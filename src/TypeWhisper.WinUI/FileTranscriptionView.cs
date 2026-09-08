@@ -15,6 +15,7 @@ public sealed partial class FileTranscriptionView : UserControl
 {
     private readonly FileTranscriptionQueue _queue = new(new FileTranscriptionQueueStore(WinUIProfile.DataPath("file-queue.json")));
     private readonly StackPanel _body = new() { Spacing = 14 };
+    private readonly HandCursorButton _headingHelp = SettingsHelp.Button("File transcription", "");
     private readonly TextBlock _notice = Text("", 12, true);
     private readonly Breadcrumbs _crumbs = new();
     private readonly Border _primaryHost = new();
@@ -40,7 +41,10 @@ public sealed partial class FileTranscriptionView : UserControl
         _tabs.SelectionChanged += id => { _watchTab = id == "watch"; _result = null; Render(); _tabs.SelectedControl.Focus(FocusState.Programmatic); };
         header.Children.Add(_tabs);
         var heading = Text("File transcription", 22); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level1); header.Children.Add(heading); root.Children.Add(header);
+        AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level1);
+        var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        titleRow.Children.Add(heading); titleRow.Children.Add(_headingHelp);
+        header.Children.Add(titleRow); root.Children.Add(header);
         _scroll = new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _body, HorizontalContentAlignment = HorizontalAlignment.Stretch, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(_scroll, 1); root.Children.Add(_scroll);
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite); Grid.SetRow(_notice, 2); root.Children.Add(_notice);
@@ -128,6 +132,9 @@ public sealed partial class FileTranscriptionView : UserControl
     private void RenderContent()
     {
         _body.Children.Clear(); _actions.Children.Clear(); _formatPicker = null; _primaryAction = null;
+        SettingsHelp.Update(_headingHelp, _watchTab
+            ? "Watch a folder for audio and video files. Finished files are transcribed and exported automatically while TypeWhisper is running, using the model selected in Dictation."
+            : "Choose audio or video files to transcribe using the model selected in Dictation. Up to 20 files, maximum 60 minutes per file. Turn on queue recovery to keep results after closing the app.");
         if (_watchTab) { RenderWatcher(); return; }
         _crumbs.SetItems(new("Quick Launch", () => { if (!_picking) ExitRequested?.Invoke(); }),
             new("Files", _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? "Queue" : "Result"));
@@ -151,8 +158,10 @@ public sealed partial class FileTranscriptionView : UserControl
         recovery.Checked += (_, _) => ChangeRecovery();
         recovery.Unchecked += (_, _) => ChangeRecovery();
         var recoveryContent = new StackPanel { Spacing = 6 };
-        recoveryContent.Children.Add(recovery);
-        recoveryContent.Children.Add(Text("Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data.", 11, true));
+        var recoveryRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        recoveryRow.Children.Add(recovery);
+        recoveryRow.Children.Add(SettingsHelp.Button("Queue recovery", "Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data."));
+        recoveryContent.Children.Add(recoveryRow);
         _body.Children.Add(new Expander { Header = _queue.RecoveryEnabled ? "Queue recovery is on" : "Queue recovery", Content = recoveryContent, HorizontalAlignment = HorizontalAlignment.Stretch });
         if (_queue.RecoveryError is { } recoveryError) _body.Children.Add(Text(recoveryError, 12, true));
         if (_queue.RecoveryError is not null)
@@ -191,8 +200,7 @@ public sealed partial class FileTranscriptionView : UserControl
         else _actions.Children.Add(Button("Add files…", async () => await ChooseFiles()));
         if (_session?.IsReady != true) _body.Children.Add(Text("Choose a ready model in Dictation before starting.", 12, true));
         else if (!_queue.Running && !_session.CanTranscribeFile) _body.Children.Add(Text("Finish the current recording or model operation before starting.", 12, true));
-        if (_queue.Jobs.Count == 0) _body.Children.Add(Text("Choose audio or video files to transcribe. Turn on queue recovery to keep results after closing the app.", 13, true));
-        else
+        if (_queue.Jobs.Count > 0)
         {
             _body.Children.Add(Text($"{_queue.Jobs.Count} {(_queue.Jobs.Count == 1 ? "file" : "files")} · {_session?.ActiveModelName ?? "No model selected"}", 12, true));
             if (_selectedJob is null || !_queue.Jobs.Contains(_selectedJob)) _selectedJob = _queue.Jobs.FirstOrDefault();

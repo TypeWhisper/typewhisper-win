@@ -13,7 +13,8 @@ internal static class LiveLanguageHintSettings
         var row = FindRow(content) ?? throw new InvalidOperationException("Preferred language settings row is missing.");
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
-        row.Children.Add(new TextBlock { Text = "Preferred languages", FontSize = 14 });
+        row.Children.Add(SettingsHelp.Label("Preferred languages",
+            "Choose up to two languages in preference order. Hints guide detection; they do not force an output language. Changes apply to the next recording."));
         var first = new ChoicePicker(); first.Configure("First language", "language", "First preferred language");
         var second = new ChoicePicker(); second.Configure("Second language", "language", "Second preferred language");
         row.Children.Add(first); row.Children.Add(second); pickers.Add(first); pickers.Add(second);
@@ -37,7 +38,7 @@ internal static class LiveLanguageHintSettings
             hint.Text = session.TextPreferences.Error ?? (!session.SupportsLanguageHints
                 ? "The selected model does not support multiple language hints. Saved preferences remain available for compatible models."
                 : session.Language != "auto" ? "Your explicit spoken language takes precedence. Choose Automatic to use preferred languages."
-                : "Choose up to two languages in preference order. Hints guide detection; they do not force an output language. Saved for the next recording.");
+                : "Saved for the next recording.");
             restoring = false;
         }
         void Save(bool primary, string code)

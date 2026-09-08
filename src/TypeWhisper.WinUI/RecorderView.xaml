@@ -22,7 +22,7 @@
             </Grid.RowDefinitions>
             <StackPanel Spacing="9">
                 <TextBox x:Name="RecordingName" Header="Recording name (optional)" PlaceholderText="Untitled recording" MaxLength="200" TextChanged="RecordingName_Changed" AutomationProperties.Name="Recording name" />
-                <TextBlock Text="AUDIO SOURCE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                <Border x:Name="AudioSourceHelp" />
                 <Grid x:Name="SourceChoices" ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />

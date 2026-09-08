@@ -14,7 +14,8 @@ internal static class LiveTranscriptionTaskSettings
         var row = FindRow(content, "TranscriptionTask") ?? throw new InvalidOperationException("Transcription task row is missing.");
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
-        row.Children.Add(Label("Transcription task", 14));
+        row.Children.Add(SettingsHelp.Label("Transcription task",
+            "Transcribe writes speech in its original language. Native translation produces English text using a compatible model. The choice is saved for this profile."));
         var picker = new ChoicePicker();
         picker.Configure("Transcription task", "language", "Preference TranscriptionTask");
         row.Children.Add(picker); pickers.Add(picker);
@@ -28,8 +29,9 @@ internal static class LiveTranscriptionTaskSettings
             foreach (var old in target.Children.OfType<ChoicePicker>()) pickers.Remove(old);
             RemoveRow(content, target);
             target.Children.Clear();
-            target.Children.Add(Label("Translation language", 14));
-            target.Children.Add(Label("English is the only native translation target. Translation to other languages is not available yet."));
+            target.Children.Add(SettingsHelp.Label("Translation language",
+                "English is the only native translation target. Translation to other languages is not available yet."));
+            target.Children.Add(Label("English"));
             row.Children.Add(target);
         }
 
@@ -47,7 +49,7 @@ internal static class LiveTranscriptionTaskSettings
                     : !session.CanChangeProvider
                         ? "Finish or cancel the current dictation before changing the task."
                         : session.SupportsTranslation
-                            ? "Saved for this profile. Native translation produces English text."
+                            ? "Saved for this profile."
                             : "This model supports transcription only. Select a translation-capable model to translate audio to English.");
         }
         void OnChanged() => row.DispatcherQueue.TryEnqueue(() => { if (row.IsLoaded) Refresh(); });

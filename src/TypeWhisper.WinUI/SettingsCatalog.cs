@@ -138,7 +138,13 @@ internal static partial class SettingsCatalog
         target.Children.Clear();
         var title = Label(category, 24);
         title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        target.Children.Add(title);
+        var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        titleRow.Children.Add(title);
+        if (category == "Shortcuts")
+            titleRow.Children.Add(SettingsHelp.Button(category, "These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable."));
+        else if (category is not "Premium" and not "Account & about" and not "Dictation")
+            titleRow.Children.Add(SettingsHelp.Button(category, "Available settings are saved for this development build. Unavailable controls are disabled."));
+        target.Children.Add(titleRow);
         if (category == "Premium")
         {
             target.Children.Add(new PremiumView(pickers));
@@ -205,7 +211,6 @@ internal static partial class SettingsCatalog
                 list.Children.Add(section);
             }
             target.Children.Add(list);
-            target.Children.Add(Label("These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable.", 12, true));
             return;
         }
         if (category == "Dictation")
@@ -213,7 +218,6 @@ internal static partial class SettingsCatalog
             RenderDictation(target, values, pickers);
             return;
         }
-        target.Children.Add(Label("Available settings are saved for this development build. Unavailable controls are disabled.", 12, true));
         if (category == "Audio")
         {
             RenderAudio(target, values, pickers);
@@ -280,8 +284,7 @@ internal static partial class SettingsCatalog
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
-                copy.Children.Add(Label(field.Label, 14));
-                if (field.Hint.Length > 0) copy.Children.Add(Label(field.Hint, 12, true));
+                copy.Children.Add(SettingsHelp.Label(field.Label, field.Hint));
                 row.Children.Add(copy);
                 var toggle = AppToggleSwitch.Create(value == "On");
                 toggle.Toggled += (_, _) =>
@@ -295,7 +298,7 @@ internal static partial class SettingsCatalog
             }
             else if (field.Choices is not null)
             {
-                stack.Children.Add(Label(field.Label, 14));
+                stack.Children.Add(SettingsHelp.Label(field.Label, field.Hint));
                 var picker = new ChoicePicker { Tag = field.Key };
                 picker.Configure(field.Label, ChoiceIcon(field), $"Preference {field.Key}");
                 picker.SetOptions(field.Choices.Select(v => new Choice(v, v, "Session-only setting")).ToArray(), value);
@@ -308,14 +311,15 @@ internal static partial class SettingsCatalog
             }
             else
             {
-                stack.Children.Add(Label(field.Label, 14));
+                stack.Children.Add(SettingsHelp.Label(field.Label, field.Hint));
                 var input = new TextBox { Text = value, MinHeight = 40, Style = (Style)Application.Current.Resources["SearchTextBoxStyle"] };
                 AutomationProperties.SetName(input, $"Preference {field.Key}");
                 AutomationProperties.SetHelpText(input, field.Label);
                 input.TextChanged += (_, _) => values[field.Key] = input.Text;
                 stack.Children.Add(new Border { Background = (Brush)Application.Current.Resources["SurfaceBrush"], BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Child = input });
             }
-            if (field.Hint.Length > 0 && field.Choices is not ["Off", "On"]) stack.Children.Add(Label(field.Hint, 12, true));
+            if (field.Hint.Length > 0 && (field.Key == "LocalModelStoragePath" || field.Category == "Shortcuts"))
+                stack.Children.Add(SettingsHelp.Button(field.Label, field.Hint));
             target.Children.Add(stack);
             if (field.Category != "Shortcuts") target.Children.Add(new Border { Tag = "SettingSeparator", Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });
         }

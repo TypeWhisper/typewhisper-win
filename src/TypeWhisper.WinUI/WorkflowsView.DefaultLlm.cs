@@ -57,9 +57,11 @@ public sealed partial class WorkflowsView
                 .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [], selected, "Choose a model");
         RefreshModels(saved?.Model ?? "");
         provider.SelectionChanged += _ => RefreshModels("");
-        var message = new TextBlock { Text = "Used by workflows set to Use default. Existing custom selections stay unchanged.", TextWrapping = TextWrapping.Wrap };
+        var help = SettingsHelp.Label("Default workflow LLM", "Used by workflows set to Use default. Existing custom selections stay unchanged.");
+        var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var content = new StackPanel { Spacing = 16, MinWidth = 300 };
-        content.Children.Add(message); content.Children.Add(provider); content.Children.Add(model);
+        content.Children.Add(help); content.Children.Add(provider); content.Children.Add(model); content.Children.Add(message);
         var dialog = _defaultsDialog = new ContentDialog
         {
             XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "Default workflow LLM", Content = content,
@@ -74,7 +76,7 @@ public sealed partial class WorkflowsView
                 _session.WorkflowDefaults.Save(new(provider.SelectedId, model.SelectedId));
                 DefaultsSaved?.Invoke();
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { args.Cancel = true; message.Text = ex.Message; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { args.Cancel = true; message.Text = ex.Message; message.Visibility = Visibility.Visible; }
         };
         try { await dialog.ShowAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowSummary.Text = "Default LLM settings could not open: " + ex.Message; }

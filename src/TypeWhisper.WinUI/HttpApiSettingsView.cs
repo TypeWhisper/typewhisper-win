@@ -36,7 +36,7 @@ internal sealed class HttpApiSettingsView : UserControl
         var authenticationRow = new Grid();
         authenticationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         authenticationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var authenticationLabel = Text("Require API token", 14);
+        var authenticationLabel = SettingsHelp.Label("Require API token", "Leave off for the existing Raycast extension. Local apps can then connect without a token.");
         authenticationLabel.VerticalAlignment = VerticalAlignment.Center;
         authenticationRow.Children.Add(authenticationLabel);
         var requireAuthentication = AppToggleSwitch.Create(api.RequireAuthentication);
@@ -44,7 +44,6 @@ internal sealed class HttpApiSettingsView : UserControl
         Grid.SetColumn(requireAuthentication, 1);
         authenticationRow.Children.Add(requireAuthentication);
         details.Children.Add(authenticationRow);
-        details.Children.Add(Text("Leave off for the existing Raycast extension. Local apps can then connect without a token.", 13));
         var documentation = new HyperlinkButton { Content = "Open documentation", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
         details.Children.Add(documentation);
         var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };

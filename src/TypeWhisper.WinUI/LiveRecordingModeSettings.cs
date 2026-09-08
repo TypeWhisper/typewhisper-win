@@ -13,7 +13,8 @@ internal static class LiveRecordingModeSettings
         var row = FindModeRow(content) ?? throw new InvalidOperationException("Recording mode settings row is missing.");
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
-        row.Children.Add(new TextBlock { Text = "Recording mode", FontSize = 14 });
+        row.Children.Add(SettingsHelp.Label("Recording mode",
+            "Toggle starts and stops with a press. Hold records while the shortcut is held. Hybrid toggles on a tap, or stops on release after a hold of at least 300 ms."));
         var picker = new ChoicePicker();
         picker.Configure("Recording mode", "microphone", "Recording mode");
         var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };

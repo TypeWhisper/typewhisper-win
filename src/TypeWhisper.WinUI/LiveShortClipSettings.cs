@@ -14,13 +14,9 @@ internal static class LiveShortClipSettings
         var store = session.TextPreferences;
         var toggle = AppToggleSwitch.Create(store.Current.TranscribeShortQuietClipsAggressively);
         AutomationProperties.SetName(toggle, "Recognize short, quiet clips");
-        row.Children.Add(new TextBlock { Text = "Recognize short, quiet clips", FontSize = 14 });
+        row.Children.Add(SettingsHelp.Label("Recognize short, quiet clips",
+            "Enable to transcribe very quiet audio; silence may produce unwanted text. Clips shorter than 40 ms are always skipped. Changes apply to the next recording."));
         row.Children.Add(toggle);
-        row.Children.Add(new TextBlock
-        {
-            Text = "Enable to transcribe very quiet audio; silence may produce unwanted text. Clips shorter than 40 ms are always skipped. Changes apply to the next recording.",
-            FontSize = 12, TextWrapping = TextWrapping.Wrap
-        });
         var status = new TextBlock { Text = store.Error ?? "Saved for the next recording.", FontSize = 12, TextWrapping = TextWrapping.Wrap };
         row.Children.Add(status);
         var restoring = false;

@@ -31,6 +31,7 @@ public sealed partial class LexiconView : UserControl
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
     private readonly Breadcrumbs _crumbs = new();
     private readonly TextBlock _heading = Text("Dictionary", 22);
+    private readonly HandCursorButton _headingHelp = SettingsHelp.Button("Dictionary", "Dictionary and snippets are saved in this profile.");
     private readonly TextBlock _notice = Text("Dictionary and snippets are saved in this profile.", 11, true);
     private readonly TextBlock _count = Text("", 11, true);
     private readonly ScrollViewer _scroll;
@@ -60,7 +61,9 @@ public sealed partial class LexiconView : UserControl
             if (!_showPacks) { _kind = Enum.Parse<LexiconKind>(id); _query = ""; }
             Render();
         };
-        header.Children.Add(_tabs); header.Children.Add(_heading); root.Children.Add(header);
+        var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        titleRow.Children.Add(_heading); titleRow.Children.Add(_headingHelp);
+        header.Children.Add(_tabs); header.Children.Add(titleRow); root.Children.Add(header);
         _scroll = new ScrollViewer { Content = _body, Padding = new Thickness(0, 0, 20, 4), HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(_scroll, 1); root.Children.Add(_scroll);
@@ -114,6 +117,7 @@ public sealed partial class LexiconView : UserControl
         if (_draft is null) _crumbs.SetItems(launch, new(Section));
         else _crumbs.SetItems(launch, new(Section, () => Navigate(CloseEditor)), new("Editor"));
         _notice.Text = _store.LastError ?? (_kind == LexiconKind.Snippet ? "Saved snippets are applied to your next dictation." : "Saved in this development profile · applied to the next dictation using existing Windows dictionary rules.");
+        AutomationProperties.SetName(_headingHelp, "About " + (_draft is null ? Section : _heading.Text));
         if (_draft is null) RenderList(); else RenderEditor();
         RenderActions(); _scroll.ChangeView(null, 0, null, true);
     }
@@ -122,12 +126,12 @@ public sealed partial class LexiconView : UserControl
 
     private void RenderList()
     {
-        _body.Children.Add(Text(_kind switch
+        SettingsHelp.Update(_headingHelp, _kind switch
         {
             LexiconKind.Word => "Names and specialist terms you want TypeWhisper to recognize.",
             LexiconKind.Correction => "Replace commonly misheard phrases with the spelling you prefer.",
             _ => "Turn a short spoken phrase into a reusable block of text."
-        }, 13, true));
+        });
         var search = Input(_query, "Search " + Section.ToLowerInvariant(), false);
         var searchGrid = new Grid { ColumnSpacing = 8 }; searchGrid.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); searchGrid.ColumnDefinitions.Add(new());
         searchGrid.Children.Add(new TypeWhisperGlyph { Kind = "search", Width = 18, Height = 18 });
@@ -301,12 +305,12 @@ public sealed partial class LexiconView : UserControl
 
     private void RenderEditor()
     {
-        _body.Children.Add(Text(_kind switch
+        SettingsHelp.Update(_headingHelp, _kind switch
         {
             LexiconKind.Word => "Save the exact spelling of a name or specialist term.",
             LexiconKind.Correction => "When this phrase is recognized, use your preferred spelling instead.",
             _ => "Say the trigger phrase to insert this text when dictation finishes."
-        }, 13, true));
+        });
         if (_kind == LexiconKind.Correction)
         {
             AddField("Correct spelling", _draft!.Value, value => _draft = _draft! with { Value = value }, 10000);
@@ -316,12 +320,11 @@ public sealed partial class LexiconView : UserControl
         {
             AddField(_kind == LexiconKind.Word ? "Word or phrase" : "Spoken trigger", _draft!.Key, value => _draft = _draft! with { Key = value }, 160);
             if (_kind == LexiconKind.Snippet)
-                AddField("Insert this text", _draft.Value, value => _draft = _draft! with { Value = value }, 10000, true);
+                AddField("Insert this text", _draft.Value, value => _draft = _draft! with { Value = value }, 10000, true, "Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches.");
         }
         if (_kind == LexiconKind.Snippet)
         {
             AddField("Tags · optional, separated by commas", _draft.Tags, value => _draft = _draft! with { Tags = value }, 300);
-            _body.Children.Add(Text("Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches.", 11, true));
         }
         AddToggle("Enabled", "Keep this entry available without removing it.", _draft.Enabled, value => _draft = _draft! with { Enabled = value });
         if (_kind == LexiconKind.Word) AddBoostingOptions();
@@ -332,9 +335,8 @@ public sealed partial class LexiconView : UserControl
     private void AddBoostingOptions()
     {
         var panel = new StackPanel { Spacing = 10 };
-        panel.Children.Add(Text("Boosting", 14));
+        panel.Children.Add(SettingsHelp.Label("Boosting", "Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size."));
         var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        var description = Text("Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size.", 12, true);
         var slider = new Slider { Minimum = 40, Maximum = 95, StepFrequency = 1, Value = (_draft!.CtcMinSimilarity ?? .65f) * 100 };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, "Minimum CTC similarity in percent");
         var valueLabel = Text("", 12, true);
@@ -363,13 +365,13 @@ public sealed partial class LexiconView : UserControl
             if (selected == 4) _draft = _draft! with { CtcMinSimilarity = (float)(slider.Value / 100) };
             valueLabel.Text = $"Minimum similarity: {slider.Value:0}%";
         };
-        Refresh(); panel.Children.Add(options); panel.Children.Add(advanced); panel.Children.Add(description);
+        Refresh(); panel.Children.Add(options); panel.Children.Add(advanced);
         _body.Children.Add(Surface(panel, 14));
     }
 
-    private void AddField(string label, string value, Action<string> update, int maxLength, bool multiline = false)
+    private void AddField(string label, string value, Action<string> update, int maxLength, bool multiline = false, string? help = null)
     {
-        var field = new StackPanel { Spacing = 7 }; field.Children.Add(Text(label, 12, true));
+        var field = new StackPanel { Spacing = 7 }; field.Children.Add(help is null ? Text(label, 12, true) : SettingsHelp.Label(label, help, 12));
         var input = Input(value, label, multiline); input.MaxLength = maxLength;
         input.TextChanged += (_, _) => update(input.Text); field.Children.Add(Surface(input, 2)); _body.Children.Add(field);
     }
@@ -377,7 +379,7 @@ public sealed partial class LexiconView : UserControl
     private void AddToggle(string title, string hint, bool value, Action<bool> update)
     {
         var row = new Grid { ColumnSpacing = 16 }; row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        var text = new StackPanel { Spacing = 4 }; text.Children.Add(Text(title, 13)); text.Children.Add(Text(hint, 11, true)); row.Children.Add(text);
+        row.Children.Add(SettingsHelp.Label(title, hint, 13));
         var toggle = AppToggleSwitch.Create(value); AutomationProperties.SetName(toggle, title); toggle.Toggled += (_, _) => update(toggle.IsOn);
         Grid.SetColumn(toggle, 1); row.Children.Add(toggle); _body.Children.Add(row);
     }
@@ -424,13 +426,14 @@ public sealed partial class LexiconView : UserControl
     private void RenderPacks()
     {
         _heading.Text = "Dictionary";
+        AutomationProperties.SetName(_headingHelp, "About term packs");
         _crumbs.SetItems(new("Quick Launch", () => ExitRequested?.Invoke()), new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
         _actions.Children.Clear();
         _actions.Children.Add(Button("Back to Quick Launch", () => ExitRequested?.Invoke()));
         _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
             ? "Saved packs provide dictionary terms for enabled vocabulary processing."
             : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");
-        _body.Children.Add(Text("Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off.", 13, true));
+        SettingsHelp.Update(_headingHelp, "Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off.");
         foreach (var pack in TypeWhisper.Core.Models.TermPack.AllPacks.Where(p => !p.RequiresCommercialLicense))
         {
             var row = new Grid { ColumnSpacing = 14 };

@@ -9,7 +9,6 @@ internal static partial class SettingsCatalog
 {
     private static void RenderDictation(StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers)
     {
-        target.Children.Add(Label("Your voice, your language, your words where you need them.", 13, true));
         var updates = new List<Action>();
         void Update() { foreach (var update in updates) update(); }
         void FieldsInto(StackPanel panel, params string[] keys) => RenderFields(
@@ -92,16 +91,16 @@ internal static partial class SettingsCatalog
         var vocabularyToggle = AppToggleSwitch.Create(DictionaryBoostingPreferences.Load());
         AutomationProperties.SetName(vocabularyToggle, "Vocabulary boosting");
         var vocabularyRow = new Grid(); vocabularyRow.ColumnDefinitions.Add(new()); vocabularyRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        vocabularyRow.Children.Add(Label("Vocabulary boosting", 14));
+        vocabularyRow.Children.Add(SettingsHelp.Label("Vocabulary boosting", "Uses text-based matching. Manage words and Term packs in Quick Launch > Dictionary. Acoustic vocabulary support depends on the selected plugin."));
         Grid.SetColumn(vocabularyToggle, 1); vocabularyRow.Children.Add(vocabularyToggle); vocabulary.Children.Add(vocabularyRow);
-        var vocabularyHint = Label("Saved for dictation. Uses existing Windows text-based matching, not acoustic CTC. Manage words and Term packs in Quick Launch > Dictionary.", 12, true);
+        var vocabularyHint = Label("Saved for dictation.", 12, true);
         vocabulary.Children.Add(vocabularyHint);
         var restoringVocabulary = false;
         vocabularyToggle.Toggled += (_, _) =>
         {
             if (restoringVocabulary) return;
             var error = DictionaryBoostingPreferences.Save(vocabularyToggle.IsOn);
-            vocabularyHint.Text = error ?? "Saved for the next dictation. Manage words and Term packs in Quick Launch > Dictionary.";
+            vocabularyHint.Text = error ?? "Saved for the next dictation.";
             if (error is not null) { restoringVocabulary = true; vocabularyToggle.IsOn = !vocabularyToggle.IsOn; restoringVocabulary = false; }
         };
         advanced.Children.Add(vocabulary);

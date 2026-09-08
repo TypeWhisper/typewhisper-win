@@ -19,7 +19,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
     internal MicrophonePriorityEditor(LocalDictationSession session)
     {
         _session = session; Spacing = 8;
-        Children.Add(new TextBlock { Text = "Microphones", FontSize = 14 });
+        Children.Add(SettingsHelp.Label("Microphones", "Drag to prioritize or use the arrow buttons. The first available microphone wins; Windows default is the fallback."));
         _list = new ListView
         {
             Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"],
@@ -130,7 +130,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
             .Select(device => new Choice(device.Id, device.Name, "Add to priority list")).ToArray(), "", _items.Count == 0 ? "System default · add microphone…" : "Add microphone…");
         var missing = _items.Where(item => !devices.Any(device => device.Id == item.Item.Id)).Select(item => item.Name).ToArray();
         _hint.Text = missing.Length > 0 ? "Disconnected (kept in priority list): " + string.Join(", ", missing)
-            : _items.Count == 0 ? "Uses Windows default until you add a microphone." : "Drag to prioritize. First available wins; Windows default is the fallback.";
+            : _items.Count == 0 ? "Uses Windows default until you add a microphone." : "Priority saved.";
     }
 
     public sealed class PriorityRow(MicrophonePriorityItem item, bool canMoveUp, bool canMoveDown)

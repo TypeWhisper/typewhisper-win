@@ -12,6 +12,8 @@ public sealed partial class WorkflowsView : UserControl
 {
     private enum Page { List, Editor, Result, Configuration }
     private Page _page;
+    private readonly HandCursorButton _templateHelp = SettingsHelp.Button("Template", "Choose a workflow template.");
+    private readonly HandCursorButton _shortcutHelp = SettingsHelp.Button("Shortcut", "Choose a shortcut to activate this workflow.");
     private WorkflowDraft? _opened;
     private string _query = string.Empty;
     private readonly Dictionary<string, string> _drafts = [];
@@ -74,6 +76,14 @@ public sealed partial class WorkflowsView : UserControl
         Filter("");
     }
 
+    private static StackPanel HelpHeading(string title, HandCursorButton help)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        row.Children.Add(new TextBlock { Text = title, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(help);
+        return row;
+    }
+
     private void RuntimeChanged() => DispatcherQueue.TryEnqueue(() =>
     {
         if (_page == Page.Configuration)
@@ -109,6 +119,14 @@ public sealed partial class WorkflowsView : UserControl
     public WorkflowsView()
     {
         InitializeComponent();
+        TemplateHelp.Child = HelpHeading("Template", _templateHelp);
+        ShortcutHelp.Child = HelpHeading("Shortcut", _shortcutHelp);
+        ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides and action plugins remain unavailable.", 12);
+        AppProcessesHelp.Child = SettingsHelp.Label("Windows process names", "Required for App activation; optional for Website activation. Separate process names with commas.", 12);
+        WebsiteDomainsHelp.Child = SettingsHelp.Label("Website domains", "Required for Website activation; optional for App activation. Domains include subdomains (example.com also matches mail.example.com). Use commas, without paths or query strings. The browser address is read once before recording; only the hostname can enter saved History. Chrome, Edge, Brave, Chromium and Firefox require a recognized address bar. Missing context leaves app/global fallback rules available.", 12);
+        ContextModeHelp.Child = SettingsHelp.Label("App and website conditions", "Match all requires an app from your list AND a domain from your list. Match any allows either component, so the app rule can still run when a browser address is unavailable.", 12);
+        TranslationHelp.Child = SettingsHelp.Label("Translation language", "Leave empty to translate into English. This is a text workflow using the selected LLM provider.", 12);
+        ProviderHelp.Child = SettingsHelp.Label("Provider", "Manual workflows run when you choose Run. Selected-text shortcuts send your selection and instructions to the configured provider and open the result for review. App, Website and Global workflows run on matching dictations and use dictation output settings; failures open review without pasting.", 12);
         WorkflowList.SelectionChanged += (_, _) =>
         {
             if (_page == Page.List) ConfigureWorkflowButton.IsEnabled = WorkflowList.SelectedItem is WorkflowDraft { IsEditable: true };
@@ -460,9 +478,9 @@ public sealed partial class WorkflowsView : UserControl
     private void UpdateConfigurationState()
     {
         if (_loadingConfiguration) return;
-        ConfigShortcutDescription.Text = ConfigTrigger.SelectedId == "DictationHotkey"
+        SettingsHelp.Update(_shortcutHelp, ConfigTrigger.SelectedId == "DictationHotkey"
             ? "Focus a text field in another app. Press this shortcut to start recording and press again to stop. The transcript is processed by this workflow using your dictation paste and History settings."
-            : "Select text in another app, then press this shortcut to send it to the configured provider. The result opens for review. Nothing is pasted or saved to History.";
+            : "Select text in another app, then press this shortcut to send it to the configured provider. The result opens for review. Nothing is pasted or saved to History.");
         var contextual = ConfigTrigger.SelectedId is "App" or "Website";
         ConfigShortcutSection.Visibility = ConfigTrigger.SelectedId is "Hotkey" or "DictationHotkey" ? Visibility.Visible : Visibility.Collapsed;
         ConfigAppSection.Visibility = ConfigWebsiteSection.Visibility = contextual ? Visibility.Visible : Visibility.Collapsed;
@@ -471,7 +489,7 @@ public sealed partial class WorkflowsView : UserControl
         var template = Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var selected) ? selected : WorkflowTemplate.Custom;
         ConfigTranslationSection.Visibility = template == WorkflowTemplate.Translation ? Visibility.Visible : Visibility.Collapsed;
         ConfigInstructionLabel.Text = template == WorkflowTemplate.Custom ? "INSTRUCTIONS (REQUIRED)" : "FINE-TUNING (OPTIONAL)";
-        ConfigTemplateDescription.Text = WorkflowTemplateCatalog.DefinitionFor(template).Description;
+        SettingsHelp.Update(_templateHelp, WorkflowTemplateCatalog.DefinitionFor(template).Description);
         var error = ConfigurationError;
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? "Save as disabled. Enable this workflow before running it."
             : EffectiveConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId) is { } providerError

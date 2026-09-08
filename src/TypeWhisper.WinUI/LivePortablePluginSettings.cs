@@ -30,10 +30,9 @@ internal sealed class LivePortablePluginSettings : UserControl
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _enable = Button("Enable plugin", () => session.SetRegistryPluginEnabledAsync(id, true));
         content.Children.Add(_enable);
-        _credentials.Children.Add(Label("API key", 16));
+        _credentials.Children.Add(SettingsHelp.Label("API key", "The plugin stores the key through encrypted Windows user storage. An empty field keeps the saved key.", 16));
         AutomationProperties.SetName(_key, "Plugin API key");
         _credentials.Children.Add(_key);
-        _credentials.Children.Add(Label("The plugin stores the key through encrypted Windows user storage. An empty field keeps the saved key."));
         _save = Button("Save key", async () =>
         {
             var error = await session.SaveRegistryKeyAsync(id, _key.Password);

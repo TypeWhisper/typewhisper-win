@@ -20,8 +20,7 @@ internal sealed class SystemVoiceSettingsControl : UserControl
         _session = session;
         var content = new StackPanel { Spacing = 8 };
         content.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"], Margin = new(0, 4, 0, 4) });
-        content.Children.Add(new TextBlock { Text = "Spoken feedback", FontSize = 16, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
-        content.Children.Add(Label("Read successfully inserted dictation aloud using Windows System Voice. Off by default. Review, failed processing and file jobs are not read automatically."));
+        content.Children.Add(SettingsHelp.Label("Spoken feedback", "Read successfully inserted dictation aloud using Windows System Voice. Off by default. Review, failed processing and file jobs are not read automatically. Local synthesis; no cloud requests. Uses the selected audio output. Supports up to 4,000 characters and two minutes of speech.", 16));
         var enabled = AppToggleSwitch.Create(session.AudioPreferences.SpokenFeedbackEnabled);
         AutomationProperties.SetName(enabled, "Spoken feedback");
         var restoring = false;
@@ -38,7 +37,6 @@ internal sealed class SystemVoiceSettingsControl : UserControl
             if (!enabled.IsOn) await StopAsync();
         };
         content.Children.Add(enabled);
-        content.Children.Add(Label("Provider: Windows System Voice · local synthesis; no cloud requests."));
         IReadOnlyList<SpokenFeedbackVoice> voices;
         try { voices = new WindowsSystemVoiceBackend().GetVoices(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -66,7 +64,6 @@ internal sealed class SystemVoiceSettingsControl : UserControl
             else { savedVoice = id; _status.Text = "Voice saved. Applies to the next playback."; }
         };
         content.Children.Add(voicePicker); pickers.Add(voicePicker);
-        content.Children.Add(Label("Uses the Audio output selected above. Supports up to 4,000 characters and two minutes of speech. Choose an available voice and output to test playback."));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         buttons.Children.Add(_test); buttons.Children.Add(_stop); content.Children.Add(buttons);
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);

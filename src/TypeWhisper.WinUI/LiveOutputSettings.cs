@@ -16,7 +16,7 @@ internal static class LiveOutputSettings
             var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "AutoPaste"));
             foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
             row.Children.Clear();
-            row.Children.Add(Label("After recording", 14));
+            row.Children.Add(SettingsHelp.Label("After recording", "Review first works even when history saving is off. Turning automatic paste off also applies to a dictation in progress."));
             var picker = new ChoicePicker();
             picker.Configure("After recording", "text", "Preference AutoPaste");
             void Refresh() => picker.SetOptions([
@@ -24,11 +24,11 @@ internal static class LiveOutputSettings
                 new("Off", "Review first", "Open the result for review and copying. No automatic paste.")
             ], store.Current.AutoPaste ? "On" : "Off");
             Refresh();
-            var status = Label(store.Error ?? "Saved. Review first also works when history saving is off.");
+            var status = Label(store.Error ?? "Saved.");
             picker.SelectionChanged += id =>
             {
                 status.Text = store.Save(store.Current with { AutoPaste = id == "On" })
-                    ?? "Saved. Turning automatic paste off also applies to a dictation in progress.";
+                    ?? "Saved.";
                 Refresh();
             };
             row.Children.Add(picker); row.Children.Add(status); pickers.Add(picker);
@@ -41,35 +41,34 @@ internal static class LiveOutputSettings
         saveRow.Children.Clear();
         var toggle = AppToggleSwitch.Create(store.Current.SaveToHistory);
         AutomationProperties.SetName(toggle, "Save to history");
-        saveRow.Children.Add(Label("Save to history", 14));
-        saveRow.Children.Add(Label("Keep new dictation results on this device. Turning this off leaves existing history unchanged."));
+        saveRow.Children.Add(SettingsHelp.Label("Save to history", "Keep new dictation results on this device. Turning this off leaves existing history unchanged. Results can still be pasted or reviewed. Changes also apply to a dictation that has not been saved yet.", 14));
         saveRow.Children.Add(toggle);
-        var hint = Label(store.Error ?? "Saved. When off, results can still be pasted or reviewed without a history entry.");
+        var hint = Label(store.Error ?? "Saved.");
         saveRow.Children.Add(hint);
         var audioRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "SaveHistoryAudio"));
         audioRow.Children.Clear();
         var audioToggle = AppToggleSwitch.Create(store.Current.SaveHistoryAudio);
         AutomationProperties.SetName(audioToggle, "Keep dictation audio in history");
         audioToggle.IsEnabled = store.Current.SaveToHistory;
-        audioRow.Children.Add(Label("Keep dictation audio", 14));
-        audioRow.Children.Add(Label("Save a local audio copy with new dictation entries so you can listen again. Audio is deleted with its history entry and follows history retention. File imports and recorder files are separate."));
+        audioRow.Children.Add(SettingsHelp.Label("Keep dictation audio", "Save a local audio copy with new dictation entries so you can listen again. Audio is deleted with its history entry and follows history retention. File imports and recorder files are separate. Off by default. Turning this off keeps existing recordings and also applies to a dictation that has not been saved yet.", 14));
         audioRow.Children.Add(audioToggle);
-        var audioHint = Label("Off by default. Requires Save to history. Turning this off keeps existing recordings.");
+        var audioHint = Label(store.Current.SaveToHistory ? "Saved." : "Requires Save to history.");
         audioRow.Children.Add(audioHint);
         var restoring = false;
         toggle.Toggled += (_, _) =>
         {
             if (restoring) return;
             hint.Text = store.Save(store.Current with { SaveToHistory = toggle.IsOn })
-                ?? "Saved. Turning history off also applies to a dictation in progress that has not been saved yet.";
+                ?? "Saved.";
             restoring = true; toggle.IsOn = store.Current.SaveToHistory; restoring = false;
             audioToggle.IsEnabled = store.Current.SaveToHistory;
+            audioHint.Text = store.Current.SaveToHistory ? "Saved." : "Requires Save to history.";
         };
         audioToggle.Toggled += (_, _) =>
         {
             if (restoring) return;
             audioHint.Text = store.Save(store.Current with { SaveHistoryAudio = audioToggle.IsOn })
-                ?? "Saved. Turning audio storage off also applies to a dictation that has not been saved yet. Existing recordings are kept.";
+                ?? "Saved.";
             restoring = true; audioToggle.IsOn = store.Current.SaveHistoryAudio; restoring = false;
         };
         foreach (var key in new[] { "HistoryRetentionMode", "HistoryRetentionMinutes", "MemoryEnabled" })

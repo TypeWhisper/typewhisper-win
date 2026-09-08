@@ -29,8 +29,7 @@ internal sealed class SyncBackupView : UserControl
     internal SyncBackupView(Dictionary<string, string> values)
     {
         Content = _body;
-        _body.Children.Add(Copy("Local backup", 22));
-        _body.Children.Add(Copy("Save a portable JSON file or merge data from an existing TypeWhisper backup.", 13, true));
+        _body.Children.Add(SettingsHelp.Label("Local backup", "Save a portable JSON file or merge data from an existing TypeWhisper backup. Audio, model files, API keys, licenses, plugin installation and device preferences are excluded.", 22));
         foreach (var (category, label) in new[]
         {
             (BackupCategory.Dictionary, "Dictionary"), (BackupCategory.Snippets, "Snippets"),
@@ -44,7 +43,6 @@ internal sealed class SyncBackupView : UserControl
             _selection.Children.Add(toggle);
         }
         _body.Children.Add(_selection);
-        _body.Children.Add(Copy("Audio, model files, API keys, licenses, plugin installation and device preferences are excluded. Keep exported files somewhere you trust.", 12, true));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         _export = Button("Export backup…", () => RunAsync(ExportAsync));
         _import = Button("Choose backup to restore…", () => RunAsync(PreviewAsync));

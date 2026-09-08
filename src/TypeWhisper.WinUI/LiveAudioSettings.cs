@@ -13,8 +13,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
     internal void Render(StackPanel content, List<ChoicePicker> pickers)
     {
         content.Children.Clear();
-        content.Children.Add(new TextBlock { Text = "Audio", FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
-        content.Children.Add(Label("Audio preferences are saved in this development profile and used by dictation.", true));
+        content.Children.Add(SettingsHelp.Label("Audio", "Audio preferences are saved in this development profile and used by dictation.", 24));
         var microphones = new MicrophonePriorityEditor(session);
         content.Children.Add(microphones);
         pickers.Add(microphones.AddPicker);
@@ -52,7 +51,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
-            copy.Children.Add(Label(title)); copy.Children.Add(Label(hint, true)); row.Children.Add(copy);
+            copy.Children.Add(SettingsHelp.Label(title, hint)); row.Children.Add(copy);
             var toggle = AppToggleSwitch.Create(value);
             toggle.IsEnabled = enabled;
             AutomationProperties.SetName(toggle, title); AutomationProperties.SetHelpText(toggle, hint);
@@ -69,7 +68,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
         {
             Separator();
             var row = new StackPanel { Spacing = 6 };
-            row.Children.Add(Label(title));
+            row.Children.Add(SettingsHelp.Label(title, hint));
             var picker = new ChoicePicker();
             picker.Configure(title, "speaker", title);
             var choices = options.Any(option => option.Id == selected) ? options : options.Concat([new Choice(selected, "Saved device · unavailable", "Reconnect the device or select another output")]).ToArray();
@@ -81,7 +80,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
                 if (session.AudioPreferencesError is not null) picker.SetOptions(choices, saved);
                 else saved = id;
             };
-            row.Children.Add(picker); row.Children.Add(Label(hint, true));
+            row.Children.Add(picker);
             content.Children.Add(row); pickers.Add(picker);
         }
     }

@@ -29,8 +29,7 @@ internal sealed class PremiumView : UserControl
         if (PremiumAccessState.CanOverride)
         {
             var development = new StackPanel { Spacing = 10 };
-            development.Children.Add(Copy("Development access", 16));
-            development.Children.Add(Copy("Test access on this development profile. Changes apply immediately and survive restarts. No purchase or license activation is performed.", 12, true));
+            development.Children.Add(SettingsHelp.Label("Development access", "Test access on this development profile. Changes apply immediately and survive restarts. No purchase or license activation is performed.", 16));
             _scenario = new ChoicePicker();
             _scenario.Configure("Development access", "lock", "Premium development access");
             pickers.Add(_scenario);
@@ -88,8 +87,7 @@ internal sealed class PremiumView : UserControl
     private void Feature(PremiumFeature feature, string title, string description)
     {
         var panel = new StackPanel { Spacing = 7 };
-        panel.Children.Add(Copy(title, 16));
-        panel.Children.Add(Copy(description, 13, true));
+        panel.Children.Add(SettingsHelp.Label(title, description, 16));
         var requirement = Access.Current.Requirement(feature);
         panel.Children.Add(Copy(requirement switch
         {
@@ -111,10 +109,9 @@ internal sealed class PremiumView : UserControl
             var toggleRow = new Grid { ColumnSpacing = 16 };
             toggleRow.ColumnDefinitions.Add(new());
             toggleRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            var label = Copy("Learn automatically", 13); label.VerticalAlignment = VerticalAlignment.Center;
+            var label = SettingsHelp.Label("Learn automatically", "After dictation, edit the inserted text and press Enter or Tab, or leave the field. Only clear word corrections are saved locally in Dictionary > Corrections. Unsupported and password fields are skipped.", 13); label.VerticalAlignment = VerticalAlignment.Center;
             toggleRow.Children.Add(label); Grid.SetColumn(toggle, 1); toggleRow.Children.Add(toggle);
             panel.Children.Add(toggleRow);
-            panel.Children.Add(Copy("After dictation, edit the inserted text and press Enter or Tab, or leave the field. Only clear word corrections are saved locally in Dictionary > Corrections. Unsupported and password fields are skipped.", 12, true));
             _learningStatus = Copy(CorrectionLearning.Status, 12, true);
             AutomationProperties.SetLiveSetting(_learningStatus, AutomationLiveSetting.Polite);
             panel.Children.Add(_learningStatus);

@@ -116,43 +116,37 @@
                             Height="44" MaxLength="80" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow name" />
                     </StackPanel>
                     <StackPanel Spacing="7">
-                        <TextBlock Text="ACTIVATION" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <Border x:Name="ActivationHelp" />
                     <local:ChoicePicker x:Name="ConfigTrigger" />
                     <StackPanel x:Name="ConfigShortcutSection" Spacing="8" Visibility="Collapsed">
-                        <TextBlock x:Name="ConfigShortcutDescription" Text="Select text in another app, then press this shortcut to send it to the configured provider. The result opens for review. Nothing is pasted or saved to History." TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
+                        <Border x:Name="ShortcutHelp" />
                         <StackPanel x:Name="ConfigShortcutHost" />
                     </StackPanel>
-                        <TextBlock Text="Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides and action plugins remain unavailable." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigAppSection" Spacing="7" Visibility="Collapsed">
-                        <TextBlock Text="WINDOWS PROCESS NAMES" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <Border x:Name="AppProcessesHelp" />
                         <TextBox x:Name="ConfigAppProcesses" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="1000" PlaceholderText="notepad, chrome (without .exe)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow process names" />
-                        <TextBlock Text="Required for App activation; optional for Website activation. Separate process names with commas." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigWebsiteSection" Spacing="7" Visibility="Collapsed">
-                        <TextBlock Text="WEBSITE DOMAINS" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <Border x:Name="WebsiteDomainsHelp" />
                         <TextBox x:Name="ConfigWebsiteDomains" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="2000" PlaceholderText="example.com, docs.example.org" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow website domains" />
-                        <TextBlock Text="Required for Website activation; optional for App activation. Domains include subdomains (example.com also matches mail.example.com). Use commas, without paths or query strings. The browser address is read once before recording; only the hostname can enter saved History. Chrome, Edge, Brave, Chromium and Firefox require a recognized address bar. Missing context leaves app/global fallback rules available." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigContextSection" Spacing="7" Visibility="Collapsed">
+                        <Border x:Name="ContextModeHelp" />
                         <local:ChoicePicker x:Name="ConfigContextMode" />
-                        <TextBlock Text="Match all requires an app from your list AND a domain from your list. Match any allows either component, so the app rule can still run when a browser address is unavailable." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel Spacing="7">
                         <TextBlock Text="PRIORITY (LOWER WINS)" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
                         <TextBox x:Name="ConfigPriority" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="11" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow priority" />
                     </StackPanel>
                     <StackPanel Spacing="7">
-                        <TextBlock Text="TEMPLATE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                        <Border x:Name="TemplateHelp" />
                         <local:ChoicePicker x:Name="ConfigTemplate" />
-                        <TextBlock x:Name="ConfigTemplateDescription" TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigTranslationSection" Spacing="7" Visibility="Collapsed">
-                        <TextBlock Text="TRANSLATION LANGUAGE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                        <Border x:Name="TranslationHelp" />
                         <TextBox x:Name="ConfigTranslationTarget" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap"
                             Height="44" MaxLength="100" PlaceholderText="English (default)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow translation target language" />
-                        <TextBlock Text="Leave empty to translate into English. This is a text workflow using the selected LLM provider."
-                            TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel Spacing="7">
                         <TextBlock x:Name="ConfigInstructionLabel" Text="INSTRUCTIONS (REQUIRED)" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
@@ -162,7 +156,7 @@
                     <Grid ColumnSpacing="10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <StackPanel Spacing="7">
-                            <TextBlock Text="PROVIDER" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                            <Border x:Name="ProviderHelp" />
                             <local:ChoicePicker x:Name="ConfigProvider" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Spacing="7">
@@ -174,8 +168,6 @@
                             <local:ChoicePicker x:Name="ConfigOutput" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="Manual workflows run when you choose Run. Selected-text shortcuts send your selection and instructions to the configured provider and open the result for review. App, Website and Global workflows run on matching dictations and use dictation output settings; failures open review without pasting." FontSize="11"
-                        Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                     <local:HandCursorButton x:Name="DeleteWorkflowButton" Content="Delete workflow" Click="DeleteWorkflow_Click"
                         HorizontalAlignment="Left" Style="{StaticResource DestructiveConfirmButtonStyle}"
                         AutomationProperties.Name="Delete workflow" />

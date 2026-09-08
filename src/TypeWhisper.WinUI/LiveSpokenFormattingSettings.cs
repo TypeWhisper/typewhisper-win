@@ -17,22 +17,22 @@ internal static class LiveSpokenFormattingSettings
         var row = FindRow(content, "SpokenFormattingProfiles") ?? throw new InvalidOperationException("Spoken formatting row is missing.");
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
-        row.Children.Add(Label("Spoken formatting", 14));
+        row.Children.Add(SettingsHelp.Label("Spoken formatting",
+            "Local rules are available for English and German. A profile applies only to its engine, model and language. Automatic language needs a recognized language; native translation uses the English profile."));
         var context = Label(""); row.Children.Add(context);
         var language = new ChoicePicker(); language.Configure("Profile language", "language", "Spoken formatting profile language");
         var strategy = new ChoicePicker(); strategy.Configure("Formatting strategy", "text", "Spoken formatting strategy");
         row.Children.Add(language); row.Children.Add(strategy); pickers.Add(language); pickers.Add(strategy);
-        row.Children.Add(Label("Local rules are available for English and German. A profile applies only to its engine, model and language. Automatic language needs a recognized language; native translation uses the English profile."));
         var status = Label(""); row.Children.Add(status);
 
         var appRow = new Grid { ColumnSpacing = 12, Tag = "AppFormattingEnabled" };
         appRow.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         appRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        appRow.Children.Add(Label("Markdown bullets in supported apps", 14));
+        appRow.Children.Add(SettingsHelp.Label("Markdown bullets in supported apps",
+            "In Obsidian, Notion, MarkText, Typora and Bear, convert lines starting with “bullet ” to Markdown list items. Other output stays unchanged. Uses the app where recording started."));
         var appToggle = AppToggleSwitch.Create(session.TextPreferences.Current.AppFormattingEnabled);
         AutomationProperties.SetName(appToggle, "Markdown bullets in supported apps");
         Grid.SetColumn(appToggle, 1); appRow.Children.Add(appToggle); row.Children.Add(appRow);
-        row.Children.Add(Label("In Obsidian, Notion, MarkText, Typora and Bear, convert lines starting with “bullet ” to Markdown list items. Other output stays unchanged. Uses the app where recording started."));
         var appStatus = Label(""); row.Children.Add(appStatus);
         var selectedLanguage = SpokenFormattingLanguageNormalizer.Normalize(session.Language) is "de" ? "de" : "en";
         string? displayedEngine = null;

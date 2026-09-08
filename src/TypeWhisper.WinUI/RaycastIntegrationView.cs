@@ -11,7 +11,7 @@ internal sealed class RaycastIntegrationView : UserControl
     internal RaycastIntegrationView()
     {
         var row = new StackPanel { Spacing = 6 };
-        row.Children.Add(new TextBlock { Text = "Raycast Extension", FontSize = 14 });
+        row.Children.Add(SettingsHelp.Label("Raycast Extension", "Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running."));
         var link = new HyperlinkButton { Content = "Learn more", Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Left };
         ToolTipService.SetToolTip(link, "Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running.");
         row.Children.Add(link);

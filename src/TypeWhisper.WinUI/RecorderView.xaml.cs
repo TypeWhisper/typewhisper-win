@@ -9,6 +9,8 @@ namespace TypeWhisper.WinUI;
 public sealed partial class RecorderView : UserControl
 {
     private RecorderController? _recorder;
+    private readonly HandCursorButton _audioSourceHelp = SettingsHelp.Button("Audio source", "Choose a source, then start your session. Audio stays on this device. Up to 60 minutes per recording.");
+    private string? _audioSourceHelpText;
     private RecorderCaptureAdapter? _capture;
     private TimeSpan ActiveDuration => (_recorder?.Duration ?? TimeSpan.Zero)
         + (_recorder?.State == RecorderState.Recording ? _capture?.SegmentElapsed ?? TimeSpan.Zero : TimeSpan.Zero);
@@ -30,6 +32,10 @@ public sealed partial class RecorderView : UserControl
     public RecorderView()
     {
         InitializeComponent();
+        var sourceLabel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        sourceLabel.Children.Add(new TextBlock { Text = "Audio source", FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        sourceLabel.Children.Add(_audioSourceHelp);
+        AudioSourceHelp.Child = sourceLabel;
         RecorderTabs.SetItems([new("record", "Record"), new("recordings", "Recordings")], "record");
         RecorderTabs.SelectionChanged += id => ShowLibrary(id == "recordings");
         RecorderBreadcrumbs.SetItems(new("Quick Launch", () => LauncherRequested?.Invoke(this, EventArgs.Empty), "Back from recorder"), new("Recorder"));
@@ -104,7 +110,14 @@ public sealed partial class RecorderView : UserControl
         RecorderDuration.Text = (active ? ActiveDuration : _recorder?.Duration ?? TimeSpan.Zero).ToString(@"hh\:mm\:ss");
         var selectedPreferences = active || busy || state == RecorderState.SaveFailed ? _preferencesAtStart : _recorderPreferences?.Current;
         var outputHint = selectedPreferences?.OutputDeviceId is null ? "default system output" : "selected system output (Recorder settings)";
-        SessionHint.Text = _recorderPreferences?.Error ?? _capture?.Warning ?? $"Audio stays on this device. Up to 60 minutes per recording · {outputHint}.";
+        var sourceHelp = $"Choose a source, then start your session. Audio stays on this device. Up to 60 minutes per recording · {outputHint}.";
+        if (_audioSourceHelpText != sourceHelp)
+        {
+            _audioSourceHelpText = sourceHelp;
+            SettingsHelp.Update(_audioSourceHelp, sourceHelp);
+        }
+        SessionHint.Text = _recorderPreferences?.Error ?? _capture?.Warning ?? "";
+        SessionHint.Visibility = string.IsNullOrEmpty(SessionHint.Text) ? Visibility.Collapsed : Visibility.Visible;
         RecordingName.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
         MicrophoneSource.IsEnabled = SystemSource.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
         MicrophoneState.Text = MicrophoneSource.IsChecked == true ? "On" : "Off";

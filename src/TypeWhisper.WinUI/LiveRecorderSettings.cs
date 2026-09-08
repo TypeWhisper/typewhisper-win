@@ -18,23 +18,20 @@ internal static class LiveRecorderSettings
         var content = new StackPanel { Spacing = 12 };
         parent.Children.Add(content);
         pickers.Clear();
-        content.Children.Add(Label("Recorder", 24));
-        content.Children.Add(Label("Source choices are saved for your next recording. Changes never switch sources during an active recording."));
+        content.Children.Add(SettingsHelp.Label("Recorder", "Source choices are saved for your next recording. Changes never switch sources during an active recording.", 24));
         var microphone = AppToggleSwitch.Create(preferences.Current.MicrophoneEnabled);
         var system = AppToggleSwitch.Create(preferences.Current.SystemAudioEnabled);
         AddToggle("Microphone on by default", microphone);
         AddToggle("System audio on by default", system);
-        content.Children.Add(Label("System audio device", 14));
+        content.Children.Add(SettingsHelp.Label("System audio device", "The microphone uses your Audio settings priority list. This output selection controls which system audio is recorded, independently of feedback sounds."));
         var device = new ChoicePicker();
         device.Configure("System audio device", "speaker", "Recorder system audio device");
         content.Children.Add(device); pickers.Add(device);
-        content.Children.Add(Label("The microphone uses your Audio settings priority list. This output selection controls which system audio is recorded, independently of feedback sounds."));
         var refreshDevices = new HandCursorButton { Content = "Refresh devices", HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         content.Children.Add(refreshDevices);
-        content.Children.Add(Label("Audio format: WAV · 16 kHz mono", 14));
+        content.Children.Add(SettingsHelp.Label("Audio format: WAV · 16 kHz mono", "Recordings are saved locally. Choose Transcribe on a saved recording to process it."));
         content.Children.Add(Label("Tracks: Mixed · microphone ducking off", 14));
-        content.Children.Add(Label("Recordings are saved locally. Use Transcribe file to add a saved recording to the file queue; transcription starts only when you choose Start there."));
         var status = Label("");
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         content.Children.Add(status);

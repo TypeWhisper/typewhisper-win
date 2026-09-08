@@ -35,10 +35,9 @@ internal static class LiveTextProcessingSettings
             var toggle = AppToggleSwitch.Create(get(store.Current));
             AutomationProperties.SetName(toggle, title);
             AutomationProperties.SetHelpText(toggle, description + " Changes apply to the next recording.");
-            header.Children.Add(Label(title, 14));
+            header.Children.Add(SettingsHelp.Label(title, description));
             Grid.SetColumn(toggle, 1); header.Children.Add(toggle);
             row.Children.Add(header);
-            row.Children.Add(Label(description));
             var status = Label(""); row.Children.Add(status);
             var restoring = false;
             refreshers.Add(() =>
@@ -61,11 +60,10 @@ internal static class LiveTextProcessingSettings
             string description)
         {
             var row = Prepare(key);
-            row.Children.Add(Label(title, 14));
+            row.Children.Add(SettingsHelp.Label(title, description));
             var picker = new ChoicePicker();
             picker.Configure(title, "language", "Preference " + key);
             row.Children.Add(picker); pickers.Add(picker);
-            row.Children.Add(Label(description));
             var status = Label(""); row.Children.Add(status);
             refreshers.Add(() =>
             {

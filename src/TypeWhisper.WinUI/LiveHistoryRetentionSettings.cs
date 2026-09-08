@@ -26,8 +26,9 @@ internal static class LiveHistoryRetentionSettings
         var previewNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("History saving is saved"));
         if (previewNote is not null) previewNote.Text = "History saving and retention are saved for this development profile. Unavailable controls are disabled.";
 
-        row.Children.Add(Label("History retention", 14));
-        row.Children.Add(Label("Forever keeps existing history. A duration permanently deletes entries older than that age and their saved audio, including entries already in history. Age is measured from when an entry was created."));
+        row.Children.Add(SettingsHelp.Label("History retention",
+            "Forever keeps existing history. Age is measured from when an entry was created."));
+        row.Children.Add(Label("A duration permanently deletes entries older than that age and their saved audio, including entries already in history."));
         var picker = new ChoicePicker();
         picker.Configure("History retention", "history", "History retention");
         var durationLabel = Label("Keep history for (minutes)");

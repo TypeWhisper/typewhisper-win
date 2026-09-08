@@ -73,7 +73,6 @@ public sealed partial class FileTranscriptionView
             _watchAutoStart.Checked += (_, _) => _watchDraft = _watchDraft with { StartWithApp = true };
             _watchAutoStart.Unchecked += (_, _) => _watchDraft = _watchDraft with { StartWithApp = false };
             _body.Children.Add(_watchAutoStart);
-            _body.Children.Add(Text("Processes existing and new audio/video files in this folder, without subfolders. Progress and transcripts are saved locally for recovery, independently of History. Automatic exports do not add History entries.", 12, true));
             if (_watcher.Settings is not null) _actions.Children.Add(Button("Cancel", () => { _watchEditing = false; _watchDraft = null; Render(); }));
             _primaryAction = () =>
             {
@@ -104,7 +103,7 @@ public sealed partial class FileTranscriptionView
         var failed = _watcher.Files.Count(f => f.Status == "Failed");
         _body.Children.Add(Text($"{completed} exported · {failed} need attention", 13));
         if (_watcher.Files.Count == 0)
-            _body.Children.Add(Text("Drop recordings into the watch folder. Finished files are transcribed and exported automatically while TypeWhisper is running.", 14, true));
+            _body.Children.Add(SettingsHelp.Label("Waiting for recordings", "Drop recordings into the watch folder. Finished files are transcribed and exported automatically while TypeWhisper is running."));
         if (_watcher.Files.Count > 40) _body.Children.Add(Text("Showing 40 recent files, with failures first. All exported transcripts remain in the output folder.", 12, true));
         foreach (var file in _watcher.Files.Reverse().OrderByDescending(f => f.Status == "Failed").Take(40))
         {
@@ -150,7 +149,7 @@ public sealed partial class FileTranscriptionView
     {
         var row = new Grid { ColumnSpacing = 8 };
         row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        var input = new TextBox { Header = label, Text = value, PlaceholderText = "Choose a folder…", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var input = new TextBox { Header = advanced ? (object)label : SettingsHelp.Label(label, "Processes existing and new audio/video files in this folder, without subfolders. Progress and transcripts are saved locally for recovery, independently of History. Automatic exports do not add History entries."), Text = value, PlaceholderText = "Choose a folder…", HorizontalAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(input, label); row.Children.Add(input);
         var choose = Button("Browse…", async () =>
         {
