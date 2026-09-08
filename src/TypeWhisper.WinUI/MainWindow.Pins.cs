@@ -20,6 +20,10 @@ public sealed partial class MainWindow
     private void LoadLauncherPins()
     {
         LoadCommandShortcuts();
+        CompactResults.ContainerContentChanging += (_, e) =>
+        {
+            if (e.ItemContainer is not null) e.ItemContainer.MinHeight = e.Item is Command { IsSuggestionsToggle: true } ? 30 : 50;
+        };
         _launcherSource.Source = _launcherGroups;
         CompactResults.ItemsSource = _launcherSource.View;
         CompactResults.PointerWheelChanged += (_, e) =>
@@ -226,7 +230,7 @@ public sealed partial class MainWindow
         var others = ordered.Where(command => !command.IsPinned).ToArray();
         if (others.Length == 0) return;
         FilteredItems.Add(new Command("Suggestions", _suggestionsExpanded ? "chevron-up" : "chevron-down",
-            _suggestionsExpanded ? "Less" : "More", _suggestionsExpanded ? "Hide suggestions" : "Show all commands", "", "")
+            "Suggestions", "", "", "")
             { IsSuggestionsToggle = true });
         if (_suggestionsExpanded)
             foreach (var command in others) FilteredItems.Add(command);

@@ -128,8 +128,8 @@
                             <GroupStyle.HeaderTemplate>
                                 <DataTemplate x:DataType="local:LauncherCommandGroup">
                                     <Border BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="{x:Bind Separator}"
-                                            Margin="{x:Bind HeaderMargin}" Padding="10,8,0,4" HorizontalAlignment="Stretch">
-                                        <TextBlock Text="{x:Bind Title}" FontSize="11" FontWeight="SemiBold"
+                                            Margin="{x:Bind HeaderMargin}" Padding="{x:Bind HeaderPadding}" HorizontalAlignment="Stretch">
+                                        <TextBlock Text="{x:Bind Title}" Visibility="{x:Bind TitleVisibility}" FontSize="11" FontWeight="SemiBold"
                                                    Foreground="{ThemeResource MutedBrush}" />
                                     </Border>
                                 </DataTemplate>
@@ -145,15 +145,15 @@
                         <DataTemplate x:DataType="local:Command">
                             <Grid Padding="10,6" Background="Transparent" Loaded="PinRow_Loaded">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="36" />
+                                    <ColumnDefinition Width="{x:Bind IconWidth}" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <local:TypeWhisperGlyph Kind="{x:Bind IconKind}" Width="19" Height="19"
+                                <local:TypeWhisperGlyph Grid.Column="{x:Bind IconColumn}" Kind="{x:Bind IconKind}" Width="19" Height="19"
                                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                <StackPanel Grid.Column="1" Margin="10,0,12,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Title}" FontSize="13" FontWeight="SemiBold" />
-                                    <TextBlock Text="{x:Bind Subtitle}" FontSize="11" Foreground="{ThemeResource MutedBrush}"
+                                <StackPanel Grid.Column="1" Margin="{x:Bind LabelMargin}" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Title}" FontSize="{x:Bind TitleSize}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind Subtitle}" Visibility="{x:Bind SubtitleVisibility}" FontSize="11" Foreground="{ThemeResource MutedBrush}"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
