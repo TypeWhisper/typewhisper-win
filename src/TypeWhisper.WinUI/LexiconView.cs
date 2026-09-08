@@ -39,6 +39,7 @@ public sealed class LexiconView : UserControl
     private Action? _pending;
     private bool _confirmDelete;
     private string _query = "";
+    private readonly HashSet<string> _collapsedCorrections = new(StringComparer.Ordinal);
     internal event Action? ExitRequested;
 
     public LexiconView()
@@ -149,6 +150,7 @@ public sealed class LexiconView : UserControl
             var hint = Text(_query.Length == 0 ? "Add a term or phrase with the button below." : "Try a different word, phrase, or tag.", 12, true); hint.TextAlignment = TextAlignment.Center; empty.Children.Add(hint);
             _rows.Children.Add(empty); return;
         }
+        if (_kind == LexiconKind.Correction) { RenderCorrectionGroups(entries); return; }
         foreach (var entry in entries)
         {
             var content = new Grid { ColumnSpacing = 14, Padding = new Thickness(2, 6, 2, 6) };
@@ -169,6 +171,73 @@ public sealed class LexiconView : UserControl
             if (entry.FromPack) trailing.Text = "Term packs  ›";
             row.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
             AutomationProperties.SetName(row, entry.FromPack ? $"Manage term pack for {entry.Key}" : entry.Kind == LexiconKind.Correction ? $"Edit correction: {entry.Value}, recognized as {entry.Key}" : $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
+        }
+    }
+
+    private void RenderCorrectionGroups(LexiconEntry[] matches)
+    {
+        var matchingTargets = matches.Select(entry => entry.Value).ToHashSet(StringComparer.Ordinal);
+        var groups = _store.Entries.Where(entry => entry.Kind == LexiconKind.Correction && matchingTargets.Contains(entry.Value))
+            .GroupBy(entry => entry.Value, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase).ToArray();
+        _count.Text = $"{groups.Length} {(groups.Length == 1 ? "spelling" : "spellings")} · {groups.Sum(group => group.Count())} variants";
+        foreach (var group in groups)
+        {
+            var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+            var title = Text(group.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            header.Children.Add(title);
+            header.Children.Add(Text($"{group.Count()} {(group.Count() == 1 ? "variant" : "variants")}", 12, true));
+            var aliases = new StackPanel { Spacing = 6 };
+            foreach (var alias in group.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var current = alias;
+                var row = new Grid { ColumnSpacing = 12 };
+                row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+                var edit = Button("", () => OpenEditor(current));
+                var label = Text(alias.Key, 13);
+                label.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
+                edit.Content = label;
+                edit.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
+                edit.HorizontalAlignment = HorizontalAlignment.Stretch;
+                edit.HorizontalContentAlignment = HorizontalAlignment.Left;
+                AutomationProperties.SetName(edit, $"Edit variant {alias.Key} for {group.Key}");
+                ToolTipService.SetToolTip(edit, "Edit variant");
+                row.Children.Add(edit);
+                var toggle = AppToggleSwitch.Create(alias.Enabled);
+                AutomationProperties.SetName(toggle, $"Enable correction from {alias.Key} to {group.Key}");
+                var restoring = false;
+                toggle.Toggled += (_, _) =>
+                {
+                    if (restoring || _closing) return;
+                    var updated = current with { Enabled = toggle.IsOn };
+                    var error = _store.Save(updated);
+                    if (error is null) { current = updated; _notice.Text = "Correction saved."; }
+                    else
+                    {
+                        restoring = true; toggle.IsOn = current.Enabled; restoring = false;
+                        _notice.Text = error;
+                    }
+                };
+                Grid.SetColumn(toggle, 1); row.Children.Add(toggle); aliases.Children.Add(row);
+            }
+            var expander = new Expander
+            {
+                Header = header, Content = aliases, IsExpanded = !_collapsedCorrections.Contains(group.Key),
+                HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
+            AutomationProperties.SetName(expander, $"Corrections for {group.Key}");
+            expander.Expanding += (_, _) => _collapsedCorrections.Remove(group.Key);
+            expander.Collapsed += (_, _) => _collapsedCorrections.Add(group.Key);
+            var panel = new Grid { ColumnSpacing = 8 };
+            panel.ColumnDefinitions.Add(new()); panel.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            panel.Children.Add(expander);
+            var add = Button("+", () => OpenEditor(new LexiconEntry(Guid.NewGuid(), LexiconKind.Correction, "") with { Value = group.Key }));
+            add.VerticalAlignment = VerticalAlignment.Top;
+            add.Margin = new Thickness(0, 8, 0, 0);
+            AutomationProperties.SetName(add, $"Add variant for {group.Key}");
+            ToolTipService.SetToolTip(add, "Add variant");
+            Grid.SetColumn(add, 1); panel.Children.Add(add);
+            _rows.Children.Add(panel);
         }
     }
 
