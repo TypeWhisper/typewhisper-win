@@ -81,6 +81,7 @@ public sealed class SpokenFeedbackController(ISpokenFeedbackBackend backend)
     private Task<SpokenFeedbackResult>? _operation;
     private bool _closed;
     private long _generation;
+    private SpokenFeedbackRequest? _activeRequest;
 
     /// <summary>Whether synthesis, playback or cancellation drain is still running.</summary>
     public bool IsBusy { get { lock (_sync) return _operation is not null; } }
@@ -105,6 +106,7 @@ public sealed class SpokenFeedbackController(ISpokenFeedbackBackend backend)
             cancellation = new();
             _cancellation = cancellation;
             _operation = completion.Task;
+            _activeRequest = request;
             generation = ++_generation;
         }
         _ = RunAsync(request, generation, cancellation, completion);
@@ -114,15 +116,19 @@ public sealed class SpokenFeedbackController(ISpokenFeedbackBackend backend)
     /// <summary>Cancels current playback and awaits backend drain; the controller remains reusable.</summary>
     public Task CancelAndDrainAsync() => Stop(false);
 
+    /// <summary>Stops only this exact request; stale view cleanup cannot cancel a newer caller's speech.</summary>
+    public Task CancelAndDrainAsync(SpokenFeedbackRequest request) => Stop(false, request);
+
     /// <summary>Permanently rejects new requests, cancels playback and awaits backend drain.</summary>
     public Task ShutdownAsync() => Stop(true);
 
-    private Task Stop(bool close)
+    private Task Stop(bool close, SpokenFeedbackRequest? expectedRequest = null)
     {
         CancellationTokenSource? cancellation;
         Task? operation;
         lock (_sync)
         {
+            if (expectedRequest is not null && !ReferenceEquals(expectedRequest, _activeRequest)) return Task.CompletedTask;
             _closed |= close;
             ++_generation;
             cancellation = _cancellation;
@@ -154,6 +160,7 @@ public sealed class SpokenFeedbackController(ISpokenFeedbackBackend backend)
             if (_generation != generation || cancellation.IsCancellationRequested)
                 result = new(SpokenFeedbackStatus.Canceled, "Spoken feedback stopped.");
             _operation = null;
+            _activeRequest = null;
             _cancellation = null;
             completion.TrySetResult(result);
         }

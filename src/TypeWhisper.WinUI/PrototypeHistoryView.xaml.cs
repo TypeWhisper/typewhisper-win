@@ -20,6 +20,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     internal Task ShutdownAsync()
     {
         if (_shutdown is not null) return _shutdown;
+        StopReadback();
         _closing = true;
         IsEnabled = false;
         foreach (var dialog in _dialogs.ToArray()) dialog.Hide();
@@ -65,7 +66,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     internal async Task RefreshAsync()
     {
-        if (_closing || _reader is null || _loading || _acting) return;
+        if (_closing || _reader is null || _loading || _acting || ReadbackActive) return;
         var openedId = IsReading ? _opened?.Entry.RecordId : null;
         _loading = true;
         _loadError = null;
@@ -290,6 +291,7 @@ public sealed partial class PrototypeHistoryView : UserControl
             return;
         }
         if (IsReading || Entries.SelectedItem is not PrototypeTranscript entry) return;
+        StopReadback();
         _opened = entry;
         TranscriptTitle.Text = entry.Title;
         TranscriptMetadata.Text = $"{entry.Time} · {entry.Metadata}";
@@ -310,6 +312,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         ListActions.Visibility = Visibility.Collapsed;
         DetailActions.Visibility = Visibility.Visible;
         CopyButton.Visibility = entry.Entry.HasTranscript ? Visibility.Visible : Visibility.Collapsed;
+        UpdateReadbackButton();
         HistoryBreadcrumbs.SetItems(new("Quick Launch", OpenLauncher, "History breadcrumb Quick Launch"),
             new("History", GoBack, "Back from history"), new(entry.Entry.Content.Kind == PrototypeHistoryEntryKind.Recording ? "Recording" : "Transcript"));
         PageTitle.Text = entry.Entry.Content.Kind == PrototypeHistoryEntryKind.Recording ? "Recording" : "Transcript";
@@ -334,6 +337,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private void ShowList()
     {
+        StopReadback();
         ReadingPage.Visibility = Visibility.Collapsed;
         ListPage.Visibility = Visibility.Visible;
         CopyButton.Visibility = Visibility.Collapsed;
@@ -482,6 +486,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     private async void Edit_Click(object sender, RoutedEventArgs e)
     {
         if (_closing || _acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        StopReadback();
         _acting = true;
         var openedId = _opened.Entry.RecordId;
         var editor = new TextBox { AcceptsReturn = true, Text = _opened.Text.ReplaceLineEndings("\r"), TextWrapping = TextWrapping.Wrap,
@@ -530,6 +535,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (_closing || _acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        StopReadback();
         _acting = true;
         var entry = _opened;
         try

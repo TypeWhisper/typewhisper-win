@@ -368,6 +368,8 @@ public sealed partial class MainWindow : Window
         }
 #endif
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService), historyService);
+        HistoryView.ReadTranscript = _dictation.ReadHistoryAsync;
+        HistoryView.StopReading = _dictation.StopHistoryReadbackAsync;
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         WorkflowsView.Connect(_dictation);
         _dictation.ReviewRequested += ShowOutputReview;
@@ -1338,6 +1340,7 @@ public sealed partial class MainWindow : Window
 
     private void CloseHistory()
     {
+        HistoryView.StopReadback();
         _historyOpen = false;
         HistoryView.Visibility = Visibility.Collapsed;
         CommandSurface.Visibility = Visibility.Visible;

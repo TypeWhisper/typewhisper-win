@@ -30,7 +30,8 @@ public sealed partial class PrototypeHistoryView
             else if (EntryActions.Visibility == Visibility.Visible && e.Key == VirtualKey.E) Edit_Click(this, args);
             else if (EntryActions.Visibility == Visibility.Visible && e.Key == VirtualKey.X) Export_Click(this, args);
             else if (EntryActions.Visibility == Visibility.Visible && e.Key == VirtualKey.Delete) Delete_Click(this, args);
-            else if (AudioActions.Visibility == Visibility.Visible && e.Key == VirtualKey.P && PlayAudioButton.IsEnabled) PlayAudio_Click(this, args);
+            else if (ReadAloudButton.Visibility == Visibility.Visible && e.Key == VirtualKey.P) ReadAloud_Click(this, args);
+            else if (AudioActions.Visibility == Visibility.Visible && e.Key == VirtualKey.A && PlayAudioButton.IsEnabled) PlayAudio_Click(this, args);
             else if (AudioActions.Visibility == Visibility.Visible && e.Key == VirtualKey.F && ShowAudioButton.IsEnabled) ShowAudio_Click(this, args);
             else return;
         }

@@ -133,7 +133,7 @@
                 <local:HandCursorButton x:Name="RetryAudioCleanupButton" Content="Retry audio cleanup · R" Visibility="Collapsed" Click="RetryAudioCleanup_Click"
                     Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Left" />
                 <StackPanel x:Name="AudioActions" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
-                    <local:HandCursorButton x:Name="PlayAudioButton" Content="Play audio · P" Click="PlayAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Play history audio" />
+                    <local:HandCursorButton x:Name="PlayAudioButton" Content="Play audio � A" Click="PlayAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Play history audio" />
                     <local:HandCursorButton x:Name="ShowAudioButton" Content="Show in folder · F" Click="ShowAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Show history audio in folder" />
                 </StackPanel>
                 <Grid x:Name="ListActions">
@@ -159,6 +159,7 @@
                 <Grid x:Name="DetailActions" Visibility="Collapsed">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel x:Name="EntryActions" Grid.Column="0" Orientation="Horizontal" Visibility="Collapsed" Spacing="8">
+                        <local:HandCursorButton x:Name="ReadAloudButton" Content="Read aloud � P" Visibility="Collapsed" Click="ReadAloud_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Read transcript aloud" />
                         <local:HandCursorButton x:Name="EditButton" Content="Edit text · E" Click="Edit_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Edit history transcript" />
                         <local:HandCursorButton x:Name="ExportButton" Content="Export… · X" Click="Export_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Export history transcript" />
                         <local:HandCursorButton x:Name="DeleteButton" Content="Delete… · Del" Click="Delete_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" AutomationProperties.Name="Delete history entry" />

@@ -8,6 +8,25 @@ internal sealed partial class LocalDictationSession
     internal SpokenFeedbackController SpokenFeedback { get; } = new(new WindowsSystemVoiceBackend());
     private DictationAudioPreferences _spokenFeedbackAtStart = new();
     private Task _spokenFeedbackActivity = Task.CompletedTask;
+    private SpokenFeedbackRequest? _historySpeechRequest;
+
+    internal Task StopHistoryReadbackAsync() => _historySpeechRequest is { } request
+        ? SpokenFeedback.CancelAndDrainAsync(request) : Task.CompletedTask;
+
+    internal Task<SpokenFeedbackResult> ReadHistoryAsync(string text, string? language)
+    {
+        if (_disposed || !CanChangeProvider || Models.Busy || SpokenFeedback.IsBusy || !_gate.Wait(0))
+            return Task.FromResult(new SpokenFeedbackResult(SpokenFeedbackStatus.Rejected,
+                "Finish the current recording, playback or model operation before reading this transcript."));
+        try
+        {
+            _historySpeechRequest = new(text, language, AudioPreferences.SpokenFeedbackVoiceId, AudioPreferences.OutputDeviceId);
+            var playback = RunSpokenFeedbackAsync(_historySpeechRequest, reportFailure: false);
+            _spokenFeedbackActivity = playback;
+            return playback;
+        }
+        finally { _gate.Release(); }
+    }
 
     internal Task<SpokenFeedbackResult> ToggleReadLastDictationAsync()
     {
