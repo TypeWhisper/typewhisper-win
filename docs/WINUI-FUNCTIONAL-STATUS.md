@@ -1,5 +1,13 @@
 # Windows 1.1 functional comparison
 
+## Copy last dictation shortcut (`a5bed04c`), 2026-09-08
+
+The Copy last transcription row in Settings > Shortcuts is now connected, with a matching Quick Launch action. It defaults to unassigned, persists in `copy-last-transcription-hotkeys.txt`, reuses atomic registration/save/rollback, and checks conflicts in both directions against launcher, dictation (including modifier-only prefixes), Cancel, History and workflow shortcuts. Shutdown and profile restoration unregister it.
+
+The action copies the exact completed session snapshot, including with History off or Review first. A successful global invocation does not activate Main or paste text. Startup has no retained dictation; empty/error feedback explains the outcome without clearing the clipboard. Active capture/output or shortcut editing prevents copying. The snapshot is RAM-only and does not load historical entries after restart. History read-back remains open.
+
+Focused Presentation validation passed **749 tests**, including six copy-action cases for exact final text, admission, fresh/closed sessions and clipboard failure/retry. The prescribed normal-profile Debug build/launch passed (`artifacts/copy-last-build.log`) and the development process was verified running. Native shortcut capture/persistence, conflict handling, copy/paste, focus preservation, History-off and restart checks remain for Marco; no Computer Use was performed. Earlier CI evidence below applies to its named commits, not this change.
+
 ## Verified CI for `a28986cd`, 2026-09-07
 
 [Headless run 34158614534](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34158614534) and [CodeQL run 34158615082](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34158615082) both completed successfully. Both runs report exact head SHA `a28986cd28b1c9d22ba889c5e853dd463b6c049b`; all three CodeQL language jobs passed.
