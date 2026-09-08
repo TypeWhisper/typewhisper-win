@@ -215,6 +215,22 @@ internal sealed class Lexicon
         return null;
     }
 
+    internal bool RemoveCorrectionGroup(string replacement)
+    {
+        var ids = _entries.Where(entry => entry.Kind == LexiconKind.Correction && !entry.FromPack &&
+            string.Equals(entry.Value, replacement, StringComparison.Ordinal)).Select(entry => entry.Id).ToHashSet();
+        if (ids.Count == 0) { LastError = "This correction group no longer exists."; return false; }
+        if (_dictionary is not null)
+        {
+            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(entry => !ids.Contains(UiId(entry.Id))).ToArray()))
+            { LastError = "Could not delete correction group."; return false; }
+            RefreshDictionary();
+        }
+        else _entries.RemoveAll(entry => ids.Contains(entry.Id));
+        LastError = null;
+        return true;
+    }
+
     internal bool Remove(Guid id)
     {
         var entry = _entries.FirstOrDefault(e => e.Id == id);

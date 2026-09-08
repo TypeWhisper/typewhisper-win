@@ -252,7 +252,35 @@ public sealed class LexiconView : UserControl
             panel.Children.Add(headingRow);
             panel.Children.Add(aliases);
             UpdateExpansion();
-            _rows.Children.Add(Surface(panel, 12));
+            var card = Surface(panel, 12);
+            MenuFlyout GroupMenu()
+            {
+                var menu = new MenuFlyout();
+                var delete = new MenuFlyoutItem { Text = "Delete group…" };
+                delete.Click += async (_, _) =>
+                {
+                    if (_closing) return;
+                    var dialog = new ContentDialog
+                    {
+                        XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
+                        Title = $"Delete corrections for {group.Key}?",
+                        Content = $"This deletes all {group.Count()} variants in this group. This cannot be undone.",
+                        PrimaryButtonText = "Delete group", CloseButtonText = "Cancel",
+                        DefaultButton = ContentDialogButton.Close
+                    };
+                    if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
+                    if (!_store.RemoveCorrectionGroup(group.Key))
+                    { _notice.Text = _store.LastError ?? "Could not delete correction group."; return; }
+                    _collapsedCorrections.Remove(group.Key);
+                    Render();
+                    _notice.Text = "Correction group deleted.";
+                };
+                menu.Items.Add(delete);
+                return menu;
+            }
+            card.ContextFlyout = GroupMenu();
+            expand.ContextFlyout = GroupMenu();
+            _rows.Children.Add(card);
         }
     }
 

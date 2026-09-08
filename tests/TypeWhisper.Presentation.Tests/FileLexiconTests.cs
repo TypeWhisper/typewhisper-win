@@ -33,6 +33,24 @@ public sealed class FileLexiconTests : IDisposable
     }
 
     [Fact]
+    public void DeleteCorrectionGroupPersistsAllVariantsAndPreservesOtherEntries()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "wrong one", "Correct")));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "wrong two", "Correct") { Enabled = false }));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "other", "Different")));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Word, "Correct")));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "sig", "Correct")));
+        Assert.True(store.RemoveCorrectionGroup("Correct"));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.DoesNotContain(reloaded.Entries, entry => entry.Kind == LexiconKind.Correction && entry.Value == "Correct");
+        Assert.Equal(3, reloaded.Entries.Count);
+        Assert.Contains(reloaded.Entries, entry => entry.Kind == LexiconKind.Word && entry.Key == "Correct");
+        Assert.Contains(reloaded.Entries, entry => entry.Kind == LexiconKind.Snippet && entry.Key == "sig");
+        Assert.False(reloaded.RemoveCorrectionGroup("Correct"));
+    }
+
+    [Fact]
     public async Task SnapshotUsesSnippetThenCorrectionsWithoutWritingAndMergesUsageIntoCurrentCatalog()
     {
         WriteSnippets(new Snippet() { Id = "signature", Trigger = "sig", Replacement = "mistake", UsageCount = 4 });
