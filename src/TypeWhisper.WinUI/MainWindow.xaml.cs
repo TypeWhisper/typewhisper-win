@@ -14,6 +14,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow : Window
 {
+    private readonly WinUIHttpApi _httpApi;
     private const int CompactWidth = 780;
     private const int CompactHeight = 520;
     private static string LauncherHotkeyPath => WinUIProfile.DataPath("quick-launch-hotkeys.txt");
@@ -159,6 +160,7 @@ public sealed partial class MainWindow : Window
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey?.Value ?? "";
             await _dictation.InitializeAsync();
+            if (!_closing) await _httpApi.InitializeAsync();
             EnsureFileTranscription();
             InitializeWorkflowShortcuts();
             InitializeHistoryShortcut();
@@ -217,12 +219,13 @@ public sealed partial class MainWindow : Window
         // session shutdown disposes the recovery store they use.
         await DrainRecoveryViewsAsync();
         // Begin all cancellation requests before awaiting any drain.
+        var api = _httpApi.ShutdownAsync();
         var session = _dictation.ShutdownAsync();
         var files = _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask;
         var history = HistoryView.ShutdownAsync();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
-        await Task.WhenAll(session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
+        await Task.WhenAll(api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
             _dictationInitialization ?? Task.CompletedTask);
         _liveOverlay?.Close();
     });
@@ -403,6 +406,7 @@ public sealed partial class MainWindow : Window
 #endif
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService), historyService);
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _httpApi = new WinUIHttpApi(_dictation, DispatcherQueue);
         HistoryView.ReadTranscript = _dictation.ReadHistoryAsync;
         HistoryView.StopReading = _dictation.StopHistoryReadbackAsync;
         _dictation.StopHistoryPlayback = () => { HistoryView.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
@@ -1153,6 +1157,11 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
+                if (category == "HTTP API")
+                {
+                    content.Children.Clear(); pickers.Clear();
+                    content.Children.Add(new HttpApiSettingsView(_httpApi));
+                }
                 if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)
                     content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });
                 if (category == "Files & recovery")

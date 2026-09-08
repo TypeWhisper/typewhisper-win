@@ -12,19 +12,22 @@ internal sealed partial class LocalDictationSession
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _fileDispatcher;
     internal bool CanTranscribeFile => CanChangeProvider && IsReady && !Models.Busy;
 
-    internal async Task<FileTranscriptionOutput> TranscribeFileAsync(string path, Action<string> stage, CancellationToken ct)
+    internal Task<FileTranscriptionOutput> TranscribeFileAsync(string path, Action<string> stage, CancellationToken ct) =>
+        TranscribeFileAsync(path, stage, ct, null);
+
+    internal async Task<FileTranscriptionOutput> TranscribeFileAsync(string path, Action<string> stage, CancellationToken ct, ParsedApiTranscription? apiRequest)
     {
         ct.ThrowIfCancellationRequested();
         if (!CanTranscribeFile || !await _gate.WaitAsync(0, ct))
             throw new InvalidOperationException("Finish the current recording or model operation before transcribing a file.");
         _fileBusy = true;
-        FileProcessingStatus = "Loading audio · open Files for progress or cancellation";
+        FileProcessingStatus = apiRequest is null ? "Loading audio · open Files for progress or cancellation" : "Processing HTTP API request";
         void Report(string message)
         {
             void Publish()
             {
                 if (ct.IsCancellationRequested) return;
-                FileProcessingStatus = message + " · Files";
+                FileProcessingStatus = message + (apiRequest is null ? " · Files" : " · HTTP API");
                 stage(message); Changed?.Invoke();
             }
             if (_fileDispatcher.HasThreadAccess) Publish();
@@ -39,8 +42,21 @@ internal sealed partial class LocalDictationSession
             var modelName = ActiveModelName;
             var providerSelection = RegistrySelectionId(_providerId);
             var registryProvider = UsesRegistryProvider;
-            var language = Language;
-            var task = TranscriptionTaskPreferences.Current;
+            if (apiRequest?.Model is { } requestedModel && requestedModel != modelId && requestedModel != ActiveChoiceId &&
+                requestedModel != _providerId + ":" + modelId)
+                throw new LocalApiRequestException(409, "The requested model is not selected. Select it in Dictation first.");
+            if (apiRequest?.Engine is { } requestedEngine && requestedEngine != engineId && requestedEngine != _providerId &&
+                requestedEngine != providerSelection)
+                throw new LocalApiRequestException(409, "The requested engine is not selected.");
+            var language = apiRequest?.Language ?? Language;
+            if (apiRequest?.Language is { } requestedLanguage && requestedLanguage != "auto" &&
+                !SupportedLanguages.Contains(requestedLanguage, StringComparer.OrdinalIgnoreCase))
+                throw new LocalApiRequestException(422, "The selected model does not support this language.");
+            if (apiRequest?.Language is not null && language != "auto")
+                language = SupportedLanguages.First(code => code.Equals(language, StringComparison.OrdinalIgnoreCase));
+            var task = apiRequest?.Task is { } requestedTask
+                ? requestedTask == "translate" ? TranscriptionTask.Translate : TranscriptionTask.Transcribe
+                : TranscriptionTaskPreferences.Current;
             var textPreferences = TextPreferences.Current;
             var processors = PluginRuntime.PostProcessors.ToArray();
             var outputPreferences = OutputPreferences.Current;
@@ -55,7 +71,10 @@ internal sealed partial class LocalDictationSession
             ct.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
             Report("Loading audio…");
-            var samples = await MediaFoundationFileDecoder.LoadAsync(path, ct);
+            float[] samples;
+            try { samples = await MediaFoundationFileDecoder.LoadAsync(path, ct); }
+            catch (Exception ex) when (apiRequest is not null && ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+            { throw new LocalApiRequestException(422, "The audio could not be decoded. Use supported media up to 60 minutes."); }
             ct.ThrowIfCancellationRequested();
             Report($"Transcribing with {modelName}…");
             var decoded = registryProvider
@@ -86,7 +105,7 @@ internal sealed partial class LocalDictationSession
             }
             var processed = await lexicon.ProcessAsync(refinedText, textPreferences, language,
                 DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language), boostVocabulary && !useCtc,
-                ReadSnippetClipboardAsync, ct, task, null, engineId, modelId, textProcessors:
+                apiRequest is null ? ReadSnippetClipboardAsync : _ => Task.FromResult(""), ct, task, null, engineId, modelId, textProcessors:
                     BindTextProcessors(processors, DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language),
                         null, null, samples.Length / 16000.0));
             ct.ThrowIfCancellationRequested();
@@ -97,7 +116,7 @@ internal sealed partial class LocalDictationSession
             warnings.AddRange(ctcWarnings);
             var duration = samples.Length / 16000.0;
             TranscriptionRecord? pendingHistory = null;
-            if (outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory)
+            if (apiRequest is null && outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory)
             {
                 Report("Preparing History…");
                 try
@@ -105,7 +124,7 @@ internal sealed partial class LocalDictationSession
                     await _history.EnsureLoadedAsync();
                     ct.ThrowIfCancellationRequested();
                     ObjectDisposedException.ThrowIf(_disposed, this);
-                    if (outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory) pendingHistory = new()
+                    if (apiRequest is null && outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory) pendingHistory = new()
                     {
                         Id = Guid.NewGuid().ToString(), Timestamp = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
                         TextProcessors = processed.TextProcessors?.ToArray(),

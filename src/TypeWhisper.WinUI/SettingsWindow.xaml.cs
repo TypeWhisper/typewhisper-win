@@ -62,7 +62,7 @@ public sealed partial class SettingsWindow : Window
             ("APP", [("Home", "home"), ("General", "settings"), ("Shortcuts", "keyboard")]),
             ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
             ("PERSONALIZATION", [("Appearance", "desktop")]),
-            ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("Premium", "lock"), ("Account & about", "info")])
+            ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("HTTP API", "plugin"), ("Premium", "lock"), ("Account & about", "info")])
         ];
         foreach (var group in groups)
         {
@@ -329,6 +329,7 @@ public sealed partial class SettingsWindow : Window
             }
             if (category == "Premium")
                 SessionHint.Text = PremiumAccessState.CanOverride ? "Development access is saved in this profile only" : "Premium access and feature availability";
+            if (category == "HTTP API") SessionHint.Text = "Local API settings are saved in this profile";
             if (category == "Account & about") SessionHint.Text = "TypeWhisper for Windows";
             if (category == "Privacy" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "History saving and retention are connected · unavailable controls are disabled";

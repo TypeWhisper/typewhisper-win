@@ -1,5 +1,12 @@
 # Windows 1.1 functional comparison
 
+## HTTP API and discovery, 2026-09-08
+
+Settings > HTTP API now controls a loopback-only server with mandatory authentication except minimal status. Mac-compatible api-discovery.json and api-port include an owner-only discovery token; persistent secrets use DPAPI. Status, models, capabilities, uploads and local-file transcription are connected. Control/mutation endpoints and automatic model switching remain separate work. See [usage and validation](WINUI-HTTP-API.md).
+
+Marco confirmed the guided word-training flow works.
+
+
 ## File processing and watched folders, 2026-09-08
 
 File transcription now uses the shared Files / Watch folder tabs above the heading. Recorder **Transcribe** starts only the selected saved recording and opens its completed transcript; unrelated queued jobs remain queued. A failed selected job retries directly. Manual file runs continue when navigating away, with processing status in Quick Launch. Completed queue results support a single folder selection for batch TXT export, preserving existing files. Result copy uses Enter; export uses X; queue removal uses Delete; retry uses R. Actions remain in the footer with the primary action on the right. Rebuilt views restore focus to the final live control, including successive Start/Pause and result/back transitions.
