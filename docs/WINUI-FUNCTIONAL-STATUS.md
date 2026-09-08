@@ -1,5 +1,13 @@
 # Windows 1.1 functional comparison
 
+## Shared section tabs (`2dc89f59`), 2026-09-08
+
+PrototypeTabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.
+
+Recorder tabs move from the top-right title row to the left below the title. Lexicon tabs keep stable controls rather than rebuilding buttons on each render, preserving keyboard focus. Section tabs stay outside scrollable content; narrow strips can scroll to the focused item. Existing editor/detail visibility and navigation guards are retained.
+
+775 Presentation tests passed (`artifacts/test-results/shared-tabs/shared-tabs.trx`), including the source encoding guard. The prescribed normal-profile build/relaunch passed (`artifacts/shared-tabs-build.log`) with a nonzero main-window handle and unchanged diagnostic log. These tests do not execute the WinUI tab component. Native visual alignment, tab/arrow-key navigation, integration switching, and record-stop auto-selection require manual acceptance. No Computer Use was performed.
+
 ## Recorder task flow (`9c419c55`), 2026-09-08
 
 Evidence level: artifact/source review of Marco's report that Recorder playback works but the UI requires too many clicks and is unclear. No live expert walkthrough or new native user test was performed.
