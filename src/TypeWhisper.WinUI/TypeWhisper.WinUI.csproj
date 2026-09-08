@@ -75,4 +75,13 @@
   <Target Name="PublishPortablePlugins" AfterTargets="Publish" DependsOnTargets="BuildPortablePlugins">
     <MSBuild Projects="@(PortablePluginProject)" Targets="CopyPackage" Properties="Configuration=$(Configuration);PluginDestination=$([System.IO.Path]::GetFullPath('$(PublishDir)Plugins'))" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" />
   </Target>
+  <Target Name="PublishBundledCli" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
+    <PropertyGroup>
+      <_CliPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)Cli', '$(MSBuildProjectDirectory)'))/</_CliPublishDirectory>
+    </PropertyGroup>
+    <MSBuild Projects="../TypeWhisper.Cli/TypeWhisper.Cli.csproj" Targets="Restore;Publish"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(_CliPublishDirectory);Platform=AnyCPU"
+      RemoveProperties="TargetFramework;RuntimeIdentifiers;OutputPath;OutDir;PublishSingleFile;PublishReadyToRun;WindowsAppSDKSelfContained" />
+    <Error Condition="!Exists('$(_CliPublishDirectory)typewhisper.exe')" Text="Bundled TypeWhisper CLI is missing." />
+  </Target>
 </Project>

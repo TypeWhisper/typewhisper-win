@@ -22,6 +22,9 @@ public enum FileTranscriptionStatus
 public sealed record FileTranscriptionOutput(string Text, string Provider, string Model, double Duration,
     IReadOnlyList<TranscriptionSegment> Segments, string? Warning = null)
 {
+    /// <summary>The language of the returned text, when known.</summary>
+    public string? Language { get; init; }
+
     /// <summary>Provider/model label captured when processing began, independent of later selection changes.</summary>
     public string? DisplayName { get; init; }
     /// <summary>Snippet IDs actually expanded, pending usage recording when the queue accepts this result.</summary>

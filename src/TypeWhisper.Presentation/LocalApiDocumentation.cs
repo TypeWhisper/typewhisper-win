@@ -27,7 +27,7 @@ internal static class LocalApiDocumentation
         <main>
         <p class="muted">TYPEWHISPER · API 1.1</p>
         <h1>Connect your scripts to TypeWhisper</h1>
-        <p>Transcribe audio using the model selected in Dictation. Keep TypeWhisper running with the HTTP API enabled under Settings → Advanced.</p>
+        <p>Transcribe audio using the Dictation model or a request-scoped engine/model override. Keep TypeWhisper running with the HTTP API enabled under Settings → Advanced.</p>
         <nav aria-label="Contents"><a href="#start">Quick start</a><a href="#endpoints">Endpoints</a><a href="#options">Options</a><a href="#discovery">Auto-discovery</a><a href="#errors">Errors</a></nav>
         <h2 id="start">Quick start</h2>
         <p>Base address: <code>http://127.0.0.1:{{PORT}}</code>. Copy your API token in Advanced settings. In PowerShell, replace <code>YOUR_API_TOKEN</code> below. Use <code>curl.exe</code> explicitly.</p>
@@ -63,17 +63,22 @@ internal static class LocalApiDocumentation
         <ul><li><code>language</code>: a supported language code, such as <code>en</code> or <code>de</code>. Defaults to the Dictation setting.</li>
         <li><code>task</code>: <code>transcribe</code> or <code>translate</code>, where supported. Defaults to the Dictation setting.</li>
         <li><code>response_format</code>: <code>json</code> (default), <code>text</code>, <code>srt</code> or <code>vtt</code>. Subtitles require provider timestamps.</li>
-        <li><code>model</code> and <code>engine</code>: optional checks against the selected model. These never switch models.</li></ul>
-        <p>JSON results contain <code>text</code>, <code>engine</code>, <code>model</code>, <code>duration</code>, <code>warnings</code> and <code>segments</code> with text/start/end. Unknown and duplicate options are rejected.</p>
+        <li><code>model</code> and <code>engine</code>: request-scoped overrides from GET /v1/models. The backend loads the requested model and restores the previous selection afterward. A loadable override also works when no model is currently ready. Portable plugin providers require an initial selection to restore afterward; otherwise the request returns 409.</li>
+        <li><code>language_hint</code>: repeat multipart fields, or use a JSON <code>language_hints</code> array. At most two ordered language codes; cannot be combined with <code>language</code>. Requires a provider that supports hints.</li>
+        <li><code>await_download</code>: boolean, commonly query <code>?await_download=1</code>. Allows required model assets to download before loading; otherwise assets must already be available.</li>
+        <li><code>apply_corrections</code>: boolean, default <code>true</code>. Set <code>false</code> to bypass dictionary corrections. File API requests do not run snippets or post-processors.</li>
+        <li><code>target_language</code>: translate through the Windows default workflow LLM configuration. Missing default LLM configuration returns 422. This does not use the macOS Translation framework.</li></ul>
+        <p>JSON boolean fields require actual booleans. Multipart/query booleans accept true/false, 1/0, yes/no and on/off. Unknown options, including prompt and normalize_numbers, are rejected. Repeated multipart language_hint is allowed; other duplicate options are rejected.</p>
+        <p>JSON results contain <code>text</code>, <code>language</code> (actual output language), <code>engine</code>, <code>model</code>, <code>duration</code>, <code>warnings</code> and <code>segments</code> with text/start/end. Unknown and duplicate options are rejected.</p>
         <h2 id="discovery">Auto-discovery</h2>
         <p>The active profile contains <code>api-discovery.json</code> (base_url, port, token and process information) and <code>api-port</code>. The normal development profile is <code>%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData</code>. The discovery token is accessible only to your Windows user. Files are removed when the API stops; verify liveness after an unexpected app exit.</p>
         <h2 id="errors">Limits and errors</h2>
         <p>Uploads: up to 32 MiB including multipart framing. Audio: up to 60 minutes. Local-file paths cannot use network shares or reparse points. Only loopback connections are accepted; browser-origin API requests are blocked.</p>
         <table><thead><tr><th scope="col">Status</th><th scope="col">Meaning</th></tr></thead><tbody>
         <tr><td>400</td><td>Invalid, duplicate or unsupported options.</td></tr><tr><td>401 / 403</td><td>Missing/invalid token or disallowed request origin.</td></tr>
-        <tr><td>409</td><td>Engine busy or selected model does not match.</td></tr><tr><td>413 / 422</td><td>Upload too large, invalid audio, unsupported language/task or missing subtitle timestamps.</td></tr>
+        <tr><td>409</td><td>Engine busy, model operation unavailable or required model assets missing.</td></tr><tr><td>413 / 422</td><td>Upload too large, invalid audio, unsupported language/task/hints, missing translation configuration or missing subtitle timestamps.</td></tr>
         <tr><td>429 / 503</td><td>Too many concurrent requests or no model ready.</td></tr></tbody></table>
-        <p>File-transcription requests do not paste text or save History/audio. Dictation and recorder control use the same recording and output settings as the app. Your configured vocabulary and text-processing pipeline apply. Cloud models and processing plugins make their normal provider calls.</p>
+        <p>File-transcription requests do not paste text or save History/audio. Dictation and recorder control use the same recording and output settings as the app. File API requests apply dictionary corrections by default, with no snippets or post-processors. Cloud transcription and requested LLM translation make their normal provider calls.</p>
         </main></html>
         """;
 }

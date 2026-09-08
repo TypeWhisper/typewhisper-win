@@ -11,11 +11,17 @@ namespace TypeWhisper.Presentation;
 /// <param name="Language">Optional requested language.</param>
 /// <param name="Task">Optional transcribe or translate task.</param>
 /// <param name="ResponseFormat">Requested json, text, srt, or vtt representation.</param>
-/// <param name="Model">Optional model constraint; must not change global selection.</param>
-/// <param name="Engine">Optional engine constraint; must not change global selection.</param>
+/// <param name="Model">Optional request-scoped model override.</param>
+/// <param name="Engine">Optional request-scoped engine override.</param>
+/// <param name="LanguageHints">Ordered source language hints, or null when absent.</param>
+/// <param name="TargetLanguage">Optional translation target language.</param>
+/// <param name="AwaitDownload">Whether model setup may wait for required assets.</param>
+/// <param name="ApplyCorrections">Whether dictionary corrections apply to the result.</param>
 public sealed record ParsedApiTranscription(
     ReadOnlyMemory<byte> Audio, string? FileName, string? LocalPath, string? Language,
-    string? Task, string ResponseFormat, string? Model, string? Engine);
+    string? Task, string ResponseFormat, string? Model, string? Engine,
+    IReadOnlyList<string>? LanguageHints = null, string? TargetLanguage = null,
+    bool AwaitDownload = false, bool ApplyCorrections = true);
 
 /// <summary>A transcript segment with actual provider timestamps in seconds.</summary>
 /// <param name="Text">Recognized segment text.</param>
@@ -37,7 +43,7 @@ public static class LocalApiTranscription
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly HashSet<string> OptionNames = new(StringComparer.Ordinal)
-        { "language", "task", "response_format", "model", "engine" };
+        { "language", "task", "response_format", "model", "engine", "language_hint", "language_hints", "target_language", "await_download", "apply_corrections" };
 
     /// <summary>Parses an uploaded or local-file transcription request without accessing the filesystem.</summary>
     public static ParsedApiTranscription Parse(LocalApiRequest request)
@@ -70,6 +76,24 @@ public static class LocalApiTranscription
                 foreach (var property in json.RootElement.EnumerateObject())
                 {
                     if (!seen.Add(property.Name)) throw Bad("Duplicate request field.");
+                    if (property.Name == "language_hints")
+                    {
+                        if (property.Value.ValueKind != JsonValueKind.Array ||
+                            property.Value.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String))
+                            throw Bad("language_hints must be an array of language codes.");
+                        var jsonHints = property.Value.EnumerateArray().Select(item => LanguageCode(item.GetString()!)).ToArray();
+                        if (jsonHints.Any(string.IsNullOrWhiteSpace)) throw Bad("Language hints must not be empty.");
+                        AddOption(options, property.Name, string.Join(',', jsonHints), allowEmptyHints: true);
+                        continue;
+                    }
+                    if (property.Name is "apply_corrections" or "await_download")
+                    {
+                        if (property.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                            throw Bad("Boolean request fields must be JSON booleans.");
+                        AddOption(options, property.Name, property.Value.GetBoolean() ? "true" : "false");
+                        continue;
+                    }
+                    if (property.Name == "language_hint") throw Bad("Use language_hints in JSON requests.");
                     if (property.Value.ValueKind != JsonValueKind.String) throw Bad("Request fields must be strings.");
                     var value = property.Value.GetString()!;
                     if (property.Name == "path") localPath = value;
@@ -100,8 +124,15 @@ public static class LocalApiTranscription
         if (task is not (null or "transcribe" or "translate")) throw Bad("Unsupported task.");
         var format = options.GetValueOrDefault("response_format", "json");
         if (format is not ("json" or "text" or "srt" or "vtt")) throw Bad("Unsupported response_format.");
+        var hintsValue = options.GetValueOrDefault("language_hints") ?? options.GetValueOrDefault("language_hint");
+        var hints = string.IsNullOrEmpty(hintsValue) ? [] : hintsValue.Split(',').Select(LanguageCode).ToArray();
+        if (hints.Length > 2) throw Bad("At most two language hints are supported.");
+        if (hints.Length > 0 && options.ContainsKey("language")) throw Bad("Use either language or language hints, not both.");
+        var target = options.GetValueOrDefault("target_language");
         return new(audio, fileName, localPath, options.GetValueOrDefault("language"), task, format,
-            options.GetValueOrDefault("model"), options.GetValueOrDefault("engine"));
+            options.GetValueOrDefault("model"), options.GetValueOrDefault("engine"), hints,
+            target is null ? null : LanguageCode(target), Boolean(options, "await_download", false),
+            Boolean(options, "apply_corrections", true));
     }
 
     /// <summary>Formats a transcript and refuses subtitle output if actual timestamps are unavailable.</summary>
@@ -138,12 +169,49 @@ public static class LocalApiTranscription
         return FormattableString.Invariant($"{milliseconds / 3600000:00}:{milliseconds / 60000 % 60:00}:{milliseconds / 1000 % 60:00}{(format == "srt" ? ',' : '.')}{milliseconds % 1000:000}");
     }
 
-    private static void AddOption(Dictionary<string, string> options, string name, string? value)
+    private static void AddOption(Dictionary<string, string> options, string name, string? value, bool allowEmptyHints = false, bool repeatHint = false)
     {
         if (!OptionNames.Contains(name)) throw Bad("Unsupported request option.");
+        if (allowEmptyHints && value == "")
+        {
+            if (options.ContainsKey("language_hint") || !options.TryAdd(name, "")) throw Bad("Duplicate request option.");
+            return;
+        }
         if (string.IsNullOrWhiteSpace(value) || value.Length > 512 || value.Any(char.IsControl))
             throw Bad("Request options must be nonempty strings without control characters.");
-        if (!options.TryAdd(name, value)) throw Bad("Duplicate request option.");
+        if (name == "language_hint") value = LanguageCode(value);
+        if (name is "language_hint" or "language_hints")
+        {
+            var other = name == "language_hint" ? "language_hints" : "language_hint";
+            if (options.ContainsKey(other)) throw Bad("Use one language hint representation.");
+            if (repeatHint && name == "language_hint" && options.TryGetValue(name, out var previous))
+            {
+                options[name] = previous + "," + value;
+                return;
+            }
+        }
+        if (!options.TryAdd(name, value.Trim())) throw Bad("Duplicate request option.");
+    }
+
+    private static bool Boolean(Dictionary<string, string> options, string name, bool fallback)
+    {
+        if (!options.TryGetValue(name, out var value)) return fallback;
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "1" or "true" or "yes" or "on" => true,
+            "0" or "false" or "no" or "off" => false,
+            _ => throw Bad($"Invalid {name} boolean.")
+        };
+    }
+
+    private static string LanguageCode(string value)
+    {
+        var normalized = value.Trim().Replace('_', '-').ToLowerInvariant();
+        var parts = normalized.Split('-');
+        if (parts[0].Length is < 2 or > 3 || !parts[0].All(char.IsAsciiLetter) ||
+            parts.Skip(1).Any(part => part.Length is < 2 or > 8 || !part.All(char.IsAsciiLetterOrDigit)))
+            throw Bad("Invalid language code.");
+        return normalized;
     }
 
     private static (ReadOnlyMemory<byte>, string?) ParseMultipart(byte[] body, MediaTypeHeaderValue media,
@@ -191,7 +259,8 @@ public static class LocalApiTranscription
                 disposition.Parameters.Any(p => p.Name is not ("name" or "filename" or "filename*")))
                 throw Bad("Invalid multipart disposition.");
             var field = Unquote(disposition.Name);
-            if (!fields.Add(field)) throw Bad("Duplicate multipart field.");
+            var repeatedField = !fields.Add(field);
+            if (repeatedField && field != "language_hint") throw Bad("Duplicate multipart field.");
             position += headerEnd + 4;
             var end = FindDelimiter(body, position, delimiter);
             if (end < 0) throw Bad("Unterminated multipart body.");
@@ -207,7 +276,7 @@ public static class LocalApiTranscription
             {
                 if (disposition.FileName != null || disposition.FileNameStar != null) throw Bad("Unexpected file field.");
                 if (end - position > 2048) throw Bad("Request option is too long.");
-                try { AddOption(options, field, StrictUtf8.GetString(body, position, end - position)); }
+                try { AddOption(options, field, StrictUtf8.GetString(body, position, end - position), repeatHint: field == "language_hint" && repeatedField); }
                 catch (DecoderFallbackException) { throw Bad("Request options must be UTF-8."); }
             }
             position = end + delimiter.Length;

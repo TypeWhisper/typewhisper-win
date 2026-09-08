@@ -38,11 +38,87 @@ public sealed class LocalApiTranscriptionTests
         Assert.Equal("json", parsed.ResponseFormat);
     }
 
+    [Fact]
+    public void LocalFileParsesMacCliOptionsAndBooleanDefaults()
+    {
+        var json = """{"path":"C:/audio.wav","language_hints":["DE","en"],"target_language":"pt_BR","engine":"remote","model":"new-model","apply_corrections":false}""";
+        var parsed = LocalApiTranscription.Parse(Request(Encoding.UTF8.GetBytes(json), "application/json",
+            "/v1/transcribe/local-file", new Dictionary<string, string?> { ["await_download"] = "1" }));
+        Assert.Equal(new[] { "de", "en" }, parsed.LanguageHints);
+        Assert.Equal("pt-br", parsed.TargetLanguage);
+        Assert.Equal("remote", parsed.Engine);
+        Assert.Equal("new-model", parsed.Model);
+        Assert.True(parsed.AwaitDownload);
+        Assert.False(parsed.ApplyCorrections);
+        var defaults = LocalApiTranscription.Parse(Request([1]));
+        Assert.True(defaults.ApplyCorrections);
+        Assert.False(defaults.AwaitDownload);
+        Assert.Empty(defaults.LanguageHints!);
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("1", true)]
+    [InlineData("yes", true)]
+    [InlineData("ON", true)]
+    [InlineData("false", false)]
+    [InlineData("0", false)]
+    [InlineData("no", false)]
+    [InlineData("off", false)]
+    public async Task MultipartSupportsRepeatedHintsAndMacBooleanForms(string boolean, bool expected)
+    {
+        using var multipart = new MultipartFormDataContent();
+        multipart.Add(new ByteArrayContent([1, 2]), "file", "a.wav");
+        multipart.Add(new StringContent("de"), "language_hint");
+        multipart.Add(new StringContent("en"), "language_hint");
+        multipart.Add(new StringContent("fr"), "target_language");
+        multipart.Add(new StringContent(boolean), "apply_corrections");
+        var parsed = LocalApiTranscription.Parse(Request(await multipart.ReadAsByteArrayAsync(),
+            multipart.Headers.ContentType!.ToString(), query: new Dictionary<string, string?> { ["await_download"] = "1" }));
+        Assert.Equal(new[] { "de", "en" }, parsed.LanguageHints);
+        Assert.Equal("fr", parsed.TargetLanguage);
+        Assert.Equal(expected, parsed.ApplyCorrections);
+        Assert.True(parsed.AwaitDownload);
+    }
+
+    [Theory]
+    [InlineData("\"language_hints\":[\"de\",\"en\",\"fr\"]")]
+    [InlineData("\"language_hints\":[\"de,en\"]")]
+    [InlineData("\"language_hints\":[\"en\"],\"language\":\"de\"")]
+    [InlineData("\"language_hints\":\"de\"")]
+    [InlineData("\"language_hints\":[1]")]
+    [InlineData("\"language_hints\":[\"\"]")]
+    [InlineData("\"language_hints\":[\"english\"]")]
+    [InlineData("\"language_hints\":[\"en-!\"]")]
+    [InlineData("\"apply_corrections\":\"false\"")]
+    [InlineData("\"apply_corrections\":0")]
+    [InlineData("\"await_download\":\"yes\"")]
+    [InlineData("\"target_language\":\"invalid-language\"")]
+    public void RejectsMalformedMacOptions(string fields)
+    {
+        var body = Encoding.UTF8.GetBytes("{\"path\":\"C:/a.wav\"," + fields + "}");
+        Assert.Equal(400, Assert.Throws<LocalApiRequestException>(() => LocalApiTranscription.Parse(
+            Request(body, "application/json", "/v1/transcribe/local-file"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task RejectsHintsDuplicatedAcrossQueryAndMultipart()
+    {
+        using var multipart = new MultipartFormDataContent();
+        multipart.Add(new ByteArrayContent([1]), "file", "a.wav");
+        multipart.Add(new StringContent("en"), "language_hint");
+        var request = Request(await multipart.ReadAsByteArrayAsync(), multipart.Headers.ContentType!.ToString(),
+            query: new Dictionary<string, string?> { ["language_hint"] = "de" });
+        Assert.Throws<LocalApiRequestException>(() => LocalApiTranscription.Parse(request));
+    }
+
     [Theory]
     [InlineData("prompt", "hello")]
-    [InlineData("target_language", "de")]
-    [InlineData("await_download", "true")]
     [InlineData("unknown", "value")]
+    [InlineData("apply_corrections", "maybe")]
+    [InlineData("await_download", "2")]
+    [InlineData("language_hints", "de,en,fr")]
+    [InlineData("language_hint", "de,en")]
     [InlineData("task", "summarize")]
     [InlineData("response_format", "verbose_json")]
     [InlineData("language", "")]

@@ -167,14 +167,13 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             {
                 api_version = "1.1", endpoints = LocalApiRouteCatalog.Routes.Select(route => route.Path).Distinct().ToArray(), routes = LocalApiRouteCatalog.Routes.Select(route => new { method = route.Method, path = route.Path }),
                 response_formats = new[] { "json", "text", "srt", "vtt" }, max_upload_bytes = 32 * 1024 * 1024,
-                model_selection = "current model; engine/model parameters validate selection",
+                model_selection = "request-scoped engine/model overrides; await_download supported",
                 saves_history = false, supports_dictation_control = true, requires_authentication = RequireAuthentication
             }) : Error(405, "Use GET.");
         if (request.Path is not ("/v1/transcribe" or "/v1/transcribe/local-file")) return Error(404, "Not found.");
         if (request.Method != "POST") return Error(405, "Use POST.");
         var parsed = LocalApiTranscription.Parse(request);
-        if (!session.IsReady) return Error(503, "Select a ready transcription model in Dictation.");
-        if (!session.CanTranscribeFile) return Error(409, "The transcription engine is busy.");
+        if (!session.CanStartApiFile) return Error(409, "The transcription engine is busy.");
         string? temporary = null;
         try
         {
@@ -211,13 +210,13 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             }
             ct.ThrowIfCancellationRequested();
             if (_closed) return Error(503, "The app is shutting down.");
-            if (!session.CanTranscribeFile) return Error(409, "The transcription engine is busy.");
+            if (!session.CanStartApiFile) return Error(409, "The transcription engine is busy.");
             var elapsed = System.Diagnostics.Stopwatch.StartNew();
             var result = await session.TranscribeFileAsync(path, _ => { }, ct, parsed);
             ct.ThrowIfCancellationRequested();
             if (parsed.ResponseFormat == "json")
                 return LocalApiResponse.Json(200, new { text = result.Text, engine = result.Provider, model = result.Model,
-                    duration = result.Duration, processing_time = elapsed.Elapsed.TotalSeconds, language = parsed.Language ?? session.Language, warnings = result.Warning, segments = result.Segments.Select(segment => new { text = segment.Text, start = segment.Start, end = segment.End }) });
+                    duration = result.Duration, processing_time = elapsed.Elapsed.TotalSeconds, language = result.Language, warnings = result.Warning, segments = result.Segments.Select(segment => new { text = segment.Text, start = segment.Start, end = segment.End }) });
             return LocalApiTranscription.FormatResponse(result.Text,
                 result.Segments.Select(segment => new LocalApiTranscriptSegment(segment.Text, segment.Start, segment.End)), parsed.ResponseFormat);
         }

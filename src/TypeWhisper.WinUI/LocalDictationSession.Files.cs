@@ -11,6 +11,7 @@ internal sealed partial class LocalDictationSession
     internal string? FileProcessingStatus { get; private set; }
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _fileDispatcher;
     internal bool CanTranscribeFile => CanChangeProvider && IsReady && !Models.Busy;
+    internal bool CanStartApiFile => CanChangeProvider && !Models.Busy;
 
     internal Task<FileTranscriptionOutput> TranscribeFileAsync(string path, Action<string> stage, CancellationToken ct) =>
         TranscribeFileAsync(path, stage, ct, null);
@@ -18,8 +19,9 @@ internal sealed partial class LocalDictationSession
     internal async Task<FileTranscriptionOutput> TranscribeFileAsync(string path, Action<string> stage, CancellationToken ct, ParsedApiTranscription? apiRequest)
     {
         ct.ThrowIfCancellationRequested();
-        if (!CanTranscribeFile || !await _gate.WaitAsync(0, ct))
+        if (!(apiRequest is null ? CanTranscribeFile : CanStartApiFile) || !await _gate.WaitAsync(0, ct))
             throw new InvalidOperationException("Finish the current recording or model operation before transcribing a file.");
+        IAsyncDisposable? modelOverride = null;
         _fileBusy = true;
         FileProcessingStatus = apiRequest is null ? "Loading audio · open Files for progress or cancellation" : "Processing HTTP API request";
         void Report(string message)
@@ -37,18 +39,17 @@ internal sealed partial class LocalDictationSession
         {
             ct = _operationCancellation.Begin(ct);
             Changed?.Invoke();
+            if (apiRequest is not null) modelOverride = await BeginApiModelOverrideAsync(apiRequest, ct);
             var engineId = ActiveEngineId;
             var modelId = ActiveModelId;
             var modelName = ActiveModelName;
             var providerSelection = RegistrySelectionId(_providerId);
             var registryProvider = UsesRegistryProvider;
-            if (apiRequest?.Model is { } requestedModel && requestedModel != modelId && requestedModel != ActiveChoiceId &&
-                requestedModel != _providerId + ":" + modelId)
-                throw new LocalApiRequestException(409, "The requested model is not selected. Select it in Dictation first.");
-            if (apiRequest?.Engine is { } requestedEngine && requestedEngine != engineId && requestedEngine != _providerId &&
-                requestedEngine != providerSelection)
-                throw new LocalApiRequestException(409, "The requested engine is not selected.");
-            var language = apiRequest?.Language ?? Language;
+            var language = apiRequest is null ? Language : apiRequest.Language ?? "auto";
+            var hints = apiRequest is null ? TextPreferences.Current.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries) : apiRequest.LanguageHints ?? [];
+            if (apiRequest is not null && hints.Count > 0 && (!registryProvider || ActiveRegistryProvider?.SupportsLanguageHints != true))
+                throw new LocalApiRequestException(422, "This provider does not support language hints. Use --language or automatic detection.");
+            var translation = apiRequest?.TargetLanguage is { } target ? ApiTranslationProcessor(target) : null;
             if (apiRequest?.Language is { } requestedLanguage && requestedLanguage != "auto" &&
                 !SupportedLanguages.Contains(requestedLanguage, StringComparer.OrdinalIgnoreCase))
                 throw new LocalApiRequestException(422, "The selected model does not support this language.");
@@ -82,7 +83,7 @@ internal sealed partial class LocalDictationSession
                     LanguageHintTranscription.DecodeAsync(engine, samples,
                         () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),
                         language == "auto" ? null : language,
-                        textPreferences.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, token), ct)
+                        hints, translate, token), ct)
                 : await _transcriptionPlugin.DecodeResultAsync(samples, language == "auto" ? null : language, translate, ct);
             // Keep the gate until non-interruptible native work has actually drained.
             ct.ThrowIfCancellationRequested();
@@ -103,7 +104,10 @@ internal sealed partial class LocalDictationSession
                 refinedText = refined.Text;
                 if (refined.Error is not null) ctcWarnings.Add("Acoustic vocabulary checking was unavailable. The decoded transcript was retained.");
             }
-            var processed = await lexicon.ProcessAsync(refinedText, textPreferences, language,
+            var processed = apiRequest is not null
+                ? new DictationLexiconSnapshot.Result(await LocalApiTextProcessing.ProcessAsync(refinedText, apiRequest.ApplyCorrections,
+                    translation, lexicon.Dictionary is { } apiDictionary ? apiDictionary.ApplyCorrections : null, ct), [], [])
+                : await lexicon.ProcessAsync(refinedText, textPreferences, language,
                 DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language), boostVocabulary && !useCtc,
                 apiRequest is null ? ReadSnippetClipboardAsync : _ => Task.FromResult(""), ct, task, null, engineId, modelId, textProcessors:
                     BindTextProcessors(processors, DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language),
@@ -146,15 +150,20 @@ internal sealed partial class LocalDictationSession
             {
                 DisplayName = registryProvider ? modelName : "NVIDIA · " + modelName,
                 AppliedSnippetIds = processed.AppliedSnippetIds,
-                PendingHistory = pendingHistory
+                PendingHistory = pendingHistory,
+                Language = apiRequest?.TargetLanguage ?? (translate ? "en" : DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language))
             };
         }
         finally
         {
-            _fileBusy = false;
-            FileProcessingStatus = null;
-            _gate.Release();
-            Changed?.Invoke();
+            try { if (modelOverride is not null) await modelOverride.DisposeAsync(); }
+            finally
+            {
+                _fileBusy = false;
+                FileProcessingStatus = null;
+                _gate.Release();
+                Changed?.Invoke();
+            }
         }
     }
 

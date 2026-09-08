@@ -57,21 +57,40 @@ All errors use `error.code` and `error.message`. Unknown routes return 404 and i
 Endpoint parity does not make platform-specific assets or all Mac transcription options interchangeable. Engine identifiers come from installed Windows plugins. Explicit model operations return 409 when unsupported or busy; selected model deletion remains protected. Windows backup archives cover dictionary, snippets, workflows and History, excluding credentials/device settings; invalid or unsupported archives return 400. Changed imports are asynchronous (202/restoring/restart_required) because live profile writers must stop before applying the merge. Unchanged imports return 200. Concurrent imports are rejected. Recorder sessions save WAV files; they do not automatically transcribe them.
 
 
-Transcription options: language, task (transcribe or translate), response_format (json, text, srt, vtt), model and engine. Omitted language/task use the Dictation selection. Engine/model parameters assert the current selection; a mismatch returns 409 and never switches the UI's model. Unsupported language/task returns 422. Model language-hint capabilities still apply. Raw uploads accept query parameters. Multipart accepts fields; local-file requests accept JSON fields. Duplicate or unknown options return 400, including currently unsupported prompt/download/target-language overrides.
+## Transcription options
+
+Raw uploads accept query parameters. Multipart accepts fields; local-file requests accept JSON fields. Use these options with either transcription route:
+
+| Option | Behavior |
+| --- | --- |
+| `language` | Explicit source language. Omitted language uses the Dictation selection. |
+| `language_hint` / `language_hints` | Repeat `language_hint` multipart fields, or send a JSON `language_hints` array. At most two ordered language codes; do not combine with `language`. The selected provider must support language hints. |
+| `task` | `transcribe` or `translate`; omission uses the Dictation selection. Unsupported language/task returns 422. |
+| `response_format` | `json` (default), `text`, `srt` or `vtt`. |
+| `engine`, `model` | Request-scoped overrides using IDs from `/v1/models`. The backend loads the requested model and restores the previous selection afterward. |
+| `await_download` | Boolean, commonly query `?await_download=1`; permits downloading required model assets before loading. Without it, required assets must already be available. |
+| `apply_corrections` | Defaults to `true`. Set JSON `false` or multipart `false` to bypass dictionary corrections. API file transcription does not run snippets or post-processors. |
+| `target_language` | Translate the transcript through the Windows default workflow LLM configuration. Missing default LLM configuration returns 422. This uses Windows providers, not the macOS Translation framework. |
+
+JSON boolean fields must be actual booleans. Multipart/query booleans accept `true`/`false`, `1`/`0`, `yes`/`no` and `on`/`off`. Duplicate and unknown options remain errors; repeated multipart `language_hint` is the supported exception. Options such as `prompt` and `normalize_numbers` are still unsupported.
 
 Example local-file request:
 
-    {"path":"C:\Audio\sample.wav","task":"transcribe","response_format":"json"}
+```json
+{"path":"C:/Audio/sample.wav","language_hints":["de","en"],"task":"transcribe","apply_corrections":false}
+```
 
-JSON contains text, engine, model, duration, warnings and segments with text/start/end. Text responses are UTF-8. Subtitle output requires real provider segment timestamps; missing/invalid timestamps return 422. Subtitle segments retain provider text, while the main transcript uses the configured vocabulary/text pipeline.
+Language hints and translation tasks remain subject to provider capabilities. An explicit model override can load a model even when none is currently ready. The app must be idle, and requested engines must be installed, enabled and configured. Portable plugin providers need an initial model selection before request-scoped overrides so the previous selection can be restored; otherwise the request returns 409.
 
-File-transcription endpoints do not paste into another application, read clipboard placeholders, save History/audio or increment snippet usage. Dictation and recorder control follow the normal application capture/output settings. Configured transcription/text-processing plugins can still make their normal provider calls.
+JSON contains `text`, `language` (the actual output language), `engine`, `model`, `duration`, `warnings` and `segments` with text/start/end. Text responses are UTF-8. Subtitle output requires real provider segment timestamps; missing/invalid timestamps return 422. Subtitle segments retain provider text, while the main transcript can include dictionary corrections and target-language translation.
+
+File-transcription endpoints do not paste into another application, read clipboard placeholders, save History/audio or increment snippet usage. Dictation and recorder control follow the normal application capture/output settings. Cloud transcription and requested LLM translation make their normal provider calls.
 
 ## Limits and lifecycle
 
 Uploads are bounded to 32 MiB, including multipart framing. Decoding retains the application's 60-minute audio limit. Network/UNC/device paths and reparse-point paths are rejected for local-file requests. Temporary uploads are removed after success, cancellation and failure.
 
-Up to four HTTP requests are admitted; excess traffic returns 429. The shared transcription gate allows one decode at a time and returns 409 when dictation, recording, training, file processing or another API request owns the engine. No-ready-model returns 503. Undecodable audio returns 422. Transport timeouts cancel processing; native work is still drained before the engine is released. Shutdown/profile restore closes admission, cancels requests and awaits active work.
+Up to four HTTP requests are admitted; excess traffic returns 429. The shared transcription gate allows one decode at a time and returns 409 when dictation, recording, training, file processing or another API request owns the engine. Without a usable current model or loadable request override, transcription returns a readiness/configuration error (409 or 503). Undecodable audio returns 422. Transport timeouts cancel processing; native work is still drained before the engine is released. Shutdown/profile restore closes admission, cancels requests and awaits active work.
 
 ## Tests
 

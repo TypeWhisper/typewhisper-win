@@ -1170,6 +1170,7 @@ public sealed partial class MainWindow : Window
                     content.Children.Clear(); pickers.Clear();
                     content.Children.Add(new TextBlock { Text = "Advanced", FontSize = 22, Margin = new Thickness(0, 0, 0, 12) });
                     content.Children.Add(new HttpApiSettingsView(_httpApi));
+                    content.Children.Add(new CliSettingsView { Margin = new Thickness(0, 16, 0, 0) });
                     content.Children.Add(new TextBlock { Text = "Integrations", FontSize = 18, Margin = new Thickness(0, 16, 0, 0) });
                     content.Children.Add(new RaycastIntegrationView());
                 }

@@ -18,6 +18,9 @@
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalCtcVocabulary.cs" Link="LocalCtcVocabulary.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalTranscriptionPlugin.cs" Link="LocalTranscriptionPlugin.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalDictationSession.ApiModelOverride.cs" Link="LocalDictationSession.ApiModelOverride.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
+    <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/CloudTranscriptionPlugin.cs" Link="CloudTranscriptionPlugin.cs" />
     <Using Include="Xunit" />
     <ProjectReference Include="../../plugins/TypeWhisper.Plugin.Groq/TypeWhisper.Plugin.Groq.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />

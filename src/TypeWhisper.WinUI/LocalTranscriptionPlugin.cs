@@ -27,6 +27,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal bool SupportsTranslation => Ready && _lease?.Engine.SupportsTranslation == true;
     internal bool Busy { get; private set; }
     internal string? ActiveModelId { get; private set; }
+    internal string? SelectedModelId => _lease?.Engine.SelectedModelId;
     internal IReadOnlyList<string> SupportedLanguages => _lease?.Engine.SupportedLanguages ?? [];
     internal string Language => SupportedLanguages.Count == 0 ? "auto" :
         SupportedLanguages.Contains(_host.GetSetting<string>("Language") ?? "en") ? _host.GetSetting<string>("Language") ?? "en" : SupportedLanguages[0];
@@ -100,7 +101,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             var selected = _host.GetSetting<string>("SelectedModelId") ?? _lease.Engine.SelectedModelId
                 ?? Models.FirstOrDefault(model => model.Model.IsRecommended)?.Model.Id
                 ?? Models.FirstOrDefault()?.Model.Id;
-            if (!Models.Any(m => m.Model.Id == selected && m.Downloaded))
+            if (selected is null || !Models.Any(m => m.Model.Id == selected && m.Downloaded))
             {
                 Feedback = "Choose a downloaded model or download one below.";
                 return;
@@ -112,16 +113,16 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
 
-    internal async Task ActivateAsync(string modelId, CancellationToken ct = default)
+    internal async Task ActivateAsync(string modelId, CancellationToken ct = default, bool persistSelection = true)
     {
         if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException("A model operation is already in progress.");
         Busy = true; Error = null; Feedback = null; Changed?.Invoke();
-        try { ObjectDisposedException.ThrowIf(_disposed, this); await ActivateCoreAsync(modelId, ct); }
+        try { ObjectDisposedException.ThrowIf(_disposed, this); await ActivateCoreAsync(modelId, ct, persistSelection); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Error = "Could not load model: " + ex.Message; throw; }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
 
-    private async Task ActivateCoreAsync(string modelId, CancellationToken ct)
+    private async Task ActivateCoreAsync(string modelId, CancellationToken ct, bool persistSelection = true)
     {
         var engine = _lease?.Engine ?? throw new InvalidOperationException("Enable the local plugin in Plugins first.");
         if (!Models.Any(m => m.Model.Id == modelId && m.Downloaded)) throw new InvalidOperationException("Download this model before selecting it.");
@@ -132,7 +133,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         {
             await engine.LoadModelAsync(modelId, ct);
             ct.ThrowIfCancellationRequested();
-            _host.SetSetting("SelectedModelId", modelId);
+            if (persistSelection) _host.SetSetting("SelectedModelId", modelId);
             ActiveModelId = modelId;
             Feedback = "Model ready for dictation.";
         }
@@ -168,10 +169,38 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
 
-    internal async Task DownloadAsync(string modelId)
+    internal async Task RestoreRequestModelAsync(string? activeModel, string? selectedModel)
     {
-        if (!await _operations.WaitAsync(0)) throw new InvalidOperationException("A model operation is already in progress.");
-        using var cancellation = new CancellationTokenSource();
+        await _operations.WaitAsync();
+        Busy = true;
+        try
+        {
+            if (activeModel is not null) await ActivateCoreAsync(activeModel, CancellationToken.None, persistSelection: false);
+            else
+            {
+                await _lease!.Engine.UnloadModelAsync();
+                ActiveModelId = null;
+                if (selectedModel is not null) _lease.Engine.SelectModel(selectedModel);
+                else if (_lease.Engine.SelectedModelId is not null)
+                {
+                    // SDK SelectModel cannot clear selection; a fresh package
+                    // restores the original unselected state without host writes.
+                    await ReleaseAsync();
+                    _lease = await _load();
+                    Generation++;
+                    _lease.Engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+                    if (_lease.Engine.SelectedModelId is not null)
+                        throw new InvalidOperationException("The local plugin did not restore its unselected state.");
+                }
+            }
+        }
+        finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+    }
+
+    internal async Task DownloadAsync(string modelId, CancellationToken ct = default, bool propagateErrors = false)
+    {
+        if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException("A model operation is already in progress.");
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _download = cancellation;
         Busy = true; Progress = 0; Error = null; Feedback = null;
         try
@@ -190,8 +219,10 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             if (!engine.IsModelDownloaded(modelId)) throw new IOException("The download did not produce a complete model.");
             Feedback = "Download complete. Choose Use model to activate it.";
         }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { Feedback = "Download canceled. Your active model is unchanged."; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Error = "Download failed: " + ex.Message; }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        { Feedback = "Download canceled. Your active model is unchanged."; if (propagateErrors) throw; }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { Error = "Download failed: " + ex.Message; if (propagateErrors) throw; }
         finally { _download = null; DownloadingModelId = null; Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
     internal void CancelDownload() => _download?.Cancel();

@@ -16,6 +16,7 @@ New-Item -ItemType Directory -Force -Path $ResultsDirectory | Out-Null
 $checks = @(
     @{ Name = 'Core'; Project = 'tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj' },
     @{ Name = 'PluginHost'; Project = 'tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Portable.Tests.csproj' },
+    @{ Name = 'CLI'; Project = 'tests/TypeWhisper.Cli.Tests/TypeWhisper.Cli.Tests.csproj' },
     @{ Name = 'Presentation'; Project = 'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj' }
 )
 # Each portable plugin owns its tests; discovery needs no host-side provider list.

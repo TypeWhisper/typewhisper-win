@@ -177,6 +177,8 @@ The app appears in the system tray, and the welcome wizard guides you through ex
 
 ## HTTP API
 
+For the Windows 1.1 WinUI host, use the [Windows 1.1 HTTP API reference](docs/WINUI-HTTP-API.md). The details below describe the legacy Windows host.
+
 The HTTP API is an advanced local automation surface. It binds to `localhost` and `127.0.0.1`, is configurable in Settings, and uses port `8978` by default. When the server starts it writes discovery files to `%LOCALAPPDATA%\TypeWhisper`: legacy `api-port` and `api-discovery.json` with `{ "version": 1, "port": 8978, "token": "..." }`.
 
 Authentication is off by default for local compatibility. If Settings > Advanced > API Server > Require API Token is enabled, `/v1/status` remains public and all other routes require either `Authorization: Bearer <token>` or `X-TypeWhisper-API-Token: <token>`. Settings backup export and import always require a token because backups can contain sensitive transcription text and personal configuration. `OPTIONS` requests return `204 No Content`.
@@ -250,40 +252,17 @@ The browser microphone integration research, security boundary, proof of concept
 
 ## CLI Tool
 
-The optional `typewhisper` CLI talks to the local HTTP API and is intended for scripts, terminals, Raycast commands, and batch workflows. It reads `%LOCALAPPDATA%\TypeWhisper\api-discovery.json` before the legacy `api-port` file. Tokens can also be supplied with `TYPEWHISPER_API_TOKEN` or `--api-token`.
+In Windows 1.1, install the optional `typewhisper` command from **Settings > Advanced > Command Line Tool**, enable the HTTP API, and open a new terminal. The CLI discovers the installing app's profile, port, and authentication settings automatically.
 
-### Commands
-
-```bash
+```powershell
 typewhisper status
 typewhisper models
 typewhisper transcribe recording.wav --language de --json
-typewhisper transcribe recording.wav --language-hint de --language-hint en
-typewhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
-typewhisper transcribe - < audio.wav
-typewhisper export typewhisper-backup.json
-typewhisper import typewhisper-backup.json
-typewhisper import typewhisper-backup.json --json
+typewhisper history search "meeting notes"
+typewhisper last
 ```
 
-Backup exports are written through a sibling temporary file and atomically moved into place. Restore uses safe merge semantics; existing conflicting entries are reported instead of silently overwritten.
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--port <N>` | Server port (default: auto-discover, fallback `8978`) |
-| `--api-token <token>` | API token override |
-| `--json` | Output as JSON |
-| `--language <code>` | Source language, such as `en` or `de` |
-| `--language-hint <code>` | Repeatable language hint for restricted auto-detection |
-| `--task <task>` | `transcribe` (default) or `translate` |
-| `--translate-to <code>` | Target language for translation |
-| `--engine <id>` | Override the transcription engine |
-| `--model <id>` | Override the transcription model |
-| `--await-download` | Wait for local model restore/download |
-
-The CLI requires the API server to be running in Settings.
+See the [Windows 1.1 CLI guide](docs/WINDOWS-CLI.md) for installation, profile overrides, dictation, model management, settings backups, and current limits.
 
 ## Workflows
 

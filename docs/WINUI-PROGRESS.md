@@ -1,5 +1,18 @@
 # Windows 1.1 progress
 
+## CLI and compact inline help — 2026-09-08
+
+The Windows 1.1 CLI is bundled with the app and can be installed, updated or removed in Advanced. Its separate user-local installation binds to the installing profile and discovers the current port and optional token. Installation journals owned files for interrupted-update recovery and preserves unrelated files and existing PATH entries.
+
+A source comparison with the Mac CLI closed missing implicit stdin, export JSON, exit-code, development-profile and correction opt-out behavior. Request-scoped engine/model overrides restore the original provider/model after completion, failure or cancellation. `await_download`, provider-supported language hints and target-language translation are connected. Windows target translation uses the configured default workflow LLM; Mac uses the system Translation framework. API transcripts use dictionary corrections without GUI snippets or post-processors. See [Windows CLI](WINDOWS-CLI.md) and [HTTP API](WINUI-HTTP-API.md) for contracts and platform prerequisites. These current details supersede the earlier current-model-only API notes below.
+
+Supplementary explanations across settings, workflows, dictionary, recorder and file views use a shared clickable info button with native Flyout/keyboard behavior. Status, errors, prerequisites and destructive consequences remain visible.
+
+Validation: **2,048 headless tests passed; one platform-specific skip**, plus 22 existing CLI support tests. The prescribed WinUI publish/relaunch includes the runnable CLI bundle. Native CLI acceptance passed 18 checks (status/discovery, models, history, file/stdin transcription, export, validation/connection errors, dictation start/stop/result and unchanged source/history); silent microphone input correctly produced a failed terminal result with exit code 3. Another 14 native checks passed with required authentication: discovered token, rejected wrong token, real correction opt-out, implicit stdin, request-model restoration and explicit unsupported/missing-provider errors. Earlier unauthenticated option checks also passed. Evidence: `artifacts/cli-mac-headless.log`, `artifacts/cli-native-full-evidence.json`, `artifacts/cli-options-native-evidence.json`. Repeatable scripts are under `tests/native/test_winui_cli*.py`.
+
+No authenticated cloud inference or real model download was performed. Translation ordering/default-provider handling, download control, cancellation/restore and installer recovery have automated coverage. The new info-button visual/click smoke could not be completed because Computer Use reported “foreground window did not report a process id”; compilation passed, but no new native UI acceptance is claimed.
+
+
 ## File processing and watched folders, 2026-09-08
 
 File transcription now uses the shared Files / Watch folder tabs above the heading. Recorder **Transcribe** starts only the selected saved recording and opens its completed transcript; unrelated queued jobs remain queued. A failed selected job retries directly. Manual file runs continue when navigating away, with processing status in Quick Launch. Completed queue results support a single folder selection for batch TXT export, preserving existing files. Result copy uses Enter; export uses X; queue removal uses Delete; retry uses R. Actions remain in the footer with the primary action on the right. Rebuilt views restore focus to the final live control, including successive Start/Pause and result/back transitions. Background queue and watcher progress preserve an open transcript instead of rebuilding its selected text.

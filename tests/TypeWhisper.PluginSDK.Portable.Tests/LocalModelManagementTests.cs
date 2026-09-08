@@ -168,6 +168,57 @@ public sealed class LocalModelManagementTests : IDisposable
         Assert.Equal(2, _loads.Count);
     }
     [Fact]
+    public async Task RequestModelSelectionDoesNotPersistAndCanRestoreAfterCancellation()
+    {
+        _downloaded.Add("canary");
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        var previous = runtime.ActiveModelId!;
+        using var request = new CancellationTokenSource();
+        await runtime.ActivateAsync("canary", request.Token, persistSelection: false);
+        Assert.Equal("canary", runtime.ActiveModelId);
+        Assert.Equal(previous, new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+        request.Cancel();
+        await runtime.ActivateAsync(previous, CancellationToken.None, persistSelection: false);
+        Assert.Equal(previous, runtime.ActiveModelId);
+        Assert.Equal(previous, new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+    }
+    [Fact]
+    public async Task CanceledRequestModelLoadRestoresPreviousModelWithoutSaving()
+    {
+        _downloaded.Add("canary");
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        using var request = new CancellationTokenSource();
+        _engine.Setup(engine => engine.LoadModelAsync("canary", It.IsAny<CancellationToken>()))
+            .Returns((string _, CancellationToken token) => { request.Cancel(); token.ThrowIfCancellationRequested(); return Task.CompletedTask; });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runtime.ActivateAsync("canary", request.Token, persistSelection: false));
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, runtime.ActiveModelId);
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+    }
+    [Fact]
+    public async Task RequestModelCanRestoreAnInitiallyUnloadedState()
+    {
+        _downloaded.Add("canary");
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        await runtime.UnloadAsync(CancellationToken.None);
+        await runtime.ActivateAsync("canary", CancellationToken.None, persistSelection: false);
+        await runtime.UnloadAsync(CancellationToken.None);
+        Assert.Null(runtime.ActiveModelId);
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+    }
+    [Fact]
+    public async Task RequestDownloadCancellationPropagatesAndKeepsSelection()
+    {
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        using var request = new CancellationTokenSource();
+        _engine.Setup(engine => engine.DownloadModelAsync("canary", It.IsAny<IProgress<double>>(), It.IsAny<CancellationToken>()))
+            .Returns((string _, IProgress<double> progress, CancellationToken token) =>
+            { request.Cancel(); token.ThrowIfCancellationRequested(); return Task.CompletedTask; });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runtime.DownloadAsync("canary", request.Token, propagateErrors: true));
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, runtime.ActiveModelId);
+        Assert.False(runtime.Busy);
+        Assert.Null(runtime.DownloadingModelId);
+    }
+    [Fact]
     public async Task PersistenceFailureRollsBackLoadedModel()
     {
         _downloaded.Add("canary");
