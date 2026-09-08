@@ -1,0 +1,58 @@
+{
+  "plugins": [
+    {
+      "id": "com.typewhisper.sherpa-onnx",
+      "name": "NVIDIA Parakeet",
+      "version": "1.1.0",
+      "minHostVersion": "1.1.0",
+      "author": "TypeWhisper",
+      "description": "Offline transcription with NVIDIA Parakeet and Canary. Audio is processed on your device.",
+      "category": "transcription",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-preview-20260908/com.typewhisper.sherpa-onnx-1.1.0-win-x64.zip",
+      "sha256": "28a3594fcd02b3fba7ed6c3efef1b083d3ed56020eb0fc8ecefdc08fe777a17d",
+      "size": 50968882,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.groq",
+      "name": "Groq",
+      "version": "1.1.0",
+      "minHostVersion": "1.1.0",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription with OpenAI Whisper models hosted by Groq.",
+      "category": "transcription",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-preview-20260908/com.typewhisper.groq-1.1.0-win-x64.zip",
+      "sha256": "0d53c4edb06486f768ef653066a9ea5e085fc1d1edc2d5c7d69998f9bc8db2dd",
+      "size": 19389,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.deepgram",
+      "name": "Deepgram",
+      "version": "1.1.0",
+      "minHostVersion": "1.1.0",
+      "author": "TypeWhisper",
+      "description": "Deepgram Nova transcription engine",
+      "category": "transcription",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-preview-20260908/com.typewhisper.deepgram-1.1.0-win-x64.zip",
+      "sha256": "0a9edddf0e6c122a37118e5acccb7c9b78a08234ad3b457791aba6b9480a715c",
+      "size": 13844,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    }
+  ]
+}
