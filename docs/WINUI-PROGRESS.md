@@ -1,5 +1,13 @@
 # Windows 1.1 progress
 
+## Existing snippet integration verified, 2026-09-08
+
+The proposed snippet implementation was already connected. Inspection confirms that normal dictation captures the snippet catalog, applies enabled replacements through DictationLexiconSnapshot after the optional LLM step, and passes the resulting final text to both insertion and History delivery. Existing tests cover persistence, case/punctuation/multiline expansion, placeholders, disabled entries, clipboard access, snapshot isolation and usage metadata. No duplicate implementation was added.
+
+69 focused Presentation tests passed (`artifacts/test-results/snippet-verification/snippet-verification.trx`). The current development app remained running with a nonzero main-window handle. This is source and automated-test verification, not native dictation acceptance. Manual check: save an enabled snippet with spoken trigger "meine Signatur" and a multiline replacement, dictate the trigger without a workflow, and compare the inserted text with History. Then disable it and repeat; the trigger should remain unexpanded. LLM workflows run before snippet expansion, so a workflow can change the trigger before matching.
+
+Marco also confirmed that the shared workflow default LLM works. This user-reported acceptance does not separately establish every restart, unavailable-provider or capture-isolation case.
+
 ## Shared workflow LLM (`fe9c924c`), 2026-09-08
 
 Workflows now has a Default LLM footer action that saves a shared provider/model pair in the local profile (`workflow-llm-default.json`). New workflows use the explicit Use default selection and display the inherited model; existing explicit or unconfigured selections keep their meaning. Each workflow can still choose its own provider/model. The default dialog validates the current provider/model, uses Save/Cancel, reports failed writes, and is closed and drained during shutdown.
