@@ -19,7 +19,7 @@ public sealed class PortablePluginStore
     private readonly object _sync = new();
     private Dictionary<string, Receipt> _installed = new(StringComparer.Ordinal);
     private bool _initialized;
-    private sealed record Receipt(string Directory, string Version, string? PendingDirectory = null, string? PendingVersion = null);
+    private sealed record Receipt(string Directory, string Version, string? PendingDirectory = null, string? PendingVersion = null, string? UpdateWarning = null);
     public string Root { get; }
     public string InventoryRoot => Path.Combine(Root, "installed");
     public bool Initialized => _initialized;
@@ -48,8 +48,18 @@ public sealed class PortablePluginStore
                     PortableCatalogEntry.ValidateId(id);
                     PackagePath(receipt.Directory);
                     if (receipt.PendingDirectory is not { } pending) continue;
-                    ValidatePackage(PackagePath(pending), id, receipt.PendingVersion!);
-                    next[id] = new(pending, receipt.PendingVersion!);
+                    try
+                    {
+                        ValidatePackage(PackagePath(pending), id, receipt.PendingVersion!);
+                        next[id] = new(pending, receipt.PendingVersion!);
+                    }
+                    catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
+                    {
+                        // Fall back only to a valid previous package. Never hide damage to both versions.
+                        ValidatePackage(PackagePath(receipt.Directory), id, receipt.Version);
+                        next[id] = new(receipt.Directory, receipt.Version, UpdateWarning:
+                            "The staged update was invalid. The previous version was kept; retry the update.");
+                    }
                 }
             }
             else if (bundledRoot is not null && Directory.Exists(bundledRoot))
@@ -62,16 +72,10 @@ public sealed class PortablePluginStore
                     var manifest = package.Manifest!;
                     if (bootstrap is not null && manifest.Id != Path.GetFileName(package.Directory))
                         throw new InvalidDataException("A selected bundle identity does not match its directory.");
-                    // Old dev outputs may still contain this once-separate dependency.
-                    if (manifest.Id == "com.typewhisper.parakeet-ctc") continue;
+                    if (manifest.IsInternalDependency) continue;
                     var token = Guid.NewGuid().ToString("N");
                     var target = PackagePath(token);
                     CopyTree(package.Directory, target);
-                    if (manifest.Id == "com.typewhisper.sherpa-onnx" && !Directory.Exists(Path.Combine(target, "Dependencies", "com.typewhisper.parakeet-ctc")))
-                    {
-                        var ctc = Path.Combine(bundledRoot, "com.typewhisper.parakeet-ctc");
-                        if (Directory.Exists(ctc)) CopyTree(ctc, Path.Combine(target, "Dependencies", "com.typewhisper.parakeet-ctc"));
-                    }
                     ValidatePackage(target, manifest.Id, manifest.Version);
                     if (_services is not null)
                         await PortablePluginPackage.RunInstallationHookAsync(target, _services(manifest.Id), _host, null, uninstall: false, ct);
@@ -89,6 +93,8 @@ public sealed class PortablePluginStore
 
     public bool IsInstalled(string id) { lock (_sync) return _installed.ContainsKey(id); }
     public string? InstalledVersion(string id) { lock (_sync) return _installed.GetValueOrDefault(id)?.Version; }
+    /// <summary>Persistent, non-fatal feedback after rejecting a damaged staged update.</summary>
+    public string? UpdateWarning(string id) { lock (_sync) return _installed.GetValueOrDefault(id)?.UpdateWarning; }
     public bool PendingRestart(string id) { lock (_sync) return _installed.GetValueOrDefault(id)?.PendingDirectory is not null; }
     public string Resolve(string id)
     {
@@ -153,7 +159,7 @@ public sealed class PortablePluginStore
             if (_services is not null)
                 await PortablePluginPackage.RunInstallationHookAsync(package, _services(entry.Id), _host, previous?.Version, uninstall: false, ct, progress);
             ct.ThrowIfCancellationRequested();
-            next[entry.Id] = update ? previous! with { PendingDirectory = token, PendingVersion = entry.Version } : new(token, entry.Version);
+            next[entry.Id] = update ? previous! with { PendingDirectory = token, PendingVersion = entry.Version, UpdateWarning = null } : new(token, entry.Version);
             Commit(next);
             package = null;
             return update;
@@ -192,14 +198,23 @@ public sealed class PortablePluginStore
         var package = PortablePluginInventory.Inspect(directory, _host);
         if (package.Error is not null) throw new InvalidDataException(package.Error);
         if (package.Manifest?.Id != id || package.Manifest.Version != version) throw new InvalidDataException("Package identity or version does not match the catalog.");
+        if (package.Manifest.IsInternalDependency)
+            throw new InvalidDataException("Internal dependencies must be installed with their parent package.");
         var dependencies = Path.Combine(directory, "Dependencies");
         if (Directory.Exists(dependencies))
             foreach (var dependency in PortablePluginInventory.Scan(dependencies, _host))
                 if (dependency.Error is not null) throw new InvalidDataException(dependency.Error);
-        if (id == "com.typewhisper.sherpa-onnx" &&
-            PortablePluginInventory.Inspect(Path.Combine(dependencies, "com.typewhisper.parakeet-ctc"), _host) is var ctc &&
-            (ctc.Error is not null || ctc.Manifest?.Id != "com.typewhisper.parakeet-ctc"))
-            throw new InvalidDataException("The NVIDIA package is missing its dictionary boosting dependency.");
+        var required = package.Manifest.BundledDependencies;
+        if (required is null || required.Distinct(StringComparer.Ordinal).Count() != required.Count)
+            throw new InvalidDataException("Invalid bundled dependency declarations.");
+        foreach (var dependencyId in required)
+        {
+            PortableCatalogEntry.ValidateId(dependencyId);
+            if (dependencyId == id) throw new InvalidDataException("A package cannot depend on itself.");
+            var dependency = PortablePluginInventory.Inspect(Path.Combine(dependencies, dependencyId), _host);
+            if (dependency.Error is not null || dependency.Manifest?.Id != dependencyId)
+                throw new InvalidDataException("A required bundled dependency is missing or invalid: " + dependencyId);
+        }
     }
 
     private void EnsureInitialized() { if (!_initialized) throw new InvalidOperationException("Plugin storage has not initialized."); }

@@ -84,7 +84,7 @@ internal sealed partial class LocalDictationSession
             var decoded = registry
                 ? await PluginRuntime.UseTranscriptionAsync(selection, (engine, token) =>
                     LanguageHintTranscription.DecodeAsync(engine, samples,
-                        () => CloudTranscriptionPlugin.EncodeWav(samples, engine.ProviderId == "groq" ? 25_000_000 : int.MaxValue),
+                        () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),
                         language == "auto" ? null : language, hints, translate, token), ct)
                 : await _transcriptionPlugin.DecodeResultAsync(samples, language == "auto" ? null : language, translate, ct);
             ct.ThrowIfCancellationRequested();

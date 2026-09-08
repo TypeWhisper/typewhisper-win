@@ -47,7 +47,6 @@ internal sealed partial class LocalDictationSession
             await Release(() => StopRecoveryCaptureAsync(preserve: true));
             await Release(_livePreview.StopAsync);
             await Release(() => CtcVocabulary.DisposeAsync().AsTask());
-            await Release(() => Groq.DisposeAsync().AsTask());
             await Release(() => PluginRuntime.DisposeAsync().AsTask());
             await Release(() => _transcriptionPlugin.DisposeAsync().AsTask());
             await Release(() => { _effects.End(); _audio.Dispose(); return Task.CompletedTask; });

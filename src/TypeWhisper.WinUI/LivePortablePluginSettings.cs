@@ -39,9 +39,9 @@ internal sealed class LivePortablePluginSettings : UserControl
             var error = await session.SaveRegistryKeyAsync(id, _key.Password);
             if (error is null && IsLoaded) _key.Password = "";
             return error;
-        });
-        _remove = Button("Remove saved key", () => session.SaveRegistryKeyAsync(id, ""));
-        _check = Button("Check connection", () => session.ValidateRegistryKeyAsync(id));
+        }, "API key saved. Check connection to verify it.");
+        _remove = Button("Remove saved key", () => session.SaveRegistryKeyAsync(id, ""), "API key removed.");
+        _check = Button("Check connection", () => session.ValidateRegistryKeyAsync(id), "Connection verified. No audio was uploaded.");
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         actions.Children.Add(_save); actions.Children.Add(_remove); actions.Children.Add(_check);
         _credentials.Children.Add(actions); content.Children.Add(_credentials); content.Children.Add(_models); content.Children.Add(_textSettings);
@@ -57,6 +57,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         var state = _session.PluginRuntime.Snapshot().FirstOrDefault(item => item.PluginId == _id);
         _status.Text = _message ?? state?.Error ?? (state?.Enabled == true ? "Plugin enabled." : "Enable this plugin to configure its providers.");
         _enable.Visibility = state?.Enabled == true ? Visibility.Collapsed : Visibility.Visible;
+        _key.PlaceholderText = state?.ApiKeyConfigured == true ? "Key saved - enter a replacement" : "Enter an API key";
         _credentials.Visibility = state?.HasApiKeySettings == true ? Visibility.Visible : Visibility.Collapsed;
         if (state?.Enabled == true && state.HasTextSettings)
             _textSettings.Content ??= new LivePluginTextSettings(_session, _id);
@@ -72,7 +73,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _enable.IsEnabled = _key.IsEnabled = _remove.IsEnabled = _check.IsEnabled = available;
         _save.IsEnabled = available && !string.IsNullOrWhiteSpace(_key.Password);
     }
-    private HandCursorButton Button(string text, Func<Task<string?>> action)
+    private HandCursorButton Button(string text, Func<Task<string?>> action, string success = "Saved.")
     {
         var button = new HandCursorButton { Content = text, HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
@@ -80,7 +81,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         {
             if (_working || !IsLoaded) return;
             _working = true; UpdateButtons();
-            try { var error = await action(); if (IsLoaded) _message = error ?? "Saved."; }
+            try { var error = await action(); if (IsLoaded) _message = error ?? success; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { if (IsLoaded) _message = "The plugin operation could not finish. Check its configuration and try again."; }
             finally

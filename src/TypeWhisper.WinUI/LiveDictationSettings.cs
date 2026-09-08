@@ -74,8 +74,8 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                     : selected.Cloud ? "Recorded audio is sent to this provider after recording. Live preview is unavailable."
                     : "Audio is transcribed on this device.");
             });
-            row.Loaded += (_, _) => { session.Models.Changed += Refresh; session.Groq.Changed += Refresh; session.Changed += Refresh; Refresh(); };
-            row.Unloaded += (_, _) => { session.Models.Changed -= Refresh; session.Groq.Changed -= Refresh; session.Changed -= Refresh; };
+            row.Loaded += (_, _) => { session.Models.Changed += Refresh; session.Changed += Refresh; Refresh(); };
+            row.Unloaded += (_, _) => { session.Models.Changed -= Refresh; session.Changed -= Refresh; };
             async Task Select(string providerId, string modelId)
             {
                 selecting = true; selectionError = null; Refresh();
@@ -109,8 +109,8 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 language.SetOptions(options.Length == 0 || session.UsesRegistryProvider ? new PrototypeChoice[] { new("auto", "Automatic", "Language detection by the model") }.Concat(options).ToArray() : options, session.Language);
                 language.IsEnabled = selectedProviderId == session.ActiveProviderId && session.CanChangeProvider && (session.UsesRegistryProvider ? session.IsReady : session.CanSelectModel) && options.Length > 0;
             });
-            languageRow.Loaded += (_, _) => { session.Models.Changed += RefreshLanguage; session.Groq.Changed += RefreshLanguage; session.Changed += RefreshLanguage; RefreshLanguage(); };
-            languageRow.Unloaded += (_, _) => { session.Models.Changed -= RefreshLanguage; session.Groq.Changed -= RefreshLanguage; session.Changed -= RefreshLanguage; };
+            languageRow.Loaded += (_, _) => { session.Models.Changed += RefreshLanguage; session.Changed += RefreshLanguage; RefreshLanguage(); };
+            languageRow.Unloaded += (_, _) => { session.Models.Changed -= RefreshLanguage; session.Changed -= RefreshLanguage; };
             language.SelectionChanged += id => { var error = session.SelectLanguage(id); RefreshLanguage(); if (error is not null) hint.Text = error; };
             languageRow.Children.Add(new TextBlock { Text = "Spoken language", FontSize = 14 });
             languageRow.Children.Add(language); pickers.Add(language);

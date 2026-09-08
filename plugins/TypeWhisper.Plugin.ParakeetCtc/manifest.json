@@ -7,5 +7,6 @@
   "category": "utility",
   "isLocal": true,
   "assemblyName": "TypeWhisper.Plugin.ParakeetCtc.dll",
-  "pluginClass": "TypeWhisper.Plugin.ParakeetCtc.ParakeetCtcPlugin"
+  "pluginClass": "TypeWhisper.Plugin.ParakeetCtc.ParakeetCtcPlugin",
+  "isInternalDependency": true
 }

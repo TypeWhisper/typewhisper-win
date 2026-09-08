@@ -10,6 +10,9 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// <summary>Unique provider identifier (e.g. "openai", "groq").</summary>
     string ProviderId { get; }
 
+    /// <summary>Maximum encoded WAV bytes accepted by this engine, including headers.</summary>
+    int MaximumAudioUploadBytes => int.MaxValue;
+
     /// <summary>Human-readable provider name for the UI.</summary>
     string ProviderDisplayName { get; }
 
@@ -63,6 +66,9 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
 
     /// <summary>Whether this engine supports real-time streaming transcription via <see cref="IStreamingSession"/>.</summary>
     bool SupportsStreaming => false;
+
+    /// <summary>Allows repeated local PCM snapshots during capture. Must not upload audio or mutate final results.</summary>
+    bool SupportsLocalLivePreview => false;
 
     /// <summary>
     /// Whether the host may pass active TypeWhisper dictionary terms through the transcription prompt.

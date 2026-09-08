@@ -162,6 +162,84 @@ public sealed class PortablePluginStoreTests : IDisposable
         Assert.Equal("1.0.0", store.InstalledVersion(Id)); Assert.False(store.PendingRestart(Id));
     }
 
+    [Fact]
+    public async Task DamagedPendingUpdateKeepsPreviousVersionAndPersistentFeedback()
+    {
+        var store = Store(); await store.InitializeAsync(); await store.InstallAsync(Entry());
+        var previous = store.Resolve(Id);
+        await store.InstallAsync(Entry("1.1.0"));
+        var pending = Directory.GetDirectories(Path.Combine(store.Root, "packages")).Single(path => path != previous);
+        File.WriteAllText(Path.Combine(pending, "manifest.json"), "broken update");
+        var restarted = Store(); await restarted.InitializeAsync();
+        Assert.Equal(previous, restarted.Resolve(Id));
+        Assert.Equal("1.0.0", restarted.InstalledVersion(Id));
+        Assert.False(restarted.PendingRestart(Id));
+        Assert.Contains("previous version", restarted.UpdateWarning(Id));
+        var again = Store(); await again.InitializeAsync();
+        Assert.Equal(restarted.UpdateWarning(Id), again.UpdateWarning(Id));
+        await again.InstallAsync(Entry("1.1.0"));
+        Assert.Null(again.UpdateWarning(Id));
+        var recovered = Store(); await recovered.InitializeAsync();
+        Assert.Equal("1.1.0", recovered.InstalledVersion(Id));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ManifestOwnsRequiredBundledDependencies(bool includeDependency)
+    {
+        var bundled = Path.Combine(_root, "bundled");
+        var parent = Path.Combine(bundled, Id);
+        Directory.CreateDirectory(bundled);
+        Directory.Move(Package(), parent);
+        var manifest = PortablePluginPackage.ReadManifest(parent) with { BundledDependencies = ["com.test.dependency"] };
+        File.WriteAllText(Path.Combine(parent, "manifest.json"), JsonSerializer.Serialize(manifest));
+        if (includeDependency)
+        {
+            var dependency = Path.Combine(parent, "Dependencies", "com.test.dependency");
+            Directory.CreateDirectory(Path.GetDirectoryName(dependency)!);
+            Directory.Move(Package(), dependency);
+            var dependencyManifest = PortablePluginPackage.ReadManifest(dependency) with { Id = "com.test.dependency", IsInternalDependency = true };
+            File.WriteAllText(Path.Combine(dependency, "manifest.json"), JsonSerializer.Serialize(dependencyManifest));
+        }
+        var store = Store();
+        if (!includeDependency)
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.InitializeAsync(bundled));
+            Assert.False(store.Initialized);
+            Assert.False(store.IsInstalled(Id));
+            return;
+        }
+        await store.InitializeAsync(bundled);
+        Assert.Single(store.Inventory());
+        Assert.True(File.Exists(Path.Combine(store.Resolve(Id), "Dependencies", "com.test.dependency", "manifest.json")));
+    }
+
+    [Theory]
+    [InlineData("../outside")]
+    [InlineData("com.test.lifecycle")]
+    public async Task InvalidDependencyDeclarationsNeverCommitAnInstallation(string dependency)
+    {
+        var bundled = Path.Combine(_root, "bundled"); Directory.CreateDirectory(bundled);
+        var parent = Path.Combine(bundled, Id); Directory.Move(Package(), parent);
+        var manifest = PortablePluginPackage.ReadManifest(parent) with { BundledDependencies = [dependency] };
+        File.WriteAllText(Path.Combine(parent, "manifest.json"), JsonSerializer.Serialize(manifest));
+        var store = Store();
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.InitializeAsync(bundled));
+        Assert.False(store.Initialized);
+    }
+
+    [Fact]
+    public async Task InternalDependenciesAreNotIndependentBootstrapIntegrations()
+    {
+        var bundled = Path.Combine(_root, "bundled"); Directory.CreateDirectory(bundled);
+        var parent = Path.Combine(bundled, Id); Directory.Move(Package(), parent);
+        var manifest = PortablePluginPackage.ReadManifest(parent) with { IsInternalDependency = true };
+        File.WriteAllText(Path.Combine(parent, "manifest.json"), JsonSerializer.Serialize(manifest));
+        var store = Store(); await store.InitializeAsync(bundled);
+        Assert.Empty(store.Inventory());
+    }
+
     [Theory]
     [InlineData("../escape.txt")]
     [InlineData("/absolute.txt")]

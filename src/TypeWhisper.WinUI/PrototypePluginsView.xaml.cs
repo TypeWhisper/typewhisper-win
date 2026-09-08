@@ -31,7 +31,6 @@ public sealed partial class PrototypePluginsView : UserControl
             () => !runtime.IsRecording && runtime.OverlayState.Phase is not (DictationPhase.Processing or DictationPhase.Configuring),
             () => Task.Run(runtime.Packages.Store.Inventory));
         runtime.CtcVocabulary.Changed += () => DispatcherQueue.TryEnqueue(() => _ = RefreshRuntimeAsync());
-        runtime.Groq.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded) _ = RefreshRuntimeAsync(); });
         runtime.Models.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded) _ = RefreshRuntimeAsync(); });
         runtime.Changed += () => DispatcherQueue.TryEnqueue(() => { UpdateRuntimeAction(); if (IsLoaded) _ = RefreshRuntimeAsync(); });
         Loaded += (_, _) => _ = RefreshRuntimeAsync();
@@ -56,15 +55,15 @@ public sealed partial class PrototypePluginsView : UserControl
                 string.Equals(package.Directory, Path.Combine(root, LocalCtcVocabulary.PluginId), StringComparison.OrdinalIgnoreCase);
             var transcription = manifest?.Id == LocalTranscriptionPlugin.PluginId &&
                 string.Equals(package.Directory, Path.Combine(root, LocalTranscriptionPlugin.PluginId), StringComparison.OrdinalIgnoreCase);
-            var cloud = manifest?.Id == CloudTranscriptionPlugin.PluginId;
-            var error = state.Error;
+            var cloud = manifest?.IsLocal == false;
+            var error = state.Error ?? (manifest is null ? null : _runtime.Packages.Store.UpdateWarning(manifest.Id));
             var enabled = state.Enabled;
             var provider = _runtime.DictationProviders.FirstOrDefault(item => item.PluginId == manifest?.Id);
             var setupRequired = enabled && provider is { Ready: false };
             _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? "An installed plugin package could not be read.",
                 "plugin", manifest?.Category ?? "Package", connected
                     ? "Uses recorded audio, token timings and dictionary terms locally to refine the final transcript."
-                    : cloud ? "Sends recorded audio to Groq over HTTPS after recording when a Groq model is selected. Stores your API key encrypted for your Windows user."
+                    : cloud ? "This package may send audio or text to its online provider when used. API keys are managed in plugin settings."
                     : transcription ? "Transcribes microphone audio locally. Includes automatic dictionary boosting for Parakeet."
                     : "Access requirements are not declared by this package's manifest.", manifest?.Version ?? "Unknown", manifest?.MinHostVersion ?? "0.0.0")
             {
@@ -72,8 +71,8 @@ public sealed partial class PrototypePluginsView : UserControl
                 RuntimeNeedsAttention = error is not null || setupRequired,
                 RuntimeStatus = state.Busy ? "Updating…" : error is not null ? "Needs attention" : setupRequired ? "Setup required" : enabled ? "Ready" : "Disabled",
                 RuntimeExplanation = error ?? (cloud ? enabled
-                    ? _runtime.Groq.Ready ? "Choose a Groq model in Settings to use cloud transcription." : "Open Settings to add your Groq API key."
-                    : "Enable Groq and add your API key to use cloud transcription."
+                    ? provider?.Ready == true ? "Choose a model in Dictation to use this provider." : "Open Settings to configure this provider."
+                    : "Enable this plugin and open Settings to configure its providers."
                     : transcription
                     ? enabled ? "NVIDIA Parakeet powers local dictation, live preview and automatic dictionary boosting. Open Settings to manage models."
                         : "Enable for local dictation and model downloads. Your downloaded models are kept."
@@ -381,7 +380,6 @@ public sealed partial class PrototypePluginsView : UserControl
             RuntimePluginSettingsPage.Content = Path.GetFileName(_opened.Id) switch
             {
                 LocalTranscriptionPlugin.PluginId => new LiveModelsView(_runtime),
-                CloudTranscriptionPlugin.PluginId => new LiveCloudSettingsView(_runtime),
                 _ => new LivePortablePluginSettings(_runtime, Path.GetFileName(_opened.Id))
             };
             if (RuntimePluginSettingsPage.Content is null) return;

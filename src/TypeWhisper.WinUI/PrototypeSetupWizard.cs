@@ -51,8 +51,8 @@ public sealed class PrototypeSetupWizard : UserControl
         Grid.SetColumn(_next, 3); footer.Children.Add(_next);
         Grid.SetRow(footer, 1); shell.Children.Add(footer); Content = shell;
         AutomationProperties.SetLiveSetting(_message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        Loaded += (_, _) => { _session.Changed += Changed; _session.Models.Changed += Changed; _session.Groq.Changed += Changed; RefreshStatus(); };
-        Unloaded += (_, _) => { _closing = true; _session.Changed -= Changed; _session.Models.Changed -= Changed; _session.Groq.Changed -= Changed; };
+        Loaded += (_, _) => { _session.Changed += Changed; _session.Models.Changed += Changed; RefreshStatus(); };
+        Unloaded += (_, _) => { _closing = true; _session.Changed -= Changed; _session.Models.Changed -= Changed; };
         _feedback.ReportPersistence(store.Error);
         Render();
     }

@@ -58,12 +58,12 @@ internal static class LiveTranscriptionTaskSettings
         };
         row.Loaded += (_, _) =>
         {
-            session.Changed += OnChanged; session.Models.Changed += OnChanged; session.Groq.Changed += OnChanged;
+            session.Changed += OnChanged; session.Models.Changed += OnChanged;
             Refresh();
         };
         row.Unloaded += (_, _) =>
         {
-            session.Changed -= OnChanged; session.Models.Changed -= OnChanged; session.Groq.Changed -= OnChanged;
+            session.Changed -= OnChanged; session.Models.Changed -= OnChanged;
         };
         Refresh();
     }

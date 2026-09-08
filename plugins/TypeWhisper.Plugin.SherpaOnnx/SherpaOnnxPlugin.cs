@@ -103,7 +103,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.5";
+    public string PluginVersion => "1.1.0";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -122,9 +122,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// Gets the currently selected provider model identifier.
     /// </summary>
     public string? SelectedModelId => _selectedModelId;
-    /// <summary>
-    /// Gets whether the provider supports translation requests.
-    /// </summary>
+    /// <summary>Local PCM inference can provide interim snapshots.</summary>
+    public bool SupportsLocalLivePreview => true;
+
+    /// <summary>Whether the selected model can translate audio.</summary>
     public bool SupportsTranslation => _selectedModelId == "canary-180m-flash";
     /// <summary>
     /// Gets whether the provider can download models through the host.

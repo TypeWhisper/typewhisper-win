@@ -23,6 +23,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal event Action? Changed;
     internal bool Enabled => _lease is not null;
     internal bool Ready => Enabled && ActiveModelId is not null;
+    internal bool SupportsLocalLivePreview => Ready && _lease?.Engine.SupportsLocalLivePreview == true;
     internal bool SupportsTranslation => Ready && _lease?.Engine.SupportsTranslation == true;
     internal bool Busy { get; private set; }
     internal string? ActiveModelId { get; private set; }
@@ -96,7 +97,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             _lease.Engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
             try { _host.SetSetting("Enabled", true); }
             catch { await ReleaseAsync(); throw; }
-            var selected = _host.GetSetting<string>("SelectedModelId") ?? ModelId;
+            var selected = _host.GetSetting<string>("SelectedModelId") ?? _lease.Engine.SelectedModelId
+                ?? Models.FirstOrDefault(model => model.Model.IsRecommended)?.Model.Id
+                ?? Models.FirstOrDefault()?.Model.Id;
             if (!Models.Any(m => m.Model.Id == selected && m.Downloaded))
             {
                 Feedback = "Choose a downloaded model or download one below.";

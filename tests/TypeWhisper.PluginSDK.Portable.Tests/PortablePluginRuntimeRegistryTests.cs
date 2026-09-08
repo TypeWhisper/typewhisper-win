@@ -70,7 +70,7 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     {
         const string groqId = "com.typewhisper.groq";
         var bundles = Path.Combine(_root, "bundles");
-        Package(bundles, groqId, typeof(TypeWhisper.Plugin.Groq.GroqPlugin), "1.0.6");
+        Package(bundles, groqId, typeof(TypeWhisper.Plugin.Groq.GroqPlugin), "1.1.0");
         var store = new PortablePluginStore(Path.Combine(_root, "store"), Version, _http);
         await store.InitializeAsync(bundles);
         await using var registry = Registry(store);

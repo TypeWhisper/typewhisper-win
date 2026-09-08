@@ -56,7 +56,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal event Action<Guid>? OutputCompleted;
     internal bool LivePreviewEnabled { get; set; } = true;
     // Availability describes the host's connected preview path, not just an SDK streaming declaration.
-    internal bool SupportsLiveTranscription => !UsesRegistryProvider &&
+    internal bool SupportsLiveTranscription => (UsesRegistryProvider
+        ? ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)
+        : Models.SupportsLocalLivePreview) &&
         TranscriptionTaskPreferences.Current == TranscriptionTask.Transcribe;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
@@ -103,7 +105,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly LocalTranscriptionPlugin _transcriptionPlugin;
     internal LocalTranscriptionPlugin Models => _transcriptionPlugin;
-    internal CloudTranscriptionPlugin Groq { get; }
     internal PortablePluginRuntimeRegistry PluginRuntime { get; }
     internal IReadOnlyList<PortableLlmProvider> LlmProviders => PluginRuntime.LlmProviders;
     internal Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct) =>
@@ -120,7 +121,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         return local;
     }
     private readonly VocabularyHostServices _selection = new(WinUIProfile.DataPath("Dictation"));
-    internal bool UsesGroq => _providerId == "groq";
     internal string ActiveModelName => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? provider.Name + " · " + (provider.Models.FirstOrDefault(model => model.Id == provider.SelectedModelId)?.DisplayName ?? "No model selected")
         : "Selected provider unavailable" : Models.ActiveModelName;
@@ -131,25 +131,21 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<DictationProviderOption> DictationProviders => new DictationProviderOption[]
     {
         new("local", LocalTranscriptionPlugin.PluginId, "NVIDIA Parakeet", Models.Enabled, true, false,
-            Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray()),
-        new("groq", CloudTranscriptionPlugin.PluginId, "Groq", Groq.Enabled, Groq.Ready, true,
-            Groq.ModelId, Groq.Models.Select(model => new DictationModelOption(model.Id, model.DisplayName, Groq.Ready)).ToArray())
+            Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray())
     }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
-        .Where(provider => provider.PluginId != CloudTranscriptionPlugin.PluginId || provider.SelectionId != CloudTranscriptionPlugin.PluginId)
-        .Select(provider => new DictationProviderOption(provider.SelectionId, provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
+        .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
             provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
                 model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()))).ToArray();
     internal Task<string?> SelectProviderModelAsync(string providerId, string modelId) => providerId switch
     {
         "local" => SelectModelAsync(modelId),
-        "groq" => SelectRegistryModelAsync(providerId, modelId),
         _ => SelectRegistryModelAsync(providerId, modelId)
     };
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
-    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Groq.Busy && !PluginRuntime.IsBusy;
-    internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !Groq.Busy;
+    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !PluginRuntime.IsBusy;
+    internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
     private DateTime _started;
     private bool _disposed;
@@ -212,10 +208,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         finally { _gate.Release(); }
     }
-    internal async Task<string?> SetGroqEnabledAsync(bool enabled) => await ChangeGroqAsync(() => Groq.SetEnabledAsync(enabled));
-    internal Task<string?> SaveGroqKeyAsync(string key) => ChangeGroqAsync(() => Groq.SaveKeyAsync(key));
-    internal Task<string?> ValidateGroqAsync() => ChangeGroqAsync(Groq.ValidateAsync);
-    internal Task<string?> SelectGroqModelAsync(string modelId) => SelectRegistryModelAsync("groq", modelId);
     internal Task<string?> SelectDictationModelAsync(string id)
     {
         foreach (var provider in DictationProviders)
@@ -240,7 +232,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (error is not null) return error;
                 LocalPluginError = null;
             }
-            else if (id == CloudTranscriptionPlugin.PluginId) await Groq.SetEnabledAsync(false);
             else if (await PluginRuntime.SetEnabledAsync(id, false) is { } runtimeError) return runtimeError;
             await Packages.Store.UninstallAsync(id, progress);
             // Keep the selected provider explicit; removing it never switches audio to a cloud service.
@@ -252,23 +243,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             SetStatus(IsReady ? $"{ActiveModelName} ready" : "Choose an installed provider in Dictation.", DictationPhase.Idle);
             _gate.Release(); Changed?.Invoke();
         }
-    }
-    private async Task<string?> ChangeGroqAsync(Func<Task> action)
-    {
-        if (!Packages.Store.IsInstalled(CloudTranscriptionPlugin.PluginId)) return "Install Groq under Integrations first.";
-        if (!CanChangeProvider || !await _gate.WaitAsync(0)) return "Finish dictation before changing Groq settings.";
-        try
-        {
-            var previousStatus = Status;
-            SetStatus("Updating Groq settings…", DictationPhase.Configuring);
-            await _livePreview.StopAsync();
-            await action();
-            SetStatus(IsReady ? $"{ActiveModelName} ready" : UsesGroq ? "Configure or enable Groq in Plugins, or select a local model." : previousStatus, DictationPhase.Idle);
-            return null;
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        { SetStatus(ex.Message, DictationPhase.Idle); return ex.Message; }
-        finally { _gate.Release(); Changed?.Invoke(); }
     }
     internal string? SelectLanguage(string language)
     {
@@ -293,8 +267,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         LocalTranscriptionPlugin.PluginId => new(id, () => Models.Enabled, () => Models.Busy || CtcVocabulary.Busy,
             () => LocalPluginError ?? CtcVocabulary.Error, SetLocalPluginEnabledAsync),
         LocalCtcVocabulary.PluginId => null,
-        CloudTranscriptionPlugin.PluginId => new(id, () => Groq.Enabled, () => Groq.Busy || PluginRuntime.IsBusy,
-            () => Groq.Error ?? PluginRuntime.Snapshot().FirstOrDefault(state => state.PluginId == id)?.Error, SetGroqEnabledAsync),
         _ => new(id, () => PluginRuntime.Snapshot().Any(state => state.PluginId == id && state.Enabled), () => PluginRuntime.IsBusy,
             () => PluginRuntime.Snapshot().FirstOrDefault(state => state.PluginId == id)?.Error, enabled => SetRegistryPluginEnabledAsync(id, enabled))
     };
@@ -358,7 +330,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         var result = await PluginRuntime.UseTranscriptionAsync(RegistrySelectionId(_providerId), (engine, ct) =>
         {
             return LanguageHintTranscription.DecodeAsync(engine, samples,
-                () => CloudTranscriptionPlugin.EncodeWav(samples, int.MaxValue), language,
+                () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes), language,
                 _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct);
         }, _operationCancellation.Token);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
@@ -406,7 +378,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
         PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
             id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId));
-        Groq = new(WinUIPluginPackages.CreateServices(CloudTranscriptionPlugin.PluginId), PluginRuntime);
         PluginRuntime.Changed += () => Changed?.Invoke();
         _history = history;
         HistoryRetention = new(history, new HistoryRetentionPreferencesStore(WinUIProfile.DataPath("history-retention.json")));
@@ -471,9 +442,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             }
             _providerId = SessionProviderId(_selection.GetSetting<string>("Provider") ?? "local");
             await PluginRuntime.InitializeAsync();
-            if (_disposed) return;
-            try { if (Packages.Store.IsInstalled(CloudTranscriptionPlugin.PluginId)) await Groq.InitializeAsync(); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Groq initialization failed: " + CloudTranscriptionPlugin.DescribeError(ex)); }
             if (_disposed) return;
             try { if (Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) await _transcriptionPlugin.InitializeAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { LocalPluginError = ex.Message; }
@@ -736,8 +704,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal string? LastUnsavedText { get; private set; }
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
-        UsesGroq ? Groq.DecodeAsync(samples, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token)
-            : UsesRegistryProvider ? DecodeRegistryAsync(samples)
+        UsesRegistryProvider ? DecodeRegistryAsync(samples)
             : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token);
     private void StopSilenceMonitoring()
     {

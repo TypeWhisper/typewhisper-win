@@ -22,7 +22,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.0.5", manifest.Version);
+        Assert.Equal("1.1.0", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 

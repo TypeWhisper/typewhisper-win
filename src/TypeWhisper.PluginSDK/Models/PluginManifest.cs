@@ -32,6 +32,12 @@ public sealed record PluginManifest
     /// <summary>Whether this is a local (on-device) or cloud-based plugin.</summary>
     public bool IsLocal { get; init; }
 
+    /// <summary>Package IDs required under Dependencies; they are shipped and removed with the parent.</summary>
+    public IReadOnlyList<string> BundledDependencies { get; init; } = [];
+
+    /// <summary>Internal packages are not bootstrapped as independently installed integrations.</summary>
+    public bool IsInternalDependency { get; init; }
+
     /// <summary>DLL file name containing the plugin type (e.g. "MyPlugin.dll").</summary>
     public required string AssemblyName { get; init; }
 

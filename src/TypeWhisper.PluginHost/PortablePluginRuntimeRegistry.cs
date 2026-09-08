@@ -4,13 +4,16 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginHost;
 
 /// <summary>One installed package's runtime state. Enablement is separate from provider readiness.</summary>
-public sealed record PortablePluginRuntimeState(string PluginId, bool Enabled, string? Error, bool HasApiKeySettings = false, bool HasTextSettings = false);
+public sealed record PortablePluginRuntimeState(string PluginId, bool Enabled, string? Error, bool HasApiKeySettings = false, bool HasTextSettings = false, bool ApiKeyConfigured = false);
 /// <summary>A transcription role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableTranscriptionProvider(string PluginId, string SelectionId, string Name,
     bool Ready, string? SelectedModelId, IReadOnlyList<PluginModelInfo> Models, bool SupportsTranslation, bool SupportsPcm,
     IReadOnlyList<string>? SupportedLanguages = null, string? EngineId = null, bool SupportsLanguageHints = false)
 {
     /// <summary>Actual per-model asset states captured under the package lease; independent of provider readiness.</summary>
+    /// <summary>Local snapshot preview explicitly supported by the engine.</summary>
+    public bool SupportsLocalLivePreview { get; init; }
+    /// <summary>Downloaded asset snapshots.</summary>
     public IReadOnlyList<PortableDownloadableModel> ModelStates { get; init; } = [];
 }
 /// <summary>An LLM role's UI snapshot, without exposing its package lifetime.</summary>
@@ -53,6 +56,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal long Generation;
         internal string? Error;
         internal bool CapabilityError;
+        internal bool ApiKeyConfigured;
         internal CancellationTokenSource? Request;
         internal Task CancellationCallbacks = Task.CompletedTask;
     }
@@ -116,7 +120,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>Returns known installed packages and their visible activation/capability errors.</summary>
     public IReadOnlyList<PortablePluginRuntimeState> Snapshot()
     {
-        lock (_sync) return _slots.Values.Select(slot => new PortablePluginRuntimeState(slot.Id, slot.Accepting, slot.Error, slot.Package?.Plugin is IApiKeyPlugin, slot.Package?.Plugin is IPluginTextSettings)).ToArray();
+        lock (_sync) return _slots.Values.Select(slot => new PortablePluginRuntimeState(slot.Id, slot.Accepting, slot.Error, slot.Package?.Plugin is IApiKeyPlugin, slot.Package?.Plugin is IPluginTextSettings, slot.Package is not null && slot.ApiKeyConfigured)).ToArray();
     }
 
     /// <summary>Restores only explicit saved enablement. Missing preferences never activate a package.</summary>
@@ -420,6 +424,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                     processor.PluginVersion, processor.Priority, slot.Generation);
                 postProcessors.Add(slot.Id, new(slot, processor, snapshot));
             }
+            slot.ApiKeyConfigured = plugin is IApiKeyPlugin { IsConfigured: true };
             var engines = (plugin is ITranscriptionEnginePlugin direct ? new[] { direct } : [])
                 .Concat(plugin is IAdditionalTranscriptionEnginesProvider additional ? additional.AdditionalTranscriptionEngines : [])
                 .Distinct(ReferenceEqualityComparer.Instance).Cast<ITranscriptionEnginePlugin>();
@@ -431,7 +436,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 transcriptionSnapshots.Add(new(slot.Id, id, engine.ProviderDisplayName, engine.IsConfigured,
                     engine.SelectedModelId, Array.AsReadOnly(engine.TranscriptionModels.ToArray()), engine.SupportsTranslation, engine is IPcmTranscriptionEnginePlugin,
                     Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId, engine.SupportsLanguageHints)
-                    { ModelStates = CaptureModelStates(slot, id, engine) });
+                    { ModelStates = CaptureModelStates(slot, id, engine), SupportsLocalLivePreview = engine.SupportsLocalLivePreview });
             }
             var providers = (plugin is ILlmProviderPlugin directLlm ? new[] { directLlm } : [])
                 .Concat(plugin is IAdditionalLlmProvidersProvider additionalLlm ? additionalLlm.AdditionalLlmProviders : [])

@@ -87,7 +87,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.6";
+    public string PluginVersion => "1.1.0";
 
     /// <inheritdoc />
     public Task OnInstallAsync(PluginInstallationContext context, CancellationToken cancellationToken)
@@ -154,6 +154,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// Gets the stable provider identifier used for model and settings selection.
     /// </summary>
     public string ProviderId => "groq";
+
+    /// <summary>Portable WAV upload limit before provider-specific compression.</summary>
+    public int MaximumAudioUploadBytes => 25_000_000;
     /// <summary>
     /// Gets the provider name displayed in the UI.
     /// </summary>
