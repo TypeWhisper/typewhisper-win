@@ -1,5 +1,13 @@
 # Windows 1.1 progress
 
+## Visible workflow notices and encoding audit (`80eb4fe7`), 2026-09-08
+
+The workflow failure notice now uses a warning icon, bordered inset surface, a distinct heading, readable body text and bottom-row Edit workflow / Dismiss actions. Edit workflow opens the exact affected workflow without replacing an active editor or another workspace. Saving that workflow clears its stale notice. Keyboard access uses ordinary Tab and focused-button Enter behavior. Native layout, direct-edit and stale-notice acceptance remain pending.
+
+The encoding audit covered 1,232 tracked text files across source, plugins, tests, scripts and documentation. It found damaged workflow provider separators, processing ellipsis and navigation glyphs, plus a mixed-encoding History XAML line. These are repaired with explicit Unicode escapes or an XML character reference. The repeat scan found no further candidates (`artifacts/encoding-scan-after.json`); this is a source-text audit, not a visual inspection of every window or runtime plugin string. A new Presentation test rejects invalid UTF-8 and known mojibake sequences in application source/localization text under src.
+
+767 Presentation tests passed (`artifacts/test-results/workflow-notice/workflow-notice.trx`). The prescribed normal-profile build/relaunch passed (`artifacts/workflow-notice-build.log`). The app exposed a nonzero main-window handle and Quick Launch title; the diagnostic log was unchanged. No Computer Use was performed.
+
 ## Workflow configuration feedback (`fbf956d4`), 2026-09-08
 
 Marco reported that workflow dictation worked after choosing an LLM, but the missing selection had not been clearly explained. The editor now highlights distinct messages for a missing LLM provider, missing model and unavailable configuration while allowing incomplete setup to be saved. Dictation workflow shortcuts check this configuration before recording and bring up a visible notice with the workflow name and corrective action. A stop press still finishes an existing capture. The selected-text activation label also replaces its malformed separator with a Unicode escape.
