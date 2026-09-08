@@ -91,6 +91,18 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     internal event EventHandler? LauncherRequested;
     internal event EventHandler? ClearSearchRequested;
     internal event Action<bool>? ConfigurationModeChanged;
+    internal event Action<string>? ConfigurationSaved;
+    internal bool EditWorkflow(string id)
+    {
+        if (_closing || IsBusy) return false;
+        var workflow = _workflows.FirstOrDefault(item => item.Id == id && item.IsEditable);
+        if (workflow is null) return false;
+        _opened = workflow;
+        _creating = false;
+        _configurationReturnPage = Page.List;
+        LoadConfiguration();
+        return true;
+    }
     internal bool IsDetail => _page != Page.List;
     internal bool IsConfiguring => _page == Page.Configuration;
 
@@ -176,12 +188,12 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         WorkflowSummary.Text = page == Page.List
             ? $"{FilteredWorkflows.Count} workflow{(FilteredWorkflows.Count == 1 ? "" : "s")}" : "Workflow";
         UpdateBreadcrumbs();
-        WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "âŒ« / Esc Back", _ => "âŒ« / Esc Back   â†‘â†“ Navigate   Enter Open" };
+        WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "\u232b / Esc Back", _ => "\u232b / Esc Back   \u2191\u2193 Navigate   Enter Open" };
         WorkflowPrimaryButton.Visibility = page == Page.List ? Visibility.Collapsed : Visibility.Visible;
         WorkflowPrimaryButton.Content = page == Page.Configuration ? (_creating ? "Create workflow" : "Save changes") : page == Page.Result ? "Copy result" : "Run workflow";
         WorkflowExecutionSummary.Text = _opened is null || _opened.ProviderId == "none"
             ? "Choose a provider and model in Edit workflow."
-            : $"{Providers.FirstOrDefault(item => item.Id == _opened.ProviderId)?.Label ?? _opened.ProviderId} Â· {_opened.ModelId} Â· input is sent to this provider when you run";
+            : $"{Providers.FirstOrDefault(item => item.Id == _opened.ProviderId)?.Label ?? _opened.ProviderId} \u00b7 {_opened.ModelId} \u00b7 input is sent to this provider when you run";
         if (_loadError is not null) WorkflowSummary.Text = _loadError;
         else if (Shortcuts?.Error is { } shortcutError) WorkflowSummary.Text = shortcutError;
         ConfigureWorkflowButton.Visibility = page is Page.List or Page.Editor ? Visibility.Visible : Visibility.Collapsed;
@@ -227,7 +239,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
             WorkflowSource.IsReadOnly = true;
             ConfigureWorkflowButton.IsEnabled = false;
             WorkflowPrimaryButton.Content = "Cancel run";
-            WorkflowInputHint.Text = "Processing with the saved provider and modelâ€¦";
+            WorkflowInputHint.Text = "Processing with the saved provider and model\u2026";
             var result = await ManualWorkflowRunner.RunAsync(_opened.ToStored(), WorkflowSource.Text,
                 Available, _session.ProcessLlmAsync, cancellation.Token);
             if (_closing) return;
@@ -506,6 +518,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
             WorkflowList.ScrollIntoView(WorkflowList.SelectedItem);
         }
         else WorkflowSummary.Text = "Workflow saved";
+        ConfigurationSaved?.Invoke(updated.Id);
     }
 
     private async void DeleteWorkflow_Click(object sender, RoutedEventArgs e)

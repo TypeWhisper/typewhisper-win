@@ -28,6 +28,12 @@ public sealed partial class MainWindow
             return HistoryShortcutConflict(value) ?? CopyLastShortcutConflict(value) ?? ReadLastShortcutConflict(value);
         });
         WorkflowsView.Shortcuts = _workflowShortcuts;
+        WorkflowsView.ConfigurationSaved += id =>
+        {
+            if (_noticeWorkflowId != id) return;
+            _noticeWorkflowId = null;
+            ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        };
         if (_workflowShortcuts.Initialize() is { } error) MetricsText.Text = error;
     }
 
@@ -51,7 +57,7 @@ public sealed partial class MainWindow
             if (error is not null)
             {
                 ShowFromActivation();
-                ShowActivationNotice(workflow.Name + ": " + error);
+                ShowActivationNotice(workflow.Name + "\n" + error, workflow.Id);
                 return;
             }
             var snapshot = AutomaticWorkflowSnapshot.ForDictationShortcut(workflow);

@@ -37,11 +37,18 @@
                     Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Hide Quick Launch" />
         </Grid>
 
-        <Border x:Name="ActivationNotice" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" Padding="14,10" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,1">
+        <Border x:Name="ActivationNotice" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" Margin="14,4,14,8" Padding="16" CornerRadius="10" BorderBrush="#E5B65A" BorderThickness="1">
             <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock x:Name="ActivationNoticeText" TextWrapping="Wrap" Foreground="{ThemeResource TextBrush}" FontSize="12" AutomationProperties.LiveSetting="Assertive" />
-                <local:HandCursorButton Grid.Column="1" Content="Dismiss" Click="DismissActivationNotice_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                <Grid.ColumnDefinitions><ColumnDefinition Width="24" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE7BA;" FontSize="20" Foreground="#E5B65A" VerticalAlignment="Top" Margin="0,2,0,0" />
+                <StackPanel Grid.Column="1" Spacing="8">
+                    <TextBlock x:Name="ActivationNoticeTitle" Text="Action needed" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource TextBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ActivationNoticeText" TextWrapping="Wrap" Foreground="{ThemeResource TextBrush}" FontSize="14" AutomationProperties.LiveSetting="Assertive" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                        <local:HandCursorButton x:Name="ActivationNoticeAction" Content="Edit workflow" Visibility="Collapsed" Click="ActivationNoticeAction_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" />
+                        <local:HandCursorButton Content="Dismiss" Click="DismissActivationNotice_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                    </StackPanel>
+                </StackPanel>
             </Grid>
         </Border>
         </StackPanel>

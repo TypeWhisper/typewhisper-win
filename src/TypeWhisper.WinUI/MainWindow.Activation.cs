@@ -5,13 +5,32 @@ namespace TypeWhisper.WinUI;
 public sealed partial class MainWindow
 {
     internal void OpenFilesFromTray() => HandleActivation(ApplicationActivationRequest.Parse(["--files"]));
-    private void ShowActivationNotice(string message)
+    private string? _noticeWorkflowId;
+    private void ShowActivationNotice(string message, string? workflowId = null)
     {
+        _noticeWorkflowId = workflowId;
+        ActivationNoticeTitle.Text = workflowId is null ? "Action needed" : "Workflow could not start";
+        ActivationNoticeAction.Visibility = workflowId is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
         ActivationNoticeText.Text = message;
         ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
     }
-    private void DismissActivationNotice_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+    private void DismissActivationNotice_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _noticeWorkflowId = null;
         ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+    }
+    private void ActivationNoticeAction_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_closing || _profileRestoreClosing || _noticeWorkflowId is not { } id) return;
+        if (_recorderOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || _historyOpen)
+        {
+            ActivationNoticeText.Text = "Return to Quick Launch, then choose Edit workflow here. Your current work has been kept.";
+            return;
+        }
+        if (!_workflowsOpen) OpenWorkflows();
+        if (!WorkflowsView.EditWorkflow(id))
+            ActivationNoticeText.Text = "Finish your current workflow action first. If this workflow was deleted, dismiss this notice.";
+    }
     internal void ShowActivationFailure(Exception error)
     {
         System.Diagnostics.Trace.TraceError("Activation request failed: {0}", error);
