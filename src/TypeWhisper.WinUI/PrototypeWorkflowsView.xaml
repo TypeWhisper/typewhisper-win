@@ -119,10 +119,10 @@
                         <TextBlock Text="ACTIVATION" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
                     <local:PrototypeChoicePicker x:Name="ConfigTrigger" />
                     <StackPanel x:Name="ConfigShortcutSection" Spacing="8" Visibility="Collapsed">
-                        <TextBlock Text="Select text in another app, then press this shortcut to send it to the configured provider. The result opens for review. Nothing is pasted or saved to History." TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBlock x:Name="ConfigShortcutDescription" Text="Select text in another app, then press this shortcut to send it to the configured provider. The result opens for review. Nothing is pasted or saved to History." TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
                         <StackPanel x:Name="ConfigShortcutHost" />
                     </StackPanel>
-                        <TextBlock Text="Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Workflow shortcuts process selected text. Starting dictation with a workflow shortcut, recording overrides and action plugins remain unavailable." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBlock Text="Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides and action plugins remain unavailable." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigAppSection" Spacing="7" Visibility="Collapsed">
                         <TextBlock Text="WINDOWS PROCESS NAMES" FontSize="10" Foreground="{ThemeResource MutedBrush}" />

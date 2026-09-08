@@ -33,11 +33,27 @@ public sealed partial class MainWindow
 
     private void RunWorkflowShortcut(string chord)
     {
+        var workflow = _workflowShortcuts?.Resolve(chord);
+        if (workflow is null) return;
+        if (!_closing && !_profileRestoreClosing && !_workflowShortcutsStopping && !PrototypeShortcutRecorder.AnyEditing
+            && ManualWorkflowStore.IsDictationShortcut(workflow) && _dictationInput?.IsRecordingOrStarting == true)
+        {
+            _ = _dictationInput.SubmitAsync(DictationInputAction.Stop);
+            return;
+        }
         if (_closing || _profileRestoreClosing || _workflowShortcutsStopping || _workflowTask is { IsCompleted: false }
             || PrototypeShortcutRecorder.AnyEditing || WorkflowsView.IsBusy || !_dictation.CanChangeProvider
             || _dictationInitialization is not { IsCompleted: true } || _dictationInput?.IsRecordingOrStarting == true) return;
-        var workflow = _workflowShortcuts?.Resolve(chord);
-        if (workflow is null) return;
+        if (ManualWorkflowStore.IsDictationShortcut(workflow))
+        {
+            var snapshot = AutomaticWorkflowSnapshot.ForDictationShortcut(workflow);
+            _ = _dictationInput?.SubmitAsync(DictationInputAction.Start, () =>
+            {
+                _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
+                return _dictation.StartAsync(snapshot);
+            });
+            return;
+        }
         var target = GetForegroundWindow();
         GetWindowThreadProcessId(target, out var processId);
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -42,7 +42,7 @@ public sealed class DictationInputCoordinator : IDisposable
     public Task Completion => _completion.Task;
 
     /// <summary>Captures intent immediately, before UI dispatch. A cancel supersedes a pending stop; competing starts are discarded.</summary>
-    public Task SubmitAsync(DictationInputAction action)
+    public Task SubmitAsync(DictationInputAction action, Func<Task>? startOverride = null)
     {
         if (_disposed) return Completion;
         ObserveMode();
@@ -63,7 +63,7 @@ public sealed class DictationInputCoordinator : IDisposable
         _busy = true; _terminal = null;
         _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var completion = _completion;
-        if (!_dispatch(() => _ = RunAsync(action, completion))) Finish(completion);
+        if (!_dispatch(() => _ = RunAsync(action, completion, startOverride))) Finish(completion);
         return completion.Task;
     }
 
@@ -75,7 +75,7 @@ public sealed class DictationInputCoordinator : IDisposable
         _observedMode = mode;
     }
 
-    private async Task RunAsync(DictationInputAction action, TaskCompletionSource completion)
+    private async Task RunAsync(DictationInputAction action, TaskCompletionSource completion, Func<Task>? startOverride)
     {
         try
         {
@@ -83,7 +83,7 @@ public sealed class DictationInputCoordinator : IDisposable
             {
                 ObserveMode();
                 if (_disposed || _terminal == DictationInputAction.Cancel || !_canStart()) return;
-                await _start();
+                await (startOverride ?? _start)();
                 ObserveMode();
                 _starting = false;
                 var terminal = _disposed ? DictationInputAction.Cancel : _terminal;

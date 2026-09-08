@@ -20,7 +20,7 @@ public sealed class WorkflowShortcutCatalogTests : IDisposable
         Func<string, string?>? reserved = null) => new(new ManualWorkflowStore(PathName, writer), backend, reserved ?? (_ => null));
 
     [Fact]
-    public void InitializeRegistersOnlySupportedEnabledSelectedTextAndPreservesDisk()
+    public void InitializeRegistersBothSupportedShortcutKindsAndPreservesDisk()
     {
         var supported = Draft();
         Seed(supported, Draft("disabled", "CTRL+K") with { IsEnabled = false },
@@ -29,7 +29,8 @@ public sealed class WorkflowShortcutCatalogTests : IDisposable
         var bytes = File.ReadAllBytes(PathName);
         var backend = new Backend(); var catalog = Catalog(backend);
         Assert.Null(catalog.Initialize());
-        Assert.Equal("CTRL+J", backend.Value);
+        Assert.Equal("CTRL+J,CTRL+L", backend.Value);
+        Assert.Equal(WorkflowHotkeyBehavior.StartDictation, catalog.Resolve("CTRL+L")?.Trigger.HotkeyBehavior);
         Assert.Equal("first", catalog.Resolve("control+j")?.Id);
         Assert.Null(catalog.Resolve("CTRL+K"));
         Assert.Equal(bytes, File.ReadAllBytes(PathName));

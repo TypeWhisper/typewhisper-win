@@ -32,6 +32,14 @@ public sealed class AutomaticWorkflowSnapshot
     /// <summary>Creates a review-only result when the catalog cannot be read safely.</summary>
     public static AutomaticWorkflowSnapshot Unavailable() => new(null, "Workflows could not be loaded. Review your transcript; nothing was pasted.");
 
+    /// <summary>Captures an explicit shortcut independently of app and global matching.</summary>
+    public static AutomaticWorkflowSnapshot ForDictationShortcut(Workflow workflow)
+    {
+        if (!workflow.IsEnabled || !ManualWorkflowStore.IsDictationShortcut(workflow))
+            throw new InvalidOperationException("This dictation workflow is disabled or unsupported.");
+        return new(workflow, null);
+    }
+
     /// <summary>Selects App, Website and Global rules using a one-time browser hostname; manual and hotkey rules remain separate.</summary>
     public static AutomaticWorkflowSnapshot? Select(IEnumerable<Workflow> workflows, string? processName, string? browserHost = null)
     {

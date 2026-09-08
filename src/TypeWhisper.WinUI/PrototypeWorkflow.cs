@@ -22,6 +22,10 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
     public WorkflowTriggerKind TriggerKind { get; init; } = WorkflowTriggerKind.Manual;
     /// <summary>Canonical shortcuts that process the selected text.</summary>
     public string Hotkeys { get; init; } = "";
+    /// <summary>The action invoked by the workflow shortcut.</summary>
+    public WorkflowHotkeyBehavior HotkeyBehavior { get; init; } = WorkflowHotkeyBehavior.ProcessSelectedText;
+    internal string ActivationId => TriggerKind == WorkflowTriggerKind.Hotkey && HotkeyBehavior == WorkflowHotkeyBehavior.StartDictation
+        ? "DictationHotkey" : TriggerKind.ToString();
     /// <summary>Comma-separated Windows process names for App activation.</summary>
     public string AppProcesses { get; init; } = "";
     /// <summary>Comma-separated domains; matching uses only the captured browser hostname.</summary>
@@ -56,7 +60,7 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
                 WorkflowTriggerKind.Website => WorkflowTrigger.Website(DomainPatterns()) with
                 { ProcessNames = AppProcesses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), ContextMatchMode = ContextMatchMode },
                 WorkflowTriggerKind.Global => WorkflowTrigger.Global(),
-                WorkflowTriggerKind.Hotkey => WorkflowTrigger.Hotkey(PrototypeShortcutRules.Split(Hotkeys), WorkflowHotkeyBehavior.ProcessSelectedText),
+                WorkflowTriggerKind.Hotkey => WorkflowTrigger.Hotkey(PrototypeShortcutRules.Split(Hotkeys), HotkeyBehavior),
                 _ => WorkflowTrigger.Manual()
             },
         Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with
@@ -74,6 +78,7 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
         ProviderId = workflow.Behavior.ProviderOverride ?? "none", ModelId = workflow.Behavior.ModelOverride ?? "", IsEnabled = workflow.IsEnabled,
         TriggerKind = workflow.Trigger.Kind, AppProcesses = string.Join(", ", workflow.Trigger.ProcessNames), Priority = workflow.SortOrder,
         Hotkeys = string.Join(",", workflow.Trigger.Hotkeys),
+        HotkeyBehavior = workflow.Trigger.HotkeyBehavior,
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, Stored = workflow
     };

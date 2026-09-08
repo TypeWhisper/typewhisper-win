@@ -494,6 +494,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     internal Task ToggleAsync() => SetRecordingAsync(null);
     internal Task StartAsync() => SetRecordingAsync(true);
+    internal Task StartAsync(AutomaticWorkflowSnapshot workflow) => SetRecordingAsync(true, workflow);
     internal Task StopAsync() => SetRecordingAsync(false);
     internal async Task CancelAsync()
     {
@@ -514,7 +515,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         finally { _effects.End(); _gate.Release(); }
     }
 
-    private async Task SetRecordingAsync(bool? recording)
+    private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null)
     {
         if (_disposed || !await _gate.WaitAsync(0)) return;
 #if DEBUG
@@ -552,7 +553,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _targetProcessId = processId;
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
                 catch (ArgumentException) { _targetApp = "Target app"; }
-                await CaptureWorkflowAtStartAsync();
+                if (workflow is null) await CaptureWorkflowAtStartAsync();
+                else { _targetHostAtStart = null; _workflowAtStart = workflow; }
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 var preferences = AudioPreferences;

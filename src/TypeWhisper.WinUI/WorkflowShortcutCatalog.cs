@@ -95,7 +95,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProces
     private Dictionary<string, Workflow> Build(IEnumerable<Workflow> items)
     {
         var result = new Dictionary<string, Workflow>(StringComparer.Ordinal);
-        foreach (var workflow in items.Where(w => w.IsEnabled && ManualWorkflowStore.IsSelectedTextShortcut(w)))
+        foreach (var workflow in items.Where(w => w.IsEnabled && (ManualWorkflowStore.IsSelectedTextShortcut(w) || ManualWorkflowStore.IsDictationShortcut(w))))
         {
             var value = string.Join(",", workflow.Trigger.Hotkeys);
             ValidateValue(value);
