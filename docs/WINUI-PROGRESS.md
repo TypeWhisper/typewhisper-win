@@ -1,5 +1,13 @@
 # Windows 1.1 progress
 
+## Read last dictation shortcut (`26e6d088`), 2026-09-08
+
+Read last transcription is connected in Quick Launch and Settings > Shortcuts, with an unassigned-by-default persistent global binding and bidirectional conflicts against the other connected shortcuts. It reads the final session snapshot through the shared Windows speech controller and current voice/output selections, independently of the automatic spoken-feedback toggle. Repeating the action cancels active speech and waits for synthesis/playback drain; it does not queue a second reading. Shutdown/profile restore unregister the shortcut and drain the shared speech activity. Successful playback does not activate Main, write History, copy or paste text.
+
+The existing speech limits apply without truncation: up to 4,000 text characters and the backend's bounded audio duration/size. Empty sessions and unavailable voices/outputs report a reason. Start admission is blocked while recording/processing/configuring; starting a new dictation uses the existing speech-cancellation path. History-entry read-back is separate and remains open.
+
+Focused Presentation validation passed **754 tests**, including five new cases for exact text/language/voice/output, empty input, oversized text, stop/drain without duplicate playback, and closed-controller rejection. The prescribed normal-profile Debug build/launch passed (`artifacts/read-last-build.log`). Native read/stop, real voice/output selection, persistence and new-recording interruption await Marco. No Computer Use was performed. Marco confirmed the preceding copy-last shortcut works; that confirmation does not establish all its persistence/conflict/History-off edge cases.
+
 ## Copy last dictation shortcut (`a5bed04c`), 2026-09-08
 
 The Copy last transcription row in Settings > Shortcuts is now connected, with a matching Quick Launch action. It defaults to unassigned, persists in `copy-last-transcription-hotkeys.txt`, reuses atomic registration/save/rollback, and checks conflicts in both directions against launcher, dictation (including modifier-only prefixes), Cancel, History and workflow shortcuts. Shutdown and profile restoration unregister it.
