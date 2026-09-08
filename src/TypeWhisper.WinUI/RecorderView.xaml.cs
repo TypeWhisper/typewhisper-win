@@ -32,6 +32,7 @@ public sealed partial class RecorderView : UserControl
     public RecorderView()
     {
         InitializeComponent();
+        EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
         var sourceLabel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         sourceLabel.Children.Add(new TextBlock { Text = "Audio source", FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
         sourceLabel.Children.Add(_audioSourceHelp);

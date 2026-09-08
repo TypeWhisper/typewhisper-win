@@ -168,6 +168,7 @@ public sealed partial class PluginsView : UserControl
     public PluginsView()
     {
         InitializeComponent();
+        EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
         IntegrationTabs.SetItems([new("installed", "Installed"), new("discover", "Discover")], "installed");
         IntegrationTabs.SelectionChanged += id =>
         { IntegrationTabs.SetSelected("installed"); if (id == "discover") Marketplace_Click(this, new RoutedEventArgs()); };

@@ -119,6 +119,7 @@ public sealed partial class WorkflowsView : UserControl
     public WorkflowsView()
     {
         InitializeComponent();
+        EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
         TemplateHelp.Child = HelpHeading("Template", _templateHelp);
         ShortcutHelp.Child = HelpHeading("Shortcut", _shortcutHelp);
         ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides and action plugins remain unavailable.", 12);

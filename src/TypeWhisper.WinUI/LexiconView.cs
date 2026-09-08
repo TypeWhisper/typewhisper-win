@@ -72,6 +72,7 @@ public sealed partial class LexiconView : UserControl
         footer.Children.Add(_crumbs); Grid.SetColumn(_actions, 1); footer.Children.Add(_actions);
         var border = new Border { Child = footer, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 1, 0, 0) };
         Grid.SetRow(border, 3); root.Children.Add(border); Content = root;
+        EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(_actions));
     }
 
     internal void Present(bool snippets)
@@ -172,7 +173,7 @@ public sealed partial class LexiconView : UserControl
             Grid.SetColumn(labels, 1); content.Children.Add(labels);
             var trailing = Text(entry.Enabled ? "Edit  ›" : "Off  ·  Edit  ›", 11, true); trailing.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(trailing, 2); content.Children.Add(trailing);
-            var row = Button("", () => { if (entry.FromPack) { _showPacks = true; Render(); } else OpenEditor(entry); }); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
+            var row = Button("", () => { if (entry.FromPack) { _showPacks = true; Render(); } else OpenEditor(entry); }); row.ContextFlyout = LexiconEntryMenu(entry); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
             if (entry.FromPack) trailing.Text = "Term packs  ›";
             row.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
             AutomationProperties.SetName(row, entry.FromPack ? $"Manage term pack for {entry.Key}" : entry.Kind == LexiconKind.Correction ? $"Edit correction: {entry.Value}, recognized as {entry.Key}" : $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
@@ -199,6 +200,7 @@ public sealed partial class LexiconView : UserControl
                 var row = new Grid { ColumnSpacing = 12 };
                 row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
                 var edit = Button("", () => OpenEditor(current));
+                EntryActionMenu.Attach(edit, () => [new("Edit variant", () => OpenEditor(current)), new("Delete variant…", () => { OpenEditor(current); EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == "Delete")?.Invoke(); })]);
                 var label = Text(alias.Key, 13);
                 label.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
                 edit.Content = label;
@@ -293,6 +295,26 @@ public sealed partial class LexiconView : UserControl
             expand.ContextFlyout = GroupMenu();
             _rows.Children.Add(card);
         }
+    }
+
+    private MenuFlyout LexiconEntryMenu(LexiconEntry entry)
+    {
+        if (entry.FromPack)
+            return EntryActionMenu.Create([new("Show term pack", () => { _showPacks = true; Render(); })]);
+        return EntryActionMenu.Create([
+            new("Edit", () => OpenEditor(entry)),
+            new(entry.Enabled ? "Disable" : "Enable", () =>
+            {
+                var error = _store.Save(entry with { Enabled = !entry.Enabled });
+                _notice.Text = error ?? "Entry updated.";
+                if (error is null) Render();
+            }),
+            new("Delete…", () =>
+            {
+                OpenEditor(entry);
+                EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == "Delete")?.Invoke();
+            })
+        ]);
     }
 
     private void OpenEditor(LexiconEntry entry)

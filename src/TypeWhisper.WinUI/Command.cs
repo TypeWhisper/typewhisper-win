@@ -7,4 +7,8 @@ public sealed record Command(
     string Subtitle,
     string Shortcut,
     string Detail,
-    bool IsActive = false);
+    bool IsActive = false,
+    bool IsPinned = false)
+{
+    public string PinLabel => IsPinned ? "Pinned" : "";
+}

@@ -66,6 +66,7 @@ public sealed partial class FileTranscriptionView : UserControl
             if (DispatcherQueue.HasThreadAccess) UpdateQueue();
             else DispatcherQueue.TryEnqueue(UpdateQueue);
         };
+        EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(_actions));
         InitializeWatcher();
         Render();
     }
@@ -284,6 +285,12 @@ public sealed partial class FileTranscriptionView : UserControl
             HorizontalContentAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources[_selectedJob == job ? "PrimaryButtonStyle" : "SecondaryButtonStyle"] };
         AutomationProperties.SetName(row, job.Name + ", " + job.Stage);
         AutomationProperties.SetItemStatus(row, _selectedJob == job ? "Selected" : "Not selected");
+        row.ContextFlyout = EntryActionMenu.Create([
+            new("View result", () => { _selectedJob = job; OpenSelectedResult(); }, job.Status == FileTranscriptionStatus.Ready),
+            new("Transcribe", () => { _selectedJob = job; _ = RunQueue(job); }, !_queue.Running && job.Status == FileTranscriptionStatus.Queued && _session?.CanTranscribeFile == true),
+            new("Retry", () => { _selectedJob = job; if (_queue.Retry(job)) _ = RunQueue(job); }, !_queue.Running && job.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled),
+            new("Remove · Del", () => { _selectedJob = job; RemoveSelected(); }, !_queue.Running && !_picking)
+        ]);
         row.Click += (_, _) => { _selectedJob = job; Render(); };
         row.PreviewKeyDown += async (_, e) =>
         {

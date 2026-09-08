@@ -534,7 +534,9 @@ public sealed partial class MainWindow : Window
             MetricsText.Text = $"Alt+Space unavailable · {exception.Message}";
         }
 
-        foreach (var command in Commands)
+        LoadLauncherPins();
+        EntryActionMenu.Attach(CompactResults, LauncherActions);
+        foreach (var command in OrderedLauncherCommands(Commands))
             FilteredItems.Add(command);
 
         Activated += MainWindow_Activated;
@@ -741,11 +743,11 @@ public sealed partial class MainWindow : Window
                 .ToArray();
 
         FilteredItems.Clear();
-        foreach (var command in matches)
+        foreach (var command in OrderedLauncherCommands(matches))
             FilteredItems.Add(command);
         sw.Stop();
 
-        CompactSectionLabel.Text = string.IsNullOrEmpty(query) ? "ACTIVE & PINNED" : $"{FilteredItems.Count} RESULTS";
+        CompactSectionLabel.Text = string.IsNullOrEmpty(query) ? "COMMANDS" : $"{FilteredItems.Count} RESULTS";
         MetricsText.Text = $"Local search · {sw.Elapsed.TotalMilliseconds:0.00} ms · {FilteredItems.Count} results";
         MetricsDot.Fill = new SolidColorBrush(sw.Elapsed.TotalMilliseconds <= 16 ? Colors.MediumSeaGreen : Colors.OrangeRed);
         SelectFirstResult();
@@ -861,9 +863,8 @@ public sealed partial class MainWindow : Window
     private void ToggleActions()
     {
         if (_historyOpen || _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen) return;
-        ActionPanel.Visibility = ActionPanel.Visibility == Visibility.Visible
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        if (UtilityOpen || LexiconOpen || FileTranscriptionOpen) return;
+        EntryActionMenu.Create(LauncherActions()).ShowAt(CompactResults);
     }
 
     private void ShowWaveformOverlay(DisplayArea? targetArea = null)
@@ -1583,8 +1584,7 @@ public sealed partial class MainWindow : Window
     }
     private void PinButton_Click(object sender, RoutedEventArgs e)
     {
-        ActionPanel.Visibility = Visibility.Collapsed;
-        MetricsText.Text = _selected is null ? "Nothing selected" : $"Pinned {_selected.Title} · in-memory preview";
+        if (_selected is { } command) ToggleLauncherPin(command);
     }
 
     [DllImport("user32.dll")]

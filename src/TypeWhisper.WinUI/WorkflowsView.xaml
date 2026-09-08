@@ -191,7 +191,7 @@
                 </StackPanel>
             </StackPanel>
         </Border>
-        <Border Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+        <Border x:Name="ContextActionsFooter" Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
             <Grid Height="48" Padding="2,0" ColumnSpacing="10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <local:Breadcrumbs x:Name="WorkflowBreadcrumbs" VerticalAlignment="Center" />

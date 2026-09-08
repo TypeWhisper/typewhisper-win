@@ -38,6 +38,7 @@ public sealed partial class MarketplaceView : UserControl
     public MarketplaceView()
     {
         InitializeComponent();
+        EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
         IntegrationTabs.SetItems([new("installed", "Installed"), new("discover", "Discover")], "discover");
         IntegrationTabs.SelectionChanged += id =>
         { IntegrationTabs.SetSelected("discover"); if (id == "installed") Installed_Click(this, new RoutedEventArgs()); };

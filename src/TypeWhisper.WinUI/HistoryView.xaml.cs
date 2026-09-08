@@ -113,6 +113,7 @@ public sealed partial class HistoryView : UserControl
     public HistoryView()
     {
         InitializeComponent();
+        EntryActionMenu.Attach(this, HistoryContextActions);
         HistoryTabs.SetItems([new("all", "All"), new("Dictation", "Dictations"), new("Recording", "Recordings")], "all");
         HistoryTabs.SelectionChanged += id =>
         { _kind = Enum.TryParse<HistoryEntryKind>(id, out var kind) ? kind : null; ApplyFilters(); };

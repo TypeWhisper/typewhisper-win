@@ -55,7 +55,7 @@
                 <TextBlock x:Name="MarketCompatibility" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
-        <Border Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+        <Border x:Name="ContextActionsFooter" Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
             <Grid MinHeight="48" Padding="2,6" ColumnSpacing="10">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>

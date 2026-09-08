@@ -119,7 +119,7 @@
             </StackPanel>
             </ScrollViewer>
         </Grid>
-        <Border Grid.Row="4" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+        <Border x:Name="ContextActionsFooter" Grid.Row="4" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
             <StackPanel Padding="2,8,2,10" Spacing="8">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
