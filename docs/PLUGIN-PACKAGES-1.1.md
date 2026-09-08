@@ -193,3 +193,8 @@ Its portable transport is separate from the unchanged legacy Windows transport.
 
 Protocol references: [CloseStream](https://developers.deepgram.com/docs/close-stream),
 [multilingual streaming](https://developers.deepgram.com/docs/language-detection).
+
+The live v2 catalog now publishes NVIDIA/Groq 1.1.1 and Deepgram 1.1.2. All three public
+archives were installed and activated in an isolated profile through the actual portable host.
+Deepgram's release is at https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-streaming-20260908.
+The native Restart now action and live microphone transcription remain manual acceptance checks.

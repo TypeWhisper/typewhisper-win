@@ -166,6 +166,20 @@ public sealed class DeepgramStreamingTests
         channel = new { alternatives = new[] { new { transcript = text, languages = new[] { "de" } } } }
     });
 
+    [Fact]
+    public async Task QueueOverflowCancelsBlockedConnectionImmediately()
+    {
+        var failed = false;
+        await using var stream = new StreamingDictation(async (_, ct) =>
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            return "";
+        }, [], _ => { }, () => failed = true, CancellationToken.None);
+        for (var i = 0; i < 257; i++) stream.Append(new float[] { 0.2f });
+        Assert.Null(await stream.FinishAsync().WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.True(failed);
+    }
+
     private sealed class Engine(IStreamingSession session) : ITranscriptionEnginePlugin
     {
         public string PluginId => "com.example.streaming";

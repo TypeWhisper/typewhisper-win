@@ -7,7 +7,7 @@ text, accumulates confirmed segments, awaits the final server response, and send
 through the existing history, workflow and output pipeline. Failed or incomplete streams use
 full-recording batch fallback; cancellation and shutdown dispose the session before unloading.
 
-Validation: 1,700 headless tests passed, one platform-specific skip. This includes 22 independent
+Validation: 1,701 headless tests passed, one platform-specific skip. This includes 23 independent
 Deepgram tests, with fragmented Unicode responses, final-result waiting, duplicate segments,
 transport failure, missing audio, cancellation, and an empty successful result. The corrected
 Groq fixture versions were rerun in the 222-test PluginHost suite. Real microphone/network and

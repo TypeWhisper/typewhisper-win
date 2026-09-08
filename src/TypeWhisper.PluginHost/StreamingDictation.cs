@@ -12,6 +12,7 @@ public sealed class StreamingDictation : IAsyncDisposable
     private readonly CancellationTokenSource _cancel;
     private readonly Task<string?> _result;
     private int _closed;
+    private int _inputFailed;
     private long _acceptedSamples;
     /// <summary>Unambiguous language reported by a finalized segment.</summary>
     public string? DetectedLanguage { get; private set; }
@@ -41,7 +42,11 @@ public sealed class StreamingDictation : IAsyncDisposable
         else Interlocked.Add(ref _acceptedSamples, samples.Length);
     }
 
-    private void FailInput() => _audio.Writer.TryComplete(new IOException("Live audio could not be queued completely."));
+    private void FailInput()
+    {
+        Interlocked.Exchange(ref _inputFailed, 1);
+        Cancel();
+    }
 
     private async Task<string?> RunAsync(
         Func<Func<ITranscriptionEnginePlugin, CancellationToken, Task<string>>, CancellationToken, Task<string>> use,
@@ -86,7 +91,7 @@ public sealed class StreamingDictation : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            if (!_cancel.IsCancellationRequested) failed();
+            if (!_cancel.IsCancellationRequested || Volatile.Read(ref _inputFailed) != 0) failed();
             return null;
         }
     }
@@ -96,9 +101,15 @@ public sealed class StreamingDictation : IAsyncDisposable
     {
         Interlocked.Exchange(ref _closed, 1);
         if (expectedSamples is { } expected && expected != Interlocked.Read(ref _acceptedSamples))
-            _audio.Writer.TryComplete(new IOException("Live capture was incomplete."));
+            FailInput();
         else _audio.Writer.TryComplete();
-        return await _result.ConfigureAwait(false);
+        try { return await _result.WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false); }
+        catch (TimeoutException)
+        {
+            // Bound the whole stop operation, including a slow backlog, not just individual sends.
+            FailInput();
+            return await _result.ConfigureAwait(false);
+        }
     }
 
     /// <summary>Stops sending audio and suppresses subsequent preview publication.</summary>
