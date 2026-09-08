@@ -368,9 +368,9 @@ public sealed partial class MainWindow : Window
         }
 #endif
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService), historyService);
+        _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         HistoryView.ReadTranscript = _dictation.ReadHistoryAsync;
         HistoryView.StopReading = _dictation.StopHistoryReadbackAsync;
-        _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         WorkflowsView.Connect(_dictation);
         _dictation.ReviewRequested += ShowOutputReview;
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
