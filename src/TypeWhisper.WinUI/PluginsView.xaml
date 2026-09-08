@@ -88,11 +88,14 @@
             </StackPanel>
         </Border>
         <Border Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
-            <Grid Height="48" Padding="2,0" ColumnSpacing="10">
+            <Grid MinHeight="48" Padding="2,6" ColumnSpacing="10">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="UpdateNotice" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
                 <local:Breadcrumbs x:Name="PluginBreadcrumbs" VerticalAlignment="Center" />
                 <TextBlock x:Name="PluginNavigationHint" Grid.Column="1" Text="⌫ / Esc Back   ↑↓ Navigate   Enter Open" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <local:HandCursorButton x:Name="InstalledUpdateButton" Content="Update all" Click="InstalledUpdate_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" />
                     <local:HandCursorButton x:Name="BrowseMarketplaceButton" Visibility="Collapsed" Content="Discover" Click="Marketplace_Click" Style="{StaticResource SecondaryButtonStyle}" AutomationProperties.Name="Browse plugin marketplace" />
                     <local:HandCursorButton x:Name="ReturnToDictationButton" Content="Back to Dictation" Click="ReturnToDictation_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" />
                     <local:HandCursorButton x:Name="PluginToggleButton" Content="Disable" Click="Toggle_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" AutomationProperties.Name="Toggle plugin" />

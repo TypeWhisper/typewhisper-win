@@ -49,6 +49,7 @@ public sealed partial class MarketplaceView : UserControl
     internal void ConfigureRuntime(LocalDictationSession runtime)
     {
         _runtime = runtime;
+        runtime.Packages.Updates.Changed += () => DispatcherQueue.TryEnqueue(() => { UpdateAllAction(); if (!IsDetail) Filter(_query); else UpdateDetail(); });
         _isInstalled = runtime.Packages.Store.IsInstalled;
 
         ResetFiltersButton.Content = "Retry";
@@ -67,8 +68,9 @@ public sealed partial class MarketplaceView : UserControl
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             _entries = await _runtime.Packages.Catalog.FetchAsync(timeout.Token);
+            _runtime.Packages.Updates.AcceptCatalog(_entries);
             _catalog = _entries.Select(entry => new MarketplaceItem(new(entry.Id, entry.Name, entry.Description,
-                "plugin", string.Join(" / ", entry.Categories), "Plugins run with your Windows user's permissions. Install only publishers you trust.",
+                "plugin", string.Join(" / ", entry.Categories.Select(value => value == "llm" ? "LLM" : char.ToUpperInvariant(value[0]) + value[1..])), "Plugins run with your Windows user's permissions. Install only publishers you trust.",
                 entry.Version, entry.MinHostVersion), entry.Author)
                 { CategoriesIds = entry.Categories, Supported = entry.Supports(LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture) }).ToArray();
             EmptyTitle.Text = _catalog.Count == 0 ? "No integrations published yet" : "No matching integrations";
@@ -87,6 +89,7 @@ public sealed partial class MarketplaceView : UserControl
     internal void Filter(string query)
     {
         if (IsDetail) return;
+        UpdateAllAction();
         _query = query;
         var selectedId = (MarketList.SelectedItem as MarketplaceItem)?.Plugin.Id ?? _opened?.Plugin.Id;
         FilteredItems.Clear();
@@ -114,6 +117,7 @@ public sealed partial class MarketplaceView : UserControl
         if (MarketList.SelectedItem is not MarketplaceItem item) return;
         _opened = item; _error = null;
         IsDetail = true;
+        UpdateAllAction();
         IntegrationTabs.Visibility = Visibility.Collapsed;
         MarketListPage.Visibility = Visibility.Collapsed;
         MarketDetailPage.Visibility = Visibility.Visible;
@@ -134,7 +138,7 @@ public sealed partial class MarketplaceView : UserControl
         var installed = _isInstalled(item.Plugin.Id);
         var update = HasUpdate(item);
         var pending = _runtime.Packages.Store.PendingRestart(item.Plugin.Id);
-        var busy = _installation is not null;
+        var busy = _installation is not null || _runtime.Packages.Updates.Busy;
         MarketTitle.Text = item.Title;
         MarketSummary.Text = "Discover";
         MarketDescription.Text = item.Description;
@@ -142,7 +146,7 @@ public sealed partial class MarketplaceView : UserControl
         MarketAccess.Text = item.Plugin.Permissions;
         MarketCompatibility.Text = $"Version {item.Plugin.Version} · Minimum host {item.Plugin.MinimumHostVersion}";
         MarketStatus.Text = busy ? "Installing…" : _error is not null ? pending ? "Restart unavailable" : "Installation failed" : pending ? "Restart required" : !item.Supported ? "Not compatible" : update ? "Update available" : installed ? "Installed" : "Available";
-        MarketStatusExplanation.Text = _error ?? (busy ? _operationMessage ?? "Preparing installation…"
+        MarketStatusExplanation.Text = _error ?? (busy ? _runtime.Packages.Updates.Busy ? _runtime.Packages.Updates.Status : _operationMessage ?? "Preparing installation…"
             : pending ? "Restart TypeWhisper to use the update. The current version remains available until then."
             : !item.Supported ? "This package does not support your TypeWhisper version or Windows architecture."
             : installed && !update ? "Open plugin settings to finish setup or manage its models."
@@ -151,8 +155,8 @@ public sealed partial class MarketplaceView : UserControl
         MarketPrimaryButton.Content = _restarting ? "Restarting…" : busy ? "Installing…" : pending ? "Restart now · Enter" : update ? "Update" : installed ? "Open in Installed" : "Install";
         MarketPrimaryButton.IsEnabled = !_restarting && !busy && item.Supported && _runtime.Packages.Store.Initialized
             && (!pending || RestartRequested is not null);
-        MarketCancelButton.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        InstallProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        MarketCancelButton.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
+        InstallProgress.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
         MarketNavigationHint.Text = busy ? "Esc Cancel" : "⌫ / Esc Back";
         if (updateBreadcrumbs) UpdateBreadcrumbs();
     }
@@ -224,7 +228,7 @@ public sealed partial class MarketplaceView : UserControl
 
     private async void Primary_Click(object sender, RoutedEventArgs e)
     {
-        if (_runtime is null || _opened is not { } item || _installation is not null || _restarting) return;
+        if (_runtime is null || _opened is not { } item || _installation is not null || _runtime.Packages.Updates.Busy || _restarting) return;
         if (_runtime.Packages.Store.PendingRestart(item.Plugin.Id))
         {
             if (RestartRequested is null) return;
@@ -237,6 +241,12 @@ public sealed partial class MarketplaceView : UserControl
         }
         if (_isInstalled(item.Plugin.Id) && !HasUpdate(item)) { ManageRequested?.Invoke(item.Plugin.Id); return; }
         if (!item.Supported) return;
+        if (_isInstalled(item.Plugin.Id) && HasUpdate(item))
+        {
+            await _runtime.Packages.Updates.UpdateAsync(item.Plugin.Id);
+            if (IsDetail) UpdateDetail();
+            return;
+        }
         var entry = _entries.Single(entry => entry.Id == item.Plugin.Id);
         using var operation = new CancellationTokenSource();
         _installation = operation; _error = null; _operationMessage = "Preparing installation…"; SetProgress(0);

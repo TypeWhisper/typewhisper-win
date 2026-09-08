@@ -56,11 +56,14 @@
             </StackPanel>
         </ScrollViewer>
         <Border Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
-            <Grid Height="48" Padding="2,0" ColumnSpacing="10">
+            <Grid MinHeight="48" Padding="2,6" ColumnSpacing="10">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="UpdateNotice" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
                 <local:Breadcrumbs x:Name="MarketBreadcrumbs" VerticalAlignment="Center" />
                 <TextBlock x:Name="MarketNavigationHint" Grid.Column="1" Text="⌫ / Esc Back   ↑↓ Navigate   Enter Open" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <local:HandCursorButton x:Name="MarketUpdateAllButton" Content="Update all" Click="MarketUpdateAll_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" />
                     <local:HandCursorButton x:Name="MarketCancelButton" Content="Cancel" Click="Cancel_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" AutomationProperties.Name="Cancel installation" />
                     <local:HandCursorButton x:Name="MarketPrimaryButton" Content="Install" Click="Primary_Click" Visibility="Collapsed" Style="{StaticResource PrimaryButtonStyle}" AutomationProperties.Name="Marketplace primary action" />
                 </StackPanel>

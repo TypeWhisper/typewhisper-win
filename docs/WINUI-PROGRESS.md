@@ -1,5 +1,20 @@
 # Windows 1.1 progress
 
+## Installed integration updates — 2026-09-08
+
+Installed and Discover share update availability and a footer Update all action. Installed
+details also allow updating one plugin. Pending packages show Restart required and are excluded
+from subsequent update batches. A failed package remains retryable while other updates continue;
+shutdown cancels and drains the coordinator before exiting. Buttons support Tab and Enter.
+Missing category metadata is supplemented from recognized runtime capabilities, and category
+labels consistently display Transcription and LLM without rewriting installed manifests.
+
+Validation: 225 PluginHost tests and 775 Presentation tests passed. New store tests cover
+compatibility, pending/repeated updates, retry after failure, and continuation of a mixed-result
+batch. The prescribed development build/relaunch passed. Manual acceptance of Update all and
+the resulting native restart remains pending.
+
+
 ## Deepgram live transcription — 2026-09-08
 
 Deepgram 1.1.2 streams microphone audio when live text is enabled. The host replaces interim

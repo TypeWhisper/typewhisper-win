@@ -28,24 +28,89 @@ public sealed class PortablePluginStoreTests : IDisposable
     private PortablePluginStore Store(bool hooks = false) => new(Path.Combine(_root, "store"), new(1, 1, 0), _http,
         hooks ? _ => Host : null);
     private VocabularyHostServices Host => new(Path.Combine(_root, "data"));
-    private string Package(string version = "1.0.0")
+
+    [Fact]
+    public async Task UpdateAllContinuesWithOtherPackagesAfterOneFailure()
+    {
+        const string otherId = "com.test.other";
+        var store = Store(); await store.InitializeAsync();
+        await store.InstallAsync(Entry());
+        await store.InstallAsync(Entry(id: otherId));
+        var first = Entry("1.1.0") with { Name = "First", Sha256 = new string('a', 64) };
+        var second = Entry("1.1.0", id: otherId) with { Name = "Second" };
+        var updates = new PortablePluginUpdates(store, new(_http), new(1, 1, 0), PortablePluginCatalog.Architecture);
+        updates.AcceptCatalog([first, second]);
+        Assert.Equal(2, updates.Available.Count);
+        await updates.UpdateAsync();
+        Assert.False(store.PendingRestart(Id));
+        Assert.True(store.PendingRestart(otherId));
+        Assert.Equal(Id, Assert.Single(updates.Available).Id);
+        Assert.Contains("1 updated", updates.Status);
+        Assert.Contains("First", updates.Status);
+        await updates.ShutdownAsync();
+    }
+
+    [Fact]
+    public async Task UpdatePlanOnlyIncludesNewerCompatibleInstalledPackagesAndSkipsPendingUpdates()
+    {
+        var store = Store(); await store.InitializeAsync();
+        await store.InstallAsync(Entry());
+        var offered = Entry("1.1.0");
+        var updates = new PortablePluginUpdates(store, new(_http), new(1, 1, 0), PortablePluginCatalog.Architecture);
+        updates.AcceptCatalog([offered with { SupportedArchitectures = ["unavailable"] },
+            offered with { Id = "com.test.not-installed" }]);
+        Assert.Empty(updates.Available);
+        updates.AcceptCatalog([offered with { Version = "1.0.0" }]);
+        Assert.Empty(updates.Available);
+        updates.AcceptCatalog([offered]);
+        Assert.True(updates.HasUpdate(Id));
+        await updates.UpdateAsync();
+        Assert.True(updates.RestartRequired);
+        Assert.Empty(updates.Available);
+        Assert.Equal("1.0.0", store.InstalledVersion(Id));
+        await updates.UpdateAsync();
+        Assert.Empty(updates.Available);
+        await updates.ShutdownAsync();
+        var restarted = Store(); await restarted.InitializeAsync();
+        Assert.Equal("1.1.0", restarted.InstalledVersion(Id));
+    }
+
+    [Fact]
+    public async Task FailedUpdateRemainsRetryableAndPreservesInstalledVersion()
+    {
+        var store = Store(); await store.InitializeAsync();
+        await store.InstallAsync(Entry());
+        var offered = Entry("1.1.0");
+        var updates = new PortablePluginUpdates(store, new(_http), new(1, 1, 0), PortablePluginCatalog.Architecture);
+        updates.AcceptCatalog([offered with { Sha256 = new string('a', 64) }]);
+        await updates.UpdateAsync();
+        Assert.Contains("Could not update", updates.Status);
+        Assert.True(updates.HasUpdate(Id));
+        Assert.False(updates.RestartRequired);
+        Assert.Equal("1.0.0", store.InstalledVersion(Id));
+        updates.AcceptCatalog([offered]);
+        await updates.UpdateAsync(Id);
+        Assert.True(updates.RestartRequired);
+        await updates.ShutdownAsync();
+    }
+    private string Package(string version = "1.0.0", string id = Id)
     {
         var folder = Path.Combine(_root, Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
         File.Copy(typeof(LifecycleProbePlugin).Assembly.Location, Path.Combine(folder, "plugin.dll"));
         File.WriteAllText(Path.Combine(folder, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
-        { Id = Id, Name = "Fixture", Version = version, AssemblyName = "plugin.dll", PluginClass = typeof(LifecycleProbePlugin).FullName! }));
+        { Id = id, Name = "Fixture", Version = version, AssemblyName = "plugin.dll", PluginClass = typeof(LifecycleProbePlugin).FullName! }));
         return folder;
     }
-    private PortableCatalogEntry Entry(string version = "1.0.0", string? unsafePath = null)
+    private PortableCatalogEntry Entry(string version = "1.0.0", string? unsafePath = null, string id = Id)
     {
         using var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, true))
         {
-            foreach (var file in Directory.GetFiles(Package(version))) zip.CreateEntryFromFile(file, Path.GetFileName(file));
+            foreach (var file in Directory.GetFiles(Package(version, id))) zip.CreateEntryFromFile(file, Path.GetFileName(file));
             if (unsafePath is not null) { using var output = new StreamWriter(zip.CreateEntry(unsafePath).Open()); output.Write("unsafe"); }
         }
         _download = stream.ToArray();
-        return new() { Id = Id, Name = "Fixture", Version = version, DownloadUrl = "https://packages.test/fixture.zip", Sha256 = Convert.ToHexString(SHA256.HashData(_download)), Size = _download.Length, SupportedArchitectures = [PortablePluginCatalog.Architecture] };
+        return new() { Id = id, Name = "Fixture", Version = version, DownloadUrl = "https://packages.test/fixture.zip", Sha256 = Convert.ToHexString(SHA256.HashData(_download)), Size = _download.Length, SupportedArchitectures = [PortablePluginCatalog.Architecture] };
     }
 
     [Fact]

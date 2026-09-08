@@ -181,7 +181,7 @@ public sealed partial class MainWindow : Window
     internal Func<Task<string?>>? RestartApplicationAsync { get; set; }
     private Task<string?> RestartForPluginUpdateAsync()
     {
-        if (_closing || _profileRestoreClosing || !_dictation.CanChangeProvider || _dictation.Models.Busy || _dictation.CtcVocabulary.Busy)
+        if (_closing || _profileRestoreClosing || _dictation.Packages.Updates.Busy || !_dictation.CanChangeProvider || _dictation.Models.Busy || _dictation.CtcVocabulary.Busy)
             return Task.FromResult<string?>("Finish recording and processing before restarting TypeWhisper.");
         return RestartApplicationAsync?.Invoke() ?? Task.FromResult<string?>("Restart is currently unavailable.");
     }
@@ -437,6 +437,7 @@ public sealed partial class MainWindow : Window
         };
         PluginsView.MarketplaceRequested += (_, _) => SwitchIntegrationTab(discover: true);
         MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
+        PluginsView.RestartRequested = RestartForPluginUpdateAsync;
         MarketplaceView.InstalledRequested += (_, _) => SwitchIntegrationTab(discover: false);
         PluginsView.ReturnToDictationRequested += (_, _) =>
         {

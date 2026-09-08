@@ -26,6 +26,8 @@ public sealed partial class PluginsView : UserControl
     internal void ConfigureRuntime(LocalDictationSession runtime)
     {
         _runtime = runtime;
+        runtime.Packages.Updates.Changed += () => DispatcherQueue.TryEnqueue(() => _ = RefreshRuntimeAsync());
+        Loaded += async (_, _) => await runtime.Packages.Updates.RefreshAsync();
         var root = runtime.Packages.Store.InventoryRoot;
         _management = new(root, runtime.GetPluginBinding,
             () => !runtime.IsRecording && runtime.OverlayState.Phase is not (DictationPhase.Processing or DictationPhase.Configuring),
@@ -61,7 +63,7 @@ public sealed partial class PluginsView : UserControl
             var provider = _runtime.DictationProviders.FirstOrDefault(item => item.PluginId == manifest?.Id);
             var setupRequired = enabled && provider is { Ready: false };
             _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? "An installed plugin package could not be read.",
-                "plugin", string.Join(" / ", manifest?.Categories ?? []), connected
+                "plugin", InstalledCategories(manifest?.Id, manifest?.Categories), connected
                     ? "Uses recorded audio, token timings and dictionary terms locally to refine the final transcript."
                     : cloud ? "This package may send audio or text to its online provider when used. API keys are managed in plugin settings."
                     : transcription ? "Transcribes microphone audio locally. Includes automatic dictionary boosting for Parakeet."
@@ -69,7 +71,7 @@ public sealed partial class PluginsView : UserControl
             {
                 Enabled = enabled, RuntimeCanToggle = state.CanToggle,
                 RuntimeNeedsAttention = error is not null || setupRequired,
-                RuntimeStatus = state.Busy ? "Updating…" : error is not null ? "Needs attention" : setupRequired ? "Setup required" : enabled ? "Ready" : "Disabled",
+                RuntimeStatus = RuntimeUpdateStatus(manifest?.Id) ?? (state.Busy ? "Updating…" : error is not null ? "Needs attention" : setupRequired ? "Setup required" : enabled ? "Ready" : "Disabled"),
                 RuntimeExplanation = error ?? (cloud ? enabled
                     ? provider?.Ready == true ? "Choose a model in Dictation to use this provider." : "Open Settings to configure this provider."
                     : "Enable this plugin and open Settings to configure its providers."
@@ -88,10 +90,12 @@ public sealed partial class PluginsView : UserControl
             else if (_page == Page.Detail) ShowPage(Page.Detail);
         }
         if (!IsDetail) Filter(_query);
+        UpdateUpdateAction();
     }
 
     private void UpdateRuntimeAction()
     {
+        UpdateUpdateAction();
         if (_runtime is null || _page != Page.Detail) return;
         PluginToggleButton.IsEnabled = _opened?.RuntimeCanToggle == true && !_changingPlugin &&
             !_runtime.CtcVocabulary.Busy && !_runtime.IsRecording;
@@ -131,6 +135,7 @@ public sealed partial class PluginsView : UserControl
         if (!plugin.Compatible || ContainsPlugin(plugin.Id)) return;
         _plugins.Add(plugin);
         if (!IsDetail) Filter(_query);
+        UpdateUpdateAction();
     }
 
     internal async Task OpenProviderSettingsAsync(string pluginId)
@@ -188,6 +193,7 @@ public sealed partial class PluginsView : UserControl
         PluginList.SelectedItem = FilteredPlugins.FirstOrDefault(item => item.Id == selectedId) ?? FilteredPlugins.FirstOrDefault();
         PluginEmptyState.Visibility = FilteredPlugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         PluginSummary.Text = Summary;
+        UpdateUpdateAction();
         UpdateBreadcrumbs();
     }
 
@@ -236,6 +242,7 @@ public sealed partial class PluginsView : UserControl
     private void ShowPage(Page page)
     {
         _page = page;
+        UpdateUpdateAction();
         PluginListPage.Visibility = page == Page.List ? Visibility.Visible : Visibility.Collapsed;
         PluginDetailPage.Visibility = page == Page.Detail ? Visibility.Visible : Visibility.Collapsed;
         PluginSettingsPage.Visibility = page == Page.Settings && _runtime is null ? Visibility.Visible : Visibility.Collapsed;
@@ -315,6 +322,7 @@ public sealed partial class PluginsView : UserControl
     private void ShowList(bool reset)
     {
         ShowPage(Page.List);
+        if (_runtime is not null) _ = _runtime.Packages.Updates.RefreshAsync();
         if (reset)
         {
             _filter = "all";

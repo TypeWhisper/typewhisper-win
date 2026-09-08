@@ -9,6 +9,8 @@ internal sealed class WinUIPluginPackages
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
     internal PortablePluginStore Store { get; } = new(WinUIProfile.DataPath("PluginPackages"), LocalCtcVocabulary.HostVersion, Http, CreateServices);
     internal PortablePluginCatalog Catalog { get; } = new(Http);
+    internal PortablePluginUpdates Updates { get; }
+    internal WinUIPluginPackages() => Updates = new(Store, Catalog, LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture);
     internal Task InitializeAsync() => Task.Run(() => Store.InitializeAsync(Path.Combine(AppContext.BaseDirectory, "Plugins"),
         bootstrapPluginIds: [LocalTranscriptionPlugin.PluginId, CloudTranscriptionPlugin.PluginId]));
     internal static VocabularyHostServices CreateServices(string id) => Services.GetOrAdd(id, BuildServices);
