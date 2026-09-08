@@ -1,5 +1,17 @@
 # Windows 1.1 functional comparison
 
+## Recorder task flow (`9c419c55`), 2026-09-08
+
+Evidence level: artifact/source review of Marco's report that Recorder playback works but the UI requires too many clicks and is unclear. No live expert walkthrough or new native user test was performed.
+
+- **Major, high confidence:** after Stop, the completed-information page required opening Saved recordings and finding Play. Saving now opens Recordings with the newly saved file selected; Enter starts playback. The old information-only completion page is removed.
+- **Moderate, high confidence:** each saved item repeated four actions and raw byte metadata. A compact single-selection list now shows title, duration and date, with one footer for the selected recording. Enter toggles play/pause, Delete opens deletion confirmation, F opens the folder and T adds to the transcription queue. Native controls and text inputs retain their own keys.
+- **Moderate, high confidence:** Transcribe file only queued the recording, and the global title input remained visible while browsing saved files. The action now says Add to transcription queue; the title input hides in Recordings and returns on Record. Record and Recordings have stable tab labels. Queue processing still requires Start on the queue page.
+
+Changing selection stops playback. Fresh library loads preserve selection by path, and completion selects the new file. The saved recording remains recoverable on existing save/retry paths; no audio pipeline or deletion policy was changed. Playback status updates between playing and paused. Footer actions recover after canceled deletion.
+
+46 focused Recorder/encoding tests passed (`artifacts/test-results/recorder-ux/recorder-ux.trx`). The final prescribed normal-profile build/relaunch passed (`artifacts/recorder-ux-build.log`), with a nonzero main-window handle and unchanged diagnostic log. Native layout and the same capture-stop-play task need Marco's acceptance, including keyboard navigation, deletion cancellation and reopening Recordings. The prior basic playback success is user-reported and does not validate this redesign.
+
 ## Internal Recorder playback (`fca2257d`), 2026-09-08
 
 Saved recordings now offers Play audio inside TypeWhisper instead of opening the associated desktop player. A fixed library playback area shows the file name and native WinUI transport controls for playback, pause and seeking, plus Stop playback. Playback uses the system-default audio output. Show in folder remains an Explorer action.
