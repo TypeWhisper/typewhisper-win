@@ -49,7 +49,7 @@ public sealed partial class MainWindow
         {
             _pinnedCommands = File.Exists(LauncherPinsPath)
                 ? new(JsonSerializer.Deserialize<string[]>(File.ReadAllText(LauncherPinsPath)) ?? [], StringComparer.Ordinal)
-                : Commands.Where(command => command.Category == "Pinned").Select(command => command.Title).ToHashSet(StringComparer.Ordinal);
+                : Commands.Where(command => command.Category == "Pinned").Select(command => command.Key).ToHashSet(StringComparer.Ordinal);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         { System.Diagnostics.Debug.WriteLine(error); }
@@ -60,14 +60,14 @@ public sealed partial class MainWindow
         if (_selected is not { } command) yield break;
         yield return new("Run command · Enter", () => { _selected = command; RunSelected(); });
         yield return new("Set shortcut…", () => { _ = ConfigureCommandShortcutAsync(command); });
-        yield return new(_pinnedCommands.Contains(command.Title) ? "Unpin from Quick Launch" : "Pin to Quick Launch",
+        yield return new(_pinnedCommands.Contains(command.Key) ? "Unpin from Quick Launch" : "Pin to Quick Launch",
             () => ToggleLauncherPin(command));
     }
 
     private void ToggleLauncherPin(Command command)
     {
         var next = new HashSet<string>(_pinnedCommands, StringComparer.Ordinal);
-        if (!next.Remove(command.Title)) next.Add(command.Title);
+        if (!next.Remove(command.Key)) next.Add(command.Key);
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(LauncherPinsPath)!);
@@ -75,19 +75,25 @@ public sealed partial class MainWindow
             File.WriteAllText(temporary, JsonSerializer.Serialize(next.Order(StringComparer.Ordinal)));
             File.Move(temporary, LauncherPinsPath, overwrite: true);
             _pinnedCommands = next;
-            SearchBox_TextChanged(SearchBox, null!);
-            CompactResults.SelectedItem = FilteredItems.FirstOrDefault(item => item.Title == command.Title);
-            MetricsText.Text = next.Contains(command.Title) ? "Pinned to Quick Launch." : "Removed from pinned commands.";
+            if (LauncherCommandsVisible)
+            {
+                SearchBox_TextChanged(SearchBox, null!);
+                CompactResults.SelectedItem = FilteredItems.FirstOrDefault(item => item.Key == command.Key);
+            }
+            MetricsText.Text = next.Contains(command.Key) ? "Pinned to Quick Launch." : "Removed from pinned commands.";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         { MetricsText.Text = "The pin could not be saved. Please try again."; }
     }
 
+    private IEnumerable<Command> LauncherCommands() => Commands.Concat(WorkflowsView.LauncherEntries
+        .Where(command => _pinnedCommands.Contains(command.Key)));
+
     private IEnumerable<Command> OrderedLauncherCommands(IEnumerable<Command> commands)
     {
         var candidates = commands.ToArray();
-        var byTitle = candidates.ToDictionary(command => command.Title, StringComparer.Ordinal);
-        return QuickLaunchRanking.Order(candidates.Select(command => command.Title), _pinnedCommands, _launcherUsage,
+        var byTitle = candidates.ToDictionary(command => command.Key, StringComparer.Ordinal);
+        return QuickLaunchRanking.Order(candidates.Select(command => command.Key), _pinnedCommands, _launcherUsage,
                 !string.IsNullOrWhiteSpace(SearchBox.Text))
             .Select(title => byTitle[title] with { IsPinned = _pinnedCommands.Contains(title), Shortcut = CommandShortcut(byTitle[title]) });
     }
@@ -104,8 +110,8 @@ public sealed partial class MainWindow
 
     private void RecordLauncherUsage(Command command)
     {
-        var count = _launcherUsage.GetValueOrDefault(command.Title)?.Count ?? 0;
-        _launcherUsage[command.Title] = new(count == long.MaxValue ? count : count + 1, DateTimeOffset.UtcNow);
+        var count = _launcherUsage.GetValueOrDefault(command.Key)?.Count ?? 0;
+        _launcherUsage[command.Key] = new(count == long.MaxValue ? count : count + 1, DateTimeOffset.UtcNow);
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(LauncherUsagePath)!);

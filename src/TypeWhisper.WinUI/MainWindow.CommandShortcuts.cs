@@ -10,7 +10,7 @@ public sealed partial class MainWindow
 {
     private Dictionary<string, string> _commandShortcuts = new(StringComparer.Ordinal);
     private static string CommandShortcutsPath => WinUIProfile.DataPath("quick-launch-shortcuts.json");
-    private string CommandShortcut(Command command) => _commandShortcuts.GetValueOrDefault(command.Title, command.Shortcut.Replace("Ctrl ,", "Ctrl+,"));
+    private string CommandShortcut(Command command) => _commandShortcuts.GetValueOrDefault(command.Key, command.Shortcut.Replace("Ctrl ,", "Ctrl+,"));
     private bool LauncherCommandsVisible => !_historyOpen && !_recorderOpen && !_workflowsOpen &&
         !_pluginsOpen && !_marketplaceOpen && !UtilityOpen && !LexiconOpen && !FileTranscriptionOpen;
 
@@ -49,7 +49,7 @@ public sealed partial class MainWindow
         if (focused is TextBox or PasswordBox or RichEditBox && !ReferenceEquals(focused, SearchBox)) return false;
         var chord = CommandChord(e.Key);
         if (chord is null) return false;
-        var command = Commands.FirstOrDefault(candidate => CommandShortcut(candidate) == chord);
+        var command = LauncherCommands().FirstOrDefault(candidate => CommandShortcut(candidate) == chord);
         if (command is null) return false;
         _selected = command;
         RunSelected();
@@ -73,7 +73,7 @@ public sealed partial class MainWindow
         };
         void Validate()
         {
-            var conflict = Commands.FirstOrDefault(other => other.Title != command.Title && CommandShortcut(other) == value);
+            var conflict = LauncherCommands().FirstOrDefault(other => other.Key != command.Key && CommandShortcut(other) == value);
             notice.Text = value == "Ctrl+K" ? "Ctrl+K opens the Actions menu."
                 : value == "Alt+F4" ? "Alt+F4 is reserved for closing windows."
                 : conflict is not null ? "Already used by " + conflict.Title + "." : "";
@@ -93,14 +93,14 @@ public sealed partial class MainWindow
             var result = await dialog.ShowAsync();
             if (result == ContentDialogResult.None) return;
             var next = new Dictionary<string, string>(_commandShortcuts, StringComparer.Ordinal)
-            { [command.Title] = result == ContentDialogResult.Secondary ? "" : value };
+            { [command.Key] = result == ContentDialogResult.Secondary ? "" : value };
             Directory.CreateDirectory(Path.GetDirectoryName(CommandShortcutsPath)!);
             var temporary = CommandShortcutsPath + ".tmp";
             File.WriteAllText(temporary, JsonSerializer.Serialize(next));
             File.Move(temporary, CommandShortcutsPath, overwrite: true);
             _commandShortcuts = next;
             SearchBox_TextChanged(SearchBox, null!);
-            CompactResults.SelectedItem = FilteredItems.FirstOrDefault(item => item.Title == command.Title);
+            CompactResults.SelectedItem = FilteredItems.FirstOrDefault(item => item.Key == command.Key);
             _isSearchEditing = false;
             UpdateSearchPresentation();
             MetricsText.Text = "Command shortcut saved.";

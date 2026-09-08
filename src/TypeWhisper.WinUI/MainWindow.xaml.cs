@@ -431,6 +431,8 @@ public sealed partial class MainWindow : Window
             await _dictation.SpokenFeedback.CancelAndDrainAsync();
         };
         WorkflowsView.Connect(_dictation);
+        WorkflowsView.IsPinned = id => _pinnedCommands.Contains("workflow:" + id);
+        WorkflowsView.TogglePin = command => ToggleLauncherPin(command);
         _dictation.ReviewRequested += ShowOutputReview;
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
@@ -557,10 +559,10 @@ public sealed partial class MainWindow : Window
         if (!_closing && !_historyOpen && !_recorderOpen && !_workflowsOpen &&
             !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen && !UtilityOpen)
         {
-            var selectedTitle = _selected?.Title;
+            var selectedKey = _selected?.Key;
             SearchBox_TextChanged(SearchBox, null!);
-            if (selectedTitle is not null)
-                CompactResults.SelectedItem = FilteredItems.FirstOrDefault(command => command.Title == selectedTitle);
+            if (selectedKey is not null)
+                CompactResults.SelectedItem = FilteredItems.FirstOrDefault(command => command.Key == selectedKey);
             MetricsText.Text = DictationStatusForDisplay;
         }
         _isSearchEditing = LauncherCommandsVisible;
@@ -743,8 +745,8 @@ public sealed partial class MainWindow : Window
         }
 
         var matches = string.IsNullOrEmpty(query)
-            ? Commands
-            : Commands.Where(command =>
+            ? LauncherCommands().ToArray()
+            : LauncherCommands().Where(command =>
                 command.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 command.Subtitle.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 command.Category.Contains(query, StringComparison.OrdinalIgnoreCase))
@@ -843,6 +845,11 @@ public sealed partial class MainWindow : Window
             WorkflowsView.OpenSelected();
         else if (_historyOpen)
             HistoryView.OpenSelected();
+        else if (_selected?.WorkflowId is { } workflowId)
+        {
+            OpenWorkflows();
+            WorkflowsView.OpenWorkflow(workflowId);
+        }
         else if (_selected?.Title == "Read last transcription")
             ReadLastTranscription();
         else if (_selected?.Title == "Copy last transcription")
@@ -1404,7 +1411,8 @@ public sealed partial class MainWindow : Window
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
         SearchBox.Text = _launcherQuery;
-        var command = FilteredItems.FirstOrDefault(item => item.Title == "Workflows");
+        SearchBox_TextChanged(SearchBox, null!);
+        var command = FilteredItems.FirstOrDefault(item => item.WorkflowId is null && item.Title == "Workflows");
         if (command is not null) { CompactResults.SelectedItem = command; UpdateDetail(command); }
         _isSearchEditing = false;
         UpdateSearchPresentation();

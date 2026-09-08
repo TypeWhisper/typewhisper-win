@@ -175,6 +175,19 @@ public sealed partial class WorkflowsView : UserControl
         WorkflowList.ScrollIntoView(WorkflowList.SelectedItem);
     }
 
+    internal Func<string, bool>? IsPinned { get; set; }
+    internal Action<Command>? TogglePin { get; set; }
+    internal IEnumerable<Command> LauncherEntries => _workflows.Select(workflow => new Command(
+        "Workflow", "workflow", workflow.Title, workflow.Description, "", "Open workflow") { WorkflowId = workflow.Id });
+
+    internal void OpenWorkflow(string id)
+    {
+        if (_closing || IsBusy) return;
+        Filter(string.Empty);
+        WorkflowList.SelectedItem = FilteredWorkflows.FirstOrDefault(workflow => workflow.Id == id);
+        OpenSelected();
+    }
+
     internal void OpenSelected()
     {
         if (IsDetail || WorkflowList.SelectedItem is not WorkflowDraft workflow) return;
@@ -404,6 +417,14 @@ public sealed partial class WorkflowsView : UserControl
         foreach (var action in EntryActionMenu.FromButtons(ContextActionsFooter)) yield return action;
         var workflow = _page == Page.List ? WorkflowList.SelectedItem as WorkflowDraft : _opened;
         if (_page is not (Page.List or Page.Editor) || workflow?.IsEditable != true) yield break;
+        yield return new(IsPinned?.Invoke(workflow.Id) == true ? "Unpin from Quick Launch" : "Pin to Quick Launch", () =>
+        {
+            var wasPinned = IsPinned?.Invoke(workflow.Id) == true;
+            TogglePin?.Invoke(LauncherEntries.First(entry => entry.WorkflowId == workflow.Id));
+            WorkflowSummary.Text = (IsPinned?.Invoke(workflow.Id) == true) != wasPinned
+                ? (wasPinned ? "Removed from pinned workflows." : "Pinned to Quick Launch.")
+                : "The pin could not be saved. Please try again.";
+        }, !IsBusy);
         yield return new("Set shortcut for selected text…", () => ConfigureShortcut("Hotkey"), !IsBusy);
         yield return new("Set shortcut for dictation…", () => ConfigureShortcut("DictationHotkey"), !IsBusy);
     }
