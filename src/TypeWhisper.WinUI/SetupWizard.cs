@@ -37,7 +37,7 @@ public sealed class SetupWizard : UserControl
         _state = new(store);
         var shell = new Grid { Padding = new Thickness(24), RowSpacing = 24, MaxWidth = 800 };
         shell.RowDefinitions.Add(new()); shell.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        shell.Children.Add(new ScrollViewer { Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        shell.Children.Add(new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var footer = new Grid { ColumnSpacing = 12 };
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new());

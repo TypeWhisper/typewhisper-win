@@ -29,7 +29,7 @@ public sealed class DateRangePicker : UserControl
         _button = Button(active ? $"{start:dd.MM.yy} – {end:dd.MM.yy}" : "Custom…", () => _flyout!.ShowAt(_button!), active);
         AutomationProperties.SetName(_button, "Choose custom date range");
         ToolTipService.SetToolTip(_button, "Choose an inclusive start and end date");
-        _flyout = new Flyout { Content = new ScrollViewer { Content = _panel, MaxHeight = 540, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
+        _flyout = new Flyout { Content = new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _panel, MaxHeight = 540, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
             Placement = FlyoutPlacementMode.BottomEdgeAlignedRight, FlyoutPresenterStyle = (Style)Application.Current.Resources["RangeFlyoutStyle"] };
         _flyout.Opening += (_, _) => { IsOpen = true; Build(); };
         _flyout.Opened += (_, _) => { _from.Focus(FocusState.Programmatic); _from.SelectAll(); };

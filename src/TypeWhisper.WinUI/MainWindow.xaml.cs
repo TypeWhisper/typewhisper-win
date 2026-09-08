@@ -1126,20 +1126,6 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
-                if (category == "Automation")
-                {
-                    content.Children.Clear(); pickers.Clear();
-                    var information = new TextBlock { Text = "Automatically transcribe files from a folder and save transcripts. Configure and monitor processing in Files > Watch folder.", TextWrapping = TextWrapping.Wrap };
-                    content.Children.Add(information);
-                    var open = new HandCursorButton { Content = "Open watch folder", Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
-                    open.Click += (_, _) =>
-                    {
-                        if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || _historyOpen)
-                        { information.Text = "Return to Quick Launch to open Files. Your current workspace is kept intact."; return; }
-                        _settingsWindow?.AppWindow.Hide(); OpenFileTranscription(); _fileTranscription?.ShowWatchFolder(); ShowFromActivation();
-                    };
-                    content.Children.Add(open);
-                }
                 if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)
                     content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });
                 if (category == "Files & recovery")

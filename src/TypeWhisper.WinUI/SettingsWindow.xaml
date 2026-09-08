@@ -28,7 +28,7 @@
                 <local:HandCursorButton x:Name="ClearSettingsSearch" Grid.Column="2" Content="×" Visibility="Collapsed" Padding="6,0" MinWidth="26" Click="ClearSearch_Click" Style="{StaticResource IconButtonStyle}" AutomationProperties.Name="Clear settings search" />
             </Grid>
         </Border>
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="10,12,10,16">
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="10,12,20,16">
             <StackPanel x:Name="SettingsNavigation" Spacing="18" />
         </ScrollViewer>
         </Grid>

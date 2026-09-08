@@ -26,7 +26,7 @@ internal sealed class DictationRecoveryView : UserControl
         DictationRecoveryPreferencesStore preferences, Func<DictationRecoveryPreferences, Task<string?>> commitPreferences)
     {
         _controller = controller; _preferences = preferences; _commitPreferences = commitPreferences;
-        Content = new ScrollViewer { Content = _body, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        Content = new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _body, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite);
         Loaded += (_, _) => { _controller.Changed += Changed; Render(); };
         Unloaded += (_, _) => _controller.Changed -= Changed;

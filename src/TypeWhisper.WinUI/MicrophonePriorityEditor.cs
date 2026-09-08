@@ -22,6 +22,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         Children.Add(new TextBlock { Text = "Microphones", FontSize = 14 });
         _list = new ListView
         {
+            Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"],
             ItemsSource = _items, CanDragItems = true, CanReorderItems = true, AllowDrop = true,
             SelectionMode = ListViewSelectionMode.Single,
             HorizontalAlignment = HorizontalAlignment.Stretch,

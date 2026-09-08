@@ -27,7 +27,7 @@
             <Flyout Opening="Choice_Opening" Opened="Choice_Opened" Closed="Choice_Closed" Placement="BottomEdgeAlignedLeft" FlyoutPresenterStyle="{StaticResource ChoiceFlyoutStyle}">
                 <StackPanel Width="262" Spacing="6" PreviewKeyDown="Choices_KeyDown">
                     <TextBlock x:Name="ChoiceHeading" FontSize="10" CharacterSpacing="70" Margin="12,8,12,6" Foreground="{ThemeResource MutedBrush}" />
-                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="False">
+                    <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="False">
                         <StackPanel x:Name="Choices" Spacing="3" />
                     </ScrollViewer>
                 </StackPanel>

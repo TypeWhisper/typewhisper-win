@@ -17,6 +17,8 @@ public sealed class HandCursorButton : Button
 
 public sealed class HandCursorListView : ListView
 {
+    public HandCursorListView() => Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"];
+
     protected override DependencyObject GetContainerForItemOverride() => new HandCursorListViewItem();
 }
 

@@ -31,7 +31,7 @@
                            FontSize="8" Foreground="{ThemeResource MutedBrush}" />
             </Grid>
 
-            <ScrollViewer x:Name="TranscriptScrollViewer"
+            <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="TranscriptScrollViewer"
                           Grid.Row="1"
                           Margin="0,7,0,0"
                           VerticalScrollMode="Enabled"
@@ -41,7 +41,7 @@
                           ViewChanged="TranscriptScrollViewer_ViewChanged"
                           AutomationProperties.Name="Live transcript text">
                 <TextBlock x:Name="TranscriptText"
-                           Margin="0,0,14,0"
+                           Margin="0"
                            FontSize="13"
                            LineHeight="18"
                            TextWrapping="Wrap"

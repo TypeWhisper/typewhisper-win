@@ -114,22 +114,11 @@ internal static partial class SettingsCatalog
         Toggle("Privacy", "MemoryEnabled", "Personal memory"),
         Toggle("Privacy", "TargetAppCorrectionLearningEnabled", "Learn from corrections", true, "Uses corrections made in the target app when supported."),
 
-        Text("Automation", "WatchFolderPath", "Watch folder"),
-        Text("Automation", "WatchFolderOutputPath", "Output folder"),
-        Choice("Automation", "WatchFolderOutputFormat", "Output format", "Markdown", "Markdown|Text|SRT|VTT|JSON"),
-        Toggle("Automation", "WatchFolderAutoStart", "Watch automatically"),
-        Toggle("Automation", "WatchFolderDeleteSource", "Delete source after transcription", false, "Destructive in the real app. This preview never deletes files."),
-        Choice("Automation", "WatchFolderLanguage", "Watch folder language", "Automatic", "Automatic|English|German|French|Spanish"),
-        Text("Automation", "WatchFolderEngineOverride", "Watch folder engine"),
-        Text("Automation", "WatchFolderModelOverride", "Watch folder model"),
-        Toggle("Automation", "ApiServerEnabled", "HTTP API server", false, "No server is started by this preview."),
-        Text("Automation", "ApiServerPort", "HTTP port", "8978", "Application text field; the real app must validate 1–65535."),
-        Toggle("Automation", "ApiServerRequiresAuthentication", "Require API authentication"),
 
         Text("Sync & backup", "CloudFolderSyncFolderPath", "Cloud sync folder", "", "Use a shared cloud folder across your devices. No sync or file access occurs here."),
     ];
 
-    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Live text", "Recorder", "Files & recovery", "Privacy", "Automation", "Sync & backup", "Account & about"];
+    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Live text", "Recorder", "Files & recovery", "Privacy", "Sync & backup", "Account & about"];
 
     internal static IEnumerable<SettingSearchEntry> SearchEntries => Fields.Select(setting => new SettingSearchEntry(
         setting.Category == "Live text" ? "Appearance" : setting.Category, setting.Key, setting.Label, setting.Hint,
@@ -227,7 +216,6 @@ internal static partial class SettingsCatalog
             return;
         }
         RenderFields(Fields.Where(f => f.Category == category), target, values, pickers, refresh);
-        if (category == "Automation") target.Children.Add(Label("Command-line integration: install, repair and status controls will be connected with the production integration. No PATH changes are made here.", 12, true));
     }
 
     internal static void RenderLiveTextOptions(StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers)

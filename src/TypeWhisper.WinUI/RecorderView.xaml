@@ -14,7 +14,7 @@
             <local:TabBar x:Name="RecorderTabs" />
             <TextBlock Text="Recorder" FontSize="20" FontWeight="SemiBold" Margin="4,0,0,0" MinHeight="32" />
         </StackPanel>
-        <ScrollViewer x:Name="RecordingContent" Grid.Row="1" Margin="12,0,12,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="RecordingContent" Grid.Row="1" Margin="12,0,12,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

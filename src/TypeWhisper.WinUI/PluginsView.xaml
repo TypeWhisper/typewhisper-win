@@ -36,7 +36,7 @@
                 <local:HandCursorButton Content="Reset filters" Click="Reset_Click" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Center" AutomationProperties.Name="Reset plugin filters" />
             </StackPanel>
         </Grid>
-        <ScrollViewer x:Name="PluginDetailPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="PluginDetailPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16" Margin="0,0,18,8">
                 <TextBlock x:Name="PluginDescription" FontSize="14" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                 <Border Background="{ThemeResource SurfaceBrush}" CornerRadius="9" Padding="14,12">
@@ -54,7 +54,7 @@
                 <TextBlock x:Name="PluginRuntimeNote" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
-        <ScrollViewer x:Name="PluginSettingsPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="PluginSettingsPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16" Margin="0,0,18,8">
                 <StackPanel Spacing="6">
                     <TextBlock x:Name="SettingsPluginName" FontSize="14" FontWeight="SemiBold" />
@@ -75,7 +75,7 @@
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
-        <ScrollViewer x:Name="RuntimePluginSettingsPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="True" AutomationProperties.Name="Plugin settings" />
+        <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="RuntimePluginSettingsPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="True" AutomationProperties.Name="Plugin settings" />
         <Border x:Name="PluginDiscardPrompt" Grid.Row="2" Visibility="Collapsed" Margin="24" Padding="22" Background="{ThemeResource SurfaceBrush}"
             BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="12" VerticalAlignment="Center">
             <StackPanel Spacing="14">

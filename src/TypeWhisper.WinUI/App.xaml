@@ -48,6 +48,8 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
+            <Thickness x:Key="VerticalScrollGutter">0,0,20,0</Thickness>
+
             <FontFamily x:Key="InterfaceFont">ms-appx:///Assets/Fonts/InterVariable.ttf#Inter Variable</FontFamily>
 
             <Style TargetType="TextBlock">
@@ -138,7 +140,7 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="TextBox">
                             <Grid Background="{TemplateBinding Background}">
-                                <ScrollViewer x:Name="ContentElement" Margin="{TemplateBinding Padding}"
+                                <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="ContentElement" Margin="{TemplateBinding Padding}"
                                               HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollMode="Disabled" VerticalScrollMode="Auto"
                                               VerticalContentAlignment="Top" IsTabStop="False" ZoomMode="Disabled"

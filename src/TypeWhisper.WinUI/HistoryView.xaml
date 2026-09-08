@@ -45,7 +45,7 @@
                         <Flyout Opening="Devices_Opening" Opened="Devices_Opened" Placement="BottomEdgeAlignedRight" FlyoutPresenterStyle="{StaticResource DeviceFlyoutPresenterStyle}">
                             <StackPanel Width="272" Spacing="6" PreviewKeyDown="Devices_PreviewKeyDown">
                                 <TextBlock Text="FILTER BY DEVICE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" Margin="12,8,12,6" />
-                                <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="False">
+                                <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="False">
                                     <StackPanel x:Name="DeviceChoices" Spacing="3" />
                                 </ScrollViewer>
                             </StackPanel>
@@ -102,7 +102,7 @@
             </StackPanel>
         </Grid>
         <Grid x:Name="ReadingPage" Grid.Row="3" Visibility="Collapsed" Margin="12,0,12,0">
-            <ScrollViewer x:Name="TranscriptScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="TranscriptScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="0,0,20,0">
             <StackPanel Margin="0,0,0,16" Spacing="7">
                 <TextBlock x:Name="TranscriptTitle" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />

@@ -62,7 +62,7 @@ public sealed partial class SettingsWindow : Window
             ("APP", [("Home", "home"), ("General", "settings"), ("Shortcuts", "keyboard")]),
             ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
             ("PERSONALIZATION", [("Appearance", "desktop")]),
-            ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("Automation", "workflow"), ("Account & about", "info")])
+            ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("Account & about", "info")])
         ];
         foreach (var group in groups)
         {
