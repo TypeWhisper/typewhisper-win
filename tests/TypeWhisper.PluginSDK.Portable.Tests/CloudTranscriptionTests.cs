@@ -211,7 +211,7 @@ public sealed class CloudTranscriptionTests : IDisposable
         var directory = Path.Combine(_root, "package"); Directory.CreateDirectory(directory);
         File.Copy(typeof(GroqPlugin).Assembly.Location, Path.Combine(directory, "TypeWhisper.Plugin.Groq.dll"));
         File.WriteAllText(Path.Combine(directory, "manifest.json"), """
-            {"id":"com.typewhisper.groq","name":"Groq","version":"1.1.0","minHostVersion":"1.1.0","assemblyName":"TypeWhisper.Plugin.Groq.dll","pluginClass":"TypeWhisper.Plugin.Groq.GroqPlugin"}
+            {"id":"com.typewhisper.groq","name":"Groq","version":"1.1.1","minHostVersion":"1.1.0","assemblyName":"TypeWhisper.Plugin.Groq.dll","pluginClass":"TypeWhisper.Plugin.Groq.GroqPlugin"}
             """);
         var context = LoadInspectAndReleasePackage(directory, Host);
         // Unload requests collection; all package/type roots must leave their stack frame first.

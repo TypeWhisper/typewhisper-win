@@ -19,4 +19,8 @@ public interface IStreamingSession : IAsyncDisposable
 /// <summary>A transcript update from a streaming session.</summary>
 /// <param name="Text">The transcript text (partial or final segment).</param>
 /// <param name="IsFinal">True if this segment is confirmed and will not change.</param>
-public sealed record StreamingTranscriptEvent(string Text, bool IsFinal);
+public sealed record StreamingTranscriptEvent(string Text, bool IsFinal)
+{
+    /// <summary>Provider-reported language of this segment, when unambiguous.</summary>
+    public string? DetectedLanguage { get; init; }
+}

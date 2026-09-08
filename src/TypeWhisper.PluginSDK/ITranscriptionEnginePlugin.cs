@@ -67,6 +67,9 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// <summary>Whether this engine supports real-time streaming transcription via <see cref="IStreamingSession"/>.</summary>
     bool SupportsStreaming => false;
 
+    /// <summary>FinalizeAsync waits for all confirmed segments; interrupted streams fail instead of returning partial success.</summary>
+    bool SupportsStreamingCompletion => false;
+
     /// <summary>Allows repeated local PCM snapshots during capture. Must not upload audio or mutate final results.</summary>
     bool SupportsLocalLivePreview => false;
 

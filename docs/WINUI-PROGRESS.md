@@ -1,5 +1,20 @@
 # Windows 1.1 progress
 
+## Deepgram live transcription — 2026-09-08
+
+Deepgram 1.1.2 streams microphone audio when live text is enabled. The host replaces interim
+text, accumulates confirmed segments, awaits the final server response, and sends the result
+through the existing history, workflow and output pipeline. Failed or incomplete streams use
+full-recording batch fallback; cancellation and shutdown dispose the session before unloading.
+
+Validation: 1,700 headless tests passed, one platform-specific skip. This includes 22 independent
+Deepgram tests, with fragmented Unicode responses, final-result waiting, duplicate segments,
+transport failure, missing audio, cancellation, and an empty successful result. The corrected
+Groq fixture versions were rerun in the 222-test PluginHost suite. Real microphone/network and
+native restart acceptance still need Marco's manual test. No authenticated cloud request was
+used by these automated tests.
+
+
 ## Application naming and integration metadata — 2026-09-08
 
 The WinUI application now uses production names for windows, controls, models, resources,

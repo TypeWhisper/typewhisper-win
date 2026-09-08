@@ -13,6 +13,8 @@ public sealed record PortableTranscriptionProvider(string PluginId, string Selec
     /// <summary>Actual per-model asset states captured under the package lease; independent of provider readiness.</summary>
     /// <summary>Local snapshot preview explicitly supported by the engine.</summary>
     public bool SupportsLocalLivePreview { get; init; }
+    /// <summary>Live audio with an awaited, complete final transcript.</summary>
+    public bool SupportsStreaming { get; init; }
     /// <summary>Downloaded asset snapshots.</summary>
     public IReadOnlyList<PortableDownloadableModel> ModelStates { get; init; } = [];
 }
@@ -436,7 +438,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 transcriptionSnapshots.Add(new(slot.Id, id, engine.ProviderDisplayName, engine.IsConfigured,
                     engine.SelectedModelId, Array.AsReadOnly(engine.TranscriptionModels.ToArray()), engine.SupportsTranslation, engine is IPcmTranscriptionEnginePlugin,
                     Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId, engine.SupportsLanguageHints)
-                    { ModelStates = CaptureModelStates(slot, id, engine), SupportsLocalLivePreview = engine.SupportsLocalLivePreview });
+                    { ModelStates = CaptureModelStates(slot, id, engine), SupportsLocalLivePreview = engine.SupportsLocalLivePreview, SupportsStreaming = engine.SupportsStreaming && engine.SupportsStreamingCompletion });
             }
             var providers = (plugin is ILlmProviderPlugin directLlm ? new[] { directLlm } : [])
                 .Concat(plugin is IAdditionalLlmProvidersProvider additionalLlm ? additionalLlm.AdditionalLlmProviders : [])

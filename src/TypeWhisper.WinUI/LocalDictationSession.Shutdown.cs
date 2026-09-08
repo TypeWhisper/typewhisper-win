@@ -13,6 +13,7 @@ internal sealed partial class LocalDictationSession
         try { _operationCancellation.Cancel(); }
         catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Operation cancellation callback failed: {0}", ex); }
         _livePreview.Cancel();
+        _cloudStream?.Cancel();
         if (!_disposed && !_fileBusy && _phase == DictationPhase.Processing)
             SetStatus("Canceling processing…", DictationPhase.Processing);
     }
@@ -25,6 +26,7 @@ internal sealed partial class LocalDictationSession
         try { _operationCancellation.Close(); }
         catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Shutdown cancellation callback failed: {0}", ex); }
         _livePreview.Cancel();
+        _cloudStream?.Cancel();
         _retentionTimer.Stop();
         StopSilenceMonitoring();
         return DrainAndReleaseAsync(Task.WhenAll(HistoryRetention.CloseAndDrainAsync(), Recovery.ShutdownAsync(),
@@ -46,6 +48,7 @@ internal sealed partial class LocalDictationSession
         {
             await Release(() => StopRecoveryCaptureAsync(preserve: true));
             await Release(_livePreview.StopAsync);
+            await Release(StopCloudStreamAsync);
             await Release(() => CtcVocabulary.DisposeAsync().AsTask());
             await Release(() => PluginRuntime.DisposeAsync().AsTask());
             await Release(() => _transcriptionPlugin.DisposeAsync().AsTask());

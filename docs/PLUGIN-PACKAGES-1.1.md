@@ -176,3 +176,20 @@ Current assets: https://github.com/TypeWhisper/typewhisper-win/releases/tag/plug
 The 1.1 catalog and portable manifests use only `categories`, an array of capability IDs.
 For example, Groq declares `["transcription", "llm"]`. There is no singular-field migration.
 The legacy Windows target retains its existing manifest contract.
+
+## Live cloud transcription
+
+Deepgram 1.1.2 supports live PCM16 mono 16 kHz audio in the WinUI host. The host
+retains its runtime lease until the session is finalized or canceled, bounds its audio
+queue, and uses the complete saved capture for batch fallback after a transport failure.
+A successful live session supplies the final transcript directly, without a second upload.
+Live text disabled keeps the existing post-recording request path. Groq remains file-based.
+
+`SupportsStreamingCompletion` opts into the host's complete-result contract in addition to
+`SupportsStreaming`: `FinalizeAsync` must await all final segments, and an interrupted stream
+must fail. Older packages without this capability remain on the post-recording path.
+Deepgram uses `language=multi` for Auto in streaming, and the explicit language otherwise.
+Its portable transport is separate from the unchanged legacy Windows transport.
+
+Protocol references: [CloseStream](https://developers.deepgram.com/docs/close-stream),
+[multilingual streaming](https://developers.deepgram.com/docs/language-detection).

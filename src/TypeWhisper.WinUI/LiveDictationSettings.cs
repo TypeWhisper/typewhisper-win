@@ -71,7 +71,9 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 hint.Text = selectionError ?? (selected is null ? "Set up a transcription provider in Integrations."
                     : !selected.Ready ? selected.Status + ". Open provider settings to finish setup. Active: " + session.ActiveModelName + "."
                     : selected.Id != session.ActiveProviderId ? "Ready. Select this provider to use it for dictation."
-                    : selected.Cloud ? "Recorded audio is sent to this provider after recording. Live preview is unavailable."
+                    : selected.Cloud ? session.SupportsLiveTranscription
+                        ? "With live text enabled, audio is streamed to this provider during recording."
+                        : "Recorded audio is sent to this provider after recording. Live preview is unavailable."
                     : "Audio is transcribed on this device.");
             });
             row.Loaded += (_, _) => { session.Models.Changed += Refresh; session.Changed += Refresh; Refresh(); };

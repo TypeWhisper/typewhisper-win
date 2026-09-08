@@ -125,7 +125,7 @@ public sealed class DeepgramPortableTests : IDisposable
         { Content = new ByteArrayContent(payload), RequestMessage = request })));
         var entry = new PortableCatalogEntry
         {
-            Id = id, Name = "Deepgram", Version = "1.1.1", MinHostVersion = "1.1.0",
+            Id = id, Name = "Deepgram", Version = "1.1.2", MinHostVersion = "1.1.0",
             DownloadUrl = "https://packages.test/deepgram.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]
@@ -144,6 +144,7 @@ public sealed class DeepgramPortableTests : IDisposable
             await registry.RefreshCapabilitiesAsync();
             var provider = Assert.Single(registry.TranscriptionProviders);
             Assert.True(provider.Ready);
+            Assert.True(provider.SupportsStreaming);
             Assert.True(Assert.Single(registry.Snapshot()).ApiKeyConfigured);
             await registry.SelectModelAsync(provider.ModelStates.Single(model => model.ModelId == "nova-2"));
         }

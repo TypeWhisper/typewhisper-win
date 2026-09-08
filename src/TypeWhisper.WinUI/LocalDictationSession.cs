@@ -18,6 +18,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private readonly AudioDuckingService _ducking = new();
     private readonly RecordingAudioEffects _effects;
     private readonly LocalLivePreview _livePreview = new();
+    private StreamingDictation? _cloudStream;
     internal WinUIPluginPackages Packages { get; } = new();
     internal LocalCtcVocabulary CtcVocabulary { get; }
     private bool _ctcAtStart;
@@ -57,7 +58,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal bool LivePreviewEnabled { get; set; } = true;
     // Availability describes the host's connected preview path, not just an SDK streaming declaration.
     internal bool SupportsLiveTranscription => (UsesRegistryProvider
-        ? ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)
+        ? ActiveRegistryProvider is { SupportsStreaming: true } || (ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId))
         : Models.SupportsLocalLivePreview) &&
         TranscriptionTaskPreferences.Current == TranscriptionTask.Transcribe;
     internal string LivePreviewText { get; private set; } = "";
@@ -397,12 +398,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_silence?.ShouldStop(_silenceClock.Elapsed, ModifiersHeld()) == true)
                 await StopAsync();
         };
+        _audio.SamplesAvailable += (_, args) => _cloudStream?.Append(args.Samples);
         _audio.AudioLevelChanged += (_, level) => _silence?.Observe(_silenceClock.Elapsed, level.RmsLevel);
         _audio.DeviceLost += (_, _) => dispatcher.TryEnqueue(() =>
         {
             if (_disposed || _audio.IsRecording) return;
             StopSilenceMonitoring();
             _livePreview.Cancel();
+            _cloudStream?.Cancel();
             _effects.End();
             if (_phase == DictationPhase.Recording) SetStatus("Microphone disconnected · recording stopped", DictationPhase.Error);
         });
@@ -474,7 +477,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_disposed) return;
             StopSilenceMonitoring();
             _livePreview.Cancel();
+            _cloudStream?.Cancel();
             if (_audio.IsRecording) await _audio.StopRecordingAsync();
+            await StopCloudStreamAsync();
             _effects.End();
             await _livePreview.StopAsync();
             SetStatus($"Shortcut cancelled · {ActiveModelName} ready");
@@ -530,6 +535,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 StopHistoryPlayback?.Invoke();
                 await SpokenFeedback.CancelAndDrainAsync();
                 await _livePreview.StopAsync();
+                await StopCloudStreamAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 GetWindowThreadProcessId(_target, out var currentTargetProcessId);
@@ -544,15 +550,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _processorsAtStart = PluginRuntime.PostProcessors.ToArray();
                 _languageAtStart = Language;
                 _recoveryAtStart = RecoveryPreferences.Current;
+                LivePreviewText = "";
+                _hasConfirmedPreviewText = false;
+                StartCloudStream();
                 _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
                 _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && Models.ActiveModelId == "parakeet-tdt-0.6b" && CtcVocabulary.Enabled;
-                LivePreviewText = "";
-                _hasConfirmedPreviewText = false;
-                if (LivePreviewEnabled && SupportsLiveTranscription)
+                if (_cloudStream is null && LivePreviewEnabled && SupportsLiveTranscription)
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
@@ -597,7 +604,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (captureDecision == ShortClipCaptureDecision.NoSpeech)
             { SetStatus("No speech energy detected. Speak closer to the microphone or enable Recognize short, quiet clips."); return; }
             SetStatus($"Transcribing with {ActiveModelName}…", DictationPhase.Processing);
-            var decoded = await DecodeFinalAsync(ShortClipCapturePolicy.PadForFinalDecode(samples));
+            var streamedText = _cloudStream is null ? null : await _cloudStream.FinishAsync(samples.Length);
+            _operationCancellation.Token.ThrowIfCancellationRequested();
+            var decoded = streamedText is null
+                ? await DecodeFinalAsync(ShortClipCapturePolicy.PadForFinalDecode(samples))
+                : (Text: streamedText, Timings: Array.Empty<VocabularyTokenTiming>(), DetectedLanguage: _cloudStream?.DetectedLanguage, NoSpeechProbability: (float?)null);
             _operationCancellation.Token.ThrowIfCancellationRequested();
             var rawText = decoded.Text;
             if (FinalSpeechPolicy.ShouldReject(rawText, decoded.NoSpeechProbability,
@@ -696,7 +707,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         finally
         {
             await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-            if (!_audio.IsRecording) _effects.End();
+            if (!_audio.IsRecording) { _effects.End(); await StopCloudStreamAsync(); }
             _gate.Release();
         }
     }

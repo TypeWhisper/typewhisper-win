@@ -44,7 +44,7 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.1.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -109,6 +109,8 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin
     /// Gets whether the provider supports live streaming transcription.
     /// </summary>
     public bool SupportsStreaming => true;
+    /// <inheritdoc />
+    public bool SupportsStreamingCompletion => true;
 
     /// <summary>
     /// Opens a streaming transcription session for live audio.
