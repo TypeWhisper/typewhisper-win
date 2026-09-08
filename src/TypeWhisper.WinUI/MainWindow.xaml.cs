@@ -1157,9 +1157,10 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
-                if (category == "HTTP API")
+                if (category == "Advanced")
                 {
                     content.Children.Clear(); pickers.Clear();
+                    content.Children.Add(new TextBlock { Text = "Advanced", FontSize = 22, Margin = new Thickness(0, 0, 0, 12) });
                     content.Children.Add(new HttpApiSettingsView(_httpApi));
                 }
                 if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)

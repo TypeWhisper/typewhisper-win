@@ -12,7 +12,7 @@ internal sealed class HttpApiSettingsView : UserControl
     internal HttpApiSettingsView(WinUIHttpApi api)
     {
         var body = new StackPanel { Spacing = 16 };
-        var heading = Text("HTTP API", 22); body.Children.Add(heading);
+        var heading = Text("HTTP API", 18); body.Children.Add(heading);
         body.Children.Add(Text("Connect local scripts and apps to TypeWhisper. Requests use the model selected in Dictation.", 14));
         var enabled = AppToggleSwitch.Create(api.Enabled);
         AutomationProperties.SetName(enabled, "Enable HTTP API");

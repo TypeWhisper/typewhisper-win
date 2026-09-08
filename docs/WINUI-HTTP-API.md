@@ -1,6 +1,6 @@
 # Windows 1.1 HTTP API
 
-Enable the server under **Settings > HTTP API**, choose a port (default 8978), and select **Apply**. The server is off by default. Settings persist across restarts. A port collision leaves it stopped with a visible error. Use **Copy address** and **Copy API token** for clients.
+Enable the server under **Settings > Advanced > HTTP API**, choose a port (default 8978), and select **Apply**. The server is off by default. Settings persist across restarts. A port collision leaves it stopped with a visible error. Use **Copy address** and **Copy API token** for clients.
 
 This is the connected file-transcription API, not complete legacy HTTP endpoint parity. Dictation/recorder control, history/dictionary mutation, model switching/download, backup import and automation routes are not exposed yet. Unknown endpoints return 404.
 

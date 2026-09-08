@@ -2,7 +2,7 @@
 
 ## HTTP API and discovery, 2026-09-08
 
-Settings > HTTP API now controls a loopback-only server with mandatory authentication except minimal status. Mac-compatible api-discovery.json and api-port include an owner-only discovery token; persistent secrets use DPAPI. Status, models, capabilities, uploads and local-file transcription are connected. Control/mutation endpoints and automatic model switching remain separate work. See [usage and validation](WINUI-HTTP-API.md).
+Settings > Advanced > HTTP API now controls a loopback-only server with mandatory authentication except minimal status. Mac-compatible api-discovery.json and api-port include an owner-only discovery token; persistent secrets use DPAPI. Status, models, capabilities, uploads and local-file transcription are connected. Control/mutation endpoints and automatic model switching remain separate work. See [usage and validation](WINUI-HTTP-API.md).
 
 Marco confirmed the guided word-training flow works.
 
