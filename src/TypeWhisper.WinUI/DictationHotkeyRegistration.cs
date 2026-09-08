@@ -14,11 +14,11 @@ internal sealed class DictationHotkeyRegistration : IDisposable
     private bool _disposed;
     internal string Value { get; private set; } = "";
     internal DictationHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<HybridHotkeyAction> invoke, Func<bool> isRecording,
-        Func<RecordingMode>? recordingMode = null, Func<bool>? paused = null)
+        Func<RecordingMode>? recordingMode = null, Func<bool>? paused = null, int idBase = 0x6500)
     {
         recordingMode ??= () => RecordingMode.Hybrid;
         // Reserve ordinary chords, but use the hook for both press and release.
-        _regular = new(window, () => { }, 0x6500);
+        _regular = new(window, () => { }, idBase);
         void Dispatch(HybridHotkeyAction? action)
         {
             // The hook runs on the installing UI thread. The receiver only captures

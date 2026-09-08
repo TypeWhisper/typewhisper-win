@@ -7,6 +7,8 @@ public sealed record DictationOutputPreferences
 {
     /// <summary>Whether to attempt insertion without first opening a review.</summary>
     public bool AutoPaste { get; init; } = true;
+    /// <summary>Restore and verify the editor captured at recording start before inserting.</summary>
+    public bool LockPasteToFocusedField { get; init; }
     /// <summary>Whether new results may be added to local history.</summary>
     public bool SaveToHistory { get; init; } = true;
 
@@ -19,6 +21,7 @@ public sealed record DictationOutputPreferences
     public DictationOutputPreferences RestrictedBy(DictationOutputPreferences current) => new()
     {
         AutoPaste = AutoPaste && current.AutoPaste,
+        LockPasteToFocusedField = LockPasteToFocusedField || current.LockPasteToFocusedField,
         SaveToHistory = SaveToHistory && current.SaveToHistory,
         SaveHistoryAudio = SaveToHistory && current.SaveToHistory && SaveHistoryAudio && current.SaveHistoryAudio
     };
@@ -56,6 +59,7 @@ public sealed class DictationOutputPreferencesStore
             Current = new()
             {
                 AutoPaste = paste.GetBoolean(), SaveToHistory = history.GetBoolean(),
+                LockPasteToFocusedField = root.TryGetProperty(nameof(DictationOutputPreferences.LockPasteToFocusedField), out var locked) && locked.GetBoolean(),
                 SaveHistoryAudio = root.TryGetProperty(nameof(DictationOutputPreferences.SaveHistoryAudio), out var audio) && audio.GetBoolean()
             };
         }

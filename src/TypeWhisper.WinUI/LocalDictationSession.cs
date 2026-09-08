@@ -149,6 +149,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !PluginRuntime.IsBusy;
     internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
+    private OriginalDictationField? _originalField;
     // Setup alone can accept dictation inside this process, while its test field has focus.
     internal Func<IntPtr, Action<string>?>? SetupTestTarget { get; set; }
     private Action<string>? _setupOutputAtStart;
@@ -553,6 +554,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _taskAtStart = TranscriptionTaskPreferences.Current;
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
+                _originalField?.Dispose(); _originalField = null;
                 _target = GetForegroundWindow();
                 GetWindowThreadProcessId(_target, out var processId);
                 _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
@@ -562,6 +564,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return;
                 }
                 _targetProcessId = processId;
+                if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
+                    _originalField = OriginalDictationField.Capture(_target, processId);
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
                 catch (ArgumentException) { _targetApp = "Target app"; }
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
@@ -716,8 +720,20 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     for (var attempt = 0; attempt < 40 && ModifiersHeld(); attempt++) await Task.Delay(25, _operationCancellation.Token);
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
-                        ModifiersHeld() || GetForegroundWindow() != _target) return false;
-                    var inserted = await _inserter.InsertAsync(text, _target);
+                        ModifiersHeld()) return false;
+                    var lockField = _outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField;
+                    if (lockField)
+                    {
+                        if (_originalField is null) return false;
+                        if (OutputPreferences.Current.LockPasteToFocusedField &&
+                            !await _originalField.RestoreAsync(_operationCancellation.Token)) return false;
+                        if (!_originalField.IsCurrent()) return false;
+                    }
+                    if (GetForegroundWindow() != _target) return false;
+                    var inserted = await _inserter.InsertAsync(text, _target, () =>
+                        !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
+                        _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
+                        (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.IsCurrent() == true));
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
                         CorrectionLearning.Observe(text, _target);
                     return inserted;
@@ -759,7 +775,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         finally
         {
             await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-            if (!_audio.IsRecording) { _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }
+            if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }
             _gate.Release();
         }
     }

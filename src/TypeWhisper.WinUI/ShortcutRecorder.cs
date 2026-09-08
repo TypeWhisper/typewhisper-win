@@ -283,7 +283,7 @@ public sealed class ShortcutRecorder : UserControl
         SetValue(ShortcutRules.Upsert(Current, _editingIndex, _candidate)); _add.Focus(FocusState.Keyboard);
     }
     // Cancellation uses RegisterHotKey rather than the dictation modifier-only hook.
-    private string? Validate(string candidate) => ShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys" or "CopyLastTranscriptionHotkeys" or "ReadLastTranscriptionHotkeys" or "WorkflowPaletteHotkeys"))
+    private string? Validate(string candidate) => ShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys" or "CopyLastTranscriptionHotkeys" or "ReadLastTranscriptionHotkeys" or "WorkflowPaletteHotkeys" or "RecorderToggleHotkeys"))
         ?? ShortcutRules.Duplicate(candidate, Current, _editingIndex)
         ?? ShortcutRules.Conflict(candidate, _key, _bindings());
     private void Candidate(string candidate)

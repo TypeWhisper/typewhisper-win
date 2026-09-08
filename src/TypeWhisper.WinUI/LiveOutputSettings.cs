@@ -32,7 +32,21 @@ internal static class LiveOutputSettings
                 Refresh();
             };
             row.Children.Add(picker); row.Children.Add(status); pickers.Add(picker);
-            DisablePreview(content, "LockPasteToFocusedField");
+            var lockRow = FindRow(content, "LockPasteToFocusedField");
+            lockRow.Children.Clear();
+            lockRow.Children.Add(SettingsHelp.Label("Paste only into the original field", "Return to the text field active when recording started, even if you switch windows. If that field is unavailable, the result opens for review instead of being pasted elsewhere."));
+            var lockToggle = AppToggleSwitch.Create(store.Current.LockPasteToFocusedField);
+            AutomationProperties.SetName(lockToggle, "Paste only into the original field");
+            lockRow.Children.Add(lockToggle);
+            var lockStatus = Label(store.Error ?? "Saved.");
+            lockRow.Children.Add(lockStatus);
+            var resettingLock = false;
+            lockToggle.Toggled += (_, _) =>
+            {
+                if (resettingLock) return;
+                lockStatus.Text = store.Save(store.Current with { LockPasteToFocusedField = lockToggle.IsOn }) ?? "Saved.";
+                resettingLock = true; lockToggle.IsOn = store.Current.LockPasteToFocusedField; resettingLock = false;
+            };
         }
         if (category != "Privacy") return;
         var previewNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("Settings preview"));
@@ -74,6 +88,21 @@ internal static class LiveOutputSettings
         foreach (var key in new[] { "HistoryRetentionMode", "HistoryRetentionMinutes", "MemoryEnabled" })
             DisablePreview(content, key);
         content.Children.Add(Label("Automatic history deletion and personal memory are not available yet."));
+    }
+
+    private static StackPanel FindRow(Panel root, string key)
+    {
+        StackPanel? Find(Panel panel)
+        {
+            foreach (var child in panel.Children)
+            {
+                if (child is StackPanel row && Equals(row.Tag, key)) return row;
+                if (child is Panel nested && Find(nested) is { } found) return found;
+                if (child is Border { Child: Panel body } && Find(body) is { } bordered) return bordered;
+            }
+            return null;
+        }
+        return Find(root) ?? throw new InvalidOperationException("Missing settings row: " + key);
     }
 
     private static void DisablePreview(StackPanel root, string key)

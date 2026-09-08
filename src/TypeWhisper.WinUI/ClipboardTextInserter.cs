@@ -8,18 +8,18 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
 {
     private readonly WindowsClipboardTransaction _clipboard = new(owner);
     internal static SemaphoreSlim TransactionGate { get; } = new(1, 1);
-    internal async Task<bool> InsertAsync(string text, IntPtr target)
+    internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null)
     {
         await TransactionGate.WaitAsync();
-        try { return await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target), text); }
+        try { return await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text); }
         finally { TransactionGate.Release(); }
     }
     public void Dispose() => _clipboard.Dispose();
 
-    private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target) : IClipboardPastePlatform
+    private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField) : IClipboardPastePlatform
     {
         private IClipboardLease? _lease;
-        public bool CanPaste => target != IntPtr.Zero && GetForegroundWindow() == target
+        public bool CanPaste => target != IntPtr.Zero && GetForegroundWindow() == target && (verifyField?.Invoke() ?? true)
             && !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0);
         public bool ClipboardIsOwned => _lease is not null && clipboard.IsCurrent(_lease);
         public async Task<IDisposable> BeginAsync(string text)

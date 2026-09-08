@@ -25,6 +25,8 @@ public sealed partial class MainWindow : Window
         if (_hotkeyRegistration is null) return "Global hotkey service is unavailable. Restart the app.";
         if (_cancelProcessingHotkey?.ConflictWithLauncher(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value) is { } workflowConflict) return workflowConflict;
+        if (RecordingShortcutConflict(value) is { } recordingConflict) return recordingConflict;
+        if (RecorderShortcutConflict(value) is { } recorderConflict) return recorderConflict;
         if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
         if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
         if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
@@ -83,6 +85,8 @@ public sealed partial class MainWindow : Window
         if (_dictationHotkey is null) return "Dictation hotkeys are unavailable. Restart the app.";
         if (_cancelProcessingHotkey?.ConflictWithDictation(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value, modifierOnly: true) is { } workflowConflict) return workflowConflict;
+        if (RecordingShortcutConflict(value, true) is { } recordingConflict) return recordingConflict;
+        if (RecorderShortcutConflict(value, true) is { } recorderConflict) return recorderConflict;
         if (WorkflowPaletteShortcutConflict(value, modifierOnly: true) is { } paletteConflict) return paletteConflict;
         if (HistoryShortcutConflict(value, modifierOnly: true) is { } historyConflict) return historyConflict;
         if (CopyLastShortcutConflict(value, modifierOnly: true) is { } copyConflict) return copyConflict;
@@ -131,19 +135,7 @@ public sealed partial class MainWindow : Window
                 else DispatcherQueue.TryEnqueue(() => _dictationInput.ObserveMode());
             };
             _dictation.Changed += _observeInputMode;
-            _dictationHotkey = new DictationHotkeyRegistration(this, action =>
-            {
-                if (action is HybridHotkeyAction.Start or HybridHotkeyAction.Toggle)
-                    _dictation.ShowLoadingForDictationAttempt();
-                if (action == HybridHotkeyAction.Cancel) _dictation.RequestCancel();
-                _ = _dictationInput.SubmitAsync(action switch
-                {
-                    HybridHotkeyAction.Start => TypeWhisper.Presentation.DictationInputAction.Start,
-                    HybridHotkeyAction.Stop => TypeWhisper.Presentation.DictationInputAction.Stop,
-                    HybridHotkeyAction.Cancel => TypeWhisper.Presentation.DictationInputAction.Cancel,
-                    _ => TypeWhisper.Presentation.DictationInputAction.Toggle
-                });
-            }, () => _dictationInput.IsRecordingOrStarting, () => _dictation.RecordingModePreferences.Current,
+            _dictationHotkey = new DictationHotkeyRegistration(this, DispatchRecordingShortcut, () => _dictationInput.IsRecordingOrStarting, () => _dictation.RecordingModePreferences.Current,
                 () => DictationHotkeysPaused);
             var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : "Ctrl+Shift+F9";
             var error = _dictationHotkey.TryChange(saved);
@@ -171,6 +163,8 @@ public sealed partial class MainWindow : Window
             InitializeCopyLastShortcut();
             InitializeReadLastShortcut();
             InitializeWorkflowPaletteShortcut();
+            InitializeRecordingShortcuts();
+            InitializeRecorderShortcut();
             if (cancelError is not null && !_closing) MetricsText.Text = cancelError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
@@ -200,6 +194,8 @@ public sealed partial class MainWindow : Window
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
         _workflowPaletteHotkey?.Dispose();
+        DisposeRecordingShortcuts();
+        _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
         _readLastHotkey?.Dispose();
         await StopWorkflowShortcutsAsync();
@@ -215,6 +211,8 @@ public sealed partial class MainWindow : Window
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
         _workflowPaletteHotkey?.Dispose();
+        DisposeRecordingShortcuts();
+        _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
         _readLastHotkey?.Dispose();
         _dictationHotkey?.Dispose();
@@ -1195,12 +1193,16 @@ public sealed partial class MainWindow : Window
             _settingsWindow.CommitCopyLastTranscriptionHotkeys = ChangeCopyLastShortcut;
             _settingsWindow.CommitReadLastTranscriptionHotkeys = ChangeReadLastShortcut;
             _settingsWindow.CommitWorkflowPaletteHotkeys = ChangeWorkflowPaletteShortcut;
+            _settingsWindow.CommitRecordingShortcut = ChangeRecordingShortcut;
+            _settingsWindow.CommitRecorderHotkeys = ChangeRecorderShortcut;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
             _settingsWindow.CommitCancelProcessingHotkeys = value =>
             {
                 if (_closing || _profileRestoreClosing) return "The app is shutting down.";
                 if (_cancelProcessingHotkey is null) return "Cancel shortcuts are unavailable. Wait for startup to finish or restart the app.";
                 if (_workflowShortcuts?.Conflict(value) is { } conflict) return conflict;
+                if (RecordingShortcutConflict(value) is { } recordingConflict) return recordingConflict;
+                if (RecorderShortcutConflict(value) is { } recorderConflict) return recorderConflict;
                 if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
                 if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
                 if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;

@@ -21,6 +21,8 @@ public sealed partial class SettingsWindow : Window
     internal Func<string, string?>? CommitCopyLastTranscriptionHotkeys { get; set; }
     internal Func<string, string?>? CommitReadLastTranscriptionHotkeys { get; set; }
     internal Func<string, string?>? CommitWorkflowPaletteHotkeys { get; set; }
+    internal Func<string, string, string?>? CommitRecordingShortcut { get; set; }
+    internal Func<string, string?>? CommitRecorderHotkeys { get; set; }
     internal Action<string, StackPanel, List<ChoicePicker>>? ConfigureLiveSettings { get; set; }
     internal event Action<string>? WorkspaceRequested;
     private bool _updating = true;
@@ -296,7 +298,7 @@ public sealed partial class SettingsWindow : Window
         if (catalog)
         {
             _catalogPickers.Clear();
-            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys);
+            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Development startup registration is connected · other unavailable controls are disabled";

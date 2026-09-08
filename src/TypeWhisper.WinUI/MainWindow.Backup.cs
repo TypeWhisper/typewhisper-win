@@ -20,6 +20,8 @@ public sealed partial class MainWindow
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
         _workflowPaletteHotkey?.Dispose();
+        DisposeRecordingShortcuts();
+        _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
         _readLastHotkey?.Dispose();
         var workflowShortcuts = StopWorkflowShortcutsAsync();

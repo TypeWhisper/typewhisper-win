@@ -38,6 +38,7 @@ public sealed partial class MainWindow
         {
             // Keep tracking held keys; resuming must not reinterpret an existing gesture.
             _dictationHotkey?.ObservePause();
+            foreach (var entry in _recordingShortcuts.Values) entry.Registration.ObservePause();
             if (IsNormalLauncherStatus) MetricsText.Text = DictationStatusForDisplay;
         }
         TrayActionsChanged?.Invoke();

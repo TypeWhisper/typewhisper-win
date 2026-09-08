@@ -132,7 +132,7 @@ internal static partial class SettingsCatalog
     internal static IEnumerable<(string Key, string Label, string Value)> ShortcutBindings(Dictionary<string, string> values) =>
         Fields.Where(field => field.Category == "Shortcuts").Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
 
-    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null)
+    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null, Func<string, string, string?>? commitRecordingShortcut = null, Func<string, string?>? commitRecorderHotkeys = null)
     {
         target.Children.Clear();
         var title = Label(category, 24);
@@ -192,7 +192,9 @@ internal static partial class SettingsCatalog
                         "RecentTranscriptionsHotkeys" => commitRecentTranscriptionsHotkeys,
                         "CopyLastTranscriptionHotkeys" => commitCopyLastTranscriptionHotkeys,
                         "ReadLastTranscriptionHotkeys" => commitReadLastTranscriptionHotkeys,
-                        "WorkflowPaletteHotkeys" => commitWorkflowPaletteHotkeys, _ => null };
+                        "WorkflowPaletteHotkeys" => commitWorkflowPaletteHotkeys,
+                        "RecorderToggleHotkeys" => commitRecorderHotkeys,
+                        "PushToTalkHotkey" or "ToggleOnlyHotkeys" or "HoldOnlyHotkeys" => commitRecordingShortcut is null ? null : value => commitRecordingShortcut(field.Key, value), _ => null };
                     item.Children.Add(new ShortcutRecorder(field.Key, field.Label, field.Value, values,
                         () => Fields.Where(f => f.Category == "Shortcuts").Select(f =>
                             (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), commit) { IsEnabled = commit is not null });
