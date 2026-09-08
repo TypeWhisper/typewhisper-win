@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
         if (_hotkeyRegistration is null) return "Global hotkey service is unavailable. Restart the app.";
         if (_cancelProcessingHotkey?.ConflictWithLauncher(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value) is { } workflowConflict) return workflowConflict;
+        if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
         if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
         if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
         if (ReadLastShortcutConflict(value) is { } readConflict) return readConflict;
@@ -82,6 +83,7 @@ public sealed partial class MainWindow : Window
         if (_dictationHotkey is null) return "Dictation hotkeys are unavailable. Restart the app.";
         if (_cancelProcessingHotkey?.ConflictWithDictation(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value, modifierOnly: true) is { } workflowConflict) return workflowConflict;
+        if (WorkflowPaletteShortcutConflict(value, modifierOnly: true) is { } paletteConflict) return paletteConflict;
         if (HistoryShortcutConflict(value, modifierOnly: true) is { } historyConflict) return historyConflict;
         if (CopyLastShortcutConflict(value, modifierOnly: true) is { } copyConflict) return copyConflict;
         if (ReadLastShortcutConflict(value, modifierOnly: true) is { } readConflict) return readConflict;
@@ -168,6 +170,7 @@ public sealed partial class MainWindow : Window
             InitializeHistoryShortcut();
             InitializeCopyLastShortcut();
             InitializeReadLastShortcut();
+            InitializeWorkflowPaletteShortcut();
             if (cancelError is not null && !_closing) MetricsText.Text = cancelError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
@@ -196,6 +199,7 @@ public sealed partial class MainWindow : Window
     {
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
+        _workflowPaletteHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
         _readLastHotkey?.Dispose();
         await StopWorkflowShortcutsAsync();
@@ -210,6 +214,7 @@ public sealed partial class MainWindow : Window
         await StopWorkflowShortcutsAsync();
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
+        _workflowPaletteHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
         _readLastHotkey?.Dispose();
         _dictationHotkey?.Dispose();
@@ -1189,12 +1194,14 @@ public sealed partial class MainWindow : Window
             _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
             _settingsWindow.CommitCopyLastTranscriptionHotkeys = ChangeCopyLastShortcut;
             _settingsWindow.CommitReadLastTranscriptionHotkeys = ChangeReadLastShortcut;
+            _settingsWindow.CommitWorkflowPaletteHotkeys = ChangeWorkflowPaletteShortcut;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
             _settingsWindow.CommitCancelProcessingHotkeys = value =>
             {
                 if (_closing || _profileRestoreClosing) return "The app is shutting down.";
                 if (_cancelProcessingHotkey is null) return "Cancel shortcuts are unavailable. Wait for startup to finish or restart the app.";
                 if (_workflowShortcuts?.Conflict(value) is { } conflict) return conflict;
+                if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
                 if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
                 if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
                 if (ReadLastShortcutConflict(value) is { } readConflict) return readConflict;
