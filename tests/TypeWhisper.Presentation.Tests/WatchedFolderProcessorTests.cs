@@ -183,5 +183,22 @@ public sealed class WatchedFolderProcessorTests : IDisposable
         Assert.Equal(json, File.ReadAllText(State));
     }
 
+    [Fact]
+    public async Task ChangingInputFolderKeepsPreviousResultsIsolatedAndRestoresThemWhenReturning()
+    {
+        Source(); var watcher = Create("srt");
+        await watcher.PollAsync(true, Decode); await watcher.PollAsync(true, Decode);
+        Assert.Equal("Failed", Assert.Single(watcher.Files).Status);
+        watcher.Stop(); var second = Path.Combine(_root, "second"); Directory.CreateDirectory(second);
+        Assert.True(watcher.Configure(new(second, Output)));
+        Assert.Empty(watcher.Files); watcher.RetryFailures();
+        await watcher.PollAsync(true, (_,_,_) => throw new Exception("Do not process a different folder"));
+        Assert.Empty(Directory.GetFiles(Output));
+        watcher.Stop(); Assert.True(watcher.Configure(new(Input, Output)));
+        Assert.Equal("Failed", Assert.Single(watcher.Files).Status);
+        watcher.RetryFailures(); await watcher.PollAsync(false, (_,_,_) => throw new Exception("Reuse the saved text"));
+        Assert.Equal("Completed", Assert.Single(watcher.Files).Status);
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

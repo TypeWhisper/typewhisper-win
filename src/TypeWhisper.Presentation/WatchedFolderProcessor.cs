@@ -56,7 +56,8 @@ public sealed class WatchedFolderProcessor
     /// <summary>The explicitly saved folder configuration.</summary>
     public WatchedFolderSettings? Settings { get; private set; }
     /// <summary>Durable source revisions and export results.</summary>
-    public IReadOnlyList<WatchedFile> Files => _files.AsReadOnly();
+    public IReadOnlyList<WatchedFile> Files => _files.Where(IsCurrentFolder).ToArray();
+    private bool IsCurrentFolder(WatchedFile file) => Settings is { } settings && string.Equals(Path.GetDirectoryName(file.Path), settings.Input, StringComparison.OrdinalIgnoreCase);
     /// <summary>Whether automatic polling is enabled.</summary>
     public bool Watching { get; private set; }
     /// <summary>Whether one scan, provider call or export is still draining.</summary>
@@ -84,7 +85,7 @@ public sealed class WatchedFolderProcessor
             Settings = settings with { Input = input, Output = output };
             var previousFiles = _files;
             if (previous?.Output != output || previous?.Format != settings.Format)
-                _files = _files.Select(f => f.Status != "Completed" && f.Result is not null ? f with { ExportPath = null } : f).ToList();
+                _files = _files.Select(f => IsCurrentFolder(f) && f.Status != "Completed" && f.Result is not null ? f with { ExportPath = null } : f).ToList();
             if (!Save()) { Settings = previous; _files = previousFiles; return false; }
             _observed.Clear();
             Status = "Folders saved. Start watching to process supported files in this folder.";
@@ -127,7 +128,7 @@ public sealed class WatchedFolderProcessor
     public bool RetryFailures()
     {
         if (Busy || _shutdown || Error is not null) return false;
-        _files = _files.Select(f => f.Status == "Failed" ? f with
+        _files = _files.Select(f => IsCurrentFolder(f) && f.Status == "Failed" ? f with
         { Status = f.Result is null ? "Queued" : "Export pending", Message = null } : f).ToList();
         if (!Save()) return false;
         Start();
@@ -155,7 +156,7 @@ public sealed class WatchedFolderProcessor
         try
         {
             // Export a retained result before considering another provider request.
-            active = _files.FirstOrDefault(f => f.Status == "Export pending");
+            active = _files.FirstOrDefault(f => IsCurrentFolder(f) && f.Status == "Export pending");
             if (active is null)
             {
                 if (!providerReady) { Status = "Waiting for a ready, idle dictation model"; return; }
