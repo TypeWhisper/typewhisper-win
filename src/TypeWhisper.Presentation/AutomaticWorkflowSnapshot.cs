@@ -41,7 +41,8 @@ public sealed class AutomaticWorkflowSnapshot
     }
 
     /// <summary>Selects App, Website and Global rules using a one-time browser hostname; manual and hotkey rules remain separate.</summary>
-    public static AutomaticWorkflowSnapshot? Select(IEnumerable<Workflow> workflows, string? processName, string? browserHost = null)
+    public static AutomaticWorkflowSnapshot? Select(IEnumerable<Workflow> workflows, string? processName, string? browserHost = null,
+        Func<Workflow, Workflow>? resolve = null)
     {
         var match = WorkflowService.MatchSnapshot(workflows.Where(w =>
             w.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global)
@@ -49,7 +50,8 @@ public sealed class AutomaticWorkflowSnapshot
             { WebsitePatterns = workflow.Trigger.WebsitePatterns.Select(pattern => BrowserWorkflowContext.NormalizePattern(pattern) ?? pattern).ToArray() } }),
             processName, BrowserWorkflowContext.NormalizeHost(browserHost));
         if (match is null) return null;
-        return new(match.Workflow, UnsupportedReason(match.Workflow));
+        var selected = resolve?.Invoke(match.Workflow) ?? match.Workflow;
+        return new(selected, UnsupportedReason(selected));
     }
 
     /// <summary>Reports semantics that this automatic dictation integration cannot execute.</summary>

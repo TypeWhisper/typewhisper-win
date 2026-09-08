@@ -34,6 +34,13 @@ public sealed partial class MainWindow
             _noticeWorkflowId = null;
             ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
         };
+        WorkflowsView.DefaultsSaved += () =>
+        {
+            if (!_noticeUsesDefault) return;
+            _noticeUsesDefault = false;
+            _noticeWorkflowId = null;
+            ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        };
         if (_workflowShortcuts.Initialize() is { } error) MetricsText.Text = error;
     }
 
@@ -50,6 +57,15 @@ public sealed partial class MainWindow
         if (_closing || _profileRestoreClosing || _workflowShortcutsStopping || _workflowTask is { IsCompleted: false }
             || PrototypeShortcutRecorder.AnyEditing || WorkflowsView.IsBusy || !_dictation.CanChangeProvider
             || _dictationInitialization is not { IsCompleted: true } || _dictationInput?.IsRecordingOrStarting == true) return;
+        var usesDefault = workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit;
+        try { workflow = _dictation.WorkflowDefaults.Resolve(workflow); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ShowFromActivation();
+            ShowActivationNotice("Default LLM settings could not be loaded. Open Default LLM in Workflows and save the selection again.", workflow.Id);
+            _noticeUsesDefault = true;
+            return;
+        }
         if (ManualWorkflowStore.IsDictationShortcut(workflow))
         {
             var error = ManualWorkflowRunner.ConfigurationError(workflow.Behavior.ProviderOverride, workflow.Behavior.ModelOverride,
@@ -57,7 +73,10 @@ public sealed partial class MainWindow
             if (error is not null)
             {
                 ShowFromActivation();
-                ShowActivationNotice(workflow.Name + "\n" + error, workflow.Id);
+                ShowActivationNotice(workflow.Name + "\n" + (usesDefault
+                    ? "The default LLM is missing or unavailable. Open Default LLM in Workflows, or choose a provider and model for this workflow."
+                    : error), workflow.Id);
+                _noticeUsesDefault = usesDefault;
                 return;
             }
             var snapshot = AutomaticWorkflowSnapshot.ForDictationShortcut(workflow);

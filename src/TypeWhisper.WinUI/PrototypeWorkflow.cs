@@ -7,7 +7,7 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
     string Instruction)
 {
     /// <summary>The exact selected LLM provider.</summary>
-    public string ProviderId { get; init; } = "none";
+    public string ProviderId { get; init; } = TypeWhisper.Presentation.WorkflowLlmDefaults.Inherit;
     /// <summary>The exact selected provider model.</summary>
     public string ModelId { get; init; } = "";
     /// <summary>The manual result review destination.</summary>

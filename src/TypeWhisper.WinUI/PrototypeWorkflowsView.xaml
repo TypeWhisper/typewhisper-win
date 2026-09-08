@@ -206,6 +206,8 @@
                 <TextBlock x:Name="WorkflowNavigationHint" Grid.Column="1" Text="⌫ / Esc Back   ↑↓ Navigate   Enter Open" FontSize="10"
                     Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <local:HandCursorButton x:Name="DefaultLlmButton" Content="Default LLM" Click="DefaultLlm_Click"
+                    Style="{StaticResource PrototypeSecondaryButtonStyle}" />
                 <local:HandCursorButton x:Name="ConfigureWorkflowButton" Content="Edit workflow" Click="Configure_Click"
                     Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Edit selected workflow" />
                 <local:HandCursorButton x:Name="NewWorkflowButton" Content="+  New workflow" Click="NewWorkflow_Click"

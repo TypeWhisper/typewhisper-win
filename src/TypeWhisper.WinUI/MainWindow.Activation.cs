@@ -6,9 +6,11 @@ public sealed partial class MainWindow
 {
     internal void OpenFilesFromTray() => HandleActivation(ApplicationActivationRequest.Parse(["--files"]));
     private string? _noticeWorkflowId;
+    private bool _noticeUsesDefault;
     private void ShowActivationNotice(string message, string? workflowId = null)
     {
         _noticeWorkflowId = workflowId;
+        _noticeUsesDefault = false;
         ActivationNoticeTitle.Text = workflowId is null ? "Action needed" : "Workflow could not start";
         ActivationNoticeAction.Visibility = workflowId is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
         ActivationNoticeText.Text = message;

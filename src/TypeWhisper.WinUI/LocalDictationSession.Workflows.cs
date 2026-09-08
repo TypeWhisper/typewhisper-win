@@ -7,6 +7,7 @@ internal sealed partial class LocalDictationSession
     private string _languageAtStart = "auto";
     private AutomaticWorkflowSnapshot? _workflowAtStart;
     private string? _targetHostAtStart;
+    internal WorkflowLlmDefaults WorkflowDefaults { get; } = new(WinUIProfile.DataPath("workflow-llm-default.json"));
 
     // Called once on the UI thread after the original target process has been captured.
     private async Task CaptureWorkflowAtStartAsync()
@@ -20,7 +21,7 @@ internal sealed partial class LocalDictationSession
                 _targetHostAtStart = await WindowsBrowserTargetReader.CaptureAsync(_target, (int)_targetProcessId,
                     _targetApp, _operationCancellation.Token);
             _operationCancellation.Token.ThrowIfCancellationRequested();
-            _workflowAtStart = AutomaticWorkflowSnapshot.Select(workflows, _targetApp, _targetHostAtStart);
+            _workflowAtStart = AutomaticWorkflowSnapshot.Select(workflows, _targetApp, _targetHostAtStart, WorkflowDefaults.Resolve);
         }
         catch (OperationCanceledException) when (_operationCancellation.Token.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)

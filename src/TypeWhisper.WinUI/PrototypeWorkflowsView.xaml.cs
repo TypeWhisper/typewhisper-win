@@ -32,9 +32,9 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         _closing = true;
         IsEnabled = false;
         _run?.Cancel();
-        try { _deleteDialog?.Hide(); }
+        try { _deleteDialog?.Hide(); _defaultsDialog?.Hide(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Workflow dialog close failed: " + ex); }
-        return Task.WhenAll(_runCompletion?.Task ?? Task.CompletedTask, _deleteCompletion?.Task ?? Task.CompletedTask);
+        return Task.WhenAll(_defaultsCompletion?.Task ?? Task.CompletedTask, _runCompletion?.Task ?? Task.CompletedTask, _deleteCompletion?.Task ?? Task.CompletedTask);
     }
 
     private ManualWorkflowStore? _store;
@@ -50,10 +50,10 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     }
     private void Shortcut_PreviewKeyUp(object sender, KeyRoutedEventArgs e) =>
         ConfigShortcutHost.Children.OfType<PrototypeShortcutRecorder>().FirstOrDefault(r => r.IsCapturing)?.CaptureKeyUp(e);
-    internal bool IsBusy => _run is not null || _page == Page.Configuration || _deleteCompletion is { Task.IsCompleted: false };
+    internal bool IsBusy => _defaultsDialog is not null || _run is not null || _page == Page.Configuration || _deleteCompletion is { Task.IsCompleted: false };
     private string? _loadError;
     private CancellationTokenSource? _run;
-    private IReadOnlyList<PrototypeChoice> Providers => [new("none", "Not configured", "Choose an installed LLM provider"),
+    private IReadOnlyList<PrototypeChoice> Providers => [new(WorkflowLlmDefaults.Inherit, "Use default", "Use the shared workflow LLM"), new("none", "Not configured", "Choose an installed LLM provider"),
         .. (_session?.LlmProviders.Select(p => new PrototypeChoice(p.SelectionId, p.Name, p.Ready ? "Ready" : "Requires configuration")) ?? [])];
     private static readonly PrototypeChoice[] Outputs = [new("preview", "Review result", "Copy the result when ready")];
 
@@ -191,13 +191,12 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "\u232b / Esc Back", _ => "\u232b / Esc Back   \u2191\u2193 Navigate   Enter Open" };
         WorkflowPrimaryButton.Visibility = page == Page.List ? Visibility.Collapsed : Visibility.Visible;
         WorkflowPrimaryButton.Content = page == Page.Configuration ? (_creating ? "Create workflow" : "Save changes") : page == Page.Result ? "Copy result" : "Run workflow";
-        WorkflowExecutionSummary.Text = _opened is null || _opened.ProviderId == "none"
-            ? "Choose a provider and model in Edit workflow."
-            : $"{Providers.FirstOrDefault(item => item.Id == _opened.ProviderId)?.Label ?? _opened.ProviderId} \u00b7 {_opened.ModelId} \u00b7 input is sent to this provider when you run";
+        UpdateExecutionSummary();
         if (_loadError is not null) WorkflowSummary.Text = _loadError;
         else if (Shortcuts?.Error is { } shortcutError) WorkflowSummary.Text = shortcutError;
         ConfigureWorkflowButton.Visibility = page is Page.List or Page.Editor ? Visibility.Visible : Visibility.Collapsed;
         NewWorkflowButton.IsEnabled = _loadError is null && _store is not null;
+        DefaultLlmButton.Visibility = page is Page.List or Page.Configuration ? Visibility.Visible : Visibility.Collapsed;
         NewWorkflowButton.Visibility = page == Page.List ? Visibility.Visible : Visibility.Collapsed;
         ConfigureWorkflowButton.IsEnabled = page == Page.List
             ? WorkflowList.SelectedItem is PrototypeWorkflow { IsEditable: true } : _opened?.IsEditable == true;
@@ -240,7 +239,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
             ConfigureWorkflowButton.IsEnabled = false;
             WorkflowPrimaryButton.Content = "Cancel run";
             WorkflowInputHint.Text = "Processing with the saved provider and model\u2026";
-            var result = await ManualWorkflowRunner.RunAsync(_opened.ToStored(), WorkflowSource.Text,
+            var result = await ManualWorkflowRunner.RunAsync(_session.WorkflowDefaults.Resolve(_opened.ToStored()), WorkflowSource.Text,
                 Available, _session.ProcessLlmAsync, cancellation.Token);
             if (_closing) return;
             WorkflowResultText.Text = result;
@@ -258,7 +257,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
             WorkflowSource.IsReadOnly = false;
             ConfigureWorkflowButton.IsEnabled = true;
             WorkflowPrimaryButton.Content = _page == Page.Result ? "Copy result" : "Run workflow";
-            WorkflowPrimaryButton.IsEnabled = _page == Page.Result || _opened is { IsEnabled: true } && Available(_opened.ProviderId, _opened.ModelId) && !string.IsNullOrWhiteSpace(WorkflowSource.Text);
+            WorkflowPrimaryButton.IsEnabled = _page == Page.Result || _opened is { IsEnabled: true } && EffectiveAvailable(_opened.ProviderId, _opened.ModelId) && !string.IsNullOrWhiteSpace(WorkflowSource.Text);
             }
             finally { completion.TrySetResult(); }
         }
@@ -305,10 +304,10 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         WorkflowSource.IsReadOnly = _run is not null;
         var empty = string.IsNullOrWhiteSpace(WorkflowSource.Text);
         if (_run is not null) return;
-        WorkflowPrimaryButton.IsEnabled = _page == Page.Result || !empty && _opened is { IsEnabled: true } && Available(_opened.ProviderId, _opened.ModelId);
+        WorkflowPrimaryButton.IsEnabled = _page == Page.Result || !empty && _opened is { IsEnabled: true } && EffectiveAvailable(_opened.ProviderId, _opened.ModelId);
         SourceWatermark.Visibility = WorkflowSource.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         WorkflowInputHint.Text = _opened is { IsEnabled: false } ? "This workflow is disabled. Enable it in Edit workflow to run it."
-            : _opened is null || !Available(_opened.ProviderId, _opened.ModelId)
+            : _opened is null || !EffectiveAvailable(_opened.ProviderId, _opened.ModelId)
             ? "The saved provider or model is unavailable. Edit the workflow or configure the plugin."
             : empty ? "Paste or type the text to process." : "Run sends this text to the selected provider. Review the result before copying.";
     }
@@ -366,7 +365,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         : !int.TryParse(ConfigPriority.Text, out _) ? "Enter a whole-number priority. Lower numbers win."
         : !Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var template) || !Enum.IsDefined(template) ? "Choose a workflow template."
         : template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(ConfigInstruction.Text) ? "Add instructions for this custom workflow."
-        : ConfigProvider.SelectedId != "none" && !Models.Any(model => model.Id == ConfigModel.SelectedId)
+        : ConfigProvider.SelectedId is not "none" and not WorkflowLlmDefaults.Inherit && !Models.Any(model => model.Id == ConfigModel.SelectedId)
             && (_creating || ConfigProvider.SelectedId != _opened?.ProviderId || ConfigModel.SelectedId != _opened?.ModelId)
                 ? "Choose a model for this provider." : null;
 
@@ -434,6 +433,13 @@ public sealed partial class PrototypeWorkflowsView : UserControl
 
     private void ConfigureModels(string modelId)
     {
+        if (ConfigProvider.SelectedId == WorkflowLlmDefaults.Inherit)
+        {
+            var defaults = ReadDefaults();
+            ConfigModel.SetOptions([new("", defaults?.Model ?? "No default configured", "Inherited from Default LLM")], "");
+            ConfigModel.IsEnabled = false;
+            return;
+        }
         ConfigModel.IsEnabled = ConfigProvider.SelectedId != "none";
         ConfigModel.SetOptions(Models, modelId, ConfigModel.IsEnabled ? (modelId.Length > 0 ? modelId + " (unavailable)" : "Choose a model") : "No model selected");
     }
@@ -465,13 +471,13 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigTemplateDescription.Text = WorkflowTemplateCatalog.DefinitionFor(template).Description;
         var error = ConfigurationError;
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? "Save as disabled. Enable this workflow before running it."
-            : ManualWorkflowRunner.ConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId, Available) is { } providerError
+            : EffectiveConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId) is { } providerError
                 ? providerError + " You can save now and complete the setup later."
                 : (ConfigTrigger.SelectedId == "DictationHotkey" ? "Press once to start and again to stop. Applies only to this recording and uses your dictation paste and history settings."
                     : ConfigTrigger.SelectedId == "Hotkey" ? "The shortcut processes selected text with this provider. Results open for review."
                     : ConfigTrigger.SelectedId == "Manual" ? "Saved on this device. Run manually and review before copying." : "Applies automatically to matching dictations. Uses your dictation paste and history settings."));
         ConfigurationValidation.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
-            error is null && (!ConfigEnabled.IsOn || Available(ConfigProvider.SelectedId, ConfigModel.SelectedId)) ? "MutedBrush" : "AccentBrush"];
+            error is null && (!ConfigEnabled.IsOn || EffectiveAvailable(ConfigProvider.SelectedId, ConfigModel.SelectedId)) ? "MutedBrush" : "AccentBrush"];
         WorkflowSummary.Text = ConfigurationDirty ? "Unsaved changes" : "Workflow configuration";
         WorkflowPrimaryButton.IsEnabled = error is null && ConfigurationDirty && ConfigurationDiscardPrompt.Visibility != Visibility.Visible;
     }
