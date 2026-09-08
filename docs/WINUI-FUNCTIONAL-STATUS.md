@@ -1,5 +1,15 @@
 # Windows 1.1 functional comparison
 
+## Internal Recorder playback (`fca2257d`), 2026-09-08
+
+Saved recordings now offers Play audio inside TypeWhisper instead of opening the associated desktop player. A fixed library playback area shows the file name and native WinUI transport controls for playback, pause and seeking, plus Stop playback. Playback uses the system-default audio output. Show in folder remains an Explorer action.
+
+The owned WAV path is revalidated before and after asynchronous opening. A generation check prevents departed or superseded loads from playing. Leaving/hiding the Recorder, switching library views, confirmed deletion and shutdown release the player/source. Dictation/Recorder capture and speech read-back stop this player through the existing capture/playback hook. Starting playback first drains speech and checks session readiness; paused capture also prevents playback. File/device failures show library feedback and keep the recording intact.
+
+775 Presentation tests passed (`artifacts/test-results/recorder-player/recorder-player.trx`), including playback path revalidation. The prescribed normal-profile build/relaunch passed (`artifacts/recorder-player-build.log`), with a nonzero main-window handle and unchanged diagnostic log. Native playback, seeking, end/replay, navigation, deletion and capture-interruption acceptance remain pending. No Computer Use was performed. Implementation reference: [WinUI media playback](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/media-playback).
+
+Marco confirmed repeated lexicon tab navigation and the multi-line signature snippet test. Those user-reported results supersede the earlier pending basic tab/signature checks, without implying every disabled-snippet or placeholder case was checked.
+
 ## Persistent lexicon tabs (`41907c35`), 2026-09-08
 
 Words, Corrections, Snippets and Term packs now share a fixed tab row above the scrollable content. Term packs uses the Dictionary heading and selected-tab styling; switching back clears the pack state, and keyboard focus returns to the activated tab. Esc from the pack list now exits to Quick Launch as from the other lists. Pack enablement and persistence are unchanged.
