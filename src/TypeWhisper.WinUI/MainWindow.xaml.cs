@@ -540,6 +540,7 @@ public sealed partial class MainWindow : Window
         EntryActionMenu.Attach(CompactResults, LauncherActions);
         foreach (var command in OrderedLauncherCommands(Commands))
             FilteredItems.Add(command);
+        RebuildLauncherGroups();
 
         Activated += MainWindow_Activated;
         AppWindow.Changed += AppWindow_Changed;
@@ -554,7 +555,13 @@ public sealed partial class MainWindow : Window
         if (_profileRestoreClosing) return;
         if (!_closing && !_historyOpen && !_recorderOpen && !_workflowsOpen &&
             !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen && !UtilityOpen)
+        {
+            var selectedTitle = _selected?.Title;
+            SearchBox_TextChanged(SearchBox, null!);
+            if (selectedTitle is not null)
+                CompactResults.SelectedItem = FilteredItems.FirstOrDefault(command => command.Title == selectedTitle);
             MetricsText.Text = DictationStatusForDisplay;
+        }
         _isSearchEditing = false;
         UpdateSearchPresentation();
         KeepLauncherOnScreen();
@@ -747,6 +754,7 @@ public sealed partial class MainWindow : Window
         FilteredItems.Clear();
         foreach (var command in OrderedLauncherCommands(matches))
             FilteredItems.Add(command);
+        RebuildLauncherGroups();
         sw.Stop();
 
         CompactSectionLabel.Text = string.IsNullOrEmpty(query) ? "COMMANDS" : $"{FilteredItems.Count} RESULTS";
@@ -824,6 +832,8 @@ public sealed partial class MainWindow : Window
         if (FileTranscriptionOpen || LexiconOpen || UtilityOpen) return;
         ActionPanel.Visibility = Visibility.Collapsed;
         if (_recorderOpen) return;
+        if (!_marketplaceOpen && !_pluginsOpen && !_workflowsOpen && !_historyOpen && _selected is { } command)
+            RecordLauncherUsage(command);
         if (_marketplaceOpen)
             MarketplaceView.OpenSelected();
         else if (_pluginsOpen)

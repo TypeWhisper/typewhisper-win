@@ -93,13 +93,26 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <TextBlock x:Name="CompactSectionLabel" Text="COMMANDS" Margin="10,1,0,7"
+                <TextBlock x:Name="CompactSectionLabel" Text="COMMANDS" Visibility="Collapsed" Margin="10,1,0,7"
                            FontSize="10" FontWeight="SemiBold" CharacterSpacing="70"
                            Foreground="{ThemeResource MutedBrush}" />
-                <local:HandCursorListView x:Name="CompactResults" Grid.Row="1" ItemsSource="{x:Bind FilteredItems}"
+                <local:HandCursorListView x:Name="CompactResults" Grid.Row="1"
                           IsItemClickEnabled="True" ItemClick="Results_ItemClick"
                           SelectionChanged="Results_SelectionChanged" SelectionMode="Single"
                           Background="Transparent" BorderThickness="0" TabNavigation="Once">
+                    <ListView.GroupStyle>
+                        <GroupStyle HidesIfEmpty="True">
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="local:LauncherCommandGroup">
+                                    <Border BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="{x:Bind Separator}"
+                                            Margin="{x:Bind HeaderMargin}" Padding="10,8,0,4" HorizontalAlignment="Stretch">
+                                        <TextBlock Text="{x:Bind Title}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource MutedBrush}" />
+                                    </Border>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem" BasedOn="{StaticResource CommandItemStyle}">
                             <Setter Property="Margin" Value="0,0,0,3" />
@@ -121,7 +134,6 @@
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                <TextBlock Text="{x:Bind PinLabel}" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
                                 <TextBlock Text="{x:Bind Shortcut}" FontFamily="Cascadia Mono" FontSize="10"
                                            Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
                                 </StackPanel>

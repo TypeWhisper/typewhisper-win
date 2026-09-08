@@ -1,14 +1,31 @@
 using System.Text.Json;
+using System.Collections.ObjectModel;
+using Microsoft.UI.Xaml.Data;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
+    private readonly ObservableCollection<LauncherCommandGroup> _launcherGroups = [];
+    private readonly CollectionViewSource _launcherSource = new() { IsSourceGrouped = true, ItemsPath = new Microsoft.UI.Xaml.PropertyPath("Items") };
+    private Dictionary<string, QuickLaunchUsage> _launcherUsage = new(StringComparer.Ordinal);
+    private static string LauncherUsagePath => WinUIProfile.DataPath("quick-launch-usage.json");
     private HashSet<string> _pinnedCommands = new(StringComparer.Ordinal);
     private static string LauncherPinsPath => WinUIProfile.DataPath("quick-launch-pins.json");
 
     private void LoadLauncherPins()
     {
+        _launcherSource.Source = _launcherGroups;
+        CompactResults.ItemsSource = _launcherSource.View;
+        try
+        {
+            if (File.Exists(LauncherUsagePath))
+                _launcherUsage = JsonSerializer.Deserialize<Dictionary<string, QuickLaunchUsage>>(File.ReadAllText(LauncherUsagePath)) ?? new(StringComparer.Ordinal);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        { System.Diagnostics.Debug.WriteLine(error); }
+
         try
         {
             _pinnedCommands = File.Exists(LauncherPinsPath)
@@ -46,7 +63,37 @@ public sealed partial class MainWindow
         { MetricsText.Text = "The pin could not be saved. Please try again."; }
     }
 
-    private IEnumerable<Command> OrderedLauncherCommands(IEnumerable<Command> commands) =>
-        commands.OrderByDescending(command => _pinnedCommands.Contains(command.Title))
-            .Select(command => command with { IsPinned = _pinnedCommands.Contains(command.Title) });
+    private IEnumerable<Command> OrderedLauncherCommands(IEnumerable<Command> commands)
+    {
+        var candidates = commands.ToArray();
+        var byTitle = candidates.ToDictionary(command => command.Title, StringComparer.Ordinal);
+        return QuickLaunchRanking.Order(candidates.Select(command => command.Title), _pinnedCommands, _launcherUsage,
+                !string.IsNullOrWhiteSpace(SearchBox.Text))
+            .Select(title => byTitle[title] with { IsPinned = _pinnedCommands.Contains(title) });
+    }
+
+    private void RebuildLauncherGroups()
+    {
+        _launcherGroups.Clear();
+        var pinned = FilteredItems.Where(command => command.IsPinned).ToArray();
+        var others = FilteredItems.Where(command => !command.IsPinned).ToArray();
+        if (pinned.Length > 0) _launcherGroups.Add(new("Pinned", pinned, false));
+        if (others.Length > 0) _launcherGroups.Add(new(
+            string.IsNullOrWhiteSpace(SearchBox.Text) ? "Suggestions" : "Results", others, pinned.Length > 0));
+    }
+
+    private void RecordLauncherUsage(Command command)
+    {
+        var count = _launcherUsage.GetValueOrDefault(command.Title)?.Count ?? 0;
+        _launcherUsage[command.Title] = new(count == long.MaxValue ? count : count + 1, DateTimeOffset.UtcNow);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LauncherUsagePath)!);
+            var temporary = LauncherUsagePath + ".tmp";
+            File.WriteAllText(temporary, JsonSerializer.Serialize(_launcherUsage));
+            File.Move(temporary, LauncherUsagePath, overwrite: true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { System.Diagnostics.Debug.WriteLine(error); }
+    }
 }
