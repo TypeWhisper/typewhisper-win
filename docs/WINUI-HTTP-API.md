@@ -1,6 +1,6 @@
 # Windows 1.1 HTTP API
 
-Enable the server under **Settings > Advanced > HTTP API**, choose a port (default 8978), and select **Apply**. The server is off by default. Settings persist across restarts. A port collision leaves it stopped with a visible error. Use **Copy address** and **Copy API token** for clients.
+Enable the server under **Settings > Advanced > HTTP API**, choose a port (default 8978), and select **Apply**. The server is off by default. Settings persist across restarts. A port collision leaves it stopped with a visible error. Select **Open documentation** to read the built-in reference at `/docs` in your browser while the server is running. Use **Copy address** and **Copy API token** for clients.
 
 This is the connected file-transcription API, not complete legacy HTTP endpoint parity. Dictation/recorder control, history/dictionary mutation, model switching/download, backup import and automation routes are not exposed yet. Unknown endpoints return 404.
 
@@ -15,7 +15,7 @@ The normal development profile is %LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData. 
 
 The discovery token is plaintext for local client compatibility, protected by a Windows ACL allowing only the current user. Its persistent backing secret is protected by DPAPI. The token survives restart. Never put it in a URL or log it.
 
-Send Authorization: Bearer <token> or X-TypeWhisper-API-Token: <token>. Authentication is mandatory except for minimal server liveness at GET /v1/status. Only loopback connections are accepted. Browser Origin headers are rejected; no CORS access is enabled.
+Send Authorization: Bearer <token> or X-TypeWhisper-API-Token: <token>. Authentication is mandatory except for minimal server liveness at GET /v1/status and the static documentation at GET /docs (also /docs/). Documentation contains no credentials and makes no API calls. Only loopback connections are accepted. Browser Origin headers are rejected; no CORS access is enabled.
 
 ## Endpoints
 

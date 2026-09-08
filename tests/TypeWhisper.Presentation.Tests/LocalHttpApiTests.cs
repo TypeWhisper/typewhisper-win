@@ -12,6 +12,40 @@ public sealed class LocalHttpApiTests
     private const string Token = "a7d18284e6504fe2a1cc070c62850709";
 
     [Fact]
+    public async Task DocumentationIsPublicStaticAndDoesNotExposeCredentialsOrBypassApiAuthentication()
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            calls++;
+            return Task.FromResult(LocalApiResponse.Json(200, new { }));
+        });
+        await server.StartAsync();
+        using var client = Client(server);
+        foreach (var path in new[] { "docs", "docs/" })
+        {
+            using var response = await client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+            var html = await response.Content.ReadAsStringAsync();
+            Assert.Contains($"http://127.0.0.1:{server.Port}/v1/transcribe", html);
+            Assert.Contains("/v1/transcribe/local-file", html);
+            Assert.Contains("api-discovery.json", html);
+            Assert.Contains("C:/Audio/sample.wav", html);
+            Assert.DoesNotContain("{{PORT}}", html);
+            Assert.DoesNotContain(Token, html);
+            Assert.DoesNotContain("<script", html);
+            Assert.Contains("default-src 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
+        }
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("v1/models")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("docs/private")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsync("docs", new StringContent(""))).StatusCode);
+        client.DefaultRequestHeaders.Add("Origin", "https://example.com");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("docs")).StatusCode);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
     public async Task StatusIsMinimalAndAuthenticationPrecedesBackend()
     {
         var calls = 0;

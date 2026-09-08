@@ -24,7 +24,7 @@ internal sealed class HttpApiSettingsView : UserControl
         var status = Text(api.Status, 13);
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         body.Children.Add(status);
-        body.Children.Add(Text("Only connections from this computer are accepted. Every endpoint except status requires the API token. Browser-origin requests are blocked.", 13));
+        body.Children.Add(Text("Only connections from this computer are accepted. API requests except status require the API token. Documentation is public. Browser-origin requests are blocked.", 13));
         body.Children.Add(Text("Auto-discovery: api-discovery.json and api-port in this profile. The discovery token is readable only by your Windows user.", 13));
         body.Children.Add(Text("Available: status, models, capabilities and file transcription (upload or local path). JSON, text and provider-timed subtitles are supported.", 13));
         var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
@@ -32,6 +32,8 @@ internal sealed class HttpApiSettingsView : UserControl
         {
             Content = title, Style = (Style)Application.Current.Resources[primary ? "PrimaryButtonStyle" : "SecondaryButtonStyle"]
         };
+        var documentation = new HyperlinkButton { Content = "Open documentation", HorizontalAlignment = HorizontalAlignment.Left };
+        body.Children.Add(documentation);
         var copyAddress = Button("Copy address");
         var copyToken = Button("Copy API token");
         var apply = Button("Apply", true);
@@ -40,7 +42,8 @@ internal sealed class HttpApiSettingsView : UserControl
         void Refresh()
         {
             status.Text = api.Status;
-            copyAddress.IsEnabled = copyToken.IsEnabled = api.Running;
+            copyAddress.IsEnabled = copyToken.IsEnabled = documentation.IsEnabled = api.Running;
+            documentation.NavigateUri = api.Running ? new Uri($"http://127.0.0.1:{api.Port}/docs") : null;
         }
         apply.Click += async (_, _) =>
         {

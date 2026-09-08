@@ -142,14 +142,17 @@ public sealed class LocalHttpApi : IAsyncDisposable
             LocalApiResponse response;
             var request = context.Request;
             var publicStatus = request.HttpMethod == "GET" && request.Url?.AbsolutePath == "/v1/status";
+            var publicDocs = request.HttpMethod == "GET" && request.Url?.AbsolutePath is "/docs" or "/docs/";
             if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) || request.Headers["Origin"] is not null)
                 response = Error(403, "Request origin is not allowed.");
-            else if (!publicStatus && !Authenticated(request))
+            else if (!publicStatus && !publicDocs && !Authenticated(request))
                 response = Error(401, "Authentication required.");
             else if (!admitted)
                 response = Error(429, "Too many requests.");
             else if (request.QueryString.AllKeys.Any(key => string.IsNullOrEmpty(key) || request.QueryString.GetValues(key)?.Length != 1))
                 response = Error(400, "Query parameters must have unique, non-empty names.");
+            else if (publicDocs)
+                response = LocalApiDocumentation.Response(Port);
             else if (publicStatus)
                 response = LocalApiResponse.Json(200, new { status = "ok", api_version = "1.1" });
             else if (request.ContentLength64 > _maxBodyBytes)
@@ -224,6 +227,8 @@ public sealed class LocalHttpApi : IAsyncDisposable
         context.Response.ContentLength64 = response.Body.Length;
         context.Response.KeepAlive = false;
         context.Response.Headers["Cache-Control"] = "no-store";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
         await context.Response.OutputStream.WriteAsync(response.Body, cancellationToken)
             .AsTask().WaitAsync(cancellationToken).ConfigureAwait(false);
     }
