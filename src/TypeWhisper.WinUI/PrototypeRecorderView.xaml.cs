@@ -59,7 +59,7 @@ public sealed partial class PrototypeRecorderView : UserControl
         _recorder.Changed += Refresh;
         Refresh();
     }
-    internal void SetPresented(bool presented) { _presented = presented; Refresh(); if (presented && _libraryOpen) BeginLibraryRefresh(); }
+    internal void SetPresented(bool presented) { _presented = presented; if (!presented) StopAudioPlayback(); Refresh(); if (presented && _libraryOpen) BeginLibraryRefresh(); }
     internal void FocusEntry() => (_libraryOpen ? LibraryRefreshButton : PrimaryButton).Focus(FocusState.Programmatic);
     internal void GoBack()
     {

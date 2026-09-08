@@ -8,6 +8,18 @@ public sealed class RecorderLibraryStoreTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "recorder-library-" + Guid.NewGuid());
 
     [Fact]
+    public async Task PlaybackRevalidatesOwnedPathAndRejectsRemovedOrExternalFiles()
+    {
+        var path = await RecorderWavStore.SaveAsync(_directory, [0.1f]);
+        var store = new RecorderLibraryStore(_directory);
+        Assert.Equal(Path.GetFullPath(path), store.ResolvePlaybackPath(path));
+        Assert.Throws<ArgumentException>(() => store.ResolvePlaybackPath(Path.Combine(_directory, "..", "outside.wav")));
+        Assert.Throws<ArgumentException>(() => store.ResolvePlaybackPath(Path.Combine(_directory, "notes.txt")));
+        File.Delete(path);
+        Assert.Throws<FileNotFoundException>(() => store.ResolvePlaybackPath(path));
+    }
+
+    [Fact]
     public async Task FreshStoreFindsPublishedWavWithActualMetadataAndNoTemporaryFiles()
     {
         var path = await RecorderWavStore.SaveAsync(_directory, new float[3200], "Grüße");

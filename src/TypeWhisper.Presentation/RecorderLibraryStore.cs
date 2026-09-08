@@ -63,6 +63,13 @@ public sealed class RecorderLibraryStore(string directory)
             throw new IOException("Linked recording files and directories are not supported.");
     }
 
+    /// <summary>Revalidates the owned local WAV immediately before playback.</summary>
+    public string ResolvePlaybackPath(string path)
+    {
+        ValidatePath(path);
+        return Path.GetFullPath(path);
+    }
+
     private static TimeSpan ReadDuration(string path)
     {
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);

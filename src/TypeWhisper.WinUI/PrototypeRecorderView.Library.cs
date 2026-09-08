@@ -21,6 +21,7 @@ public sealed partial class PrototypeRecorderView
 
     private void Library_Click(object sender, RoutedEventArgs e)
     {
+        StopAudioPlayback();
         _libraryOpen = !_libraryOpen;
         RecordingContent.Visibility = _libraryOpen ? Visibility.Collapsed : Visibility.Visible;
         LibraryPanel.Visibility = _libraryOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -66,8 +67,8 @@ public sealed partial class PrototypeRecorderView
         row.Children.Add(new TextBlock { Text = $"{duration} · {entry.SizeBytes:N0} bytes · {date}", FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
         if (entry.Error is not null) row.Children.Add(new TextBlock { Text = "Could not read recording: " + entry.Error, TextWrapping = TextWrapping.Wrap });
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        AddLibraryAction(actions, "Play in default app", () => OpenLibraryFile(entry.FilePath, false), entry.Error is null);
-        AddLibraryAction(actions, "Show in folder", () => OpenLibraryFile(entry.FilePath, true));
+        AddLibraryAction(actions, "Play audio", () => PlayLibraryAudio(entry.FilePath, entry.Name), entry.Error is null);
+        AddLibraryAction(actions, "Show in folder", () => OpenLibraryFile(entry.FilePath));
         AddLibraryAction(actions, "Transcribe file…", () => RequestTranscribe(entry.FilePath), entry.Error is null);
         AddLibraryAction(actions, "Delete…", () =>
         {
@@ -86,14 +87,13 @@ public sealed partial class PrototypeRecorderView
         panel.Children.Add(button);
     }
 
-    private void OpenLibraryFile(string path, bool folder)
+    private void OpenLibraryFile(string path)
     {
         if (_libraryClosing) return;
         try
         {
             if (!System.IO.File.Exists(path)) throw new System.IO.FileNotFoundException("The recording no longer exists.");
-            Process.Start(folder ? new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true }
-                : new ProcessStartInfo(path) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { LibraryStatus.Text = "Could not open recording: " + ex.Message; }
     }
@@ -114,6 +114,7 @@ public sealed partial class PrototypeRecorderView
             if (await confirmation.ShowAsync() != ContentDialogResult.Primary || _libraryClosing) return;
             if (IsQueuedSource?.Invoke(entry.FilePath) == true)
             { LibraryStatus.Text = "Remove this recording from the file queue before deleting it."; return; }
+            StopAudioPlayback();
             _library.Delete(entry.FilePath, IsQueuedSource);
             if (_recorder?.ForgetDeletedFile(entry.FilePath) == true)
             {
@@ -142,6 +143,7 @@ public sealed partial class PrototypeRecorderView
     private async Task ShutdownLibraryAsync()
     {
         _libraryClosing = true;
+        StopAudioPlayback();
         _libraryGeneration++;
         _libraryCancellation?.Cancel();
         _libraryConfirmation?.Hide();

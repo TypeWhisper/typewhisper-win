@@ -97,7 +97,7 @@
             </Grid>
         </Grid>
         <Grid x:Name="LibraryPanel" Grid.Row="1" Margin="12,4,12,0" Padding="0,0,4,0" Visibility="Collapsed">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <Grid Margin="0,0,0,12">
                 <TextBlock x:Name="LibraryStatus" Text="Saved recordings" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,100,0" AutomationProperties.LiveSetting="Polite" />
                 <local:HandCursorButton x:Name="LibraryRefreshButton" Content="Refresh" Click="LibraryRefresh_Click" HorizontalAlignment="Right" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
@@ -105,6 +105,18 @@
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="LibraryEntries" Spacing="8" />
             </ScrollViewer>
+            <Border x:Name="LibraryPlaybackPanel" Grid.Row="2" Visibility="Collapsed" Padding="12" Margin="0,8,0,0"
+                    Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="10">
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="LibraryPlaybackTitle" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
+                    <MediaPlayerElement x:Name="LibraryPlayerElement" Height="80" AutoPlay="False" AreTransportControlsEnabled="True">
+                        <MediaPlayerElement.TransportControls>
+                            <MediaTransportControls IsCompact="True" IsZoomButtonVisible="False" IsPlaybackRateButtonVisible="False" ShowAndHideAutomatically="False" />
+                        </MediaPlayerElement.TransportControls>
+                    </MediaPlayerElement>
+                    <local:HandCursorButton Content="Stop playback" Click="StopLibraryPlayback_Click" HorizontalAlignment="Right" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                </StackPanel>
+            </Border>
         </Grid>
         <Border Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
             <Grid Height="48" Padding="2,0" ColumnSpacing="12">
