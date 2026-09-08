@@ -394,6 +394,8 @@ public sealed partial class MainWindow : Window
         HistoryView.ExitRequested += (_, _) => CloseHistory();
         RecorderView.ExitRequested += (_, _) => CloseRecorder();
         RecorderView.Connect(_dictation);
+        RecorderView.LibraryModeChanged += library =>
+        { if (_recorderOpen) SearchSurface.Visibility = library ? Visibility.Collapsed : Visibility.Visible; };
         RecorderView.IsQueuedSource = path => _fileTranscription?.ContainsSource(path) == true;
         RecorderView.TranscribeRequested += path =>
         {
@@ -1393,6 +1395,7 @@ public sealed partial class MainWindow : Window
 
     private void CloseRecorder()
     {
+        SearchSurface.Visibility = Visibility.Visible;
         _recorderOpen = false;
         RecorderView.SetPresented(false);
         RecorderView.Visibility = Visibility.Collapsed;

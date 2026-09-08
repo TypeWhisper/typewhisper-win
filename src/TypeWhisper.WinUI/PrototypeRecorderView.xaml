@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:TypeWhisper.WinUI"
-    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml">
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml" KeyDown="Recorder_KeyDown">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -12,9 +12,10 @@
         </Grid.RowDefinitions>
         <Grid Margin="12,0,12,12" MinHeight="32">
             <TextBlock Text="Recorder" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <local:HandCursorButton x:Name="LibraryButton" Content="Saved recordings" Click="Library_Click"
-                Style="{StaticResource PrototypeSecondaryButtonStyle}"
-                HorizontalAlignment="Right" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                <local:HandCursorButton x:Name="RecordTab" Content="Record" Click="RecordTab_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" />
+                <local:HandCursorButton x:Name="LibraryButton" Content="Recordings" Click="Library_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+            </StackPanel>
         </Grid>
         <Grid x:Name="RecordingContent" Grid.Row="1" Margin="12,0,12,0">
             <Grid.RowDefinitions>
@@ -61,24 +62,6 @@
                     <TextBlock x:Name="SessionHint" Text="Choose a source, then start your session." FontSize="12"
                         Foreground="{ThemeResource MutedBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
                 </StackPanel>
-                <Grid x:Name="CompletedPanel" Visibility="Collapsed">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <StackPanel Spacing="6" Margin="0,0,0,14">
-                        <TextBlock x:Name="CompletedTitle" Text="Recording saved" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                        <TextBlock x:Name="CompletedMetadata" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
-                        <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,8,0,0" />
-                    </StackPanel>
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel Spacing="10" Margin="0,0,20,12">
-                            <TextBlock Text="AUDIO FILE READY" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
-                            <TextBlock Text="Your recording was saved locally. Choose Transcribe file to add it to the file queue. Transcription starts only when you explicitly choose Start there."
-                                FontSize="15" LineHeight="25" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                        </StackPanel>
-                    </ScrollViewer>
-                </Grid>
                 <Border x:Name="DiscardConfirmation" Visibility="Collapsed" Background="{ThemeResource ElevatedBrush}"
                     BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="10" Padding="20"
                     VerticalAlignment="Center" HorizontalAlignment="Stretch">
@@ -102,9 +85,9 @@
                 <TextBlock x:Name="LibraryStatus" Text="Saved recordings" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,100,0" AutomationProperties.LiveSetting="Polite" />
                 <local:HandCursorButton x:Name="LibraryRefreshButton" Content="Refresh" Click="LibraryRefresh_Click" HorizontalAlignment="Right" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
             </Grid>
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="LibraryEntries" Spacing="8" />
-            </ScrollViewer>
+            <local:HandCursorListView x:Name="LibraryEntries" Grid.Row="1" SelectionMode="Single"
+                ItemContainerStyle="{StaticResource PrototypeCommandItemStyle}" SelectionChanged="LibrarySelection_Changed"
+                IsItemClickEnabled="False" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
             <Border x:Name="LibraryPlaybackPanel" Grid.Row="2" Visibility="Collapsed" Padding="12" Margin="0,8,0,0"
                     Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="10">
                 <StackPanel Spacing="4">
@@ -119,7 +102,8 @@
             </Border>
         </Grid>
         <Border Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
-            <Grid Height="48" Padding="2,0" ColumnSpacing="12">
+            <Grid Padding="2,8" ColumnSpacing="12" RowSpacing="10">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -127,8 +111,12 @@
                 </Grid.ColumnDefinitions>
                 <local:PrototypeBreadcrumbs x:Name="RecorderBreadcrumbs" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="⌫ / Esc Back" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
-                <StackPanel x:Name="SessionActions" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <StackPanel x:Name="SessionActions" Grid.Row="1" Grid.ColumnSpan="3" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <TextBlock x:Name="LibraryRecordingStatus" Visibility="Collapsed" VerticalAlignment="Center" FontSize="12" MaxWidth="240" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
+                    <local:HandCursorButton x:Name="LibraryQueueButton" Content="Add to transcription queue &#x00B7; T" Click="LibraryQueue_Click" Visibility="Collapsed" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                    <local:HandCursorButton x:Name="LibraryFolderButton" Content="Folder &#x00B7; F" Click="LibraryFolder_Click" Visibility="Collapsed" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                    <local:HandCursorButton x:Name="LibraryDeleteButton" Content="Delete &#x00B7; Del" Click="LibraryDelete_Click" Visibility="Collapsed" Style="{StaticResource PrototypeDestructiveButtonStyle}" />
+                    <local:HandCursorButton x:Name="LibraryPlayButton" Content="Play audio &#x00B7; Enter" Click="LibraryPlay_Click" Visibility="Collapsed" Style="{StaticResource PrototypePrimaryButtonStyle}" />
                     <local:HandCursorButton x:Name="OpenFolderButton" Content="Open folder" Click="OpenFolder_Click" Visibility="Collapsed" />
                     <local:HandCursorButton x:Name="ViewHistoryButton" Content="Transcribe file…" Click="ViewHistory_Click" Visibility="Collapsed"
                         Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Transcribe saved recording" />

@@ -12,6 +12,7 @@ public sealed partial class PrototypeRecorderView
     private MediaPlayer? _libraryPlayer;
     private MediaSource? _librarySource;
     private int _libraryPlaybackGeneration;
+    private string? _libraryPlayingPath;
 
     internal void StopAudioPlayback()
     {
@@ -19,6 +20,7 @@ public sealed partial class PrototypeRecorderView
         var player = _libraryPlayer;
         var source = _librarySource;
         _libraryPlayer = null; _librarySource = null;
+        _libraryPlayingPath = null;
         try { LibraryPlayerElement.SetMediaPlayer(null); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
         try { player?.Dispose(); }
@@ -26,6 +28,7 @@ public sealed partial class PrototypeRecorderView
         try { source?.Dispose(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
         LibraryPlaybackPanel.Visibility = Visibility.Collapsed;
+        if (_initialized) RefreshLibraryActions();
     }
 
     private void StopLibraryPlayback_Click(object sender, RoutedEventArgs e)
@@ -42,6 +45,21 @@ public sealed partial class PrototypeRecorderView
             LibraryStatus.Text = "Finish the current recording or processing before playing audio.";
             return;
         }
+        if (_libraryPlayingPath == path && _libraryPlayer is { } existing)
+        {
+            try
+            {
+                if (existing.PlaybackSession.PlaybackState == MediaPlaybackState.Playing) existing.Pause();
+                else
+                {
+                    if (existing.PlaybackSession.Position >= existing.PlaybackSession.NaturalDuration) existing.PlaybackSession.Position = TimeSpan.Zero;
+                    existing.Play();
+                }
+                RefreshLibraryActions();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { StopAudioPlayback(); LibraryStatus.Text = "Playback failed: " + ex.Message; }
+            return;
+        }
         StopAudioPlayback();
         var generation = _libraryPlaybackGeneration;
         LibraryPlaybackPanel.Visibility = Visibility.Visible;
@@ -56,6 +74,13 @@ public sealed partial class PrototypeRecorderView
             _library.ResolvePlaybackPath(verified);
             _librarySource = MediaSource.CreateFromStorageFile(file);
             var player = _libraryPlayer = new MediaPlayer { AutoPlay = false };
+            _libraryPlayingPath = path;
+            player.PlaybackSession.PlaybackStateChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!ReferenceEquals(player, _libraryPlayer)) return;
+                RefreshLibraryActions();
+                LibraryStatus.Text = player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing ? "Playing " + name : "Playback paused";
+            });
             player.MediaFailed += (_, _) => DispatcherQueue.TryEnqueue(() =>
             {
                 if (!ReferenceEquals(player, _libraryPlayer)) return;

@@ -17,18 +17,29 @@ public sealed partial class PrototypeRecorderView
     private Task _libraryMutation = Task.CompletedTask;
     private ContentDialog? _libraryConfirmation;
     private string? _librarySavedPath;
+    private string? _selectRecordingPath;
+    private bool _refreshingLibrary;
+    private RecorderLibraryEntry? SelectedRecording => (LibraryEntries.SelectedItem as ListViewItem)?.Tag as RecorderLibraryEntry;
     internal Func<string, bool>? IsQueuedSource { get; set; }
+    internal event Action<bool>? LibraryModeChanged;
 
     private void Library_Click(object sender, RoutedEventArgs e)
     {
+        ShowLibrary(true);
+    }
+    private void RecordTab_Click(object sender, RoutedEventArgs e) => ShowLibrary(false);
+    private void ShowLibrary(bool open)
+    {
         StopAudioPlayback();
-        _libraryOpen = !_libraryOpen;
+        _libraryOpen = open;
+        LibraryModeChanged?.Invoke(open);
         RecordingContent.Visibility = _libraryOpen ? Visibility.Collapsed : Visibility.Visible;
         LibraryPanel.Visibility = _libraryOpen ? Visibility.Visible : Visibility.Collapsed;
-        LibraryButton.Content = _libraryOpen ? "Back to recording" : "Saved recordings";
+        LibraryButton.Style = (Style)Application.Current.Resources[_libraryOpen ? "PrototypePrimaryButtonStyle" : "PrototypeSecondaryButtonStyle"];
+        RecordTab.Style = (Style)Application.Current.Resources[_libraryOpen ? "PrototypeSecondaryButtonStyle" : "PrototypePrimaryButtonStyle"];
         if (_libraryOpen) BeginLibraryRefresh();
         Refresh();
-        FocusEntry();
+        if (_presented) FocusEntry();
     }
 
     private void LibraryRefresh_Click(object sender, RoutedEventArgs e) => BeginLibraryRefresh();
@@ -49,8 +60,21 @@ public sealed partial class PrototypeRecorderView
         {
             var entries = await _library.ReadAsync(cancellationToken);
             if (_libraryClosing || generation != _libraryGeneration) return;
-            LibraryEntries.Children.Clear();
-            foreach (var entry in entries) LibraryEntries.Children.Add(BuildLibraryEntry(entry));
+            var selected = _selectRecordingPath ?? SelectedRecording?.FilePath;
+            _selectRecordingPath = null;
+            _refreshingLibrary = true;
+            try
+            {
+                LibraryEntries.Items.Clear();
+                foreach (var entry in entries) LibraryEntries.Items.Add(BuildLibraryEntry(entry));
+                LibraryEntries.SelectedItem = LibraryEntries.Items.OfType<ListViewItem>().FirstOrDefault(item => (item.Tag as RecorderLibraryEntry)?.FilePath == selected)
+                    ?? LibraryEntries.Items.FirstOrDefault();
+            }
+            finally { _refreshingLibrary = false; }
+            if (SelectedRecording?.FilePath != _libraryPlayingPath) StopAudioPlayback();
+            RefreshLibraryActions();
+            if (LibraryEntries.SelectedItem is { } item) LibraryEntries.ScrollIntoView(item);
+            if (_libraryOpen && _presented) LibraryEntries.Focus(FocusState.Programmatic);
             LibraryStatus.Text = entries.Count == 0 ? "No saved recordings yet." : $"{entries.Count} saved recording{(entries.Count == 1 ? "" : "s")}";
         }
         catch (OperationCanceledException) { }
@@ -61,30 +85,13 @@ public sealed partial class PrototypeRecorderView
     private FrameworkElement BuildLibraryEntry(RecorderLibraryEntry entry)
     {
         var row = new StackPanel { Spacing = 8 };
-        row.Children.Add(new TextBlock { Text = entry.Name, FontSize = 14, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+        row.Children.Add(new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(entry.Name), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
         var duration = entry.Duration?.ToString(@"hh\:mm\:ss") ?? "Duration unavailable";
         var date = entry.CreatedAt == DateTimeOffset.MinValue ? "Date unavailable" : entry.CreatedAt.ToLocalTime().ToString("g");
-        row.Children.Add(new TextBlock { Text = $"{duration} · {entry.SizeBytes:N0} bytes · {date}", FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
+        row.Children.Add(new TextBlock { Text = $"{duration} · {date}", FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
         if (entry.Error is not null) row.Children.Add(new TextBlock { Text = "Could not read recording: " + entry.Error, TextWrapping = TextWrapping.Wrap });
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        AddLibraryAction(actions, "Play audio", () => PlayLibraryAudio(entry.FilePath, entry.Name), entry.Error is null);
-        AddLibraryAction(actions, "Show in folder", () => OpenLibraryFile(entry.FilePath));
-        AddLibraryAction(actions, "Transcribe file…", () => RequestTranscribe(entry.FilePath), entry.Error is null);
-        AddLibraryAction(actions, "Delete…", () =>
-        {
-            if (_libraryMutation.IsCompleted) _libraryMutation = DeleteLibraryEntryAsync(entry);
-        }, destructive: true);
-        row.Children.Add(actions);
-        return new Border { Child = row, Padding = new Thickness(14), CornerRadius = new CornerRadius(10),
-            Background = (Brush)Application.Current.Resources["SurfaceBrush"] };
-    }
-
-    private static void AddLibraryAction(Panel panel, string text, Action action, bool enabled = true, bool destructive = false)
-    {
-        var button = new HandCursorButton { Content = text, IsEnabled = enabled, MinHeight = 34,
-            Style = (Style)Application.Current.Resources[destructive ? "PrototypeDestructiveButtonStyle" : "PrototypeSecondaryButtonStyle"] };
-        button.Click += (_, _) => action();
-        panel.Children.Add(button);
+        row.Padding = new Thickness(12);
+        return new ListViewItem { Content = row, Tag = entry };
     }
 
     private void OpenLibraryFile(string path)
