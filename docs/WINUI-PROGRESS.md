@@ -1,5 +1,15 @@
 # Windows 1.1 progress
 
+## Shared workflow LLM (`fe9c924c`), 2026-09-08
+
+Workflows now has a Default LLM footer action that saves a shared provider/model pair in the local profile (`workflow-llm-default.json`). New workflows use the explicit Use default selection and display the inherited model; existing explicit or unconfigured selections keep their meaning. Each workflow can still choose its own provider/model. The default dialog validates the current provider/model, uses Save/Cancel, reports failed writes, and is closed and drained during shutdown.
+
+Manual execution, selected-text shortcuts, explicit dictation shortcuts and automatic App/Website/Global matching resolve the same pair. Automatic matching resolves only the selected rule. Resolution captures provider/model before execution; changes to the default cannot redirect an existing recording or selected-text operation. Explicit selections never fall back to another provider when unavailable. Missing or malformed defaults produce configuration feedback/review rather than silently selecting a service. Saving the default clears its stale shortcut notice.
+
+Validation: 774 Presentation tests passed (`artifacts/test-results/workflow-defaults/workflow-defaults.trx`), including persistence, explicit-selection isolation from corrupt defaults, legacy missing-selection preservation, captured recording selection, automatic matching and manual resolution. The prescribed normal-profile build/relaunch passed (`artifacts/workflow-defaults-build.log`), with a nonzero main-window handle, Quick Launch title and unchanged diagnostic log. No Computer Use was performed; native picker/dialog/layout and actual inherited LLM processing remain pending manual acceptance.
+
+Manual check: Workflows > Default LLM > choose provider/model > Save. Create a translation workflow, leave provider on Use default, and run it. Check an existing workflow with its own selection still uses that choice. Restart and check the shared selection persists; test missing/unavailable default feedback separately.
+
 ## Visible workflow notices and encoding audit (`80eb4fe7`), 2026-09-08
 
 The workflow failure notice now uses a warning icon, bordered inset surface, a distinct heading, readable body text and bottom-row Edit workflow / Dismiss actions. Edit workflow opens the exact affected workflow without replacing an active editor or another workspace. Saving that workflow clears its stale notice. Keyboard access uses ordinary Tab and focused-button Enter behavior. Native layout, direct-edit and stale-notice acceptance remain pending.
