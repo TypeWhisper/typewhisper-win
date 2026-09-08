@@ -25,7 +25,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
             "Could we move the meeting to Thursday? I'd like to test the new version on two monitors first. Thanks for your patience!"),
         new("checklist", "Checklist", "Pull the next actions out of your notes.", "check",
             "Extract concrete action items as a checklist. Do not invent tasks or deadlines.",
-            "Vor dem nächsten Test müssen wir den Prototyp starten, die History filtern und eine Aufnahme abschließen. Dann wollen wir die Geräteauswahl mit der Tastatur bedienen. Zum Schluss machen wir einen Screenshot und sammeln das Feedback.",
-            "☐ Prototyp starten\n☐ History filtern\n☐ Eine Aufnahme abschließen\n☐ Geräteauswahl mit der Tastatur bedienen\n☐ Screenshot erstellen\n☐ Feedback sammeln")
+            "Vor dem nächsten Test müssen wir die App starten, die History filtern und eine Aufnahme abschließen. Dann wollen wir die Geräteauswahl mit der Tastatur bedienen. Zum Schluss machen wir einen Screenshot und sammeln das Feedback.",
+            "☐ App starten\n☐ History filtern\n☐ Eine Aufnahme abschließen\n☐ Geräteauswahl mit der Tastatur bedienen\n☐ Screenshot erstellen\n☐ Feedback sammeln")
     ];
 }
