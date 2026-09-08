@@ -4,15 +4,15 @@ namespace TypeWhisper.WinUI;
 
 internal static class OverlayPreferencesStore
 {
-    internal static PrototypeOverlayPreferences Read(string path)
+    internal static OverlayPreferences Read(string path)
     {
-        if (!File.Exists(path)) return new(PrototypeOverlayMode.Standard, true, false);
-        var preferences = JsonSerializer.Deserialize<PrototypeOverlayPreferences>(File.ReadAllText(path));
+        if (!File.Exists(path)) return new(OverlayMode.Standard, true, false);
+        var preferences = JsonSerializer.Deserialize<OverlayPreferences>(File.ReadAllText(path));
         if (preferences?.IsValid != true) throw new JsonException("Invalid overlay preferences.");
         return preferences;
     }
 
-    internal static void Save(string path, PrototypeOverlayPreferences preferences)
+    internal static void Save(string path, OverlayPreferences preferences)
     {
         if (!preferences.IsValid) throw new ArgumentException("Invalid overlay preferences.", nameof(preferences));
         var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;

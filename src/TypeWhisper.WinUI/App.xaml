@@ -55,7 +55,7 @@
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
             </Style>
 
-            <Style x:Key="PrototypeSearchTextBoxStyle" TargetType="TextBox">
+            <Style x:Key="SearchTextBoxStyle" TargetType="TextBox">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
@@ -86,7 +86,7 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="PrototypeApiKeyPasswordBoxStyle" TargetType="PasswordBox">
+            <Style x:Key="ApiKeyPasswordBoxStyle" TargetType="PasswordBox">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
@@ -111,7 +111,7 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="PrototypeHeatmapToolTipStyle" TargetType="ToolTip">
+            <Style x:Key="HeatmapToolTipStyle" TargetType="ToolTip">
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToolTip">
@@ -122,7 +122,7 @@
                     </Setter.Value>
                 </Setter>
             </Style>
-            <Style x:Key="PrototypeRangeFlyoutStyle" TargetType="FlyoutPresenter">
+            <Style x:Key="RangeFlyoutStyle" TargetType="FlyoutPresenter">
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="FlyoutPresenter">
@@ -133,7 +133,7 @@
                     </Setter.Value>
                 </Setter>
             </Style>
-            <Style x:Key="PrototypeLexiconMultilineStyle" TargetType="TextBox" BasedOn="{StaticResource PrototypeSearchTextBoxStyle}">
+            <Style x:Key="LexiconMultilineStyle" TargetType="TextBox" BasedOn="{StaticResource SearchTextBoxStyle}">
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="TextBox">
@@ -149,7 +149,7 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="PrototypeButtonStyle" TargetType="Button">
+            <Style x:Key="ButtonStyle" TargetType="Button">
                 <Setter Property="FontFamily" Value="{StaticResource InterfaceFont}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="FontSize" Value="12" />
@@ -219,7 +219,7 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="PrototypeSourceToggleStyle" TargetType="ToggleButton">
+            <Style x:Key="SourceToggleStyle" TargetType="ToggleButton">
                 <Setter Property="FontFamily" Value="{StaticResource InterfaceFont}" />
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
                 <Setter Property="MinHeight" Value="48" />
@@ -259,24 +259,24 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="PrototypePrimaryButtonStyle" TargetType="Button"
-                   BasedOn="{StaticResource PrototypeButtonStyle}">
+            <Style x:Key="PrimaryButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource ButtonStyle}">
                 <Setter Property="Background" Value="#FF12304A" />
                 <Setter Property="BorderBrush" Value="#FF2F83BD" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Foreground" Value="#FFF1F8FD" />
             </Style>
 
-            <Style x:Key="PrototypeSecondaryButtonStyle" TargetType="Button"
-                   BasedOn="{StaticResource PrototypeButtonStyle}">
+            <Style x:Key="SecondaryButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource ButtonStyle}">
                 <Setter Property="Background" Value="#0FFFFFFF" />
                 <Setter Property="BorderBrush" Value="#FF2B4054" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
             </Style>
 
-            <Style x:Key="PrototypeDestructiveButtonStyle" TargetType="Button"
-                   BasedOn="{StaticResource PrototypeButtonStyle}">
+            <Style x:Key="DestructiveButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource ButtonStyle}">
                 <Setter Property="Background" Value="#FF52212A" />
                 <Setter Property="BorderBrush" Value="#FFB94355" />
                 <Setter Property="BorderThickness" Value="1" />
@@ -284,15 +284,15 @@
                 <Setter Property="FocusVisualPrimaryBrush" Value="#FFFF99A6" />
             </Style>
 
-            <Style x:Key="PrototypeDestructiveConfirmButtonStyle" TargetType="Button"
-                   BasedOn="{StaticResource PrototypeDestructiveButtonStyle}">
+            <Style x:Key="DestructiveConfirmButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource DestructiveButtonStyle}">
                 <Setter Property="Background" Value="#FFB72840" />
                 <Setter Property="BorderBrush" Value="#FFD64D64" />
                 <Setter Property="Foreground" Value="White" />
             </Style>
 
-            <Style x:Key="PrototypeIconButtonStyle" TargetType="Button"
-                   BasedOn="{StaticResource PrototypeButtonStyle}">
+            <Style x:Key="IconButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource ButtonStyle}">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
@@ -306,8 +306,8 @@
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
             </Style>
 
-            <Style x:Key="PrototypeMenuButtonStyle" TargetType="Button"
-                   BasedOn="{StaticResource PrototypeButtonStyle}">
+            <Style x:Key="MenuButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource ButtonStyle}">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
@@ -318,7 +318,7 @@
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             </Style>
 
-            <Style x:Key="PrototypeCommandItemStyle" TargetType="ListViewItem">
+            <Style x:Key="CommandItemStyle" TargetType="ListViewItem">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
                 <Setter Property="Padding" Value="0" />

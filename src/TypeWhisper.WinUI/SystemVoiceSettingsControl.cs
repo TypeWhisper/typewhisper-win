@@ -15,14 +15,14 @@ internal sealed class SystemVoiceSettingsControl : UserControl
     private bool _testing;
     private bool _stopping;
 
-    internal SystemVoiceSettingsControl(LocalDictationSession session, List<PrototypeChoicePicker> pickers)
+    internal SystemVoiceSettingsControl(LocalDictationSession session, List<ChoicePicker> pickers)
     {
         _session = session;
         var content = new StackPanel { Spacing = 8 };
         content.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"], Margin = new(0, 4, 0, 4) });
         content.Children.Add(new TextBlock { Text = "Spoken feedback", FontSize = 16, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
         content.Children.Add(Label("Read successfully inserted dictation aloud using Windows System Voice. Off by default. Review, failed processing and file jobs are not read automatically."));
-        var enabled = PrototypeToggleSwitch.Create(session.AudioPreferences.SpokenFeedbackEnabled);
+        var enabled = AppToggleSwitch.Create(session.AudioPreferences.SpokenFeedbackEnabled);
         AutomationProperties.SetName(enabled, "Spoken feedback");
         var restoring = false;
         enabled.Toggled += async (_, _) =>
@@ -47,12 +47,12 @@ internal sealed class SystemVoiceSettingsControl : UserControl
             content.Children.Add(Label("Installed Windows voices could not be read. Reopen Audio settings after checking Windows speech settings."));
         }
         if (voices.Count == 0) content.Children.Add(Label("No installed Windows voice is available. Install a voice through Windows settings before testing."));
-        var options = new List<PrototypeChoice> { new("", "Windows default voice", "Uses the Windows voice; no automatic language switch") };
-        options.AddRange(voices.Select(voice => new PrototypeChoice(voice.Id, voice.DisplayName, voice.Language ?? "Installed Windows voice")));
+        var options = new List<Choice> { new("", "Windows default voice", "Uses the Windows voice; no automatic language switch") };
+        options.AddRange(voices.Select(voice => new Choice(voice.Id, voice.DisplayName, voice.Language ?? "Installed Windows voice")));
         var savedVoice = session.AudioPreferences.SpokenFeedbackVoiceId ?? "";
         if (!options.Any(option => option.Id == savedVoice))
             options.Add(new(savedVoice, "Saved voice · unavailable", "Choose an installed voice; unavailable voices never fall back silently"));
-        var voicePicker = new PrototypeChoicePicker();
+        var voicePicker = new ChoicePicker();
         voicePicker.Configure("Windows voice", "speaker", "Spoken feedback voice");
         voicePicker.SetOptions(options, savedVoice);
         voicePicker.SelectionChanged += id =>
@@ -123,5 +123,5 @@ internal sealed class SystemVoiceSettingsControl : UserControl
     private static TextBlock Label(string text) => new() { Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap,
         Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
     private static HandCursorButton Button(string text) => new() { Content = text,
-        Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+        Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
 }

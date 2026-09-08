@@ -8,8 +8,8 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeOverlayLayout.cs" Link="PrototypeOverlayLayout.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeWorkflow.cs" Link="PrototypeWorkflow.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/OverlayLayout.cs" Link="OverlayLayout.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WorkflowDraft.cs" Link="WorkflowDraft.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="xunit" Version="2.*" />
@@ -17,7 +17,7 @@
     <PackageReference Include="Moq" Version="4.*" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeHistoryStore.cs" Link="PrototypeHistoryStore.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HistoryStore.cs" Link="HistoryStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs" Link="HistoryEntryAdapter.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
@@ -29,13 +29,13 @@
     <Compile Include="../../src/TypeWhisper.WinUI/RecordingAudioEffects.cs" Link="RecordingAudioEffects.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/SilenceAutoStop.cs" Link="SilenceAutoStop.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeLexicon.cs" Link="PrototypeLexicon.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Lexicon.cs" Link="Lexicon.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs" Link="DictationDictionarySnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationLexiconSnapshot.cs" Link="DictationLexiconSnapshot.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeShortcutRules.cs" Link="PrototypeShortcutRules.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeHistoryEntry.cs" Link="PrototypeHistoryEntry.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeTranscript.cs" Link="PrototypeTranscript.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntry.cs" Link="HistoryEntry.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Transcript.cs" Link="Transcript.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
   </ItemGroup>
 </Project>

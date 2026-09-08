@@ -12,21 +12,21 @@ public sealed class TermPackPersistenceTests : IDisposable
     [Fact]
     public void PacksSurviveReloadAndCanBeDisabled()
     {
-        var store = new PrototypeLexicon(FilePath);
+        var store = new Lexicon(FilePath);
         var pack = TermPack.AllPacks[0];
         Assert.Null(store.SetPackEnabled(pack, true));
         store = new(FilePath);
         Assert.True(store.PackEnabled(pack.Id));
         Assert.Equal(pack.Terms.Length, store.Entries.Count);
         Assert.Null(store.SetPackEnabled(pack, false));
-        Assert.Empty(new PrototypeLexicon(FilePath).Entries);
+        Assert.Empty(new Lexicon(FilePath).Entries);
     }
 
     [Fact]
     public void DisablingPackPreservesPersonalAndOtherPackTerms()
     {
-        var store = new PrototypeLexicon(FilePath);
-        Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Word, "TypeWhisper")));
+        var store = new Lexicon(FilePath);
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper")));
         var a = new TermPack("a", "A", "", ["TypeWhisper", "Shared"]);
         var b = new TermPack("b", "B", "", ["Shared"]);
         Assert.Null(store.SetPackEnabled(a, true));
@@ -40,7 +40,7 @@ public sealed class TermPackPersistenceTests : IDisposable
     [Fact]
     public void RepeatedActivationIsIdempotentAndPackTermsCannotBeEditedDirectly()
     {
-        var store = new PrototypeLexicon(FilePath);
+        var store = new Lexicon(FilePath);
         var pack = new TermPack("test", "Test", "", ["TypeWhisper"]);
         store.SetPackEnabled(pack, true); store.SetPackEnabled(pack, true);
         var entry = Assert.Single(store.Entries);
@@ -52,23 +52,23 @@ public sealed class TermPackPersistenceTests : IDisposable
     public void InvalidDictionaryIsNeverOverwritten()
     {
         File.WriteAllText(FilePath, "broken JSON");
-        var store = new PrototypeLexicon(FilePath);
+        var store = new Lexicon(FilePath);
         Assert.NotNull(store.SetPackEnabled(TermPack.AllPacks[0], true));
-        Assert.NotNull(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Word, "TypeWhisper")));
+        Assert.NotNull(store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper")));
         Assert.Equal("broken JSON", File.ReadAllText(FilePath));
     }
 
     [Fact]
     public void PersonalWordEditsAndDeletionArePersisted()
     {
-        var store = new PrototypeLexicon(FilePath);
-        Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Word, "TypeWhisper")));
+        var store = new Lexicon(FilePath);
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper")));
         store = new(FilePath);
         var word = Assert.Single(store.Entries);
         Assert.Null(store.Save(word with { Enabled = false }));
         store = new(FilePath);
         Assert.False(Assert.Single(store.Entries).Enabled);
         Assert.True(store.Remove(word.Id));
-        Assert.Empty(new PrototypeLexicon(FilePath).Entries);
+        Assert.Empty(new Lexicon(FilePath).Entries);
     }
 }

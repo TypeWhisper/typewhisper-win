@@ -2,7 +2,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace TypeWhisper.WinUI;
 
-// Runtime binding stays separate from the remaining prototype settings catalog.
+// Runtime binding stays separate from the remaining preview settings catalog.
 internal sealed class LiveDictationSettings(LocalDictationSession session, Action<string> openPluginSettings)
 {
     private static string LanguageName(string code)
@@ -10,7 +10,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
         try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
         catch (System.Globalization.CultureNotFoundException) { return code; }
     }
-    internal void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers)
+    internal void Configure(string category, StackPanel content, List<ChoicePicker> pickers)
     {
         LiveRecorderSettings.Configure(category, content, pickers, session.RecorderPreferences, session.GetRecorderOutputDevices);
         LiveOutputSettings.Configure(category, content, pickers, session);
@@ -32,12 +32,12 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
             if (previewNote is not null) previewNote.Text = "Model, language, recording mode, output and text formatting choices are saved. Other options on this page may still be previews.";
             var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "DictationModel"));
             row.Children.Clear();
-            var provider = new PrototypeChoicePicker();
+            var provider = new ChoicePicker();
             provider.Configure("Provider", "plugin", "Dictation provider");
             row.Children.Add(new TextBlock { Text = "Provider", FontSize = 14 });
             row.Children.Add(provider); pickers.Add(provider);
             var modelSection = new StackPanel { Spacing = 8 };
-            var model = new PrototypeChoicePicker();
+            var model = new ChoicePicker();
             model.Configure("Model", "chip", "Active dictation model");
             modelSection.Children.Add(new TextBlock { Text = "Model", FontSize = 14 });
             modelSection.Children.Add(model); pickers.Add(model);
@@ -45,7 +45,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
             var hint = new TextBlock { FontSize = 12, TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap };
             row.Children.Add(hint);
             var setup = new HandCursorButton { Content = "Provider settings", HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left,
-                Style = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+                Style = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["SecondaryButtonStyle"] };
             row.Children.Add(setup);
             var selectedProviderId = session.ActiveProviderId;
             var observedActiveProviderId = session.ActiveProviderId;
@@ -58,12 +58,12 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                     selectedProviderId = observedActiveProviderId = session.ActiveProviderId;
                 var providers = session.DictationProviders;
                 var selected = providers.FirstOrDefault(item => item.Id == selectedProviderId);
-                provider.SetOptions(providers.Select(item => new PrototypeChoice(item.Id, item.Name,
+                provider.SetOptions(providers.Select(item => new Choice(item.Id, item.Name,
                     (item.Cloud ? "Cloud" : "On-device") + " · " + item.Status)).ToArray(), selectedProviderId, "Choose a provider");
                 var canChange = session.CanChangeProvider && !session.Models.Busy && !selecting;
                 provider.IsEnabled = canChange;
                 modelSection.Visibility = selected?.Models.Count > 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-                model.SetOptions(selected?.Models.Select(item => new PrototypeChoice(item.Id, item.Name,
+                model.SetOptions(selected?.Models.Select(item => new Choice(item.Id, item.Name,
                     item.Ready ? "Ready" : "Download in provider settings", item.Ready)).ToArray() ?? [], selected?.SelectedModelId ?? "", "Choose a model");
                 model.IsEnabled = canChange && selected?.Enabled == true && selected.Models.Any(item => item.Ready);
                 setup.IsEnabled = !selecting && selected is not null;
@@ -99,14 +99,14 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
             };
             var languageRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "Language"));
             languageRow.Children.Clear();
-            var language = new PrototypeChoicePicker();
+            var language = new ChoicePicker();
             language.Configure("Spoken language", "language", "Dictation language");
             void RefreshLanguage() => languageRow.DispatcherQueue.TryEnqueue(() =>
             {
                 if (!languageRow.IsLoaded) return;
-                var options = session.SupportedLanguages.Select(code => new PrototypeChoice(code,
+                var options = session.SupportedLanguages.Select(code => new Choice(code,
                     LanguageName(code), "Supported by the active model")).ToArray();
-                language.SetOptions(options.Length == 0 || session.UsesRegistryProvider ? new PrototypeChoice[] { new("auto", "Automatic", "Language detection by the model") }.Concat(options).ToArray() : options, session.Language);
+                language.SetOptions(options.Length == 0 || session.UsesRegistryProvider ? new Choice[] { new("auto", "Automatic", "Language detection by the model") }.Concat(options).ToArray() : options, session.Language);
                 language.IsEnabled = selectedProviderId == session.ActiveProviderId && session.CanChangeProvider && (session.UsesRegistryProvider ? session.IsReady : session.CanSelectModel) && options.Length > 0;
             });
             languageRow.Loaded += (_, _) => { session.Models.Changed += RefreshLanguage; session.Changed += RefreshLanguage; RefreshLanguage(); };

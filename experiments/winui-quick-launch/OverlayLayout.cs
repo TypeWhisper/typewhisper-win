@@ -1,0 +1,27 @@
+namespace TypeWhisper.WinUI;
+
+internal enum OverlayAnchor { TopLeft, TopCenter, TopRight, BottomLeft, BottomCenter, BottomRight }
+internal enum OverlayWidget { None, Indicator, Waveform, Timer, Clock, Profile, HotkeyMode, AppName }
+
+internal sealed record OverlayPreferences(OverlayMode Mode, bool LiveText, bool TechnicalDetails,
+    OverlayAnchor Anchor = OverlayAnchor.BottomCenter,
+    OverlayWidget Left = OverlayWidget.Waveform,
+    OverlayWidget Right = OverlayWidget.Timer)
+{
+    internal bool AtTop => Anchor is OverlayAnchor.TopLeft or OverlayAnchor.TopCenter or OverlayAnchor.TopRight;
+    internal int HorizontalIndex => Anchor switch
+    {
+        OverlayAnchor.TopLeft or OverlayAnchor.BottomLeft => 0,
+        OverlayAnchor.TopRight or OverlayAnchor.BottomRight => 2,
+        _ => 1
+    };
+    internal static OverlayAnchor Snap(double x, double y) =>
+        (OverlayAnchor)((y < 0.5 ? 0 : 3) + (x < 0.25 ? 0 : x > 0.75 ? 2 : 1));
+
+    internal OverlayPreferences SelectWidget(bool left, OverlayWidget widget)
+    {
+        if (widget != OverlayWidget.None && widget == (left ? Right : Left))
+            return this with { Left = Right, Right = Left };
+        return left ? this with { Left = widget } : this with { Right = widget };
+    }
+}

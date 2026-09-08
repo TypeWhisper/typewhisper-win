@@ -12,7 +12,7 @@ Dictation selects a provider first and then a ready model. Plugin settings own m
 
 The sole 1.1 catalog is `https://typewhisper.github.io/typewhisper-win/plugins-v2.json`. There is no community feed or fallback to the old registry. The planned URL is fixed; publication and real remote acceptance remain outstanding. See [package contract](PLUGIN-PACKAGES-1.1.md).
 
-The approved prototype is the UI foundation. Retain its useful interaction patterns while replacing examples with real services. Do not treat an existing screen or settings control as completed integration. The old WPF application remains the shipping host. Old personal history import is not required; no existing production data is automatically moved, rewritten or deleted.
+The approved preview is the UI foundation. Retain its useful interaction patterns while replacing examples with real services. Do not treat an existing screen or settings control as completed integration. The old WPF application remains the shipping host. Old personal history import is not required; no existing production data is automatically moved, rewritten or deleted.
 
 ## Host and storage
 

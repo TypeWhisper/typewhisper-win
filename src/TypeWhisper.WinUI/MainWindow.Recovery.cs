@@ -4,18 +4,18 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private readonly HashSet<PrototypeDictationRecoveryView> _recoveryViews = [];
+    private readonly HashSet<DictationRecoveryView> _recoveryViews = [];
     private readonly List<Task> _recoveryViewDrains = [];
 
-    private PrototypeDictationRecoveryView CreateRecoveryView()
+    private DictationRecoveryView CreateRecoveryView()
     {
-        var view = new PrototypeDictationRecoveryView(_dictation.Recovery,
+        var view = new DictationRecoveryView(_dictation.Recovery,
             _dictation.RecoveryPreferences, _dictation.SaveRecoveryPreferencesAsync);
         _recoveryViews.Add(view);
         return view;
     }
 
-    private void CloseRecoveryView(PrototypeDictationRecoveryView? view)
+    private void CloseRecoveryView(DictationRecoveryView? view)
     {
         if (view is null || !_recoveryViews.Remove(view)) return;
         // A closed settings window must not leave an untracked writer or decoder.

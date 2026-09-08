@@ -17,15 +17,15 @@ public sealed class HistorySourceKindTests
     };
 
     [Theory]
-    [InlineData("dictation", PrototypeHistoryEntryKind.Dictation)]
-    [InlineData("recording", PrototypeHistoryEntryKind.Recording)]
-    [InlineData("file", PrototypeHistoryEntryKind.ImportedFile)]
-    [InlineData("future-source", PrototypeHistoryEntryKind.Unknown)]
-    [InlineData("Dictation", PrototypeHistoryEntryKind.Unknown)]
-    [InlineData(" dictation ", PrototypeHistoryEntryKind.Unknown)]
-    [InlineData(null, PrototypeHistoryEntryKind.Unknown)]
-    [InlineData("", PrototypeHistoryEntryKind.Unknown)]
-    public void OnlyExplicitKnownSourceValuesDetermineKind(string? source, PrototypeHistoryEntryKind expected)
+    [InlineData("dictation", HistoryEntryKind.Dictation)]
+    [InlineData("recording", HistoryEntryKind.Recording)]
+    [InlineData("file", HistoryEntryKind.ImportedFile)]
+    [InlineData("future-source", HistoryEntryKind.Unknown)]
+    [InlineData("Dictation", HistoryEntryKind.Unknown)]
+    [InlineData(" dictation ", HistoryEntryKind.Unknown)]
+    [InlineData(null, HistoryEntryKind.Unknown)]
+    [InlineData("", HistoryEntryKind.Unknown)]
+    public void OnlyExplicitKnownSourceValuesDetermineKind(string? source, HistoryEntryKind expected)
     {
         var original = Record("source", source);
         var loaded = JsonSerializer.Deserialize<TranscriptionRecord>(JsonSerializer.Serialize(original))!;
@@ -46,7 +46,7 @@ public sealed class HistorySourceKindTests
             """;
         var record = JsonSerializer.Deserialize<TranscriptionRecord>(json)!;
         Assert.Null(record.SourceKind);
-        Assert.Equal(PrototypeHistoryEntryKind.Unknown, HistoryEntryAdapter.FromRecord(record).Content.Kind);
+        Assert.Equal(HistoryEntryKind.Unknown, HistoryEntryAdapter.FromRecord(record).Content.Kind);
         Assert.DoesNotContain("SourceKind", JsonSerializer.Serialize(record));
     }
 
@@ -55,11 +55,11 @@ public sealed class HistorySourceKindTests
     {
         var records = new[] { Record("dictated", "dictation"), Record("recorded", "recording"),
             Record("imported", "file"), Record("legacy", null), Record("future", "future-source") };
-        var store = new PrototypeHistoryStore(records.Select(HistoryEntryAdapter.FromRecord));
+        var store = new HistoryStore(records.Select(HistoryEntryAdapter.FromRecord));
         Assert.Equal(5, store.Query().Count);
-        var dictation = Assert.Single(store.Query(kind: PrototypeHistoryEntryKind.Dictation));
+        var dictation = Assert.Single(store.Query(kind: HistoryEntryKind.Dictation));
         Assert.Equal("dictated", dictation.PersistedRecordId);
-        Assert.Equal(2, store.Query(kind: PrototypeHistoryEntryKind.Unknown).Count);
+        Assert.Equal(2, store.Query(kind: HistoryEntryKind.Unknown).Count);
     }
 
     [Fact]

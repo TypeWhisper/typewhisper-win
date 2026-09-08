@@ -2,7 +2,7 @@
     x:Class="TypeWhisper.WinUI.TranscriptPreviewWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="TypeWhisper Live Transcript Prototype">
+    Title="TypeWhisper Live Transcript">
 
     <Border x:Name="TranscriptRoot"
             Background="{ThemeResource SurfaceBrush}"

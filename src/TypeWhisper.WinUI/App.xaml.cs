@@ -21,7 +21,7 @@ public partial class App : Application
             System.Diagnostics.Debug.WriteLine(args.Exception);
             try
             {
-                File.AppendAllText(Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-Prototype-errors.log"),
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log"),
                     $"{DateTimeOffset.Now:O} {args.Exception}\n");
             }
             catch (IOException) { }
@@ -78,6 +78,7 @@ public partial class App : Application
             return;
         }
         _window = new MainWindow();
+        _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
         _window.RestoreProfile = RestoreProfileAsync;
         if (request.ShowWindow) _window.ShowFromActivation();
         _tray = new TrayIconService(
@@ -214,9 +215,11 @@ public partial class App : Application
         }
     }
 
-    private async void ExitFromTray()
+    private async void ExitFromTray() => await ExitOrRestartAsync(restart: false);
+
+    private async Task<string?> ExitOrRestartAsync(bool restart)
     {
-        if (_exiting) return;
+        if (_exiting) return "The app is already shutting down.";
         _exiting = true;
         _tray?.SetShutdownState("Finishing shutdown…");
         try
@@ -224,8 +227,18 @@ public partial class App : Application
             if (_window is not null) await _window.ShutdownDictationAsync();
             _tray?.Dispose();
             _tray = null;
+            if (restart)
+            {
+                // Restart the same host only after all profile writers and native owners have drained.
+                // On success this API terminates the process; returning means restart failed.
+                var reason = AppInstance.Restart("");
+                var message = "Automatic restart failed. Close and reopen TypeWhisper to apply the plugin update.";
+                ShowProfileFailure(message, reason.ToString());
+                return message;
+            }
             _mainInstance?.UnregisterKey();
             Exit();
+            return null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -237,6 +250,7 @@ public partial class App : Application
                 _exiting = false;
                 _tray?.AllowShutdownRetry();
             }
+            return "Shutdown could not finish. Resolve the displayed error before restarting.";
         }
     }
 }

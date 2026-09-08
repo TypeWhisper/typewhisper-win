@@ -21,7 +21,7 @@ public sealed class ManualWorkflowTemplateTests : IDisposable
     public async Task EveryCatalogTemplatePersistsAndRunsTheExactCorePrompt(WorkflowTemplate template)
     {
         var workflow = Workflow(template);
-        var draft = PrototypeWorkflow.FromStored(workflow);
+        var draft = WorkflowDraft.FromStored(workflow);
         var store = new ManualWorkflowStore(StorePath);
         Assert.True(ManualWorkflowStore.IsSupported(workflow));
         store.Save(draft.ToStored());
@@ -49,10 +49,10 @@ public sealed class ManualWorkflowTemplateTests : IDisposable
     [InlineData("日本語", "日本語")]
     public void TranslationTargetRoundTripsAndFeedsCorePrompt(string? target, string expected)
     {
-        var draft = PrototypeWorkflow.FromStored(Workflow(WorkflowTemplate.Translation)) with { TranslationTarget = target, Instruction = "Keep names unchanged." };
+        var draft = WorkflowDraft.FromStored(Workflow(WorkflowTemplate.Translation)) with { TranslationTarget = target, Instruction = "Keep names unchanged." };
         var store = new ManualWorkflowStore(StorePath);
         store.Save(draft.ToStored());
-        var restored = PrototypeWorkflow.FromStored(Assert.Single(store.Read()));
+        var restored = WorkflowDraft.FromStored(Assert.Single(store.Read()));
         Assert.Equal(target, restored.TranslationTarget);
         Assert.Contains($"into {expected}", restored.ToStored().SystemPrompt());
         Assert.Contains("Keep names unchanged.", restored.ToStored().SystemPrompt());
@@ -81,7 +81,7 @@ public sealed class ManualWorkflowTemplateTests : IDisposable
             Output = new() { AutoEnter = true },
             Behavior = new() { ProviderOverride = "provider", ModelOverride = "model", InputLanguage = "de", InputLanguageHints = ["de", "en"], TranslationTarget = "French" }
         };
-        var opened = PrototypeWorkflow.FromStored(original);
+        var opened = WorkflowDraft.FromStored(original);
         var edited = opened with { Template = WorkflowTemplate.Summary, Instruction = "Keep all dates." };
         var stored = edited.ToStored();
         Assert.Equal(WorkflowTemplate.Translation, opened.Template);

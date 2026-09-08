@@ -49,7 +49,7 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
-    private static readonly IReadOnlyList<PrototypeCommand> Commands =
+    private static readonly IReadOnlyList<Command> Commands =
     [
         new("Pinned", "microphone", "Dictation", "Focus a text field, then use your dictation shortcut", "", "Configure Main dictation in Settings > Shortcuts. Use the shortcut to start, and again to finish."),
         new("Pinned", "history", "History", "Browse, search, copy, and export transcriptions", "H", "Opens History in workspace mode. Full transcript search remains inside this explicit scope."),
@@ -66,10 +66,10 @@ public sealed partial class MainWindow : Window
         new("Suggested", "stats", "Statistics", "Words, streaks, apps, and models", "", "Explore your usage over time."),
     ];
 
-    internal ObservableCollection<PrototypeCommand> FilteredItems { get; } = [];
+    internal ObservableCollection<Command> FilteredItems { get; } = [];
 
     private readonly Stopwatch _activationStopwatch = Stopwatch.StartNew();
-    private readonly PrototypeHotkeyRegistration? _hotkeyRegistration;
+    private readonly HotkeyRegistration? _hotkeyRegistration;
     private DictationHotkeyRegistration? _dictationHotkey;
     private ProcessingCancelHotkeyRegistration? _cancelProcessingHotkey;
     private TypeWhisper.Presentation.DictationInputCoordinator? _dictationInput;
@@ -178,6 +178,13 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) MetricsText.Text = "Could not finish cancellation. Try again."; }
     }
+    internal Func<Task<string?>>? RestartApplicationAsync { get; set; }
+    private Task<string?> RestartForPluginUpdateAsync()
+    {
+        if (_closing || _profileRestoreClosing || !_dictation.CanChangeProvider || _dictation.Models.Busy || _dictation.CtcVocabulary.Busy)
+            return Task.FromResult<string?>("Finish recording and processing before restarting TypeWhisper.");
+        return RestartApplicationAsync?.Invoke() ?? Task.FromResult<string?>("Restart is currently unavailable.");
+    }
     private bool _closing;
     private readonly TypeWhisper.Presentation.AsyncShutdownCoordinator _shutdown = new();
     internal async Task ShutdownDictationAsync()
@@ -285,23 +292,23 @@ public sealed partial class MainWindow : Window
         await Task.Delay(5000);
         if (_overlayRevision == revision) _liveOverlay?.HidePreview();
     }
-    private PrototypeCommand? _selected;
+    private Command? _selected;
     private OverlayWindow? _overlay;
-    private PrototypeSettingsWindow? _settingsWindow;
+    private SettingsWindow? _settingsWindow;
     private bool _technicalDetailsEnabled;
     private bool _isSearchEditing;
     private bool _transcriptPreviewEnabled = true;
     private uint _appliedWindowDpi;
-    private PrototypeOverlayMode _overlayMode = PrototypeOverlayMode.Standard;
+    private OverlayMode _overlayMode = OverlayMode.Standard;
     private bool _historyOpen;
     private bool _recorderOpen;
     private bool _workflowsOpen;
     private bool _pluginsOpen;
     private bool _marketplaceOpen;
     private string _launcherQuery = string.Empty;
-    private PrototypeFileTranscriptionView? _fileTranscription;
+    private FileTranscriptionView? _fileTranscription;
     private bool FileTranscriptionOpen => FileTranscriptionHost.Visibility == Visibility.Visible;
-    private PrototypeLexiconView? _lexicon;
+    private LexiconView? _lexicon;
     private bool LexiconOpen => LexiconHost.Visibility == Visibility.Visible;
 
     internal void ShowOutputReview(TypeWhisper.Presentation.DictationOutputResult result)
@@ -429,6 +436,7 @@ public sealed partial class MainWindow : Window
             await PluginsView.OpenInstalledAsync(id);
         };
         PluginsView.MarketplaceRequested += (_, _) => SwitchIntegrationTab(discover: true);
+        MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
         MarketplaceView.InstalledRequested += (_, _) => SwitchIntegrationTab(discover: false);
         PluginsView.ReturnToDictationRequested += (_, _) =>
         {
@@ -467,7 +475,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            _hotkeyRegistration = new PrototypeHotkeyRegistration(this, ShowFromHotkey);
+            _hotkeyRegistration = new HotkeyRegistration(this, ShowFromHotkey);
             var savedHotkey = File.Exists(LauncherHotkeyPath) ? File.ReadAllText(LauncherHotkeyPath) : "Alt+Space";
             var hotkeyError = _hotkeyRegistration.TryChange(savedHotkey);
             if (hotkeyError is not null) MetricsText.Text = hotkeyError;
@@ -743,21 +751,21 @@ public sealed partial class MainWindow : Window
 
     private void Results_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is ListView { SelectedItem: PrototypeCommand command })
+        if (sender is ListView { SelectedItem: Command command })
         {
             _selected = command;
             UpdateDetail(command);
         }
     }
 
-    private void UpdateDetail(PrototypeCommand? command)
+    private void UpdateDetail(Command? command)
     {
         _selected = command;
     }
 
     private void Results_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is PrototypeCommand command)
+        if (e.ClickedItem is Command command)
         {
             _selected = command;
             RunSelected();
@@ -802,7 +810,7 @@ public sealed partial class MainWindow : Window
         else if (_selected?.Title.Contains("dictation", StringComparison.OrdinalIgnoreCase) == true)
             MetricsText.Text = DictationStatusForDisplay;
         else if (_selected is not null)
-            MetricsText.Text = $"Executed {_selected.Title} · prototype data only";
+            MetricsText.Text = $"Executed {_selected.Title} · preview data only";
     }
 
     private void ToggleActions()
@@ -830,7 +838,7 @@ public sealed partial class MainWindow : Window
             _overlay.ActivateWithoutTakingFocus();
             OverlayPreviewPanel.Visibility = _historyOpen || _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen ? Visibility.Collapsed : Visibility.Visible;
             UpdateOverlayControls();
-            MetricsText.Text = _overlayMode == PrototypeOverlayMode.Minimal
+            MetricsText.Text = _overlayMode == OverlayMode.Minimal
                 ? "Overlay active · minimal indicator"
                 : _transcriptPreviewEnabled
                 ? "Overlay active · live transcript preview on"
@@ -1000,9 +1008,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private PrototypeOverlayPreferences _layoutPreferences = new(PrototypeOverlayMode.Standard, true, false);
+    private OverlayPreferences _layoutPreferences = new(OverlayMode.Standard, true, false);
     private readonly Dictionary<string, string> _settingsValues = new();
-    private PrototypeOverlayPreferences OverlayPreferences => _layoutPreferences with { Mode = _overlayMode, LiveText = _transcriptPreviewEnabled, TechnicalDetails = _technicalDetailsEnabled };
+    private OverlayPreferences OverlayPreferences => _layoutPreferences with { Mode = _overlayMode, LiveText = _transcriptPreviewEnabled, TechnicalDetails = _technicalDetailsEnabled };
     private static readonly string OverlayPreferencesPath = WinUIProfile.DataPath("overlay.json");
     private void LoadOverlayPreferences()
     {
@@ -1017,7 +1025,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         { MetricsText.Text = "Could not load overlay preferences: " + ex.Message; }
     }
-    private bool SaveOverlayPreferences(PrototypeOverlayPreferences? preferences = null)
+    private bool SaveOverlayPreferences(OverlayPreferences? preferences = null)
     {
         try
         {
@@ -1038,7 +1046,7 @@ public sealed partial class MainWindow : Window
     {
         if (_lexicon is null)
         {
-            _lexicon = new PrototypeLexiconView();
+            _lexicon = new LexiconView();
             _lexicon.ExitRequested += () =>
             {
                 LexiconHost.Visibility = Visibility.Collapsed;
@@ -1057,7 +1065,7 @@ public sealed partial class MainWindow : Window
     {
         if (_fileTranscription is null)
         {
-            _fileTranscription = new PrototypeFileTranscriptionView();
+            _fileTranscription = new FileTranscriptionView();
             _fileTranscription.Connect(_dictation);
             _fileTranscription.ExitRequested += () =>
             {
@@ -1078,7 +1086,7 @@ public sealed partial class MainWindow : Window
         if (_profileRestoreClosing) return;
         if (_settingsWindow is null)
         {
-            _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
+            _settingsWindow = new SettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
@@ -1097,12 +1105,12 @@ public sealed partial class MainWindow : Window
                 _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey.Value;
                 return error;
             };
-            _settingsWindow.CreateSetupWizard = exit => new PrototypeSetupWizard(_settingsValues, exit,
+            _settingsWindow.CreateSetupWizard = exit => new SetupWizard(_settingsValues, exit,
                 value => _closing || _profileRestoreClosing ? "The app is shutting down." : ChangeDictationHotkeys(value),
                 _dictation, OpenProviderSettings);
             var dictationSettings = new LiveDictationSettings(_dictation, OpenProviderSettings);
             var startup = WindowsStartupRegistration.Create();
-            PrototypeDictationRecoveryView? recoveryView = null;
+            DictationRecoveryView? recoveryView = null;
             _settingsWindow.ConfigureLiveSettings = (category, content, pickers) =>
             {
                 dictationSettings.Configure(category, content, pickers);
@@ -1423,7 +1431,7 @@ public sealed partial class MainWindow : Window
     }
     private void OverlayMode_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: string mode } && Enum.TryParse<PrototypeOverlayMode>(mode, out var selected))
+        if (sender is Button { Tag: string mode } && Enum.TryParse<OverlayMode>(mode, out var selected))
         {
             _overlayMode = selected;
             SaveOverlayPreferences();
@@ -1453,10 +1461,10 @@ public sealed partial class MainWindow : Window
         {
             var selected = (string)button.Tag == _overlayMode.ToString();
             button.Style = (Style)Application.Current.Resources[selected
-                ? "PrototypePrimaryButtonStyle" : "PrototypeSecondaryButtonStyle"];
+                ? "PrimaryButtonStyle" : "SecondaryButtonStyle"];
         }
         PausePreviewButton.Content = _overlay?.IsPaused == true ? "Resume" : "Pause";
-        var minimal = _overlayMode == PrototypeOverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
+        var minimal = _overlayMode == OverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
         UpdateTranscriptToggle();
         OverlayPreviewHint.Text = minimal
             ? "Minimal: indicator only at the screen edge · live-text preference remembered"
@@ -1464,7 +1472,7 @@ public sealed partial class MainWindow : Window
     }
     private void UpdateTranscriptToggle()
     {
-        var minimal = _overlayMode == PrototypeOverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
+        var minimal = _overlayMode == OverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
         var available = _dictation.SupportsLiveTranscription;
         TranscriptToggleButton.IsEnabled = !minimal && available;
         TranscriptToggleButton.Content = !available ? "Live text · Unavailable" : minimal ? "Live text  —" : _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
@@ -1497,7 +1505,7 @@ public sealed partial class MainWindow : Window
     private void PinButton_Click(object sender, RoutedEventArgs e)
     {
         ActionPanel.Visibility = Visibility.Collapsed;
-        MetricsText.Text = _selected is null ? "Nothing selected" : $"Pinned {_selected.Title} · in-memory prototype";
+        MetricsText.Text = _selected is null ? "Nothing selected" : $"Pinned {_selected.Title} · in-memory preview";
     }
 
     [DllImport("user32.dll")]

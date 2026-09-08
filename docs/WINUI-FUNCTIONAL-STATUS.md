@@ -34,7 +34,7 @@ The prescribed normal-profile build/relaunch passed (`artifacts/tab-position-bui
 
 ## Shared section tabs (`2dc89f59`), 2026-09-08
 
-PrototypeTabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.
+TabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.
 
 Recorder tabs move from the top-right title row to the left below the title. Lexicon tabs keep stable controls rather than rebuilding buttons on each render, preserving keyboard focus. Section tabs stay outside scrollable content; narrow strips can scroll to the focused item. Existing editor/detail visibility and navigation guards are retained.
 
@@ -128,7 +128,7 @@ API references: [MediaSource playback](https://learn.microsoft.com/en-us/windows
 
 Marco reported that the app was not visible. The process existed but had no main window: the diagnostic log showed `Delegate to an instance method cannot have null this` in the MainWindow constructor. The new History delegates had been assigned before `_dictation` was constructed. Initialization now precedes those bindings.
 
-The prescribed normal-profile build/relaunch passed (`artifacts/history-startup-fix.log`). The restarted process exposed a nonzero main-window handle and title `TypeWhisper Quick Launch Prototype`; the diagnostic log remained unchanged from before the corrected launch. Earlier History read-back launch claims based only on process existence were insufficient and are superseded by this evidence. Native History read/stop acceptance still remains open.
+The prescribed normal-profile build/relaunch passed (`artifacts/history-startup-fix.log`). The restarted process exposed a nonzero main-window handle and title `TypeWhisper Quick Launch Application`; the diagnostic log remained unchanged from before the corrected launch. Earlier History read-back launch claims based only on process existence were insufficient and are superseded by this evidence. Native History read/stop acceptance still remains open.
 
 ## History read-back (`90a3914b`), 2026-09-08
 
@@ -279,7 +279,7 @@ Audited snapshots:
 - Previous Windows: `e18adcd51a2e80f904a55ad2aa2282dab1f54296`, local checkout `F:/typewhisper/typewhisper-win`.
 - Mac: `357fe6f70a463ae376e485e5c1ef4f4d24db2c1e`, local checkout `F:/typewhisper/typewhisper-mac`.
 
-The comparison follows entry points, service consumers, settings callbacks, persistence and processing calls. A service in Core, a linked source file, an SDK interface or a rendered setting is not enough to count as connected. Conversely, a `Prototype` filename does not imply a fake feature: dictionary editing and history reading are connected despite their names.
+The comparison follows entry points, service consumers, settings callbacks, persistence and processing calls. A service in Core, a linked source file, an SDK interface or a rendered setting is not enough to count as connected. Conversely, a `Application` filename does not imply a fake feature: dictionary editing and history reading are connected despite their names.
 
 Status applies to **WinUI**: **Connected** means the stated runtime path exists; **Partial** means a useful subset exists with the listed gaps; **Preview** means sample/session behavior; **Missing** means no corresponding WinUI integration was found; **Decision** means platform or product scope needs an explicit choice. None means release acceptance is complete. Reference columns describe source implementations at the pinned snapshots, not fresh end-to-end validation. “Not found” is limited to this audit.
 
@@ -295,7 +295,7 @@ Status applies to **WinUI**: **Connected** means the stated runtime path exists;
 
 ## Dictation, audio and text processing
 
-Sources: [WinUI session](../src/TypeWhisper.WinUI/LocalDictationSession.cs), [live settings](../src/TypeWhisper.WinUI/LiveDictationSettings.cs), [dictation settings](../src/TypeWhisper.WinUI/PrototypeDictationSettings.cs), [audio settings](../src/TypeWhisper.WinUI/LiveAudioSettings.cs), [Windows dictation][w-dictation], [Windows pipeline][w-pipeline], [Mac dictation][m-dictation], [Mac pipeline][m-pipeline].
+Sources: [WinUI session](../src/TypeWhisper.WinUI/LocalDictationSession.cs), [live settings](../src/TypeWhisper.WinUI/LiveDictationSettings.cs), [dictation settings](../src/TypeWhisper.WinUI/DictationSettings.cs), [audio settings](../src/TypeWhisper.WinUI/LiveAudioSettings.cs), [Windows dictation][w-dictation], [Windows pipeline][w-pipeline], [Mac dictation][m-dictation], [Mac pipeline][m-pipeline].
 
 | Feature | Previous Windows | Mac | WinUI status and remaining work |
 |---|---|---|---|
@@ -326,7 +326,7 @@ Sources: [WinUI session](../src/TypeWhisper.WinUI/LocalDictationSession.cs), [li
 
 ## Dictionary, snippets, workflows and extensibility
 
-Sources: [WinUI lexicon](../src/TypeWhisper.WinUI/PrototypeLexicon.cs), [dictionary snapshot](../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs), [snippet snapshot](../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs), [manual workflows](../src/TypeWhisper.WinUI/PrototypeWorkflowsView.xaml.cs), [Windows workflows][w-workflows], [Windows plugin manager][w-plugins], [Mac workflows][m-workflows], [Mac plugin manager][m-plugins].
+Sources: [WinUI lexicon](../src/TypeWhisper.WinUI/Lexicon.cs), [dictionary snapshot](../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs), [snippet snapshot](../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs), [manual workflows](../src/TypeWhisper.WinUI/WorkflowsView.xaml.cs), [Windows workflows][w-workflows], [Windows plugin manager][w-plugins], [Mac workflows][m-workflows], [Mac plugin manager][m-plugins].
 
 | Feature | Previous Windows | Mac | WinUI status and remaining work |
 |---|---|---|---|
@@ -349,7 +349,7 @@ Sources: [WinUI lexicon](../src/TypeWhisper.WinUI/PrototypeLexicon.cs), [diction
 
 ## History, recording and files
 
-Sources: [WinUI history](../src/TypeWhisper.WinUI/PrototypeHistoryView.xaml.cs), [history adapter](../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs), [recorder](../src/TypeWhisper.WinUI/PrototypeRecorderView.xaml.cs), [file processing](../src/TypeWhisper.WinUI/PrototypeFileTranscriptionView.cs), [Windows history][w-history], [Windows files][w-files], [Windows recorder][w-recorder], [Mac history][m-history], [Mac files][m-files], [Mac recorder][m-recorder].
+Sources: [WinUI history](../src/TypeWhisper.WinUI/HistoryView.xaml.cs), [history adapter](../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs), [recorder](../src/TypeWhisper.WinUI/RecorderView.xaml.cs), [file processing](../src/TypeWhisper.WinUI/FileTranscriptionView.cs), [Windows history][w-history], [Windows files][w-files], [Windows recorder][w-recorder], [Mac history][m-history], [Mac files][m-files], [Mac recorder][m-recorder].
 
 | Feature | Previous Windows | Mac | WinUI status and remaining work |
 |---|---|---|---|
@@ -371,7 +371,7 @@ Sources: [WinUI history](../src/TypeWhisper.WinUI/PrototypeHistoryView.xaml.cs),
 
 ## Application, data and release
 
-Sources: [WinUI entry point](../src/TypeWhisper.WinUI/App.xaml.cs), [settings shell](../src/TypeWhisper.WinUI/PrototypeSettingsWindow.xaml.cs), [settings catalog](../src/TypeWhisper.WinUI/PrototypeSettingsCatalog.cs), [usage fixtures](../src/TypeWhisper.WinUI/PrototypeUsageData.cs), [setup](../src/TypeWhisper.WinUI/PrototypeSetupWizard.cs), [account](../src/TypeWhisper.WinUI/PrototypeAccountView.cs), [sync/backup](../src/TypeWhisper.WinUI/PrototypeSyncBackupView.cs), [project](../src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj), [Windows startup/services][w-app], [Mac service composition][m-services].
+Sources: [WinUI entry point](../src/TypeWhisper.WinUI/App.xaml.cs), [settings shell](../src/TypeWhisper.WinUI/SettingsWindow.xaml.cs), [settings catalog](../src/TypeWhisper.WinUI/SettingsCatalog.cs), [usage fixtures](../src/TypeWhisper.WinUI/UsageData.cs), [setup](../src/TypeWhisper.WinUI/SetupWizard.cs), [account](../src/TypeWhisper.WinUI/AccountView.cs), [sync/backup](../src/TypeWhisper.WinUI/SyncBackupView.cs), [project](../src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj), [Windows startup/services][w-app], [Mac service composition][m-services].
 
 | Feature | Previous Windows | Mac | WinUI status and remaining work |
 |---|---|---|---|
@@ -409,7 +409,7 @@ Both reference applications already separate installed integrations from discove
 | Package contract | Plugin-owned `portable.proj`, tests and output directory; generic build discovery | Scale to remaining source plugins; remove host-specific provider/dependency assumptions where contracts should own them. |
 | Trust | Checksums and metadata validation; plugins run in process | Decide publisher/authenticity policy. SHA-256 is not a signature or sandbox; legacy Windows has a separate registry trust validator. |
 
-See [package contract](PLUGIN-PACKAGES-1.1.md), [store](../src/TypeWhisper.PluginHost/PortablePluginStore.cs), [catalog](../src/TypeWhisper.PluginHost/PortablePluginCatalog.cs), and [Installed UI](../src/TypeWhisper.WinUI/PrototypePluginsView.xaml.cs).
+See [package contract](PLUGIN-PACKAGES-1.1.md), [store](../src/TypeWhisper.PluginHost/PortablePluginStore.cs), [catalog](../src/TypeWhisper.PluginHost/PortablePluginCatalog.cs), and [Installed UI](../src/TypeWhisper.WinUI/PluginsView.xaml.cs).
 
 ## Plugin source inventory
 

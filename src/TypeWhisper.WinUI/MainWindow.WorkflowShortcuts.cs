@@ -5,7 +5,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private PrototypeHotkeyRegistration? _workflowHotkeys;
+    private HotkeyRegistration? _workflowHotkeys;
     private WorkflowShortcutCatalog? _workflowShortcuts;
     private CancellationTokenSource? _workflowCancellation;
     private Task? _workflowTask;
@@ -16,7 +16,7 @@ public sealed partial class MainWindow
     private void InitializeWorkflowShortcuts()
     {
         if (_closing) return;
-        _workflowHotkeys = new PrototypeHotkeyRegistration(this, RunWorkflowShortcut, 0x7800);
+        _workflowHotkeys = new HotkeyRegistration(this, RunWorkflowShortcut, 0x7800);
         _workflowShortcuts = new(new(WinUIProfile.DataPath("workflows.json")), new WorkflowHotkeyBackend(_workflowHotkeys), value =>
         {
             if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
@@ -48,14 +48,14 @@ public sealed partial class MainWindow
     {
         var workflow = _workflowShortcuts?.Resolve(chord);
         if (workflow is null) return;
-        if (!_closing && !_profileRestoreClosing && !_workflowShortcutsStopping && !PrototypeShortcutRecorder.AnyEditing
+        if (!_closing && !_profileRestoreClosing && !_workflowShortcutsStopping && !ShortcutRecorder.AnyEditing
             && ManualWorkflowStore.IsDictationShortcut(workflow) && _dictationInput?.IsRecordingOrStarting == true)
         {
             _ = _dictationInput.SubmitAsync(DictationInputAction.Stop);
             return;
         }
         if (_closing || _profileRestoreClosing || _workflowShortcutsStopping || _workflowTask is { IsCompleted: false }
-            || PrototypeShortcutRecorder.AnyEditing || WorkflowsView.IsBusy || !_dictation.CanChangeProvider
+            || ShortcutRecorder.AnyEditing || WorkflowsView.IsBusy || !_dictation.CanChangeProvider
             || _dictationInitialization is not { IsCompleted: true } || _dictationInput?.IsRecordingOrStarting == true) return;
         var usesDefault = workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit;
         try { workflow = _dictation.WorkflowDefaults.Resolve(workflow); }
@@ -163,7 +163,7 @@ public sealed partial class MainWindow
         if (_workflowTask is not null) await _workflowTask;
         await Task.WhenAll(_workflowWindows.ToArray().Select(w => w.ShutdownAsync()));
     }
-    private sealed class WorkflowHotkeyBackend(PrototypeHotkeyRegistration registration) : IProcessingCancelShortcutBackend
+    private sealed class WorkflowHotkeyBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
     {
         public string Value => registration.Value;
         public string? TryChange(string value) => registration.TryChange(value);

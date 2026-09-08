@@ -7,25 +7,25 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveTranscriptionTaskSettings
 {
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
         var row = FindRow(content, "TranscriptionTask") ?? throw new InvalidOperationException("Transcription task row is missing.");
-        foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
         row.Children.Add(Label("Transcription task", 14));
-        var picker = new PrototypeChoicePicker();
+        var picker = new ChoicePicker();
         picker.Configure("Transcription task", "language", "Preference TranscriptionTask");
         row.Children.Add(picker); pickers.Add(picker);
         var status = Label(""); row.Children.Add(status);
         string? selectionError = null;
 
-        // Replace the preview-only target picker and detach it from its prototype
+        // Replace the preview-only target picker and detach it from its preview
         // visibility rule, which reads a separate non-persistent values dictionary.
         if (FindRow(content, "TranslationTargetLanguage") is { } target)
         {
-            foreach (var old in target.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+            foreach (var old in target.Children.OfType<ChoicePicker>()) pickers.Remove(old);
             RemoveRow(content, target);
             target.Children.Clear();
             target.Children.Add(Label("Translation language", 14));

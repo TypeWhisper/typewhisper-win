@@ -6,7 +6,7 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class DictationHotkeyRegistration : IDisposable
 {
-    private readonly PrototypeHotkeyRegistration _regular;
+    private readonly HotkeyRegistration _regular;
     private readonly HookProc _callback;
     private readonly IntPtr _hook;
     private HashSet<string> _bindings = [];
@@ -24,7 +24,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
             // The hook runs on the installing UI thread. The receiver only captures
             // intent here and schedules audio work through its bounded coordinator.
             // This preserves event-time readiness before a long UI queue can drain.
-            if (action is not null && !_disposed && !PrototypeShortcutRecorder.AnyEditing) invoke(action.Value);
+            if (action is not null && !_disposed && !ShortcutRecorder.AnyEditing) invoke(action.Value);
         }
         _callback = (code, message, data) =>
         {
@@ -41,7 +41,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
                 {
                     var down = message.ToInt64() is 0x100 or 0x104;
                     var up = message.ToInt64() is 0x101 or 0x105;
-                    if (PrototypeShortcutRecorder.AnyEditing) _state = new();
+                    if (ShortcutRecorder.AnyEditing) _state = new();
                     else if (down || up)
                     {
                         var mode = recordingMode();
@@ -58,9 +58,9 @@ internal sealed class DictationHotkeyRegistration : IDisposable
 
     internal string? TryChange(string value)
     {
-        var chords = PrototypeShortcutRules.Split(value).Select(PrototypeShortcutRules.Normalize).Distinct().ToArray();
+        var chords = ShortcutRules.Split(value).Select(ShortcutRules.Normalize).Distinct().ToArray();
         foreach (var chord in chords)
-            if (PrototypeShortcutRules.Validate(chord, true) is string error) return error;
+            if (ShortcutRules.Validate(chord, true) is string error) return error;
         static bool ModifierOnly(string chord) => chord.Split('+').All(p => p is "CTRL" or "ALT" or "SHIFT" or "WIN");
         var registrationError = _regular.TryChange(string.Join(",", chords.Where(c => !ModifierOnly(c))));
         if (registrationError is not null) return registrationError;

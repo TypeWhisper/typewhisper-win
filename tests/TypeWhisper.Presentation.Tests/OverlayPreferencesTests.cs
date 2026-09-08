@@ -17,8 +17,8 @@ public sealed class OverlayPreferencesTests : IDisposable
         var loaded = OverlayPreferencesStore.Read(FilePath);
         Assert.Equal(12, loaded.LiveTranscriptionFontSize);
         Assert.Equal(1500, loaded.PreviewBubbleAutoHideMilliseconds);
-        Assert.Equal(PrototypeOverlayMode.Compact, loaded.Mode);
-        Assert.Equal(PrototypeOverlayAnchor.TopRight, loaded.Anchor);
+        Assert.Equal(OverlayMode.Compact, loaded.Mode);
+        Assert.Equal(OverlayAnchor.TopRight, loaded.Anchor);
         Assert.False(loaded.LiveText);
     }
 
@@ -28,7 +28,7 @@ public sealed class OverlayPreferencesTests : IDisposable
     [InlineData(13.5, 1200)]
     public void BoundaryValuesPersistAcrossRestart(double size, int delay)
     {
-        var expected = new PrototypeOverlayPreferences(PrototypeOverlayMode.Standard, true, false,
+        var expected = new OverlayPreferences(OverlayMode.Standard, true, false,
             LiveTranscriptionFontSize: size, PreviewBubbleAutoHideMilliseconds: delay);
         OverlayPreferencesStore.Save(FilePath, expected);
         Assert.Equal(expected, OverlayPreferencesStore.Read(FilePath));
@@ -42,7 +42,7 @@ public sealed class OverlayPreferencesTests : IDisposable
     [InlineData(double.NaN, 1500)]
     public void InvalidChoicesDoNotOverwriteSavedPreferences(double size, int delay)
     {
-        var valid = new PrototypeOverlayPreferences(PrototypeOverlayMode.Standard, true, false);
+        var valid = new OverlayPreferences(OverlayMode.Standard, true, false);
         OverlayPreferencesStore.Save(FilePath, valid);
         Assert.Throws<ArgumentException>(() => OverlayPreferencesStore.Save(FilePath, valid with
             { LiveTranscriptionFontSize = size, PreviewBubbleAutoHideMilliseconds = delay }));
@@ -60,7 +60,7 @@ public sealed class OverlayPreferencesTests : IDisposable
     [Fact]
     public void FailedWritePreservesExistingPreferencesAndCleansTemporaryFile()
     {
-        var valid = new PrototypeOverlayPreferences(PrototypeOverlayMode.Standard, true, false);
+        var valid = new OverlayPreferences(OverlayMode.Standard, true, false);
         OverlayPreferencesStore.Save(FilePath, valid);
         var blocked = Path.Combine(_directory, "blocked");
         Directory.CreateDirectory(blocked);

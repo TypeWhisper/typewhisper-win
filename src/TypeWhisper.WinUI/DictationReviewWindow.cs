@@ -48,7 +48,7 @@ internal sealed class DictationReviewWindow : Window
         Grid.SetRow(transcript, 1); body.Children.Add(transcript);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12,
             HorizontalAlignment = HorizontalAlignment.Right };
-        var copy = new HandCursorButton { Content = "Copy text", Style = (Style)Application.Current.Resources["PrototypePrimaryButtonStyle"] };
+        var copy = new HandCursorButton { Content = "Copy text", Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
         copy.Click += (_, _) =>
         {
             try
@@ -61,7 +61,7 @@ internal sealed class DictationReviewWindow : Window
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { status.Text = "Clipboard unavailable. Your text is still here; try again."; }
         };
-        var close = new HandCursorButton { Content = "Done", Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+        var close = new HandCursorButton { Content = "Done", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         close.Click += async (_, _) =>
         {
             try { await ShutdownAsync(); }
@@ -75,7 +75,7 @@ internal sealed class DictationReviewWindow : Window
         pluginActions.Children.Add(new TextBlock { Text = "Manual action", Foreground = (Brush)Application.Current.Resources["TextBrush"] });
         AutomationProperties.SetName(_actionPicker, "Manual plugin action");
         foreach (var action in available) _actionPicker.Items.Add(new ComboBoxItem { Content = action.Name, Tag = action });
-        _runAction.Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"];
+        _runAction.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
         _runAction.Content = "Run action";
         _actionPicker.SelectionChanged += (_, _) =>
         {

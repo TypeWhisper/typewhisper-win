@@ -53,7 +53,7 @@ internal sealed class LivePluginTextSettings : UserControl
             MaxHeight = field.IsMultiline ? 240 : 40,
             Padding = new Thickness(10, 8, 10, 8),
             Style = (Style)Application.Current.Resources[field.IsMultiline
-                ? "PrototypeLexiconMultilineStyle" : "PrototypeSearchTextBoxStyle"],
+                ? "LexiconMultilineStyle" : "SearchTextBoxStyle"],
             MaxLength = Math.Clamp(field.MaxLength, 1, 32768),
             Text = field.Value
         };
@@ -71,7 +71,7 @@ internal sealed class LivePluginTextSettings : UserControl
         input.LostFocus += (_, _) => fieldBorder.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
         _content.Children.Add(fieldBorder);
         var save = new HandCursorButton { Content = "Save " + field.Title, HorizontalAlignment = HorizontalAlignment.Left,
-            Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         var saving = false;
         input.Loaded += (_, _) => input.IsEnabled = !saving;
         save.Loaded += (_, _) => save.IsEnabled = !saving;

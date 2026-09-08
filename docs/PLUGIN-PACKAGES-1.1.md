@@ -110,9 +110,9 @@ of an already imported installation.
 ## Catalog contract
 
 The feed accepts an array of entries, or an object with a `plugins` array. Each entry
-uses the existing Windows field names:
+uses these field names:
 
-- `id`, `name`, `version`, `minHostVersion`, `author`, `description`, `category`
+- `id`, `name`, `version`, `minHostVersion`, `author`, `description`, `categories`
 - `downloadUrl`: absolute HTTPS URL of the ZIP
 - `sha256`: hexadecimal SHA-256 of the exact ZIP bytes
 - `size`: exact ZIP size in bytes, up to 1 GiB
@@ -172,3 +172,7 @@ before changing the catalog. Keep old assets available; do not overwrite legacy 
 `plugins.json`. Publish new plugin releases as prereleases with `latest=false` while 1.1 is in preview.
 
 Current assets: https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-preview-20260908
+
+The 1.1 catalog and portable manifests use only `categories`, an array of capability IDs.
+For example, Groq declares `["transcription", "llm"]`. There is no singular-field migration.
+The legacy Windows target retains its existing manifest contract.

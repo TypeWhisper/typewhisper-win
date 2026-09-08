@@ -43,13 +43,13 @@ internal sealed class WorkflowShortcutWindow : Window
         ScrollViewer.SetVerticalScrollBarVisibility(_text, ScrollBarVisibility.Auto);
         Grid.SetRow(_text, 1); body.Children.Add(_text);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Right };
-        _copy = new() { Content = "Copy text", IsEnabled = false, Style = (Style)Application.Current.Resources["PrototypePrimaryButtonStyle"] };
+        _copy = new() { Content = "Copy text", IsEnabled = false, Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
         _copy.Click += (_, _) =>
         {
             try { var data = new DataPackage(); data.SetText(_text.Text); Clipboard.SetContent(data); _status.Text = "Copied. Not saved to History."; }
             catch (Exception ex) when (ex is not OutOfMemoryException) { _status.Text = "The clipboard is unavailable. Your text is still here."; }
         };
-        _cancel = new() { Content = "Cancel", Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+        _cancel = new() { Content = "Cancel", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _cancel.Click += async (_, _) =>
         {
             try

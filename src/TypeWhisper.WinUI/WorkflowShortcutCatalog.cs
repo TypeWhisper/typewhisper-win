@@ -10,8 +10,8 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProces
     private Dictionary<string, Workflow> _active = new(StringComparer.Ordinal);
     internal string? Error { get; private set; }
     internal string ActiveValue => backend.Value;
-    internal static string Canonical(string value) => string.Join(",", PrototypeShortcutRules.Split(value)
-        .Select(PrototypeShortcutRules.Normalize).Distinct(StringComparer.Ordinal));
+    internal static string Canonical(string value) => string.Join(",", ShortcutRules.Split(value)
+        .Select(ShortcutRules.Normalize).Distinct(StringComparer.Ordinal));
 
     internal string? Initialize()
     {
@@ -19,7 +19,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProces
         catch (Exception ex) when (ex is not OutOfMemoryException) { return Error = "Workflow shortcuts are unavailable. " + ex.Message; }
     }
 
-    internal Workflow? Resolve(string chord) => _active.TryGetValue(PrototypeShortcutRules.Normalize(chord), out var workflow)
+    internal Workflow? Resolve(string chord) => _active.TryGetValue(ShortcutRules.Normalize(chord), out var workflow)
         ? Snapshot(workflow) : null;
 
     internal string? Conflict(string value, bool modifierOnly = false) =>
@@ -34,7 +34,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProces
             if (!enabled) return null;
             var other = store.Read().Where(w => w.Id != id).ToArray();
             var bindings = Build(other);
-            foreach (var chord in PrototypeShortcutRules.Split(Canonical(value)))
+            foreach (var chord in ShortcutRules.Split(Canonical(value)))
             {
                 if (reservedConflict(chord) is { } conflict) return conflict;
                 if (bindings.TryGetValue(chord, out var owner)) return "Already used by " + owner.Name + ".";
@@ -101,7 +101,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProces
             ValidateValue(value);
             // Copy every mutable collection used by this supported subset before publishing callbacks.
             var snapshot = Snapshot(workflow);
-            foreach (var chord in PrototypeShortcutRules.Split(Canonical(value)))
+            foreach (var chord in ShortcutRules.Split(Canonical(value)))
             {
                 if (reservedConflict(chord) is { } conflict) throw new InvalidOperationException(workflow.Name + ": " + conflict);
                 if (!result.TryAdd(chord, snapshot)) throw new InvalidOperationException(chord + " is assigned to more than one enabled workflow.");
@@ -120,11 +120,11 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProces
 
     private static void ValidateValue(string value)
     {
-        if (value.Length > 256 || PrototypeShortcutRules.Split(value).Length == 0 || value.Any(char.IsControl))
+        if (value.Length > 256 || ShortcutRules.Split(value).Length == 0 || value.Any(char.IsControl))
             throw new InvalidOperationException("Assign at least one shortcut (maximum 256 characters).");
-        foreach (var chord in PrototypeShortcutRules.Split(value))
-            if (PrototypeShortcutRules.Validate(chord, false) is { } error) throw new InvalidOperationException(error);
+        foreach (var chord in ShortcutRules.Split(value))
+            if (ShortcutRules.Validate(chord, false) is { } error) throw new InvalidOperationException(error);
     }
-    private static bool SameBindings(string left, string right) => PrototypeShortcutRules.Split(left).ToHashSet(StringComparer.Ordinal)
-        .SetEquals(PrototypeShortcutRules.Split(right));
+    private static bool SameBindings(string left, string right) => ShortcutRules.Split(left).ToHashSet(StringComparer.Ordinal)
+        .SetEquals(ShortcutRules.Split(right));
 }

@@ -9,16 +9,16 @@ namespace TypeWhisper.WinUI;
 internal static class LiveHistoryRetentionSettings
 {
     // Call after LiveOutputSettings: its preview controls are replaced here.
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
         HistoryRetentionController controller)
     {
         if (category != "Privacy") return;
         var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "HistoryRetentionMode"));
-        foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
         row.IsHitTestVisible = true;
         var oldDuration = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "HistoryRetentionMinutes"));
-        foreach (var old in oldDuration.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+        foreach (var old in oldDuration.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         oldDuration.Children.Clear();
         oldDuration.Visibility = Visibility.Collapsed;
         var oldNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("Automatic history deletion,"));
@@ -28,14 +28,14 @@ internal static class LiveHistoryRetentionSettings
 
         row.Children.Add(Label("History retention", 14));
         row.Children.Add(Label("Forever keeps existing history. A duration permanently deletes entries older than that age and their saved audio, including entries already in history. Age is measured from when an entry was created."));
-        var picker = new PrototypeChoicePicker();
+        var picker = new ChoicePicker();
         picker.Configure("History retention", "history", "History retention");
         var durationLabel = Label("Keep history for (minutes)");
         var duration = new NumberBox { Minimum = 1, Maximum = HistoryRetentionPreferences.MaximumMinutes,
             SmallChange = 60, LargeChange = 1440, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
         AutomationProperties.SetName(duration, "History retention in minutes");
         var apply = new HandCursorButton { Content = "Apply retention", HorizontalAlignment = HorizontalAlignment.Left,
-            Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         AutomationProperties.SetName(apply, "Apply history retention");
         var status = Label("");
         AutomationProperties.SetLiveSetting(status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);

@@ -48,11 +48,11 @@ public sealed class AutomaticWorkflowTests
             var path = Path.Combine(directory, "workflows.json");
             var foreign = Rule("foreign", new() { Kind = WorkflowTriggerKind.Hotkey, WebsitePatterns = ["example.com"] });
             Assert.True(new WorkflowService(path).TryReplaceAll([foreign]));
-            var draft = PrototypeWorkflow.FromStored(Rule("app", WorkflowTrigger.App("notepad"), -5));
+            var draft = WorkflowDraft.FromStored(Rule("app", WorkflowTrigger.App("notepad"), -5));
             var store = new ManualWorkflowStore(path);
             store.Save(draft.ToStored(), allowAutomatic: true);
             var saved = store.Read();
-            var restored = PrototypeWorkflow.FromStored(saved.Single(item => item.Id == "app"));
+            var restored = WorkflowDraft.FromStored(saved.Single(item => item.Id == "app"));
             Assert.Equal(WorkflowTriggerKind.App, restored.TriggerKind);
             Assert.Equal("notepad", restored.AppProcesses);
             Assert.Equal(-5, restored.Priority);

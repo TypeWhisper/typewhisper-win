@@ -10,17 +10,17 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveSpokenFormattingSettings
 {
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
         var row = FindRow(content, "SpokenFormattingProfiles") ?? throw new InvalidOperationException("Spoken formatting row is missing.");
-        foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
         row.Children.Add(Label("Spoken formatting", 14));
         var context = Label(""); row.Children.Add(context);
-        var language = new PrototypeChoicePicker(); language.Configure("Profile language", "language", "Spoken formatting profile language");
-        var strategy = new PrototypeChoicePicker(); strategy.Configure("Formatting strategy", "text", "Spoken formatting strategy");
+        var language = new ChoicePicker(); language.Configure("Profile language", "language", "Spoken formatting profile language");
+        var strategy = new ChoicePicker(); strategy.Configure("Formatting strategy", "text", "Spoken formatting strategy");
         row.Children.Add(language); row.Children.Add(strategy); pickers.Add(language); pickers.Add(strategy);
         row.Children.Add(Label("Local rules are available for English and German. A profile applies only to its engine, model and language. Automatic language needs a recognized language; native translation uses the English profile."));
         var status = Label(""); row.Children.Add(status);
@@ -29,7 +29,7 @@ internal static class LiveSpokenFormattingSettings
         appRow.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         appRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         appRow.Children.Add(Label("Markdown bullets in supported apps", 14));
-        var appToggle = PrototypeToggleSwitch.Create(session.TextPreferences.Current.AppFormattingEnabled);
+        var appToggle = AppToggleSwitch.Create(session.TextPreferences.Current.AppFormattingEnabled);
         AutomationProperties.SetName(appToggle, "Markdown bullets in supported apps");
         Grid.SetColumn(appToggle, 1); appRow.Children.Add(appToggle); row.Children.Add(appRow);
         row.Children.Add(Label("In Obsidian, Notion, MarkText, Typora and Bear, convert lines starting with “bullet ” to Markdown list items. Other output stays unchanged. Uses the app where recording started."));
@@ -46,7 +46,7 @@ internal static class LiveSpokenFormattingSettings
             displayedEngine = engine; displayedModel = model;
             var selectedTask = session.TranscriptionTaskPreferences.Current;
             if (selectedTask == TranscriptionTask.Translate) selectedLanguage = "en";
-            language.SetOptions(DictationFormatting.SupportedLanguages.Order().Select(code => new PrototypeChoice(code,
+            language.SetOptions(DictationFormatting.SupportedLanguages.Order().Select(code => new Choice(code,
                 code == "de" ? "German" : "English", "Profile language")).ToArray(), selectedLanguage);
             var profile = string.IsNullOrWhiteSpace(engine) ? null : DictationFormatting.Resolve(preferences, engine, model, selectedLanguage, null);
             strategy.SetOptions([

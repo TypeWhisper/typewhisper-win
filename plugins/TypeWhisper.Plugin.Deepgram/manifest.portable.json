@@ -7,7 +7,6 @@
   "assemblyName": "TypeWhisper.Plugin.Deepgram.dll",
   "pluginClass": "TypeWhisper.Plugin.Deepgram.DeepgramPlugin",
   "minHostVersion": "1.1.0",
-  "category": "transcription",
   "categories": [
     "transcription"
   ]

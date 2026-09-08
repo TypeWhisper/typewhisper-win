@@ -26,7 +26,7 @@ public sealed partial class OverlayWindow : Window
 
     private readonly Stopwatch _duration = new();
     private readonly float[] _levels = new float[64];
-    private readonly PrototypeAudioLevelSource _audioLevelSource = new();
+    private readonly AudioLevelSource _audioLevelSource = new();
     private readonly Random _random = new(73);
     private readonly Func<float>? _externalLevel;
     private readonly Func<DictationOverlayState>? _runtimeState;
@@ -41,7 +41,7 @@ public sealed partial class OverlayWindow : Window
     private bool _useMicrophone;
     private bool _isLoaded;
     private bool _transcriptPreviewEnabled;
-    private PrototypeOverlayMode _mode;
+    private OverlayMode _mode;
     private bool _previewVisible;
     private bool _sessionStarted;
     private bool _paused;
@@ -51,8 +51,8 @@ public sealed partial class OverlayWindow : Window
     private double _scale = 1;
     private int _logicalWidth = WindowWidth;
     private int _logicalHeight = WindowHeight;
-    private PrototypeOverlayPreferences _layout = new(PrototypeOverlayMode.Standard, true, false);
-    internal void SetLayout(PrototypeOverlayPreferences preferences)
+    private OverlayPreferences _layout = new(OverlayMode.Standard, true, false);
+    internal void SetLayout(OverlayPreferences preferences)
     {
         _layout = preferences;
         _transcriptWindow?.SetTextSize(preferences.LiveTranscriptionFontSize);
@@ -194,7 +194,7 @@ public sealed partial class OverlayWindow : Window
         StatusText.Foreground = new SolidColorBrush(_paused
             ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 59, 167, 255));
         RecordingDot.Visibility = _paused ? Visibility.Collapsed : Visibility.Visible;
-        if (_mode != PrototypeOverlayMode.Minimal)
+        if (_mode != OverlayMode.Minimal)
         {
             UpdateWidgetText(LeftWidgetText, _layout.Left);
             UpdateWidgetText(RightWidgetText, _layout.Right);
@@ -206,11 +206,11 @@ public sealed partial class OverlayWindow : Window
         _diagnosticDrawCount = 0;
     }
 
-    internal void SetMode(PrototypeOverlayMode mode, DisplayArea area)
+    internal void SetMode(OverlayMode mode, DisplayArea area)
     {
         _mode = mode;
-        var minimal = mode == PrototypeOverlayMode.Minimal;
-        var compact = mode == PrototypeOverlayMode.Compact;
+        var minimal = mode == OverlayMode.Minimal;
+        var compact = mode == OverlayMode.Compact;
         _logicalWidth = minimal ? 112 : compact ? 280 : WindowWidth;
         _logicalHeight = minimal ? 22 : compact ? 36 : WindowHeight;
         OverlayRoot.Padding = minimal ? new Thickness(16, 4, 16, 4) : compact ? new Thickness(12, 6, 12, 6) : new Thickness(14, 10, 14, 10);
@@ -219,7 +219,7 @@ public sealed partial class OverlayWindow : Window
         StatusHost.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
         StatusHost.Width = compact ? 42 : 104;
         StatusText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        DiagnosticsText.Visibility = _technicalDetails && mode == PrototypeOverlayMode.Standard ? Visibility.Visible : Visibility.Collapsed;
+        DiagnosticsText.Visibility = _technicalDetails && mode == OverlayMode.Standard ? Visibility.Visible : Visibility.Collapsed;
         DurationText.Margin = compact ? new Thickness(0) : new Thickness(0, 2, 0, 0);
         StatusText.FontSize = compact ? 8 : 9;
         WaveformHost.Height = minimal ? 14 : compact ? 24 : 42;
@@ -259,7 +259,7 @@ public sealed partial class OverlayWindow : Window
     internal void SetTranscriptPreviewEnabled(bool enabled)
     {
         _transcriptPreviewEnabled = enabled;
-        if (!_isLoaded || !_previewVisible || _mode == PrototypeOverlayMode.Minimal)
+        if (!_isLoaded || !_previewVisible || _mode == OverlayMode.Minimal)
             return;
 
         if (enabled)
@@ -271,7 +271,7 @@ public sealed partial class OverlayWindow : Window
     internal void SetTechnicalDetailsEnabled(bool enabled)
     {
         _technicalDetails = enabled;
-        DiagnosticsText.Visibility = enabled && _mode == PrototypeOverlayMode.Standard ? Visibility.Visible : Visibility.Collapsed;
+        DiagnosticsText.Visibility = enabled && _mode == OverlayMode.Standard ? Visibility.Visible : Visibility.Collapsed;
         _diagnosticSampleStart = Stopwatch.GetTimestamp();
         _diagnosticDrawCount = 0;
         DiagnosticsText.Text = _paused ? "Paused" : "Measuring…";
@@ -301,7 +301,7 @@ public sealed partial class OverlayWindow : Window
 
     private void SetJoinedShape(bool joined)
     {
-        OverlayRoot.CornerRadius = _mode == PrototypeOverlayMode.Minimal
+        OverlayRoot.CornerRadius = _mode == OverlayMode.Minimal
             ? (_layout.AtTop ? new CornerRadius(0, 0, 9, 9) : new CornerRadius(9, 9, 0, 0)) : joined
             ? (_layout.AtTop ? new CornerRadius(14, 14, 0, 0) : new CornerRadius(0, 0, 14, 14))
             : new CornerRadius(14);
@@ -311,37 +311,37 @@ public sealed partial class OverlayWindow : Window
 
     private void ApplyWidgets()
     {
-        var minimal = _mode == PrototypeOverlayMode.Minimal;
-        var left = minimal ? PrototypeOverlayWidget.Waveform : _layout.Left;
-        var right = minimal ? PrototypeOverlayWidget.None : _layout.Right;
-        WaveformHost.Visibility = left == PrototypeOverlayWidget.Waveform || right == PrototypeOverlayWidget.Waveform ? Visibility.Visible : Visibility.Collapsed;
-        Grid.SetColumn(WaveformHost, right == PrototypeOverlayWidget.Waveform ? 2 : 1);
-        StatusHost.Visibility = left == PrototypeOverlayWidget.Timer || right == PrototypeOverlayWidget.Timer ? Visibility.Visible : Visibility.Collapsed;
-        Grid.SetColumn(StatusHost, left == PrototypeOverlayWidget.Timer ? 1 : 2);
-        StatusHost.Width = _mode == PrototypeOverlayMode.Compact ? 42 : 104;
-        RecordingLayout.ColumnDefinitions[1].Width = left == PrototypeOverlayWidget.None ? GridLength.Auto : right == PrototypeOverlayWidget.Waveform ? new GridLength(1, GridUnitType.Auto) : new GridLength(1, GridUnitType.Star);
-        RecordingLayout.ColumnDefinitions[2].Width = right == PrototypeOverlayWidget.Waveform ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
-        RightWidgetHost.MaxWidth = _mode == PrototypeOverlayMode.Compact ? 122 : 172;
+        var minimal = _mode == OverlayMode.Minimal;
+        var left = minimal ? OverlayWidget.Waveform : _layout.Left;
+        var right = minimal ? OverlayWidget.None : _layout.Right;
+        WaveformHost.Visibility = left == OverlayWidget.Waveform || right == OverlayWidget.Waveform ? Visibility.Visible : Visibility.Collapsed;
+        Grid.SetColumn(WaveformHost, right == OverlayWidget.Waveform ? 2 : 1);
+        StatusHost.Visibility = left == OverlayWidget.Timer || right == OverlayWidget.Timer ? Visibility.Visible : Visibility.Collapsed;
+        Grid.SetColumn(StatusHost, left == OverlayWidget.Timer ? 1 : 2);
+        StatusHost.Width = _mode == OverlayMode.Compact ? 42 : 104;
+        RecordingLayout.ColumnDefinitions[1].Width = left == OverlayWidget.None ? GridLength.Auto : right == OverlayWidget.Waveform ? new GridLength(1, GridUnitType.Auto) : new GridLength(1, GridUnitType.Star);
+        RecordingLayout.ColumnDefinitions[2].Width = right == OverlayWidget.Waveform ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        RightWidgetHost.MaxWidth = _mode == OverlayMode.Compact ? 122 : 172;
         UpdateWidgetText(LeftWidgetText, left);
         UpdateWidgetText(RightWidgetText, right);
         // A mandatory status dot remains even when both configurable slots are empty.
         DotHost.Visibility = minimal ? Visibility.Collapsed : Visibility.Visible;
-        DotHost.Width = DotHost.Height = _mode == PrototypeOverlayMode.Compact ? 18 : 34;
+        DotHost.Width = DotHost.Height = _mode == OverlayMode.Compact ? 18 : 34;
     }
 
-    private void UpdateWidgetText(TextBlock text, PrototypeOverlayWidget widget)
+    private void UpdateWidgetText(TextBlock text, OverlayWidget widget)
     {
         var host = text == LeftWidgetText ? LeftWidgetHost : RightWidgetHost;
         var iconHost = text == LeftWidgetText ? LeftAppIconHost : RightAppIconHost;
-        host.Visibility = widget is PrototypeOverlayWidget.None or PrototypeOverlayWidget.Timer or PrototypeOverlayWidget.Waveform ? Visibility.Collapsed : Visibility.Visible;
-        iconHost.Visibility = widget == PrototypeOverlayWidget.AppName ? Visibility.Visible : Visibility.Collapsed;
+        host.Visibility = widget is OverlayWidget.None or OverlayWidget.Timer or OverlayWidget.Waveform ? Visibility.Collapsed : Visibility.Visible;
+        iconHost.Visibility = widget == OverlayWidget.AppName ? Visibility.Visible : Visibility.Collapsed;
         text.Text = widget switch
         {
-            PrototypeOverlayWidget.Clock => DateTime.Now.ToString("HH:mm"),
-            PrototypeOverlayWidget.Profile => _runtimeState is null ? "Default profile" : "Parakeet",
-            PrototypeOverlayWidget.HotkeyMode => _runtimeState?.Invoke().RecordingModeLabel ?? "Toggle",
-            PrototypeOverlayWidget.AppName => _runtimeState?.Invoke().TargetApp ?? "Quick Launch",
-            PrototypeOverlayWidget.Indicator => _runtimeState?.Invoke().Label ?? (_paused ? "Paused" : "Recording"),
+            OverlayWidget.Clock => DateTime.Now.ToString("HH:mm"),
+            OverlayWidget.Profile => _runtimeState is null ? "Default profile" : "Parakeet",
+            OverlayWidget.HotkeyMode => _runtimeState?.Invoke().RecordingModeLabel ?? "Toggle",
+            OverlayWidget.AppName => _runtimeState?.Invoke().TargetApp ?? "Quick Launch",
+            OverlayWidget.Indicator => _runtimeState?.Invoke().Label ?? (_paused ? "Paused" : "Recording"),
             _ => ""
         };
     }
@@ -392,7 +392,7 @@ public sealed partial class OverlayWindow : Window
         var sampleSeconds = (timestamp - _diagnosticSampleStart) / (double)Stopwatch.Frequency;
         if (sampleSeconds >= 1)
         {
-            if (_technicalDetails && _mode == PrototypeOverlayMode.Standard)
+            if (_technicalDetails && _mode == OverlayMode.Standard)
                 DiagnosticsText.Text = $"{dbfs:0} dBFS · {_diagnosticDrawCount / sampleSeconds:0} fps";
             _diagnosticSampleStart = timestamp;
             _diagnosticDrawCount = 0;
@@ -406,7 +406,7 @@ public sealed partial class OverlayWindow : Window
             : previous + (normalized - previous) * 0.20f;
 
         DurationText.Text = (_runtimeState?.Invoke().Duration ?? _duration.Elapsed).ToString(@"mm\:ss");
-        if (_mode != PrototypeOverlayMode.Minimal)
+        if (_mode != OverlayMode.Minimal)
         {
             UpdateWidgetText(LeftWidgetText, _layout.Left);
             UpdateWidgetText(RightWidgetText, _layout.Right);
@@ -429,14 +429,14 @@ public sealed partial class OverlayWindow : Window
         if (size.Width <= 1 || size.Height <= 1)
             return;
 
-        if (_paused && _mode == PrototypeOverlayMode.Minimal)
+        if (_paused && _mode == OverlayMode.Minimal)
         {
             var pauseColor = Color.FromArgb(255, 244, 188, 106);
             args.DrawingSession.FillRoundedRectangle((float)size.Width / 2 - 5, 2, 3, 10, 1, 1, pauseColor);
             args.DrawingSession.FillRoundedRectangle((float)size.Width / 2 + 2, 2, 3, 10, 1, 1, pauseColor);
             return;
         }
-        var barCount = _mode == PrototypeOverlayMode.Minimal ? 16 : _mode == PrototypeOverlayMode.Compact ? 28 : 44;
+        var barCount = _mode == OverlayMode.Minimal ? 16 : _mode == OverlayMode.Compact ? 28 : 44;
         var center = (float)size.Height / 2;
         var width = (float)size.Width;
         var slotWidth = width / barCount;

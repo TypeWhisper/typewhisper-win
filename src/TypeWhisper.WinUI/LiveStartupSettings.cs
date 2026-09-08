@@ -6,11 +6,11 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveStartupSettings
 {
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers, StartupRegistration registration)
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers, StartupRegistration registration)
     {
         if (category != "General") return;
         var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "AutostartEnabled"));
-        foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear(); row.IsHitTestVisible = true;
         var toggle = new ToggleSwitch { Header = "Start this development build with Windows" };
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };

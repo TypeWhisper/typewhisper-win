@@ -9,13 +9,13 @@ public sealed class DictationSnippetSnapshotTests : IDisposable
     private string FilePath => Path.Combine(_directory, "snippets.json");
     public DictationSnippetSnapshotTests() => Directory.CreateDirectory(_directory);
     public void Dispose() => Directory.Delete(_directory, true);
-    private PrototypeLexicon Open() => new(snippetPath: FilePath);
+    private Lexicon Open() => new(snippetPath: FilePath);
 
     [Fact]
     public void SaveEditDisableAndDeleteSurviveRestart()
     {
         var store = Open();
-        Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "my signature", "Viele Grüße\nMarco", "email", true)));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "my signature", "Viele Grüße\nMarco", "email", true)));
         store = Open();
         var saved = Assert.Single(store.Entries);
         Assert.Equal("Viele Grüße\nMarco", saved.Value);
@@ -50,10 +50,10 @@ public sealed class DictationSnippetSnapshotTests : IDisposable
     public void ExpansionUsesExistingCasePunctuationMultilineAndPlaceholderRules()
     {
         var store = Open();
-        Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "my signature", "Grüße\nMarco $1")));
-        Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "today", "{date:yyyy-MM-dd}")));
-        Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "URL", "https://example.com", CaseSensitive: true)));
-        Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "disabled", "Hidden", Enabled: false)));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "my signature", "Grüße\nMarco $1")));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "today", "{date:yyyy-MM-dd}")));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "URL", "https://example.com", CaseSensitive: true)));
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "disabled", "Hidden", Enabled: false)));
         var snapshot = DictationSnippetSnapshot.Load(FilePath);
         Assert.Equal("Grüße\nMarco $1", snapshot.Apply("MY SIGNATURE!").Text);
         Assert.Equal(DateTime.Now.ToString("yyyy-MM-dd"), snapshot.Apply("today").Text);
@@ -65,8 +65,8 @@ public sealed class DictationSnippetSnapshotTests : IDisposable
     public void ClipboardIsRequestedOnlyForMatchingEnabledSnippets()
     {
         var store = Open();
-        store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "link", "See {clipboard}"));
-        store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "disabled", "{clipboard}", Enabled: false));
+        store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "link", "See {clipboard}"));
+        store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "disabled", "{clipboard}", Enabled: false));
         var snapshot = DictationSnippetSnapshot.Load(FilePath);
         Assert.False(snapshot.NeedsClipboard("normal disabled"));
         Assert.True(snapshot.NeedsClipboard("link"));
@@ -89,7 +89,7 @@ public sealed class DictationSnippetSnapshotTests : IDisposable
         File.WriteAllText(FilePath, json);
         var store = Open();
         Assert.NotNull(store.LastError);
-        Assert.NotNull(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "hello", "Changed")));
+        Assert.NotNull(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "hello", "Changed")));
         var result = DictationSnippetSnapshot.Load(FilePath).Apply("hello");
         Assert.NotNull(result.Error);
         Assert.Equal("hello", result.Text);
@@ -101,7 +101,7 @@ public sealed class DictationSnippetSnapshotTests : IDisposable
     {
         var store = Open();
         Directory.CreateDirectory(FilePath);
-        Assert.NotNull(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Snippet, "hello", "Changed")));
+        Assert.NotNull(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "hello", "Changed")));
         Assert.Empty(store.Entries);
     }
 

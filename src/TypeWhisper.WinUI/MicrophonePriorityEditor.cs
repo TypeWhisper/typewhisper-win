@@ -13,8 +13,8 @@ internal sealed class MicrophonePriorityEditor : StackPanel
     private readonly ObservableCollection<PriorityRow> _items = [];
     private readonly ListView _list;
     private readonly TextBlock _hint = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap };
-    private readonly PrototypeChoicePicker _add = new();
-    internal PrototypeChoicePicker AddPicker => _add;
+    private readonly ChoicePicker _add = new();
+    internal ChoicePicker AddPicker => _add;
 
     internal MicrophonePriorityEditor(LocalDictationSession session)
     {
@@ -63,12 +63,12 @@ internal sealed class MicrophonePriorityEditor : StackPanel
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock Text="≡" Width="20" TextAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" ToolTipService.ToolTip="Drag to reorder"/>
                     <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
-                      <ToolTipService.ToolTip><ToolTip Content="{Binding Name}" Style="{StaticResource PrototypeHeatmapToolTipStyle}"/></ToolTipService.ToolTip>
+                      <ToolTipService.ToolTip><ToolTip Content="{Binding Name}" Style="{StaticResource HeatmapToolTipStyle}"/></ToolTipService.ToolTip>
                     </TextBlock>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
-                      <local:HandCursorButton Command="{Binding Up}" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="Move microphone up" ToolTipService.ToolTip="Move up" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource PrototypeMenuButtonStyle}"><FontIcon Glyph="&#xE74A;" FontSize="12"/></local:HandCursorButton>
-                      <local:HandCursorButton Command="{Binding Down}" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="Move microphone down" ToolTipService.ToolTip="Move down" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource PrototypeMenuButtonStyle}"><FontIcon Glyph="&#xE74B;" FontSize="12"/></local:HandCursorButton>
-                      <local:HandCursorButton Command="{Binding Remove}" AutomationProperties.Name="Remove microphone from priority list" ToolTipService.ToolTip="Remove" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource PrototypeMenuButtonStyle}"><FontIcon Glyph="&#xE711;" FontSize="12"/></local:HandCursorButton>
+                      <local:HandCursorButton Command="{Binding Up}" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="Move microphone up" ToolTipService.ToolTip="Move up" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE74A;" FontSize="12"/></local:HandCursorButton>
+                      <local:HandCursorButton Command="{Binding Down}" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="Move microphone down" ToolTipService.ToolTip="Move down" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE74B;" FontSize="12"/></local:HandCursorButton>
+                      <local:HandCursorButton Command="{Binding Remove}" AutomationProperties.Name="Remove microphone from priority list" ToolTipService.ToolTip="Remove" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE711;" FontSize="12"/></local:HandCursorButton>
                     </StackPanel>
                   </Grid>
                 </DataTemplate>
@@ -93,7 +93,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         addRow.Children.Add(_add);
         var refresh = new HandCursorButton { Content = new FontIcon { Glyph = "\uE72C", FontSize = 16 }, Width = 42, Height = 42,
-            Padding = new Thickness(8), Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+            Padding = new Thickness(8), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         AutomationProperties.SetName(refresh, "Refresh microphones"); ToolTipService.SetToolTip(refresh, "Refresh microphones");
         refresh.Click += (_, _) => Refresh(); Grid.SetColumn(refresh, 1); addRow.Children.Add(refresh);
         Children.Add(addRow); Children.Add(_hint);
@@ -126,7 +126,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         _list.Visibility = _items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         var devices = _session.GetMicrophones();
         _add.SetOptions(devices.Where(device => !_items.Any(item => item.Item.Id == device.Id))
-            .Select(device => new PrototypeChoice(device.Id, device.Name, "Add to priority list")).ToArray(), "", _items.Count == 0 ? "System default · add microphone…" : "Add microphone…");
+            .Select(device => new Choice(device.Id, device.Name, "Add to priority list")).ToArray(), "", _items.Count == 0 ? "System default · add microphone…" : "Add microphone…");
         var missing = _items.Where(item => !devices.Any(device => device.Id == item.Item.Id)).Select(item => item.Name).ToArray();
         _hint.Text = missing.Length > 0 ? "Disconnected (kept in priority list): " + string.Join(", ", missing)
             : _items.Count == 0 ? "Uses Windows default until you add a microphone." : "Drag to prioritize. First available wins; Windows default is the fallback.";

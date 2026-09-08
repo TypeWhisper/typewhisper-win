@@ -57,7 +57,7 @@ internal sealed class HybridHotkeyState
     }
 
     private static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
-    private string Chord() => PrototypeShortcutRules.Normalize(string.Join("+", _down.Select(key => key switch
+    private string Chord() => ShortcutRules.Normalize(string.Join("+", _down.Select(key => key switch
     {
         0x11 or 0xA2 or 0xA3 => "CTRL", 0x12 or 0xA4 or 0xA5 => "ALT",
         0x10 or 0xA0 or 0xA1 => "SHIFT", 0x5B or 0x5C => "WIN",

@@ -57,7 +57,7 @@ public sealed class LexiconTransferTests : IDisposable
         Directory.CreateDirectory(_directory);
         var original = LexiconTransfer.WriteDictionary([Word("existing", "Existing")]);
         File.WriteAllText(DictionaryPath, original);
-        var store = new PrototypeLexicon(DictionaryPath, SnippetPath);
+        var store = new Lexicon(DictionaryPath, SnippetPath);
         Assert.NotNull(store.Import(json, snippets: false, replace: true));
         Assert.Equal(original, File.ReadAllText(DictionaryPath));
         Assert.Equal("Existing", Assert.Single(store.Entries).Key);
@@ -68,7 +68,7 @@ public sealed class LexiconTransferTests : IDisposable
     {
         Directory.CreateDirectory(_directory);
         File.WriteAllText(DictionaryPath, LexiconTransfer.WriteDictionary([Word("existing", "Existing"), Word("pack:test:term", "Packed")]));
-        var store = new PrototypeLexicon(DictionaryPath, SnippetPath);
+        var store = new Lexicon(DictionaryPath, SnippetPath);
         var import = LexiconTransfer.WriteDictionary([Word("new", "existing")]);
         Assert.NotNull(store.Import(import, snippets: false, replace: false));
         Assert.Equal(2, store.Entries.Count);
@@ -93,7 +93,7 @@ public sealed class LexiconTransferTests : IDisposable
     {
         Directory.CreateDirectory(_directory);
         File.WriteAllText(SnippetPath, LexiconTransfer.WriteSnippets([Snippet("old", "old phrase")]));
-        var store = new PrototypeLexicon(DictionaryPath, SnippetPath);
+        var store = new Lexicon(DictionaryPath, SnippetPath);
         File.Delete(SnippetPath); Directory.CreateDirectory(SnippetPath);
         Assert.NotNull(store.Import(LexiconTransfer.WriteSnippets([Snippet("new", "new phrase")]), snippets: true, replace: true));
         Assert.Equal("old phrase", Assert.Single(store.Entries).Key);
@@ -105,7 +105,7 @@ public sealed class LexiconTransferTests : IDisposable
         Directory.CreateDirectory(_directory);
         const string original = "[{\"Id\":\"s\",\"Trigger\":\"hello\",\"Replacement\":\"world\",\"Future\":true}]";
         File.WriteAllText(SnippetPath, original);
-        var store = new PrototypeLexicon(DictionaryPath, SnippetPath);
+        var store = new Lexicon(DictionaryPath, SnippetPath);
         Assert.NotNull(store.Import("[]", snippets: true, replace: true));
         Assert.Equal(original, File.ReadAllText(SnippetPath));
     }
@@ -116,7 +116,7 @@ public sealed class LexiconTransferTests : IDisposable
         Directory.CreateDirectory(_directory);
         var personal = Word("personal", "Personal") with { UsageCount = 5 };
         File.WriteAllText(DictionaryPath, LexiconTransfer.WriteDictionary([personal, Word("pack:example:term", "Packed")]));
-        var store = new PrototypeLexicon(DictionaryPath, SnippetPath);
+        var store = new Lexicon(DictionaryPath, SnippetPath);
         var destination = Path.Combine(_directory, "export.json");
         Assert.Null(store.Export(destination, snippets: false));
         Assert.Equal(personal, Assert.Single(LexiconTransfer.ReadDictionary(File.ReadAllText(destination))));

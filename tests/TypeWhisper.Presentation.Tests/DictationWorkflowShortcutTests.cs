@@ -44,7 +44,7 @@ public sealed class DictationWorkflowShortcutTests
     public void EditorRoundTripPreservesDictationActivationAndRejectsUnsupportedOverrides()
     {
         var workflow = Workflow();
-        var draft = PrototypeWorkflow.FromStored(workflow);
+        var draft = WorkflowDraft.FromStored(workflow);
         Assert.Equal("DictationHotkey", draft.ActivationId);
         Assert.True(ManualWorkflowStore.IsDictationShortcut(draft.ToStored()));
         Assert.Throws<InvalidOperationException>(() => AutomaticWorkflowSnapshot.ForDictationShortcut(workflow with { IsEnabled = false }));

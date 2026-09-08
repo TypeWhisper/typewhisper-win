@@ -10,7 +10,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
 {
     private readonly TextBlock _status = Label(session.AudioPreferencesError ?? "Changes are saved for your next dictation.", true);
 
-    internal void Render(StackPanel content, List<PrototypeChoicePicker> pickers)
+    internal void Render(StackPanel content, List<ChoicePicker> pickers)
     {
         content.Children.Clear();
         content.Children.Add(new TextBlock { Text = "Audio", FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
@@ -30,7 +30,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             value => Save(session.AudioPreferences with { WhisperModeEnabled = value }));
         AddToggle("Lower audio while recording", "Reduce the selected output's volume, then restore it after recording. This includes TypeWhisper sounds on that output.", preferences.AudioDuckingEnabled,
             value => Save(session.AudioPreferences with { AudioDuckingEnabled = value }));
-        var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Select(level => new PrototypeChoice(level.ToString(), level == 0 ? "Muted" : $"{level}%", "Of the current output volume")).ToArray();
+        var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Select(level => new Choice(level.ToString(), level == 0 ? "Muted" : $"{level}%", "Of the current output volume")).ToArray();
         AddPicker("Recording volume", "0% silences the output. Your own volume changes during recording are preserved.", levels,
             ((int)Math.Round(preferences.AudioDuckingLevel * 100)).ToString(), id => Save(session.AudioPreferences with { AudioDuckingLevel = int.Parse(id) / 100f }));
         AddToggle("Pause media during recording", "Send the media Play/Pause key at start and stop, as in the previous app. Use while media is playing; paused media may start.", preferences.PauseMediaDuringRecording,
@@ -39,7 +39,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
         AddToggle("Stop after silence", "Finish and transcribe after a quiet pause, including silence at the start. Waits while shortcut modifiers are held. Background noise may delay stopping.", preferences.SilenceAutoStopEnabled,
             value => Save(session.AudioPreferences with { SilenceAutoStopEnabled = value }));
         var timeouts = new[] { 3, 5, 10, 15, 30 }.Append(preferences.SilenceAutoStopSeconds).Distinct().Order()
-            .Select(seconds => new PrototypeChoice(seconds.ToString(), $"{seconds} seconds", "Continuous silence before finishing")).ToArray();
+            .Select(seconds => new Choice(seconds.ToString(), $"{seconds} seconds", "Continuous silence before finishing")).ToArray();
         AddPicker("Silence timeout", "Used when Stop after silence is enabled. Changes apply to the next recording.", timeouts,
             preferences.SilenceAutoStopSeconds.ToString(), id => Save(session.AudioPreferences with { SilenceAutoStopSeconds = int.Parse(id) }));
         content.Children.Add(_status);
@@ -53,7 +53,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
             copy.Children.Add(Label(title)); copy.Children.Add(Label(hint, true)); row.Children.Add(copy);
-            var toggle = PrototypeToggleSwitch.Create(value);
+            var toggle = AppToggleSwitch.Create(value);
             toggle.IsEnabled = enabled;
             AutomationProperties.SetName(toggle, title); AutomationProperties.SetHelpText(toggle, hint);
             var restoring = false;
@@ -65,14 +65,14 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             };
             Grid.SetColumn(toggle, 1); row.Children.Add(toggle); content.Children.Add(row);
         }
-        void AddPicker(string title, string hint, IReadOnlyList<PrototypeChoice> options, string selected, Action<string> changed)
+        void AddPicker(string title, string hint, IReadOnlyList<Choice> options, string selected, Action<string> changed)
         {
             Separator();
             var row = new StackPanel { Spacing = 6 };
             row.Children.Add(Label(title));
-            var picker = new PrototypeChoicePicker();
+            var picker = new ChoicePicker();
             picker.Configure(title, "speaker", title);
-            var choices = options.Any(option => option.Id == selected) ? options : options.Concat([new PrototypeChoice(selected, "Saved device · unavailable", "Reconnect the device or select another output")]).ToArray();
+            var choices = options.Any(option => option.Id == selected) ? options : options.Concat([new Choice(selected, "Saved device · unavailable", "Reconnect the device or select another output")]).ToArray();
             picker.SetOptions(choices, selected);
             var saved = selected;
             picker.SelectionChanged += id =>
@@ -86,9 +86,9 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
         }
     }
 
-    private static IReadOnlyList<PrototypeChoice> OutputDevices()
+    private static IReadOnlyList<Choice> OutputDevices()
     {
-        var choices = new List<PrototypeChoice> { new("", "System default", "Windows default output") };
+        var choices = new List<Choice> { new("", "System default", "Windows default output") };
         try
         {
             using var enumerator = new MMDeviceEnumerator();

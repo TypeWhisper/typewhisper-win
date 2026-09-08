@@ -9,7 +9,7 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveRecorderSettings
 {
-    internal static void Configure(string category, StackPanel parent, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel parent, List<ChoicePicker> pickers,
         RecorderPreferencesStore preferences, Func<IReadOnlyList<SystemAudioOutputDevice>> getDevices)
     {
         if (category != "Recorder") return;
@@ -20,17 +20,17 @@ internal static class LiveRecorderSettings
         pickers.Clear();
         content.Children.Add(Label("Recorder", 24));
         content.Children.Add(Label("Source choices are saved for your next recording. Changes never switch sources during an active recording."));
-        var microphone = PrototypeToggleSwitch.Create(preferences.Current.MicrophoneEnabled);
-        var system = PrototypeToggleSwitch.Create(preferences.Current.SystemAudioEnabled);
+        var microphone = AppToggleSwitch.Create(preferences.Current.MicrophoneEnabled);
+        var system = AppToggleSwitch.Create(preferences.Current.SystemAudioEnabled);
         AddToggle("Microphone on by default", microphone);
         AddToggle("System audio on by default", system);
         content.Children.Add(Label("System audio device", 14));
-        var device = new PrototypeChoicePicker();
+        var device = new ChoicePicker();
         device.Configure("System audio device", "speaker", "Recorder system audio device");
         content.Children.Add(device); pickers.Add(device);
         content.Children.Add(Label("The microphone uses your Audio settings priority list. This output selection controls which system audio is recorded, independently of feedback sounds."));
         var refreshDevices = new HandCursorButton { Content = "Refresh devices", HorizontalAlignment = HorizontalAlignment.Left,
-            Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         content.Children.Add(refreshDevices);
         content.Children.Add(Label("Audio format: WAV · 16 kHz mono", 14));
         content.Children.Add(Label("Tracks: Mixed · microphone ducking off", 14));
@@ -40,7 +40,7 @@ internal static class LiveRecorderSettings
         content.Children.Add(status);
         var refreshing = false;
         var subscribed = false;
-        IReadOnlyList<PrototypeChoice> choices = [];
+        IReadOnlyList<Choice> choices = [];
         string? deviceError = null;
 
         void RefreshSelection()
@@ -51,7 +51,7 @@ internal static class LiveRecorderSettings
             system.IsOn = current.SystemAudioEnabled;
             var id = current.OutputDeviceId ?? "";
             var available = choices.Any(choice => choice.Id == id);
-            var options = available ? choices : choices.Concat([new PrototypeChoice(id,
+            var options = available ? choices : choices.Concat([new Choice(id,
                 "Saved device · unavailable", "Reconnect it or choose another device. No automatic fallback.")]).ToArray();
             device.SetOptions(options, id);
             status.Text = preferences.Error ?? deviceError ?? (!available
@@ -61,12 +61,12 @@ internal static class LiveRecorderSettings
         }
         void RefreshDevices()
         {
-            var available = new List<PrototypeChoice> { new("", "System default", "Windows default audio output") };
+            var available = new List<Choice> { new("", "System default", "Windows default audio output") };
             deviceError = null;
             try
             {
                 available.AddRange(getDevices().Where(item => !string.IsNullOrWhiteSpace(item.Id))
-                    .DistinctBy(item => item.Id).Select(item => new PrototypeChoice(item.Id!, item.Name, "System audio capture source")));
+                    .DistinctBy(item => item.Id).Select(item => new Choice(item.Id!, item.Name, "System audio capture source")));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { deviceError = "Audio devices could not be listed. Your saved selection is unchanged."; }

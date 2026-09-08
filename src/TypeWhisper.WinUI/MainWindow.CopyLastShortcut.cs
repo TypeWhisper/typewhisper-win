@@ -4,7 +4,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private PrototypeHotkeyRegistration? _copyLastHotkey;
+    private HotkeyRegistration? _copyLastHotkey;
     private ProcessingCancelShortcut? _copyLastShortcutSettings;
 
     private void InitializeCopyLastShortcut()
@@ -25,8 +25,8 @@ public sealed partial class MainWindow
     private string? ValidateCopyLastShortcut(string value)
     {
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the copy-last shortcut again using the shortcut editor.";
-        foreach (var chord in PrototypeShortcutRules.Split(value))
-            if (PrototypeShortcutRules.Validate(chord, false) is { } error) return error;
+        foreach (var chord in ShortcutRules.Split(value))
+            if (ShortcutRules.Validate(chord, false) is { } error) return error;
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
             return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
@@ -47,7 +47,7 @@ public sealed partial class MainWindow
 
     private void CopyLastTranscription()
     {
-        var blocked = _closing || _profileRestoreClosing || PrototypeShortcutRecorder.AnyEditing;
+        var blocked = _closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
         var result = LastDictationCopy.Execute(_dictation.LastCompletedDictation, blocked, busy, text =>
@@ -78,7 +78,7 @@ public sealed partial class MainWindow
         ShowActivationNotice(message);
     }
 
-    private sealed class CopyLastShortcutBackend(PrototypeHotkeyRegistration registration) : IProcessingCancelShortcutBackend
+    private sealed class CopyLastShortcutBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
     {
         public string Value => registration.Value;
         public string? TryChange(string value) => registration.TryChange(value);

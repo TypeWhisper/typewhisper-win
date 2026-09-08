@@ -76,7 +76,7 @@ internal sealed class LivePortablePluginSettings : UserControl
     private HandCursorButton Button(string text, Func<Task<string?>> action, string success = "Saved.")
     {
         var button = new HandCursorButton { Content = text, HorizontalAlignment = HorizontalAlignment.Left,
-            Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         button.Click += async (_, _) =>
         {
             if (_working || !IsLoaded) return;

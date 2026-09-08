@@ -25,7 +25,7 @@ public sealed class WorkflowEnablementTests : IDisposable
         var original = Unsupported();
         Assert.True(new WorkflowService(StorePath).TryReplaceAll([original]));
         var store = new ManualWorkflowStore(StorePath);
-        var draft = PrototypeWorkflow.FromStored(Assert.Single(store.Read()));
+        var draft = WorkflowDraft.FromStored(Assert.Single(store.Read()));
         Assert.False(draft.IsEditable);
         Assert.Contains("Unsupported", draft.Description);
         var latest = original with { Name = "Concurrent rename", Behavior = original.Behavior with { FineTuning = "Concurrent instructions" } };

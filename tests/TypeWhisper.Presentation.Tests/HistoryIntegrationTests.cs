@@ -19,7 +19,7 @@ public sealed class HistoryIntegrationTests
         var projected = HistoryEntryAdapter.FromRecord(record);
         projected.Validate();
         Assert.Equal("Original", projected.Content.Transcript!.FinalText);
-        Assert.Equal(PrototypeHistoryEntryKind.Unknown, projected.Content.Kind);
+        Assert.Equal(HistoryEntryKind.Unknown, projected.Content.Kind);
         Assert.Equal("unknown", projected.Content.Origin.DeviceId);
         Assert.Equal("parakeet", projected.Content.EngineName);
         Assert.Equal(projected.RecordId, HistoryEntryAdapter.FromRecord(record).RecordId);

@@ -10,7 +10,7 @@ using global::Windows.UI;
 namespace TypeWhisper.WinUI;
 
 /// <summary>
-/// Small source-owned icon set for the prototype's signal-oriented visual language.
+/// Small source-owned icon set for the preview's signal-oriented visual language.
 /// </summary>
 public sealed class TypeWhisperGlyph : UserControl
 {

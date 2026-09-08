@@ -6,16 +6,16 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveLanguageHintSettings
 {
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
         var row = FindRow(content) ?? throw new InvalidOperationException("Preferred language settings row is missing.");
-        foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
         row.Children.Add(new TextBlock { Text = "Preferred languages", FontSize = 14 });
-        var first = new PrototypeChoicePicker(); first.Configure("First language", "language", "First preferred language");
-        var second = new PrototypeChoicePicker(); second.Configure("Second language", "language", "Second preferred language");
+        var first = new ChoicePicker(); first.Configure("First language", "language", "First preferred language");
+        var second = new ChoicePicker(); second.Configure("Second language", "language", "Second preferred language");
         row.Children.Add(first); row.Children.Add(second); pickers.Add(first); pickers.Add(second);
         var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap }; row.Children.Add(hint);
         var restoring = false;
@@ -25,13 +25,13 @@ internal static class LiveLanguageHintSettings
             var codes = session.SupportedLanguages.Count > 0 ? session.SupportedLanguages : CultureInfo.GetCultures(CultureTypes.NeutralCultures)
                 .Select(culture => culture.TwoLetterISOLanguageName).Where(code => code != "iv").Distinct().ToArray();
             var options = codes.Where(code => code.Length is 2 or 3 && code.All(c => c is >= 'a' and <= 'z'))
-                .Select(code => new PrototypeChoice(code, Name(code), "Preferred input language")).OrderBy(choice => choice.Label).ToList();
+                .Select(code => new Choice(code, Name(code), "Preferred input language")).OrderBy(choice => choice.Label).ToList();
             var selected = session.TextPreferences.Current.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries);
             // Preserve saved choices visibly when switching to a provider with a narrower language list.
             foreach (var code in selected.Where(code => !options.Any(option => option.Id == code)))
                 options.Add(new(code, Name(code) + " (unavailable)", "Not supported by this provider.", false));
-            first.SetOptions(new[] { new PrototypeChoice("", "Unrestricted", "Detect without preferred languages") }.Concat(options).ToArray(), selected.FirstOrDefault() ?? "");
-            second.SetOptions(new[] { new PrototypeChoice("", "None", "Use only the first preferred language") }.Concat(options.Where(option => option.Id != selected.FirstOrDefault())).ToArray(), selected.Skip(1).FirstOrDefault() ?? "");
+            first.SetOptions(new[] { new Choice("", "Unrestricted", "Detect without preferred languages") }.Concat(options).ToArray(), selected.FirstOrDefault() ?? "");
+            second.SetOptions(new[] { new Choice("", "None", "Use only the first preferred language") }.Concat(options.Where(option => option.Id != selected.FirstOrDefault())).ToArray(), selected.Skip(1).FirstOrDefault() ?? "");
             first.IsEnabled = session.SupportsLanguageHints && session.Language == "auto";
             second.IsEnabled = first.IsEnabled && selected.Length > 0;
             hint.Text = session.TextPreferences.Error ?? (!session.SupportsLanguageHints

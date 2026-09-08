@@ -13,7 +13,7 @@ public sealed record PortableCatalogEntry
     public string MinHostVersion { get; init; } = "1.1.0";
     public string Author { get; init; } = "";
     public string Description { get; init; } = "";
-    public string Category { get; init; } = "transcription";
+    public string[] Categories { get; init; } = [];
     public required string DownloadUrl { get; init; }
     public required string Sha256 { get; init; }
     public long Size { get; init; }
@@ -23,6 +23,8 @@ public sealed record PortableCatalogEntry
     public void Validate()
     {
         ValidateId(Id);
+        if (Categories is null || Categories.Any(id => string.IsNullOrWhiteSpace(id) || id == "all"))
+            throw new InvalidDataException("Invalid plugin categories.");
         if (string.IsNullOrWhiteSpace(Name) || !System.Version.TryParse(Version, out _) ||
             !System.Version.TryParse(MinHostVersion, out _) || !Regex.IsMatch(Sha256 ?? "", "^[a-fA-F0-9]{64}$") ||
             Size <= 0 || Size > PortablePluginStore.MaximumPackageBytes ||

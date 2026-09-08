@@ -3,7 +3,6 @@
   "name": "NVIDIA Parakeet",
   "version": "1.1.0",
   "author": "TypeWhisper",
-  "category": "transcription",
   "description": "Offline transcription with NVIDIA Parakeet and Canary. Audio is processed on your device.",
   "assemblyName": "TypeWhisper.Plugin.SherpaOnnx.dll",
   "pluginClass": "TypeWhisper.Plugin.SherpaOnnx.SherpaOnnxPlugin",
@@ -11,5 +10,8 @@
   "bundledDependencies": [
     "com.typewhisper.parakeet-ctc"
   ],
-  "minHostVersion": "1.1.0"
+  "minHostVersion": "1.1.0",
+  "categories": [
+    "transcription"
+  ]
 }

@@ -24,6 +24,6 @@
     <Compile Include="../../src/TypeWhisper.Windows/Services/AudioCaptureDiagnostics.cs" Link="AudioCaptureDiagnostics.cs" />
     <Compile Include="../../src/TypeWhisper.Windows/Services/NonFatalExceptionFilter.cs" Link="NonFatalExceptionFilter.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeShortcutRules.cs" Link="PrototypeShortcutRules.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
   </ItemGroup>
 </Project>

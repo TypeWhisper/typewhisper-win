@@ -1,5 +1,18 @@
 # Windows 1.1 progress
 
+## Application naming and integration metadata — 2026-09-08
+
+The WinUI application now uses production names for windows, controls, models, resources,
+source files and project references. Archived experiment paths and their check projects use
+matching names. The development user-data profile remains separate from the installed app.
+The marketplace supports multiple `categories` per integration and offers a Restart now
+primary action for pending updates, using the existing shutdown coordination before restart.
+
+Validation: prescribed development build and launch succeeded with a visible TypeWhisper
+window. Headless suites passed (1,682 tests, one platform skip), plus five categories contract
+tests. Native restart still needs a manual acceptance check with a pending plugin update.
+
+
 ## Public v2 marketplace preview, 2026-09-08
 
 The [v2 catalog](https://typewhisper.github.io/typewhisper-win/plugins-v2.json) is now published on `gh-pages` at `afdaf5b9c83d898283468b0a1dc3fb7e7c50acb5`. It contains NVIDIA Parakeet, Groq and Deepgram 1.1.0 for Windows x64, backed by separate assets in the [portable plugin preview release](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-preview-20260908). The release is a prerelease and is not marked latest. The old `plugins.json` blob and the existing latest-release identity were checked before/after and are unchanged.
@@ -34,7 +47,7 @@ The prescribed normal-profile build/relaunch passed (`artifacts/tab-position-bui
 
 ## Shared section tabs (`2dc89f59`), 2026-09-08
 
-PrototypeTabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.
+TabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.
 
 Recorder tabs move from the top-right title row to the left below the title. Lexicon tabs keep stable controls rather than rebuilding buttons on each render, preserving keyboard focus. Section tabs stay outside scrollable content; narrow strips can scroll to the focused item. Existing editor/detail visibility and navigation guards are retained.
 
@@ -128,7 +141,7 @@ API references: [MediaSource playback](https://learn.microsoft.com/en-us/windows
 
 Marco reported that the app was not visible. The process existed but had no main window: the diagnostic log showed `Delegate to an instance method cannot have null this` in the MainWindow constructor. The new History delegates had been assigned before `_dictation` was constructed. Initialization now precedes those bindings.
 
-The prescribed normal-profile build/relaunch passed (`artifacts/history-startup-fix.log`). The restarted process exposed a nonzero main-window handle and title `TypeWhisper Quick Launch Prototype`; the diagnostic log remained unchanged from before the corrected launch. Earlier History read-back launch claims based only on process existence were insufficient and are superseded by this evidence. Native History read/stop acceptance still remains open.
+The prescribed normal-profile build/relaunch passed (`artifacts/history-startup-fix.log`). The restarted process exposed a nonzero main-window handle and title `TypeWhisper Quick Launch Application`; the diagnostic log remained unchanged from before the corrected launch. Earlier History read-back launch claims based only on process existence were insufficient and are superseded by this evidence. Native History read/stop acceptance still remains open.
 
 ## History read-back (`90a3914b`), 2026-09-08
 

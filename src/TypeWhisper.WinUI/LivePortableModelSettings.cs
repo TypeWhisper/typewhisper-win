@@ -277,5 +277,5 @@ internal sealed class LivePortableModelSettings : UserControl
     }
     private static TextBlock Label(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12 };
     private static HandCursorButton Button(string text) => new() { Content = text,
-        Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+        Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
 }

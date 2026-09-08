@@ -12,8 +12,8 @@ public sealed class DictationDictionarySnapshotTests : IDisposable
     [Fact]
     public void PersonalWordsAndPacksFeedExistingBoostingOnlyWhenEnabled()
     {
-        var store = new PrototypeLexicon(FilePath);
-        store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Word, "TypeWhisper"));
+        var store = new Lexicon(FilePath);
+        store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper"));
         store.SetPackEnabled(new("test", "Test", "", ["Parakeet"]), true);
         var snapshot = DictationDictionarySnapshot.Load(FilePath);
         Assert.Equal("type whisper and parrakeet", snapshot.Apply("type whisper and parrakeet"));
@@ -24,8 +24,8 @@ public sealed class DictationDictionarySnapshotTests : IDisposable
     [Fact]
     public void CorrectionsDoNotOverwriteEditsMadeAfterSnapshot()
     {
-        var store = new PrototypeLexicon(FilePath);
-        var entry = new PrototypeLexiconEntry(Guid.NewGuid(), PrototypeLexiconKind.Correction, "hello", "Grüße");
+        var store = new Lexicon(FilePath);
+        var entry = new LexiconEntry(Guid.NewGuid(), LexiconKind.Correction, "hello", "Grüße");
         store.Save(entry);
         var snapshot = DictationDictionarySnapshot.Load(FilePath);
         var saved = store.Entries.Single();
@@ -39,9 +39,9 @@ public sealed class DictationDictionarySnapshotTests : IDisposable
     [Fact]
     public void DisabledTermsAndCorrectionsDoNotApply()
     {
-        var store = new PrototypeLexicon(FilePath);
-        store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Word, "TypeWhisper", Enabled: false));
-        store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Correction, "hello", "Grüße", Enabled: false));
+        var store = new Lexicon(FilePath);
+        store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper", Enabled: false));
+        store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "hello", "Grüße", Enabled: false));
         Assert.Equal("hello type whisper", DictationDictionarySnapshot.Load(FilePath).Apply("hello type whisper", true));
     }
 

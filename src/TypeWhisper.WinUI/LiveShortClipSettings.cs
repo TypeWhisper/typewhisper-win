@@ -12,7 +12,7 @@ internal static class LiveShortClipSettings
         var row = FindRow(content) ?? throw new InvalidOperationException("Short clip settings row is missing.");
         row.Children.Clear();
         var store = session.TextPreferences;
-        var toggle = PrototypeToggleSwitch.Create(store.Current.TranscribeShortQuietClipsAggressively);
+        var toggle = AppToggleSwitch.Create(store.Current.TranscribeShortQuietClipsAggressively);
         AutomationProperties.SetName(toggle, "Recognize short, quiet clips");
         row.Children.Add(new TextBlock { Text = "Recognize short, quiet clips", FontSize = 14 });
         row.Children.Add(toggle);

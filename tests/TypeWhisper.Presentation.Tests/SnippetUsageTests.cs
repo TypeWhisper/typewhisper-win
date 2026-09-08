@@ -125,7 +125,7 @@ public sealed class SnippetUsageTests : IDisposable
     public void ExistingLexiconEditorAndAddImportKeepUsageFromLaterDictations()
     {
         Save(Entry("one", "trigger", "original"));
-        var lexicon = new PrototypeLexicon(snippetPath: CatalogPath);
+        var lexicon = new Lexicon(snippetPath: CatalogPath);
         var draft = Assert.Single(lexicon.Entries) with { Value = "edited" };
         SnippetUsageRecorder.Record(CatalogPath, ["one"]);
         Assert.Null(lexicon.Save(draft));
@@ -141,7 +141,7 @@ public sealed class SnippetUsageTests : IDisposable
     public void OpenEditorDoesNotRestoreSnippetDeletedByAnotherMutation()
     {
         Save(Entry("one", "trigger", "original"));
-        var lexicon = new PrototypeLexicon(snippetPath: CatalogPath);
+        var lexicon = new Lexicon(snippetPath: CatalogPath);
         var draft = Assert.Single(lexicon.Entries) with { Value = "edited" };
         SnippetCatalogTransaction.Update(CatalogPath, _ => []);
         Assert.NotNull(lexicon.Save(draft));

@@ -4,7 +4,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private PrototypeHotkeyRegistration? _historyHotkey;
+    private HotkeyRegistration? _historyHotkey;
     private ProcessingCancelShortcut? _historyShortcutSettings;
 
     private void InitializeHistoryShortcut()
@@ -25,8 +25,8 @@ public sealed partial class MainWindow
     private string? ValidateHistoryShortcut(string value)
     {
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the History shortcut again using the shortcut editor.";
-        foreach (var chord in PrototypeShortcutRules.Split(value))
-            if (PrototypeShortcutRules.Validate(chord, false) is { } error) return error;
+        foreach (var chord in ShortcutRules.Split(value))
+            if (ShortcutRules.Validate(chord, false) is { } error) return error;
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
             return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
@@ -47,7 +47,7 @@ public sealed partial class MainWindow
 
     private void OpenHistoryFromShortcut()
     {
-        if (_closing || _profileRestoreClosing || PrototypeShortcutRecorder.AnyEditing) return;
+        if (_closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing) return;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
         // Settings has its own window; opening History here does not replace its draft.
@@ -58,7 +58,7 @@ public sealed partial class MainWindow
         if (!_historyOpen) OpenHistory();
     }
 
-    private sealed class HistoryShortcutBackend(PrototypeHotkeyRegistration registration) : IProcessingCancelShortcutBackend
+    private sealed class HistoryShortcutBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
     {
         public string Value => registration.Value;
         public string? TryChange(string value) => registration.TryChange(value);

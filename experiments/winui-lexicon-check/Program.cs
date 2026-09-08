@@ -1,0 +1,38 @@
+using TypeWhisper.WinUI;
+
+var checks = 0;
+void Check(bool success, string name) { if (!success) throw new Exception(name); checks++; }
+var store = new Lexicon();
+LexiconEntry Entry(LexiconKind kind, string key, string value = "") => new(Guid.NewGuid(), kind, key, value);
+var word = Entry(LexiconKind.Word, "  TypeWhisper  ");
+Check(store.Save(word) is null, "Create word");
+Check(store.Entries.Single().Key == "TypeWhisper", "Trim key");
+Check(store.Save(Entry(LexiconKind.Word, "typewhisper")) is not null, "Case-insensitive duplicate");
+Check(store.Save(word with { Key = "TypeWhisper" }) is null, "Editing same ID is allowed");
+Check(store.Entries.Count == 1, "Update does not append");
+Check(store.Save(Entry(LexiconKind.Word, "  ")) is not null, "Empty word");
+Check(store.Save(Entry(LexiconKind.Word, "two\nlines")) is not null, "Single-line trigger");
+Check(store.Save(Entry(LexiconKind.Word, new string('x', 161))) is not null, "Trigger limit");
+Check(store.Save(Entry(LexiconKind.Correction, "type whisper")) is not null, "Missing correction");
+Check(store.Save(Entry(LexiconKind.Correction, "same", "same")) is not null, "No-op correction");
+var correction = Entry(LexiconKind.Correction, "type whisper", "TypeWhisper");
+Check(store.Save(correction) is null, "Create correction");
+Check(store.Search(LexiconKind.Correction, "TYPEWHISPER").Count() == 1, "Search replacement");
+Check(store.Search(LexiconKind.Word, "unmatched").Count() == 0, "Empty search result");
+Check(store.Search(LexiconKind.Word, "  type  ").Count() == 1, "Trim query");
+var snippet = Entry(LexiconKind.Snippet, "meeting", "Date: {date}\n\nNext steps\n") with { Tags = "work, notes" };
+Check(store.Save(snippet) is null, "Create snippet");
+Check(store.Search(LexiconKind.Snippet, "notes").Count() == 1, "Search tags");
+Check(store.Entries.Single(entry => entry.Id == snippet.Id).Value == snippet.Value, "Preserve multiline and placeholders");
+Check(store.Save(snippet with { Enabled = false, CaseSensitive = true }) is null, "Disable and case-sensitive");
+Check(store.Entries.Single(entry => entry.Id == snippet.Id).Enabled == false, "Persist enabled flag");
+Check(store.Save(Entry(LexiconKind.Snippet, "MEETING", "Other") with { CaseSensitive = true }) is null, "Distinct case-sensitive trigger");
+Check(store.Save(Entry(LexiconKind.Snippet, "Meeting", "Other")) is not null, "Insensitive trigger clashes with either case");
+Check(store.Save(Entry(LexiconKind.Snippet, "too long", new string('x', 10001))) is not null, "Content limit");
+Check(store.Save(snippet with { Tags = new string('x', 301) }) is not null, "Tag limit");
+Check(store.Save(Entry(LexiconKind.Word, "meeting")) is null, "Kinds have independent namespaces");
+Check(store.Remove(snippet.Id), "Remove exact ID");
+Check(!store.Remove(snippet.Id), "Remove missing ID");
+Check(store.Entries.Any(entry => entry.Id == correction.Id), "Unrelated entry preserved");
+Check(Lexicon.CreateSamples().Entries.Count == 8, "Isolated sample data");
+Console.WriteLine($"{checks} lexicon model checks passed.");

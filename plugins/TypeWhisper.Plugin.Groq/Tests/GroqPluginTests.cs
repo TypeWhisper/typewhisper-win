@@ -35,7 +35,6 @@ public class GroqPluginTests
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
         Assert.NotNull(manifest);
-        Assert.Equal("transcription", manifest.Category);
         Assert.Equal(["transcription", "llm"], manifest.Categories);
     }
 

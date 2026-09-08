@@ -107,7 +107,7 @@ public sealed class BrowserWorkflowTests
         {
             var path = Path.Combine(directory, "workflows.json");
             var rule = Rule("website", WorkflowTrigger.Website("example.com") with { ProcessNames = ["chrome"] });
-            var draft = PrototypeWorkflow.FromStored(rule) with { WebsiteDomains = "BÜCHER.de, *.example.com", ContextMatchMode = WorkflowContextMatchMode.Any };
+            var draft = WorkflowDraft.FromStored(rule) with { WebsiteDomains = "BÜCHER.de, *.example.com", ContextMatchMode = WorkflowContextMatchMode.Any };
             var stored = draft.ToStored();
             new ManualWorkflowStore(path).Save(stored, allowAutomatic: true);
             var restarted = Assert.Single(new ManualWorkflowStore(path).Read());

@@ -34,7 +34,7 @@ The prescribed normal-profile build/relaunch passed (`artifacts/tab-position-bui
 
 ## Shared section tabs (`2dc89f59`), 2026-09-08
 
-PrototypeTabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.
+TabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.
 
 Recorder tabs move from the top-right title row to the left below the title. Lexicon tabs keep stable controls rather than rebuilding buttons on each render, preserving keyboard focus. Section tabs stay outside scrollable content; narrow strips can scroll to the focused item. Existing editor/detail visibility and navigation guards are retained.
 
@@ -128,7 +128,7 @@ API references: [MediaSource playback](https://learn.microsoft.com/en-us/windows
 
 Marco reported that the app was not visible. The process existed but had no main window: the diagnostic log showed `Delegate to an instance method cannot have null this` in the MainWindow constructor. The new History delegates had been assigned before `_dictation` was constructed. Initialization now precedes those bindings.
 
-The prescribed normal-profile build/relaunch passed (`artifacts/history-startup-fix.log`). The restarted process exposed a nonzero main-window handle and title `TypeWhisper Quick Launch Prototype`; the diagnostic log remained unchanged from before the corrected launch. Earlier History read-back launch claims based only on process existence were insufficient and are superseded by this evidence. Native History read/stop acceptance still remains open.
+The prescribed normal-profile build/relaunch passed (`artifacts/history-startup-fix.log`). The restarted process exposed a nonzero main-window handle and title `TypeWhisper Quick Launch Application`; the diagnostic log remained unchanged from before the corrected launch. Earlier History read-back launch claims based only on process existence were insufficient and are superseded by this evidence. Native History read/stop acceptance still remains open.
 
 ## History read-back (`90a3914b`), 2026-09-08
 

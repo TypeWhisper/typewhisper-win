@@ -18,9 +18,9 @@ public sealed class CtcTermPreferencesTests
         try
         {
             var path = Path.Combine(folder, "dictionary.json");
-            var store = new PrototypeLexicon(path);
-            Assert.Null(store.Save(new(Guid.NewGuid(), PrototypeLexiconKind.Word, "TypeWhisper", CtcMinSimilarity: value)));
-            Assert.Equal(value, Assert.Single(new PrototypeLexicon(path).Entries).CtcMinSimilarity);
+            var store = new Lexicon(path);
+            Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper", CtcMinSimilarity: value)));
+            Assert.Equal(value, Assert.Single(new Lexicon(path).Entries).CtcMinSimilarity);
             Assert.Equal(value, Assert.Single(DictationDictionarySnapshot.Load(path).EnabledCtcEntries).CtcMinSimilarity);
         }
         finally { Directory.Delete(folder, true); }

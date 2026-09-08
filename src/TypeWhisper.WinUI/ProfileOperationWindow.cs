@@ -28,7 +28,7 @@ internal sealed class ProfileOperationWindow : Window
             HorizontalAlignment = HorizontalAlignment.Stretch };
         body.Children.Add(_details);
         _retry = new HandCursorButton { Content = "Retry saving and restoring", Visibility = Visibility.Collapsed,
-            Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _retry.Click += async (_, _) =>
         {
             var retry = _retryAction;
@@ -37,7 +37,7 @@ internal sealed class ProfileOperationWindow : Window
         };
         body.Children.Add(_retry);
         _close = new HandCursorButton { Content = "Close TypeWhisper", HorizontalAlignment = HorizontalAlignment.Right,
-            Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _close.Click += (_, _) => exit(); body.Children.Add(_close);
         Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         NativeWindowAppearance.ApplyAppTitleBar(this);

@@ -23,10 +23,13 @@ public sealed record PluginManifest
     /// <summary>Short description of the plugin.</summary>
     public string? Description { get; init; }
 
+#if WINDOWS
     /// <summary>Plugin category for UI grouping (e.g. "transcription", "llm", "memory", "action", "utility").</summary>
     public string? Category { get; init; }
 
-    /// <summary>Additional category identifiers for plugins that expose multiple capabilities.</summary>
+#endif
+
+    /// <summary>Category identifiers for plugins that expose multiple capabilities.</summary>
     public IReadOnlyList<string>? Categories { get; init; }
 
     /// <summary>Whether this is a local (on-device) or cloud-based plugin.</summary>

@@ -6,15 +6,15 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveRecordingModeSettings
 {
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
         var row = FindModeRow(content) ?? throw new InvalidOperationException("Recording mode settings row is missing.");
-        foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
         row.Children.Add(new TextBlock { Text = "Recording mode", FontSize = 14 });
-        var picker = new PrototypeChoicePicker();
+        var picker = new ChoicePicker();
         picker.Configure("Recording mode", "microphone", "Recording mode");
         var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         string? selectionError = null;

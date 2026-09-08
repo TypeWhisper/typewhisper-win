@@ -9,7 +9,7 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveTextProcessingSettings
 {
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
@@ -20,7 +20,7 @@ internal static class LiveTextProcessingSettings
         StackPanel Prepare(string key)
         {
             var row = FindRow(content, key) ?? throw new InvalidOperationException($"Text settings row '{key}' is missing.");
-            foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+            foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
             row.Children.Clear();
             return row;
         }
@@ -32,7 +32,7 @@ internal static class LiveTextProcessingSettings
             var header = new Grid { ColumnSpacing = 12 };
             header.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
             header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            var toggle = PrototypeToggleSwitch.Create(get(store.Current));
+            var toggle = AppToggleSwitch.Create(get(store.Current));
             AutomationProperties.SetName(toggle, title);
             AutomationProperties.SetHelpText(toggle, description + " Changes apply to the next recording.");
             header.Children.Add(Label(title, 14));
@@ -56,13 +56,13 @@ internal static class LiveTextProcessingSettings
             };
         }
 
-        void AddChoice(string key, string title, IReadOnlyList<PrototypeChoice> options,
+        void AddChoice(string key, string title, IReadOnlyList<Choice> options,
             Func<DictationTextPreferences, string> get, Func<DictationTextPreferences, string, DictationTextPreferences> update,
             string description)
         {
             var row = Prepare(key);
             row.Children.Add(Label(title, 14));
-            var picker = new PrototypeChoicePicker();
+            var picker = new ChoicePicker();
             picker.Configure(title, "language", "Preference " + key);
             row.Children.Add(picker); pickers.Add(picker);
             row.Children.Add(Label(description));

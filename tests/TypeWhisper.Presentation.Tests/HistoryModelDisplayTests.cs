@@ -19,7 +19,7 @@ public sealed class HistoryModelDisplayTests
         var entry = HistoryEntryAdapter.FromRecord(record);
         Assert.Equal("removed-rule", entry.Content.WorkflowId);
         Assert.Equal("Saved workflow name", entry.Content.WorkflowName);
-        Assert.Equal(PrototypeHistoryProcessingState.Failed, entry.Content.ProcessingState);
+        Assert.Equal(HistoryProcessingState.Failed, entry.Content.ProcessingState);
         Assert.Equal(record.WorkflowFailureMessage, entry.Content.FailureMessage);
         Assert.Equal("Original dictation", entry.Content.Transcript!.FinalText);
         Assert.Equal("Original dictation", entry.Content.Transcript.RawText);
@@ -36,7 +36,7 @@ public sealed class HistoryModelDisplayTests
     public void UsesStoredProviderAndModelWithoutAssumingTheCurrentModel(string? provider, string? model, string expected)
     {
         var record = new TranscriptionRecord { Id = "historical-entry", Timestamp = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc), RawText = "dictated", FinalText = "Dictated.", EngineUsed = provider ?? "", ModelUsed = model };
-        var transcript = new PrototypeTranscript(HistoryEntryAdapter.FromRecord(record), "Today");
+        var transcript = new Transcript(HistoryEntryAdapter.FromRecord(record), "Today");
         Assert.Equal(expected, transcript.ModelLabel);
         Assert.Equal("Model: " + expected, transcript.ModelMetadata);
         Assert.Equal(model, record.ModelUsed);

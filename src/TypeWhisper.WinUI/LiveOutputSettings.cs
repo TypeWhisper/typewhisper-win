@@ -7,17 +7,17 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveOutputSettings
 {
-    internal static void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers,
+    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
         LocalDictationSession session)
     {
         var store = session.OutputPreferences;
         if (category == "Dictation")
         {
             var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "AutoPaste"));
-            foreach (var old in row.Children.OfType<PrototypeChoicePicker>()) pickers.Remove(old);
+            foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
             row.Children.Clear();
             row.Children.Add(Label("After recording", 14));
-            var picker = new PrototypeChoicePicker();
+            var picker = new ChoicePicker();
             picker.Configure("After recording", "text", "Preference AutoPaste");
             void Refresh() => picker.SetOptions([
                 new("On", "Insert directly", "Paste the finished text into the original app."),
@@ -39,7 +39,7 @@ internal static class LiveOutputSettings
         if (previewNote is not null) previewNote.Text = "History saving is saved for this development profile. Unavailable controls are disabled.";
         var saveRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "SaveToHistoryEnabled"));
         saveRow.Children.Clear();
-        var toggle = PrototypeToggleSwitch.Create(store.Current.SaveToHistory);
+        var toggle = AppToggleSwitch.Create(store.Current.SaveToHistory);
         AutomationProperties.SetName(toggle, "Save to history");
         saveRow.Children.Add(Label("Save to history", 14));
         saveRow.Children.Add(Label("Keep new dictation results on this device. Turning this off leaves existing history unchanged."));
@@ -48,7 +48,7 @@ internal static class LiveOutputSettings
         saveRow.Children.Add(hint);
         var audioRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "SaveHistoryAudio"));
         audioRow.Children.Clear();
-        var audioToggle = PrototypeToggleSwitch.Create(store.Current.SaveHistoryAudio);
+        var audioToggle = AppToggleSwitch.Create(store.Current.SaveHistoryAudio);
         AutomationProperties.SetName(audioToggle, "Keep dictation audio in history");
         audioToggle.IsEnabled = store.Current.SaveToHistory;
         audioRow.Children.Add(Label("Keep dictation audio", 14));

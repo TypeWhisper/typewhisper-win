@@ -4,7 +4,7 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class ProcessingCancelHotkeyRegistration : IDisposable
 {
-    private readonly PrototypeHotkeyRegistration _native;
+    private readonly HotkeyRegistration _native;
     private readonly ProcessingCancelShortcut _settings;
     private readonly Func<string> _launcher;
     private readonly Func<string> _dictation;
@@ -17,7 +17,7 @@ internal sealed class ProcessingCancelHotkeyRegistration : IDisposable
         _launcher = launcherShortcuts; _dictation = dictationShortcuts;
         _native = new(window, () =>
         {
-            if (!_disposed) ProcessingCancelShortcut.Invoke(canCancel(), PrototypeShortcutRecorder.AnyEditing, requestCancel);
+            if (!_disposed) ProcessingCancelShortcut.Invoke(canCancel(), ShortcutRecorder.AnyEditing, requestCancel);
         }, 0x7500);
         _settings = new(WinUIProfile.DataPath("cancel-processing-hotkeys.txt"), new Backend(_native), Validate);
     }
@@ -30,15 +30,15 @@ internal sealed class ProcessingCancelHotkeyRegistration : IDisposable
     private string? Validate(string value)
     {
         if (value != Canonical(value)) return "Assign the cancel shortcut again using the shortcut editor.";
-        foreach (var chord in PrototypeShortcutRules.Split(value))
-            if (PrototypeShortcutRules.Validate(chord, false) is { } error) return error;
+        foreach (var chord in ShortcutRules.Split(value))
+            if (ShortcutRules.Validate(chord, false) is { } error) return error;
         if (ProcessingCancelShortcut.Conflicts(value, Canonical(_launcher()), false)) return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, Canonical(_dictation()), true)) return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         return null;
     }
-    private static string Canonical(string value) => string.Join(",", PrototypeShortcutRules.Split(value).Select(PrototypeShortcutRules.Normalize).Distinct());
+    private static string Canonical(string value) => string.Join(",", ShortcutRules.Split(value).Select(ShortcutRules.Normalize).Distinct());
     public void Dispose() { if (_disposed) return; _disposed = true; _native.Dispose(); }
-    private sealed class Backend(PrototypeHotkeyRegistration registration) : IProcessingCancelShortcutBackend
+    private sealed class Backend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
     {
         public string Value => registration.Value;
         public string? TryChange(string value) => registration.TryChange(value);

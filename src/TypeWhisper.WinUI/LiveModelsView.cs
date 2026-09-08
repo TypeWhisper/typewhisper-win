@@ -190,7 +190,7 @@ internal sealed class LiveModelsView : UserControl
         TextWrapping = TextWrapping.Wrap, Foreground = Brush(muted ? "MutedBrush" : "TextBrush") };
     private static HandCursorButton Button(string text, string name)
     {
-        var button = new HandCursorButton { Content = text, Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+        var button = new HandCursorButton { Content = text, Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         AutomationProperties.SetName(button, name); return button;
     }
 }

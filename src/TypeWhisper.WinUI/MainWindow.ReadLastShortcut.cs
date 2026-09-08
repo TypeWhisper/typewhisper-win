@@ -4,7 +4,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private PrototypeHotkeyRegistration? _readLastHotkey;
+    private HotkeyRegistration? _readLastHotkey;
     private ProcessingCancelShortcut? _readLastShortcutSettings;
 
     private void InitializeReadLastShortcut()
@@ -25,8 +25,8 @@ public sealed partial class MainWindow
     private string? ValidateReadLastShortcut(string value)
     {
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the read-last shortcut again using the shortcut editor.";
-        foreach (var chord in PrototypeShortcutRules.Split(value))
-            if (PrototypeShortcutRules.Validate(chord, false) is { } error) return error;
+        foreach (var chord in ShortcutRules.Split(value))
+            if (ShortcutRules.Validate(chord, false) is { } error) return error;
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
             return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
@@ -48,7 +48,7 @@ public sealed partial class MainWindow
     private long _readLastRevision;
     private async void ReadLastTranscription()
     {
-        if (_closing || _profileRestoreClosing || PrototypeShortcutRecorder.AnyEditing) return;
+        if (_closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing) return;
         if (_dictationInitialization is not { IsCompleted: true } ||
             (!_dictation.SpokenFeedback.IsBusy && (!_dictation.CanChangeProvider || _dictation.Models.Busy)) ||
             _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false })
@@ -67,7 +67,7 @@ public sealed partial class MainWindow
         }
     }
 
-    private sealed class ReadLastShortcutBackend(PrototypeHotkeyRegistration registration) : IProcessingCancelShortcutBackend
+    private sealed class ReadLastShortcutBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
     {
         public string Value => registration.Value;
         public string? TryChange(string value) => registration.TryChange(value);
