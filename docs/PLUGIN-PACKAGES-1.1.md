@@ -13,7 +13,7 @@ descriptor to build and supply its folder. `eng/PortablePlugin.targets` copies t
 to the development bundle. Independently distributed plugins do not need a descriptor
 in the application repository; they only need to provide the package described below.
 
-Groq and NVIDIA Parakeet have independent `Tests/*.csproj` suites. Run one suite directly
+Groq, NVIDIA Parakeet and Deepgram have independent `Tests/*.csproj` suites. Run one suite directly
 with `dotnet test`, or use `eng/Test-WinUIHeadless.ps1`, which discovers plugin-owned
 test projects alongside the SDK/host and presentation checks. Tests do not require
 Computer Use, a desktop, downloaded models, or live API credentials.
@@ -129,3 +129,23 @@ a separate release decision.
 At implementation time the v2 endpoint returned HTTP 404. Discover shows a retryable
 unavailable state, while installed providers continue working. Publishing the feed and
 its actual ZIP artifacts is still required for a live remote install walkthrough.
+
+## Declarative package dependencies and preview (1.1)
+
+Declare required package IDs in `bundledDependencies` and ship each complete child folder at
+`Dependencies/<id>`. The store validates identity and compatibility without knowing provider names.
+Mark internal component manifests with `isInternalDependency: true`; they cannot be installed as
+standalone integrations. The parent owns their distribution/removal. This declaration does not
+implicitly activate dependency capabilities or call their hooks; the parent integration still owns
+runtime initialization and cleanup.
+
+`ITranscriptionEnginePlugin.MaximumAudioUploadBytes` limits encoded WAV uploads, including the
+header. `SupportsLocalLivePreview` explicitly permits repeated local PCM snapshots and defaults
+to false. The WinUI host also requires PCM support and local package metadata for generic preview;
+`SupportsStreaming` alone does not mean that a cloud streaming transport is connected.
+Groq and Deepgram remain batch transcription providers in WinUI.
+
+NVIDIA and Groq package versions are 1.1.0. Existing installations are not overwritten by development
+builds: use a package update to adopt the new declarations. Deepgram is built but is not bootstrapped
+into existing or fresh profiles and has not been published to the v2 catalog. Its own tests run without
+keys, models or network requests and verify its installation through the generic package/registry APIs.

@@ -1,5 +1,17 @@
 # Windows 1.1 progress
 
+## Portable provider expansion (`e9b3cde2`, `c0827132`), 2026-09-08
+
+Groq now uses the generic registry for settings, activation, model selection, credentials and all recorded/file/recovery transcription paths. Its dedicated settings view and session configuration wrapper are removed. Shared settings distinguish a saved key from a successful connection check. Existing stored Groq selection IDs are preserved. WAV upload limits and opt-in local PCM preview come from SDK capabilities; streaming support alone never opens a live-text window. The NVIDIA model adapter chooses its initial model from saved/plugin/recommended metadata instead of a fixed model ID.
+
+The package store validates `bundledDependencies` from manifests and excludes `isInternalDependency` packages from standalone bootstrap. NVIDIA declares its bundled CTC component; the store no longer copies or validates provider-specific dependency IDs. Invalid staged updates fall back to a validated previous package, persist a visible warning, and allow a later retry. This does not claim rollback for arbitrary plugin activation failures or plugin-owned data migrations.
+
+Deepgram is a portable 1.1.0 package with its own build descriptor and nine tests. The real package is installed from a simulated HTTPS ZIP response and exercised through the generic registry: explicit activation, key/model persistence, restart, disable, uninstall and reinstall. Additional tests cover request content, cancellation, classified errors without provider-response leakage, and loading without WPF. Deepgram API behavior follows the [official prerecorded transcription reference](https://developers.deepgram.com/reference/speech-to-text/listen-pre-recorded). No live provider request was made. The local ZIP and checksum are in `artifacts/plugin-packages/deepgram-1.1.0.*`; no feed or release artifact was published.
+
+Validation: 1,682 passed and one platform-specific skip across the Windows headless suites (`artifacts/test-results/plugin-expansion-verified/`; the final host suite has 217 passes). The prescribed normal-profile build/relaunch passed (`artifacts/plugin-expansion-verified-build.log`), a nonzero main-window handle was verified, and the diagnostic log is unchanged. No Computer Use was performed. Existing personal package installations and credentials were not replaced; the rebuilt NVIDIA and Groq packages are version 1.1.0 and require a package update to adopt their new capability declarations.
+
+Scope limit: NVIDIA still uses its dedicated native inference/CTC adapter and local model settings. The generic registry already supports other PCM/downloadable engines, but this change does not move NVIDIA inference/CTC into it or connect cloud streaming. Real-key/provider acceptance and remote catalog install/update acceptance remain open. Marco separately confirmed the preceding Recorder tab-position, naming and keyboard checks.
+
 ## Stable tab placement, 2026-09-08
 
 Section tabs now precede the headings in Recorder, History, lexicon, and integration views. Recorder keeps its navigation at the same position on Record and Recordings: the optional recording name is an input inside Record, below the tabs and heading, rather than the shared shell input. The recording form scrolls independently, with a compact timer/status area to avoid clipping in the small window. Actions remain in the footer. Existing global search bars in other sections are unchanged.
