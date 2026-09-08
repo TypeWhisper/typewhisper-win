@@ -79,10 +79,38 @@ internal static class EntryActionMenu
 
     internal static MenuFlyout Create(IEnumerable<Action> actions)
     {
-        var menu = new MenuFlyout();
+        var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
+        presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, Application.Current.Resources["ElevatedBrush"]));
+        presenterStyle.Setters.Add(new Setter(Control.BorderBrushProperty, Application.Current.Resources["HairlineBrush"]));
+        presenterStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
+        presenterStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(10)));
+        presenterStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6)));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 280d));
+        var menu = new MenuFlyout { MenuFlyoutPresenterStyle = presenterStyle };
         foreach (var action in actions)
         {
-            var item = new MenuFlyoutItem { Text = action.Label, IsEnabled = action.Enabled };
+            var parts = action.Label.Split(" · ", 2, StringSplitOptions.TrimEntries);
+            var label = parts[0];
+            if (menu.Items.Count > 0 && (label == "Set shortcut…" || label.StartsWith("Delete", StringComparison.Ordinal)))
+                menu.Items.Add(new MenuFlyoutSeparator());
+            var glyph = label switch
+            {
+                var text when text.StartsWith("Unpin", StringComparison.Ordinal) => "\uE77A",
+                var text when text.StartsWith("Pin", StringComparison.Ordinal) => "\uE718",
+                var text when text.StartsWith("Set shortcut", StringComparison.Ordinal) => "\uE765",
+                var text when text.StartsWith("Copy", StringComparison.Ordinal) => "\uE8C8",
+                var text when text.StartsWith("Edit", StringComparison.Ordinal) => "\uE70F",
+                var text when text.StartsWith("Delete", StringComparison.Ordinal) || text.StartsWith("Remove", StringComparison.Ordinal) => "\uE74D",
+                var text when text.StartsWith("Export", StringComparison.Ordinal) => "\uE74E",
+                var text when text.StartsWith("Run", StringComparison.Ordinal) || text.StartsWith("Play", StringComparison.Ordinal) => "\uE768",
+                _ => "\uE8A7"
+            };
+            var item = new MenuFlyoutItem
+            {
+                Text = label, IsEnabled = action.Enabled,
+                KeyboardAcceleratorTextOverride = parts.Length > 1 ? parts[1] : "",
+                Icon = new FontIcon { Glyph = glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 14 }
+            };
             item.Click += (_, _) => action.Invoke();
             menu.Items.Add(item);
         }

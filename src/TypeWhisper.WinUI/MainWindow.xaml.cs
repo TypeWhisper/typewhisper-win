@@ -562,7 +562,7 @@ public sealed partial class MainWindow : Window
                 CompactResults.SelectedItem = FilteredItems.FirstOrDefault(command => command.Title == selectedTitle);
             MetricsText.Text = DictationStatusForDisplay;
         }
-        _isSearchEditing = false;
+        _isSearchEditing = LauncherCommandsVisible;
         UpdateSearchPresentation();
         KeepLauncherOnScreen();
         AppWindow.Show();
@@ -913,6 +913,7 @@ public sealed partial class MainWindow : Window
     private void WindowRoot_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
+        if (HandleCommandShortcut(e)) { e.Handled = true; return; }
         if (UtilityOpen)
         {
             if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox and not PasswordBox and not RichEditBox)
@@ -983,7 +984,7 @@ public sealed partial class MainWindow : Window
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
             .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down);
 
-        if (ctrl && e.Key == (global::Windows.System.VirtualKey)0xBC) // VK_OEM_COMMA
+        if (!LauncherCommandsVisible && ctrl && e.Key == (global::Windows.System.VirtualKey)0xBC) // VK_OEM_COMMA
         {
             OpenSettings();
             e.Handled = true;
@@ -1067,9 +1068,12 @@ public sealed partial class MainWindow : Window
         {
             if (FilteredItems.Count > 0)
             {
-                var offset = e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1;
-                CompactResults.SelectedIndex = Math.Clamp(CompactResults.SelectedIndex + offset, 0, FilteredItems.Count - 1);
+                CompactResults.SelectedIndex = e.Key == global::Windows.System.VirtualKey.Down ? 0 : FilteredItems.Count - 1;
                 CompactResults.ScrollIntoView(CompactResults.SelectedItem);
+                _isSearchEditing = false;
+                if (CompactResults.ContainerFromItem(CompactResults.SelectedItem) is Control row)
+                    row.Focus(FocusState.Keyboard);
+                else CompactResults.Focus(FocusState.Keyboard);
             }
             e.Handled = true;
             return;

@@ -16,6 +16,7 @@ public sealed partial class MainWindow
 
     private void LoadLauncherPins()
     {
+        LoadCommandShortcuts();
         _launcherSource.Source = _launcherGroups;
         CompactResults.ItemsSource = _launcherSource.View;
         CompactResults.PointerWheelChanged += (_, e) =>
@@ -58,6 +59,7 @@ public sealed partial class MainWindow
     {
         if (_selected is not { } command) yield break;
         yield return new("Run command · Enter", () => { _selected = command; RunSelected(); });
+        yield return new("Set shortcut…", () => { _ = ConfigureCommandShortcutAsync(command); });
         yield return new(_pinnedCommands.Contains(command.Title) ? "Unpin from Quick Launch" : "Pin to Quick Launch",
             () => ToggleLauncherPin(command));
     }
@@ -87,7 +89,7 @@ public sealed partial class MainWindow
         var byTitle = candidates.ToDictionary(command => command.Title, StringComparer.Ordinal);
         return QuickLaunchRanking.Order(candidates.Select(command => command.Title), _pinnedCommands, _launcherUsage,
                 !string.IsNullOrWhiteSpace(SearchBox.Text))
-            .Select(title => byTitle[title] with { IsPinned = _pinnedCommands.Contains(title) });
+            .Select(title => byTitle[title] with { IsPinned = _pinnedCommands.Contains(title), Shortcut = CommandShortcut(byTitle[title]) });
     }
 
     private void RebuildLauncherGroups()
