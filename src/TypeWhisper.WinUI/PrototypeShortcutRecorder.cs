@@ -106,7 +106,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
             "ToggleOnlyHotkeys" => ("pause", "Press to start or stop"),
             "HoldOnlyHotkeys" => ("keyboard", "Record while held down"),
             "RecentTranscriptionsHotkeys" => ("history", "Open recent transcripts"),
-            "CopyLastTranscriptionHotkeys" => ("file", "Copy your latest result"),
+            "CopyLastTranscriptionHotkeys" => ("file", "Copy the last dictation from this session"),
             "WorkflowPaletteHotkeys" => ("workflow", "Run a text workflow"),
             "WorkflowSelectedTextHotkeys" => ("workflow", "Process selected text with this workflow · saved when you save the workflow"),
             _ => ("recorder", "Open the audio recorder")
@@ -280,7 +280,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
         SetValue(PrototypeShortcutRules.Upsert(Current, _editingIndex, _candidate)); _add.Focus(FocusState.Keyboard);
     }
     // Cancellation uses RegisterHotKey rather than the dictation modifier-only hook.
-    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys"))
+    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys" or "CopyLastTranscriptionHotkeys"))
         ?? PrototypeShortcutRules.Duplicate(candidate, Current, _editingIndex)
         ?? PrototypeShortcutRules.Conflict(candidate, _key, _bindings());
     private void Candidate(string candidate)

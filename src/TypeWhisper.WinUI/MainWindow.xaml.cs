@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
         if (_cancelProcessingHotkey?.ConflictWithLauncher(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value) is { } workflowConflict) return workflowConflict;
         if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
+        if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
         var previous = _hotkeyRegistration.Value;
         var error = _hotkeyRegistration.TryChange(value);
         if (error is not null) return error;
@@ -58,6 +59,7 @@ public sealed partial class MainWindow : Window
         new("Suggested", "file", "Transcribe file", "Drop or choose audio and video files", "", "Opens the file transcription queue in workspace mode."),
         new("Suggested", "dictionary", "Dictionary", "Your words and preferred spellings", "D", "Manage words and correction rules used by TypeWhisper."),
         new("Suggested", "text", "Snippets", "Reusable text with spoken triggers", "", "Create and edit text snippets."),
+        new("Suggested", "file", "Copy last transcription", "Copy the last completed dictation from this session", "", "Copies final dictated text, including when History is off. Configure its global shortcut in Settings > Shortcuts."),
         new("Suggested", "home", "Dashboard", "Your activity and recent transcriptions", "", "Opens the activity dashboard."),
         new("Suggested", "stats", "Statistics", "Words, streaks, apps, and models", "", "Explore your usage over time."),
     ];
@@ -78,6 +80,7 @@ public sealed partial class MainWindow : Window
         if (_cancelProcessingHotkey?.ConflictWithDictation(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value, modifierOnly: true) is { } workflowConflict) return workflowConflict;
         if (HistoryShortcutConflict(value, modifierOnly: true) is { } historyConflict) return historyConflict;
+        if (CopyLastShortcutConflict(value, modifierOnly: true) is { } copyConflict) return copyConflict;
         if (_dictation.IsRecording) return "Finish the recording before changing its shortcut.";
         var previous = _dictationHotkey.Value;
         var error = _dictationHotkey.TryChange(value);
@@ -155,6 +158,7 @@ public sealed partial class MainWindow : Window
             await _dictation.InitializeAsync();
             InitializeWorkflowShortcuts();
             InitializeHistoryShortcut();
+            InitializeCopyLastShortcut();
             if (cancelError is not null && !_closing) MetricsText.Text = cancelError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
@@ -176,6 +180,7 @@ public sealed partial class MainWindow : Window
     {
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
+        _copyLastHotkey?.Dispose();
         await StopWorkflowShortcutsAsync();
         // The recorder owns the session gate while capturing; save it before session shutdown waits for that gate.
         var reviews = DrainReviewWindowsAsync();
@@ -188,6 +193,7 @@ public sealed partial class MainWindow : Window
         await StopWorkflowShortcutsAsync();
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
+        _copyLastHotkey?.Dispose();
         _dictationHotkey?.Dispose();
         _dictationInput?.Dispose();
         if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
@@ -754,6 +760,8 @@ public sealed partial class MainWindow : Window
             WorkflowsView.OpenSelected();
         else if (_historyOpen)
             HistoryView.OpenSelected();
+        else if (_selected?.Title == "Copy last transcription")
+            CopyLastTranscription();
         else if (_selected?.Title == "History")
             OpenHistory();
         else if (_selected?.Title == "Recorder")
@@ -1055,6 +1063,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
+            _settingsWindow.CommitCopyLastTranscriptionHotkeys = ChangeCopyLastShortcut;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
             _settingsWindow.CommitCancelProcessingHotkeys = value =>
             {
@@ -1062,6 +1071,7 @@ public sealed partial class MainWindow : Window
                 if (_cancelProcessingHotkey is null) return "Cancel shortcuts are unavailable. Wait for startup to finish or restart the app.";
                 if (_workflowShortcuts?.Conflict(value) is { } conflict) return conflict;
                 if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
+                if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
                 var error = _cancelProcessingHotkey.TryChange(value);
                 _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey.Value;
                 return error;
