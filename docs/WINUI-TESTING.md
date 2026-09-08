@@ -516,3 +516,9 @@ Use an isolated Debug profile and locally synthesized speech for unattended nati
 - Automated suites cover source stability, exclusive-write contention, interrupted requests, late-result cancellation, atomic progress failures, safe export recovery, folder isolation, Unicode, collisions and real-timestamp subtitle requirements.
 
 Evidence: `artifacts/watch-folder-native-evidence.json`, `artifacts/watch-folder-headless-final.log`. The native batch export picker and newly recorded microphone/system-audio quality remain outside this acceptance run.
+
+## Learned-correction overlay feedback (2026-09-08)
+
+Successful automatic dictionary additions reuse the recording overlay at its configured anchor. The acknowledgement shows the original and replacement, with a left-shrinking countdown for 12 seconds. It does not activate the window or open live transcription. A new dictation cancels feedback and restores the recording layout. Duplicate or unsaved corrections do not produce success feedback.
+
+Native acceptance in the isolated correction-learning profile verified a real Notepad correction from teh to the, the saved mapping and animated countdown in the existing overlay, retained editor focus, and automatic dismissal. Custom anchors, multiple monitors and every recording-overlay mode were not exercised in this run.

@@ -239,6 +239,23 @@ public sealed partial class MainWindow : Window
     }
     internal bool CanRetryRecorderShutdown => RecorderView.NeedsSaveRetry;
 
+    private void ShowLearnedCorrections(IReadOnlyList<TypeWhisper.Core.Models.LearnedDictionaryCorrection> corrections)
+    {
+        if (_closing || _dictation.IsRecording || _dictation.OverlayState.Phase == DictationPhase.Processing) return;
+        ++_overlayRevision;
+        _completedRecordingId = Guid.Empty;
+        _completedPreviewExpired = true;
+        _overlay?.HidePreview();
+        _liveOverlay ??= new OverlayWindow(false, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0,
+            () => _dictation.OverlayState, () => _dictation.LivePreviewText);
+        _liveOverlay.SetLayout(OverlayPreferences);
+        _liveOverlay.ShowCorrectionFeedback(corrections, DisplayArea.GetFromWindowId(_liveOverlay.AppWindow.Id, DisplayAreaFallback.Primary));
+    }
+    private void HideLearnedCorrections()
+    {
+        if (_liveOverlay?.IsCorrectionFeedbackVisible == true) _liveOverlay.HidePreview();
+    }
+
     private void UpdateLiveDictation()
     {
         if (_closing) return;
@@ -246,6 +263,8 @@ public sealed partial class MainWindow : Window
         if (IsNormalLauncherStatus) MetricsText.Text = DictationStatusForDisplay;
         UpdateTranscriptToggle();
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
+        if (_liveOverlay?.IsCorrectionFeedbackVisible == true &&
+            _dictation.OverlayState.Phase is not (DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error)) return;
         if (_dictation.OverlayState.Phase != DictationPhase.Completed) _completedPreviewExpired = false;
         else if (_completedPreviewExpired) return;
         else if (OverlayPreferences.PreviewBubbleAutoHideMilliseconds == 0)
@@ -332,6 +351,13 @@ public sealed partial class MainWindow : Window
     internal MainWindow()
     {
         InitializeComponent();
+        CorrectionLearning.CorrectionsLearned += ShowLearnedCorrections;
+        CorrectionLearning.ObservationCancelled += HideLearnedCorrections;
+        Closed += (_, _) =>
+        {
+            CorrectionLearning.CorrectionsLearned -= ShowLearnedCorrections;
+            CorrectionLearning.ObservationCancelled -= HideLearnedCorrections;
+        };
 #if DEBUG
         ConfigureTrayProbe();
 #endif

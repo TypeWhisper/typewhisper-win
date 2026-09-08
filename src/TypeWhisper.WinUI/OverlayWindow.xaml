@@ -60,6 +60,16 @@
                 <TextBlock x:Name="RightWidgetText" Grid.Column="1" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}"/>
             </Grid>
         </Grid>
+        <Grid x:Name="CorrectionFeedback" Grid.RowSpan="2" Visibility="Collapsed" RowSpacing="5" AutomationProperties.LiveSetting="Polite">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="3"/></Grid.RowDefinitions>
+            <TextBlock x:Name="CorrectionHeading" Text="Saved to Dictionary" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}"/>
+            <TextBlock x:Name="CorrectionText" Grid.Row="1" FontSize="14" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextBrush}"/>
+            <Border Grid.Row="2" Background="{ThemeResource HairlineBrush}" CornerRadius="1.5">
+                <Border Background="{ThemeResource AccentBrush}" CornerRadius="1.5" RenderTransformOrigin="0,0.5">
+                    <Border.RenderTransform><ScaleTransform x:Name="CorrectionCountdown" ScaleX="1"/></Border.RenderTransform>
+                </Border>
+            </Border>
+        </Grid>
         <TextBlock x:Name="DiagnosticsText" Grid.Row="1" Text="Measuring…" FontFamily="Cascadia Mono" FontSize="8"
                    HorizontalAlignment="Right" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
         </Grid>

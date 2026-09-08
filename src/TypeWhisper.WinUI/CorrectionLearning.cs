@@ -16,6 +16,8 @@ internal static class CorrectionLearning
     internal static string Status { get; private set; } = Enabled ? "Ready for the next dictation." : "Automatic learning is off. Existing corrections remain in Dictionary.";
     internal static event Action? Changed;
     internal static event Action? DictionaryChanged;
+    internal static event Action<IReadOnlyList<LearnedDictionaryCorrection>>? CorrectionsLearned;
+    internal static event Action? ObservationCancelled;
     static CorrectionLearning() { PremiumView.Access.Changed += () => { if (!Allowed) Cancel(); Changed?.Invoke(); }; }
     private static bool ReadEnabled()
     {
@@ -37,6 +39,7 @@ internal static class CorrectionLearning
     }
     internal static Task Cancel()
     {
+        ObservationCancelled?.Invoke();
         _cancellation?.Cancel();
         return _pending;
     }
@@ -92,7 +95,13 @@ internal static class CorrectionLearning
     private static IReadOnlyList<LearnedDictionaryCorrection> Save(IReadOnlyList<CorrectionSuggestion> suggestions)
     {
         var learned = LearnedCorrectionStore.Save(DictationDictionarySnapshot.StoragePath, suggestions);
-        if (learned.Count > 0) DictionaryChanged?.Invoke();
+        if (learned.Count > 0)
+        {
+            DictionaryChanged?.Invoke();
+            try { CorrectionsLearned?.Invoke(learned); }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            { System.Diagnostics.Debug.WriteLine("Correction feedback unavailable: " + e.GetType().Name); }
+        }
         return learned;
     }
 }

@@ -58,6 +58,31 @@ public sealed partial class OverlayWindow : Window
         _transcriptWindow?.SetTextSize(preferences.LiveTranscriptionFontSize);
     }
 
+    private readonly Stopwatch _feedbackClock = new();
+    internal bool IsCorrectionFeedbackVisible { get; private set; }
+    internal void ShowCorrectionFeedback(IReadOnlyList<TypeWhisper.Core.Models.LearnedDictionaryCorrection> corrections, DisplayArea area)
+    {
+        if (corrections.Count == 0 || _closed) return;
+        HidePreview();
+        SetTranscriptPreviewEnabled(false);
+        SetTechnicalDetailsEnabled(false);
+        // Use the same anchor and shell, with enough room for a readable acknowledgement even in Minimal mode.
+        SetMode(OverlayMode.Standard, area);
+        CorrectionHeading.Text = corrections.Count == 1 ? "Saved to Dictionary" : $"Saved {corrections.Count} corrections to Dictionary";
+        CorrectionText.Text = string.Join(" · ", corrections.Select(c => $"{c.Original} → {c.Replacement}"));
+        RecordingLayout.Visibility = DiagnosticsText.Visibility = Visibility.Collapsed;
+        CorrectionFeedback.Visibility = Visibility.Visible;
+        CorrectionCountdown.ScaleX = 1;
+        IsCorrectionFeedbackVisible = true;
+        _previewVisible = _sessionStarted = true;
+        _feedbackClock.Restart();
+        ConfigureNativeWindow();
+        AppWindow.Show(activateWindow: false);
+        NativeWindowAppearance.RemoveOverlayFrame(this);
+        CompositionTarget.Rendering -= CompositionTarget_Rendering;
+        CompositionTarget.Rendering += CompositionTarget_Rendering;
+        FadeIn();
+    }
     internal bool IsPaused => _paused;
     internal bool IsPreviewVisible => _previewVisible;
 
@@ -141,6 +166,10 @@ public sealed partial class OverlayWindow : Window
 
     internal void HidePreview()
     {
+        IsCorrectionFeedbackVisible = false;
+        _feedbackClock.Reset();
+        CorrectionFeedback.Visibility = Visibility.Collapsed;
+        RecordingLayout.Visibility = Visibility.Visible;
         _previewVisible = false;
         _sessionStarted = false;
         _paused = false;
@@ -208,6 +237,7 @@ public sealed partial class OverlayWindow : Window
 
     internal void SetMode(OverlayMode mode, DisplayArea area)
     {
+        if (IsCorrectionFeedbackVisible) HidePreview();
         _mode = mode;
         var minimal = mode == OverlayMode.Minimal;
         var compact = mode == OverlayMode.Compact;
@@ -370,6 +400,13 @@ public sealed partial class OverlayWindow : Window
 
     private void CompositionTarget_Rendering(object? sender, object e)
     {
+        if (IsCorrectionFeedbackVisible)
+        {
+            var remaining = Math.Clamp(1 - _feedbackClock.Elapsed.TotalSeconds / 12, 0, 1);
+            CorrectionCountdown.ScaleX = remaining;
+            if (remaining == 0) HidePreview();
+            return;
+        }
         if (_paused || !_previewVisible) return;
         var timestamp = Stopwatch.GetTimestamp();
         var targetTicks = Stopwatch.Frequency / 60d;
