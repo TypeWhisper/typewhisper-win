@@ -12,6 +12,163 @@ public sealed class LocalHttpApiTests
     private const string Token = "a7d18284e6504fe2a1cc070c62850709";
 
     [Fact]
+    public async Task CustomStatusIsPublicButCannotBypassOriginOrProtectedEndpointChecks()
+    {
+        var statusCalls = 0;
+        var backendCalls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            backendCalls++;
+            return Task.FromResult(LocalApiResponse.Json(200, new { }));
+        }, statusHandler: ct =>
+        {
+            Assert.True(ct.CanBeCanceled);
+            statusCalls++;
+            return Task.FromResult(LocalApiResponse.Json(200, new { status = "ready", model = "selected-model" }));
+        });
+        await server.StartAsync();
+        using var client = Client(server);
+        Assert.Contains("selected-model", await client.GetStringAsync("v1/status"));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("v1/models")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsync("v1/status", new StringContent(""))).StatusCode);
+        client.DefaultRequestHeaders.Add("Origin", "http://localhost:8978");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/status")).StatusCode);
+        Assert.Equal(1, statusCalls);
+        Assert.Equal(0, backendCalls);
+    }
+
+    [Fact]
+    public async Task CustomStatusDoesNotWaitForDeclaredRequestBody()
+    {
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) => throw new InvalidOperationException(),
+            statusHandler: _ => Task.FromResult(LocalApiResponse.Json(200, new { status = "ready" })));
+        await server.StartAsync();
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, server.Port);
+        await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"GET /v1/status HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nContent-Length: 999999999\r\n\r\n"));
+        using var reader = new StreamReader(tcp.GetStream());
+        Assert.Contains("200", await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task AfterResponseRunsOnceAfterAcceptedResponseIsWritten()
+    {
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var callbacks = 0;
+        var failures = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) => Task.FromResult(
+            LocalApiResponse.Json(202, new { status = "restoring" }) with
+            {
+                AfterResponse = () => { Interlocked.Increment(ref callbacks); completed.TrySetResult(); },
+                ResponseFailed = () => Interlocked.Increment(ref failures)
+            }));
+        await server.StartAsync();
+        using var client = Client(server, true);
+        using var response = await client.PostAsync("v1/settings/import", new StringContent("{}"));
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Contains("restoring", await response.Content.ReadAsStringAsync());
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await server.StopAsync();
+        Assert.Equal(1, callbacks);
+        Assert.Equal(0, failures);
+    }
+
+    [Fact]
+    public async Task FailedResponseWriteDoesNotRunAfterResponse()
+    {
+        var callbacks = 0;
+        var failures = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) => Task.FromResult(
+            // Invalid HTTP status forces response publication to fail before any bytes are sent.
+            LocalApiResponse.Json(99, new { }) with
+            {
+                AfterResponse = () => Interlocked.Increment(ref callbacks),
+                ResponseFailed = () => Interlocked.Increment(ref failures)
+            }));
+        await server.StartAsync();
+        using var client = Client(server, true);
+        Assert.Equal(HttpStatusCode.InternalServerError, (await client.GetAsync("v1/models")).StatusCode);
+        await server.StopAsync();
+        Assert.Equal(0, callbacks);
+        Assert.Equal(1, failures);
+    }
+
+    [Fact]
+    public async Task TimedOutResponseDoesNotRunAfterResponse()
+    {
+        var callbacks = 0;
+        var failures = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, async (_, ct) =>
+        {
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, ct); }
+            catch (OperationCanceledException) { }
+            return LocalApiResponse.Json(202, new { }) with
+            {
+                AfterResponse = () => Interlocked.Increment(ref callbacks),
+                ResponseFailed = () => Interlocked.Increment(ref failures)
+            };
+        }, requestTimeout: TimeSpan.FromMilliseconds(100));
+        await server.StartAsync();
+        using var client = Client(server, true);
+        using var response = await client.GetAsync("v1/models");
+        Assert.Equal(HttpStatusCode.RequestTimeout, response.StatusCode);
+        await server.StopAsync();
+        Assert.Equal(0, callbacks);
+        Assert.Equal(1, failures);
+    }
+
+    [Fact]
+    public async Task FailedCompletionCallbackReleasesReservationAndCleanupCannotFaultTheHost()
+    {
+        var failures = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) => Task.FromResult(
+            LocalApiResponse.Json(202, new { }) with
+            {
+                AfterResponse = () => throw new InvalidOperationException("Scheduling failed."),
+                ResponseFailed = () => { Interlocked.Increment(ref failures); throw new InvalidOperationException("Cleanup failed."); }
+            }));
+        await server.StartAsync();
+        using var client = Client(server, true);
+        using var response = await client.GetAsync("v1/models");
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        await server.StopAsync();
+        Assert.Equal(1, failures);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TokenRequirementControlsLegacyRequestsButAlwaysBlocksBrowserOrigins(bool requireAuthentication)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { }));
+        }, requireAuthentication: requireAuthentication);
+        await server.StartAsync();
+        using var client = Client(server);
+        var expected = requireAuthentication ? HttpStatusCode.Unauthorized : HttpStatusCode.OK;
+        Assert.Equal(expected, (await client.GetAsync("v1/models")).StatusCode);
+        Assert.Equal(expected, (await client.PostAsync("v1/transcribe", new StringContent("audio"))).StatusCode);
+        Assert.Equal(requireAuthentication ? 0 : 2, calls);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/models")).StatusCode);
+        var authenticatedCalls = calls;
+        foreach (var origin in new[] { "https://example.com", "http://localhost:8978", "null" })
+        {
+            client.DefaultRequestHeaders.Remove("Origin");
+            client.DefaultRequestHeaders.Add("Origin", origin);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/models")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/status")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("docs")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("v1/transcribe", new StringContent("audio"))).StatusCode);
+        }
+        Assert.Equal(authenticatedCalls, calls);
+    }
+
+    [Fact]
     public async Task DocumentationIsPublicStaticAndDoesNotExposeCredentialsOrBypassApiAuthentication()
     {
         var calls = 0;

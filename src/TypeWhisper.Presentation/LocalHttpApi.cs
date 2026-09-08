@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace TypeWhisper.Presentation;
 
-/// <summary>An authenticated request whose body has passed the transport size limit.</summary>
+/// <summary>An admitted local request whose body has passed the transport size limit.</summary>
 /// <param name="Method">HTTP method.</param>
 /// <param name="Path">Absolute URL path.</param>
 /// <param name="Body">Buffered request body.</param>
@@ -20,6 +20,12 @@ public sealed record LocalApiRequest(string Method, string Path, byte[] Body, st
 /// <param name="ContentType">Response media type.</param>
 public sealed record LocalApiResponse(int StatusCode, byte[] Body, string ContentType = "application/json")
 {
+    /// <summary>Runs after a successful response has been written; used to schedule operations that stop the server.</summary>
+    public Action? AfterResponse { get; init; }
+
+    /// <summary>Releases reserved work if response publication or its completion callback fails.</summary>
+    public Action? ResponseFailed { get; init; }
+
     /// <summary>Serializes a JSON response as UTF-8.</summary>
     public static LocalApiResponse Json(int statusCode, object value) =>
         new(statusCode, JsonSerializer.SerializeToUtf8Bytes(value));
@@ -29,7 +35,9 @@ public sealed record LocalApiResponse(int StatusCode, byte[] Body, string Conten
 public sealed class LocalHttpApi : IAsyncDisposable
 {
     private readonly Func<LocalApiRequest, CancellationToken, Task<LocalApiResponse>> _handler;
+    private readonly Func<CancellationToken, Task<LocalApiResponse>>? _statusHandler;
     private readonly byte[] _tokenHash;
+    private readonly bool _requireAuthentication;
     private readonly int _maxBodyBytes;
     private readonly TimeSpan _requestTimeout;
     private readonly SemaphoreSlim _slots;
@@ -40,10 +48,11 @@ public sealed class LocalHttpApi : IAsyncDisposable
     private CancellationTokenSource? _stopping;
     private Task? _acceptLoop;
 
-    /// <summary>Creates a host with a required token and bounded request admission.</summary>
+    /// <summary>Creates a host with configurable token authentication and bounded request admission.</summary>
     public LocalHttpApi(int port, string token,
         Func<LocalApiRequest, CancellationToken, Task<LocalApiResponse>> handler,
-        int maxBodyBytes = 32 * 1024 * 1024, int maxConcurrency = 4, TimeSpan? requestTimeout = null)
+        int maxBodyBytes = 32 * 1024 * 1024, int maxConcurrency = 4, TimeSpan? requestTimeout = null,
+        bool requireAuthentication = true, Func<CancellationToken, Task<LocalApiResponse>>? statusHandler = null)
     {
         if (port is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(port));
         if (string.IsNullOrWhiteSpace(token) || token.Length < 32 || token.Any(char.IsWhiteSpace))
@@ -53,8 +62,10 @@ public sealed class LocalHttpApi : IAsyncDisposable
         _requestTimeout = requestTimeout ?? TimeSpan.FromMinutes(5);
         if (_requestTimeout <= TimeSpan.Zero || _requestTimeout.TotalMilliseconds > uint.MaxValue - 1)
             throw new ArgumentOutOfRangeException(nameof(requestTimeout));
+        _statusHandler = statusHandler;
         Port = port;
         _tokenHash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        _requireAuthentication = requireAuthentication;
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
         _maxBodyBytes = maxBodyBytes;
         _slots = new SemaphoreSlim(maxConcurrency, maxConcurrency);
@@ -137,15 +148,16 @@ public sealed class LocalHttpApi : IAsyncDisposable
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stopping);
         timeout.CancelAfter(_requestTimeout);
+        LocalApiResponse? response = null;
+        var responseCompleted = false;
         try
         {
-            LocalApiResponse response;
             var request = context.Request;
             var publicStatus = request.HttpMethod == "GET" && request.Url?.AbsolutePath == "/v1/status";
             var publicDocs = request.HttpMethod == "GET" && request.Url?.AbsolutePath is "/docs" or "/docs/";
             if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) || request.Headers["Origin"] is not null)
                 response = Error(403, "Request origin is not allowed.");
-            else if (!publicStatus && !publicDocs && !Authenticated(request))
+            else if (_requireAuthentication && !publicStatus && !publicDocs && !Authenticated(request))
                 response = Error(401, "Authentication required.");
             else if (!admitted)
                 response = Error(429, "Too many requests.");
@@ -154,7 +166,8 @@ public sealed class LocalHttpApi : IAsyncDisposable
             else if (publicDocs)
                 response = LocalApiDocumentation.Response(Port);
             else if (publicStatus)
-                response = LocalApiResponse.Json(200, new { status = "ok", api_version = "1.1" });
+                response = _statusHandler is null ? LocalApiResponse.Json(200, new { status = "ok", api_version = "1.1" })
+                    : await _statusHandler(timeout.Token).ConfigureAwait(false);
             else if (request.ContentLength64 > _maxBodyBytes)
                 response = Error(413, "Request body is too large.");
             else
@@ -183,6 +196,8 @@ public sealed class LocalHttpApi : IAsyncDisposable
                     body.ToArray(), request.ContentType, query), timeout.Token).ConfigureAwait(false);
             }
             await WriteAsync(context, response, timeout.Token).ConfigureAwait(false);
+            response.AfterResponse?.Invoke();
+            responseCompleted = true;
         }
         catch (OperationCanceledException)
         {
@@ -194,6 +209,12 @@ public sealed class LocalHttpApi : IAsyncDisposable
         }
         finally
         {
+            if (!responseCompleted)
+            {
+                try { response?.ResponseFailed?.Invoke(); }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                { System.Diagnostics.Trace.TraceError("API response cleanup failed: {0}", ex); }
+            }
             try { context.Response.Close(); } catch { /* Client disconnected or listener stopped. */ }
             if (admitted) _slots.Release();
         }
@@ -211,7 +232,7 @@ public sealed class LocalHttpApi : IAsyncDisposable
     private bool TokenMatches(string? candidate) => CryptographicOperations.FixedTimeEquals(
         _tokenHash, SHA256.HashData(Encoding.UTF8.GetBytes(candidate ?? string.Empty)));
 
-    private static LocalApiResponse Error(int status, string message) => LocalApiResponse.Json(status, new { error = message });
+    private static LocalApiResponse Error(int status, string message) => LocalApiResponse.Json(status, new { error = new { code = status switch { 400 => "bad_request", 401 => "unauthorized", 403 => "forbidden", 413 => "payload_too_large", 429 => "too_many_requests", _ => "error" }, message } });
 
     private static async Task TryWriteErrorAsync(HttpListenerContext context, int status, string message)
     {
