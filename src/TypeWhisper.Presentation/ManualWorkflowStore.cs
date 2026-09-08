@@ -128,6 +128,17 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
 /// <summary>Runs the exact configured provider and model; no fallback or sample transformation is permitted.</summary>
 public static class ManualWorkflowRunner
 {
+    /// <summary>Explains missing LLM configuration before input is captured or sent.</summary>
+    public static string? ConfigurationError(string? provider, string? model, Func<string, string, bool> available)
+    {
+        if (string.IsNullOrWhiteSpace(provider) || provider == "none")
+            return "Choose an LLM provider and model in Edit workflow. This workflow cannot run without them.";
+        if (string.IsNullOrWhiteSpace(model))
+            return "Choose an LLM model in Edit workflow before running this workflow.";
+        return available(provider, model) ? null
+            : "The saved LLM provider or model is unavailable. Check the plugin settings and model in Edit workflow.";
+    }
+
     /// <summary>Processes source text, rejecting unavailable choices and late results after cancellation.</summary>
     public static async Task<string> RunAsync(Workflow workflow, string input,
         Func<string, string, bool> available,
@@ -139,11 +150,11 @@ public static class ManualWorkflowRunner
         var provider = workflow.Behavior.ProviderOverride;
         var model = workflow.Behavior.ModelOverride;
         if (string.IsNullOrWhiteSpace(input)) throw new InvalidOperationException("Enter source text first.");
-        if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(model) || !available(provider, model))
-            throw new InvalidOperationException("The saved provider or model is unavailable. Configure the workflow before running it.");
+        if (ConfigurationError(provider, model, available) is { } configurationError)
+            throw new InvalidOperationException(configurationError);
         var prompt = workflow.SystemPrompt();
         if (string.IsNullOrWhiteSpace(prompt)) throw new InvalidOperationException("This workflow has no instructions.");
-        var result = await process(provider, prompt, input, model, cancellationToken).ConfigureAwait(false);
+        var result = await process(provider!, prompt, input, model!, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException("The provider returned an empty result. Your source text is unchanged.");
         return result;

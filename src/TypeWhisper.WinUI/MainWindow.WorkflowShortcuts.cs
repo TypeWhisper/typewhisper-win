@@ -46,6 +46,14 @@ public sealed partial class MainWindow
             || _dictationInitialization is not { IsCompleted: true } || _dictationInput?.IsRecordingOrStarting == true) return;
         if (ManualWorkflowStore.IsDictationShortcut(workflow))
         {
+            var error = ManualWorkflowRunner.ConfigurationError(workflow.Behavior.ProviderOverride, workflow.Behavior.ModelOverride,
+                (provider, model) => _dictation.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)));
+            if (error is not null)
+            {
+                ShowFromActivation();
+                ShowActivationNotice(workflow.Name + ": " + error);
+                return;
+            }
             var snapshot = AutomaticWorkflowSnapshot.ForDictationShortcut(workflow);
             _ = _dictationInput?.SubmitAsync(DictationInputAction.Start, () =>
             {

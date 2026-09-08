@@ -6,6 +6,20 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class DictationWorkflowShortcutTests
 {
+    [Theory]
+    [InlineData(null, "model", "Choose an LLM provider")]
+    [InlineData("none", "model", "Choose an LLM provider")]
+    [InlineData("provider", "", "Choose an LLM model")]
+    [InlineData("provider", "model", "unavailable")]
+    public void MissingConfigurationExplainsRequiredAction(string? provider, string? model, string expected)
+    {
+        Assert.Contains(expected, ManualWorkflowRunner.ConfigurationError(provider, model, (_, _) => false));
+    }
+
+    [Fact]
+    public void ReadyConfigurationHasNoWarning() =>
+        Assert.Null(ManualWorkflowRunner.ConfigurationError("provider", "model", (_, _) => true));
+
     private static Workflow Workflow() => new()
     {
         Id = "translation", Name = "Translate", Template = WorkflowTemplate.Translation,

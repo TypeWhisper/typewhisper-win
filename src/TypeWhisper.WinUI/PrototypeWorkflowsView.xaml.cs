@@ -389,7 +389,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigName.Text = _opened.Title;
         ConfigTrigger.SetOptions([
             new("Manual", "Manual", "Run explicitly with source text"),
-            new("Hotkey", "Shortcut Â· selected text", "Send the selected text to this workflow and review the result"),
+            new("Hotkey", "Shortcut \u00b7 selected text", "Send the selected text to this workflow and review the result"),
             new("DictationHotkey", "Shortcut \u00b7 dictation", "Press to start dictation with this workflow; press again to stop"),
             new("App", "App", "Apply to dictation in matching Windows processes"),
             new("Website", "Website", "Apply to dictation on matching browser domains"),
@@ -453,12 +453,13 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigTemplateDescription.Text = WorkflowTemplateCatalog.DefinitionFor(template).Description;
         var error = ConfigurationError;
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? "Save as disabled. Enable this workflow before running it."
-            : !Available(ConfigProvider.SelectedId, ConfigModel.SelectedId)
-                ? "You can save this workflow now. Configure the selected plugin before running it."
+            : ManualWorkflowRunner.ConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId, Available) is { } providerError
+                ? providerError + " You can save now and complete the setup later."
                 : (ConfigTrigger.SelectedId == "DictationHotkey" ? "Press once to start and again to stop. Applies only to this recording and uses your dictation paste and history settings."
                     : ConfigTrigger.SelectedId == "Hotkey" ? "The shortcut processes selected text with this provider. Results open for review."
                     : ConfigTrigger.SelectedId == "Manual" ? "Saved on this device. Run manually and review before copying." : "Applies automatically to matching dictations. Uses your dictation paste and history settings."));
-        ConfigurationValidation.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[error is null ? "MutedBrush" : "AccentBrush"];
+        ConfigurationValidation.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
+            error is null && (!ConfigEnabled.IsOn || Available(ConfigProvider.SelectedId, ConfigModel.SelectedId)) ? "MutedBrush" : "AccentBrush"];
         WorkflowSummary.Text = ConfigurationDirty ? "Unsaved changes" : "Workflow configuration";
         WorkflowPrimaryButton.IsEnabled = error is null && ConfigurationDirty && ConfigurationDiscardPrompt.Visibility != Visibility.Visible;
     }
