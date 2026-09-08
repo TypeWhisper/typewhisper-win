@@ -40,7 +40,9 @@ public enum WorkflowTemplate
     /// <summary>
     /// Represents the custom option.
     /// </summary>
-    Custom
+    Custom,
+    /// <summary>Transcribe without workflow LLM processing.</summary>
+    Dictation
 }
 
 /// <summary>
@@ -137,6 +139,7 @@ public static class WorkflowTemplateCatalog
         new(WorkflowTemplate.Checklist, "Checklist", "Extract action items into a checklist.", "Check"),
         new(WorkflowTemplate.Json, "JSON", "Extract structured data as JSON.", "Json"),
         new(WorkflowTemplate.Summary, "Summary", "Condense dictated text into a concise summary.", "Summary"),
+        new(WorkflowTemplate.Dictation, "Dictation Only", "Transcribe and insert without LLM processing.", "Microphone"),
         new(WorkflowTemplate.Custom, "Custom Workflow", "Start with a flexible workflow draft.", "Custom")
     ];
 
@@ -513,6 +516,7 @@ public sealed record Workflow
 
         return Template switch
         {
+            WorkflowTemplate.Dictation => null,
             WorkflowTemplate.CleanedText =>
                 "Use AI to apply smart formatting to the dictated text. Correct punctuation, capitalization, grammar, paragraph structure, and formatting. Preserve the original wording, meaning, tone, and source language. Return only the formatted text."
                 + inputBoundaryInstruction + languageHint + settingsInstruction + fineTuningInstruction + outputInstruction,

@@ -79,7 +79,7 @@ public sealed class WorkflowTemplatePicker : UserControl
     private static string Icon(string id) => id switch
     {
         "CleanedText" => "correction", "Translation" => "globe", "EmailReply" => "mail", "MeetingNotes" => "file",
-        "Checklist" => "check", "Json" => "plugin", "Summary" => "text", _ => "settings"
+        "Checklist" => "check", "Json" => "plugin", "Summary" => "text", "Dictation" => "microphone", _ => "settings"
     };
     private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
 }

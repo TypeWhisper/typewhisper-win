@@ -137,7 +137,17 @@ public sealed partial class WorkflowsView : UserControl
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
         ConfigContextMode.Configure("App and website conditions", "workflow", "Workflow context match mode");
         ConfigContextMode.SelectionChanged += _ => UpdateConfigurationState();
-        ConfigTemplate.SelectionChanged += _ => UpdateConfigurationState();
+        ConfigTemplate.SelectionChanged += _ =>
+        {
+            if (!_loadingConfiguration && Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var template))
+            {
+                var suggested = WorkflowTemplateCatalog.DefinitionFor(template).Name;
+                ConfigName.Text = WorkflowTemplateNames.ForSelection(ConfigName.Text, _suggestedName, suggested);
+                _suggestedName = suggested;
+                ConfigAdvanced.IsExpanded = template == WorkflowTemplate.Custom;
+            }
+            UpdateConfigurationState();
+        };
         ConfigProvider.Configure("Provider", "plugin", "Workflow provider");
         ConfigModel.Configure("Model", "chip", "Workflow model");
         ConfigOutput.Configure("Output destination", "run", "Workflow output");
@@ -289,7 +299,7 @@ public sealed partial class WorkflowsView : UserControl
             WorkflowSource.IsReadOnly = false;
             ConfigureWorkflowButton.IsEnabled = true;
             WorkflowPrimaryButton.Content = _page == Page.Result ? "Copy result" : "Run workflow";
-            WorkflowPrimaryButton.IsEnabled = _page == Page.Result || _opened is { IsEnabled: true } && EffectiveAvailable(_opened.ProviderId, _opened.ModelId) && !string.IsNullOrWhiteSpace(WorkflowSource.Text);
+            WorkflowPrimaryButton.IsEnabled = _page == Page.Result || _opened is { IsEnabled: true } && (_opened.Template == WorkflowTemplate.Dictation || EffectiveAvailable(_opened.ProviderId, _opened.ModelId)) && !string.IsNullOrWhiteSpace(WorkflowSource.Text);
             }
             finally { completion.TrySetResult(); }
         }
@@ -337,10 +347,10 @@ public sealed partial class WorkflowsView : UserControl
         WorkflowSource.IsReadOnly = _run is not null;
         var empty = string.IsNullOrWhiteSpace(WorkflowSource.Text);
         if (_run is not null) return;
-        WorkflowPrimaryButton.IsEnabled = _page == Page.Result || !empty && _opened is { IsEnabled: true } && EffectiveAvailable(_opened.ProviderId, _opened.ModelId);
+        WorkflowPrimaryButton.IsEnabled = _page == Page.Result || !empty && _opened is { IsEnabled: true } && (_opened.Template == WorkflowTemplate.Dictation || EffectiveAvailable(_opened.ProviderId, _opened.ModelId));
         SourceWatermark.Visibility = WorkflowSource.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         WorkflowInputHint.Text = _opened is { IsEnabled: false } ? "This workflow is disabled. Enable it in Edit workflow to run it."
-            : _opened is null || !EffectiveAvailable(_opened.ProviderId, _opened.ModelId)
+            : _opened is null || !(_opened.Template == WorkflowTemplate.Dictation || EffectiveAvailable(_opened.ProviderId, _opened.ModelId))
             ? "The saved provider or model is unavailable. Edit the workflow or configure the plugin."
             : empty ? "Paste or type the text to process." : "Run sends this text to the selected provider. Review the result before copying.";
     }
@@ -400,7 +410,7 @@ public sealed partial class WorkflowsView : UserControl
         : !int.TryParse(ConfigPriority.Text, out _) ? "Enter a whole-number priority. Lower numbers win."
         : !Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var template) || !Enum.IsDefined(template) ? "Choose a workflow template."
         : template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(ConfigInstruction.Text) ? "Add instructions for this custom workflow."
-        : ConfigProvider.SelectedId is not "none" and not WorkflowLlmDefaults.Inherit && !Models.Any(model => model.Id == ConfigModel.SelectedId)
+        : template != WorkflowTemplate.Dictation && ConfigProvider.SelectedId is not "none" and not WorkflowLlmDefaults.Inherit && !Models.Any(model => model.Id == ConfigModel.SelectedId)
             && (_creating || ConfigProvider.SelectedId != _opened?.ProviderId || ConfigModel.SelectedId != _opened?.ModelId)
                 ? "Choose a model for this provider." : null;
 
@@ -446,12 +456,14 @@ public sealed partial class WorkflowsView : UserControl
         });
     }
 
+    private string? _suggestedName;
+
     private void NewWorkflow_Click(object sender, RoutedEventArgs e)
     {
         if (_page != Page.List) return;
         _selectionBeforeCreate = WorkflowList.SelectedItem as WorkflowDraft;
         _creating = true;
-        _opened = new WorkflowDraft(Guid.NewGuid().ToString("N"), "", "Manual workflow", "workflow", "");
+        _opened = new WorkflowDraft(Guid.NewGuid().ToString("N"), WorkflowTemplateCatalog.DefinitionFor(WorkflowTemplate.CleanedText).Name, "Manual workflow", "workflow", "") { Template = WorkflowTemplate.CleanedText };
         _configurationReturnPage = Page.List;
         LoadConfiguration();
     }
@@ -466,6 +478,8 @@ public sealed partial class WorkflowsView : UserControl
         _loadingConfiguration = true;
         ConfigEnabled.IsOn = _opened.IsEnabled;
         DeleteWorkflowButton.Visibility = _creating ? Visibility.Collapsed : Visibility.Visible;
+        ConfigAdvanced.IsExpanded = false;
+        _suggestedName = _creating ? WorkflowTemplateCatalog.DefinitionFor(_opened.Template).Name : null;
         ConfigName.Text = _opened.Title;
         SetDraftIcon(_opened.IconKind);
         ConfigTrigger.SetOptions([
@@ -536,25 +550,28 @@ public sealed partial class WorkflowsView : UserControl
         ConfigContextSection.Visibility = contextual && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Visibility.Visible : Visibility.Collapsed;
         ConfigOutputSection.Visibility = ConfigTrigger.SelectedId is "Manual" or "Hotkey" ? Visibility.Visible : Visibility.Collapsed;
         var template = Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var selected) ? selected : WorkflowTemplate.Custom;
+        ConfigInstructionSection.Visibility = ConfigProviderSection.Visibility = ConfigModelSection.Visibility = template == WorkflowTemplate.Dictation ? Visibility.Collapsed : Visibility.Visible;
+        if (template == WorkflowTemplate.Custom) ConfigAdvanced.IsExpanded = true;
         ConfigTranslationSection.Visibility = template == WorkflowTemplate.Translation ? Visibility.Visible : Visibility.Collapsed;
         ConfigInstructionLabel.Text = template == WorkflowTemplate.Custom ? "INSTRUCTIONS (REQUIRED)" : "FINE-TUNING (OPTIONAL)";
         SettingsHelp.Update(_templateHelp, WorkflowTemplateCatalog.DefinitionFor(template).Description);
         var error = ConfigurationError;
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? "Save as disabled. Enable this workflow before running it."
+            : template == WorkflowTemplate.Dictation ? "No LLM processing. Dictation uses your selected transcription model."
             : EffectiveConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId) is { } providerError
                 ? providerError + " You can save now and complete the setup later."
                 : (ConfigTrigger.SelectedId == "DictationHotkey" ? "Press once to start and again to stop. Applies only to this recording and uses your dictation paste and history settings."
                     : ConfigTrigger.SelectedId == "Hotkey" ? "The shortcut processes selected text with this provider. Results open for review."
                     : ConfigTrigger.SelectedId == "Manual" ? "Saved on this device. Run manually and review before copying." : "Applies automatically to matching dictations. Uses your dictation paste and history settings."));
         ConfigurationValidation.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
-            error is null && (!ConfigEnabled.IsOn || EffectiveAvailable(ConfigProvider.SelectedId, ConfigModel.SelectedId)) ? "MutedBrush" : "AccentBrush"];
+            error is null && (!ConfigEnabled.IsOn || template == WorkflowTemplate.Dictation || EffectiveAvailable(ConfigProvider.SelectedId, ConfigModel.SelectedId)) ? "MutedBrush" : "AccentBrush"];
         WorkflowSummary.Text = ConfigurationDirty ? "Unsaved changes" : "Workflow configuration";
-        WorkflowPrimaryButton.IsEnabled = error is null && ConfigurationDirty && ConfigurationDiscardPrompt.Visibility != Visibility.Visible;
+        WorkflowPrimaryButton.IsEnabled = error is null && (_creating || ConfigurationDirty) && ConfigurationDiscardPrompt.Visibility != Visibility.Visible;
     }
 
     private void SaveConfiguration()
     {
-        if (_closing || _opened is null || ConfigurationError is not null || !ConfigurationDirty || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
+        if (_closing || _opened is null || ConfigurationError is not null || (!_creating && !ConfigurationDirty) || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
         var updated = _opened with { IconKind = _draftIcon, Title = ConfigName.Text.Trim(), Instruction = ConfigInstruction.Text.Trim().ReplaceLineEndings("\n"),
             TriggerKind = ConfigTrigger.SelectedId == "DictationHotkey" ? WorkflowTriggerKind.Hotkey : Enum.Parse<WorkflowTriggerKind>(ConfigTrigger.SelectedId),
             HotkeyBehavior = ConfigTrigger.SelectedId == "DictationHotkey" ? WorkflowHotkeyBehavior.StartDictation : WorkflowHotkeyBehavior.ProcessSelectedText, AppProcesses = ConfigAppProcesses.Text.Trim(),

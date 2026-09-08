@@ -35,10 +35,10 @@ public sealed class WorkflowLlmDefaults(string path)
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
     /// <summary>Resolves inheritance once without modifying the saved workflow.</summary>
-    public Workflow Resolve(Workflow workflow) => workflow.Behavior.ProviderOverride != Inherit ? workflow
+    public Workflow Resolve(Workflow workflow) => workflow.Template == WorkflowTemplate.Dictation || workflow.Behavior.ProviderOverride != Inherit ? workflow
         : Apply(workflow, Read());
     /// <summary>Applies a captured pair only to an explicitly inheriting workflow.</summary>
-    public static Workflow Apply(Workflow workflow, WorkflowLlmSelection? defaults) => workflow.Behavior.ProviderOverride != Inherit ? workflow
+    public static Workflow Apply(Workflow workflow, WorkflowLlmSelection? defaults) => workflow.Template == WorkflowTemplate.Dictation || workflow.Behavior.ProviderOverride != Inherit ? workflow
         : workflow with { Behavior = workflow.Behavior with { ProviderOverride = defaults?.Provider, ModelOverride = defaults?.Model } };
     private static void Validate(WorkflowLlmSelection value)
     {

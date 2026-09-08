@@ -39,8 +39,39 @@ public sealed class ManualWorkflowTemplateTests : IDisposable
                 Assert.Equal("Exact source", input);
                 return Task.FromResult("Real adapter test output");
             });
-        Assert.Equal(1, calls);
-        Assert.Equal("Real adapter test output", result);
+        Assert.Equal(template == WorkflowTemplate.Dictation ? 0 : 1, calls);
+        Assert.Equal(template == WorkflowTemplate.Dictation ? "Exact source" : "Real adapter test output", result);
+    }
+
+    [Fact]
+    public async Task DictationOnlyNeedsNoProviderAndNeverCallsAnLlm()
+    {
+        var workflow = Workflow(WorkflowTemplate.Dictation) with { Behavior = new() };
+        var store = new ManualWorkflowStore(StorePath);
+        store.Save(workflow);
+        workflow = Assert.Single(store.Read());
+        const string input = "  Exact words.\nSecond line!  ";
+        bool Available(string _, string __) => throw new Exception("Must not check an LLM");
+        Task<string> Process(string _, string __, string ___, string ____, CancellationToken _____) => throw new Exception("Must not invoke an LLM");
+        Assert.Null(workflow.SystemPrompt());
+        Assert.Equal(input, await ManualWorkflowRunner.RunAsync(workflow, input, Available, Process));
+        Assert.Equal(input, await AutomaticWorkflowSnapshot.ForApi(workflow).ProcessAsync(input, "de", "de", Available, Process, default));
+        var automatic = AutomaticWorkflowSnapshot.Select([workflow with { Trigger = WorkflowTrigger.Global() }], "notepad");
+        Assert.NotNull(automatic);
+        Assert.Equal(input, await automatic.ProcessAsync(input, null, null, Available, Process, default));
+        using var canceled = new CancellationTokenSource(); canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ManualWorkflowRunner.RunAsync(workflow, input, Available, Process, canceled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => automatic.ProcessAsync(input, null, null, Available, Process, canceled.Token));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ManualWorkflowRunner.RunAsync(workflow with { IsEnabled = false }, input, Available, Process));
+    }
+
+    [Fact]
+    public void DictationOnlyIgnoresEvenCorruptDefaultLlmSettings()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "llm.json"); File.WriteAllText(path, "broken");
+        var workflow = Workflow(WorkflowTemplate.Dictation) with { Behavior = new() { ProviderOverride = WorkflowLlmDefaults.Inherit } };
+        Assert.Same(workflow, new WorkflowLlmDefaults(path).Resolve(workflow));
     }
 
     [Theory]
@@ -120,6 +151,16 @@ public sealed class ManualWorkflowTemplateTests : IDisposable
         Assert.Equal(action.Output, saved.Single(item => item.Id == action.Id).Output);
         Assert.Equal("keep this", saved.Single(item => item.Id == settings.Id).Behavior.Settings["schema"]);
         Assert.Equal(4, saved.Count);
+    }
+
+    [Theory]
+    [InlineData("", null, "Summary", "Summary")]
+    [InlineData("Custom Workflow", "Custom Workflow", "Dictation Only", "Dictation Only")]
+    [InlineData("My notes", "Summary", "Dictation Only", "My notes")]
+    [InlineData("Summary", null, "Dictation Only", "Summary")]
+    public void TemplateNamesPreserveUserOverrides(string current, string? previous, string next, string expected)
+    {
+        Assert.Equal(expected, WorkflowTemplateNames.ForSelection(current, previous, next));
     }
 
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, true); }

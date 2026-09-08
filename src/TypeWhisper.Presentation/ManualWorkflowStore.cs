@@ -150,6 +150,7 @@ public static class ManualWorkflowRunner
         var provider = workflow.Behavior.ProviderOverride;
         var model = workflow.Behavior.ModelOverride;
         if (string.IsNullOrWhiteSpace(input)) throw new InvalidOperationException("Enter source text first.");
+        if (workflow.Template == WorkflowTemplate.Dictation) return input;
         if (ConfigurationError(provider, model, available) is { } configurationError)
             throw new InvalidOperationException(configurationError);
         var prompt = workflow.SystemPrompt();

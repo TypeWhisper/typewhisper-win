@@ -36,6 +36,7 @@ public sealed partial class WorkflowsView
     private void UpdateExecutionSummary()
     {
         if (_opened is null) return;
+        if (_opened.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) { WorkflowExecutionSummary.Text = "Dictation Only · no LLM processing"; return; }
         var choice = EffectiveSelection(_opened.ProviderId, _opened.ModelId);
         WorkflowExecutionSummary.Text = EffectiveConfigurationError(_opened.ProviderId, _opened.ModelId)
             ?? (_opened.ProviderId == WorkflowLlmDefaults.Inherit ? "Default LLM: " : "")

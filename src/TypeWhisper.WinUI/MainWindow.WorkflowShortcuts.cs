@@ -68,7 +68,7 @@ public sealed partial class MainWindow
         }
         if (ManualWorkflowStore.IsDictationShortcut(workflow))
         {
-            var error = ManualWorkflowRunner.ConfigurationError(workflow.Behavior.ProviderOverride, workflow.Behavior.ModelOverride,
+            var error = workflow.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation ? null : ManualWorkflowRunner.ConfigurationError(workflow.Behavior.ProviderOverride, workflow.Behavior.ModelOverride,
                 (provider, model) => _dictation.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)));
             if (error is not null)
             {
@@ -99,12 +99,12 @@ public sealed partial class MainWindow
         using var cancellation = new CancellationTokenSource();
         _workflowCancellation = cancellation;
         var provider = _dictation.LlmProviders.FirstOrDefault(p => p.SelectionId == workflow.Behavior.ProviderOverride);
-        var label = (provider?.Name ?? workflow.Behavior.ProviderOverride ?? "Not configured") + " · " + workflow.Behavior.ModelOverride;
+        var label = workflow.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation ? "Dictation Only · no LLM processing" : (provider?.Name ?? workflow.Behavior.ProviderOverride ?? "Not configured") + " · " + workflow.Behavior.ModelOverride;
         try
         {
             using var reservation = _dictation.ReserveWorkflowShortcut();
             DictationChanged?.Invoke("Workflow: " + workflow.Name, false);
-            if (provider is not { Ready: true } || !provider.Models.Any(m => m.Id == workflow.Behavior.ModelOverride))
+            if (workflow.Template != TypeWhisper.Core.Models.WorkflowTemplate.Dictation && (provider is not { Ready: true } || !provider.Models.Any(m => m.Id == workflow.Behavior.ModelOverride)))
                 throw new InvalidOperationException("The workflow provider or model is unavailable. Configure it in Workflows before running this shortcut.");
             var capture = new WindowsSelectedTextCapture(WinRT.Interop.WindowNative.GetWindowHandle(this));
             var source = await capture.CaptureAsync(target, processId, cancellation.Token);

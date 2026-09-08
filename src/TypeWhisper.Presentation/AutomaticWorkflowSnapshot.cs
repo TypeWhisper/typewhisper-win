@@ -92,6 +92,7 @@ public sealed class AutomaticWorkflowSnapshot
         ct.ThrowIfCancellationRequested();
         if (Error is not null) throw new InvalidOperationException(Error);
         var workflow = _workflow!;
+        if (workflow.Template == WorkflowTemplate.Dictation) return text;
         var provider = workflow.Behavior.ProviderOverride;
         var model = workflow.Behavior.ModelOverride;
         if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(model) || !available(provider, model))

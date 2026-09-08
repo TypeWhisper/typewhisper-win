@@ -116,14 +116,8 @@
                         <TextBlock Text="Choose the result this workflow should produce." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                         <local:WorkflowTemplatePicker x:Name="ConfigTemplate" />
                     </StackPanel>
-                    <ToggleSwitch x:Name="ConfigEnabled" Header="Enable workflow" OnContent="Enabled" OffContent="Disabled"
-                        Toggled="ConfigEnabled_Toggled" AutomationProperties.Name="Enable workflow" />
-                    <StackPanel Spacing="7">
-                        <TextBlock Text="NAME" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
-                        <TextBox x:Name="ConfigName" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap"
-                            Height="44" MaxLength="80" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow name" />
-                    </StackPanel>
-                    <Border x:Name="ConfigIconHost" />
+                    <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,0,0,8" />
+                    <TextBlock Text="Trigger" FontSize="18" FontWeight="SemiBold" />
                     <StackPanel Spacing="7">
                         <Border x:Name="ActivationHelp" />
                     <local:ChoicePicker x:Name="ConfigTrigger" />
@@ -144,27 +138,39 @@
                         <Border x:Name="ContextModeHelp" />
                         <local:ChoicePicker x:Name="ConfigContextMode" />
                     </StackPanel>
+                    <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,12,0,8" />
+                    <TextBlock Text="Behavior" FontSize="18" FontWeight="SemiBold" />
+                    <ToggleSwitch x:Name="ConfigEnabled" Header="Enable workflow" OnContent="Enabled" OffContent="Disabled"
+                        Toggled="ConfigEnabled_Toggled" AutomationProperties.Name="Enable workflow" />
                     <StackPanel Spacing="7">
-                        <TextBlock Text="PRIORITY (LOWER WINS)" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
-                        <TextBox x:Name="ConfigPriority" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="11" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow priority" />
+                        <TextBlock Text="NAME" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBox x:Name="ConfigName" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap"
+                            Height="44" MaxLength="80" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow name" />
                     </StackPanel>
+                    <Border x:Name="ConfigIconHost" />
                     <StackPanel x:Name="ConfigTranslationSection" Spacing="7" Visibility="Collapsed">
                         <Border x:Name="TranslationHelp" />
                         <TextBox x:Name="ConfigTranslationTarget" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap"
                             Height="44" MaxLength="100" PlaceholderText="English (default)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow translation target language" />
                     </StackPanel>
+                    <Expander x:Name="ConfigAdvanced" Header="Advanced" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="16">
                     <StackPanel Spacing="7">
+                        <TextBlock Text="PRIORITY (LOWER WINS)" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBox x:Name="ConfigPriority" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="11" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow priority" />
+                    </StackPanel>
+                    <StackPanel x:Name="ConfigInstructionSection" Spacing="7">
                         <TextBlock x:Name="ConfigInstructionLabel" Text="INSTRUCTIONS (REQUIRED)" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                         <TextBox x:Name="ConfigInstruction" Style="{StaticResource WorkflowEditorStyle}" Height="80" MaxLength="8000"
                             TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow instructions" />
                     </StackPanel>
                     <Grid ColumnSpacing="10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <StackPanel Spacing="7">
+                        <StackPanel x:Name="ConfigProviderSection" Spacing="7">
                             <Border x:Name="ProviderHelp" />
                             <local:ChoicePicker x:Name="ConfigProvider" />
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="7">
+                        <StackPanel x:Name="ConfigModelSection" Grid.Column="1" Spacing="7">
                             <TextBlock Text="MODEL" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                             <local:ChoicePicker x:Name="ConfigModel" />
                         </StackPanel>
@@ -173,6 +179,8 @@
                             <local:ChoicePicker x:Name="ConfigOutput" />
                         </StackPanel>
                     </Grid>
+                        </StackPanel>
+                    </Expander>
                     <local:HandCursorButton x:Name="DeleteWorkflowButton" Content="Delete workflow" Click="DeleteWorkflow_Click"
                         HorizontalAlignment="Left" Style="{StaticResource DestructiveConfirmButtonStyle}"
                         AutomationProperties.Name="Delete workflow" />
