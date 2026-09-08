@@ -154,10 +154,10 @@ public sealed class LexiconView : UserControl
             var content = new Grid { ColumnSpacing = 14, Padding = new Thickness(2, 6, 2, 6) };
             content.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); content.ColumnDefinitions.Add(new()); content.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
             content.Children.Add(new TypeWhisperGlyph { Kind = Icon, Width = 20, Height = 20 });
-            var labels = new StackPanel { Spacing = 5 }; var title = Text(entry.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; labels.Children.Add(title);
+            var labels = new StackPanel { Spacing = 5 }; var title = Text(_kind == LexiconKind.Correction ? entry.Value : entry.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; labels.Children.Add(title);
             if (_kind != LexiconKind.Word)
             {
-                var description = Text((_kind == LexiconKind.Correction ? "→  " : "") + entry.Value.Replace('\n', ' '), 12, true);
+                var description = Text(_kind == LexiconKind.Correction ? "Recognized as: " + entry.Key : entry.Value.Replace('\n', ' '), 12, true);
                 description.MaxLines = 1; description.TextTrimming = TextTrimming.CharacterEllipsis; labels.Children.Add(description);
             }
             if (entry.Tags.Length > 0) labels.Children.Add(Text(entry.Tags, 11, true));
@@ -168,7 +168,7 @@ public sealed class LexiconView : UserControl
             var row = Button("", () => { if (entry.FromPack) { _showPacks = true; Render(); } else OpenEditor(entry); }); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
             if (entry.FromPack) trailing.Text = "Term packs  ›";
             row.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
-            AutomationProperties.SetName(row, entry.FromPack ? $"Manage term pack for {entry.Key}" : $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
+            AutomationProperties.SetName(row, entry.FromPack ? $"Manage term pack for {entry.Key}" : entry.Kind == LexiconKind.Correction ? $"Edit correction: {entry.Value}, recognized as {entry.Key}" : $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
         }
     }
 
@@ -187,9 +187,17 @@ public sealed class LexiconView : UserControl
             LexiconKind.Correction => "When this phrase is recognized, use your preferred spelling instead.",
             _ => "Say the trigger phrase to insert this text when dictation finishes."
         }, 13, true));
-        AddField(_kind == LexiconKind.Word ? "Word or phrase" : _kind == LexiconKind.Correction ? "Recognized phrase" : "Spoken trigger", _draft!.Key, value => _draft = _draft! with { Key = value }, 160);
-        if (_kind != LexiconKind.Word)
-            AddField(_kind == LexiconKind.Snippet ? "Insert this text" : "Replace with", _draft.Value, value => _draft = _draft! with { Value = value }, 10000, _kind == LexiconKind.Snippet);
+        if (_kind == LexiconKind.Correction)
+        {
+            AddField("Correct spelling", _draft!.Value, value => _draft = _draft! with { Value = value }, 10000);
+            AddField("Recognized as", _draft.Key, value => _draft = _draft! with { Key = value }, 160);
+        }
+        else
+        {
+            AddField(_kind == LexiconKind.Word ? "Word or phrase" : "Spoken trigger", _draft!.Key, value => _draft = _draft! with { Key = value }, 160);
+            if (_kind == LexiconKind.Snippet)
+                AddField("Insert this text", _draft.Value, value => _draft = _draft! with { Value = value }, 10000, true);
+        }
         if (_kind == LexiconKind.Snippet)
         {
             AddField("Tags · optional, separated by commas", _draft.Tags, value => _draft = _draft! with { Tags = value }, 300);
