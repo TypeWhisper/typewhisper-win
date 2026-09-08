@@ -18,6 +18,24 @@ public sealed partial class MainWindow
     {
         _launcherSource.Source = _launcherGroups;
         CompactResults.ItemsSource = _launcherSource.View;
+        CompactResults.PointerWheelChanged += (_, e) =>
+        {
+            // Group headers and custom row templates can leave wheel input unhandled.
+            // Route those events to this list's own scroll viewer.
+            if (e.Handled) return;
+            Microsoft.UI.Xaml.Controls.ScrollViewer? FindScroll(Microsoft.UI.Xaml.DependencyObject node)
+            {
+                if (node is Microsoft.UI.Xaml.Controls.ScrollViewer scroll) return scroll;
+                for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node); i++)
+                    if (FindScroll(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i)) is { } found) return found;
+                return null;
+            }
+            if (FindScroll(CompactResults) is not { ScrollableHeight: > 0 } viewer) return;
+            var delta = e.GetCurrentPoint(CompactResults).Properties.MouseWheelDelta;
+            if (delta == 0) return;
+            viewer.ChangeView(null, Math.Clamp(viewer.VerticalOffset - delta, 0, viewer.ScrollableHeight), null, disableAnimation: true);
+            e.Handled = true;
+        };
         try
         {
             if (File.Exists(LauncherUsagePath))

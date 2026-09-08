@@ -99,9 +99,32 @@
                 <local:HandCursorListView x:Name="CompactResults" Grid.Row="1"
                           IsItemClickEnabled="True" ItemClick="Results_ItemClick"
                           SelectionChanged="Results_SelectionChanged" SelectionMode="Single"
-                          Background="Transparent" BorderThickness="0" TabNavigation="Once">
+                          Background="Transparent" BorderThickness="0" TabNavigation="Once"
+                          ScrollViewer.VerticalScrollMode="Enabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsStackPanel AreStickyGroupHeadersEnabled="False" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
                     <ListView.GroupStyle>
                         <GroupStyle HidesIfEmpty="True">
+                            <GroupStyle.HeaderContainerStyle>
+                                <Style TargetType="ListViewHeaderItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="MinHeight" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListViewHeaderItem">
+                                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                    HorizontalContentAlignment="Stretch" />
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </GroupStyle.HeaderContainerStyle>
                             <GroupStyle.HeaderTemplate>
                                 <DataTemplate x:DataType="local:LauncherCommandGroup">
                                     <Border BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="{x:Bind Separator}"

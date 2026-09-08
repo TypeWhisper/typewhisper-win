@@ -612,7 +612,7 @@ public sealed partial class MainWindow : Window
         if (_marketplaceOpen && MarketplaceView.IsDetail) return;
         if (_recorderOpen) RecorderView.FocusEntry();
         else if (_workflowsOpen && WorkflowsView.IsDetail) WorkflowsView.FocusEntry();
-        else SearchBox.Focus(FocusState.Programmatic);
+        // ShowFromActivation focuses search explicitly. Reactivation must retain the current scroll position.
     }
 
     private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
