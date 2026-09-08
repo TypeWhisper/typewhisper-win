@@ -132,6 +132,8 @@ public sealed partial class MainWindow : Window
             _dictation.Changed += _observeInputMode;
             _dictationHotkey = new DictationHotkeyRegistration(this, action =>
             {
+                if (action is HybridHotkeyAction.Start or HybridHotkeyAction.Toggle)
+                    _dictation.ShowLoadingForDictationAttempt();
                 if (action == HybridHotkeyAction.Cancel) _dictation.RequestCancel();
                 _ = _dictationInput.SubmitAsync(action switch
                 {
@@ -268,7 +270,7 @@ public sealed partial class MainWindow : Window
         UpdateTranscriptToggle();
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
         if (_liveOverlay?.IsCorrectionFeedbackVisible == true &&
-            _dictation.OverlayState.Phase is not (DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error)) return;
+            _dictation.OverlayState.Phase is not (DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.LoadingModel)) return;
         if (_dictation.OverlayState.Phase != DictationPhase.Completed) _completedPreviewExpired = false;
         else if (_completedPreviewExpired) return;
         else if (OverlayPreferences.PreviewBubbleAutoHideMilliseconds == 0)
@@ -277,7 +279,7 @@ public sealed partial class MainWindow : Window
             _liveOverlay?.HidePreview();
             return;
         }
-        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed)
+        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel)
         {
             _overlay?.HidePreview();
             var showTranscript = _dictation.OverlayState.ShouldShowTranscript(_transcriptPreviewEnabled, _dictation.SupportsLiveTranscription);
@@ -597,7 +599,7 @@ public sealed partial class MainWindow : Window
         NativeWindowAppearance.RemoveSystemBorder(this, resizable: true);
         // Closing a settings picker reactivates the window. Keep its current
         // field focused instead of jumping back to the name and scrolling up.
-        if (UtilityOpen) return;
+        if (UtilityOpen || VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
         if (_workflowsOpen && WorkflowsView.IsConfiguring) return;
         if (_pluginsOpen && PluginsView.IsDetail) return;
         if (_marketplaceOpen && MarketplaceView.IsDetail) return;
@@ -900,6 +902,7 @@ public sealed partial class MainWindow : Window
 
     private void WindowRoot_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
         if (UtilityOpen)
         {
             if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox and not PasswordBox and not RichEditBox)
@@ -949,6 +952,7 @@ public sealed partial class MainWindow : Window
 
     private void WindowRoot_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
         if (UtilityOpen)
         {
             if (e.Key == global::Windows.System.VirtualKey.Escape) { CloseUtility(); e.Handled = true; }

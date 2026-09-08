@@ -146,8 +146,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
-    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !PluginRuntime.IsBusy;
-    internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
+    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !PluginRuntime.IsBusy;
+    internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
     private DateTime _started;
     private bool _disposed;
@@ -156,7 +156,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private bool _hasConfirmedPreviewText;
     private string _targetApp = "";
     private uint _targetProcessId;
-    internal DictationOverlayState OverlayState => new(_phase,
+    private bool _showModelLoadingForDictation;
+    internal void ShowLoadingForDictationAttempt()
+    {
+        if (_phase != DictationPhase.LoadingModel || _disposed) return;
+        _showModelLoadingForDictation = true;
+        Changed?.Invoke();
+    }
+    internal DictationOverlayState OverlayState => new(
+        DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation),
         _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current);
     internal string Status { get; private set; } = "Loading local transcription plugin…";
     internal string Shortcut { get; set; } = "Ctrl+Shift+F9";
@@ -193,7 +201,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (!CanSelectModel || !await _gate.WaitAsync(0)) return "Finish recording or the current model operation before changing models.";
         try
         {
-            SetStatus("Loading model…", DictationPhase.Configuring);
+            SetStatus("Loading model… Wait until the model is ready before dictating.", DictationPhase.LoadingModel);
             await _livePreview.StopAsync();
             await Models.ActivateAsync(modelId);
             _selection.SetSetting("Provider", "local");
@@ -306,13 +314,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         return model is null ? Task.FromResult<string?>("This model is no longer available. Refresh its provider settings.")
             : UseRegistryModelAsync(model);
     }
-    private async Task<string?> ChangeRegistryPluginAsync(string id, Func<Task> action)
+    private async Task<string?> ChangeRegistryPluginAsync(string id, Func<Task> action, bool loadingModel = false)
     {
         if (!Packages.Store.IsInstalled(id)) return "Install this plugin in Integrations first.";
         if (!CanChangeProvider || Models.Busy || !await _gate.WaitAsync(0)) return "Finish dictation and model operations before changing plugins.";
         try
         {
-            SetStatus("Updating plugin…", DictationPhase.Configuring);
+            SetStatus(loadingModel ? "Loading model…" : "Updating plugin…", loadingModel ? DictationPhase.LoadingModel : DictationPhase.Configuring);
             await _livePreview.StopAsync();
             await action();
             SetStatus(IsReady ? $"{ActiveModelName} ready" : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
@@ -445,6 +453,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _audio.SetMicrophonePriorityList(_microphones);
             }
             _providerId = SessionProviderId(_selection.GetSetting<string>("Provider") ?? "local");
+            SetStatus("Loading model…", DictationPhase.LoadingModel);
             await PluginRuntime.InitializeAsync();
             if (_disposed) return;
             try { if (Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) await _transcriptionPlugin.InitializeAsync(); }
@@ -755,6 +764,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private void SetStatus(string status, DictationPhase? phase = null)
     {
         if (_disposed) return;
+        if (phase != DictationPhase.LoadingModel) _showModelLoadingForDictation = false;
         Status = status;
         _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
         Changed?.Invoke();

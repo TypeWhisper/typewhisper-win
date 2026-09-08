@@ -453,7 +453,7 @@ public sealed partial class OverlayWindow : Window
 
     private void WaveformCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed } state)
+        if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel } state)
         {
             var color = state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130)
                 : state.Phase == DictationPhase.Completed ? Color.FromArgb(255, 96, 210, 140) : Color.FromArgb(255, 244, 188, 106);

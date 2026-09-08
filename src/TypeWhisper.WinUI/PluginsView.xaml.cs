@@ -30,7 +30,7 @@ public sealed partial class PluginsView : UserControl
         Loaded += async (_, _) => await runtime.Packages.Updates.RefreshAsync();
         var root = runtime.Packages.Store.InventoryRoot;
         _management = new(root, runtime.GetPluginBinding,
-            () => !runtime.IsRecording && runtime.OverlayState.Phase is not (DictationPhase.Processing or DictationPhase.Configuring),
+            () => !runtime.IsRecording && runtime.OverlayState.Phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel),
             () => Task.Run(runtime.Packages.Store.Inventory));
         runtime.CtcVocabulary.Changed += () => DispatcherQueue.TryEnqueue(() => _ = RefreshRuntimeAsync());
         runtime.Models.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded) _ = RefreshRuntimeAsync(); });

@@ -121,7 +121,7 @@ internal sealed partial class LocalDictationSession
             {
                 saveError = "The plugin selected the model, but saving the dictation provider failed. Check the active provider in Dictation before recording.";
             }
-        });
+        }, loadingModel: true);
         return error ?? saveError;
     }
 }

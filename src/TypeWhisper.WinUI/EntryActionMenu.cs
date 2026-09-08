@@ -13,33 +13,67 @@ internal static class EntryActionMenu
 
     internal static void Attach(FrameworkElement surface, Func<IEnumerable<Action>> actions)
     {
-        surface.ContextRequested += (_, e) =>
+        MenuFlyout? openMenu = null;
+        bool Show(DependencyObject? source, global::Windows.Foundation.Point? point)
         {
-            if (e.Handled) return;
-            var source = e.OriginalSource as DependencyObject;
+            if (openMenu is not null) return true;
             ListViewItem? row = null;
+            var preserveNativeMenu = false;
             for (var node = source; node is not null && node != surface; node = VisualTreeHelper.GetParent(node))
             {
-                if (node is TextBox or PasswordBox or RichEditBox ||
-                    node is TextBlock { IsTextSelectionEnabled: true }) return;
-                if (node is FrameworkElement { ContextFlyout: not null }) return;
                 if (node is ListViewItem item) { row = item; break; }
+                if (node is TextBox or PasswordBox or RichEditBox ||
+                    node is TextBlock { IsTextSelectionEnabled: true } ||
+                    node is Button or Border && node.ReadLocalValue(FrameworkElement.ContextFlyoutProperty) is MenuFlyout)
+                    preserveNativeMenu = true;
             }
+            if (row is null && preserveNativeMenu) return false;
             if (row is not null && ItemsControl.ItemsControlFromItemContainer(row) is ListView list)
             {
                 if (!row.IsSelected)
                 {
-                    list.SelectedItems.Clear();
-                    row.IsSelected = true;
+                    if (list.SelectionMode == ListViewSelectionMode.Single)
+                        list.SelectedItem = list.ItemFromContainer(row);
+                    else
+                    {
+                        list.SelectedItems.Clear();
+                        list.SelectedItems.Add(list.ItemFromContainer(row));
+                    }
                 }
                 row.Focus(FocusState.Programmatic);
             }
             var menu = Create(actions());
-            if (menu.Items.Count == 0) return;
-            e.Handled = true;
-            if (e.TryGetPosition(surface, out var point))
-                menu.ShowAt(surface, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = point });
+            if (menu.Items.Count == 0) return false;
+            openMenu = menu;
+            menu.Closed += (_, _) => openMenu = null;
+            if (point is { } location)
+                menu.ShowAt(surface, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = location });
             else menu.ShowAt(row ?? surface);
+            return true;
+        }
+        surface.AddHandler(UIElement.PointerReleasedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
+        {
+            var point = e.GetCurrentPoint(surface);
+            if (point.Properties.PointerUpdateKind == Microsoft.UI.Input.PointerUpdateKind.RightButtonReleased &&
+                Show(e.OriginalSource as DependencyObject, point.Position)) e.Handled = true;
+        }), handledEventsToo: true);
+        surface.IsRightTapEnabled = true;
+        surface.AddHandler(UIElement.RightTappedEvent, new Microsoft.UI.Xaml.Input.RightTappedEventHandler((_, e) =>
+        {
+            if (Show(e.OriginalSource as DependencyObject, e.GetPosition(surface))) e.Handled = true;
+        }), handledEventsToo: true);
+        surface.ContextRequested += (_, e) =>
+        {
+            if (!e.Handled && Show(e.OriginalSource as DependencyObject, e.TryGetPosition(surface, out var point) ? point : null))
+                e.Handled = true;
+        };
+        surface.KeyDown += (_, e) =>
+        {
+            var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Shift)
+                .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down);
+            if (!e.Handled && (e.Key == global::Windows.System.VirtualKey.Application ||
+                e.Key == global::Windows.System.VirtualKey.F10 && shift))
+                e.Handled = Show(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(surface.XamlRoot) as DependencyObject, null);
         };
     }
 

@@ -5,6 +5,18 @@ using Xunit;
 public sealed class DictationOverlayStateTests
 {
     [Theory]
+    [InlineData(6, false, 4)]
+    [InlineData(6, true, 6)]
+    [InlineData(0, true, 0)]
+    [InlineData(1, false, 1)]
+    [InlineData(2, false, 2)]
+    [InlineData(3, false, 3)]
+    public void ModelLoadingIsVisibleOnlyAfterADictationAttempt(int phase, bool attempted, int expected)
+    {
+        Assert.Equal((DictationPhase)expected, DictationOverlayState.VisiblePhase((DictationPhase)phase, attempted));
+    }
+
+    [Theory]
     [InlineData(1, true, false, false)]
     [InlineData(2, true, false, false)]
     [InlineData(3, true, false, false)]
@@ -13,6 +25,8 @@ public sealed class DictationOverlayStateTests
     [InlineData(1, true, true, true)]
     [InlineData(1, false, true, false)]
     [InlineData(4, true, true, false)]
+    [InlineData(6, true, true, false)]
+    [InlineData(6, true, false, false)]
     public void TranscriptWindowRespectsLiveCapabilityWithoutHidingCompletedOutput(int phase, bool enabled, bool supported, bool visible)
     {
         var state = new DictationOverlayState((DictationPhase)phase, TimeSpan.Zero, "Status", "Notepad");
@@ -34,6 +48,7 @@ public sealed class DictationOverlayStateTests
     [InlineData(1, "RECORDING")]
     [InlineData(2, "TRANSCRIBING")]
     [InlineData(3, "ERROR")]
+    [InlineData(6, "LOADING MODEL")]
     public void RuntimeStateRetainsRealSessionData(int phase, string label)
     {
         var state = new DictationOverlayState((DictationPhase)phase, TimeSpan.FromSeconds(12), "Session status", "Notepad");
