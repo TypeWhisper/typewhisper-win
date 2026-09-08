@@ -16,6 +16,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
     <PackageReference Include="Moq" Version="4.*" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/PremiumAccessState.cs" Link="PremiumAccessState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HistoryStore.cs" Link="HistoryStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs" Link="HistoryEntryAdapter.cs" />

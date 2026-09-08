@@ -1,3 +1,11 @@
+## Premium development access (2026-09-08)
+
+Open Settings > Premium. In Debug builds, Development access applies immediately and persists in the active profile's `premium-development.txt`. Select **Use actual access** to delete the override. Scenarios cover locked access, supporter, commercial license, signed-in Premium, combined access and signed-out Premium. Release builds neither read nor write this override and always use the actual-access provider.
+
+The initial actual-access provider grants no entitlements: real license activation/account authentication and the three Premium feature implementations are not connected yet. The UI distinguishes access requirements from implementation availability. This is a development-testable foundation, not completed cloud sync, calendar automation or correction learning.
+
+Validation: `PremiumAccessTests` passes 7 cases in Debug and 7 in Release, including the 16-combination access matrix, persistence/reset, malformed state, failed saves and release override rejection. Native WinUI smoke: navigation, commercial activation, supporter selection using Up/Enter and immediate status changes passed. Build: `artifacts/premium-build-final.log`.
+
 # Testing the 1.1 application
 
 ## Public v2 marketplace preview, 2026-09-08

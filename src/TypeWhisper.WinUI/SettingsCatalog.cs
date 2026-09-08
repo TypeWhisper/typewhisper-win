@@ -118,7 +118,7 @@ internal static partial class SettingsCatalog
         Text("Sync & backup", "CloudFolderSyncFolderPath", "Cloud sync folder", "", "Use a shared cloud folder across your devices. No sync or file access occurs here."),
     ];
 
-    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Live text", "Recorder", "Files & recovery", "Privacy", "Sync & backup", "Account & about"];
+    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Live text", "Recorder", "Files & recovery", "Privacy", "Sync & backup", "Premium", "Account & about"];
 
     internal static IEnumerable<SettingSearchEntry> SearchEntries => Fields.Select(setting => new SettingSearchEntry(
         setting.Category == "Live text" ? "Appearance" : setting.Category, setting.Key, setting.Label, setting.Hint,
@@ -140,6 +140,11 @@ internal static partial class SettingsCatalog
         var title = Label(category, 24);
         title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         target.Children.Add(title);
+        if (category == "Premium")
+        {
+            target.Children.Add(new PremiumView(pickers));
+            return;
+        }
         if (category == "Account & about")
         {
             target.Children.Add(new AccountView(values, pickers));

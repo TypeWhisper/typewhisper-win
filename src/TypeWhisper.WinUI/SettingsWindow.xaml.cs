@@ -62,7 +62,7 @@ public sealed partial class SettingsWindow : Window
             ("APP", [("Home", "home"), ("General", "settings"), ("Shortcuts", "keyboard")]),
             ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
             ("PERSONALIZATION", [("Appearance", "desktop")]),
-            ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("Account & about", "info")])
+            ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("Premium", "lock"), ("Account & about", "info")])
         ];
         foreach (var group in groups)
         {
@@ -327,6 +327,9 @@ public sealed partial class SettingsWindow : Window
                 Descendants(CatalogContent).OfType<SyncBackupView>().FirstOrDefault()?.ConnectRestore(RestoreProfile);
                 SessionHint.Text = "Local backup and restore are connected · device sync is not available yet";
             }
+            if (category == "Premium")
+                SessionHint.Text = PremiumAccessState.CanOverride ? "Development access is saved in this profile only" : "Premium access and feature availability";
+            if (category == "Account & about") SessionHint.Text = "TypeWhisper for Windows";
             if (category == "Privacy" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "History saving and retention are connected · unavailable controls are disabled";
             SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
@@ -408,6 +411,7 @@ public sealed partial class SettingsWindow : Window
         new("Appearance", "LiveTextToggle", "Live transcription", "Show streaming text beside the recording block.", "text"),
         new("Appearance", "DetailsToggle", "Technical details", "Show audio level and render frequency.", "signal", "dB FPS"),
         new("Overlay editor", "", "Customize layout", "Choose screen position and arrange the left and right widgets.", "layout", "appearance monitor top bottom drag"),
+        new("Premium", "", "Premium", "Premium access, commercial license and development activation.", "lock", "supporter calendar correction learning cloud sync"),
         new("Account & about", "", "Account & about", "License, Premium, updates and app information.", "info")
     ];
 
