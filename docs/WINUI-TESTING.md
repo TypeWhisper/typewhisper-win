@@ -1,5 +1,15 @@
 # Testing the 1.1 application
 
+## Inline History audio player (`7340cbf8`), 2026-09-08
+
+Saved History audio now plays inside TypeWhisper instead of launching the associated desktop player. The footer contains a source-owned play/pause icon and A shortcut, position/duration, and a keyboard-accessible seek slider. F still opens the audio folder. P remains the separate text read-aloud action. The implementation uses Windows MediaPlayer/MediaSource with the verified local audio path and system-default playback output; it does not yet route this audio through the saved spoken-feedback output selection.
+
+Navigation, History close, editing/deletion and shutdown dispose the player/source and invalidate pending loads. Starting dictation or Recorder capture stops the player first. Text read-back stops audio playback; starting audio drains shared speech before playing. Startup and media-event callbacks recheck the current request/player so delayed loading cannot play a departed entry. Background History refresh is deferred while an audio player is retained. Playback/seek/media failures leave the transcript intact and show actionable feedback. No audio export or History/clipboard write is involved.
+
+The prescribed normal-profile Debug build/relaunch passed (`artifacts/history-player-build.log`). The process had a nonzero main-window handle and the Quick Launch title; the diagnostic log remained unchanged from before the launch. The preceding 757-pass Presentation result is not a new test run for this WinUI-only player. Native play/pause/seek, end/replay, navigation and deletion release, capture interruption, missing-file/device-error and layout acceptance remain for Marco. No Computer Use was performed.
+
+API references: [MediaSource playback](https://learn.microsoft.com/en-us/windows/apps/develop/media-playback/media-playback-with-mediasource) and [MediaPlayer playback session](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/media-playback).
+
 ## History read-back startup correction, 2026-09-08
 
 Marco reported that the app was not visible. The process existed but had no main window: the diagnostic log showed `Delegate to an instance method cannot have null this` in the MainWindow constructor. The new History delegates had been assigned before `_dictation` was constructed. Initialization now precedes those bindings.
