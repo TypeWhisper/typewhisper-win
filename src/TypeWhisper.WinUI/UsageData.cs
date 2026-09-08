@@ -3,7 +3,7 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-// The dashboard is a projection of currently retained history, never lifetime telemetry.
+// Statistics are a projection of currently retained history, never lifetime telemetry.
 internal sealed class UsageData(IEnumerable<TranscriptionRecord> records)
 {
     private readonly UsageStatistics _statistics = new(records);

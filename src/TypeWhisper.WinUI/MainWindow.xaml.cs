@@ -63,7 +63,6 @@ public sealed partial class MainWindow : Window
         new("Suggested", "text", "Snippets", "Reusable text with spoken triggers", "", "Create and edit text snippets."),
         new("Suggested", "file", "Copy last transcription", "Copy the last completed dictation from this session", "", "Copies final dictated text, including when History is off. Configure its global shortcut in Settings > Shortcuts."),
         new("Suggested", "audio", "Read last transcription", "Read the last dictation aloud; run again to stop", "", "Uses the selected Windows voice and audio output. Works independently of automatic spoken feedback."),
-        new("Suggested", "home", "Dashboard", "Your activity and recent transcriptions", "", "Opens the activity dashboard."),
         new("Suggested", "devices", "Sync & backup", "Export or restore your TypeWhisper data", "", "Create local backups and review data before restoring."),
         new("Suggested", "stats", "Statistics", "Words, streaks, apps, and models", "", "Explore your usage over time."),
     ];
@@ -357,6 +356,9 @@ public sealed partial class MainWindow : Window
     internal MainWindow()
     {
         InitializeComponent();
+        PageKeyboardNavigation.Attach(WindowRoot, node => ReferenceEquals(node, SearchBox) && !_isSearchEditing &&
+            (_historyOpen && HistoryView.IsReading || _workflowsOpen && WorkflowsView.IsDetail ||
+             _pluginsOpen && PluginsView.IsDetail || _marketplaceOpen && MarketplaceView.IsDetail || UtilityOpen));
         CorrectionLearning.CorrectionsLearned += ShowLearnedCorrections;
         CorrectionLearning.ObservationCancelled += HideLearnedCorrections;
         Closed += (_, _) =>
@@ -434,7 +436,6 @@ public sealed partial class MainWindow : Window
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
         {
             if (_historyOpen) await HistoryView.RefreshAsync();
-            if (_settingsWindow is not null) await _settingsWindow.RefreshActivityAsync();
             if (UtilityOpen && _utilityActivity is not null) await _utilityActivity.RefreshAsync();
         });
         PluginsView.ConfigureRuntime(_dictation);
@@ -606,7 +607,7 @@ public sealed partial class MainWindow : Window
         NativeWindowAppearance.RemoveSystemBorder(this, resizable: true);
         // Closing a settings picker reactivates the window. Keep its current
         // field focused instead of jumping back to the name and scrolling up.
-        if (UtilityOpen || VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
+        if (UtilityOpen || WindowRoot.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
         if (_workflowsOpen && WorkflowsView.IsConfiguring) return;
         if (_pluginsOpen && PluginsView.IsDetail) return;
         if (_marketplaceOpen && MarketplaceView.IsDetail) return;
@@ -864,8 +865,8 @@ public sealed partial class MainWindow : Window
             OpenSettings();
         else if (_selected?.Title == "Sync & backup")
             OpenSyncBackup();
-        else if (_selected?.Title is "Dashboard" or "Statistics")
-            OpenDashboard(_selected.Title == "Statistics");
+        else if (_selected?.Title == "Statistics")
+            OpenStatistics();
         else if (_selected?.Title.Contains("dictation", StringComparison.OrdinalIgnoreCase) == true)
             MetricsText.Text = DictationStatusForDisplay;
         else if (_selected is not null)
@@ -1031,7 +1032,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (_historyOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
+        if (_historyOpen && !HistoryView.IsReading && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
             && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             HistoryView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
@@ -1039,7 +1040,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (_workflowsOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
+        if (_workflowsOpen && !WorkflowsView.IsDetail && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
             && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             WorkflowsView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
@@ -1047,7 +1048,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (_pluginsOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
+        if (_pluginsOpen && !PluginsView.IsDetail && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
             && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             PluginsView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
@@ -1055,7 +1056,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (_marketplaceOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
+        if (_marketplaceOpen && !MarketplaceView.IsDetail && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
             && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             MarketplaceView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
@@ -1224,17 +1225,6 @@ public sealed partial class MainWindow : Window
                 }
             };
             _settingsWindow.WorkspaceRequested += OpenUtility;
-            _settingsWindow.ConfigureActivity = activity => activity.Connect(_dictation.HistoryReader, () => _dictation.OutputPreferences.Current.SaveToHistory);
-            _settingsWindow.HistoryRequested += () =>
-            {
-                if (_historyOpen) { _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); return; }
-                if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen)
-                {
-                    _settingsWindow?.ShowHistoryNavigationHint();
-                    return;
-                }
-                _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); OpenHistory();
-            };
             _settingsWindow.Closed += (_, _) =>
             {
                 CloseRecoveryView(recoveryView);
@@ -1278,9 +1268,9 @@ public sealed partial class MainWindow : Window
         _settingsWindow.ShowOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
     }
 
-    internal void OpenDashboard(bool statistics = false)
+    internal void OpenStatistics()
     {
-        OpenUtility(statistics ? "Statistics" : "Dashboard");
+        OpenUtility("Statistics");
     }
 
     internal void OpenSyncBackup()

@@ -54,8 +54,8 @@ public sealed partial class MainWindow
         {
             case "--account": OpenAccount(); break;
             case "--sync-backup": OpenSyncBackup(); break;
-            case "--dashboard": OpenDashboard(); break;
-            case "--statistics": OpenDashboard(true); break;
+            case "--dashboard": OpenStatistics(); break;
+            case "--statistics": OpenStatistics(); break;
             case "--dictionary": OpenLexicon(); break;
             case "--snippets": OpenLexicon(true); break;
             case "--files":

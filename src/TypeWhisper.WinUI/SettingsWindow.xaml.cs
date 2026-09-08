@@ -21,9 +21,7 @@ public sealed partial class SettingsWindow : Window
     internal Func<string, string?>? CommitCopyLastTranscriptionHotkeys { get; set; }
     internal Func<string, string?>? CommitReadLastTranscriptionHotkeys { get; set; }
     internal Action<string, StackPanel, List<ChoicePicker>>? ConfigureLiveSettings { get; set; }
-    internal Action<ActivityView>? ConfigureActivity { get; set; }
     internal event Action<string>? WorkspaceRequested;
-    internal Task RefreshActivityAsync() => _activity?.RefreshAsync() ?? Task.CompletedTask;
     private bool _updating = true;
     private bool _liveTranscriptionAvailable = true;
     internal void SetLiveTranscriptionAvailability(bool available)
@@ -45,13 +43,12 @@ public sealed partial class SettingsWindow : Window
     private readonly List<ChoicePicker> _catalogPickers = [];
     private readonly List<ChoicePicker> _appearancePickers = [];
     private readonly List<HandCursorButton> _navigationButtons = [];
-    private ActivityView? _activity;
-    internal event Action? HistoryRequested;
     internal SettingsWindow(OverlayPreferences preferences, Dictionary<string, string> values)
     {
         _values = values;
         _preferences = preferences;
         InitializeComponent();
+        PageKeyboardNavigation.Attach(SettingsRoot);
         NativeWindowAppearance.ApplyAppTitleBar(this);
         CatalogContent.LayoutUpdated += (_, _) => SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
         AppToggleSwitch.Configure(LiveTextToggle);
@@ -59,7 +56,7 @@ public sealed partial class SettingsWindow : Window
         OverlayEditor.Changed += Publish;
         (string Heading, (string Category, string Icon)[] Items)[] groups =
         [
-            ("APP", [("Home", "home"), ("General", "settings"), ("Shortcuts", "keyboard")]),
+            ("APP", [("General", "settings"), ("Shortcuts", "keyboard")]),
             ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
             ("PERSONALIZATION", [("Appearance", "desktop")]),
             ("DATA & SYSTEM", [("Privacy", "lock"), ("Advanced", "settings"), ("Premium", "lock"), ("Account & about", "info")])
@@ -253,7 +250,6 @@ public sealed partial class SettingsWindow : Window
         }
         if (e.Key == global::Windows.System.VirtualKey.Escape)
         {
-            if (_activity?.CloseRangeIfOpen() == true) { e.Handled = true; return; }
             if (ComparisonScroll.Visibility == Visibility.Visible)
             {
                 if (!SelectComparison.CloseOpenPicker()) ShowCategory("Appearance");
@@ -273,7 +269,6 @@ public sealed partial class SettingsWindow : Window
     private void ShowCategory(string category)
     {
         if (category is "Statistics" or "Sync & backup") { WorkspaceRequested?.Invoke(category); return; }
-        ActivityHost.Visibility = Visibility.Collapsed;
         // TextChanged can arrive after the programmatic clear. It must not rebuild
         // this page again and remove the control focused by OpenSearchResult.
         _searchActive = false;
@@ -300,25 +295,6 @@ public sealed partial class SettingsWindow : Window
         if (catalog)
         {
             _catalogPickers.Clear();
-            if (category == "Home")
-            {
-                CatalogContent.Children.Clear(); CatalogScroll.Visibility = Visibility.Collapsed;
-                if (_activity is null)
-                {
-                    _activity = new ActivityView();
-                    ConfigureActivity?.Invoke(_activity);
-                    _activity.NavigateRequested += destination =>
-                    {
-                        if (destination == "Setup") ShowSetup();
-                        else if (destination == "History") HistoryRequested?.Invoke();
-                        else ShowCategory(destination);
-                    };
-                    ActivityHost.Child = _activity;
-                }
-                ActivityHost.Visibility = Visibility.Visible; _activity.Present(false);
-                SessionHint.Text = "Statistics reflect retained history · deletion and retention reduce these totals";
-                return;
-            }
             SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && ConfigureLiveSettings is not null)
@@ -400,7 +376,6 @@ public sealed partial class SettingsWindow : Window
 
     private static readonly SettingSearchEntry[] AppearanceSearchEntries =
     [
-        new("Home", "", "Dashboard", "Your activity and recent transcriptions.", "home", "start overview"),
         new("Appearance", "StandardChoice", "Recording overlay", "Choose Standard, Compact or Minimal.", "microphone", "waveform indicator"),
         new("Appearance", "LiveTextToggle", "Live transcription", "Show streaming text beside the recording block.", "text"),
         new("Appearance", "DetailsToggle", "Technical details", "Show audio level and render frequency.", "signal", "dB FPS"),
@@ -422,7 +397,6 @@ public sealed partial class SettingsWindow : Window
             return;
         }
         _searchActive = true;
-        ActivityHost.Visibility = Visibility.Collapsed;
         SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = PreviewButton.Visibility = Visibility.Collapsed;
         CatalogScroll.Visibility = Visibility.Visible;
         _catalogPickers.Clear();

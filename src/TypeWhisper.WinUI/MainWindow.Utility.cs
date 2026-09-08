@@ -42,11 +42,11 @@ public sealed partial class MainWindow
                 CloseUtility();
                 if (destination == "History") OpenHistory();
                 else if (destination == "Setup") OpenSetup();
-                else if (destination is "Dashboard" or "Statistics") OpenUtility(destination);
+                else if (destination == "Statistics") OpenUtility(destination);
                 else OpenSettings();
             };
             root.Children.Add(_utilityActivity);
-            _utilityActivity.Present(title == "Statistics");
+            _utilityActivity.Present();
         }
         var footer = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 12, 0, 12) };
         footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });

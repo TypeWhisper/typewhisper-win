@@ -12,12 +12,11 @@ public sealed class ActivityView : UserControl
 {
     private readonly StackPanel _body = new() { Spacing = 20 };
     private readonly Grid _header = new() { ColumnSpacing = 12, Padding = new Thickness(24, 16, 24, 16) };
-    private readonly TextBlock _title = Text("Dashboard", 24);
+    private readonly TextBlock _title = Text("Statistics", 24);
     private readonly StackPanel _periods = new() { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
     private readonly ScrollViewer _scroll;
     private readonly List<Action<double>> _responsive = [];
     private UsagePeriod _period = UsagePeriod.AllTime;
-    private bool _statistics;
     private HistoryReader? _reader;
     private Func<bool> _historySavingEnabled = () => true;
     private IReadOnlyList<TranscriptionRecord> _records = [];
@@ -77,7 +76,7 @@ public sealed class ActivityView : UserControl
         finally { _loading = false; Render(); }
     }
 
-    internal void Present(bool statistics) { _statistics = statistics; Render(); _ = RefreshAsync(); }
+    internal void Present() { Render(); _ = RefreshAsync(); }
     internal bool CloseRangeIfOpen()
     {
         if (_rangePicker?.IsOpen != true) return false;
@@ -87,12 +86,11 @@ public sealed class ActivityView : UserControl
     {
         _rangePicker?.Close(); _rangePicker = null;
         _body.Children.Clear(); _periods.Children.Clear(); _responsive.Clear();
-        _title.Text = _statistics ? "Statistics" : "Dashboard";
+        _title.Text = "Statistics";
         var data = new UsageData(_records);
-        var summary = _statistics && _period == UsagePeriod.Custom
+        var summary = _period == UsagePeriod.Custom
             ? data.SummarizeRange(_rangeStart, _rangeEnd)
-            : data.Summarize(_statistics ? _period : UsagePeriod.AllTime);
-        if (_statistics)
+            : data.Summarize(_period);
         {
             foreach (var period in new[] { UsagePeriod.Week, UsagePeriod.Month, UsagePeriod.AllTime })
             {
@@ -110,50 +108,19 @@ public sealed class ActivityView : UserControl
             if (_loadError is not null) _body.Children.Add(Button("Retry", () => _ = RefreshAsync()));
         }
         else if (summary.Transcriptions == 0) RenderEmpty();
-        else if (_statistics) RenderStatistics(summary);
-        else RenderDashboard(summary);
+        else RenderStatistics(summary);
         _body.Children.Add(Text("Based only on entries currently saved in local history. Editing, deletion and retention change these figures. Dictations that were not saved are not counted. Dates and hours use this device's local time.", 11, true));
         if (!_historySavingEnabled()) _body.Children.Add(Text("History saving is off. New dictations will not appear in these statistics. Existing saved entries are still included.", 12, true));
         foreach (var resize in _responsive) resize(Math.Max(0, ActualWidth - 48));
         _scroll.ChangeView(null, 0, null, true);
     }
 
-    private void RenderDashboard(UsageSummary summary)
-    {
-        var activity = new StackPanel { Spacing = 16 };
-        activity.Children.Add(SectionLink("Your activity", "stats", "View all statistics", () => NavigateRequested?.Invoke("Statistics")));
-        activity.Children.Add(Metrics(summary, true)); _body.Children.Add(Card(activity));
-        var recent = new StackPanel { Spacing = 4 };
-        recent.Children.Add(SectionLink("Recent transcriptions", "history", "View all history", () => NavigateRequested?.Invoke("History")));
-        var entries = _records.Take(3).Select(record => new Transcript(HistoryEntryAdapter.FromRecord(record),
-            new DateTimeOffset(DateTime.SpecifyKind(record.Timestamp, DateTimeKind.Utc)).ToLocalTime().ToString("g"))).ToArray();
-        foreach (var item in entries)
-        {
-            var labels = new StackPanel { Spacing = 5 };
-            var text = Text(item.Preview, 14); text.MaxLines = 1; text.TextTrimming = TextTrimming.CharacterEllipsis;
-            labels.Children.Add(text); labels.Children.Add(Text($"{item.Time} · {item.Entry.Content.AppName ?? item.Entry.Content.AppProcessName ?? "App not recorded"}", 11, true));
-            var row = Button("", () => ShowTranscript(item)); row.Content = labels; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
-            row.Style = (Style)Application.Current.Resources["MenuButtonStyle"]; row.Padding = new Thickness(4, 12, 4, 12);
-            AutomationProperties.SetName(row, "Open recent transcription: " + item.Title); recent.Children.Add(row);
-            if (item != entries[^1]) recent.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush") });
-        }
-        _body.Children.Add(Card(recent));
-    }
-    private void ShowTranscript(Transcript item)
-    {
-        _body.Children.Clear(); _periods.Children.Clear(); _responsive.Clear(); _title.Text = "Recent transcription";
-        _body.Children.Add(Button("← Dashboard", Render)); _body.Children.Add(Text(item.Title, 18));
-        _body.Children.Add(Text(item.Metadata, 11, true));
-        _body.Children.Add(Text(item.ModelMetadata, 11, true));
-        var text = Text(item.Text, 14); text.IsTextSelectionEnabled = true; _body.Children.Add(Card(text));
-        _scroll.ChangeView(null, 0, null, true);
-    }
     private void RenderEmpty()
     {
         var body = new StackPanel { Spacing = 12, Padding = new Thickness(8, 28, 8, 28) };
         body.Children.Add(new TypeWhisperGlyph { Kind = "signal", Width = 42, Height = 42, HorizontalAlignment = HorizontalAlignment.Center });
-        var title = Text(_statistics ? "No saved activity in this date range" : "No saved activity yet", 20); title.TextAlignment = TextAlignment.Center; body.Children.Add(title);
-        var hint = Text(_statistics ? "Choose another date range or save a new dictation to history." : "Dictations saved to local history will appear here.", 13, true); hint.TextAlignment = TextAlignment.Center; body.Children.Add(hint);
+        var title = Text("No saved activity in this date range", 20); title.TextAlignment = TextAlignment.Center; body.Children.Add(title);
+        var hint = Text("Choose another date range or save a new dictation to history.", 13, true); hint.TextAlignment = TextAlignment.Center; body.Children.Add(hint);
         var history = Button("Open history", () => NavigateRequested?.Invoke("History"), true); history.HorizontalAlignment = HorizontalAlignment.Center; body.Children.Add(history);
         _body.Children.Add(Card(body));
     }
@@ -171,9 +138,6 @@ public sealed class ActivityView : UserControl
         _body.Children.Add(Heatmap(summary));
         _body.Children.Add(Text("Words use the current displayed transcript. Recorded minutes sum the stored duration; entries without a recorded duration contribute zero. Rankings count saved entries, including entries with missing attribution.", 11, true));
     }
-    private Grid Metrics(UsageSummary summary, bool links) => MetricGrid([
-        ("Words", summary.Words.ToString("N0"), "text"), ("Saved entries", summary.Transcriptions.ToString("N0"), "signal"),
-        ("Recorded apps", summary.KnownApps.ToString(), "desktop"), ("Recorded minutes", summary.Minutes.ToString("N1"), "history")], links);
     private Grid MetricGrid((string Label, string Value, string Icon)[] metrics, bool links)
     {
         var grid = new Grid { ColumnSpacing = 12, RowSpacing = 12 };
@@ -341,14 +305,6 @@ public sealed class ActivityView : UserControl
         }
         AutomationProperties.SetName(grid, "Hourly activity, Monday to Sunday, 00:00 to 23:00. Darker cells mean less activity.");
         body.Children.Add(grid); body.Children.Add(Text("Less  ░ ▒ ▓  More · local time", 10, true)); return Card(body);
-    }
-    private static HandCursorButton SectionLink(string title, string icon, string action, Action click)
-    {
-        var row = new Grid { ColumnSpacing = 8 }; row.ColumnDefinitions.Add(new() { Width = new GridLength(20) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        row.Children.Add(new TypeWhisperGlyph { Kind = icon, Width = 18, Height = 18 }); var label = Text(title, 14); label.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; Grid.SetColumn(label, 1); row.Children.Add(label);
-        var more = Text(action + "  ›", 11, true); more.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(more, 2); row.Children.Add(more);
-        var button = Button("", click); button.Content = row; button.Padding = new Thickness(0); button.Style = (Style)Application.Current.Resources["IconButtonStyle"];
-        button.HorizontalAlignment = HorizontalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; AutomationProperties.SetName(button, action); return button;
     }
     private static Border Card(UIElement child, double padding = 18) => new() { Child = child, Padding = new Thickness(padding), Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12) };
     private static HandCursorButton Button(string label, Action click, bool primary = false)
