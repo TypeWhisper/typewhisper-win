@@ -35,7 +35,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
 #if DEBUG
                 // Computer Use emits injected keys. Accept them only in the explicit
                 // named-profile probe, whose session path returns before any audio work.
-                acceptInjectedProbeInput = LocalDictationSession.WorkflowProbeEnabled;
+                acceptInjectedProbeInput = LocalDictationSession.WorkflowProbeEnabled || LocalDictationSession.CorrectionProbeEnabled;
 #endif
                 if ((key.Flags & 0x10) == 0 || acceptInjectedProbeInput)
                 {

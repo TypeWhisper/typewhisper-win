@@ -1,3 +1,15 @@
+## Automatic correction learning (2026-09-08)
+
+Settings > Premium now connects correction learning. In Debug, choose Commercial license or All access under Development access, then enable Learn automatically. Dictate into a supported editor, correct one word within 30 seconds, and commit with Enter, Tab or a focus change. Dictionary > Corrections contains the saved entry; the next dictation applies it. Existing manual or disabled entries are not overwritten. Turning learning off preserves existing corrections; delete them in Dictionary to stop applying them.
+
+Observation starts only after successful automatic paste, never for failed insertion or review-only output. It is cancelled/drained for a new dictation and shutdown, and cancelled on opt-out or entitlement loss. It reads only the captured editor through bounded UI Automation, with no clipboard-copy or descendant-scan fallback. Password fields, terminal processes and detected browser address bars are excluded. Unavailable UIA providers fail without interrupting dictation. No observed field contents are logged or uploaded.
+
+Validation: 57 relevant tests pass in Debug and Release (`artifacts/correction-tests-final.log`, `artifacts/correction-tests-release.log`). Tests cover committed/ambiguous edits, context matching, cancellation, duplicates, persistence failures, manual-entry preservation and application/deletion on the next dictionary snapshot. WinUI build: `artifacts/correction-build-final.log`.
+
+Native smoke passed in Notepad with isolated profile `correction-20260908`: real clipboard insertion of the fixed synthetic sentence, edit `teh` to `the`, focus change, and a persisted `autoLearned` dictionary entry. Premium displayed one learned correction. This exercises insertion, native observation and persistence, without an audio or cloud request. The normal development profile was relaunched afterwards.
+
+For repeatable native tests only, Debug accepts `TYPEWHISPER_WINUI_CORRECTION_PROBE=1` together with a named `TYPEWHISPER_WINUI_TEST_PROFILE`. The dictation shortcut inserts a fixed sample and runs the real observer without model readiness, microphone, History or cloud calls. Set development access and enable learning in that isolated profile first. The default new-profile shortcut is Ctrl+Shift+F9. These hooks are excluded from Release and never work on the normal profile.
+
 ## Premium development access (2026-09-08)
 
 Open Settings > Premium. In Debug builds, Development access applies immediately and persists in the active profile's `premium-development.txt`. Select **Use actual access** to delete the override. Scenarios cover locked access, supporter, commercial license, signed-in Premium, combined access and signed-out Premium. Release builds neither read nor write this override and always use the actual-access provider.

@@ -464,6 +464,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     internal Task ToggleAsync() => SetRecordingAsync(null);
+    internal bool CanStartFromShortcut => IsReady
+#if DEBUG
+        || CorrectionProbeEnabled
+#endif
+        ;
+#if DEBUG
+    internal static bool CorrectionProbeEnabled => WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_CORRECTION_PROBE") == "1";
+#endif
     internal Task StartAsync() => SetRecordingAsync(true);
     internal Task StartAsync(AutomaticWorkflowSnapshot workflow) => SetRecordingAsync(true, workflow);
     internal Task StopAsync() => SetRecordingAsync(false);
@@ -492,6 +500,21 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         if (_disposed || !await _gate.WaitAsync(0)) return;
 #if DEBUG
+        if (CorrectionProbeEnabled && !_audio.IsRecording)
+        {
+            try
+            {
+                await CorrectionLearning.Cancel();
+                var target = GetForegroundWindow();
+                const string sample = "We use teh tool every day.";
+                for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
+                var inserted = await _inserter.InsertAsync(sample, target);
+                File.WriteAllText(WinUIProfile.DataPath("correction-probe.txt"), inserted ? "inserted" : "paste_failed");
+                if (inserted) CorrectionLearning.Observe(sample, target);
+            }
+            finally { _gate.Release(); }
+            return;
+        }
         if (WorkflowProbeEnabled && !_audio.IsRecording)
         {
             try { if (recording != false) await RunWorkflowProbeAsync(); }
@@ -507,6 +530,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
+                await CorrectionLearning.Cancel();
                 _operationCancellation.Begin();
                 if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)
                 {
@@ -668,7 +692,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
                         ModifiersHeld() || GetForegroundWindow() != _target) return false;
-                    return await _inserter.InsertAsync(text, _target);
+                    var inserted = await _inserter.InsertAsync(text, _target);
+                    if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
+                        CorrectionLearning.Observe(text, _target);
+                    return inserted;
                 }, _operationCancellation.Token, samples, 16000);
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             if (_disposed) return;

@@ -16,7 +16,7 @@ internal sealed record LexiconEntry(Guid Id, LexiconKind Kind, string Key,
 internal sealed class Lexicon
 {
     private readonly List<LexiconEntry> _entries = [];
-    private readonly DictionaryService? _dictionary;
+    private DictionaryService? _dictionary;
     private SnippetService? _snippets;
     private string? _snippetLoadError;
     private string? _loadError;
@@ -50,6 +50,18 @@ internal sealed class Lexicon
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         { LastError = _loadError = "Dictionary could not be loaded: " + ex.Message; }
+    }
+
+    internal void ReloadDictionary()
+    {
+        if (_dictionaryPath is null) return;
+        try
+        {
+            if (File.Exists(_dictionaryPath)) _ = LexiconTransfer.ReadDictionary(File.ReadAllText(_dictionaryPath), allowPackEntries: true);
+            _dictionary = new(_dictionaryPath); RefreshDictionary(); _loadError = null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+        { LastError = _loadError = "Dictionary could not be loaded."; }
     }
 
     private static Guid UiId(string id) => new(SHA256.HashData(Encoding.UTF8.GetBytes(id)).AsSpan(0, 16));

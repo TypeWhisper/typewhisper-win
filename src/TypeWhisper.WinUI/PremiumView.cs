@@ -16,6 +16,8 @@ internal sealed class PremiumView : UserControl
     private readonly StackPanel _features = new() { Spacing = 12 };
     private readonly ChoicePicker? _scenario;
     private bool _refreshing;
+    private ToggleSwitch? _learningToggle;
+    private TextBlock? _learningStatus;
 
     internal PremiumView(List<ChoicePicker> pickers)
     {
@@ -39,8 +41,8 @@ internal sealed class PremiumView : UserControl
             development.Children.Add(_scenario);
             body.Children.Add(Card(development));
         }
-        Loaded += (_, _) => { Access.Changed += Refresh; Refresh(); };
-        Unloaded += (_, _) => Access.Changed -= Refresh;
+        Loaded += (_, _) => { Access.Changed += Refresh; CorrectionLearning.Changed += RefreshLearning; Refresh(); };
+        Unloaded += (_, _) => { Access.Changed -= Refresh; CorrectionLearning.Changed -= RefreshLearning; };
         Refresh();
     }
 
@@ -72,6 +74,17 @@ internal sealed class PremiumView : UserControl
         finally { _refreshing = false; }
     }
 
+    private void RefreshLearning()
+    {
+        _refreshing = true;
+        try
+        {
+            if (_learningToggle is not null) _learningToggle.IsOn = CorrectionLearning.Enabled;
+            if (_learningStatus is not null) _learningStatus.Text = CorrectionLearning.Status;
+        }
+        finally { _refreshing = false; }
+    }
+
     private void Feature(PremiumFeature feature, string title, string description)
     {
         var panel = new StackPanel { Spacing = 7 };
@@ -87,7 +100,26 @@ internal sealed class PremiumView : UserControl
             PremiumRequirement.LinkCommercialLicense => "Link your commercial license to your account",
             _ => "Requires a commercial license or Premium account"
         }, 12));
-        panel.Children.Add(Copy("Not connected in this Windows build yet.", 12, true));
+        if (feature == PremiumFeature.CorrectionLearning)
+        {
+            var toggle = new ToggleSwitch { IsOn = CorrectionLearning.Enabled,
+                IsEnabled = requirement == PremiumRequirement.Available };
+            AppToggleSwitch.Configure(toggle);
+            AutomationProperties.SetName(toggle, "Automatically learn dictation corrections");
+            _learningToggle = toggle;
+            toggle.Toggled += (_, _) => { if (!_refreshing) CorrectionLearning.SetEnabled(toggle.IsOn); };
+            var toggleRow = new Grid { ColumnSpacing = 16 };
+            toggleRow.ColumnDefinitions.Add(new());
+            toggleRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            var label = Copy("Learn automatically", 13); label.VerticalAlignment = VerticalAlignment.Center;
+            toggleRow.Children.Add(label); Grid.SetColumn(toggle, 1); toggleRow.Children.Add(toggle);
+            panel.Children.Add(toggleRow);
+            panel.Children.Add(Copy("After dictation, edit the inserted text and press Enter or Tab, or leave the field. Only clear word corrections are saved locally in Dictionary > Corrections. Unsupported and password fields are skipped.", 12, true));
+            _learningStatus = Copy(CorrectionLearning.Status, 12, true);
+            AutomationProperties.SetLiveSetting(_learningStatus, AutomationLiveSetting.Polite);
+            panel.Children.Add(_learningStatus);
+        }
+        else panel.Children.Add(Copy("Not connected in this Windows build yet.", 12, true));
         _features.Children.Add(Card(panel));
     }
     private static TextBlock Copy(string text, double size, bool muted = false) => new()

@@ -43,6 +43,7 @@ public sealed class LexiconView : UserControl
 
     public LexiconView()
     {
+        CorrectionLearning.DictionaryChanged += () => { _store.ReloadDictionary(); if (_draft is null && !_closing) Render(); };
         var root = new Grid { Background = Brush("InkBrush"), Padding = new Thickness(8, 0, 8, 0), RowSpacing = 12 };
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
@@ -70,6 +71,7 @@ public sealed class LexiconView : UserControl
 
     internal void Present(bool snippets)
     {
+        _store.ReloadDictionary();
         _store.ReloadSnippets();
         _kind = snippets ? LexiconKind.Snippet : LexiconKind.Word;
         _showPacks = false;
