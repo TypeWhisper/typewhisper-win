@@ -266,7 +266,7 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    private void ShowCategory(string category)
+    internal void ShowCategory(string category)
     {
         if (category is "Statistics" or "Sync & backup") { WorkspaceRequested?.Invoke(category); return; }
         // TextChanged can arrive after the programmatic clear. It must not rebuild

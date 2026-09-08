@@ -52,7 +52,7 @@ public sealed partial class MainWindow : Window
     private static extern bool SetForegroundWindow(IntPtr hwnd);
     private static readonly IReadOnlyList<Command> Commands =
     [
-        new("Pinned", "microphone", "Dictation", "Focus a text field, then use your dictation shortcut", "", "Configure Main dictation in Settings > Shortcuts. Use the shortcut to start, and again to finish."),
+        new("Pinned", "microphone", "Dictation", "Return to your previous text field", "", "Return to the previous app, then use your dictation shortcut to record."),
         new("Pinned", "history", "History", "Browse, search, copy, and export transcriptions", "H", "Opens History in workspace mode. Full transcript search remains inside this explicit scope."),
         new("Pinned", "recorder", "Recorder", "Record microphone and system audio", "R", "Opens the recorder workspace without interrupting active dictation."),
         new("Pinned", "workflow", "Workflows", "Run and manage reusable text workflows", "W", "Choose a workflow, inspect its provider, and run it against selected or dictated text."),
@@ -555,6 +555,7 @@ public sealed partial class MainWindow : Window
     internal void ShowFromActivation()
     {
         if (_profileRestoreClosing) return;
+        RememberPreviousApp();
         if (!_closing && !_historyOpen && !_recorderOpen && !_workflowsOpen &&
             !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen && !UtilityOpen)
         {
@@ -844,6 +845,8 @@ public sealed partial class MainWindow : Window
             WorkflowsView.OpenSelected();
         else if (_historyOpen)
             HistoryView.OpenSelected();
+        else if (_selected?.Route is { } route)
+            OpenWorkspaceCommand(route);
         else if (_selected?.WorkflowId is { } workflowId)
         {
             OpenWorkflows();
@@ -873,8 +876,8 @@ public sealed partial class MainWindow : Window
             OpenSyncBackup();
         else if (_selected?.Title == "Statistics")
             OpenStatistics();
-        else if (_selected?.Title.Contains("dictation", StringComparison.OrdinalIgnoreCase) == true)
-            MetricsText.Text = DictationStatusForDisplay;
+        else if (_selected?.Title == "Dictation")
+            ReturnToPreviousApp();
         else if (_selected is not null)
             MetricsText.Text = $"Executed {_selected.Title} · preview data only";
     }
@@ -1128,7 +1131,7 @@ public sealed partial class MainWindow : Window
         _settingsWindow?.ShowSetup();
     }
 
-    internal void OpenLexicon(bool snippets = false)
+    internal void OpenLexicon(bool snippets = false, string? section = null)
     {
         if (_lexicon is null)
         {
@@ -1145,7 +1148,7 @@ public sealed partial class MainWindow : Window
         }
         SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
         LexiconHost.Visibility = Visibility.Visible;
-        _lexicon.Present(snippets);
+        _lexicon.Present(snippets, section);
     }
 
     private void EnsureFileTranscription()

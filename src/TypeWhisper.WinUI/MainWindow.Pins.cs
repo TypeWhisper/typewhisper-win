@@ -205,8 +205,7 @@ public sealed partial class MainWindow
         row.PointerCaptureLost += Pin_PointerCaptureLost;
     }
 
-    private IEnumerable<Command> LauncherCommands() => Commands.Concat(WorkflowsView.LauncherEntries
-        .Where(command => _pinnedCommands.Contains(command.Key)));
+    private IEnumerable<Command> LauncherCommands() => Commands.Concat(WorkspaceCommands).Concat(WorkflowsView.LauncherEntries);
 
     private IEnumerable<Command> OrderedLauncherCommands(IEnumerable<Command> commands)
     {

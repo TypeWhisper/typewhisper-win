@@ -22,7 +22,7 @@ public sealed partial class RecorderView
     private RecorderLibraryEntry? SelectedRecording => (LibraryEntries.SelectedItem as ListViewItem)?.Tag as RecorderLibraryEntry;
     internal Func<string, bool>? IsQueuedSource { get; set; }
 
-    private void ShowLibrary(bool open)
+    internal void ShowLibrary(bool open)
     {
         StopAudioPlayback();
         _libraryOpen = open;

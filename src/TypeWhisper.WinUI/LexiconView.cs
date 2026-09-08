@@ -75,12 +75,12 @@ public sealed partial class LexiconView : UserControl
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(_actions));
     }
 
-    internal void Present(bool snippets)
+    internal void Present(bool snippets, string? section = null)
     {
         _store.ReloadDictionary();
         _store.ReloadSnippets();
-        _kind = snippets ? LexiconKind.Snippet : LexiconKind.Word;
-        _showPacks = false;
+        _kind = section == "corrections" ? LexiconKind.Correction : snippets ? LexiconKind.Snippet : LexiconKind.Word;
+        _showPacks = section == "packs";
         _draft = _original = null; _pending = null; _query = ""; Render();
     }
 

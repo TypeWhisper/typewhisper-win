@@ -16,6 +16,7 @@ public sealed record Command(
     public double TitleSize => IsSuggestionsToggle ? 11 : 13;
     public Microsoft.UI.Xaml.Visibility SubtitleVisibility => IsSuggestionsToggle ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
     public bool IsSuggestionsToggle { get; init; }
+    public string? Route { get; init; }
     public string? WorkflowId { get; init; }
     public string Key => WorkflowId is null ? Title : "workflow:" + WorkflowId;
     public string PinLabel => IsPinned ? "Pinned" : "";

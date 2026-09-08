@@ -97,6 +97,7 @@ public sealed partial class HistoryView : UserControl
         }
     }
     private string _query = string.Empty;
+    internal void SelectKind(HistoryEntryKind kind) { _kind = kind; ApplyFilters(); }
     private HistoryEntryKind? _kind;
     private string? _deviceId;
     private bool _deviceMenuKeyboard;
