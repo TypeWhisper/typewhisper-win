@@ -220,24 +220,39 @@ public sealed class LexiconView : UserControl
                 };
                 Grid.SetColumn(toggle, 1); row.Children.Add(toggle); aliases.Children.Add(row);
             }
-            var expander = new Expander
+            var panel = new StackPanel { Spacing = 8 };
+            var headingRow = new Grid { ColumnSpacing = 12 };
+            headingRow.ColumnDefinitions.Add(new());
+            headingRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            var chevron = Text("", 12, true);
+            header.Children.Insert(0, chevron);
+            void UpdateExpansion()
             {
-                Header = header, Content = aliases, IsExpanded = !_collapsedCorrections.Contains(group.Key),
-                HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch
-            };
-            AutomationProperties.SetName(expander, $"Corrections for {group.Key}");
-            expander.Expanding += (_, _) => _collapsedCorrections.Remove(group.Key);
-            expander.Collapsed += (_, _) => _collapsedCorrections.Add(group.Key);
-            var panel = new Grid { ColumnSpacing = 8 };
-            panel.ColumnDefinitions.Add(new()); panel.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            panel.Children.Add(expander);
+                var expanded = !_collapsedCorrections.Contains(group.Key);
+                aliases.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+                chevron.Text = expanded ? "⌄" : "›";
+            }
+            var expand = Button("", () =>
+            {
+                if (!_collapsedCorrections.Add(group.Key)) _collapsedCorrections.Remove(group.Key);
+                UpdateExpansion();
+            });
+            expand.Content = header;
+            expand.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
+            expand.HorizontalAlignment = HorizontalAlignment.Stretch;
+            expand.HorizontalContentAlignment = HorizontalAlignment.Left;
+            AutomationProperties.SetName(expand, $"Expand or collapse corrections for {group.Key}");
+            headingRow.Children.Add(expand);
             var add = Button("+", () => OpenEditor(new LexiconEntry(Guid.NewGuid(), LexiconKind.Correction, "") with { Value = group.Key }));
-            add.VerticalAlignment = VerticalAlignment.Top;
-            add.Margin = new Thickness(0, 8, 0, 0);
+            add.VerticalAlignment = VerticalAlignment.Center;
+            add.Width = 40;
             AutomationProperties.SetName(add, $"Add variant for {group.Key}");
             ToolTipService.SetToolTip(add, "Add variant");
-            Grid.SetColumn(add, 1); panel.Children.Add(add);
-            _rows.Children.Add(panel);
+            Grid.SetColumn(add, 1); headingRow.Children.Add(add);
+            panel.Children.Add(headingRow);
+            panel.Children.Add(aliases);
+            UpdateExpansion();
+            _rows.Children.Add(Surface(panel, 12));
         }
     }
 
