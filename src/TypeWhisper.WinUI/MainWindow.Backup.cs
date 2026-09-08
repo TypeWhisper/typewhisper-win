@@ -19,6 +19,7 @@ public sealed partial class MainWindow
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
+        _readLastHotkey?.Dispose();
         var workflowShortcuts = StopWorkflowShortcutsAsync();
         _dictationInput?.Dispose();
         _dictation.RequestCancel();

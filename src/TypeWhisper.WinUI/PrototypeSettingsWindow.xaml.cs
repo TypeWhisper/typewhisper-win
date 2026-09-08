@@ -19,6 +19,7 @@ public sealed partial class PrototypeSettingsWindow : Window
     internal Func<string, string?>? CommitCancelProcessingHotkeys { get; set; }
     internal Func<string, string?>? CommitRecentTranscriptionsHotkeys { get; set; }
     internal Func<string, string?>? CommitCopyLastTranscriptionHotkeys { get; set; }
+    internal Func<string, string?>? CommitReadLastTranscriptionHotkeys { get; set; }
     internal Action<string, StackPanel, List<PrototypeChoicePicker>>? ConfigureLiveSettings { get; set; }
     internal Action<PrototypeActivityView>? ConfigureActivity { get; set; }
     internal Func<TypeWhisper.Core.Services.PersistedProfileBackup, TypeWhisper.Core.Services.PersistedProfileBackupPreview, Task>? RestoreProfile { get; set; }
@@ -317,7 +318,7 @@ public sealed partial class PrototypeSettingsWindow : Window
                 SessionHint.Text = "Statistics reflect retained history · deletion and retention reduce these totals";
                 return;
             }
-            PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys);
+            PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Development startup registration is connected · other unavailable controls are disabled";

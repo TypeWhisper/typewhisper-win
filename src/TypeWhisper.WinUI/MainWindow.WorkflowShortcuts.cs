@@ -25,7 +25,7 @@ public sealed partial class MainWindow
                 return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
             if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
                 return "Already used by Cancel processing.";
-            return HistoryShortcutConflict(value) ?? CopyLastShortcutConflict(value);
+            return HistoryShortcutConflict(value) ?? CopyLastShortcutConflict(value) ?? ReadLastShortcutConflict(value);
         });
         WorkflowsView.Shortcuts = _workflowShortcuts;
         if (_workflowShortcuts.Initialize() is { } error) MetricsText.Text = error;

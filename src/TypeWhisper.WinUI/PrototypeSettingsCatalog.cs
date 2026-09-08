@@ -82,6 +82,7 @@ internal static partial class PrototypeSettingsCatalog
         Text("Shortcuts", "HoldOnlyHotkeys", "Hold to record"),
         Text("Shortcuts", "RecentTranscriptionsHotkeys", "Recent transcriptions"),
         Text("Shortcuts", "CopyLastTranscriptionHotkeys", "Copy last transcription"),
+        Text("Shortcuts", "ReadLastTranscriptionHotkeys", "Read last transcription"),
         Text("Shortcuts", "WorkflowPaletteHotkeys", "Workflow palette"),
         Text("Shortcuts", "RecorderToggleHotkeys", "Recorder"),
 
@@ -144,7 +145,7 @@ internal static partial class PrototypeSettingsCatalog
     internal static IEnumerable<(string Key, string Label, string Value)> ShortcutBindings(Dictionary<string, string> values) =>
         Fields.Where(field => field.Category == "Shortcuts").Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
 
-    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null)
+    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null)
     {
         target.Children.Clear();
         var title = Label(category, 24);
@@ -170,7 +171,7 @@ internal static partial class PrototypeSettingsCatalog
             [
                 ("Quick Launch", ["QuickLaunchHotkeys"]),
                 ("Dictation", ["MainDictationHotkeys", "CancelProcessingHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
-                ("Recent transcriptions", ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys"]),
+                ("Recent transcriptions", ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys", "ReadLastTranscriptionHotkeys"]),
                 ("Workflow palette", ["WorkflowPaletteHotkeys"]),
                 ("Recorder", ["RecorderToggleHotkeys"])
             ];
@@ -195,7 +196,8 @@ internal static partial class PrototypeSettingsCatalog
                     var commit = field.Key switch { "QuickLaunchHotkeys" => commitLauncherHotkeys,
                         "MainDictationHotkeys" => commitDictationHotkeys, "CancelProcessingHotkeys" => commitCancelProcessingHotkeys,
                         "RecentTranscriptionsHotkeys" => commitRecentTranscriptionsHotkeys,
-                        "CopyLastTranscriptionHotkeys" => commitCopyLastTranscriptionHotkeys, _ => null };
+                        "CopyLastTranscriptionHotkeys" => commitCopyLastTranscriptionHotkeys,
+                        "ReadLastTranscriptionHotkeys" => commitReadLastTranscriptionHotkeys, _ => null };
                     item.Children.Add(new PrototypeShortcutRecorder(field.Key, field.Label, field.Value, values,
                         () => Fields.Where(f => f.Category == "Shortcuts").Select(f =>
                             (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), commit) { IsEnabled = commit is not null });

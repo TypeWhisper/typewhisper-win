@@ -9,6 +9,30 @@ internal sealed partial class LocalDictationSession
     private DictationAudioPreferences _spokenFeedbackAtStart = new();
     private Task _spokenFeedbackActivity = Task.CompletedTask;
 
+    internal Task<SpokenFeedbackResult> ToggleReadLastDictationAsync()
+    {
+        if (_disposed || (!SpokenFeedback.IsBusy && (!CanChangeProvider || Models.Busy)) || !_gate.Wait(0))
+            return Task.FromResult(new SpokenFeedbackResult(SpokenFeedbackStatus.Rejected,
+                "Finish the current recording or model operation before reading the last dictation."));
+        try
+        {
+            var playback = ReadLastDictationCoreAsync();
+            _spokenFeedbackActivity = playback;
+            return playback;
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<SpokenFeedbackResult> ReadLastDictationCoreAsync()
+    {
+        var playback = LastDictationReadback.ToggleAsync(SpokenFeedback, LastCompletedDictation,
+            AudioPreferences.SpokenFeedbackVoiceId, AudioPreferences.OutputDeviceId);
+        Changed?.Invoke();
+        var result = await playback;
+        if (!_disposed) Changed?.Invoke();
+        return result;
+    }
+
     internal Task<SpokenFeedbackResult> TestSpokenFeedbackAsync()
     {
         if (!CanChangeProvider || Models.Busy || SpokenFeedback.IsBusy || !_gate.Wait(0))
