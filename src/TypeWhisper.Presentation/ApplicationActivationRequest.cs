@@ -5,6 +5,10 @@ namespace TypeWhisper.Presentation;
 /// <summary>A bounded navigation request; files are queued for explicit processing, never automatically transcribed.</summary>
 public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<string> Files, string? Error, bool ShowWindow)
 {
+    /// <summary>Opaque authorization callback; never include its query in diagnostics.</summary>
+    public Uri? AccountCallback { get; init; }
+    /// <summary>Redacts authorization callback data from diagnostic output.</summary>
+    public override string ToString() => $"Activation: {Route ?? "default"}; account callback: {AccountCallback is not null}";
     /// <summary>Maximum files in one activation.</summary>
     public const int MaximumFiles = 20;
     private static readonly string[] Routes = ["--account", "--sync-backup", "--dashboard", "--statistics", "--dictionary", "--snippets", "--files", "--setup", "--compare-selects", "--settings"];
@@ -13,6 +17,9 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
     public static ApplicationActivationRequest Parse(IEnumerable<string> arguments, bool startup = false)
     {
         var args = arguments.Take(128).ToArray();
+        if (args.Any(value => value.StartsWith("typewhisper:", StringComparison.OrdinalIgnoreCase)))
+            return args.Length == 1 && Uri.TryCreate(args[0], UriKind.Absolute, out var callback) && PremiumAccountClient.IsCallback(callback)
+                ? new(null, [], null, true) { AccountCallback = callback } : Failure("Invalid account callback.");
         if (args.Length >= 128 || args.Sum(value => (long)value.Length) > 32767) return Failure("Too many activation arguments.");
         string? route = null;
         var paths = new List<string>();

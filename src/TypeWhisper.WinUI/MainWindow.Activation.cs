@@ -44,6 +44,12 @@ public sealed partial class MainWindow
     {
         if (_closing || _profileRestoreClosing) return;
         if (!request.ShowWindow) return;
+        if (request.AccountCallback is { } callback)
+        {
+            WinUIPremiumAccount.ReceiveCallback(callback);
+            OpenSettings();
+            return;
+        }
         ShowFromActivation();
         if (request.Error is { } error) { ShowActivationNotice(error); return; }
         var filesOpen = FileTranscriptionOpen && !LexiconOpen && !_historyOpen && !_recorderOpen && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen;

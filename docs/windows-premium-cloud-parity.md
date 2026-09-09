@@ -18,7 +18,7 @@ The Mac already uses a browser-based flow against `https://app.typewhisper.com` 
 
 Related endpoints: `/v1/entitlements/current`, `/v1/entitlements/polar/device/attach`, `/v1/entitlements/polar/device/current`, and `/v1/account` (account deletion). Do not confuse local sign-out with account deletion.
 
-Windows integration still needs protocol activation routing to the running dev/production app, cancellation and expiry handling, DPAPI token storage, signed entitlement verification, and account/licensing UI integration. Do not ship a sign-in button until this round trip is connected and tested. No Apple developer private key belongs in the Windows binary.
+Windows now implements this flow under Premium → Manage access, including protocol activation routing to the running app, cancellation and expiry handling, per-profile DPAPI token storage, pinned P256 entitlement verification, refresh, commercial license linking, and device sign-out. Account deletion is not exposed. Automated tests exercise the HTTP exchange, PKCE, signature validation, callback rejection/replay, expiry, cancellation, unauthorized sessions, and device sign-out. A real Apple login still requires user authentication in the browser; automated tests do not establish that live round trip. No Apple developer private key is included in the Windows binary.
 
 Apple supports this web flow: https://developer.apple.com/help/account/capabilities/configure-sign-in-with-apple-for-the-web
 

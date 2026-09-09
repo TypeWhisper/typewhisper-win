@@ -32,6 +32,7 @@ internal sealed partial class PremiumView : UserControl
         _details.Children.Add(_notice);
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         _accessDetails.Children.Add(CreateLicenseSection());
+        _accessDetails.Children.Add(new PremiumAccountView());
         _details.Children.Add(_accessDetails);
         _details.Children.Add(_features);
         if (PremiumAccessState.CanOverride)
@@ -64,7 +65,7 @@ internal sealed partial class PremiumView : UserControl
                 + (Access.IsOverridden ? " · Development" : "");
             _notice.Text = Access.Error ?? (Access.IsOverridden
                 ? "Development access is active. Feature availability below is separate from access."
-                : "Commercial licenses unlock correction learning. Supporter status is separate. Cloud folder sync is available with a commercial license. Apple account sign-in is not connected yet.");
+                : "Manage your license and Apple account below. Cloud folder sync is available with a commercial license.");
             RefreshOverview();
             RefreshDetails();
             _scenario?.SetOptions([

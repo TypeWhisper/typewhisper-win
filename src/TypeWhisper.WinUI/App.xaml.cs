@@ -33,7 +33,9 @@ public partial class App : Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
-        var request = TypeWhisper.Presentation.ApplicationActivationRequest.Parse(Environment.GetCommandLineArgs().Skip(1),
+        var request = activation.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocol
+            ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocol.Uri.AbsoluteUri])
+            : TypeWhisper.Presentation.ApplicationActivationRequest.Parse(Environment.GetCommandLineArgs().Skip(1),
             activation.Kind == ExtendedActivationKind.StartupTask);
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         _mainInstance = AppInstance.FindOrRegisterForKey(InstanceKey);
@@ -56,7 +58,9 @@ public partial class App : Application
         _activations.Add(request);
         _mainInstance.Activated += (_, redirected) =>
         {
-            var incoming = redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
+            var incoming = redirected.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs
+                ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocolArgs.Uri.AbsoluteUri])
+                : redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
                 ? TypeWhisper.Presentation.ApplicationActivationRequest.ParseCommandLine(launchArgs.Arguments)
                 : TypeWhisper.Presentation.ApplicationActivationRequest.Parse([], redirected.Kind == ExtendedActivationKind.StartupTask);
             if (!incoming.ShowWindow) return;

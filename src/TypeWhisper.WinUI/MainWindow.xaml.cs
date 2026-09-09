@@ -166,6 +166,7 @@ public sealed partial class MainWindow : Window
             InitializeRecordingShortcuts();
             InitializeRecorderShortcut();
             await WinUILicensing.ValidateAsync();
+            if (!_closing) await WinUIPremiumAccount.RefreshAsync();
             if (!_closing)
             {
                 WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
@@ -236,7 +237,7 @@ public sealed partial class MainWindow : Window
         var history = HistoryView.ShutdownAsync();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
-        await Task.WhenAll(WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
+        await Task.WhenAll(WinUIPremiumAccount.ShutdownAsync(), WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
             _dictationInitialization ?? Task.CompletedTask);
         _liveOverlay?.Close();
     });

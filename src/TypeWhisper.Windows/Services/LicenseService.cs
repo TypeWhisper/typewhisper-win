@@ -267,6 +267,14 @@ public sealed partial class LicenseService : ObservableObject
         return proofs;
     }
 
+    /// <summary>Returns the existing commercial activation proof for linking the signed-in account.</summary>
+    public bool TryGetCommercialAccountProof(out string? key, out string? activationId)
+    {
+        key = HasCommercialLicense ? _commercialLicenseKey : null;
+        activationId = HasCommercialLicense ? _commercialActivationId : null;
+        return !string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(activationId);
+    }
+
     private SupporterTier? EffectiveSupporterTier => SupporterTier switch
     {
         null => null,

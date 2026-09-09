@@ -8,7 +8,8 @@ internal static class WinUILicensing
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
     internal static LicenseService Service { get; } = new(Http, Path.GetDirectoryName(WinUIProfile.DataPath("licenses.dat"))!);
-    internal static PremiumAccess Current => new(Commercial: Service.HasCommercialLicense, Supporter: Service.HasSupporterLicense);
+    internal static PremiumAccess Current => new(Commercial: Service.HasCommercialLicense, Supporter: Service.HasSupporterLicense,
+        SignedIn: WinUIPremiumAccount.SignedIn, PremiumAccount: WinUIPremiumAccount.Premium);
     internal static event Action? Changed;
     internal static string? Notice { get; private set; }
     internal static bool Busy { get; private set; }

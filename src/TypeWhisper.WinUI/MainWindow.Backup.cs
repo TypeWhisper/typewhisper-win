@@ -29,7 +29,7 @@ public sealed partial class MainWindow
         _dictation.RequestCancel();
         // Close admission immediately, including when recorder saving will need a retry.
         // These drains can wait for the recorder's reservation without blocking this call.
-        _profileUiDrain = Task.WhenAll(WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), _httpApi.ShutdownAsync(), workflowShortcuts, HistoryView.ShutdownAsync(), WorkflowsView.ShutdownAsync(),
+        _profileUiDrain = Task.WhenAll(WinUIPremiumAccount.ShutdownAsync(), WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), _httpApi.ShutdownAsync(), workflowShortcuts, HistoryView.ShutdownAsync(), WorkflowsView.ShutdownAsync(),
             DrainRecoveryViewsAsync(),
             DrainReviewWindowsAsync(),
             _lexicon?.ShutdownAsync() ?? Task.CompletedTask,
