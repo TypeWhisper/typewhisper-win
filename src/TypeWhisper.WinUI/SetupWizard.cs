@@ -13,7 +13,6 @@ public sealed partial class SetupWizard : UserControl
     private readonly Dictionary<string, string> _values;
     private readonly Action<bool> _exit;
     private readonly Func<string, string?> _commitHotkeys;
-    private readonly Action<string> _openProvider;
     private readonly SetupState _state;
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly Grid _steps = new() { Margin = new Thickness(0, 24, 0, 0) };
@@ -25,7 +24,9 @@ public sealed partial class SetupWizard : UserControl
     private readonly List<ChoicePicker> _pickers = [];
     private readonly SetupReadiness _feedback = new();
     private ChoicePicker? _providerPicker, _modelPicker, _languagePicker;
-    private HandCursorButton? _configureProvider;
+    private ContentControl? _providerSettings;
+    private TextBlock? _modelLabel, _engineStatus;
+    private string? _renderedProvider;
     private string? _selectedProvider;
     private string? _observedProvider;
     private bool _refreshingModels;
@@ -33,9 +34,9 @@ public sealed partial class SetupWizard : UserControl
     private bool _selecting;
 
     internal SetupWizard(Dictionary<string, string> values, Action<bool> exit,
-        Func<string, string?> commitHotkeys, LocalDictationSession session, Action<string> openProvider)
+        Func<string, string?> commitHotkeys, LocalDictationSession session)
     {
-        _session = session; _values = values; _exit = exit; _commitHotkeys = commitHotkeys; _openProvider = openProvider;
+        _session = session; _values = values; _exit = exit; _commitHotkeys = commitHotkeys;
         var store = new SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         _state = new(store);
         var shell = new Grid { Padding = new Thickness(32, 18, 32, 24), RowSpacing = 28, Background = WizardBackground() };
@@ -123,7 +124,8 @@ public sealed partial class SetupWizard : UserControl
     private void Render()
     {
         _body.Children.Clear(); _pickers.Clear(); _shortcutRecorder = null; _testBox = null;
-        _providerPicker = _modelPicker = _languagePicker = null; _configureProvider = null;
+        _providerPicker = _modelPicker = _languagePicker = null;
+        _providerSettings = null; _modelLabel = _engineStatus = null; _renderedProvider = null;
         RenderSteps();
         string[] titles = ["Welcome to TypeWhisper", "Permissions", "Choose your hotkey", "AI & Engine", "Try it out"];
         string[] subtitles = ["Set up voice typing in a few simple steps.", "Give TypeWhisper access to work on your PC.",
@@ -158,7 +160,12 @@ public sealed partial class SetupWizard : UserControl
             _body.Children.Add(Copy(label, 12));
             _body.Children.Add(picker); _pickers.Add(picker); return picker;
         }
-        _providerPicker = Create("Provider"); _modelPicker = Create("Ready model"); _languagePicker = Create("Spoken language");
+        _providerPicker = Create("Provider");
+        _providerSettings = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        _body.Children.Add(_providerSettings);
+        _modelPicker = Create("Ready model");
+        _modelLabel = (TextBlock)_body.Children[^2];
+        _languagePicker = Create("Spoken language");
         _providerPicker.SelectionChanged += id => { if (_refreshingModels || _closing) return; _selectedProvider = id; RefreshModelPickers(); };
         _modelPicker.SelectionChanged += async id =>
         {
@@ -173,13 +180,6 @@ public sealed partial class SetupWizard : UserControl
             if (_refreshingModels || _closing) return;
             _feedback.ReportPersistence(_session.SelectLanguage(id)); RefreshModelPickers(); RefreshStatus();
         };
-        _configureProvider = Button("Configure plugin", () =>
-        {
-            var provider = _session.DictationProviders.FirstOrDefault(item => item.Id == _selectedProvider);
-            if (provider is not null) _openProvider(provider.PluginId);
-        });
-        _body.Children.Add(_configureProvider);
-        _body.Children.Add(Copy("Choose a model to use its provider. Open plugin settings to download models or enter an API key."));
         RefreshModelPickers();
     }
     private static string LanguageName(string code)
@@ -207,7 +207,19 @@ public sealed partial class SetupWizard : UserControl
             _providerPicker.IsEnabled = canChange;
             _modelPicker.IsEnabled = canChange && selected?.Ready == true;
             _languagePicker.IsEnabled = canChange && _session.IsReady && codes.Count > 0 && _selectedProvider == _session.ActiveProviderId;
-            if (_configureProvider is not null) _configureProvider.IsEnabled = canChange && selected is not null;
+            var local = selected?.Id == "local";
+            _modelPicker.Visibility = local ? Visibility.Collapsed : Visibility.Visible;
+            if (_modelLabel is not null) _modelLabel.Visibility = _modelPicker.Visibility;
+            if (_engineStatus is not null) _engineStatus.Text = _session.IsReady
+                ? _session.ActiveModelName + " is ready for dictation."
+                : "Choose a model below. Download it, then select Use model to continue.";
+            if (_providerSettings is not null && _renderedProvider != selected?.Id)
+            {
+                _renderedProvider = selected?.Id;
+                _providerSettings.Content = selected is null ? null : local
+                    ? (UIElement)new LiveModelsView(_session, setup: true)
+                    : new LivePortablePluginSettings(_session, selected.PluginId);
+            }
         }
         finally { _refreshingModels = false; }
     }

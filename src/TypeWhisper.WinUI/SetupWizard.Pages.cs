@@ -135,35 +135,10 @@ public sealed partial class SetupWizard
 
     private void RenderEngines()
     {
-        _body.Children.Add(Card(CardContent("check", _session.IsReady ? _session.ActiveModelName + " is ready" : "Choose your dictation engine",
-            _session.IsReady ? "Your selected model is ready for dictation." : "Download a local model or configure a provider to get started.")));
-        foreach (var provider in _session.DictationProviders.Where(item => !item.Cloud || item.Id == _session.ActiveProviderId).OrderBy(item => item.Cloud))
-        {
-            var selected = provider.Id == _session.ActiveProviderId;
-            var ready = provider.Models.FirstOrDefault(model => model.Ready);
-            var button = Button(provider.Name, async () =>
-            {
-                if (_selecting || !_session.CanChangeProvider || (selected && _session.IsReady)) return;
-                if (ready is null) { _openProvider(provider.PluginId); return; }
-                _selecting = true; RefreshStatus();
-                try { _feedback.ReportPersistence(await _session.SelectProviderModelAsync(provider.Id, ready.Id)); }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { _feedback.ReportPersistence("Model selection failed: " + ex.Message); }
-                finally { _selecting = false; if (!_closing) Render(); }
-            });
-            button.Content = CardContent(provider.Cloud ? "plugin" : "desktop", provider.Name + (!provider.Cloud ? " · On device" : " · Cloud"),
-                provider.Cloud ? "Uses your provider account. Audio is sent to this service." : "Runs offline on your PC without an API key.",
-                selected && _session.IsReady ? "Selected" : ready is not null ? "Ready" : "Configure");
-            button.HorizontalAlignment = HorizontalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-            StyleCardButton(button, selected);
-            AutomationProperties.SetName(button, provider.Name);
-            _body.Children.Add(button);
-        }
-        var start = _body.Children.Count;
+        _engineStatus = Copy("");
+        AutomationProperties.SetLiveSetting(_engineStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        _body.Children.Add(_engineStatus);
         CreateModelPickers();
-        var configuration = new StackPanel { Spacing = 10 };
-        while (_body.Children.Count > start) { var child = _body.Children[start]; _body.Children.RemoveAt(start); configuration.Children.Add(child); }
-        _body.Children.Add(new Expander { Header = "Model and language", Content = configuration, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
-        _body.Children.Add(Copy("Cloud providers and optional AI text processing can be configured later in Integrations."));
     }
 
     private void RenderTest()

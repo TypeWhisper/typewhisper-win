@@ -1,3 +1,11 @@
+## Compact workflow templates and inline setup models (2026-09-09)
+
+Workflow templates now use 88-DIP minimum-height cards instead of 154 DIP, with inline icons/titles and two-line descriptions. The grid uses three columns from 620 DIP, two from 400, and one below that. Full descriptions remain available through tooltips and accessible names; arrow-key navigation follows the active column count.
+
+Setup embeds the existing model controls and portable provider settings rather than navigating to Integrations. Local model download, progress/cancellation and activation share `LiveModelsView`; model removal and duplicate headings are omitted in setup. Provider and language controls remain inline. Session notifications update readiness without reconstructing the download controls.
+
+Validation: prescribed WinUI build/relaunch passed; 142 existing Setup/Workflow presentation tests passed (`artifacts/wizard-workflow-tests.log`). In isolated profile `wizard-inline-20260909`, Canary downloaded and activated entirely in the wizard, which then enabled Continue. The compact three-column workflow grid was inspected at a 766-DIP-wide launcher. No cloud credentials or paid requests were used; cloud provider configuration was not exercised with a real account.
+
 ## Automatic correction learning (2026-09-08)
 
 Settings > Premium now connects correction learning. In Debug, choose Commercial license or All access under Development access, then enable Learn automatically. Dictate into a supported editor, correct one word within 30 seconds, and commit with Enter, Tab or a focus change. Dictionary > Corrections contains the saved entry; the next dictation applies it. Existing manual or disabled entries are not overwritten. Turning learning off preserves existing corrections; delete them in Dictionary to stop applying them.

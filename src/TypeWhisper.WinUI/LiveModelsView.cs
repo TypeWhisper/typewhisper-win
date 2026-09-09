@@ -9,6 +9,7 @@ namespace TypeWhisper.WinUI;
 internal sealed class LiveModelsView : UserControl
 {
     private readonly LocalDictationSession _session;
+    private readonly bool _setup;
     private readonly StackPanel _panel = new() { Spacing = 12 };
     private readonly StackPanel _cards = new() { Spacing = 12 };
     private readonly TextBlock _active = Copy("", 16);
@@ -20,15 +21,18 @@ internal sealed class LiveModelsView : UserControl
     private bool _confirmingRemoval;
     private sealed record ModelRow(PluginModelInfo Model, Border Card, TextBlock Status, HandCursorButton Action, HandCursorButton Remove, HandCursorButton Cancel, Border Progress, Border Fill);
 
-    internal LiveModelsView(LocalDictationSession session)
+    internal LiveModelsView(LocalDictationSession session, bool setup = false)
     {
-        _session = session;
+        _session = session; _setup = setup;
         Tag = "SelectedModelId";
-        _panel.Children.Add(Copy("ACTIVE MODEL", 10, true));
-        _panel.Children.Add(_active);
-        _panel.Children.Add(Copy("Local models support dictation and live preview. Downloads continue when you leave this page.", 12, true));
+        if (!setup)
+        {
+            _panel.Children.Add(Copy("ACTIVE MODEL", 10, true));
+            _panel.Children.Add(_active);
+            _panel.Children.Add(Copy("Local models support dictation and live preview. Downloads continue when you leave this page.", 12, true));
+        }
         _panel.Children.Add(_cards);
-        _panel.Children.Add(_vocabulary);
+        if (!setup) _panel.Children.Add(_vocabulary);
         _setupAction.HorizontalAlignment = HorizontalAlignment.Left;
         _setupAction.Click += async (_, _) =>
         {
@@ -76,7 +80,7 @@ internal sealed class LiveModelsView : UserControl
             row.Status.Text = removing ? "Removing downloaded files…" : downloading ? $"Downloading · {models.Progress:P0}" : active ? "Active · ready for dictation" : state.Downloaded ? "Downloaded · ready to activate" : "Available to download";
             row.Action.Content = downloading ? $"{models.Progress:P0}" : active ? "Active" : state.Downloaded ? "Use model" : "Download";
             row.Action.IsEnabled = !_confirmingRemoval && !models.Busy && !active && (!state.Downloaded || _session.CanSelectModel);
-            row.Remove.Visibility = models.SupportsModelRemoval && state.Downloaded ? Visibility.Visible : Visibility.Collapsed;
+            row.Remove.Visibility = !_setup && models.SupportsModelRemoval && state.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             row.Remove.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanChangeProvider && models.CanRemoveModel(row.Model.Id);
             ToolTipService.SetToolTip(row.Remove, models.CanRemoveModel(row.Model.Id)
                 ? "Remove downloaded files for this model." : "Select a different model in this plugin before removing this one.");
@@ -99,7 +103,7 @@ internal sealed class LiveModelsView : UserControl
         layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var copy = new StackPanel { Spacing = 5 };
         copy.Children.Add(Copy("LOCAL MODELS · ON-DEVICE · " + model.Publisher + " · " + model.SizeDescription, 10, true));
-        copy.Children.Add(Copy(model.DisplayName, 16));
+        copy.Children.Add(Copy(model.DisplayName, _setup ? 14 : 16));
         var languages = Button($"{model.LanguageCount} languages", $"Languages supported by {model.DisplayName}");
         languages.Padding = new Thickness(0); languages.BorderThickness = new Thickness(0);
         languages.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -173,7 +177,7 @@ internal sealed class LiveModelsView : UserControl
         };
         actions.Children.Add(action); actions.Children.Add(remove); actions.Children.Add(cancel);
         Grid.SetColumn(actions, 1); layout.Children.Add(actions);
-        var card = new Border { Child = layout, Padding = new Thickness(16), CornerRadius = new CornerRadius(10),
+        var card = new Border { Child = layout, Padding = new Thickness(_setup ? 12 : 16), CornerRadius = new CornerRadius(10),
             Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1) };
         card.SizeChanged += (_, e) =>
         {

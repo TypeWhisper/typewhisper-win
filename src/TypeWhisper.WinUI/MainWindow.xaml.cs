@@ -1220,7 +1220,7 @@ public sealed partial class MainWindow : Window
             };
             _settingsWindow.CreateSetupWizard = exit => new SetupWizard(_settingsValues, exit,
                 value => _closing || _profileRestoreClosing ? "The app is shutting down." : ChangeDictationHotkeys(value),
-                _dictation, OpenProviderSettings);
+                _dictation);
             var dictationSettings = new LiveDictationSettings(_dictation, OpenProviderSettings);
             var startup = WindowsStartupRegistration.Create();
             DictationRecoveryView? recoveryView = null;

@@ -7,7 +7,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed class WorkflowTemplatePicker : UserControl
 {
-    private readonly Grid _grid = new() { ColumnSpacing = 12, RowSpacing = 12 };
+    private readonly Grid _grid = new() { ColumnSpacing = 8, RowSpacing = 8 };
     private readonly List<(HandCursorButton Button, TextBlock Check, Choice Choice)> _cards = [];
     private int _columns = 1;
     internal string SelectedId { get; private set; } = "";
@@ -26,17 +26,22 @@ public sealed class WorkflowTemplatePicker : UserControl
         foreach (var choice in options)
         {
             var index = _cards.Count;
-            var panel = new StackPanel { Spacing = 10 };
-            var top = new Grid();
-            top.Children.Add(new TypeWhisperGlyph { Kind = Icon(choice.Id), Width = 25, Height = 25, HorizontalAlignment = HorizontalAlignment.Left });
+            var panel = new StackPanel { Spacing = 6 };
+            var top = new Grid { ColumnSpacing = 8 };
+            top.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            top.ColumnDefinitions.Add(new());
+            top.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            top.Children.Add(new TypeWhisperGlyph { Kind = Icon(choice.Id), Width = 18, Height = 18, HorizontalAlignment = HorizontalAlignment.Left });
             var check = new TextBlock { Text = "✓", FontSize = 18, Foreground = Brush("AccentBrush"), HorizontalAlignment = HorizontalAlignment.Right };
-            top.Children.Add(check); panel.Children.Add(top);
-            panel.Children.Add(new TextBlock { Text = choice.Label, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(new TextBlock { Text = choice.Description, FontSize = 12, Foreground = Brush("MutedBrush"), TextWrapping = TextWrapping.Wrap });
-            var button = new HandCursorButton { Content = panel, Padding = new Thickness(16), MinHeight = 154,
+            Grid.SetColumn(check, 2); top.Children.Add(check);
+            var title = new TextBlock { Text = choice.Label, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
+            Grid.SetColumn(title, 1); top.Children.Add(title); panel.Children.Add(top);
+            panel.Children.Add(new TextBlock { Text = choice.Description, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 12, Foreground = Brush("MutedBrush"), TextWrapping = TextWrapping.Wrap });
+            var button = new HandCursorButton { Content = panel, Padding = new Thickness(12, 10, 12, 10), MinHeight = 88,
                 HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                VerticalContentAlignment = VerticalAlignment.Top, CornerRadius = new CornerRadius(12), IsEnabled = choice.Enabled };
+                VerticalContentAlignment = VerticalAlignment.Top, CornerRadius = new CornerRadius(8), IsEnabled = choice.Enabled };
             AutomationProperties.SetName(button, choice.Label + ". " + choice.Description);
+            ToolTipService.SetToolTip(button, choice.Description);
             button.Click += (_, _) => { SelectedId = choice.Id; UpdateSelection(); SelectionChanged?.Invoke(choice.Id); };
             button.KeyDown += (_, e) =>
             {
@@ -69,7 +74,7 @@ public sealed class WorkflowTemplatePicker : UserControl
 
     private void LayoutCards()
     {
-        _columns = ActualWidth >= 760 ? 3 : ActualWidth >= 460 ? 2 : 1;
+        _columns = ActualWidth >= 620 ? 3 : ActualWidth >= 400 ? 2 : 1;
         _grid.ColumnDefinitions.Clear(); _grid.RowDefinitions.Clear();
         for (var i = 0; i < _columns; i++) _grid.ColumnDefinitions.Add(new());
         for (var i = 0; i < (_cards.Count + _columns - 1) / _columns; i++) _grid.RowDefinitions.Add(new() { Height = GridLength.Auto });
