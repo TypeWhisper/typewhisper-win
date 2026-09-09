@@ -19,4 +19,8 @@
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Fixtures/PremiumSync/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

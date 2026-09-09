@@ -80,7 +80,11 @@ public sealed record UserDataSyncSnippet(
     bool IsEnabled,
     IReadOnlyList<string> Tags,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt)
+{
+    /// <summary>Gets snippet tags, defaulting to empty for older Mac sync packages.</summary>
+    public IReadOnlyList<string> Tags { get; init; } = Tags ?? [];
+}
 
 /// <summary>
 /// Represents user data sync snapshot data.

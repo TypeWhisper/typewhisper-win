@@ -349,6 +349,45 @@ public sealed class CloudFolderSyncTests : IDisposable
         Assert.Equal(DictionaryEntrySource.Manual, roundTrip!.Dictionary!.Source);
     }
 
+    [Theory]
+    [InlineData("upsert-dictionary-v1.json", "recieve", "receive")]
+    [InlineData("upsert-dictionary-ctc-v1.json", "TypeWhisper", null)]
+    public async Task ImportsMacDictionaryFixtureWithoutRepeatingMutation(string fixture, string original, string? replacement)
+    {
+        StageMacFixture(fixture);
+        var store = new InMemoryUserDataSyncStore();
+        var state = new CloudFolderSyncState { DeviceId = "fixture-windows" };
+        var entitlements = new PaidEntitlements(CanUseCloudFolderSync: true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlements);
+        var entry = Assert.Single(store.DictionaryEntries);
+        Assert.Equal(original, entry.Original);
+        Assert.Equal(replacement, entry.Replacement);
+        store.AppliedMutations.Clear();
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlements);
+        Assert.Empty(store.AppliedMutations);
+    }
+
+    [Fact]
+    public async Task ImportsMacLegacySnippetWithoutTags()
+    {
+        StageMacFixture("upsert-snippet-legacy-v1.json");
+        var store = new InMemoryUserDataSyncStore();
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store,
+            new CloudFolderSyncState { DeviceId = "fixture-windows" },
+            new PaidEntitlements(CanUseCloudFolderSync: true));
+        var snippet = Assert.Single(store.Snippets);
+        Assert.Equal(";hello", snippet.Trigger);
+        Assert.Equal("Hello!", snippet.Replacement);
+        Assert.Empty(snippet.Tags);
+    }
+
+    private void StageMacFixture(string name)
+    {
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "fixture-mac");
+        Directory.CreateDirectory(folder);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "PremiumSync", name), Path.Combine(folder, name));
+    }
+
     private IReadOnlyList<string> OperationFiles(string deviceId)
     {
         var directory = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", deviceId);

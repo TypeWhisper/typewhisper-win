@@ -23,11 +23,17 @@ internal sealed partial class PremiumView : UserControl
     internal PremiumView(List<ChoicePicker> pickers)
     {
         var body = new StackPanel { Spacing = 20 }; Content = body;
-        body.Children.Add(_status);
-        body.Children.Add(_notice);
+        body.Children.Add(_overview);
+        body.Children.Add(_details);
+        var back = new HandCursorButton { Content = "← Back to Premium" };
+        back.Click += (_, _) => ShowOverview();
+        _details.Children.Add(back);
+        _details.Children.Add(_detailTitle);
+        _details.Children.Add(_notice);
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        body.Children.Add(CreateLicenseSection());
-        body.Children.Add(_features);
+        _accessDetails.Children.Add(CreateLicenseSection());
+        _details.Children.Add(_accessDetails);
+        _details.Children.Add(_features);
         if (PremiumAccessState.CanOverride)
         {
             var development = new StackPanel { Spacing = 10 };
@@ -40,7 +46,7 @@ internal sealed partial class PremiumView : UserControl
                 if (!_refreshing && Enum.TryParse<PremiumDevScenario>(id, out var scenario)) Access.SetScenario(scenario);
             };
             development.Children.Add(_scenario);
-            body.Children.Add(Card(development));
+            _accessDetails.Children.Add(Card(development));
         }
         Loaded += (_, _) => { Access.Changed += Refresh; CorrectionLearning.Changed += RefreshLearning; Refresh(); };
         Unloaded += (_, _) => { Access.Changed -= Refresh; CorrectionLearning.Changed -= RefreshLearning; };
@@ -59,10 +65,8 @@ internal sealed partial class PremiumView : UserControl
             _notice.Text = Access.Error ?? (Access.IsOverridden
                 ? "Development access is active. Feature availability below is separate from access."
                 : "Commercial licenses unlock correction learning. Supporter status is separate. Account sign-in and cloud sync are not connected yet.");
-            _features.Children.Clear();
-            Feature(PremiumFeature.CalendarMeetings, "Calendar meetings", "Start meeting recordings from your calendar.");
-            Feature(PremiumFeature.CorrectionLearning, "Correction learning", "Learn from corrections you make after dictation.");
-            Feature(PremiumFeature.CloudSync, "Cloud sync", "Keep your TypeWhisper data in sync across devices.");
+            RefreshOverview();
+            RefreshDetails();
             _scenario?.SetOptions([
                 new("Actual", "Use actual access", "Remove the development override."),
                 new("Free", "No Premium access", "Test locked features."),
@@ -83,6 +87,7 @@ internal sealed partial class PremiumView : UserControl
         {
             if (_learningToggle is not null) _learningToggle.IsOn = CorrectionLearning.Enabled;
             if (_learningStatus is not null) _learningStatus.Text = CorrectionLearning.Status;
+            RefreshOverview();
         }
         finally { _refreshing = false; }
     }
