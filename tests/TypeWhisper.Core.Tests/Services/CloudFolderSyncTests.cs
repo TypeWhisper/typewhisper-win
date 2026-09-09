@@ -264,7 +264,7 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
-    public async Task ExpiredLocalTombstonesArePrunedAfterRetentionWindow()
+    public async Task OldTombstonesRemainUntilSafeCompactionIsAvailable()
     {
         var itemId = UserDataSyncIdentity.SnippetItemId(";sig");
         var store = new InMemoryUserDataSyncStore();
@@ -289,7 +289,7 @@ public sealed class CloudFolderSyncTests : IDisposable
             new PaidEntitlements(CanUseCloudFolderSync: true),
             now: Date(10 + 91 * 24 * 60 * 60));
 
-        Assert.Empty(OperationFiles("win-a"));
+        Assert.Single(OperationFiles("win-a"));
     }
 
     [Fact]

@@ -166,6 +166,11 @@ public sealed partial class MainWindow : Window
             InitializeRecordingShortcuts();
             InitializeRecorderShortcut();
             await WinUILicensing.ValidateAsync();
+            if (!_closing)
+            {
+                WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
+                WinUICloudSync.Initialize(DispatcherQueue);
+            }
             if (cancelError is not null && !_closing) MetricsText.Text = cancelError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
@@ -231,7 +236,7 @@ public sealed partial class MainWindow : Window
         var history = HistoryView.ShutdownAsync();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
-        await Task.WhenAll(WinUILicensing.ShutdownAsync(), api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
+        await Task.WhenAll(WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
             _dictationInitialization ?? Task.CompletedTask);
         _liveOverlay?.Close();
     });

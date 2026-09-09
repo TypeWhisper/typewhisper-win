@@ -98,7 +98,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 entry.CreatedAt,
                 entry.UpdatedAt,
                 entry.Source,
-                entry.IsRegex))
+                entry.IsRegex, entry.CtcMinSimilarity))
             .ToList();
 
     private IReadOnlyList<UserDataSyncSnippet> FallbackSnippetSnapshot() =>
@@ -148,6 +148,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
                 IsRegex = synced.IsRegex,
+            CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -163,6 +164,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
             IsRegex = synced.IsRegex,
+            CtcMinSimilarity = synced.CtcMinSimilarity,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,
             CreatedAt = synced.CreatedAt,

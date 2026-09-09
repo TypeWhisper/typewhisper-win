@@ -292,7 +292,6 @@ public static class CloudFolderSyncEngine
     private const string ManifestFileName = "manifest.json";
     private const string DevicesDirectoryName = "devices";
     private const string OperationsDirectoryName = "ops";
-    private static readonly TimeSpan TombstoneRetention = TimeSpan.FromDays(90);
 
     /// <summary>
     /// Gets the package path.
@@ -308,7 +307,7 @@ public static class CloudFolderSyncEngine
         IUserDataSyncStore? store,
         CloudFolderSyncState state,
         PaidEntitlements entitlements,
-        DateTime? now = null)
+        DateTime? now = null, CancellationToken cancellationToken = default)
     {
         if (!entitlements.CanUseCloudFolderSync)
             throw new CloudFolderSyncNotEntitledException();
@@ -316,6 +315,7 @@ public static class CloudFolderSyncEngine
         if (store is null)
             throw new CloudFolderSyncMissingStoreException();
 
+        cancellationToken.ThrowIfCancellationRequested();
         var syncNow = NormalizeUtc(now ?? DateTime.UtcNow);
         var deviceId = EnsureRelativePathSegment(state.DeviceId, nameof(state.DeviceId));
         var packagePath = PackagePath(folderPath);
@@ -334,12 +334,14 @@ public static class CloudFolderSyncEngine
         var initialRecords = RecordsFrom(store.Snapshot());
         var localOperations = MakeLocalOperations(initialRecords, state, syncNow);
         Write(localOperations, deviceOperationsPath, syncNow);
-        PruneExpiredTombstones(deviceOperationsPath, syncNow);
+        // Keep tombstones: deleting them while old upserts remain would resurrect data on a new device.
+        cancellationToken.ThrowIfCancellationRequested();
 
-        var operations = ReadOperations(operationsPath);
+        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken), initialRecords);
         var winners = WinningOperations(operations);
         var mutations = MakeMutations(winners, initialRecords, state.DeviceId, state.AppliedOperationIds);
 
+        cancellationToken.ThrowIfCancellationRequested();
         if (mutations.Count > 0)
             store.Apply(mutations);
 
@@ -413,10 +415,42 @@ public static class CloudFolderSyncEngine
     }
 
     private static bool IsValidOperation(CloudFolderSyncOperation operation) =>
-        operation.SchemaVersion == 1 &&
+        operation.SchemaVersion == 1 && !string.IsNullOrWhiteSpace(operation.OperationId) &&
+        !string.IsNullOrWhiteSpace(operation.DeviceId) && !string.IsNullOrWhiteSpace(operation.ItemId) &&
+        operation.UpdatedAt != default && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
         (operation.Kind == CloudFolderSyncOperationKind.Delete ||
-         operation.Dictionary is not null ||
-         operation.Snippet is not null);
+         operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { } d &&
+            !string.IsNullOrWhiteSpace(d.Original) && Enum.IsDefined(d.EntryType) &&
+            (d.CtcMinSimilarity is null || float.IsFinite(d.CtcMinSimilarity.Value) && d.CtcMinSimilarity >= .4f && d.CtcMinSimilarity <= .95f) ||
+         operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { } n &&
+            !string.IsNullOrWhiteSpace(n.Trigger) && n.Replacement is not null);
+
+    private static IReadOnlyList<CloudFolderSyncOperation> NormalizeIdentities(
+        IReadOnlyList<CloudFolderSyncOperation> operations, IReadOnlyDictionary<string, CloudFolderSyncRecord> local)
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        void Remember(CloudFolderSyncRecord record)
+        {
+            var legacy = record.Dictionary is { } d ? $"dictionary:{UserDataSyncIdentity.JsonName(d.EntryType)}:{UserDataSyncIdentity.NormalizedKey(d.Original)}"
+                : record.Snippet is { } n ? "snippet:" + UserDataSyncIdentity.NormalizedKey(n.Trigger) : record.ItemId;
+            aliases[legacy] = record.ItemId;
+        }
+        foreach (var record in local.Values) Remember(record);
+        var valid = operations.Where(IsValidOperation).ToArray();
+        var canonical = valid.Select(operation =>
+        {
+            if (operation.Kind != CloudFolderSyncOperationKind.Upsert) return operation;
+            var id = operation.Collection == UserDataSyncCollection.Dictionary
+                ? UserDataSyncIdentity.DictionaryItemId(operation.Dictionary!.EntryType, operation.Dictionary.Original)
+                : UserDataSyncIdentity.SnippetItemId(operation.Snippet!.Trigger);
+            aliases[operation.ItemId] = id;
+            Remember(new(operation.Collection, id, operation.UpdatedAt, "", operation.Dictionary, operation.Snippet));
+            return operation with { ItemId = id };
+        }).ToArray();
+        return canonical.Select(operation => operation.Kind == CloudFolderSyncOperationKind.Delete &&
+            !local.ContainsKey(operation.ItemId) && aliases.TryGetValue(operation.ItemId, out var id)
+                ? operation with { ItemId = id } : operation).ToArray();
+    }
 
     private static void Merge(
         CloudFolderSyncRecord candidate,
@@ -583,7 +617,7 @@ public static class CloudFolderSyncEngine
         }
     }
 
-    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(string operationsPath)
+    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(string operationsPath, CancellationToken cancellationToken)
     {
         if (!Directory.Exists(operationsPath))
             return [];
@@ -594,12 +628,12 @@ public static class CloudFolderSyncEngine
         {
             foreach (var file in Directory.EnumerateFiles(deviceDirectory, "*.json"))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
                     var operation = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(
                         File.ReadAllText(file));
-                    if (operation is not null)
-                        operations.Add(operation);
+                    if (operation is not null) operations.Add(operation);
                 }
                 catch
                 {
@@ -609,31 +643,6 @@ public static class CloudFolderSyncEngine
         }
 
         return operations;
-    }
-
-    private static void PruneExpiredTombstones(string deviceOperationsPath, DateTime now)
-    {
-        if (!Directory.Exists(deviceOperationsPath))
-            return;
-
-        foreach (var file in Directory.EnumerateFiles(deviceOperationsPath, "*.json"))
-        {
-            try
-            {
-                var operation = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(
-                    File.ReadAllText(file));
-                if (operation?.Kind == CloudFolderSyncOperationKind.Delete &&
-                    operation.DeletedAt is { } deletedAt &&
-                    now - NormalizeUtc(deletedAt) > TombstoneRetention)
-                {
-                    File.Delete(file);
-                }
-            }
-            catch
-            {
-                // Best-effort pruning only.
-            }
-        }
     }
 
     private static void WriteJson<T>(T value, string path)

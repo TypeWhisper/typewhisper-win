@@ -51,8 +51,7 @@ internal sealed class SyncBackupView : UserControl
         AutomationProperties.SetLiveSetting(_notice, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _body.Children.Add(_notice); _body.Children.Add(_review);
         _body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new(0, 8, 0, 8) });
-        _body.Children.Add(Copy("Sync", 18));
-        _body.Children.Add(Copy("Sync between devices is not connected yet. Use a local backup to transfer the categories above.", 13, true));
+        _body.Children.Add(new CloudSyncView());
         Unloaded += (_, _) => { _unloaded = true; _lifetime.Cancel(); _dialog?.Hide(); };
         UpdateButtons();
     }

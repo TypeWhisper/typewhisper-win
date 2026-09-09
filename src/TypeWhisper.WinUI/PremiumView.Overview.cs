@@ -43,6 +43,7 @@ internal sealed partial class PremiumView
             PremiumFeature.CloudSync => "Sync Dictionary & Snippets",
             _ => "Manage Premium Access"
         };
+        if (_selectedFeature == PremiumFeature.CloudSync) { _features.Children.Add(new CloudSyncView()); return; }
         if (_selectedFeature is { } feature)
             Feature(feature, _detailTitle.Text, feature == PremiumFeature.CorrectionLearning
                 ? "Remembers confident edits after insertion and improves future text."
@@ -75,7 +76,7 @@ internal sealed partial class PremiumView
             hero.Children.Add(IconTile("\uE734", gold));
             hero.Children.Add(Copy("Premium features that save you work", 22));
             hero.Children.Add(Copy("Record scheduled meetings automatically, learn from your corrections, and keep your dictionary and snippets in sync.", 14, true));
-            hero.Children.Add(Copy("Correction learning is available on Windows. Meeting automation and cloud sync are coming later.", 12, true));
+            hero.Children.Add(Copy("Correction learning is available on Windows. Cloud folder sync is also available; meeting automation is coming later.", 12, true));
             var unlock = new HandCursorButton { Content = "Unlock Premium" };
             unlock.Click += (_, _) => ShowDetails(null);
             hero.Children.Add(unlock);
@@ -92,7 +93,7 @@ internal sealed partial class PremiumView
         var cards = new Grid { ColumnSpacing = 12, RowSpacing = 12 };
         cards.Children.Add(OverviewFeature(PremiumFeature.CalendarMeetings, "Meeting Automation", "Reminds you before a scheduled meeting or starts recording automatically when you join.", "Calendar integration is not connected in this Windows build yet.", "\uE787", Color.FromArgb(255, 59, 167, 255)));
         cards.Children.Add(OverviewFeature(PremiumFeature.CorrectionLearning, "Learn from Corrections", "Remembers confident edits after insertion and improves future text.", "teh → the\nrecieve → receive", "\uE734", gold));
-        cards.Children.Add(OverviewFeature(PremiumFeature.CloudSync, "Sync Dictionary & Snippets", "Keeps your personal terms and text snippets available across your devices.", "Cloud sync is not connected in this Windows build yet.", "\uE753", Color.FromArgb(255, 67, 201, 220)));
+        cards.Children.Add(OverviewFeature(PremiumFeature.CloudSync, "Sync Dictionary & Snippets", "Keeps your personal terms and text snippets available across your devices.", "Choose a shared iCloud Drive, OneDrive or Dropbox folder.", "\uE753", Color.FromArgb(255, 67, 201, 220)));
         void Arrange(double width)
         {
             var columns = width >= 660 ? 3 : 1;
@@ -118,7 +119,7 @@ internal sealed partial class PremiumView
         var top = new Grid { ColumnSpacing = 6 };
         top.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); top.ColumnDefinitions.Add(new());
         top.Children.Add(IconTile(glyph, accent));
-        var badge = Copy(!learning ? "Coming later" : available ? (CorrectionLearning.Enabled ? "Active" : "Off") : "Premium", 11);
+        var badge = Copy(feature == PremiumFeature.CloudSync ? (WinUICloudSync.Preferences.Enabled ? "Enabled" : "Cloud folder") : !learning ? "Coming later" : available ? (CorrectionLearning.Enabled ? "Active" : "Off") : "Premium", 11);
         badge.Foreground = new SolidColorBrush(accent);
         var pill = new Border { Child = badge, Padding = new Thickness(8, 4, 8, 4), CornerRadius = new CornerRadius(12), Background = Tint(accent, 24), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(pill, 1); top.Children.Add(pill); panel.Children.Add(top);

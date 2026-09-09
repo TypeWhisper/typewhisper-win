@@ -64,7 +64,7 @@ internal sealed partial class PremiumView : UserControl
                 + (Access.IsOverridden ? " · Development" : "");
             _notice.Text = Access.Error ?? (Access.IsOverridden
                 ? "Development access is active. Feature availability below is separate from access."
-                : "Commercial licenses unlock correction learning. Supporter status is separate. Account sign-in and cloud sync are not connected yet.");
+                : "Commercial licenses unlock correction learning. Supporter status is separate. Cloud folder sync is available with a commercial license. Apple account sign-in is not connected yet.");
             RefreshOverview();
             RefreshDetails();
             _scenario?.SetOptions([

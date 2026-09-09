@@ -646,7 +646,7 @@ public sealed class DictionaryService : IDictionaryService
                 entry.CreatedAt,
                 entry.UpdatedAt,
                 entry.Source,
-                entry.IsRegex))
+                entry.IsRegex, entry.CtcMinSimilarity))
             .ToList();
     }
 
@@ -701,6 +701,7 @@ public sealed class DictionaryService : IDictionaryService
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
                 IsRegex = synced.IsRegex,
+            CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -716,6 +717,7 @@ public sealed class DictionaryService : IDictionaryService
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
             IsRegex = synced.IsRegex,
+            CtcMinSimilarity = synced.CtcMinSimilarity,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,
             CreatedAt = synced.CreatedAt,
