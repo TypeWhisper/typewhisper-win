@@ -63,6 +63,8 @@ internal sealed class PremiumAccessState
 #endif
     }
 
+    internal void NotifyActualAccessChanged() => Changed?.Invoke();
+
     internal bool SetScenario(PremiumDevScenario scenario)
     {
 #if DEBUG

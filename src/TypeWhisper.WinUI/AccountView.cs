@@ -20,7 +20,7 @@ internal sealed class AccountView : UserControl
 
         body.Children.Add(Copy("Version " + (typeof(App).Assembly.GetName().Version?.ToString(3) ?? "Unknown"), 13, true));
         body.Children.Add(Copy("Premium and licenses", 16));
-        body.Children.Add(Copy("Access status and development activation are available under Premium in the sidebar.", 13, true));
+        body.Children.Add(Copy("Activate and manage your license under Premium in the sidebar.", 13, true));
         body.Children.Add(Copy("App updates", 16));
         body.Children.Add(Copy("Automatic app updates are not connected in this build. Plugin updates are available in Integrations.", 13, true));
     }

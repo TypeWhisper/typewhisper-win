@@ -7,10 +7,11 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-internal sealed class PremiumView : UserControl
+internal sealed partial class PremiumView : UserControl
 {
     // A single access source for the host. Real entitlement providers can replace the actual-access callback.
-    internal static PremiumAccessState Access { get; } = new(WinUIProfile.DataPath("premium-development.txt"), () => new());
+    internal static PremiumAccessState Access { get; } = new(WinUIProfile.DataPath("premium-development.txt"), () => WinUILicensing.Current);
+    static PremiumView() => WinUILicensing.Changed += Access.NotifyActualAccessChanged;
     private readonly TextBlock _status = Copy("", 20);
     private readonly TextBlock _notice = Copy("", 12, true);
     private readonly StackPanel _features = new() { Spacing = 12 };
@@ -25,6 +26,7 @@ internal sealed class PremiumView : UserControl
         body.Children.Add(_status);
         body.Children.Add(_notice);
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
+        body.Children.Add(CreateLicenseSection());
         body.Children.Add(_features);
         if (PremiumAccessState.CanOverride)
         {
@@ -50,12 +52,13 @@ internal sealed class PremiumView : UserControl
         _refreshing = true;
         try
         {
+            RefreshLicenseSection();
             var access = Access.Current;
             _status.Text = (access.Any ? "Premium access active" : access.Supporter ? "Supporter · no Premium access" : "No Premium access")
                 + (Access.IsOverridden ? " · Development" : "");
             _notice.Text = Access.Error ?? (Access.IsOverridden
                 ? "Development access is active. Feature availability below is separate from access."
-                : "License activation and account sign-in are not connected in this build yet.");
+                : "Commercial licenses unlock correction learning. Supporter status is separate. Account sign-in and cloud sync are not connected yet.");
             _features.Children.Clear();
             Feature(PremiumFeature.CalendarMeetings, "Calendar meetings", "Start meeting recordings from your calendar.");
             Feature(PremiumFeature.CorrectionLearning, "Correction learning", "Learn from corrections you make after dictation.");

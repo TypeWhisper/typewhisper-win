@@ -10,6 +10,23 @@ public sealed class PremiumAccessTests : IDisposable
     private string Store => Path.Combine(_root, "premium-development.txt");
 
     [Fact]
+    public void VerifiedLicenseChangesNotifyConsumersWithoutWritingDevelopmentState()
+    {
+        var actual = new PremiumAccess();
+        var state = new PremiumAccessState(Store, () => actual);
+        var changes = 0; state.Changed += () => changes++;
+        actual = new PremiumAccess(Commercial: true);
+        state.NotifyActualAccessChanged();
+        Assert.True(state.Current.Commercial);
+        actual = new PremiumAccess(Supporter: true);
+        state.NotifyActualAccessChanged();
+        Assert.False(state.Current.Commercial);
+        Assert.True(state.Current.Supporter);
+        Assert.Equal(2, changes);
+        Assert.False(File.Exists(Store));
+    }
+
+    [Fact]
     public void AccessMatrixMatchesFeatureRequirements()
     {
         foreach (var commercial in new[] { false, true })

@@ -257,11 +257,11 @@
                 <TextBlock x:Name="MetricsText" Text="Search ready · 0.0 ms" FontSize="10"
                            Foreground="{ThemeResource MutedBrush}" />
             </StackPanel>
-            <local:HandCursorButton x:Name="TranscriptToggleButton" Grid.Column="1" Content="Live text  On"
+            <local:HandCursorButton x:Name="TranscriptToggleButton" Visibility="Collapsed" Grid.Column="1" Content="Live text  On"
                     Click="TranscriptToggleButton_Click" Foreground="{ThemeResource AccentBrush}"
                     Style="{StaticResource IconButtonStyle}"
                     AutomationProperties.Name="Toggle live transcript preview" />
-            <local:HandCursorButton x:Name="TestOverlayButton" Grid.Column="2" Content="Test overlay" Click="TestWaveformButton_Click"
+            <local:HandCursorButton x:Name="TestOverlayButton" Visibility="Collapsed" Grid.Column="2" Content="Test overlay" Click="TestWaveformButton_Click"
                     Style="{StaticResource IconButtonStyle}"
                     AutomationProperties.Name="Test waveform" />
             <TextBlock x:Name="NavigationHint" Grid.Column="3" Text="↑↓ Navigate   Enter Run   Ctrl K Actions   Esc Hide"

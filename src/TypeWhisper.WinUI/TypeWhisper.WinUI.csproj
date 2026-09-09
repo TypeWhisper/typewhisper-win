@@ -20,6 +20,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="WinUIEx" Version="2.9.3" />
@@ -33,6 +34,9 @@
     <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../TypeWhisper.Windows/Resources/Localization/en.json" LogicalName="TypeWhisper.LicenseStrings.json" />
+    <Compile Include="../TypeWhisper.Windows/Services/LicenseService.cs" Link="Platform/LicenseService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AppDistribution.cs" Link="Platform/AppDistribution.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="Platform/AudioRecordingService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/SoundService.cs" Link="Platform/SoundService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioDuckingService.cs" Link="Platform/AudioDuckingService.cs" />
