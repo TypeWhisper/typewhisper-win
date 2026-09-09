@@ -10,6 +10,7 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class WinUIHttpApi(LocalDictationSession session, DispatcherQueue dispatcher)
 {
+    private const string ApiVersion = "1.2";
     private sealed record Preferences(bool Enabled = false, int Port = 8978, bool RequireAuthentication = false);
     private readonly WindowsPluginSecretStore _secrets = new(WinUIProfile.DataPath("HttpApi"));
     private readonly SemaphoreSlim _changes = new(1, 1);
@@ -78,7 +79,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             File.WriteAllText(discovery.FullName, JsonSerializer.Serialize(new
             {
                 version = 1, token = _token,
-                host = "127.0.0.1", port, base_url = $"http://127.0.0.1:{port}", api_version = "1.1",
+                host = "127.0.0.1", port, base_url = $"http://127.0.0.1:{port}", api_version = ApiVersion,
                 pid = Environment.ProcessId, requires_authentication = requireAuthentication
             }));
             File.Move(DiscoveryPath + ".tmp", DiscoveryPath, true);
@@ -155,7 +156,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         if (request.Method == "OPTIONS") return new LocalApiResponse(204, [], "text/plain");
         if (LocalApiRouteCatalog.Routes.Any(route => route.Path == request.Path) && !LocalApiRouteCatalog.Contains(request.Method, request.Path)) return Error(405, "Method not allowed.");
         if (_importPending) return Error(503, "Settings import is restarting the app.");
-        if (request.Path == "/v1/status") return LocalApiResponse.Json(200, new { status = session.IsReady ? "ready" : "no_model", engine = session.ActiveEngineId, model = session.ActiveModelId, api_version = "1.2", supports_workflow_dictation = true, supports_streaming = session.SupportsLiveTranscription, supports_translation = session.SupportsTranslation });
+        if (request.Path == "/v1/status") return LocalApiResponse.Json(200, new { status = session.IsReady ? "ready" : "no_model", engine = session.ActiveEngineId, model = session.ActiveModelId, api_version = ApiVersion, supports_workflow_dictation = true, supports_streaming = session.SupportsLiveTranscription, supports_translation = session.SupportsTranslation });
         if (request.Path == "/v1/history") return await new LocalApiHistory(session.HistoryReader, session.HistoryActions).HandleAsync(request, ct);
         if (await HandleDictationAsync(request, ct) is { } dictation) return dictation;
         if (await HandleDataAsync(request, ct) is { } data) return data;
@@ -165,7 +166,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         if (request.Path == "/v1/capabilities")
             return request.Method == "GET" ? LocalApiResponse.Json(200, new
             {
-                api_version = "1.1", endpoints = LocalApiRouteCatalog.Routes.Select(route => route.Path).Distinct().ToArray(), routes = LocalApiRouteCatalog.Routes.Select(route => new { method = route.Method, path = route.Path }),
+                api_version = ApiVersion, endpoints = LocalApiRouteCatalog.Routes.Select(route => route.Path).Distinct().ToArray(), routes = LocalApiRouteCatalog.Routes.Select(route => new { method = route.Method, path = route.Path }),
                 response_formats = new[] { "json", "text", "srt", "vtt" }, max_upload_bytes = 32 * 1024 * 1024,
                 model_selection = "request-scoped engine/model overrides; await_download supported",
                 saves_history = false, supports_dictation_control = true, requires_authentication = RequireAuthentication
