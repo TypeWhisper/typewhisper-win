@@ -193,7 +193,6 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
         }
 
         // Sort by priority ascending (lower = runs first)
-        steps.Sort((a, b) => a.Item1.CompareTo(b.Item1));
-        return steps;
+        return steps.OrderBy(step => step.Item1).ToList();
     }
 }

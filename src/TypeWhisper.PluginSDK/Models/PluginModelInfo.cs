@@ -7,6 +7,9 @@ namespace TypeWhisper.PluginSDK.Models;
 /// <param name="DisplayName">Human-readable name for the UI.</param>
 public sealed record PluginModelInfo(string Id, string DisplayName)
 {
+    /// <summary>Organization that created the model, when supplied by the plugin.</summary>
+    public string? Publisher { get; init; }
+
     /// <summary>Human-readable size description (e.g. "~670 MB").</summary>
     public string? SizeDescription { get; init; }
 
@@ -18,4 +21,7 @@ public sealed record PluginModelInfo(string Id, string DisplayName)
 
     /// <summary>Number of languages supported by this model.</summary>
     public int LanguageCount { get; init; }
+
+    /// <summary>ISO language codes supported by this model, for catalog descriptions.</summary>
+    public IReadOnlyList<string> LanguageCodes { get; init; } = [];
 }

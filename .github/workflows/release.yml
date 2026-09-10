@@ -1,14 +1,12 @@
-name: Release
+name: Legacy Release
 
 on:
   push:
     tags: ['v*']
-  schedule:
-    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       base_version:
-        description: 'Base version for daily builds, without v or prerelease suffix. Defaults to the active release line.'
+        description: 'Legacy WPF build only. Use WinUI Daily for 1.1 Daily releases.'
         required: false
         type: string
 

@@ -11,11 +11,15 @@ namespace TypeWhisper.Cli;
 /// <param name="PortOverride">Port override supplied to the member.</param>
 /// <param name="ApiTokenOverride">Api token override supplied to the member.</param>
 /// <param name="EnvironmentApiToken">Environment api token supplied to the member.</param>
+/// <param name="ProfileDirectory">Explicit profile directory containing discovery files.</param>
+/// <param name="DevMode">Selects the WinUI development profile without production fallback.</param>
 public sealed record CliConnectionOptions(
     string? ApplicationDataRoot = null,
     int? PortOverride = null,
     string? ApiTokenOverride = null,
-    string? EnvironmentApiToken = null);
+    string? EnvironmentApiToken = null,
+    string? ProfileDirectory = null,
+    bool DevMode = false);
 
 /// <summary>
 /// Represents cli connection data.
@@ -35,6 +39,7 @@ public sealed record CliConnection(int Port, string? ApiToken);
 /// <param name="Engine">Engine supplied to the member.</param>
 /// <param name="Model">Model supplied to the member.</param>
 /// <param name="AwaitDownload">Await download supplied to the member.</param>
+/// <param name="ApplyCorrections">Whether dictionary corrections should be applied.</param>
 public sealed record CliTranscribeRequest(
     string FilePath,
     string? Language,
@@ -43,7 +48,8 @@ public sealed record CliTranscribeRequest(
     string? TargetLanguage,
     string? Engine,
     string? Model,
-    bool AwaitDownload);
+    bool AwaitDownload,
+    bool ApplyCorrections = true);
 
 /// <summary>
 /// Provides cli connection resolver behavior.
@@ -57,22 +63,43 @@ public static class CliConnectionResolver
     /// </summary>
     public static CliConnection Resolve(CliConnectionOptions options)
     {
-        var appDirectory = Path.Join(
-            options.ApplicationDataRoot
-                ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TypeWhisper");
-
-        var discovery = ReadDiscovery(Path.Join(appDirectory, "api-discovery.json"));
-        var port = ValidatePort(options.PortOverride)
-            ?? ValidatePort(discovery?.Port)
-            ?? ValidatePort(ReadLegacyPort(Path.Join(appDirectory, "api-port")))
-            ?? DefaultPort;
-        var token = FirstNonBlank(
-            options.ApiTokenOverride,
-            options.EnvironmentApiToken,
-            discovery?.Token);
-
+        if (options.DevMode && !string.IsNullOrWhiteSpace(options.ProfileDirectory))
+            throw new ArgumentException("--dev and --profile cannot be used together.");
+        var root = options.ApplicationDataRoot ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var bound = options.ApplicationDataRoot is null ? ReadBoundProfile() : null;
+        var explicitProfile = options.DevMode ? Path.Join(root, "TypeWhisper-WinUI-DevUserData")
+            : FirstNonBlank(options.ProfileDirectory, bound);
+        var directories = explicitProfile is not null ? new[] { Path.GetFullPath(explicitProfile) }
+            : new[] { Path.Join(root, "TypeWhisper-WinUI"), Path.Join(root, "TypeWhisper"), Path.Join(root, "TypeWhisper-WinUI-DevUserData") };
+        var candidates = directories.Select(directory => new
+        {
+            Discovery = ReadDiscovery(Path.Join(directory, "api-discovery.json")),
+            LegacyPort = ValidatePort(ReadLegacyPort(Path.Join(directory, "api-port")))
+        }).ToArray();
+        var requestedPort = ValidatePort(options.PortOverride);
+        var selected = requestedPort is { } selectedPort
+            ? candidates.FirstOrDefault(candidate => ValidatePort(candidate.Discovery?.Port) == selectedPort || candidate.LegacyPort == selectedPort)
+            : candidates.FirstOrDefault(candidate => ValidatePort(candidate.Discovery?.Port) is not null || candidate.LegacyPort is not null);
+        var port = requestedPort ?? ValidatePort(selected?.Discovery?.Port) ?? selected?.LegacyPort ?? DefaultPort;
+        // A token belongs to its discovered endpoint. Never carry it over to an unrelated --port.
+        var discoveredToken = selected?.Discovery is { } discovery && discovery.Port == port && discovery.RequiresAuthentication != false
+            ? discovery.Token : null;
+        var token = FirstNonBlank(options.ApiTokenOverride, options.EnvironmentApiToken, discoveredToken);
         return new CliConnection(port, token);
+    }
+
+    private static string? ReadBoundProfile()
+    {
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "cli-profile.json");
+            if (!File.Exists(path) || new FileInfo(path).Length > 65536) return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            if (document.RootElement.TryGetProperty("profile_directory", out var value) && value.ValueKind == JsonValueKind.String
+                && value.GetString() is { } profile && Path.IsPathFullyQualified(profile)) return profile;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+        return null;
     }
 
     /// <summary>
@@ -84,14 +111,14 @@ public static class CliConnectionResolver
     {
         try
         {
-            if (!File.Exists(path))
+            if (!File.Exists(path) || new FileInfo(path).Length > 65536)
                 return null;
 
             var discovery = JsonSerializer.Deserialize<ApiDiscovery>(
                 File.ReadAllText(path),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            return discovery;
+            return discovery?.Version == 1 && IsPortInRange(discovery.Port) ? discovery : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -137,6 +164,9 @@ public static class CliConnectionResolver
         /// Gets or sets the token value.
         /// </summary>
         public string? Token { get; init; }
+        /// <summary>Whether the discovered endpoint requires bearer authentication.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("requires_authentication")]
+        public bool? RequiresAuthentication { get; init; }
     }
 }
 
@@ -184,11 +214,12 @@ public static class CliRequestBuilder
         {
             ["path"] = request.FilePath,
             ["language"] = request.Language,
-            ["language_hints"] = request.LanguageHints,
+            ["language_hints"] = request.LanguageHints.Count > 0 ? request.LanguageHints : null,
             ["task"] = request.Task,
             ["target_language"] = request.TargetLanguage,
             ["engine"] = request.Engine,
-            ["model"] = request.Model
+            ["model"] = request.Model,
+            ["apply_corrections"] = request.ApplyCorrections ? null : false
         }
         .Where(pair => pair.Value is not null)
         .ToDictionary(pair => pair.Key, pair => pair.Value);

@@ -14,7 +14,9 @@ public enum TranscriptionRecordStatus
     /// <summary>
     /// Speech-to-text succeeded, but workflow post-processing failed.
     /// </summary>
-    WorkflowPostProcessingFailed
+    WorkflowPostProcessingFailed,
+    /// <summary>A configured text processor failed; the preceding text remains available for review.</summary>
+    TextProcessorFailed
 }
 
 /// <summary>
@@ -38,6 +40,16 @@ public sealed record TranscriptionRecord
     /// Gets or sets the final text value.
     /// </summary>
     public required string FinalText { get; init; }
+    /// <summary>
+    /// Gets the explicitly recorded local source kind: dictation, recording, or file.
+    /// Missing and unfamiliar values do not imply a source kind. This optional field
+    /// does not define a cross-platform history synchronization contract.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceKind { get; init; }
+    /// <summary>Optional processor identities, versions and sanitized execution statuses, saved only with History.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<TextProcessorProvenance>? TextProcessors { get; init; }
     /// <summary>
     /// Gets or sets the app name value.
     /// </summary>

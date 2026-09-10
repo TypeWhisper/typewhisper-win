@@ -10,6 +10,9 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// <summary>Unique provider identifier (e.g. "openai", "groq").</summary>
     string ProviderId { get; }
 
+    /// <summary>Maximum encoded WAV bytes accepted by this engine, including headers.</summary>
+    int MaximumAudioUploadBytes => int.MaxValue;
+
     /// <summary>Human-readable provider name for the UI.</summary>
     string ProviderDisplayName { get; }
 
@@ -31,6 +34,10 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// <summary>Transcribes WAV audio data and returns the result.</summary>
     Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct);
+
+    /// <summary>Whether the selected model consumes multiple ordered language hints through the WAV method.</summary>
+    /// <remarks>False by default: the compatibility method only selects the first language and is not multi-language detection.</remarks>
+    bool SupportsLanguageHints => false;
 
     /// <summary>Transcribes WAV audio with ordered language hints.</summary>
     Task<PluginTranscriptionResult> TranscribeWithLanguageHintsAsync(
@@ -59,6 +66,12 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
 
     /// <summary>Whether this engine supports real-time streaming transcription via <see cref="IStreamingSession"/>.</summary>
     bool SupportsStreaming => false;
+
+    /// <summary>FinalizeAsync waits for all confirmed segments; interrupted streams fail instead of returning partial success.</summary>
+    bool SupportsStreamingCompletion => false;
+
+    /// <summary>Allows repeated local PCM snapshots during capture. Must not upload audio or mutate final results.</summary>
+    bool SupportsLocalLivePreview => false;
 
     /// <summary>
     /// Whether the host may pass active TypeWhisper dictionary terms through the transcription prompt.

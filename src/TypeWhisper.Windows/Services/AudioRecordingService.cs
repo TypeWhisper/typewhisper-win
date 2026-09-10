@@ -62,6 +62,18 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private string? _activeDeviceName;
     private float _peakRmsLevel;
     private float _preGainPeakRms;
+    private IAudioInputCapture? _failedCaptureCleanup;
+    /// <summary>Whether a capture whose release failed is retained for an explicit retry.</summary>
+    public bool HasUnreleasedCapture => _failedCaptureCleanup is not null;
+    /// <summary>Retries a previously failed native release without creating another capture.</summary>
+    public void RetryFailedCaptureCleanup()
+    {
+        lock (_captureLifecycleLock)
+        {
+            _failedCaptureCleanup?.Dispose();
+            _failedCaptureCleanup = null;
+        }
+    }
     private float _currentRmsLevel;
     private System.Timers.Timer? _devicePollTimer;
     private IReadOnlyList<AudioInputDeviceInfo> _cachedDeviceInfos = [];
@@ -350,6 +362,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public void StartRecording(bool enableRecovery)
     {
+        if (HasUnreleasedCapture) throw new InvalidOperationException("The previous audio capture could not be released. Retry stopping it before starting another recording.");
         var startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (_captureLifecycleLock)
         {
@@ -1478,6 +1491,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             }
             catch (Exception disposeException) when (IsNonFatalAudioException(disposeException))
             {
+                _failedCaptureCleanup = waveIn;
                 System.Diagnostics.Debug.WriteLine(
                     $"Reusable audio capture cleanup failed: {disposeException.Message}");
             }
@@ -1559,7 +1573,13 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 {
                     StopRecordingForCleanup(waveIn);
                 }
-                waveIn.Dispose();
+                try { waveIn.Dispose(); }
+                catch (Exception ex) when (IsNonFatalAudioException(ex))
+                {
+                    // Retain failed fallback releases just like restartable captures; callers can keep their samples and retry cleanup.
+                    _failedCaptureCleanup = waveIn;
+                    System.Diagnostics.Debug.WriteLine($"Audio capture cleanup remains pending: {ex.Message}");
+                }
                 if (classification == CaptureDisposalClassification.Failure)
                 {
                     AudioCaptureDiagnostics.Log(
@@ -1589,6 +1609,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         lock (_captureLifecycleLock)
         {
+            RetryFailedCaptureCleanup();
             if (!_disposed)
             {
                 _disposed = true;
@@ -1604,6 +1625,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 DiscardActiveRecoveryRecording();
                 StopPreview();
                 DisposeWaveIn();
+                RetryFailedCaptureCleanup();
             }
         }
     }
@@ -2309,17 +2331,15 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
 
     public void Dispose()
     {
-        if (_disposed)
-            return;
-
         _disposed = true;
         var capture = _capture;
-        _capture = null;
         if (capture is null)
             return;
 
         DetachCapture(capture);
         capture.Dispose();
+        // Keep failed native releases reachable for the service's cleanup retry.
+        _capture = null;
     }
 
     private void SwitchToFallback()

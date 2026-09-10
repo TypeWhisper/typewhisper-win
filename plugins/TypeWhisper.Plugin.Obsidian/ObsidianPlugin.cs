@@ -2,7 +2,9 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+#if WINDOWS
 using System.Windows.Controls;
+#endif
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -11,7 +13,7 @@ namespace TypeWhisper.Plugin.Obsidian;
 /// <summary>
 /// Provides obsidian plugin behavior.
 /// </summary>
-public sealed partial class ObsidianPlugin : IActionPlugin
+public sealed partial class ObsidianPlugin : IActionPlugin, IPluginTextSettings
 {
     private IPluginHostServices? _host;
 
@@ -55,18 +57,21 @@ public sealed partial class ObsidianPlugin : IActionPlugin
     /// <summary>
     /// Deactivates the plugin and releases provider resources.
     /// </summary>
-    public Task DeactivateAsync() => Task.CompletedTask;
+    public Task DeactivateAsync() { _host = null; return Task.CompletedTask; }
 
+#if WINDOWS
     /// <summary>
     /// Creates the settings view shown by the host, or null when no UI is required.
     /// </summary>
     public UserControl? CreateSettingsView() => new ObsidianSettingsView(this);
+#endif
 
     /// <summary>
     /// Performs execute asynchronously.
     /// </summary>
     public async Task<ActionResult> ExecuteAsync(string input, ActionContext context, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (_host is null)
             return new ActionResult(false, "Plugin not activated");
 
@@ -83,6 +88,20 @@ public sealed partial class ObsidianPlugin : IActionPlugin
         if (string.IsNullOrWhiteSpace(filenameTemplate))
             filenameTemplate = "{{date}} {{time}} Transcription";
 
+#if !WINDOWS
+        if (dailyNoteMode)
+            return new(false, "Daily-note append is not available in this host. Set Note mode to new-note in plugin settings.");
+        var now = DateTime.Now;
+        try
+        {
+            var savedPath = await ObsidianNoteWriter.WriteAsync(vaultPath, subfolder,
+                BuildFilename(filenameTemplate, context, now), BuildNoteContent(input, context, now), ct);
+            return new(true, "Saved to " + Path.GetFileName(savedPath));
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
+        { return new(false, "The note could not be saved. Check the vault path, note folder and write access. Your review text is unchanged."); }
+#else
         var now = DateTime.Now;
         var targetDir = Path.Combine(vaultPath, subfolder);
         Directory.CreateDirectory(targetDir);
@@ -125,6 +144,7 @@ public sealed partial class ObsidianPlugin : IActionPlugin
 
         _host.Log(PluginLogLevel.Info, $"Saved transcription to {filePath}");
         return new ActionResult(true, $"Saved to {filename}");
+#endif
     }
 
     private static string BuildNoteContent(string input, ActionContext context, DateTime now)
@@ -268,7 +288,44 @@ public sealed partial class ObsidianPlugin : IActionPlugin
     /// <summary>
     /// Releases resources held by the instance.
     /// </summary>
-    public void Dispose() { }
+    public void Dispose() => _host = null;
+
+    /// <inheritdoc />
+    public IReadOnlyList<PluginTextSetting> TextSettings => _host is null ? [] :
+    [
+        new("vault-path", "Vault directory", "Enter the absolute path of an existing local vault directory.", _host.GetSetting<string>("vault-path") ?? "", 4096),
+        new("subfolder", "Note folder", "Relative folder inside the vault. Links and parent-directory components are unsupported.", _host.GetSetting<string>("subfolder") ?? "TypeWhisper", 1024),
+        new("filename-template", "Filename template", "Supports {{date}}, {{time}} and {{app}}. Existing notes are never overwritten.", _host.GetSetting<string>("filename-template") ?? "{{date}} {{time}} Transcription", 512),
+        new("note-mode", "Note mode", "Use new-note. Existing daily-note configuration is preserved but cannot run in the portable host.", _host.GetSetting<bool>("daily-note-mode") ? "daily-note" : "new-note", 32)
+    ];
+
+    /// <inheritdoc />
+    public Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_host is null) throw new InvalidOperationException("Enable this plugin before configuring it.");
+        ArgumentNullException.ThrowIfNull(value);
+        var field = TextSettings.FirstOrDefault(field => field.Id == id) ?? throw new ArgumentException("Unknown setting.", nameof(id));
+        if (value.Length > field.MaxLength) throw new ArgumentException("The setting is too long.", nameof(value));
+        if (id == "note-mode")
+        {
+            if (value != "new-note") throw new ArgumentException("Only new-note is supported by the portable host.", nameof(value));
+            _host.SetSetting("daily-note-mode", false);
+        }
+        else
+        {
+            if (id == "vault-path" && (!Path.IsPathFullyQualified(value) || !Directory.Exists(value)))
+                throw new ArgumentException("Choose an existing absolute vault directory.", nameof(value));
+            if (id == "subfolder")
+            {
+                if (Path.IsPathRooted(value) || value.Contains(':') || value.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)
+                    .Any(part => part is "." or ".." || part != ObsidianNoteWriter.SafeFilename(part)))
+                    throw new ArgumentException("Choose a relative note folder without links or parent components.", nameof(value));
+            }
+            _host.SetSetting(id, value);
+        }
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed record ObsidianVaultInfo(string Name, string Path);

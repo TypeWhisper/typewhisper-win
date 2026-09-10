@@ -660,6 +660,49 @@ public sealed class LicenseServiceTests : IDisposable
         Assert.False(viewModel.ShowCommercialManage);
     }
 
+    [Fact]
+    public async Task ActivatedLicensePersistsEncryptedAndCanBeDeactivatedAfterRestart()
+    {
+        var directory = CreateTempDir();
+        var requests = new List<string>();
+        var client = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            var route = request.RequestUri!.AbsolutePath;
+            requests.Add(route);
+            return route.Split('/').Last() switch
+            {
+                "activate" => Json(HttpStatusCode.OK, """{"id":"device-test"}"""),
+                "validate" => Json(HttpStatusCode.OK, """{"status":"granted","benefit_id":"a4c0b152-0b91-4588-b8f8-779870affba9"}"""),
+                "deactivate" => Json(HttpStatusCode.OK, "{}"),
+                _ => throw new InvalidOperationException(route)
+            };
+        }));
+        var service = new LicenseService(client, directory);
+        Assert.NotNull(await service.ActivateAnyLicenseKeyAsync("TEST-ONLY-NOT-A-REAL-KEY"));
+        Assert.Null(service.StorageError);
+        Assert.DoesNotContain("TEST-ONLY-NOT-A-REAL-KEY", File.ReadAllText(Path.Combine(directory, "licenses.dat")));
+        var reloaded = new LicenseService(client, directory);
+        Assert.True(reloaded.HasCommercialLicense);
+        await reloaded.DeactivateCommercialLicenseAsync();
+        Assert.False(reloaded.HasCommercialActivation);
+        Assert.False(new LicenseService(client, directory).HasCommercialLicense);
+        Assert.Equal(3, requests.Count);
+    }
+
+    [Fact]
+    public async Task ActivationReportsCredentialPersistenceFailure()
+    {
+        var directory = CreateTempDir();
+        Directory.CreateDirectory(Path.Combine(directory, "licenses.dat"));
+        var service = new LicenseService(new HttpClient(new CapturingHandler((request, _) =>
+            request.RequestUri!.AbsolutePath.EndsWith("/activate")
+                ? Json(HttpStatusCode.OK, """{"id":"test-device"}""")
+                : Json(HttpStatusCode.OK, """{"status":"granted","benefit_id":"a4c0b152-0b91-4588-b8f8-779870affba9"}"""))), directory);
+        await service.ActivateAnyLicenseKeyAsync("TEST-ONLY-NOT-A-REAL-KEY");
+        Assert.NotNull(service.StorageError);
+        Assert.DoesNotContain("TEST-ONLY-NOT-A-REAL-KEY", service.StorageError);
+    }
+
     public void Dispose()
     {
         foreach (var dir in _tempDirs)

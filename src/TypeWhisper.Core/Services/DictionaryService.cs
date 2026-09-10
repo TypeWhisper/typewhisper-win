@@ -121,13 +121,28 @@ public sealed class DictionaryService : IDictionaryService
     {
         using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
-        var corrections = _cache
+        return ApplyCorrectionsSnapshot(text, _cache, IncrementUsageCount);
+    }
+
+    /// <summary>Applies a recording's dictionary snapshot without modifying persisted entries or usage counters.</summary>
+    public static string ApplyCorrectionsSnapshot(string text, IReadOnlyList<DictionaryEntry> entries) =>
+        ApplyCorrectionsSnapshot(text, entries, null);
+
+    private static string ApplyCorrectionsSnapshot(string text, IReadOnlyList<DictionaryEntry> entries, Action<string>? onMatch)
+    {
+        var corrections = entries
             .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction && e.Replacement is not null)
             .OrderByDescending(e => e.Original.Length);
 
         foreach (var entry in corrections)
         {
+            var replacement = ExpandReplacementEscapes(entry.Replacement!);
             var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);
+            // ASR often punctuates a final spoken layout command. That period
+            // belongs to the command, not to a new line after its replacement.
+            // Preserve regex semantics and punctuation around ordinary corrections.
+            if (!entry.IsRegex && replacement.Any(c => c is '\r' or '\n') && replacement.All(char.IsWhiteSpace))
+                pattern += @"(?:[ \t]*\.[ \t]*(?=$))?";
             var options = entry.CaseSensitive
                 ? RegexOptions.CultureInvariant
                 : RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
@@ -137,9 +152,8 @@ public sealed class DictionaryService : IDictionaryService
                 if (!regex.IsMatch(text))
                     continue;
 
-                var replacement = ExpandReplacementEscapes(entry.Replacement!);
                 text = regex.Replace(text, _ => replacement);
-                IncrementUsageCount(entry.Id);
+                onMatch?.Invoke(entry.Id);
             }
             catch (ArgumentException) when (entry.IsRegex)
             {
@@ -637,7 +651,7 @@ public sealed class DictionaryService : IDictionaryService
                 entry.CreatedAt,
                 entry.UpdatedAt,
                 entry.Source,
-                entry.IsRegex))
+                entry.IsRegex, entry.CtcMinSimilarity))
             .ToList();
     }
 
@@ -692,6 +706,7 @@ public sealed class DictionaryService : IDictionaryService
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
                 IsRegex = synced.IsRegex,
+            CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -707,6 +722,7 @@ public sealed class DictionaryService : IDictionaryService
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
             IsRegex = synced.IsRegex,
+            CtcMinSimilarity = synced.CtcMinSimilarity,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,
             CreatedAt = synced.CreatedAt,

@@ -1,0 +1,6 @@
+<Project>
+  <Target Name="CopyPackage">
+    <ItemGroup><PackageFile Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/**/*" Exclude="$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/**/runtimes/linux*/**/*;$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/**/runtimes/osx*/**/*;$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/**/runtimes/android*/**/*;$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/**/runtimes/ios*/**/*" /></ItemGroup>
+    <Copy SourceFiles="@(PackageFile)" DestinationFiles="@(PackageFile->'$(PluginDestination)/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

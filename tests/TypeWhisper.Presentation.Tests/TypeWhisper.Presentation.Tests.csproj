@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/TypeWhisper.WinUI/RecorderView.Api.cs" Link="RecorderView.Api.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/OverlayLayout.cs" Link="OverlayLayout.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WorkflowDraft.cs" Link="WorkflowDraft.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="Moq" Version="4.*" />
+    <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LearnedCorrectionStore.cs" Link="LearnedCorrectionStore.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/TargetAppCorrectionLearningService.cs" Link="TargetAppCorrectionLearningService.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/PremiumAccessState.cs" Link="PremiumAccessState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HistoryStore.cs" Link="HistoryStore.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs" Link="HistoryEntryAdapter.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HotkeyRecoveryState.cs" Link="HotkeyRecoveryState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/OriginalFieldFocus.cs" Link="OriginalFieldFocus.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/SelectedTextCaptureOperation.cs" Link="SelectedTextCaptureOperation.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WorkflowShortcutCatalog.cs" Link="WorkflowShortcutCatalog.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationOverlayState.cs" Link="DictationOverlayState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationAudioPreferences.cs" Link="DictationAudioPreferences.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/RecordingAudioEffects.cs" Link="RecordingAudioEffects.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/SilenceAutoStop.cs" Link="SilenceAutoStop.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictionaryTrainingPlan.cs" Link="DictionaryTrainingPlan.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Lexicon.cs" Link="Lexicon.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalApiDataHandler.cs" Link="LocalApiDataHandler.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs" Link="DictationDictionarySnapshot.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationLexiconSnapshot.cs" Link="DictationLexiconSnapshot.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntry.cs" Link="HistoryEntry.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Transcript.cs" Link="Transcript.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
+  </ItemGroup>
+</Project>

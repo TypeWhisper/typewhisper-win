@@ -91,6 +91,10 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
     private volatile bool _rootAvailable;
     private int _sequence;
     private bool _disposed;
+    private string? _lastError;
+
+    /// <summary>The latest storage failure, if any. In-memory transcription may still continue.</summary>
+    public string? LastError => Volatile.Read(ref _lastError);
 
     /// <summary>
     /// Creates a recovery audio store.
@@ -303,7 +307,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
             var fileName = Path.GetFileName(path);
             if (ActiveFileNamePattern.IsMatch(fileName))
             {
-                TryDeleteSafeFile(fileName, ActiveFileNamePattern);
+                RecoverActiveFile(fileName);
                 continue;
             }
 
@@ -315,7 +319,6 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
 
             if (!TryReadDescriptor(pendingPath, pending: true, out _))
             {
-                TryDeleteSafeFile(fileName, PendingFileNamePattern);
                 continue;
             }
 
@@ -327,14 +330,51 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
             {
                 if (!File.Exists(finalPath))
                     File.Move(pendingPath, finalPath);
-                else
-                    TryDeleteSafeFile(fileName, PendingFileNamePattern);
             }
             catch
             {
+                ReportStorageFailure();
                 // Leave a valid pending file in place so a later startup can retry promotion.
             }
         }
+    }
+
+    private void RecoverActiveFile(string fileName)
+    {
+        if (!TryResolveSafeFile(fileName, ActiveFileNamePattern, out var path)) return;
+        var finalName = fileName.Replace(".active.wav", ".wav", StringComparison.Ordinal);
+        var match = FinalFileNamePattern.Match(finalName);
+        if (!match.Success || !DateTimeOffset.TryParseExact(match.Groups["timestamp"].Value,
+            "yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out _) ||
+            !TryResolveSafeFile(finalName, FinalFileNamePattern, out var finalPath) || File.Exists(finalPath)) return;
+        try
+        {
+            // Never infer a format from the extension. Only our exact PCM header is repairable.
+            // Exclusive access also prevents recovery of a recording another owner still writes.
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                var length = stream.Length - WavHeaderSize;
+                if (length <= 0 || length > int.MaxValue - 36 || length % sizeof(short) != 0) return;
+                Span<byte> header = stackalloc byte[WavHeaderSize];
+                stream.ReadExactly(header);
+                var declared = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(40, 4));
+                if (declared < 0 || declared > length || declared % sizeof(short) != 0 ||
+                    !header.SequenceEqual(BuildWavHeader(declared))) return;
+                stream.Position = 0;
+                stream.Write(BuildWavHeader((int)length));
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(path, finalPath); // Never overwrite an existing recording.
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { ReportStorageFailure(); }
+    }
+
+    private void ReportStorageFailure()
+    {
+        Volatile.Write(ref _lastError, "Recovery audio could not be stored or restored completely. Your current transcription can continue; recovery is not guaranteed.");
+        PublishSnapshot();
     }
 
     private void EnumerateDurableRecordings()
@@ -413,6 +453,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
         }
         catch
         {
+            ReportStorageFailure();
             await DisposeStreamAsync(stream).ConfigureAwait(false);
             if (fileName is not null)
                 TryDeleteSafeFile(fileName, ActiveFileNamePattern);
@@ -442,9 +483,19 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
 
             await recording.Stream.WriteAsync(pcm).ConfigureAwait(false);
             recording.SampleCount += samples.Length;
+            if (recording.SampleCount - recording.FlushedSampleCount >= SampleRate)
+            {
+                // At most one second of accepted audio between checkpoints during capture.
+                // Queued or unflushed samples are not guaranteed after a process/system crash.
+                await RewriteWavHeaderAsync(recording.Stream, recording.SampleCount * sizeof(short)).ConfigureAwait(false);
+                await recording.Stream.FlushAsync().ConfigureAwait(false);
+                recording.Stream.Flush(flushToDisk: true);
+                recording.FlushedSampleCount = recording.SampleCount;
+            }
         }
         catch
         {
+            ReportStorageFailure();
             await DisableActiveRecordingAsync(recording).ConfigureAwait(false);
         }
     }
@@ -487,7 +538,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
         catch
         {
             await DisposeStreamAsync(recording.Stream).ConfigureAwait(false);
-            TryDeleteSafeFile(recording.FileName, ActiveFileNamePattern);
+            ReportStorageFailure();
             return null;
         }
     }
@@ -533,6 +584,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
         catch
         {
             // Keep a valid pending file on disk for startup promotion after a transient file error.
+            ReportStorageFailure();
             _pendingRecordings[token] = pending;
             return null;
         }
@@ -652,7 +704,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
         _activeRecordings.Remove(recording.Id);
         await DisposeStreamAsync(recording.Stream).ConfigureAwait(false);
         recording.Stream = null;
-        TryDeleteSafeFile(recording.FileName, ActiveFileNamePattern);
+        // Preserve any bytes already written; a later restart may recover the valid prefix.
     }
 
     private string ReserveBaseName(DateTimeOffset createdAt)
@@ -721,6 +773,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
                     || (attributes & FileAttributes.Directory) == 0)
                 {
                     _rootAvailable = false;
+                    ReportStorageFailure();
                     return false;
                 }
             }
@@ -735,6 +788,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
         catch
         {
             _rootAvailable = false;
+            ReportStorageFailure();
             return false;
         }
     }
@@ -865,7 +919,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
 
     private static async Task RewriteWavHeaderAsync(Stream stream, long dataLength)
     {
-        if (dataLength > int.MaxValue)
+        if (dataLength > int.MaxValue - 36)
             throw new IOException("Recovery recording exceeds the WAV size limit.");
 
         stream.Position = 0;
@@ -963,6 +1017,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
         public string Path { get; } = path;
         public FileStream? Stream { get; set; } = stream;
         public long SampleCount { get; set; }
+        public long FlushedSampleCount { get; set; }
     }
 
     private sealed record PendingRecording(

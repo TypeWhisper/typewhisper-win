@@ -37,8 +37,8 @@ public sealed class FillerWordsSettingsStore
             if (string.Equals(_wordsText, value, StringComparison.Ordinal))
                 return;
 
-            _wordsText = value;
             _host.SetSetting(WordsKey, value);
+            _wordsText = value;
         }
     }
 

@@ -33,6 +33,9 @@ public interface IPluginHostServices
     /// </summary>
     bool IsUiAutomation => false;
 
+    /// <summary>Whether activation may migrate data from historical application directories.</summary>
+    bool AllowLegacyDataMigration => true;
+
     /// <summary>Process name of the currently active foreground application, or null.</summary>
     string? ActiveAppProcessName { get; }
 

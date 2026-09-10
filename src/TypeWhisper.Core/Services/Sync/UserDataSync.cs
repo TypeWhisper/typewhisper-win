@@ -51,6 +51,7 @@ public enum UserDataSyncDictionaryEntryType
 /// <param name="CreatedAt">Created at supplied to the member.</param>
 /// <param name="UpdatedAt">Updated at supplied to the member.</param>
 /// <param name="Source">Optional correction provenance supplied to the member.</param>
+/// <param name="CtcMinSimilarity">Optional acoustic matching threshold.</param>
 /// <param name="IsRegex">Whether the original value is a regular expression.</param>
 public sealed record UserDataSyncDictionaryEntry(
     UserDataSyncDictionaryEntryType EntryType,
@@ -61,7 +62,8 @@ public sealed record UserDataSyncDictionaryEntry(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     DictionaryEntrySource Source = DictionaryEntrySource.Manual,
-    bool IsRegex = false);
+    bool IsRegex = false,
+    float? CtcMinSimilarity = null);
 
 /// <summary>
 /// Represents user data sync snippet data.
@@ -80,7 +82,11 @@ public sealed record UserDataSyncSnippet(
     bool IsEnabled,
     IReadOnlyList<string> Tags,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt)
+{
+    /// <summary>Gets snippet tags, defaulting to empty for older Mac sync packages.</summary>
+    public IReadOnlyList<string> Tags { get; init; } = Tags ?? [];
+}
 
 /// <summary>
 /// Represents user data sync snapshot data.

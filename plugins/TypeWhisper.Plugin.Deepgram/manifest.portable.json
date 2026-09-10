@@ -1,0 +1,13 @@
+{
+  "id": "com.typewhisper.deepgram",
+  "name": "Deepgram",
+  "version": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Deepgram Nova transcription engine",
+  "assemblyName": "TypeWhisper.Plugin.Deepgram.dll",
+  "pluginClass": "TypeWhisper.Plugin.Deepgram.DeepgramPlugin",
+  "minHostVersion": "1.1.0",
+  "categories": [
+    "transcription"
+  ]
+}

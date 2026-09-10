@@ -1,0 +1,275 @@
+<Window
+    x:Class="TypeWhisper.WinUI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TypeWhisper.WinUI"
+    Title="TypeWhisper">
+
+    <Grid x:Name="WindowRoot" Background="{ThemeResource InkBrush}" KeyDown="WindowRoot_KeyDown"
+          PreviewKeyDown="WindowRoot_PreviewKeyDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="34" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+        <Grid x:Name="DragRegion" Height="38" Padding="14,0,8,0" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <local:Breadcrumbs x:Name="TitleBreadcrumbs" VerticalAlignment="Center" MaxWidth="440" />
+            <Grid x:Name="TitleDragSurface" Grid.Column="1" Background="Transparent" />
+
+            <local:HandCursorButton Grid.Column="2" Content="—" Click="MinimizeButton_Click"
+                    Style="{StaticResource IconButtonStyle}" AutomationProperties.Name="Minimize" />
+            <local:HandCursorButton Grid.Column="3" Content="×" Click="HideButton_Click"
+                    Style="{StaticResource IconButtonStyle}" AutomationProperties.Name="Hide Quick Launch" />
+        </Grid>
+
+        <Border x:Name="ActivationNotice" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" Margin="14,4,14,8" Padding="16" CornerRadius="10" BorderBrush="#E5B65A" BorderThickness="1">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="24" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE7BA;" FontSize="20" Foreground="#E5B65A" VerticalAlignment="Top" Margin="0,2,0,0" />
+                <StackPanel Grid.Column="1" Spacing="8">
+                    <TextBlock x:Name="ActivationNoticeTitle" Text="Action needed" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource TextBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ActivationNoticeText" TextWrapping="Wrap" Foreground="{ThemeResource TextBrush}" FontSize="14" AutomationProperties.LiveSetting="Assertive" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                        <local:HandCursorButton x:Name="ActivationNoticeAction" Content="Edit workflow" Visibility="Collapsed" Click="ActivationNoticeAction_Click" Style="{StaticResource PrimaryButtonStyle}" />
+                        <local:HandCursorButton Content="Dismiss" Click="DismissActivationNotice_Click" Style="{StaticResource SecondaryButtonStyle}" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+        </StackPanel>
+        <Grid Grid.Row="1" Margin="14,6,14,10">
+            <Border x:Name="SearchSurface"
+                    Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}"
+                    BorderThickness="1" CornerRadius="10" Height="48">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="44" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <local:TypeWhisperGlyph x:Name="SearchGlyph" Grid.Column="0" Kind="search" Width="17" Height="17" />
+                    <Grid Grid.Column="1">
+                        <TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged"
+                                 LostFocus="SearchBox_LostFocus"
+                                 Style="{StaticResource SearchTextBoxStyle}"
+                                 Opacity="0"
+                                 AutomationProperties.Name="Quick Launch search" />
+                        <TextBlock x:Name="SearchPlaceholder"
+                                   Text="Search commands, recordings, workflows…"
+                                   FontFamily="{StaticResource InterfaceFont}" FontSize="14"
+                                   Foreground="{ThemeResource MutedBrush}"
+                                   HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                   TextAlignment="Left" Margin="10,0,0,0"
+                                   IsHitTestVisible="False" />
+                    </Grid>
+                    <Border Grid.Column="2" Margin="8,0,10,0" Padding="7,3" CornerRadius="5"
+                            BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1"
+                            VerticalAlignment="Center">
+                        <TextBlock x:Name="HotkeyHint" Text="Alt  Space" FontFamily="Cascadia Mono" FontSize="10"
+                                   Foreground="{ThemeResource MutedBrush}" />
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid x:Name="CommandSurface" Grid.Row="2" Margin="14,0,14,0">
+            <Grid x:Name="CompactVariant">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="CompactSectionLabel" Text="COMMANDS" Visibility="Collapsed" Margin="10,1,0,7"
+                           FontSize="10" FontWeight="SemiBold" CharacterSpacing="70"
+                           Foreground="{ThemeResource MutedBrush}" />
+                <local:HandCursorListView x:Name="CompactResults" Grid.Row="1"
+                          IsItemClickEnabled="True" ItemClick="Results_ItemClick"
+                          SelectionChanged="Results_SelectionChanged" SelectionMode="Single"
+                          Background="Transparent" BorderThickness="0" TabNavigation="Once"
+                          ScrollViewer.VerticalScrollMode="Enabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsStackPanel AreStickyGroupHeadersEnabled="False" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.GroupStyle>
+                        <GroupStyle HidesIfEmpty="True">
+                            <GroupStyle.HeaderContainerStyle>
+                                <Style TargetType="ListViewHeaderItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="MinHeight" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListViewHeaderItem">
+                                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                    HorizontalContentAlignment="Stretch" />
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </GroupStyle.HeaderContainerStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="local:LauncherCommandGroup">
+                                    <Border BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="{x:Bind Separator}"
+                                            Margin="{x:Bind HeaderMargin}" Padding="{x:Bind HeaderPadding}" HorizontalAlignment="Stretch">
+                                        <TextBlock Text="{x:Bind Title}" Visibility="{x:Bind TitleVisibility}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource MutedBrush}" />
+                                    </Border>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource CommandItemStyle}">
+                            <Setter Property="Margin" Value="0,0,0,3" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:Command">
+                            <Grid Padding="10,6" Background="Transparent" Loaded="PinRow_Loaded">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="{x:Bind IconWidth}" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <local:TypeWhisperGlyph Grid.Column="{x:Bind IconColumn}" Kind="{x:Bind IconKind}" Width="19" Height="19"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Margin="{x:Bind LabelMargin}" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Title}" FontSize="{x:Bind TitleSize}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind Subtitle}" Visibility="{x:Bind SubtitleVisibility}" FontSize="11" Foreground="{ThemeResource MutedBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind Shortcut}" FontFamily="Cascadia Mono" FontSize="10"
+                                           Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </local:HandCursorListView>
+            </Grid>
+
+
+            <Border x:Name="ActionPanel" Width="290" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,8,0" Padding="8" CornerRadius="10"
+                    Background="{ThemeResource ElevatedBrush}" BorderBrush="{ThemeResource HairlineBrush}"
+                    BorderThickness="1" Visibility="Collapsed" Translation="0,-4,0">
+                <StackPanel Spacing="3">
+                    <TextBlock Text="ACTIONS" Margin="9,5,0,6" FontSize="10" FontWeight="SemiBold"
+                               CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                    <local:HandCursorButton HorizontalContentAlignment="Stretch" Click="RunSelectedButton_Click"
+                            Style="{StaticResource MenuButtonStyle}">
+                        <Grid Width="250">
+                            <TextBlock Text="Run command" />
+                            <TextBlock Text="Enter" HorizontalAlignment="Right" FontFamily="Cascadia Mono"
+                                       Foreground="{ThemeResource MutedBrush}" />
+                        </Grid>
+                    </local:HandCursorButton>
+                    <local:HandCursorButton HorizontalContentAlignment="Stretch" Click="KeepOpenButton_Click"
+                            Style="{StaticResource MenuButtonStyle}">
+                        <Grid Width="250">
+                            <TextBlock Text="Run and keep open" />
+                            <TextBlock Text="Ctrl Enter" HorizontalAlignment="Right" FontFamily="Cascadia Mono"
+                                       Foreground="{ThemeResource MutedBrush}" />
+                        </Grid>
+                    </local:HandCursorButton>
+                    <local:HandCursorButton HorizontalContentAlignment="Stretch" Click="PinButton_Click"
+                            Style="{StaticResource MenuButtonStyle}">
+                        <Grid Width="250">
+                            <TextBlock Text="Pin to Quick Launch" />
+                            <local:TypeWhisperGlyph Kind="pin" Width="14" Height="14"
+                                                    HorizontalAlignment="Right" />
+                        </Grid>
+                    </local:HandCursorButton>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <local:HistoryView x:Name="HistoryView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
+        <local:RecorderView x:Name="RecorderView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
+        <local:WorkflowsView x:Name="WorkflowsView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
+        <local:PluginsView x:Name="PluginsView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
+        <local:MarketplaceView x:Name="MarketplaceView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
+
+        <Border x:Name="OverlayPreviewPanel" Grid.Row="3" VerticalAlignment="Bottom"
+                Margin="14,0,14,0" Padding="14,12" Visibility="Collapsed"
+                Background="{ThemeResource ElevatedBrush}" CornerRadius="10"
+                BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1">
+            <StackPanel Spacing="8">
+                <TextBlock Text="OVERLAY PREVIEW" FontSize="10" CharacterSpacing="70"
+                           FontWeight="SemiBold" Foreground="{ThemeResource MutedBrush}" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <local:HandCursorButton x:Name="StandardOverlayButton" Content="Standard" Tag="Standard"
+                            Click="OverlayMode_Click" Style="{StaticResource SecondaryButtonStyle}"
+                            AutomationProperties.Name="Standard overlay" />
+                        <local:HandCursorButton x:Name="CompactOverlayButton" Content="Compact" Tag="Compact"
+                            Click="OverlayMode_Click" Style="{StaticResource SecondaryButtonStyle}"
+                            AutomationProperties.Name="Compact overlay" />
+                        <local:HandCursorButton x:Name="MinimalOverlayButton" Content="Minimal" Tag="Minimal"
+                            Click="OverlayMode_Click" Style="{StaticResource SecondaryButtonStyle}"
+                            AutomationProperties.Name="Minimal overlay" />
+                    </StackPanel>
+                    <local:HandCursorButton x:Name="PausePreviewButton" Grid.Column="1" Content="Pause"
+                        Click="PausePreview_Click" Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="Pause or resume overlay preview" />
+                    <local:HandCursorButton Grid.Column="2" Content="End preview"
+                        Click="EndPreview_Click" Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="End overlay preview" />
+                </Grid>
+                <TextBlock x:Name="OverlayPreviewHint" FontSize="11" TextWrapping="Wrap"
+                    Foreground="{ThemeResource MutedBrush}"
+                    Text="Microphone level only · transcript is sample text · no audio saved" />
+            </StackPanel>
+        </Border>
+
+        <Viewbox Grid.Row="4" Visibility="{Binding Visibility, ElementName=QuickLaunchFooter}" Width="22" Height="22"
+                 HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0" Stretch="Uniform">
+            <local:SetupLogo ToolTipService.ToolTip="TypeWhisper" />
+        </Viewbox>
+        <Grid x:Name="QuickLaunchFooter" Grid.Row="4" Margin="42,0,18,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Ellipse x:Name="MetricsDot" Width="6" Height="6" Fill="#FF48C78E" />
+                <TextBlock x:Name="MetricsText" Text="Search ready · 0.0 ms" FontSize="10"
+                           Foreground="{ThemeResource MutedBrush}" />
+            </StackPanel>
+            <local:HandCursorButton x:Name="TranscriptToggleButton" Visibility="Collapsed" Grid.Column="1" Content="Live text  On"
+                    Click="TranscriptToggleButton_Click" Foreground="{ThemeResource AccentBrush}"
+                    Style="{StaticResource IconButtonStyle}"
+                    AutomationProperties.Name="Toggle live transcript preview" />
+            <local:HandCursorButton x:Name="TestOverlayButton" Visibility="Collapsed" Grid.Column="2" Content="Test overlay" Click="TestWaveformButton_Click"
+                    Style="{StaticResource IconButtonStyle}"
+                    AutomationProperties.Name="Test waveform" />
+            <TextBlock x:Name="NavigationHint" Grid.Column="3" Text="↑↓ Navigate   Enter Run   Ctrl K Actions   Esc Hide"
+                       VerticalAlignment="Center" Margin="12,0,0,0" FontSize="10"
+                       Foreground="{ThemeResource MutedBrush}" />
+        </Grid>
+        <Border x:Name="FileTranscriptionHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
+        <Border x:Name="UtilityHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
+        <Border x:Name="LexiconHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
+    </Grid>
+</Window>

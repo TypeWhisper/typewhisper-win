@@ -30,7 +30,9 @@ jobs:
       - id: discover
         shell: pwsh
         run: |
-          $allProjects = @(Get-ChildItem plugins -Recurse -Filter *.csproj | Sort-Object FullName)
+          # Test projects live under plugins/*/Tests and are exercised by WinUI headless checks.
+          # Only top-level plugin projects are distributable packages.
+          $allProjects = @(Get-ChildItem plugins/*/*.csproj | Sort-Object FullName)
           if ($allProjects.Count -eq 0) {
             throw "No plugin projects found under plugins/."
           }
@@ -185,7 +187,15 @@ jobs:
           $projectDir = Split-Path $projectPath -Parent
           $manifestPath = Join-Path $projectDir 'manifest.json'
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          $outputDir = Join-Path $projectDir 'bin/Release/net10.0-windows'
+          $frameworks = (& dotnet msbuild $projectPath -nologo -getProperty:TargetFrameworks).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Could not resolve plugin target frameworks.' }
+          if (-not $frameworks) {
+            $frameworks = (& dotnet msbuild $projectPath -nologo -getProperty:TargetFramework).Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'Could not resolve plugin target framework.' }
+          }
+          foreach ($framework in $frameworks.Split(';', [StringSplitOptions]::RemoveEmptyEntries)) {
+          $outputDir = (& dotnet msbuild $projectPath -nologo -p:Configuration=Release "-p:TargetFramework=$framework" -getProperty:TargetDir).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $outputDir) { throw 'Could not resolve plugin output directory.' }
           $assemblyPath = Join-Path $outputDir $manifest.assemblyName
           $copiedManifestPath = Join-Path $outputDir 'manifest.json'
 
@@ -211,6 +221,7 @@ jobs:
             if (-not (Test-Path $builtScriptDir)) {
               throw "Built scripts directory missing: $builtScriptDir"
             }
+          }
           }
 
       - uses: actions/upload-artifact@v7

@@ -1,0 +1,192 @@
+using System.Text;
+using TypeWhisper.PluginHost;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
+
+namespace TypeWhisper.WinUI;
+
+internal sealed record CloudTranscriptionLease(ITranscriptionEnginePlugin Engine, IApiKeyPlugin Configuration, IAsyncDisposable Lifetime);
+
+// Owns package/configuration operations independently of the UI so CI can test them.
+internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Task<CloudTranscriptionLease>> load) : IAsyncDisposable
+{
+    private readonly PortablePluginRuntimeRegistry? _registry;
+    internal CloudTranscriptionPlugin(IPluginHostServices host, PortablePluginRuntimeRegistry registry)
+        : this(host, () => throw new InvalidOperationException("Registry owns this package."))
+    { _registry = registry; registry.Changed += OnRegistryChanged; }
+    private void OnRegistryChanged() => Changed?.Invoke();
+    private PortableTranscriptionProvider? RegistryProvider => _registry?.TranscriptionProviders.FirstOrDefault(provider => provider.PluginId == PluginId && provider.SelectionId == PluginId);
+    internal const string PluginId = "com.typewhisper.groq";
+    private readonly SemaphoreSlim _operations = new(1, 1);
+    private CloudTranscriptionLease? _lease;
+    private readonly CancellationTokenSource _shutdown = new();
+    private bool _disposed;
+    internal event Action? Changed;
+    internal bool Enabled => !_disposed && (_registry is null ? _lease is not null : _registry.Snapshot().Any(state => state.PluginId == PluginId && state.Enabled));
+    internal bool Ready => !_disposed && (_registry is null ? _lease?.Configuration.IsConfigured == true : RegistryProvider?.Ready == true);
+    internal bool Busy { get; private set; }
+    internal string? Error { get; private set; }
+    internal string? Feedback { get; private set; }
+    internal IReadOnlyList<PluginModelInfo> Models => _registry is null ? _lease?.Engine.TranscriptionModels ?? [] : RegistryProvider?.Models ?? [];
+    internal string? ModelId => _registry is null ? _lease?.Engine.SelectedModelId : RegistryProvider?.SelectedModelId;
+    internal bool SupportsTranslation => _registry is null ? _lease?.Engine.SupportsTranslation == true : RegistryProvider?.SupportsTranslation == true;
+    internal string ModelName => Models.FirstOrDefault(m => m.Id == ModelId)?.DisplayName ?? "Groq";
+    internal IReadOnlyList<string> Languages => _registry is null ? _lease?.Engine.SupportedLanguages ?? [] : RegistryProvider?.SupportedLanguages ?? [];
+    internal string Language => host.GetSetting<string>("Language") is { } language && Languages.Contains(language) ? language : "auto";
+
+    internal async Task InitializeAsync()
+    {
+        if (host.GetSetting<bool?>("Enabled") == true) await SetEnabledAsync(true);
+    }
+
+    internal Task SetEnabledAsync(bool enabled) => RunAsync(async () =>
+    {
+        if (_registry is not null)
+        {
+            if (await _registry.SetEnabledAsync(PluginId, enabled) is { } error) throw new InvalidOperationException(error);
+            return;
+        }
+        if (enabled)
+        {
+            await EnableCoreAsync();
+        }
+        else
+        {
+            host.SetSetting("Enabled", false);
+            await ReleaseAsync();
+        }
+    });
+
+    internal Task SaveKeyAsync(string key) => RunAsync(async () =>
+    {
+        if (!Enabled && !string.IsNullOrWhiteSpace(key)) await EnableCoreAsync();
+        if (_registry is null) await RequireLease().Configuration.SetApiKeyAsync(key);
+        else await _registry.UseConfigurationAsync(PluginId, async (plugin, _) => { await ((IApiKeyPlugin)plugin).SetApiKeyAsync(key); return true; });
+        if (_registry is not null) await _registry.RefreshCapabilitiesAsync();
+        Feedback = Ready ? "API key saved. Check connection to verify it." : "API key removed.";
+    });
+
+    private async Task EnableCoreAsync()
+    {
+        if (Enabled) return;
+        if (_registry is not null)
+        {
+            if (await _registry.SetEnabledAsync(PluginId, true) is { } error) throw new InvalidOperationException(error);
+            return;
+        }
+        var lease = await load();
+        try { host.SetSetting("Enabled", true); }
+        catch { await lease.Lifetime.DisposeAsync(); throw; }
+        _lease = lease;
+    }
+
+    internal Task ValidateAsync() => RunAsync(async () =>
+    {
+        if (_registry is null) await RequireLease().Configuration.ValidateConfigurationAsync(_shutdown.Token);
+        else await _registry.UseConfigurationAsync(PluginId, async (plugin, ct) => { await ((IApiKeyPlugin)plugin).ValidateConfigurationAsync(ct); return true; }, _shutdown.Token);
+        Feedback = "Connected to Groq. No audio was uploaded.";
+    });
+
+    internal Task SelectModelAsync(string id) => RunAsync(async () =>
+    {
+        if (_registry is null) RequireLease().Engine.SelectModel(id);
+        else await _registry.UseTranscriptionAsync(PluginId, (engine, _) => { engine.SelectModel(id); return Task.FromResult(true); });
+    });
+
+    internal void SelectLanguage(string language)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Busy || !Enabled) throw new InvalidOperationException("Wait until Groq is ready.");
+        if (language != "auto" && !Languages.Contains(language)) throw new ArgumentException("Unsupported language.");
+        host.SetSetting("Language", language); Changed?.Invoke();
+    }
+
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool translate = false, CancellationToken ct = default)
+    {
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(ct, _shutdown.Token);
+        var token = request.Token;
+        (string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability) result = ("", [], null, null);
+        await RunAsync(async () =>
+        {
+            if (!Ready) throw new InvalidOperationException("Add an API key in Plugins > Groq > Settings.");
+            if (translate && !SupportsTranslation) throw new NotSupportedException("Native English translation is unavailable for the selected Groq model.");
+            var wav = EncodeWav(samples);
+            var response = _registry is null ? await RequireLease().Engine.TranscribeAsync(wav,
+                Language == "auto" ? null : Language, translate, null, token)
+                : await _registry.UseTranscriptionAsync(PluginId, (engine, ct) => engine.TranscribeAsync(wav,
+                    Language == "auto" ? null : Language, translate, null, ct), token);
+            token.ThrowIfCancellationRequested();
+            result = (response.Text, response.TokenTimings.ToArray(), response.DetectedLanguage, response.NoSpeechProbability);
+        });
+        return result;
+    }
+
+    // Mono 16 kHz PCM16 avoids platform codecs and keeps uploads small.
+    internal static byte[] EncodeWav(float[] samples, int maximumBytes = 25_000_000)
+    {
+        if (samples.Length == 0) throw new ArgumentException("No audio captured.");
+        if (samples.LongLength * 2 + 44 > maximumBytes)
+            throw new PluginRequestException(maximumBytes == 25_000_000 ? "Recording exceeds Groq's 25 MB upload limit. Use a shorter recording." : "Recording is too large to encode as WAV.", PluginRequestFailureKind.RequestTooLarge);
+        using var stream = new MemoryStream(44 + samples.Length * 2);
+        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
+        writer.Write("RIFF"u8); writer.Write(36 + samples.Length * 2); writer.Write("WAVEfmt "u8);
+        writer.Write(16); writer.Write((short)1); writer.Write((short)1);
+        writer.Write(16000); writer.Write(32000); writer.Write((short)2); writer.Write((short)16);
+        writer.Write("data"u8); writer.Write(samples.Length * 2);
+        foreach (var sample in samples)
+        {
+            if (!float.IsFinite(sample)) throw new ArgumentException("Audio contains invalid samples.");
+            writer.Write((short)Math.Clamp((int)Math.Round(Math.Clamp(sample, -1, 1) * 32768), short.MinValue, short.MaxValue));
+        }
+        writer.Flush(); return stream.ToArray();
+    }
+
+    private CloudTranscriptionLease RequireLease() => _lease ?? throw new InvalidOperationException("Enable Groq in Plugins first.");
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (!await _operations.WaitAsync(0)) throw new InvalidOperationException("A Groq operation is already in progress.");
+        Busy = true; Error = null; Feedback = null; Changed?.Invoke();
+        try { ObjectDisposedException.ThrowIf(_disposed, this); await action(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Error = DescribeError(ex);
+            // Provider response bodies may contain sensitive input; expose only classified errors.
+            throw new InvalidOperationException(Error);
+        }
+        finally { if (_registry is not null) await _registry.RefreshCapabilitiesAsync(); Busy = false; _operations.Release(); Changed?.Invoke(); }
+    }
+    internal static string DescribeError(Exception ex) => ex switch
+    {
+        PluginRequestException request => request.FailureKind switch
+        {
+            PluginRequestFailureKind.Authentication => "Groq rejected the API key. Replace it in plugin settings.",
+            PluginRequestFailureKind.Permission => "This Groq key does not have permission for the request.",
+            PluginRequestFailureKind.RateLimit => "Groq rate limit reached. Wait and try again.",
+            PluginRequestFailureKind.Network => "Could not reach Groq. Check your internet connection.",
+            PluginRequestFailureKind.Timeout => "Groq timed out. Try again.",
+            PluginRequestFailureKind.RequestTooLarge => "Recording exceeds Groq's upload limit. Use a shorter recording.",
+            _ => "Groq could not complete the request. Check the selected model and try again."
+        },
+        OperationCanceledException => "Groq request canceled.",
+        NotSupportedException => "The selected Groq model cannot translate audio to English. Choose Whisper Large V3 or switch to Transcribe.",
+        System.Reflection.TargetInvocationException { InnerException: { } inner } => DescribeError(inner),
+        TypeLoadException or MissingMethodException or FileNotFoundException => "Groq package could not load: " + ex.Message,
+        System.Security.Cryptography.CryptographicException => "The saved API key could not be decrypted. Remove the key and save it again.",
+        IOException or UnauthorizedAccessException => "Groq settings could not be read or saved. Check storage access.",
+        _ => "Groq is unavailable. Check plugin enablement, API key and model settings."
+    };
+    private async Task ReleaseAsync()
+    {
+        var lease = _lease; _lease = null;
+        if (lease is not null) await lease.Lifetime.DisposeAsync();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true; _shutdown.Cancel();
+        if (_registry is not null) _registry.Changed -= OnRegistryChanged;
+        await _operations.WaitAsync();
+        try { await ReleaseAsync(); }
+        finally { _operations.Release(); _shutdown.Dispose(); }
+    }
+}

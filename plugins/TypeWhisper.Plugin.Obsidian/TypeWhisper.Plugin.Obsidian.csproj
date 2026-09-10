@@ -1,12 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <UseWPF>true</UseWPF>
+    <UseWPF Condition="'$(TargetFramework)' == 'net10.0-windows'">true</UseWPF>
     <RootNamespace>TypeWhisper.Plugin.Obsidian</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.Obsidian.Tests" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <Compile Remove="ObsidianSettingsView.xaml.cs" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
@@ -15,9 +22,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <Target Name="CopyToAppPlugins" AfterTargets="Build">
+  <Target Name="CopyToAppPlugins" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
     <PropertyGroup>
       <AppOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\src\TypeWhisper.Windows\bin\$(Configuration)\$(TargetFramework)'))</AppOutputDir>
+      <AppOutputDir Condition="'$(TargetFramework)' == 'net10.0'">$(MSBuildProjectDirectory)\bin\$(Configuration)\portable-host</AppOutputDir>
       <PluginOutputDir>$(AppOutputDir)\Plugins\com.typewhisper.obsidian\</PluginOutputDir>
     </PropertyGroup>
     <MakeDir Directories="$(PluginOutputDir)" />

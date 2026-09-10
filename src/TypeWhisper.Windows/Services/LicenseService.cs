@@ -11,7 +11,11 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core;
+#if TYPEWHISPER_WINUI
+using Loc = TypeWhisper.WinUI.LicenseText;
+#else
 using TypeWhisper.Windows.Services.Localization;
+#endif
 
 namespace TypeWhisper.Windows.Services;
 
@@ -54,6 +58,9 @@ public sealed partial class LicenseService : ObservableObject
     private readonly string _legacyCredentialPath;
     private readonly AppDistributionKind _distributionKind;
     private readonly string _appVersion;
+
+    /// <summary>Describes a local credential write failure without exposing the license key.</summary>
+    public string? StorageError { get; private set; }
 
     private bool _suppressPersistence;
     private string? _commercialLicenseKey;
@@ -156,7 +163,9 @@ public sealed partial class LicenseService : ObservableObject
         _distributionKind = distributionKind ?? AppDistribution.Current;
         _appVersion = appVersion ?? GetAppVersion();
         LoadStore();
+#if !TYPEWHISPER_WINUI
         PropertyChangedEventManager.AddHandler(Loc.Instance, OnLocalizationChanged, "Item[]");
+#endif
     }
 
     /// <summary>
@@ -256,6 +265,14 @@ public sealed partial class LicenseService : ObservableObject
         }
 
         return proofs;
+    }
+
+    /// <summary>Returns the existing commercial activation proof for linking the signed-in account.</summary>
+    public bool TryGetCommercialAccountProof(out string? key, out string? activationId)
+    {
+        key = HasCommercialLicense ? _commercialLicenseKey : null;
+        activationId = HasCommercialLicense ? _commercialActivationId : null;
+        return !string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(activationId);
     }
 
     private SupporterTier? EffectiveSupporterTier => SupporterTier switch
@@ -1106,9 +1123,11 @@ public sealed partial class LicenseService : ObservableObject
             var protectedPayload = Protect(json);
             Directory.CreateDirectory(Path.GetDirectoryName(_credentialPath)!);
             File.WriteAllText(_credentialPath, protectedPayload, Encoding.UTF8);
+            StorageError = null;
         }
         catch (Exception ex)
         {
+            StorageError = "License changes could not be saved on this device. Keep your key and retry before closing the app.";
             Debug.WriteLine($"Persisting license store failed: {ex.Message}");
         }
     }

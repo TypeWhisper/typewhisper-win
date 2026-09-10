@@ -151,6 +151,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     /// Gets the stable provider identifier used for model and settings selection.
     /// </summary>
     public string ProviderId => "soniox";
+
+    /// <summary>Soniox transcription consumes ordered language hints in its request.</summary>
+    public bool SupportsLanguageHints => true;
     /// <summary>
     /// Gets the provider name displayed in the UI.
     /// </summary>

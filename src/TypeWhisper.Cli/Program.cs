@@ -10,9 +10,23 @@ namespace TypeWhisper.Cli;
 /// </summary>
 static class Program
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromMinutes(5) };
+
+    private static readonly CancellationTokenSource Cancellation = new();
 
     static async Task<int> Main(string[] args)
+    {
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; Cancellation.Cancel(); };
+        try { return await RunAsync(args); }
+        catch (OperationCanceledException)
+        { return Error(Cancellation.IsCancellationRequested ? "Operation cancelled." : "Request timed out.", Cancellation.IsCancellationRequested ? 1 : 2); }
+        catch (HttpRequestException) { return Error("TypeWhisper is not running or API server is disabled.", 2); }
+        catch (JsonException) { return Error("Invalid response from server.", 3); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { return Error(ex.Message); }
+    }
+
+    static async Task<int> RunAsync(string[] args)
     {
         var options = CliOptions.Parse(args);
         if (options.ShowHelp)
@@ -36,21 +50,109 @@ static class Program
             return 1;
         }
 
+        if (Validate(options) is { } validationError) return Error(validationError);
+
         var connection = CliConnectionResolver.Resolve(new CliConnectionOptions(
             PortOverride: options.Port,
             ApiTokenOverride: options.ApiToken,
-            EnvironmentApiToken: Environment.GetEnvironmentVariable("TYPEWHISPER_API_TOKEN")));
+            EnvironmentApiToken: Environment.GetEnvironmentVariable("TYPEWHISPER_API_TOKEN"),
+            ProfileDirectory: options.DevMode ? null : options.ProfileDirectory ?? Environment.GetEnvironmentVariable("TYPEWHISPER_PROFILE"),
+            DevMode: options.DevMode));
         var baseUrl = $"http://127.0.0.1:{connection.Port}";
 
         return options.Command switch
         {
             "status" => await StatusAsync(baseUrl, options.Json, connection.ApiToken),
-            "models" => await ModelsAsync(baseUrl, options.Json, connection.ApiToken),
+            "models" when options.Positionals.Count == 0 || options.Positionals[0] == "list" => await ModelsAsync(baseUrl, options.Json, connection.ApiToken),
+            "models" or "dictation" or "history" or "last" => await ExtendedAsync(baseUrl, options, connection.ApiToken),
             "transcribe" => await TranscribeAsync(baseUrl, options, connection.ApiToken),
             "export" => await ExportSettingsAsync(baseUrl, options, connection.ApiToken),
             "import" => await ImportSettingsAsync(baseUrl, options, connection.ApiToken),
             _ => Error($"Unknown command: {options.Command}")
         };
+    }
+
+    static string? Validate(CliOptions o)
+    {
+        var p = o.Positionals;
+        var action = p.FirstOrDefault();
+        var valid = o.Command switch
+        {
+            "status" or "last" => p.Count == 0,
+            "export" or "import" => p.Count == 1,
+            "transcribe" => p.Count <= 1,
+            "models" => p.Count == 0 || p.Count == 1 && action is "list" or "load" or "unload" or "delete",
+            "dictation" => p.Count == 1 && action is "start" or "stop" or "status" || p.Count == 2 && action == "result" && Guid.TryParse(p[1], out _),
+            "history" => p.Count == 0 || p.Count == 1 && action == "last" || p.Count == 2 && action == "search",
+            _ => false
+        };
+        if (!valid) return $"Invalid command or arguments for '{o.Command}'. Run typewhisper --help for usage.";
+        if (o.DevMode && o.ProfileDirectory is not null) return "--dev and --profile cannot be used together.";
+        var allowed = new HashSet<string> { "--port", "--profile", "--dev", "--api-token", "--json" };
+        if (o.Command == "transcribe") allowed.UnionWith(["--language", "--language-hint", "--task", "--translate-to", "--engine", "--model", "--await-download", "--no-corrections"]);
+        if (o.Command == "models" && action is "load" or "unload" or "delete") allowed.UnionWith(["--engine", "--model"]);
+        if (o.Command == "dictation" && action == "start") allowed.Add("--workflow");
+        if (o.Command == "history" && action != "last") allowed.UnionWith(["--query", "--limit", "--offset"]);
+        if (o.Flags.FirstOrDefault(f => !allowed.Contains(f)) is { } invalid) return $"{invalid} is not valid for this command.";
+        if (o.Command == "models" && action is "load" or "unload" or "delete" &&
+            (string.IsNullOrWhiteSpace(o.Engine) || action != "unload" && string.IsNullOrWhiteSpace(o.Model)))
+            return action == "unload" ? "models unload requires --engine." : $"models {action} requires --engine and --model.";
+        if (o.Command == "history" && action == "search" && o.Query != null) return "Use either history search <query> or --query.";
+        if (o.Command == "transcribe" && o.Task is not ("transcribe" or "translate")) return "--task must be transcribe or translate.";
+        return null;
+    }
+
+    static async Task<int> ExtendedAsync(string baseUrl, CliOptions o, string? apiToken)
+    {
+        var action = o.Positionals.FirstOrDefault();
+        var method = HttpMethod.Get;
+        string path;
+        object? payload = null;
+        if (o.Command == "models")
+        {
+            method = action == "delete" ? HttpMethod.Delete : HttpMethod.Post;
+            path = action == "delete"
+                ? $"/v1/models?engine={Uri.EscapeDataString(o.Engine!)}&model={Uri.EscapeDataString(o.Model!)}"
+                : $"/v1/models/{action}";
+            if (action != "delete") payload = new { engine = o.Engine, model = o.Model };
+        }
+        else if (o.Command == "dictation")
+        {
+            path = action == "result" ? $"/v1/dictation/transcription?id={Uri.EscapeDataString(o.Positionals[1])}" : $"/v1/dictation/{action}";
+            if (action is "start" or "stop") method = HttpMethod.Post;
+            if (action == "start" && o.Workflow != null) payload = new { workflow_id = o.Workflow };
+        }
+        else
+        {
+            var last = o.Command == "last" || action == "last";
+            var query = action == "search" ? o.Positionals[1] : o.Query;
+            path = $"/v1/history?limit={(last ? 1 : o.Limit ?? 50)}&offset={o.Offset ?? 0}";
+            if (query != null) path += $"&q={Uri.EscapeDataString(query)}";
+        }
+        using var request = new HttpRequestMessage(method, baseUrl + path);
+        CliRequestBuilder.ApplyApiToken(request, apiToken);
+        if (payload != null) request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        using var response = await Http.SendAsync(request, Cancellation.Token);
+        var body = await response.Content.ReadAsStringAsync(Cancellation.Token);
+        if (!response.IsSuccessStatusCode) return Error($"Request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+        if (o.Json) Console.WriteLine(PrettyJson(body));
+        else if (o.Command is "history" or "last")
+        {
+            var entries = root.GetProperty("entries");
+            if (entries.GetArrayLength() == 0) Console.WriteLine("No history entries.");
+            foreach (var entry in entries.EnumerateArray())
+                Console.WriteLine(o.Command == "last" || action == "last" ? Prop(entry, "text") : $"{Prop(entry, "timestamp")}  {Prop(entry, "text")}");
+        }
+        else if (o.Command == "models") Console.WriteLine($"{Prop(root, "status")}: {Prop(root, "engine")} {Prop(root, "model")}".TrimEnd());
+        else if (action == "status") Console.WriteLine(Prop(root, "state"));
+        else if (action == "result" && root.TryGetProperty("transcription", out var transcript) && transcript.ValueKind == JsonValueKind.Object)
+            Console.WriteLine(Prop(transcript, "text"));
+        else Console.WriteLine($"{Prop(root, "status")}: {Prop(root, "id")}");
+        if (o.Command == "dictation" && action == "result" && Prop(root, "status") == "failed")
+            return Error(Prop(root, "error") is { Length: > 0 } error ? error : "Dictation failed.", 3);
+        return 0;
     }
 
     static async Task<int> ExportSettingsAsync(string baseUrl, CliOptions options, string? apiToken)
@@ -62,13 +164,13 @@ static class Program
         try
         {
             using var request = CliRequestBuilder.BuildGet(baseUrl, "/v1/settings/export", apiToken);
-            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, Cancellation.Token);
             await using var responseStream = await response.Content.ReadAsStreamAsync();
             var body = await CliBackupFile.ReadBoundedUtf8Async(
                 responseStream,
                 response.Content.Headers.ContentLength);
             if (!response.IsSuccessStatusCode)
-                return Error($"Backup export failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+                return Error($"Backup export failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
 
             using (JsonDocument.Parse(body)) { }
             await CliBackupFile.WriteAtomicAsync(path, body);
@@ -77,8 +179,7 @@ static class Program
             {
                 Console.WriteLine(JsonSerializer.Serialize(new
                 {
-                    success = true,
-                    path,
+                    file = path,
                     bytes = Encoding.UTF8.GetByteCount(body)
                 }, new JsonSerializerOptions { WriteIndented = true }));
             }
@@ -91,11 +192,11 @@ static class Program
         }
         catch (HttpRequestException)
         {
-            return Error("TypeWhisper is not running or API server is disabled.");
+            return Error("TypeWhisper is not running or API server is disabled.", 2);
         }
+        catch (JsonException) { return Error("Invalid response from server.", 3); }
         catch (Exception ex) when (ex is IOException
             or UnauthorizedAccessException
-            or JsonException
             or InvalidDataException
             or DecoderFallbackException)
         {
@@ -115,29 +216,35 @@ static class Program
         try
         {
             var backupJson = await CliBackupFile.ReadAsync(path);
-            using (JsonDocument.Parse(backupJson)) { }
+            try { using (JsonDocument.Parse(backupJson)) { } }
+            catch (JsonException ex) { return Error($"Invalid backup JSON: {ex.Message}"); }
 
             using var request = CliRequestBuilder.BuildSettingsImport(baseUrl, backupJson, apiToken);
-            using var response = await Http.SendAsync(request);
+            using var response = await Http.SendAsync(request, Cancellation.Token);
             var body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                return Error($"Backup import failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+                return Error($"Backup import failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
 
             if (options.Json)
             {
                 Console.WriteLine(PrettyJson(body));
-                return ImportSucceeded(body) ? 0 : 1;
+                return ImportSucceeded(body) ? 0 : 3;
             }
 
+            if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
+            {
+                Console.WriteLine("Backup import accepted. TypeWhisper is restarting to finish restoring it.");
+                return 0;
+            }
             return PrintImportSummary(body);
         }
         catch (HttpRequestException)
         {
-            return Error("TypeWhisper is not running or API server is disabled.");
+            return Error("TypeWhisper is not running or API server is disabled.", 2);
         }
+        catch (JsonException) { return Error("Invalid response from server.", 3); }
         catch (Exception ex) when (ex is IOException
             or UnauthorizedAccessException
-            or JsonException
             or InvalidDataException
             or DecoderFallbackException)
         {
@@ -180,7 +287,7 @@ static class Program
         if (!success && root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
             Console.Error.WriteLine($"Error: {error.GetString()}");
 
-        return success ? 0 : 1;
+        return success ? 0 : 3;
     }
 
     static int Count(JsonElement result, string name) =>
@@ -191,10 +298,10 @@ static class Program
         try
         {
             using var request = CliRequestBuilder.BuildGet(baseUrl, "/v1/status", apiToken);
-            var response = await Http.SendAsync(request);
+            using var response = await Http.SendAsync(request, Cancellation.Token);
             var body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                return Error($"Status request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+                return Error($"Status request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
 
             if (json) { Console.WriteLine(PrettyJson(body)); return 0; }
 
@@ -210,7 +317,7 @@ static class Program
         }
         catch (HttpRequestException)
         {
-            return Error("TypeWhisper is not running or API server is disabled.");
+            return Error("TypeWhisper is not running or API server is disabled.", 2);
         }
     }
 
@@ -219,10 +326,10 @@ static class Program
         try
         {
             using var request = CliRequestBuilder.BuildGet(baseUrl, "/v1/models", apiToken);
-            var response = await Http.SendAsync(request);
+            using var response = await Http.SendAsync(request, Cancellation.Token);
             var body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                return Error($"Models request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+                return Error($"Models request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
 
             if (json) { Console.WriteLine(PrettyJson(body)); return 0; }
 
@@ -255,7 +362,7 @@ static class Program
         }
         catch (HttpRequestException)
         {
-            return Error("TypeWhisper is not running or API server is disabled.");
+            return Error("TypeWhisper is not running or API server is disabled.", 2);
         }
     }
 
@@ -264,16 +371,21 @@ static class Program
         if (!string.IsNullOrEmpty(options.Language) && options.LanguageHints.Count > 0)
             return Error("--language and --language-hint cannot be used together.");
 
-        var file = options.Positionals.FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(file))
-            return Error("Usage: typewhisper transcribe <file|->");
+        var file = options.Positionals.FirstOrDefault() ?? "-";
 
         if (file == "-")
         {
             byte[] audioBytes;
             await using var stdin = Console.OpenStandardInput();
             using var buffer = new MemoryStream();
-            await stdin.CopyToAsync(buffer);
+            var chunk = new byte[81920];
+            int read;
+            while ((read = await stdin.ReadAsync(chunk, Cancellation.Token)) > 0)
+            {
+                if (buffer.Length + read > 32 * 1024 * 1024)
+                    return Error("Stdin audio exceeds the 32 MiB limit.");
+                await buffer.WriteAsync(chunk.AsMemory(0, read), Cancellation.Token);
+            }
             audioBytes = buffer.ToArray();
             if (audioBytes.Length == 0)
                 return Error("No data received from stdin.");
@@ -292,15 +404,16 @@ static class Program
                 AddString(content, "target_language", options.TranslateTo);
                 AddString(content, "engine", options.Engine);
                 AddString(content, "model", options.Model);
+                if (!options.ApplyCorrections) AddString(content, "apply_corrections", "false");
 
                 var path = options.AwaitDownload ? "/v1/transcribe?await_download=1" : "/v1/transcribe";
                 using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}{path}") { Content = content };
                 CliRequestBuilder.ApplyApiToken(request, apiToken);
-                var response = await Http.SendAsync(request);
+                using var response = await Http.SendAsync(request, Cancellation.Token);
                 var body = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
-                    return Error($"Transcription failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+                    return Error($"Transcription failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
 
                 if (options.Json) { Console.WriteLine(PrettyJson(body)); return 0; }
 
@@ -310,7 +423,7 @@ static class Program
             }
             catch (HttpRequestException)
             {
-                return Error("TypeWhisper is not running or API server is disabled.");
+                return Error("TypeWhisper is not running or API server is disabled.", 2);
             }
         }
 
@@ -329,13 +442,14 @@ static class Program
                     options.TranslateTo,
                     options.Engine,
                     options.Model,
-                    options.AwaitDownload),
+                    options.AwaitDownload,
+                    options.ApplyCorrections),
                 apiToken);
-            var response = await Http.SendAsync(request);
+            using var response = await Http.SendAsync(request, Cancellation.Token);
             var body = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
-                return Error($"Transcription failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+                return Error($"Transcription failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
 
             if (options.Json) { Console.WriteLine(PrettyJson(body)); return 0; }
 
@@ -345,7 +459,7 @@ static class Program
         }
         catch (HttpRequestException)
         {
-            return Error("TypeWhisper is not running or API server is disabled.");
+            return Error("TypeWhisper is not running or API server is disabled.", 2);
         }
     }
 
@@ -358,13 +472,22 @@ static class Program
 
             Commands:
               status                    Show TypeWhisper status
-              models                    List available models
-              transcribe <file|->       Transcribe an audio file, or - for stdin
+              models [list]             List available models
+              models load|delete        Requires --engine <id> --model <id>
+              models unload             Requires --engine <id>; optional --model <id>
+              dictation start           Start recording; optional --workflow <id>
+              dictation stop|status     Stop recording or show recording state
+              dictation result <id>     Get a dictation session result
+              history [search <query>]  List history; --query, --limit, --offset
+              history last | last       Show the latest history entry
+              transcribe [file|-]       Transcribe a file; omit it or use - for stdin
               export <path>             Export a portable settings backup
               import <path>             Restore a portable settings backup
 
             Global options:
               --port <N>                API server port (default: auto-discover, fallback 8978)
+              --profile <directory>     Discover an explicit profile (or TYPEWHISPER_PROFILE)
+              --dev                     Connect to the WinUI development profile
               --api-token <token>       API token (overrides TYPEWHISPER_API_TOKEN and discovery)
               --json                    Output as JSON
               --version                 Show version
@@ -372,18 +495,23 @@ static class Program
 
             Transcribe options:
               --language <code>         Source language (e.g. en, de)
-              --language-hint <code>    Repeatable language hint for auto-detection
+              --language-hint <code>    Repeatable ordered hint; requires engine support
               --task <task>             transcribe (default) or translate
-              --translate-to <code>     Target language for translation
-              --engine <id>             Override the engine for this request
-              --model <id>              Override the model for this request
-              --await-download          Wait for local model restore/download
+              --no-corrections          Return raw text without dictionary corrections
+              --translate-to <code>     Translate via the configured default workflow LLM
+              --engine <id>             Temporarily select an engine for this request
+              --model <id>              Temporarily select a model for this request
+              --await-download          Wait for model restore/download before transcribing
+
+            History options:
+              --query <text>            Filter history
+              --limit <N>               Maximum entries, 0-200 (default: 50)
+              --offset <N>              Skip entries (default: 0)
 
             Examples:
               typewhisper status
               typewhisper transcribe recording.wav
               typewhisper transcribe recording.wav --language de --json
-              typewhisper transcribe recording.wav --language-hint de --language-hint en
               typewhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
               typewhisper transcribe - < audio.wav
               typewhisper export typewhisper-backup.json
@@ -433,15 +561,8 @@ static class Program
 
     static string PrettyJson(string json)
     {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch
-        {
-            return json;
-        }
+        using var doc = JsonDocument.Parse(json);
+        return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
     }
 
     static string ExtractErrorMessage(string body)
@@ -468,7 +589,7 @@ static class Program
     static string Pad(string value, int width) =>
         value.PadRight(width);
 
-    static int Error(string message) { Console.Error.WriteLine($"Error: {message}"); return 1; }
+    static int Error(string message, int exitCode = 1) { Console.Error.WriteLine($"Error: {message}"); return exitCode; }
 
     private sealed record CliOptions
     {
@@ -528,6 +649,14 @@ static class Program
         /// Gets or sets the await download value.
         /// </summary>
         public bool AwaitDownload { get; private init; }
+        public bool ApplyCorrections { get; private init; } = true;
+        public bool DevMode { get; private init; }
+        public string? ProfileDirectory { get; private init; }
+        public string? Workflow { get; private init; }
+        public string? Query { get; private init; }
+        public int? Limit { get; private init; }
+        public int? Offset { get; private init; }
+        public HashSet<string> Flags { get; private init; } = [];
         /// <summary>
         /// Gets or sets the error value.
         /// </summary>
@@ -551,10 +680,16 @@ static class Program
             string? apiToken = null;
             var json = false;
             var awaitDownload = false;
+            var applyCorrections = true;
+            var devMode = false;
+            string? workflow = null, query = null, profile = null;
+            int? limit = null, offset = null;
+            var flags = new HashSet<string>();
 
             for (var i = 0; i < args.Length; i++)
             {
                 var arg = args[i];
+                if (arg.StartsWith("--")) flags.Add(arg);
                 switch (arg)
                 {
                     case "--help":
@@ -567,6 +702,30 @@ static class Program
                         break;
                     case "--await-download":
                         awaitDownload = true;
+                        break;
+                    case "--dev":
+                        devMode = true;
+                        break;
+                    case "--no-corrections":
+                        applyCorrections = false;
+                        break;
+                    case "--profile":
+                        if (!TryReadValue(args, ref i, out profile))
+                            return options with { Error = "--profile requires a directory." };
+                        break;
+                    case "--workflow":
+                        if (!TryReadValue(args, ref i, out workflow))
+                            return options with { Error = "--workflow requires a value." };
+                        break;
+                    case "--query":
+                        if (!TryReadValue(args, ref i, out query))
+                            return options with { Error = "--query requires a value." };
+                        break;
+                    case "--limit":
+                    case "--offset":
+                        if (!TryReadValue(args, ref i, out var number) || !int.TryParse(number, out var parsed) || parsed < 0 || (arg == "--limit" && parsed > 200))
+                            return options with { Error = arg == "--limit" ? "--limit requires a number between 0 and 200." : "--offset requires a nonnegative integer." };
+                        if (arg == "--limit") limit = parsed; else offset = parsed;
                         break;
                     case "--port":
                         if (!TryReadValue(args, ref i, out var portValue) || !int.TryParse(portValue, out var parsedPort))
@@ -629,7 +788,10 @@ static class Program
                 TranslateTo = translateTo,
                 Engine = engine,
                 Model = model,
-                AwaitDownload = awaitDownload
+                AwaitDownload = awaitDownload,
+                ApplyCorrections = applyCorrections,
+                DevMode = devMode,
+                ProfileDirectory = profile, Workflow = workflow, Query = query, Limit = limit, Offset = offset, Flags = flags
             };
         }
 
@@ -642,7 +804,7 @@ static class Program
             }
 
             value = args[++index];
-            return true;
+            return !string.IsNullOrWhiteSpace(value);
         }
 
         private static bool LooksLikeOption(string value) =>

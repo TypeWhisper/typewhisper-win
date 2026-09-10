@@ -1,0 +1,14 @@
+{
+  "id": "com.typewhisper.parakeet-ctc",
+  "name": "Parakeet CTC Vocabulary",
+  "version": "0.1.0",
+  "author": "TypeWhisper",
+  "description": "Local acoustic vocabulary rescoring using the Parakeet 110M English CTC head.",
+  "isLocal": true,
+  "assemblyName": "TypeWhisper.Plugin.ParakeetCtc.dll",
+  "pluginClass": "TypeWhisper.Plugin.ParakeetCtc.ParakeetCtcPlugin",
+  "isInternalDependency": true,
+  "categories": [
+    "utility"
+  ]
+}

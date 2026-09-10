@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="TypeWhisper.WinUI" />
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges>
+    <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+  </requestedPrivileges></security></trustInfo>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings>
+    <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+  </windowsSettings></application>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"><application>
+    <supportedOS Id="{4f476546-937f-4f5f-b1b9-cb6258c47593}" />
+  </application></compatibility>
+</assembly>

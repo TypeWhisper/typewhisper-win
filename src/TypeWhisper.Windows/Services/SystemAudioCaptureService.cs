@@ -21,6 +21,11 @@ public sealed class SystemAudioCaptureService : IDisposable
     private readonly object _lock = new();
     private bool _isRecording;
     private float _peakRmsLevel;
+    private readonly Func<TimeSpan> _clock;
+    private TimeSpan _startedAt;
+    private TimeSpan _timelineOffset;
+    private int? _stopSample;
+    private const int MaximumSamples = 16000 * 60 * 60;
 
     /// <summary>
     /// Initializes a new instance of the SystemAudioCaptureService class.
@@ -30,15 +35,18 @@ public sealed class SystemAudioCaptureService : IDisposable
     {
     }
 
-    internal SystemAudioCaptureService(ISystemAudioLoopbackCaptureFactory captureFactory)
+    internal SystemAudioCaptureService(ISystemAudioLoopbackCaptureFactory captureFactory, Func<TimeSpan>? clock = null)
     {
         _captureFactory = captureFactory;
+        _clock = clock ?? (() => Stopwatch.GetElapsedTime(0));
     }
 
     /// <summary>
     /// Gets whether recording is currently active.
     /// </summary>
     public bool IsRecording => _isRecording;
+    /// <summary>Whether native capture resources remain owned, including after a failed release.</summary>
+    public bool HasCaptureResources => _capture is not null;
     /// <summary>
     /// Gets the peak rms level.
     /// </summary>
@@ -55,22 +63,29 @@ public sealed class SystemAudioCaptureService : IDisposable
     /// <summary>
     /// Starts capturing system audio output.
     /// </summary>
-    public void StartCapture(string? deviceId = null)
+    /// <param name="deviceId">The output device, or the default output when omitted.</param>
+    /// <param name="timelineOffset">Elapsed time on a shared recording timeline before this source starts.</param>
+    public void StartCapture(string? deviceId = null, TimeSpan timelineOffset = default)
     {
         if (_isRecording) return;
 
+        var startedAt = _clock();
         _capture = _captureFactory.Create(deviceId);
         lock (_lock)
         {
             _samples.Clear();
+            _timelineOffset = timelineOffset;
+            _startedAt = startedAt;
+            _stopSample = null;
         }
         _peakRmsLevel = 0;
 
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += OnRecordingStopped;
 
-        _capture.StartRecording();
         _isRecording = true;
+        try { _capture.StartRecording(); }
+        catch { _isRecording = false; throw; }
     }
 
     /// <summary>
@@ -82,20 +97,29 @@ public sealed class SystemAudioCaptureService : IDisposable
     /// <summary>
     /// Stops capturing and returns the captured samples resampled to 16kHz mono.
     /// </summary>
-    public float[] StopCapture()
+    /// <param name="timelineEnd">An optional shared stop time, excluding time spent draining other sources.</param>
+    public float[] StopCapture(TimeSpan? timelineEnd = null)
     {
-        if (!_isRecording || _capture is null) return [];
+        if (_capture is null) return [];
 
-        _capture.StopRecording();
-        _isRecording = false;
-        _capture.DataAvailable -= OnDataAvailable;
-        _capture.RecordingStopped -= OnRecordingStopped;
-
-        _capture.Dispose();
-        _capture = null;
+        var capture = _capture;
+        lock (_lock) { _stopSample ??= timelineEnd is { } end ? ToSample(end) : TimelineSample(_clock()); }
+        try { capture.StopRecording(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { Debug.WriteLine($"Stopping system audio failed; releasing capture: {ex.Message}"); }
+        finally
+        {
+            capture.DataAvailable -= OnDataAvailable;
+            capture.RecordingStopped -= OnRecordingStopped;
+            // A failed release retains the reference and active state so the owner can retry it.
+            capture.Dispose();
+            _capture = null;
+            _isRecording = false;
+        }
 
         lock (_lock)
         {
+            PadTo(_stopSample.Value);
             return [.. _samples];
         }
     }
@@ -116,6 +140,7 @@ public sealed class SystemAudioCaptureService : IDisposable
 
     private void OnDataAvailable(object? sender, AudioInputDataAvailableEventArgs e)
     {
+        var receivedAt = _clock();
         var capture = _capture;
         if (!_isRecording || capture is null)
             return;
@@ -139,11 +164,29 @@ public sealed class SystemAudioCaptureService : IDisposable
 
         lock (_lock)
         {
-            _samples.AddRange(samples);
+            // NAudio exposes callback receipt time, not WASAPI device position. Keep short scheduling
+            // jitter contiguous, but preserve real loopback silence instead of compressing the timeline.
+            var packetStart = Math.Max(0, TimelineSample(receivedAt) - samples.Length);
+            var previousCount = _samples.Count;
+            if (_samples.Count == 0 || packetStart - _samples.Count > 800) PadTo(packetStart);
+            var count = Math.Min(samples.Length, (_stopSample ?? MaximumSamples) - _samples.Count);
+            if (count > 0) _samples.AddRange(samples.AsSpan(0, count).ToArray());
+            samples = _samples.GetRange(previousCount, _samples.Count - previousCount).ToArray();
         }
 
         AudioLevelChanged?.Invoke(peak);
         SamplesAvailable?.Invoke(this, new SamplesAvailableEventArgs(samples));
+    }
+
+    private int TimelineSample(TimeSpan now) => ToSample(now - _startedAt + _timelineOffset);
+
+    private static int ToSample(TimeSpan elapsed) => (int)Math.Clamp(
+        Math.Round(elapsed.TotalSeconds * 16000), 0, MaximumSamples);
+
+    private void PadTo(int sample)
+    {
+        var end = Math.Min(sample, _stopSample ?? MaximumSamples);
+        if (end > _samples.Count) _samples.AddRange(new float[end - _samples.Count]);
     }
 
     private void OnRecordingStopped(object? sender, AudioInputRecordingStoppedEventArgs e)
@@ -307,35 +350,33 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
     public IReadOnlyList<SystemAudioOutputDevice> GetAvailableDevices()
     {
         using var enumerator = new MMDeviceEnumerator();
-        var renderDevices = enumerator
-            .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-            .Select(device => new SystemAudioOutputDevice(device.ID, device.FriendlyName))
-            .ToList();
-        var captureMixDevices = enumerator
-            .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
-            .Where(IsSystemAudioCaptureMix)
-            .Select(device => new SystemAudioOutputDevice(
-                CaptureDevicePrefix + device.ID,
-                device.FriendlyName))
-            .ToList();
-
-        return [.. renderDevices.Concat(captureMixDevices)];
+        var devices = new List<SystemAudioOutputDevice>();
+        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+            using (device) devices.Add(new(device.ID, device.FriendlyName));
+        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
+            using (device)
+                if (IsSystemAudioCaptureMix(device)) devices.Add(new(CaptureDevicePrefix + device.ID, device.FriendlyName));
+        return devices;
     }
 
     public ISystemAudioLoopbackCapture Create(string? deviceId)
     {
-        if (string.IsNullOrWhiteSpace(deviceId))
-            return new WasapiCaptureAdapter(new WasapiLoopbackCapture());
-
-        using var enumerator = new MMDeviceEnumerator();
-        if (deviceId.StartsWith(CaptureDevicePrefix, StringComparison.OrdinalIgnoreCase))
+        MMDevice? selected = null;
+        try
         {
-            var captureDevice = enumerator.GetDevice(deviceId[CaptureDevicePrefix.Length..]);
-            return new WasapiCaptureAdapter(new WasapiCapture(captureDevice));
+            using var enumerator = new MMDeviceEnumerator();
+            var useDefault = string.IsNullOrWhiteSpace(deviceId);
+            var captureMix = !useDefault && deviceId!.StartsWith(CaptureDevicePrefix, StringComparison.OrdinalIgnoreCase);
+            selected = useDefault ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
+                : enumerator.GetDevice(captureMix ? deviceId![CaptureDevicePrefix.Length..] : deviceId!);
+            if (selected.State != DeviceState.Active) throw new InvalidOperationException("The selected audio endpoint is not active.");
+            return new WasapiCaptureAdapter(captureMix ? new WasapiCapture(selected) : new WasapiLoopbackCapture(selected), selected);
         }
-
-        var renderDevice = enumerator.GetDevice(deviceId);
-        return new WasapiCaptureAdapter(new WasapiLoopbackCapture(renderDevice));
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            selected?.Dispose();
+            throw new InvalidOperationException("The selected system audio device is unavailable. Reconnect it or choose another device in Recorder settings. No fallback output was selected.", ex);
+        }
     }
 
     private static bool IsSystemAudioCaptureMix(MMDevice device)
@@ -351,11 +392,14 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
 
 internal sealed class WasapiCaptureAdapter : ISystemAudioLoopbackCapture
 {
-    private readonly WasapiCapture _capture;
+    private readonly IWaveIn _capture;
+    private IDisposable? _ownedDevice;
+    private bool _captureDisposed;
 
-    public WasapiCaptureAdapter(WasapiCapture capture)
+    public WasapiCaptureAdapter(IWaveIn capture, IDisposable? ownedDevice = null)
     {
         _capture = capture;
+        _ownedDevice = ownedDevice;
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += OnRecordingStopped;
     }
@@ -365,15 +409,23 @@ internal sealed class WasapiCaptureAdapter : ISystemAudioLoopbackCapture
 
     public WaveFormat WaveFormat => _capture.WaveFormat;
 
-    public void StartRecording() => _capture.StartRecording();
+    public void StartRecording() { ObjectDisposedException.ThrowIf(_captureDisposed, this); _capture.StartRecording(); }
 
-    public void StopRecording() => _capture.StopRecording();
+    public void StopRecording() { if (!_captureDisposed) _capture.StopRecording(); }
 
     public void Dispose()
     {
         _capture.DataAvailable -= OnDataAvailable;
         _capture.RecordingStopped -= OnRecordingStopped;
-        _capture.Dispose();
+        if (!_captureDisposed)
+        {
+            _capture.Dispose();
+            _captureDisposed = true;
+        }
+        // NAudio releases its AudioClient but does not own the supplied MMDevice.
+        // Only release the endpoint after native capture has drained; retain it on a failed release.
+        _ownedDevice?.Dispose();
+        _ownedDevice = null;
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e) =>

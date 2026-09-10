@@ -28,6 +28,8 @@ public sealed record DictionaryEntry
     /// Gets or sets the case sensitive value.
     /// </summary>
     public bool CaseSensitive { get; init; }
+    /// <summary>Optional acoustic candidate similarity threshold; null delegates to the engine.</summary>
+    public float? CtcMinSimilarity { get; init; }
     /// <summary>
     /// Gets or sets whether the original value is a regular expression.
     /// </summary>

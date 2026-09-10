@@ -16,6 +16,9 @@ public sealed record PluginTranscriptionResult(
     /// </summary>
     public IReadOnlyList<PluginTranscriptionSegment> Segments { get; init; } = [];
 
+    /// <summary>Token intervals supplied by local engines for acoustic vocabulary refinement.</summary>
+    public IReadOnlyList<VocabularyTokenTiming> TokenTimings { get; init; } = [];
+
     /// <summary>
     /// Backward-compatible constructor for plugins compiled against SDK &lt; 1.1.
     /// </summary>

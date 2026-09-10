@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="Moq" Version="4.*" />
+    <ProjectReference Include="../TypeWhisper.PluginSDK.PortableFixture/TypeWhisper.PluginSDK.PortableFixture.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalCtcVocabulary.cs" Link="LocalCtcVocabulary.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalTranscriptionPlugin.cs" Link="LocalTranscriptionPlugin.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalDictationSession.ApiModelOverride.cs" Link="LocalDictationSession.ApiModelOverride.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
+    <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/CloudTranscriptionPlugin.cs" Link="CloudTranscriptionPlugin.cs" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.Groq/TypeWhisper.Plugin.Groq.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <Compile Include="../../src/TypeWhisper.WinUI/MediaFoundationFileDecoder.cs" Link="MediaFoundationFileDecoder.cs" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <Compile Remove="MediaFoundationFileDecoderTests.cs" />
+    <Compile Remove="WindowsPluginSecretStoreTests.cs" />
+  </ItemGroup>
+</Project>

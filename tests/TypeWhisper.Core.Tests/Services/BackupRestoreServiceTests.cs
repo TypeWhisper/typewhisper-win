@@ -488,6 +488,60 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == "concurrent");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("file")]
+    [InlineData("future-source-kind")]
+    public async Task OptionalAcousticThresholdAndActualSourceKindSurviveRoundTrip(string? sourceKind)
+    {
+        var source = CreateProfile("metadata-source");
+        source.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "term", Original = "TypeWhisper", EntryType = DictionaryEntryType.Term, CtcMinSimilarity = 0.67f });
+        source.History.AddRecord(new TranscriptionRecord
+        { Id = "record", Timestamp = DateTime.UtcNow, RawText = "raw", FinalText = "final", SourceKind = sourceKind });
+        var json = await source.Backup.ExportAsync();
+        var destination = CreateProfile("metadata-target");
+        var imported = await destination.Backup.ImportAsync(json);
+        Assert.True(imported.Success, imported.Error);
+        Assert.Equal(0.67f, Assert.Single(destination.Dictionary.Entries).CtcMinSimilarity);
+        Assert.Equal(sourceKind, Assert.Single(destination.History.Records).SourceKind);
+        var repeated = await destination.Backup.ImportAsync(json);
+        Assert.True(repeated.Success, repeated.Error);
+        Assert.Single(destination.History.Records);
+        Assert.Single(destination.Dictionary.Entries);
+    }
+
+    [Fact]
+    public async Task DifferentAcousticThresholdIsReportedAsConflictWithoutOverwritingLocalChoice()
+    {
+        var source = CreateProfile("threshold-source");
+        source.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "term", Original = "TypeWhisper", EntryType = DictionaryEntryType.Term, CtcMinSimilarity = 0.67f });
+        var destination = CreateProfile("threshold-target");
+        destination.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "local", Original = "TypeWhisper", EntryType = DictionaryEntryType.Term, CtcMinSimilarity = 0.8f });
+        var result = await destination.Backup.ImportAsync(await source.Backup.ExportAsync());
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(1, result.Categories[TypeWhisper.Core.Models.Backup.BackupCategory.Dictionary].Conflicts);
+        Assert.Equal(0.8f, Assert.Single(destination.Dictionary.Entries).CtcMinSimilarity);
+    }
+
+    [Theory]
+    [InlineData(-0.01)]
+    [InlineData(1.01)]
+    public async Task InvalidAcousticThresholdFailsBeforeImport(double threshold)
+    {
+        var source = CreateProfile("invalid-threshold");
+        source.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "term", Original = "TypeWhisper", EntryType = DictionaryEntryType.Term });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync())!;
+        json["data"]!["dictionary"]!["entries"]![0]!["ctcMinSimilarity"] = threshold;
+        Assert.False(source.Backup.PreviewImport(json.ToJsonString()).IsValid);
+        var result = await source.Backup.ImportAsync(json.ToJsonString());
+        Assert.False(result.Success);
+        Assert.Null(Assert.Single(source.Dictionary.Entries).CtcMinSimilarity);
+    }
+
     private Profile CreateProfile(string name)
     {
         var root = Path.Combine(_directory, name);

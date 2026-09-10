@@ -31,7 +31,7 @@ The existing preflight response does not provide the CORS policy needed by an ar
 | Approach | Result | Reason |
 | --- | --- | --- |
 | Content script calls loopback HTTP | Reject | Content-script requests follow the page origin and CORS rules. It would also put the API token in the least trusted extension context. |
-| Service worker calls loopback HTTP with host permissions | Limited prototype only | It avoids page-origin CORS, but still expands localhost permissions and makes protected discovery and token handling part of the extension. |
+| Service worker calls loopback HTTP with host permissions | Limited preview only | It avoids page-origin CORS, but still expands localhost permissions and makes protected discovery and token handling part of the extension. |
 | WebExtension plus Native Messaging bridge | Recommended | The native host can read protected local state and expose a small, versioned command protocol while the token never enters the page or content script. |
 | Native overlay beside the browser field | Reject as primary UI | Cross-process positioning, focus, scroll, zoom, and accessibility behavior are fragile. |
 | Separate full extension per operating system | Avoid initially | Field discovery and insertion are browser concerns and should be shared. Keep only installation and native transport platform-specific. |

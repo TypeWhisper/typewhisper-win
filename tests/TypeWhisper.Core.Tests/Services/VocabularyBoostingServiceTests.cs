@@ -206,6 +206,16 @@ public class VocabularyBoostingServiceTests
     private static VocabularyBoostingService CreateSut(params DictionaryEntry[] entries) =>
         new(new FakeDictionaryService(entries));
 
+    [Fact]
+    public void Snapshot_ReusesCatalogWithoutObservingLaterCollectionEdits()
+    {
+        DictionaryEntry[] entries = [new() { Id = "word", EntryType = DictionaryEntryType.Term, Original = "TypeWhisper" }];
+        var snapshot = VocabularyBoostingService.CreateSnapshot(entries);
+        entries[0] = entries[0] with { Original = "SomethingElse" };
+        Assert.Equal("TypeWhisper", snapshot.Apply("type whisper"));
+        Assert.Equal("TypeWhisper for windows", snapshot.Apply("type whisper for windows"));
+    }
+
     private sealed class FakeDictionaryService : IDictionaryService
     {
         public FakeDictionaryService(IEnumerable<DictionaryEntry> entries)

@@ -86,6 +86,7 @@ public sealed record BackupDictionary
 
 public sealed record BackupDictionaryEntry
 {
+    public float? CtcMinSimilarity { get; init; }
     public required DictionaryEntryType EntryType { get; init; }
     public required string Original { get; init; }
     public string? Replacement { get; init; }
@@ -120,6 +121,7 @@ public sealed record BackupPlugin
 
 public sealed record BackupHistoryEntry
 {
+    public string? SourceKind { get; init; }
     public required DateTime Timestamp { get; init; }
     public required string RawText { get; init; }
     public required string FinalText { get; init; }

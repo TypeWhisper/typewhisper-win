@@ -1,7 +1,7 @@
 namespace TypeWhisper.PluginSDK.Models;
 
 /// <summary>
-/// Describes a plugin's metadata, loaded from plugin.json in the plugin directory.
+/// Describes a plugin's metadata, loaded from manifest.json in the plugin directory.
 /// </summary>
 public sealed record PluginManifest
 {
@@ -23,14 +23,23 @@ public sealed record PluginManifest
     /// <summary>Short description of the plugin.</summary>
     public string? Description { get; init; }
 
+#if WINDOWS
     /// <summary>Plugin category for UI grouping (e.g. "transcription", "llm", "memory", "action", "utility").</summary>
     public string? Category { get; init; }
 
-    /// <summary>Additional category identifiers for plugins that expose multiple capabilities.</summary>
+#endif
+
+    /// <summary>Category identifiers for plugins that expose multiple capabilities.</summary>
     public IReadOnlyList<string>? Categories { get; init; }
 
     /// <summary>Whether this is a local (on-device) or cloud-based plugin.</summary>
     public bool IsLocal { get; init; }
+
+    /// <summary>Package IDs required under Dependencies; they are shipped and removed with the parent.</summary>
+    public IReadOnlyList<string> BundledDependencies { get; init; } = [];
+
+    /// <summary>Internal packages are not bootstrapped as independently installed integrations.</summary>
+    public bool IsInternalDependency { get; init; }
 
     /// <summary>DLL file name containing the plugin type (e.g. "MyPlugin.dll").</summary>
     public required string AssemblyName { get; init; }

@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../TypeWhisper.Windows/Resources/Icons/app.ico</ApplicationIcon>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);TYPEWHISPER_WINUI;DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Velopack" Version="0.0.1298" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.Speech" Version="10.0.0" />
+    <PackageReference Include="WinUIEx" Version="2.9.3" />
+    <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
+    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
+    <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
+    <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
+    <ProjectReference Include="../TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
+    <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../TypeWhisper.Windows/Resources/Localization/en.json" LogicalName="TypeWhisper.LicenseStrings.json" />
+    <Compile Include="../TypeWhisper.Windows/Services/LicenseService.cs" Link="Platform/LicenseService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AppDistribution.cs" Link="Platform/AppDistribution.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="Platform/AudioRecordingService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/SoundService.cs" Link="Platform/SoundService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AudioDuckingService.cs" Link="Platform/AudioDuckingService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/MediaPauseService.cs" Link="Platform/MediaPauseService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/WindowsClipboardTransaction.cs" Link="Platform/WindowsClipboardTransaction.cs" />
+    <Compile Include="../TypeWhisper.Windows/Native/NativeMethods.Clipboard.cs" Link="Platform/NativeMethods.Clipboard.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="Platform/WasapiAudioInputCapture.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingResult.cs" Link="Platform/AudioRecordingResult.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/RecorderCaptureModels.cs" Link="Platform/RecorderCaptureModels.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/RecorderTranscriptionBuffer.cs" Link="Platform/RecorderTranscriptionBuffer.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/SystemAudioCaptureService.cs" Link="Platform/SystemAudioCaptureService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AudioCaptureDiagnostics.cs" Link="Platform/AudioCaptureDiagnostics.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/NonFatalExceptionFilter.cs" Link="Platform/NonFatalExceptionFilter.cs" />
+  </ItemGroup>
+  <Target Name="PublishWinUIResources" AfterTargets="Publish">
+    <ItemGroup>
+      <WinUIResource Include="$(OutputPath)**/*.pri;$(OutputPath)**/*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="BuildPortablePlugins" BeforeTargets="Publish">
+    <ItemGroup><PortablePluginProject Include="../../plugins/*/portable.proj" /></ItemGroup>
+    <MSBuild Projects="@(PortablePluginProject)" Targets="Build" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" BuildInParallel="false" />
+  </Target>
+  <Target Name="WriteDevelopmentStartupReceipt" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <PropertyGroup>
+      <_StartupSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))</_StartupSourceRoot>
+      <_StartupOutputRoot>$([System.IO.Path]::GetFullPath('$(PublishDir)', '$(MSBuildProjectDirectory)'))</_StartupOutputRoot>
+      <_StartupSourcePrefix>$([MSBuild]::EnsureTrailingSlash('$(_StartupSourceRoot)'))</_StartupSourcePrefix>
+      <_StartupInsideSource>$([System.String]::Copy('$(_StartupOutputRoot)').StartsWith('$(_StartupSourcePrefix)', System.StringComparison.OrdinalIgnoreCase))</_StartupInsideSource>
+      <_StartupSourceJson>$(_StartupSourceRoot.Replace('\', '/'))</_StartupSourceJson>
+      <_StartupOutputJson>$(_StartupOutputRoot.Replace('\', '/'))</_StartupOutputJson>
+    </PropertyGroup>
+    <Delete Files="$(_StartupOutputRoot)/typewhisper-dev-publication.json" />
+    <WriteLinesToFile File="$(_StartupOutputRoot)/typewhisper-dev-publication.json"
+      Lines="{&quot;Version&quot;:1,&quot;Identity&quot;:&quot;TypeWhisper.WinUI.Dev&quot;,&quot;SourceRoot&quot;:&quot;$(_StartupSourceJson)&quot;,&quot;OutputDirectory&quot;:&quot;$(_StartupOutputJson)&quot;}"
+      Overwrite="true" Encoding="UTF-8"
+      Condition="'$(Configuration)' == 'Debug' and '$(_StartupInsideSource)' != 'True' and '$(_StartupOutputRoot)' != '$(_StartupSourceRoot)' and Exists('$(_StartupOutputRoot)/TypeWhisper.WinUI.exe')" />
+  </Target>
+  <Target Name="PublishPortablePlugins" AfterTargets="Publish" DependsOnTargets="BuildPortablePlugins">
+    <MSBuild Projects="@(PortablePluginProject)" Targets="CopyPackage" Properties="Configuration=$(Configuration);PluginDestination=$([System.IO.Path]::GetFullPath('$(PublishDir)Plugins'))" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" />
+  </Target>
+  <Target Name="PublishBundledCli" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
+    <PropertyGroup>
+      <_CliPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)Cli', '$(MSBuildProjectDirectory)'))/</_CliPublishDirectory>
+    </PropertyGroup>
+    <MSBuild Projects="../TypeWhisper.Cli/TypeWhisper.Cli.csproj" Targets="Restore;Publish"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(_CliPublishDirectory);Platform=AnyCPU"
+      RemoveProperties="TargetFramework;RuntimeIdentifiers;OutputPath;OutDir;PublishSingleFile;PublishReadyToRun;WindowsAppSDKSelfContained" />
+    <Error Condition="!Exists('$(_CliPublishDirectory)typewhisper.exe')" Text="Bundled TypeWhisper CLI is missing." />
+  </Target>
+</Project>
