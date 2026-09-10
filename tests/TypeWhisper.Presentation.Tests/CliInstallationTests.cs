@@ -19,6 +19,67 @@ public sealed class CliInstallationTests : IDisposable
     }
     private CliInstallation Service() => new(_bundle, _install, () => _userPath, value => _userPath = value, Path.Combine(_root, "profile"));
 
+    private void Shared(string name, string content)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        File.WriteAllBytes(Path.Combine(_root, name), bytes);
+        File.WriteAllText(Path.Combine(_bundle, ".typewhisper-shared-runtime.json"),
+            System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
+            { [name] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)) }));
+    }
+
+    [Fact]
+    public void SharedRuntimeIsCopiedIntoIndependentInstallationAndRemovedAsOwned()
+    {
+        Shared("coreclr.dll", "shared runtime");
+        var service = Service();
+        service.Install();
+        File.Delete(Path.Combine(_root, "coreclr.dll"));
+        Assert.Equal("shared runtime", File.ReadAllText(Path.Combine(_install, "coreclr.dll")));
+        Assert.False(File.Exists(Path.Combine(_install, ".typewhisper-shared-runtime.json")));
+        service.Remove();
+        Assert.False(File.Exists(Path.Combine(_install, "coreclr.dll")));
+    }
+
+    [Fact]
+    public void ChangedSharedRuntimeFailsBeforeWritingInstallationOrPath()
+    {
+        Shared("coreclr.dll", "expected");
+        File.WriteAllText(Path.Combine(_root, "coreclr.dll"), "changed");
+        var previousPath = _userPath;
+        Assert.Throws<IOException>(() => Service().Install());
+        Assert.False(Directory.Exists(_install));
+        Assert.Equal(previousPath, _userPath);
+    }
+
+    [Theory]
+    [InlineData("../outside.dll")]
+    [InlineData("..\\outside.dll")]
+    [InlineData("C:outside.dll")]
+    [InlineData("cli-profile.json")]
+    public void SharedManifestRejectsPathsOutsideRuntimePayload(string name)
+    {
+        File.WriteAllText(Path.Combine(_bundle, ".typewhisper-shared-runtime.json"),
+            System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { [name] = new('a', 64) }));
+        Assert.Throws<IOException>(() => Service().Install());
+        Assert.False(Directory.Exists(_install));
+    }
+
+    [Fact]
+    public void SharedRuntimeUpdateReplacesOnlyPreviouslyOwnedPayload()
+    {
+        Shared("coreclr.dll", "old runtime");
+        var service = Service();
+        service.Install();
+        Shared("coreclr.dll", "new runtime");
+        service.Install();
+        Assert.Equal("new runtime", File.ReadAllText(Path.Combine(_install, "coreclr.dll")));
+        File.WriteAllText(Path.Combine(_install, "coreclr.dll"), "external change");
+        Assert.Throws<IOException>(service.Install);
+        service.Remove();
+        Assert.Equal("external change", File.ReadAllText(Path.Combine(_install, "coreclr.dll")));
+    }
+
     [Fact]
     public void InstallCopiesRuntimeAndProfileAndRemovePreservesOtherFilesAndPath()
     {

@@ -6,6 +6,6 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+    <ProjectReference Include="../TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
   </ItemGroup>
 </Project>

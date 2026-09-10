@@ -10,6 +10,7 @@ public sealed record CliInstallationState(bool Bundled, bool Installed, bool Can
 public sealed class CliInstallation
 {
     private const string ManifestName = ".typewhisper-cli.json";
+    private const string SharedRuntimeName = ".typewhisper-shared-runtime.json";
     private readonly string _bundle;
     private readonly string _destination;
     private readonly Func<string> _readPath;
@@ -43,8 +44,8 @@ public sealed class CliInstallation
     {
         if (!GetState().Bundled) throw new IOException("The CLI is not included in this build.");
         var previous = ReadManifest();
-        var files = Directory.EnumerateFiles(_bundle, "*", SearchOption.AllDirectories)
-            .ToDictionary(path => Path.GetRelativePath(_bundle, path), Hash, StringComparer.OrdinalIgnoreCase);
+        var sources = ReadBundleSources();
+        var files = sources.ToDictionary(file => file.Key, file => file.Value.Hash, StringComparer.OrdinalIgnoreCase);
         var profileBytes = _profileDirectory is null ? null : System.Text.Encoding.UTF8.GetBytes(
             JsonSerializer.Serialize(new { profile_directory = Path.GetFullPath(_profileDirectory) }));
         if (profileBytes is not null) files["cli-profile.json"] = Convert.ToHexString(SHA256.HashData(profileBytes));
@@ -67,7 +68,7 @@ public sealed class CliInstallation
             try
             {
                 if (file.Key == "cli-profile.json" && profileBytes is not null) File.WriteAllBytes(temporary, profileBytes);
-                else File.Copy(Path.Combine(_bundle, file.Key), temporary);
+                else File.Copy(sources[file.Key].Source, temporary);
                 if (Hash(temporary) != file.Value) throw new IOException("The CLI bundle changed during installation. Try again.");
                 // A recovered pending version becomes the old owned version before
                 // a newer bundle replaces it, including after multiple failed updates.
@@ -122,6 +123,33 @@ public sealed class CliInstallation
         Environment.ExpandEnvironmentVariables(value.Trim().Trim('"')).TrimEnd('\\', '/'),
         _destination.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
     private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+    private Dictionary<string, (string Source, string Hash)> ReadBundleSources()
+    {
+        var sources = Directory.EnumerateFiles(_bundle, "*", SearchOption.AllDirectories)
+            .Where(path => !string.Equals(Path.GetRelativePath(_bundle, path), SharedRuntimeName, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(path => Path.GetRelativePath(_bundle, path), path => (Source: path, Hash: Hash(path)), StringComparer.OrdinalIgnoreCase);
+        var manifest = Path.Combine(_bundle, SharedRuntimeName);
+        if (!File.Exists(manifest)) return sources; // Existing full bundles remain installable.
+        var shared = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(manifest))
+            ?? throw new IOException("The shared CLI runtime manifest is invalid.");
+        var appRoot = Path.GetDirectoryName(_bundle)!;
+        foreach (var (name, hash) in shared)
+        {
+            // Shared payloads are root-level runtime files, never arbitrary parent paths.
+            if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0
+                || name is "." or ".." or ManifestName or SharedRuntimeName or "cli-profile.json"
+                || !System.Text.RegularExpressions.Regex.IsMatch(hash ?? "", "\\A[0-9A-Fa-f]{64}\\z"))
+                throw new IOException("The shared CLI runtime manifest contains an invalid entry.");
+            var source = Path.Combine(appRoot, name);
+            for (var path = source; path is not null; path = Path.GetDirectoryName(path))
+                if ((File.Exists(path) || Directory.Exists(path)) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("Shared CLI runtime files must not use symbolic links.");
+            if (!File.Exists(source) || !string.Equals(Hash(source), hash, StringComparison.OrdinalIgnoreCase))
+                throw new IOException($"The shared CLI runtime file '{name}' is missing or changed. Reinstall the app and try again.");
+            if (!sources.TryAdd(name, (source, hash!.ToUpperInvariant()))) throw new IOException("The CLI bundle contains duplicate runtime entries.");
+        }
+        return sources;
+    }
     private static bool IsOwned(Manifest manifest, string relative, string hash) =>
         (manifest.Files.TryGetValue(relative, out var committed) && committed == hash)
         || (manifest.PendingFiles.TryGetValue(relative, out var pending) && pending == hash);

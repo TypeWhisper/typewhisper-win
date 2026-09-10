@@ -5,7 +5,7 @@
     <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>../TypeWhisper.Windows/Resources/Icons/app.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
@@ -17,7 +17,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
     <PackageReference Include="Velopack" Version="0.0.1298" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
@@ -27,10 +27,17 @@
     <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="WinUIEx" Version="2.9.3" />
     <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
-    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
+    <!-- The tray bridge references the old AppSDK metapackage. Restore the bridge
+         without that dependency graph; WinUI and its foundation are provided above. -->
+    <PackageDownload Include="H.NotifyIcon.WinUI" Version="[2.4.1]" />
+    <PackageReference Include="H.NotifyIcon" Version="2.4.1" />
+    <Reference Include="H.NotifyIcon.WinUI">
+      <HintPath>$(NuGetPackageRoot)h.notifyicon.winui/2.4.1/lib/net10.0-windows10.0.17763/H.NotifyIcon.WinUI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
-    <ProjectReference Include="../TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="../TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
     <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -83,5 +90,6 @@
       Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(_CliPublishDirectory);Platform=AnyCPU"
       RemoveProperties="TargetFramework;RuntimeIdentifiers;OutputPath;OutDir;PublishSingleFile;PublishReadyToRun;WindowsAppSDKSelfContained" />
     <Error Condition="!Exists('$(_CliPublishDirectory)typewhisper.exe')" Text="Bundled TypeWhisper CLI is missing." />
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../eng/Optimize-CliBundle.ps1&quot; -PublishDirectory &quot;$(PublishDir)/.&quot;" />
   </Target>
 </Project>
