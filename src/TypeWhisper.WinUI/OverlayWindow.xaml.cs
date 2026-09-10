@@ -398,8 +398,22 @@ public sealed partial class OverlayWindow : Window
             work.Y + work.Height - WindowHeight - 38));
     }
 
+    internal Func<DisplayArea>? DisplayProvider { get; set; }
+    private readonly Stopwatch _displayCheck = Stopwatch.StartNew();
+
     private void CompositionTarget_Rendering(object? sender, object e)
     {
+        if (_previewVisible && !IsCorrectionFeedbackVisible && DisplayProvider is not null && _displayCheck.ElapsedMilliseconds >= 250)
+        {
+            _displayCheck.Restart();
+            var area = DisplayProvider();
+            var current = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.None);
+            if (current?.DisplayId != area.DisplayId)
+            {
+                SetMode(_mode, area);
+                AnchorTranscript();
+            }
+        }
         if (IsCorrectionFeedbackVisible)
         {
             var remaining = Math.Clamp(1 - _feedbackClock.Elapsed.TotalSeconds / 12, 0, 1);

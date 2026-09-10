@@ -267,7 +267,7 @@ public sealed partial class MainWindow : Window
         _liveOverlay ??= new OverlayWindow(false, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0,
             () => _dictation.OverlayState, () => _dictation.LivePreviewText);
         _liveOverlay.SetLayout(OverlayPreferences);
-        _liveOverlay.ShowCorrectionFeedback(corrections, DisplayArea.GetFromWindowId(_liveOverlay.AppWindow.Id, DisplayAreaFallback.Primary));
+        _liveOverlay.ShowCorrectionFeedback(corrections, ResolveOverlayDisplayArea());
     }
     private void HideLearnedCorrections()
     {
@@ -300,7 +300,8 @@ public sealed partial class MainWindow : Window
             // Apply before showing a reused overlay, so a cloud recording cannot flash its old text window.
             _liveOverlay.SetTranscriptPreviewEnabled(showTranscript);
             _liveOverlay.SetLayout(OverlayPreferences);
-            _liveOverlay.SetMode(_overlayMode, DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
+            _liveOverlay.DisplayProvider = ResolveOverlayDisplayArea;
+            _liveOverlay.SetMode(_overlayMode, ResolveOverlayDisplayArea());
             _liveOverlay.ActivateWithoutTakingFocus();
             _liveOverlay.SetTechnicalDetailsEnabled(_technicalDetailsEnabled);
             if (_dictation.OverlayState.Phase == DictationPhase.Error) _ = HideErrorOverlayAsync(revision);
@@ -684,6 +685,20 @@ public sealed partial class MainWindow : Window
         PositionNearTopCenter(area);
     }
 
+    private DisplayArea ResolveOverlayDisplayArea()
+    {
+        if (OverlayPreferences.Screen == OverlayScreen.PrimaryScreen) return DisplayArea.Primary;
+        var foreground = GetForegroundWindow();
+        if (foreground != IntPtr.Zero)
+        {
+            var area = DisplayArea.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(foreground), DisplayAreaFallback.None);
+            if (area is not null) return area;
+        }
+        if (GetCursorPos(out var cursor))
+            return DisplayArea.GetFromPoint(new PointInt32(cursor.X, cursor.Y), DisplayAreaFallback.Primary);
+        return DisplayArea.Primary;
+    }
+
     private DisplayArea? ResolveInvocationDisplayArea()
     {
         var ownWindow = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -904,7 +919,7 @@ public sealed partial class MainWindow : Window
         EntryActionMenu.Create(LauncherActions()).ShowAt(CompactResults);
     }
 
-    private void ShowWaveformOverlay(DisplayArea? targetArea = null)
+    private void ShowWaveformOverlay()
     {
         try
         {
@@ -913,7 +928,8 @@ public sealed partial class MainWindow : Window
                 _overlay = new OverlayWindow(_transcriptPreviewEnabled);
                 _overlay.Closed += (_, _) => _overlay = null;
             }
-            var area = targetArea ?? DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+            var area = ResolveOverlayDisplayArea();
+            _overlay.DisplayProvider = ResolveOverlayDisplayArea;
             _overlay.SetLayout(OverlayPreferences);
             _overlay.SetMode(_overlayMode, area);
             _overlay.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
@@ -1269,7 +1285,7 @@ public sealed partial class MainWindow : Window
                     _settingsWindow.ShowOverlaySaveError(MetricsText.Text);
                     return;
                 }
-                var modeChanged = _overlayMode != preferences.Mode || _layoutPreferences.Anchor != preferences.Anchor
+                var modeChanged = _overlayMode != preferences.Mode || _layoutPreferences.Screen != preferences.Screen || _layoutPreferences.Anchor != preferences.Anchor
                     || _layoutPreferences.Left != preferences.Left || _layoutPreferences.Right != preferences.Right;
                 _layoutPreferences = preferences;
                 _overlayMode = preferences.Mode;
@@ -1278,11 +1294,11 @@ public sealed partial class MainWindow : Window
                 if (_liveOverlay?.IsPreviewVisible == true) UpdateLiveDictation();
                 if (_overlay?.IsPreviewVisible == true)
                 {
-                    // Keep the existing overlay's monitor and bottom anchor.
+                    // Position changes use the selected display and anchor.
                     // A text-only toggle must not resize or move its lower block.
                     _overlay.SetLayout(preferences);
                     if (modeChanged)
-                        _overlay.SetMode(_overlayMode, DisplayArea.GetFromWindowId(_overlay.AppWindow.Id, DisplayAreaFallback.Primary));
+                        _overlay.SetMode(_overlayMode, ResolveOverlayDisplayArea());
                     _overlay.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
                     _overlay.SetTechnicalDetailsEnabled(_technicalDetailsEnabled);
                 }
@@ -1291,7 +1307,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.PreviewRequested += (_, _) =>
             {
                 if (_overlay?.IsPreviewVisible == true) EndPreview_Click(this, new RoutedEventArgs());
-                else ShowWaveformOverlay(DisplayArea.GetFromWindowId(_settingsWindow!.AppWindow.Id, DisplayAreaFallback.Primary));
+                else ShowWaveformOverlay();
             };
         }
         _settingsWindow.SetPreferences(OverlayPreferences);

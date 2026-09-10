@@ -16,6 +16,7 @@
                 </Border>
             </Canvas>
         </Border>
+        <local:ChoicePicker x:Name="ScreenPicker" />
         <Grid ColumnSpacing="10">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <local:ChoicePicker x:Name="EdgePicker" />

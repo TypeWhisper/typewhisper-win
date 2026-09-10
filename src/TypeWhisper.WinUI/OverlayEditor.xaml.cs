@@ -24,6 +24,8 @@ public sealed partial class OverlayEditor : UserControl
     public OverlayEditor()
     {
         InitializeComponent();
+        ScreenPicker.Configure("Display", "desktop", "Overlay display");
+        ScreenPicker.SelectionChanged += value => Publish(_preferences with { Screen = Enum.Parse<OverlayScreen>(value) });
         EdgePicker.Configure("Screen edge", "desktop", "Overlay screen edge");
         AlignmentPicker.Configure("Alignment", "layout", "Overlay screen alignment");
         LeftWidgetPicker.Configure("Left widget", "workflow", "Overlay left widget");
@@ -45,6 +47,8 @@ public sealed partial class OverlayEditor : UserControl
     internal void SetPreferences(OverlayPreferences preferences)
     {
         _preferences = preferences;
+        ScreenPicker.SetOptions([new("ActiveScreen", "Active screen", "Follow the screen containing the active window"),
+            new("PrimaryScreen", "Primary screen", "Always use your main Windows display")], preferences.Screen.ToString());
         EdgePicker.SetOptions([new("top", "Top", "Live text opens downward"), new("bottom", "Bottom", "Live text opens upward")], preferences.AtTop ? "top" : "bottom");
         AlignmentPicker.SetOptions([new("0", "Left", "Align to the left edge"), new("1", "Center", "Keep centered"), new("2", "Right", "Align to the right edge")], preferences.HorizontalIndex.ToString());
         LeftWidgetPicker.SetOptions(Widgets, preferences.Left.ToString());
@@ -128,11 +132,11 @@ public sealed partial class OverlayEditor : UserControl
     private void Swap_Click(object sender, RoutedEventArgs e) => Swap();
     private void Reset_Click(object sender, RoutedEventArgs e) => Publish(_preferences with
     {
-        Anchor = OverlayAnchor.BottomCenter, Left = OverlayWidget.Waveform, Right = OverlayWidget.Timer
+        Screen = OverlayScreen.ActiveScreen, Anchor = OverlayAnchor.BottomCenter, Left = OverlayWidget.Waveform, Right = OverlayWidget.Timer
     });
     internal bool CloseOpenPicker()
     {
-        foreach (var picker in new[] { EdgePicker, AlignmentPicker, LeftWidgetPicker, RightWidgetPicker })
+        foreach (var picker in new[] { ScreenPicker, EdgePicker, AlignmentPicker, LeftWidgetPicker, RightWidgetPicker })
             if (picker.IsPopupOpen) { picker.ClosePopup(); return true; }
         return false;
     }

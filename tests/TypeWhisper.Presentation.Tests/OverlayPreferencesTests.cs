@@ -15,11 +15,31 @@ public sealed class OverlayPreferencesTests : IDisposable
         Directory.CreateDirectory(_directory);
         File.WriteAllText(FilePath, "{\"Mode\":1,\"LiveText\":false,\"TechnicalDetails\":true,\"Anchor\":2,\"Left\":3,\"Right\":0}");
         var loaded = OverlayPreferencesStore.Read(FilePath);
+        Assert.Equal(OverlayScreen.ActiveScreen, loaded.Screen);
         Assert.Equal(12, loaded.LiveTranscriptionFontSize);
         Assert.Equal(1500, loaded.PreviewBubbleAutoHideMilliseconds);
         Assert.Equal(OverlayMode.Compact, loaded.Mode);
         Assert.Equal(OverlayAnchor.TopRight, loaded.Anchor);
         Assert.False(loaded.LiveText);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void DisplayChoicePersists(int screen)
+    {
+        var expected = new OverlayPreferences(OverlayMode.Standard, true, false, Screen: (OverlayScreen)screen);
+        OverlayPreferencesStore.Save(FilePath, expected);
+        Assert.Equal(expected, OverlayPreferencesStore.Read(FilePath));
+    }
+
+    [Fact]
+    public void InvalidDisplayDoesNotReplaceSavedChoice()
+    {
+        var expected = new OverlayPreferences(OverlayMode.Standard, true, false, Screen: OverlayScreen.PrimaryScreen);
+        OverlayPreferencesStore.Save(FilePath, expected);
+        Assert.Throws<ArgumentException>(() => OverlayPreferencesStore.Save(FilePath, expected with { Screen = (OverlayScreen)99 }));
+        Assert.Equal(expected, OverlayPreferencesStore.Read(FilePath));
     }
 
     [Theory]
