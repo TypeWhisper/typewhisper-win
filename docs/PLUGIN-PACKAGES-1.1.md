@@ -18,6 +18,12 @@ with `dotnet test`, or use `eng/Test-WinUIHeadless.ps1`, which discovers plugin-
 test projects alongside the SDK/host and presentation checks. Tests do not require
 Computer Use, a desktop, downloaded models, or live API credentials.
 
+The Plugins Smoke workflow builds only packages with changes under their own directory
+on pull requests and pushes to `main`, keeping legacy and v2 packages separate.
+Shared SDK, host and workflow edits do not expand that build matrix. For a full
+cross-plugin compatibility sweep, start Plugins Smoke manually with **Run workflow**.
+Manifest validation and the separate headless test suites still run normally.
+
 A portable package is a folder containing:
 
 ```text
