@@ -27,73 +27,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test plugin selection
+        shell: pwsh
+        run: ./eng/Get-ChangedPluginProjects.Tests.ps1
+
       - id: discover
         shell: pwsh
+        env:
+          PLUGIN_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PLUGIN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          # Test projects live under plugins/*/Tests and are exercised by WinUI headless checks.
-          # Only top-level plugin projects are distributable packages.
-          $allProjects = @(Get-ChildItem plugins/*/*.csproj | Sort-Object FullName)
-          if ($allProjects.Count -eq 0) {
-            throw "No plugin projects found under plugins/."
-          }
-
-          $runAll = $env:GITHUB_EVENT_NAME -ne 'pull_request'
-          $selectedPluginDirs = [ordered]@{}
-          $changedFiles = @()
-
-          if (-not $runAll) {
-            $baseSha = '${{ github.event.pull_request.base.sha }}'
-            $changedFiles = @(git diff --name-only $baseSha HEAD | ForEach-Object { $_.Replace('\', '/') })
-
-            foreach ($file in $changedFiles) {
-              if (
-                $file -eq '.github/workflows/plugins-smoke.yml' -or
-                $file -eq 'Directory.Build.props' -or
-                $file -like 'src/TypeWhisper.PluginSDK/*'
-              ) {
-                $runAll = $true
-                break
-              }
-
-              if ($file -match '^plugins/([^/]+)/') {
-                $selectedPluginDirs[$Matches[1]] = $true
-              }
-            }
-          }
-
-          $projects = @()
-          foreach ($project in $allProjects) {
-            $relativePath = $project.FullName.Replace($env:GITHUB_WORKSPACE + [System.IO.Path]::DirectorySeparatorChar, '').Replace('\', '/')
-            $parts = $relativePath.Split('/')
-            $pluginDir = if ($parts.Count -ge 2) { $parts[1] } else { '' }
-
-            if ($runAll -or $selectedPluginDirs.Contains($pluginDir)) {
-              $projects += [ordered]@{
-                name = $project.BaseName
-                path = $relativePath
-              }
-            }
-          }
-
-          $scanMode = if ($runAll) { 'all' } elseif ($projects.Count -gt 0) { 'changed' } else { 'none' }
-          $json = if ($projects.Count -gt 0) { ConvertTo-Json -InputObject $projects -Compress -Depth 3 } else { '[]' }
-          $hasProjects = if ($projects.Count -gt 0) { 'true' } else { 'false' }
-
-          Write-Host "Plugin smoke scan mode: $scanMode"
-          if ($changedFiles.Count -gt 0) {
-            Write-Host "Changed files:"
-            $changedFiles | ForEach-Object { Write-Host "  $_" }
-          }
-          if ($projects.Count -gt 0) {
-            Write-Host "Selected plugin projects:"
-            $projects | ForEach-Object { Write-Host "  $($_.path)" }
-          } else {
-            Write-Host "No plugin projects selected for this pull request."
-          }
-
+          $selection = ./eng/Get-ChangedPluginProjects.ps1 -EventName $env:GITHUB_EVENT_NAME -BaseSha $env:PLUGIN_BASE_SHA -HeadSha $env:PLUGIN_HEAD_SHA
+          $json = ConvertTo-Json -InputObject @($selection.projects) -Compress -Depth 3
+          $hasProjects = $selection.has_projects.ToString().ToLowerInvariant()
+          Write-Host "Plugin smoke scan mode: $($selection.scan_mode)"
+          $selection.projects | ForEach-Object { Write-Host "  $($_.path)" }
           "projects=$json" >> $env:GITHUB_OUTPUT
           "has_projects=$hasProjects" >> $env:GITHUB_OUTPUT
-          "scan_mode=$scanMode" >> $env:GITHUB_OUTPUT
+          "scan_mode=$($selection.scan_mode)" >> $env:GITHUB_OUTPUT
 
   validate-metadata:
     runs-on: windows-latest
@@ -106,7 +57,7 @@ jobs:
         run: |
           $errors = [System.Collections.Generic.List[string]]::new()
 
-          foreach ($manifestPath in Get-ChildItem plugins -Recurse -Filter manifest.json | Sort-Object FullName) {
+          foreach ($manifestPath in Get-ChildItem plugins, plugins-v2 -Recurse -Filter manifest.json | Sort-Object FullName) {
             try {
               $manifest = Get-Content $manifestPath.FullName -Raw | ConvertFrom-Json
             } catch {

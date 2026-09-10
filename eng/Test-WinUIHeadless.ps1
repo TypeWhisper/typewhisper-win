@@ -20,7 +20,7 @@ $checks = @(
     @{ Name = 'Presentation'; Project = 'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj' }
 )
 # Each portable plugin owns its tests; discovery needs no host-side provider list.
-$checks += @(Get-ChildItem -Path (Join-Path $repository 'plugins/*/Tests/*.csproj') | ForEach-Object {
+$checks += @(Get-ChildItem -Path @((Join-Path $repository 'plugins/*/Tests/*.csproj'), (Join-Path $repository 'plugins-v2/*/Tests/*.csproj')) | ForEach-Object {
     @{ Name = $_.BaseName; Project = [IO.Path]::GetRelativePath($repository, $_.FullName) }
 })
 $results = [System.Collections.Generic.List[object]]::new()

@@ -4,11 +4,15 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    private void StartCloudStream()
+    private async Task StartCloudStreamAsync()
     {
         if (!LivePreviewEnabled || !SupportsLiveTranscription || !UsesRegistryProvider ||
             ActiveRegistryProvider is not { SupportsStreaming: true }) return;
         var selection = RegistrySelectionId(_providerId);
+        var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
+        var canStream = await PluginRuntime.UseTranscriptionAsync(selection, (engine, _) =>
+            Task.FromResult(engine.SupportsStreamingForPrompt(LanguageHintTranscription.CreateDictionaryPrompt(engine, dictionary?.EnabledTerms))), _operationCancellation.Token);
+        if (!canStream) return;
         var languages = _languageAtStart != "auto" ? new[] { _languageAtStart }
             : ActiveRegistryProvider.SupportsLanguageHints
                 ? _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -26,7 +30,7 @@ internal sealed partial class LocalDictationSession
                 if (_disposed || !ReferenceEquals(_cloudStream, stream) || !_audio.IsRecording) return;
                 LivePreviewText = "Live connection interrupted. The full recording will be transcribed after stopping.";
                 LivePreviewChanged?.Invoke();
-            }), _operationCancellation.Token);
+            }), _operationCancellation.Token, dictionary?.EnabledTerms);
         _cloudStream = stream;
     }
 
