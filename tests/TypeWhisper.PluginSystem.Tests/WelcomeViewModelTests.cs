@@ -776,7 +776,10 @@ public sealed class WelcomeViewModelTests
 
     private sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
     {
-        public IAudioInputCapture Create(int deviceNumber, NAudio.Wave.WaveFormat waveFormat, int bufferMilliseconds) =>
+        public IAudioInputCapture Create(
+            AudioInputDeviceSelection selection,
+            NAudio.Wave.WaveFormat waveFormat,
+            int bufferMilliseconds) =>
             throw new InvalidOperationException("No capture should be created when no input device exists.");
     }
 

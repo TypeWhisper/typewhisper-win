@@ -21,7 +21,7 @@ public sealed class WorkflowProviderReleaseMetadataTests
         { "TypeWhisper.Plugin.Gemini", "1.3.0" },
         { "TypeWhisper.Plugin.GemmaLocal", "1.0.1" },
         { "TypeWhisper.Plugin.Groq", "1.0.6" },
-        { "TypeWhisper.Plugin.OpenAi", "1.1.2" },
+        { "TypeWhisper.Plugin.OpenAi", "1.1.3" },
         { "TypeWhisper.Plugin.OpenAiCompatible", "1.0.6" },
         { "TypeWhisper.Plugin.OpenRouter", "1.1.1" },
         { "TypeWhisper.Plugin.Xai", "1.0.1" },

@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.sherpa-onnx",
   "name": "NVIDIA Parakeet",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "TypeWhisper",
   "category": "transcription",
   "description": "Offline transcription with NVIDIA Parakeet and Canary. Audio is processed on your device.",

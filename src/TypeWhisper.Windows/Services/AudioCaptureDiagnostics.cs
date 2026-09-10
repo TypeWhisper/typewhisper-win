@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using TypeWhisper.Core;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -14,9 +15,7 @@ internal static class AudioCaptureDiagnostics
             StringComparison.Ordinal);
 
     private static readonly string LogPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        SafePathSegment("TypeWhisper"),
-        SafePathSegment("Logs"),
+        TypeWhisperEnvironment.LogsPath,
         SafePathSegment("audio-capture-diagnostics.log"));
 
     internal static event Action<string>? MessageLogged;

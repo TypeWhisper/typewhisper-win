@@ -22,6 +22,33 @@ if (args.Contains("--help", StringComparer.Ordinal))
     Console.WriteLine("--ignore-user-config --ignore-rules --ephemeral --output-schema --strict-config --json --sandbox --skip-git-repo-check");
     Console.WriteLine("--safe-mode --tools --strict-mcp-config --no-session-persistence --json-schema --disallowedTools --disable-slash-commands --no-chrome");
     Console.WriteLine("--print --output-format --json-schema");
+    Console.WriteLine("--pure --model --agent --format --title --dir");
+    return;
+}
+
+if (args.SequenceEqual(new[] { "auth", "list" }, StringComparer.Ordinal))
+{
+    if (scenario.Contains("signed-out", StringComparison.Ordinal)
+        || scenario.Contains("opencode-auth-error", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine("No OpenCode Zen credentials");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    if (scenario.Contains("opencode-auth-missing", StringComparison.Ordinal))
+    {
+        Console.WriteLine("GitHub Copilot");
+        return;
+    }
+
+    var authentication = scenario.Contains("opencode-auth-ansi", StringComparison.Ordinal)
+        ? "\u001b[32mOpenCode Zen\u001b[0m"
+        : "OpenCode Zen";
+    if (scenario.Contains("opencode-auth-stderr", StringComparison.Ordinal))
+        Console.Error.WriteLine(authentication);
+    else
+        Console.WriteLine(authentication);
     return;
 }
 
@@ -44,6 +71,34 @@ if (args.SequenceEqual(new[] { "login", "status" }, StringComparer.Ordinal)
     Console.WriteLine(executableName.Contains("claude", StringComparison.Ordinal)
         ? "{\"loggedIn\":true,\"authMethod\":\"subscription\"}"
         : "Logged in using subscription");
+    return;
+}
+
+
+if (args.SequenceEqual(new[] { "models", "opencode", "--verbose", "--pure" }, StringComparer.Ordinal))
+{
+    if (scenario.Contains("catalog-fail", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine("catalog unavailable");
+        Environment.ExitCode = 2;
+        return;
+    }
+
+    WriteModel(
+        "paid-model",
+        "Paid Model",
+        inputCost: 1,
+        outputCost: 2,
+        cacheCost: 0);
+    if (!scenario.Contains("catalog-none", StringComparison.Ordinal))
+    {
+        WriteModel(
+            "muse-spark-1.3-contributor-free",
+            "Muse Spark 1.3 Free",
+            inputCost: 0,
+            outputCost: 0,
+            cacheCost: 0);
+    }
     return;
 }
 
@@ -162,8 +217,42 @@ else if (executableName.Contains("claude", StringComparison.Ordinal))
 {
     Console.WriteLine("{\"type\":\"result\",\"subtype\":\"success\",\"structured_output\":{\"text\":\"processed\"}}");
 }
+else if (executableName.Contains("opencode", StringComparison.Ordinal))
+{
+    Console.WriteLine("{\"type\":\"step_start\",\"part\":{\"type\":\"step-start\"}}");
+    Console.WriteLine("{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"{\\\"text\\\":\\\"processed\\\"}\"}}");
+}
 else
 {
     Console.WriteLine("{\"type\":\"init\"}");
     Console.WriteLine("{\"type\":\"result\",\"structured_output\":{\"text\":\"processed\"}}");
+}
+
+static void WriteModel(
+    string id,
+    string name,
+    double inputCost,
+    double outputCost,
+    double cacheCost)
+{
+    Console.WriteLine($"opencode/{id}");
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        id,
+        providerID = "opencode",
+        name,
+        status = "active",
+        capabilities = new
+        {
+            input = new { text = true, image = false },
+            output = new { text = true, image = false }
+        },
+        cost = new
+        {
+            input = inputCost,
+            output = outputCost,
+            cache = new { read = cacheCost, write = 0 }
+        },
+        variants = new { low = new { }, high = new { } }
+    }, new JsonSerializerOptions { WriteIndented = true }));
 }

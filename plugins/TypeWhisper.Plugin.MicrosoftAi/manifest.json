@@ -1,0 +1,18 @@
+{
+  "id": "com.typewhisper.microsoft-ai",
+  "name": "Microsoft AI",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.9",
+  "author": "TypeWhisper",
+  "description": "Fast cloud transcription with Microsoft MAI Transcribe, language detection, terminology biasing, transcript styles, timestamps, and optional speaker diarization. Requires an Azure Speech endpoint and API key.",
+  "descriptions": {
+    "de": "Schnelle Cloud-Transkription mit Microsoft MAI Transcribe, Spracherkennung, Fachbegriffs-Biasing, Transkriptionsstilen, Zeitstempeln und optionaler Sprechererkennung. Erfordert einen Azure-Speech-Endpunkt und API-Key."
+  },
+  "category": "transcription",
+  "categories": ["transcription"],
+  "isLocal": false,
+  "iconSystemName": "waveform.and.mic",
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.MicrosoftAi.dll",
+  "pluginClass": "TypeWhisper.Plugin.MicrosoftAi.MicrosoftAiPlugin"
+}

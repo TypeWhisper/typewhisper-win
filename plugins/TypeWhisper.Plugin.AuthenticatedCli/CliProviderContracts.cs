@@ -9,7 +9,8 @@ internal enum CliProviderKind
 {
     Codex,
     Claude,
-    Antigravity
+    Antigravity,
+    OpenCode
 }
 
 internal enum CliAvailabilityState
@@ -23,6 +24,8 @@ internal enum CliAvailabilityState
     SignedOut,
     AuthenticationUnknown,
     SafetyControlsUnavailable,
+    ModelCatalogUnavailable,
+    NoFreeModels,
     Ready,
     Error
 }
@@ -32,7 +35,8 @@ internal sealed record CliAvailabilitySnapshot(
     string? ExecutablePath,
     string? Version,
     IReadOnlyList<string> Candidates,
-    DateTimeOffset CheckedAt)
+    DateTimeOffset CheckedAt,
+    int CatalogRevision = 0)
 {
     internal static CliAvailabilitySnapshot Initial { get; } = new(
         CliAvailabilityState.Checking,
@@ -45,7 +49,8 @@ internal sealed record CliAvailabilitySnapshot(
         State == other.State
         && string.Equals(ExecutablePath, other.ExecutablePath, StringComparison.OrdinalIgnoreCase)
         && string.Equals(Version, other.Version, StringComparison.Ordinal)
-        && Candidates.SequenceEqual(other.Candidates, StringComparer.OrdinalIgnoreCase);
+        && Candidates.SequenceEqual(other.Candidates, StringComparer.OrdinalIgnoreCase)
+        && CatalogRevision == other.CatalogRevision;
 }
 
 internal sealed record CliPromptEnvelope(
@@ -149,10 +154,26 @@ internal sealed class CliProviderDescriptor
             [],
             ["--print", "--output-format", "--json-schema"],
             [],
-            safetyControlsAvailable: false)
+            safetyControlsAvailable: false),
+        new(
+            CliProviderKind.OpenCode,
+            "opencode",
+            "opencode.exe",
+            "authenticated-cli-opencode",
+            "Provider.OpenCode",
+            "https://opencode.ai/docs/cli/",
+            ["--version"],
+            ["run", "--help"],
+            ["auth", "list"],
+            ["--pure", "--model", "--agent", "--format", "--title", "--dir"],
+            ["XDG_DATA_HOME"],
+            safetyControlsAvailable: true)
     ];
 
-    internal IReadOnlyList<string> CreateInvocationArguments(string workingDirectory, string schemaPath) =>
+    internal IReadOnlyList<string> CreateInvocationArguments(
+        string workingDirectory,
+        string schemaPath,
+        string model = "default") =>
         Kind switch
         {
             CliProviderKind.Codex =>
@@ -218,6 +239,16 @@ internal sealed class CliProviderDescriptor
                 "--output-format", "stream-json",
                 "--json-schema", schemaPath
             ],
+            CliProviderKind.OpenCode =>
+            [
+                "run",
+                "--pure",
+                "--format", "json",
+                "--title", "TypeWhisper",
+                "--dir", workingDirectory,
+                "--agent", "typewhisper",
+                "--model", model
+            ],
             _ => throw new InvalidOperationException("Unknown authenticated CLI provider.")
         };
 
@@ -233,17 +264,30 @@ internal sealed class CliProviderDescriptor
             $@"(?<![0-9A-Za-z_-]){Regex.Escape(token)}(?![0-9A-Za-z_-])",
             RegexOptions.CultureInvariant));
 
-    internal bool IsAuthenticated(int exitCode, string stdout)
+    internal bool IsAuthenticated(int exitCode, string output)
     {
         if (exitCode != 0)
             return false;
+
+        if (Kind == CliProviderKind.OpenCode)
+        {
+            var sanitized = Regex.Replace(
+                output,
+                "\\x1B(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\x07]*(?:\\x07|\\x1B\\\\))",
+                "",
+                RegexOptions.CultureInvariant);
+            return Regex.IsMatch(
+                sanitized,
+                @"(?<![0-9A-Za-z])OpenCode\s+Zen(?![0-9A-Za-z])",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
 
         if (Kind != CliProviderKind.Claude)
             return true;
 
         try
         {
-            using var document = JsonDocument.Parse(stdout);
+            using var document = JsonDocument.Parse(output);
             return document.RootElement.ValueKind == JsonValueKind.Object
                    && document.RootElement.TryGetProperty("loggedIn", out var loggedIn)
                    && loggedIn.ValueKind == JsonValueKind.True;
@@ -261,6 +305,7 @@ internal sealed class CliProviderDescriptor
             CliProviderKind.Codex => ParseCodexOutput(stdout),
             CliProviderKind.Claude => ParseClaudeOutput(stdout),
             CliProviderKind.Antigravity => ParseAntigravityOutput(stdout),
+            CliProviderKind.OpenCode => ParseOpenCodeOutput(stdout),
             _ => null
         };
 
@@ -320,6 +365,69 @@ internal sealed class CliProviderDescriptor
             return ParseLogicalResult(structured);
 
         return null;
+    }
+
+    private static string? ParseOpenCodeOutput(string stdout)
+    {
+        string? finalText = null;
+        foreach (var line in NonEmptyLines(stdout))
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            if (!TryGetString(root, "type", out var type)
+                || !string.Equals(type, "text", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!root.TryGetProperty("part", out var part)
+                || part.ValueKind != JsonValueKind.Object
+                || !TryGetString(part, "type", out var partType)
+                || !string.Equals(partType, "text", StringComparison.Ordinal)
+                || !TryGetString(part, "text", out var text))
+            {
+                return null;
+            }
+
+            finalText = text;
+        }
+
+        return ParseLogicalResult(finalText);
+    }
+
+    internal string ExtractFailureText(string standardOutput, string standardError)
+    {
+        if (Kind != CliProviderKind.OpenCode)
+            return standardOutput + "\n" + standardError;
+
+        var messages = new List<string>();
+        foreach (var line in NonEmptyLines(standardOutput + "\n" + standardError))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                if (error.TryGetProperty("data", out var data)
+                    && data.ValueKind == JsonValueKind.Object
+                    && TryGetString(data, "message", out var dataMessage))
+                {
+                    messages.Add(dataMessage);
+                }
+                else if (TryGetString(error, "message", out var message))
+                {
+                    messages.Add(message);
+                }
+            }
+            catch (JsonException)
+            {
+                // OpenCode failures are classified only from explicit structured error fields.
+            }
+        }
+
+        return string.Join('\n', messages);
     }
 
     private static string? ParseAntigravityOutput(string stdout)

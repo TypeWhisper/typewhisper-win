@@ -22,6 +22,7 @@
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.Meta\Tests\*.cs" LinkBase="Meta" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\Tests\*.cs" LinkBase="OpenRouter" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.Gemini\Tests\**\*.cs" LinkBase="Gemini" />
+    <Compile Include="..\..\plugins\TypeWhisper.Plugin.MicrosoftAi\Tests\**\*.cs" LinkBase="MicrosoftAi" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\Tests\*.cs" LinkBase="LiveTranscript" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.SmallestAi\Tests\*.cs" LinkBase="SmallestAi" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.FillerWords\Tests\*.cs" LinkBase="FillerWords" />
@@ -37,6 +38,7 @@
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\TypeWhisper.Plugin.OpenRouter.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Groq\TypeWhisper.Plugin.Groq.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Gemini\TypeWhisper.Plugin.Gemini.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.MicrosoftAi\TypeWhisper.Plugin.MicrosoftAi.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Xai\TypeWhisper.Plugin.Xai.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.ElevenLabs\TypeWhisper.Plugin.ElevenLabs.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Reson8\TypeWhisper.Plugin.Reson8.csproj" />

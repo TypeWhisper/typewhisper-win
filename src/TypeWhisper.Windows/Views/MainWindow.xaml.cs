@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private static partial int SetWindowLongW(IntPtr hWnd, int nIndex, int dwNewLong);
 
     private readonly ISettingsService _settings;
+    private readonly CoalescedRefreshDispatcher _audioRefreshDispatcher;
     private readonly RecordingOverlayViewModel _viewModel;
     private readonly DispatcherTimer _overlayRecoveryTimer;
     private OverlayPlacementTarget _currentPlacementTarget = OverlayPlacementTarget.CursorMonitor;
@@ -40,12 +41,17 @@ public partial class MainWindow : Window
     /// <summary>
     /// Initializes a new instance of the MainWindow class.
     /// </summary>
-    public MainWindow(RecordingOverlayViewModel viewModel, ISettingsService settings)
+    public MainWindow(
+        RecordingOverlayViewModel viewModel,
+        ISettingsService settings,
+        AudioRecordingService audio)
     {
         InitializeComponent();
         DataContext = viewModel;
         _viewModel = viewModel;
         _settings = settings;
+        _audioRefreshDispatcher = new CoalescedRefreshDispatcher(
+            audio.RefreshAfterDisplayOrPowerChange);
         _overlayRecoveryTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = OverlayRecoveryDelay
@@ -114,20 +120,31 @@ public partial class MainWindow : Window
         ReassertTopmost();
     }
 
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
         DispatchPrimaryOverlayRecovery();
+        DispatchAudioCaptureRefresh();
+    }
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
     {
         if (e.Mode == PowerModes.Resume)
+        {
             DispatchPrimaryOverlayRecovery();
+            DispatchAudioCaptureRefresh();
+        }
     }
 
     private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {
         if (e.Reason == SessionSwitchReason.SessionUnlock)
+        {
             DispatchPrimaryOverlayRecovery();
+            DispatchAudioCaptureRefresh();
+        }
     }
+
+    private void DispatchAudioCaptureRefresh() => _audioRefreshDispatcher.Request();
 
     private void DispatchPrimaryOverlayRecovery()
     {

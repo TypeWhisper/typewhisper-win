@@ -88,6 +88,38 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
             Foreground = Brushes.Gray,
             FontSize = 11
         };
+        var catalogStatus = new TextBlock
+        {
+            Margin = new Thickness(0, 6, 0, 0),
+            Foreground = Brushes.LightGray,
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = descriptor.Kind == CliProviderKind.OpenCode ? Visibility.Visible : Visibility.Collapsed
+        };
+        AutomationProperties.SetAutomationId(catalogStatus, $"AuthenticatedCliCatalogState_{descriptor.Key}");
+        var freeModelCount = new TextBlock
+        {
+            Margin = new Thickness(0, 3, 0, 0),
+            Foreground = Brushes.LightGray,
+            Visibility = descriptor.Kind == CliProviderKind.OpenCode ? Visibility.Visible : Visibility.Collapsed
+        };
+        AutomationProperties.SetAutomationId(freeModelCount, $"AuthenticatedCliFreeModelCount_{descriptor.Key}");
+        var freeOnlyNotice = new TextBlock
+        {
+            Text = descriptor.Kind == CliProviderKind.OpenCode ? L("Settings.OpenCodeFreeOnly") : "",
+            Margin = new Thickness(0, 8, 0, 0),
+            Foreground = Brushes.LightGray,
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = descriptor.Kind == CliProviderKind.OpenCode ? Visibility.Visible : Visibility.Collapsed
+        };
+        var privacyWarning = new TextBlock
+        {
+            Text = descriptor.Kind == CliProviderKind.OpenCode ? L("Settings.OpenCodePrivacyWarning") : "",
+            Margin = new Thickness(0, 6, 0, 0),
+            Foreground = Brushes.Orange,
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = descriptor.Kind == CliProviderKind.OpenCode ? Visibility.Visible : Visibility.Collapsed
+        };
+        AutomationProperties.SetAutomationId(privacyWarning, $"AuthenticatedCliPrivacyWarning_{descriptor.Key}");
         var pickerLabel = new TextBlock
         {
             Text = L("Settings.SelectExecutable"),
@@ -134,7 +166,18 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
             Margin = new Thickness(0, 8, 0, 0),
             Tag = descriptor.DocumentationUrl
         };
+        AutomationProperties.SetAutomationId(docsButton, $"AuthenticatedCliDocs_{descriptor.Key}");
         docsButton.Click += OnOpenDocsClick;
+        var zenTermsButton = new Button
+        {
+            Content = descriptor.Kind == CliProviderKind.OpenCode ? L("Settings.OpenCodeTerms") : "",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 8, 0, 0),
+            Tag = "https://opencode.ai/docs/zen/",
+            Visibility = descriptor.Kind == CliProviderKind.OpenCode ? Visibility.Visible : Visibility.Collapsed
+        };
+        AutomationProperties.SetAutomationId(zenTermsButton, $"AuthenticatedCliZenTerms_{descriptor.Key}");
+        zenTermsButton.Click += OnOpenDocsClick;
 
         var content = new StackPanel();
         content.Children.Add(title);
@@ -142,10 +185,15 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
         content.Children.Add(path);
         content.Children.Add(version);
         content.Children.Add(checkedAt);
+        content.Children.Add(catalogStatus);
+        content.Children.Add(freeModelCount);
+        content.Children.Add(freeOnlyNotice);
+        content.Children.Add(privacyWarning);
         content.Children.Add(pickerLabel);
         content.Children.Add(picker);
         content.Children.Add(help);
         content.Children.Add(docsButton);
+        content.Children.Add(zenTermsButton);
 
         var container = new Border
         {
@@ -158,7 +206,17 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
             Child = content
         };
 
-        return new ProviderCard(descriptor, container, state, path, version, checkedAt, pickerLabel, picker);
+        return new ProviderCard(
+            descriptor,
+            container,
+            state,
+            path,
+            version,
+            checkedAt,
+            catalogStatus,
+            freeModelCount,
+            pickerLabel,
+            picker);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -224,6 +282,22 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
                     ? ""
                     : L("Settings.LastChecked", snapshot.CheckedAt.ToLocalTime().ToString("g"));
 
+                if (card.Descriptor.Kind == CliProviderKind.OpenCode)
+                {
+                    var catalog = _plugin.GetOpenCodeCatalogStatus();
+                    card.FreeModelCount.Text = L("Settings.OpenCodeFreeModelCount", catalog.FreeModelCount);
+                    card.CatalogStatus.Text = catalog.LastRefreshError is not null
+                        ? catalog.IsLastKnownGood
+                            ? L("Settings.OpenCodeCatalogCached")
+                            : L("Settings.OpenCodeCatalogFailed")
+                        : catalog.RefreshedAt is not null
+                            ? L("Settings.OpenCodeCatalogCurrent")
+                            : L("Settings.OpenCodeCatalogPending");
+                    card.CatalogStatus.Foreground = catalog.LastRefreshError is null
+                        ? Brushes.LightGray
+                        : Brushes.Orange;
+                }
+
                 var showPicker = snapshot.Candidates.Count > 1
                                  || snapshot.State == CliAvailabilityState.SelectedExecutableMissing;
                 card.PickerLabel.Visibility = showPicker ? Visibility.Visible : Visibility.Collapsed;
@@ -263,6 +337,8 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
         TextBlock Path,
         TextBlock Version,
         TextBlock CheckedAt,
+        TextBlock CatalogStatus,
+        TextBlock FreeModelCount,
         TextBlock PickerLabel,
         ComboBox Picker);
 }

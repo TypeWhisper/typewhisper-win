@@ -1,8 +1,10 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using TypeWhisper.Core.Audio;
 using TypeWhisper.Plugin.OpenAi;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
@@ -453,6 +455,177 @@ public class OpenAiPluginTests
     }
 
     [Fact]
+    public void CreateCompressedUpload_ProducesSmallerM4aContainer()
+    {
+        var samples = Enumerable.Range(0, 32_000)
+            .Select(index => (float)(Math.Sin(index * 2 * Math.PI * 440 / 16_000) * 0.25))
+            .ToArray();
+        var wavAudio = WavEncoder.Encode(samples);
+
+        var upload = OpenAiPlugin.CreateCompressedUpload(wavAudio);
+
+        Assert.Equal("audio.m4a", upload.FileName);
+        Assert.Equal("audio/mp4", upload.ContentType);
+        Assert.True(upload.Data.AsSpan().IndexOf("ftyp"u8) >= 0);
+        Assert.True(upload.Data.Length < wavAudio.Length);
+    }
+
+    [Fact]
+    public async Task GPTTranscribe_UsesCompressedUploadAndPreservesContextFields()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler((request, body) =>
+        {
+            Assert.Equal("https://api.openai.com/v1/audio/transcriptions", request.RequestUri?.ToString());
+            capturedBody = body;
+            Assert.NotNull(body);
+            AssertMultipartToken(body, "filename", "audio.m4a");
+            Assert.Contains("Content-Type: audio/mp4", body);
+            AssertMultipartToken(body, "name", "model");
+            Assert.Contains("gpt-transcribe", body);
+            AssertMultipartToken(body, "name", "languages[]");
+            Assert.Contains("de", body);
+            AssertMultipartToken(body, "name", "prompt");
+            Assert.Contains("TypeWhisper", body);
+            return Task.FromResult(JsonResponse("""{"text":"compressed ok"}"""));
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-test";
+        using var httpClient = new HttpClient(handler);
+        var sut = new OpenAiPlugin(
+            httpClient,
+            _ => new FakeTtsPlaybackSession(),
+            _ => new OpenAiTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeWithLanguageHintsAsync(
+            [4, 5, 6],
+            ["de"],
+            translate: false,
+            prompt: "TypeWhisper",
+            CancellationToken.None);
+
+        Assert.NotNull(capturedBody);
+        Assert.Equal("compressed ok", result.Text);
+    }
+
+    [Fact]
+    public async Task GPTTranscribe_EncoderFailureFallsBackToWavUpload()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            capturedBody = body;
+            return Task.FromResult(JsonResponse("""{"text":"wav ok"}"""));
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-test";
+        using var httpClient = new HttpClient(handler);
+        var sut = new OpenAiPlugin(
+            httpClient,
+            _ => new FakeTtsPlaybackSession(),
+            _ => throw new COMException("AAC encoder unavailable"));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeAsync(
+            [4, 5, 6],
+            "de",
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+
+        Assert.NotNull(capturedBody);
+        AssertMultipartToken(capturedBody, "filename", "audio.wav");
+        Assert.Contains("Content-Type: audio/wav", capturedBody);
+        Assert.Equal("wav ok", result.Text);
+    }
+
+    [Fact]
+    public async Task GPTTranscribe_FormatRejectionRetriesWithWavAndPreservesFields()
+    {
+        var bodies = new List<string>();
+        var handler = new CapturingHandler((_, body) =>
+        {
+            bodies.Add(body ?? "");
+            if (bodies.Count == 1)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.UnsupportedMediaType)
+                {
+                    Content = new StringContent(
+                        """{"error":{"message":"Unsupported audio format"}}""",
+                        Encoding.UTF8,
+                        "application/json")
+                });
+            }
+
+            return Task.FromResult(JsonResponse("""{"text":"fallback ok","language":"de"}"""));
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-test";
+        using var httpClient = new HttpClient(handler);
+        var sut = new OpenAiPlugin(
+            httpClient,
+            _ => new FakeTtsPlaybackSession(),
+            _ => new OpenAiTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeWithLanguageHintsAsync(
+            [4, 5, 6],
+            ["de", "en"],
+            translate: false,
+            prompt: "TypeWhisper",
+            CancellationToken.None);
+
+        Assert.Equal("fallback ok", result.Text);
+        Assert.Equal(2, bodies.Count);
+        AssertMultipartToken(bodies[0], "filename", "audio.m4a");
+        Assert.Contains("Content-Type: audio/mp4", bodies[0]);
+        AssertMultipartToken(bodies[1], "filename", "audio.wav");
+        Assert.Contains("Content-Type: audio/wav", bodies[1]);
+        foreach (var body in bodies)
+        {
+            Assert.Contains("gpt-transcribe", body);
+            Assert.Contains("languages[]", body);
+            Assert.Contains("de", body);
+            Assert.Contains("en", body);
+            Assert.Contains("TypeWhisper", body);
+        }
+    }
+
+    [Fact]
+    public async Task WhisperTranscribe_UsesCompressedUpload()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            capturedBody = body;
+            return Task.FromResult(JsonResponse("""{"text":"legacy ok"}"""));
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-test";
+        host.SetSetting("selectedModel", "whisper-1");
+        using var httpClient = new HttpClient(handler);
+        var sut = new OpenAiPlugin(
+            httpClient,
+            _ => new FakeTtsPlaybackSession(),
+            _ => new OpenAiTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeAsync(
+            [4, 5, 6],
+            "de",
+            translate: false,
+            prompt: "TypeWhisper",
+            CancellationToken.None);
+
+        Assert.NotNull(capturedBody);
+        AssertMultipartToken(capturedBody, "filename", "audio.m4a");
+        Assert.Contains("Content-Type: audio/mp4", capturedBody);
+        Assert.Contains("verbose_json", capturedBody);
+        Assert.Equal("legacy ok", result.Text);
+    }
+
+    [Fact]
     public async Task GPTTranscribe_RejectsTranslationBeforeSendingRequest()
     {
         var requests = 0;
@@ -728,7 +901,7 @@ public class OpenAiPluginTests
         Assert.Equal("gpt-5.6-sol", sut.SelectedLlmModelId);
         Assert.Equal("gpt-5.6-sol", host.GetSetting<string>("selectedLLMModel"));
         Assert.Equal(
-            "https://chatgpt.com/backend-api/codex/models?client_version=1.1.2",
+            "https://chatgpt.com/backend-api/codex/models?client_version=1.1.3",
             capturedRequest?.RequestUri?.ToString());
         Assert.Equal("Bearer access-token", capturedRequest?.Headers.Authorization?.ToString());
         Assert.Equal(
@@ -793,7 +966,7 @@ public class OpenAiPluginTests
         Assert.Equal(
             [
                 "https://auth.openai.com/oauth/token",
-                "https://chatgpt.com/backend-api/codex/models?client_version=1.1.2",
+                "https://chatgpt.com/backend-api/codex/models?client_version=1.1.3",
             ],
             requestedUris);
         Assert.Equal(["gpt-5.6-sol"], models.Select(model => model.Id).ToArray());
@@ -1063,6 +1236,14 @@ public class OpenAiPluginTests
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+
+    private static void AssertMultipartToken(string body, string name, string value)
+    {
+        Assert.True(
+            body.Contains($"{name}=\"{value}\"", StringComparison.Ordinal)
+            || body.Contains($"{name}={value}", StringComparison.Ordinal),
+            $"Multipart body did not contain {name}={value}:{Environment.NewLine}{body}");
+    }
 
     private sealed class CapturingHandler(
         Func<HttpRequestMessage, string?, Task<HttpResponseMessage>> responder) : HttpMessageHandler

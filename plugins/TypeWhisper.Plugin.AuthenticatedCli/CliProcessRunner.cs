@@ -16,7 +16,9 @@ internal sealed record CliProcessRequest(
     IReadOnlyList<string> ProviderEnvironmentVariables,
     TimeSpan Timeout,
     int MaximumStandardOutputBytes,
-    int MaximumStandardErrorBytes);
+    int MaximumStandardErrorBytes,
+    IReadOnlyDictionary<string, string>? EnvironmentOverrides = null,
+    bool RestrictUserDirectories = false);
 
 internal sealed record CliProcessResult(
     int ExitCode,
@@ -42,6 +44,9 @@ internal sealed class CliProcessRunner : ICliProcessRunner
     private const int ProcThreadAttributeHandleList = 0x00020002;
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(2);
     private static readonly Encoding Utf8WithoutBom = new UTF8Encoding(false, true);
+    private static readonly HashSet<string> ProtectedEnvironmentVariables = new(
+        ["PATH", "PATHEXT", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec"],
+        StringComparer.OrdinalIgnoreCase);
     private static readonly string[] CommonEnvironmentVariables =
     [
         "SystemRoot",
@@ -169,13 +174,17 @@ internal sealed class CliProcessRunner : ICliProcessRunner
             startInfo.ArgumentList.Add(argument);
 
         startInfo.Environment.Clear();
-        foreach (var name in CommonEnvironmentVariables.Concat(request.ProviderEnvironmentVariables).Distinct())
+        var commonEnvironment = request.RestrictUserDirectories
+            ? CommonEnvironmentVariables.Where(name => name is not (
+                "HOMEDRIVE" or "HOMEPATH" or "APPDATA" or "LOCALAPPDATA" or "PROGRAMDATA"))
+            : CommonEnvironmentVariables;
+        foreach (var name in commonEnvironment.Concat(request.ProviderEnvironmentVariables).Distinct())
         {
             var value = Environment.GetEnvironmentVariable(name);
             if (string.IsNullOrEmpty(value))
                 continue;
 
-            if (name is "CODEX_HOME" or "CLAUDE_CONFIG_DIR")
+            if (name is "CODEX_HOME" or "CLAUDE_CONFIG_DIR" or "XDG_DATA_HOME")
             {
                 if (!CliPathSafety.IsSafeLocalDirectory(value))
                     continue;
@@ -198,7 +207,35 @@ internal sealed class CliProcessRunner : ICliProcessRunner
         startInfo.Environment["CI"] = "1";
         startInfo.Environment["TERM"] = "dumb";
         startInfo.Environment["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1";
+
+        if (request.EnvironmentOverrides is not null)
+        {
+            foreach (var (name, value) in request.EnvironmentOverrides)
+            {
+                ValidateEnvironmentOverride(name, value);
+                startInfo.Environment[name] = value;
+            }
+        }
+
         return startInfo;
+    }
+
+    private static void ValidateEnvironmentOverride(string name, string value)
+    {
+        if (string.IsNullOrWhiteSpace(name)
+            || name.Contains('=')
+            || name.Contains('\0')
+            || name.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '_'))
+            || !(char.IsAsciiLetter(name[0]) || name[0] == '_'))
+        {
+            throw new InvalidOperationException("The provider CLI environment override name is invalid.");
+        }
+
+        if (ProtectedEnvironmentVariables.Contains(name))
+            throw new InvalidOperationException("The provider CLI environment override targets a protected variable.");
+
+        if (value.Contains('\0'))
+            throw new InvalidOperationException("The provider CLI environment override value is invalid.");
     }
 
     private static NativeLaunchedProcess StartSuspended(

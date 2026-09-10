@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 #if WINDOWS
 using System.Windows.Controls;
 #endif
@@ -17,6 +19,12 @@ namespace TypeWhisper.Plugin.SherpaOnnx;
 /// </summary>
 public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEnginePlugin
 {
+    internal const int SampleRate = 16000;
+    // The exported encoder fails near 400 seconds; use a lower bound to leave room for feature padding.
+    internal const int ParakeetMaximumChunkSeconds = 300;
+    internal const int ParakeetChunkOverlapSeconds = 5;
+    private const int MinimumTranscriptOverlapWords = 2;
+    private const int MaximumTranscriptOverlapWords = 40;
     private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main";
     private const string CanaryRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main";
 
@@ -24,6 +32,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     // NVIDIA model card: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
     private static readonly IReadOnlyList<string> ParakeetSupportedLanguages =
         ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"];
+    private static readonly Regex TranscriptWordRegex = new(
+        @"[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly IReadOnlyList<ModelDefinition> Models =
     [
@@ -104,7 +115,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// Gets the plugin version reported to the host.
     /// </summary>
 #if WINDOWS
-    public string PluginVersion => "1.0.5";
+    public string PluginVersion => "1.0.6";
 #else
     public string PluginVersion => "1.1.1";
 #endif
@@ -420,7 +431,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         return Task.Run(() =>
         {
             var audioSamples = samples.ToArray();
-            var audioDuration = audioSamples.Length / 16000.0;
+            var audioDuration = audioSamples.Length / (double)SampleRate;
 
             lock (_sync)
             {
@@ -432,10 +443,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
                 if (model.SupportsTranslation)
                     EnsureCanaryLanguage(language, translate);
 
-                using var stream = _recognizer.CreateStream();
-                stream.AcceptWaveform(16000, audioSamples);
-                _recognizer.Decode(stream);
+                // Long recordings need bounded chunks; single-chunk recordings retain token timings.
+                if (model.Id == "parakeet-tdt-0.6b" && audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
+                    return new PluginTranscriptionResult(
+                        TranscribeParakeetSamples(_recognizer, audioSamples, cancellationToken), null, audioDuration, NoSpeechProbability: null);
 
+                using var stream = _recognizer.CreateStream();
+                stream.AcceptWaveform(SampleRate, audioSamples);
+                _recognizer.Decode(stream);
                 var result = stream.Result;
                 var rawText = result.Text.Trim();
 
@@ -451,6 +466,140 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             }
         }, cancellationToken);
     }
+
+    private string TranscribeParakeetSamples(
+        OfflineRecognizer recognizer,
+        float[] audioSamples,
+        CancellationToken ct)
+    {
+        var chunks = CreateParakeetChunks(audioSamples.Length);
+        if (chunks.Count == 1)
+            return RecognizeSamples(recognizer, audioSamples);
+
+        _host?.Log(
+            PluginLogLevel.Info,
+            $"Splitting {audioSamples.Length / (double)SampleRate:F1}s of Parakeet audio into {chunks.Count} chunks.");
+
+        var transcript = string.Empty;
+        foreach (var chunk in chunks)
+        {
+            ct.ThrowIfCancellationRequested();
+            var samples = new float[chunk.Count];
+            Array.Copy(audioSamples, chunk.Offset, samples, 0, chunk.Count);
+            transcript = MergeChunkTranscripts(transcript, RecognizeSamples(recognizer, samples));
+        }
+
+        return transcript;
+    }
+
+    private static string RecognizeSamples(OfflineRecognizer recognizer, float[] samples)
+    {
+        using var stream = recognizer.CreateStream();
+        stream.AcceptWaveform(SampleRate, samples);
+        recognizer.Decode(stream);
+        return stream.Result.Text.Trim();
+    }
+
+    internal static IReadOnlyList<(int Offset, int Count)> CreateParakeetChunks(int sampleCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(sampleCount);
+
+        var maximumChunkSamples = ParakeetMaximumChunkSeconds * SampleRate;
+        if (sampleCount <= maximumChunkSamples)
+            return [(0, sampleCount)];
+
+        var overlapSamples = ParakeetChunkOverlapSeconds * SampleRate;
+        var strideSamples = maximumChunkSamples - overlapSamples;
+        var chunkCount = (int)Math.Ceiling(
+            (sampleCount - overlapSamples) / (double)strideSamples);
+        var processedSampleCount = sampleCount + ((chunkCount - 1) * overlapSamples);
+        var baseChunkSize = processedSampleCount / chunkCount;
+        var longerChunkCount = processedSampleCount % chunkCount;
+        var chunks = new List<(int Offset, int Count)>(chunkCount);
+        var offset = 0;
+
+        for (var index = 0; index < chunkCount; index++)
+        {
+            var count = baseChunkSize + (index < longerChunkCount ? 1 : 0);
+            chunks.Add((offset, count));
+            offset += count - overlapSamples;
+        }
+
+        return chunks;
+    }
+
+    internal static string MergeChunkTranscripts(string transcript, string nextChunk)
+    {
+        transcript = transcript.Trim();
+        nextChunk = nextChunk.Trim();
+        if (string.IsNullOrEmpty(transcript))
+            return nextChunk;
+        if (string.IsNullOrEmpty(nextChunk))
+            return transcript;
+
+        var transcriptWords = TokenizeTranscriptWords(transcript);
+        var nextWords = TokenizeTranscriptWords(nextChunk);
+        var maximumOverlap = Math.Min(
+            MaximumTranscriptOverlapWords,
+            Math.Min(transcriptWords.Count, nextWords.Count));
+
+        for (var overlap = maximumOverlap; overlap >= MinimumTranscriptOverlapWords; overlap--)
+        {
+            var transcriptStart = transcriptWords.Count - overlap;
+            var matches = true;
+            for (var index = 0; index < overlap; index++)
+            {
+                if (!string.Equals(
+                        transcriptWords[transcriptStart + index].Normalized,
+                        nextWords[index].Normalized,
+                        StringComparison.Ordinal))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+                return AppendTranscript(transcript, nextChunk[nextWords[overlap - 1].End..]);
+        }
+
+        return AppendTranscript(transcript, nextChunk);
+    }
+
+    private static List<TranscriptWord> TokenizeTranscriptWords(string text) =>
+        TranscriptWordRegex.Matches(text)
+            .Select(match => new TranscriptWord(
+                match.Value.Replace('’', '\'').ToUpperInvariant(),
+                match.Index + match.Length))
+            .ToList();
+
+    private static string AppendTranscript(string transcript, string tail)
+    {
+        tail = tail.TrimStart();
+        if (string.IsNullOrEmpty(tail))
+            return transcript;
+
+        var firstCharacter = tail[0];
+        var punctuationCategory = char.GetUnicodeCategory(firstCharacter);
+        var isOpeningPunctuation = punctuationCategory is UnicodeCategory.OpenPunctuation
+            or UnicodeCategory.InitialQuotePunctuation
+            || ((firstCharacter is '"' or '\'')
+                && tail.Length > 1
+                && !char.IsWhiteSpace(tail[1]));
+
+        if (char.IsPunctuation(firstCharacter) && !isOpeningPunctuation)
+        {
+            var transcriptEnd = transcript.Length;
+            while (transcriptEnd > 0 && char.IsPunctuation(transcript[transcriptEnd - 1]))
+                transcriptEnd--;
+
+            return transcript[..transcriptEnd] + tail;
+        }
+
+        return transcript + " " + tail;
+    }
+
+    private sealed record TranscriptWord(string Normalized, int End);
 
     /// <summary>
     /// Releases resources held by the instance.
