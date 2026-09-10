@@ -117,7 +117,8 @@ public sealed partial class OpenAiPlugin
     {
         var path = Path.Combine(Path.GetDirectoryName(typeof(OpenAiPlugin).Assembly.Location)!, "Localization", "de.json");
         try { return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path, System.Text.Encoding.UTF8)) ?? []; }
-        catch (IOException) { return new Dictionary<string, string>(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        { return new Dictionary<string, string>(); }
     });
     private static string L(string text) => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de"
         && GermanStrings.Value.TryGetValue(text, out var translated) ? translated : text;

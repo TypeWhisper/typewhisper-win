@@ -193,9 +193,15 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _oauthExpiresAt = LoadExpiresAt(host);
         if (await host.LoadSecretAsync(OAuthSessionSecretName) is { } savedSession)
         {
-            var session = JsonSerializer.Deserialize<SavedOAuthSession>(savedSession)
-                ?? throw new InvalidDataException("The stored ChatGPT login is invalid.");
-            ApplyOAuthSession(session);
+            // The bundled session is authoritative, even if corrupt: never revive old split credentials.
+            ApplyOAuthSession(new("", "", null, null, null, null));
+            try
+            {
+                var session = JsonSerializer.Deserialize<SavedOAuthSession>(savedSession);
+                if (session is not null && !string.IsNullOrWhiteSpace(session.AccessToken) && !string.IsNullOrWhiteSpace(session.RefreshToken))
+                    ApplyOAuthSession(session);
+            }
+            catch (JsonException) { host.Log(PluginLogLevel.Warning, "Stored ChatGPT login is invalid; sign in again."); }
         }
 
         ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: false);
@@ -898,6 +904,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("Existing login file could not be parsed.");
 
+        if (store.Tokens is null)
+            throw new InvalidOperationException("Existing login file could not be parsed.");
         var tokens = new OpenAiOAuthTokenResponse(
             store.Tokens.IdToken,
             store.Tokens.AccessToken,

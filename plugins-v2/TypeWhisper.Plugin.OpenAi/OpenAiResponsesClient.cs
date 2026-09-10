@@ -131,7 +131,7 @@ internal sealed class OpenAiResponsesClient
                 }
             }
 
-            var joined = string.Concat(parts).Trim();
+            var joined = string.Join("\n", parts).Trim();
             if (!string.IsNullOrEmpty(joined))
                 return joined;
         }

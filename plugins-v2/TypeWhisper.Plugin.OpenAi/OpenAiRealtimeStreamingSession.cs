@@ -27,7 +27,7 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
     private readonly CancellationTokenSource _receiveCts = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private Task? _receiveTask;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     internal OpenAiRealtimeStreamingSession(WebSocket ws, OpenAiRealtimeTranscriptCollector collector)
     {
@@ -270,6 +270,8 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
                 if (changed && transcriptEvent is not null) TranscriptReceived?.Invoke(transcriptEvent);
                 if (_committedItemId is not null && _completedItems.Contains(_committedItemId)) _final.TrySetResult();
             }
+            ct.ThrowIfCancellationRequested();
+            throw new IOException("OpenAI closed the live connection before completion.");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         { _ready.TrySetCanceled(ct); _final.TrySetCanceled(ct); }

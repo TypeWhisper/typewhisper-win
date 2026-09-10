@@ -180,12 +180,11 @@ internal static class OpenAiOAuthClient
         var json = await response.Content.ReadAsStringAsync(ct);
         try
         {
-            return JsonSerializer.Deserialize<OpenAiOAuthTokenResponse>(
-                json,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                ?? throw new PluginRequestException(
-                    "OpenAI token response could not be parsed.",
-                    PluginRequestFailureKind.Authentication);
+            var tokens = JsonSerializer.Deserialize<OpenAiOAuthTokenResponse>(
+                json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (tokens is null || string.IsNullOrWhiteSpace(tokens.AccessToken) || string.IsNullOrWhiteSpace(tokens.RefreshToken))
+                throw new PluginRequestException("OpenAI token response could not be parsed.", PluginRequestFailureKind.Authentication);
+            return tokens;
         }
         catch (JsonException ex)
         {
@@ -294,64 +293,117 @@ internal static class OpenAiOAuthClient
 internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
 {
     private readonly string _expectedState;
+    private readonly int _port;
     private TcpListener? _listener;
+    private TcpListener? _ipv6Listener;
+    private TcpClient? _queuedClient;
+    internal int Port => (_listener?.LocalEndpoint as IPEndPoint)?.Port
+        ?? throw new InvalidOperationException("OAuth callback server was not started.");
 
-    /// <summary>
-    /// Initializes a loopback server that waits for the OpenAI OAuth callback.
-    /// </summary>
-    public OpenAiLoopbackOAuthServer(string expectedState)
+    /// <summary>Initializes a server bound only to the local loopback interfaces.</summary>
+    public OpenAiLoopbackOAuthServer(string expectedState, int port = OpenAiOAuthClient.CallbackPort)
     {
         _expectedState = expectedState;
+        _port = port;
     }
 
-    /// <summary>
-    /// Starts the service or session.
-    /// </summary>
+    /// <summary>Starts the service or session.</summary>
     public void Start()
     {
-        _listener = new TcpListener(IPAddress.Loopback, OpenAiOAuthClient.CallbackPort);
-        _listener.Start();
-    }
-
-    /// <summary>
-    /// Performs wait for code asynchronously.
-    /// </summary>
-    public async Task<string> WaitForCodeAsync(CancellationToken ct)
-    {
-        var listener = _listener ?? throw new InvalidOperationException("OAuth callback server was not started.");
-        using var client = await listener.AcceptTcpClientAsync(ct);
-        await using var stream = client.GetStream();
-        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
-        var request = new StringBuilder();
-        var character = new char[1];
-        while (request.Length < 8192)
-        {
-            if (await reader.ReadAsync(character.AsMemory(), ct) == 0) break;
-            if (character[0] == '\n') break;
-            request.Append(character[0]);
-        }
-        if (request.Length == 8192) throw new InvalidOperationException("OAuth callback request was too large.");
-        var requestLine = request.ToString().TrimEnd('\r');
-
-        string html;
+        if (_listener is not null) throw new InvalidOperationException("OAuth callback server was already started.");
         try
         {
-            var code = ParseAuthorizationCode(requestLine, _expectedState);
-            html = SuccessHtml;
-            await SendHtmlAsync(stream, html, ct);
-            return code;
+            _listener = new TcpListener(IPAddress.Loopback, _port);
+            _listener.Start();
+            if (Socket.OSSupportsIPv6)
+            {
+                _ipv6Listener = new TcpListener(IPAddress.IPv6Loopback, Port);
+                _ipv6Listener.Server.DualMode = false;
+                _ipv6Listener.Start();
+            }
         }
-        catch (Exception ex)
+        catch { StopListeners(); throw; }
+    }
+
+    private async Task<TcpClient> AcceptClientAsync(CancellationToken ct)
+    {
+        if (_queuedClient is { } queued)
         {
-            html = ErrorHtml(WebUtility.HtmlEncode(ex.Message));
-            await SendHtmlAsync(stream, html, ct);
-            throw;
+            _queuedClient = null;
+            return queued;
         }
-        finally
+        var listener = _listener ?? throw new InvalidOperationException("OAuth callback server was not started.");
+        var ipv6Listener = _ipv6Listener;
+        if (ipv6Listener is null) return await listener.AcceptTcpClientAsync(ct);
+        using var pending = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var ipv4 = listener.AcceptTcpClientAsync(pending.Token).AsTask();
+        var ipv6 = ipv6Listener.AcceptTcpClientAsync(pending.Token).AsTask();
+        var winner = await Task.WhenAny(ipv4, ipv6);
+        var loser = ReferenceEquals(winner, ipv4) ? ipv6 : ipv4;
+        await pending.CancelAsync();
+        // Preserve a simultaneous IPv4/IPv6 connection for the next request.
+        try { _queuedClient = await loser; }
+        catch (OperationCanceledException) when (pending.IsCancellationRequested) { }
+        catch (SocketException) when (pending.IsCancellationRequested) { }
+        catch (ObjectDisposedException) when (pending.IsCancellationRequested) { }
+        return await winner;
+    }
+
+    /// <summary>Performs wait for code asynchronously.</summary>
+    public async Task<string> WaitForCodeAsync(CancellationToken ct)
+    {
+        try
         {
-            listener.Stop();
-            _listener = null;
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                using var client = await AcceptClientAsync(ct);
+                // Speculative connections must not block the real redirect indefinitely.
+                using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                requestTimeout.CancelAfter(TimeSpan.FromSeconds(2));
+                var requestToken = requestTimeout.Token;
+                try
+                {
+                    await using var stream = client.GetStream();
+                    using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+                    var request = new StringBuilder();
+                    var character = new char[1];
+                    while (request.Length < 8192)
+                    {
+                        if (await reader.ReadAsync(character.AsMemory(), requestToken) == 0) break;
+                        if (character[0] == '\n') break;
+                        request.Append(character[0]);
+                    }
+                    if (request.Length == 8192) continue;
+                    string code;
+                    try { code = ParseAuthorizationCode(request.ToString().TrimEnd('\r'), _expectedState); }
+                    catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or UriFormatException)
+                    {
+                        await SendHtmlAsync(stream, ErrorHtml("This request was not a valid login callback. Please finish signing in."), requestToken);
+                        continue;
+                    }
+                    // A closed browser tab must not discard an already validated code.
+                    try { await SendHtmlAsync(stream, SuccessHtml, requestToken); }
+                    catch (IOException) { ct.ThrowIfCancellationRequested(); }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                    return code;
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                catch (IOException) { ct.ThrowIfCancellationRequested(); }
+                catch (SocketException) { ct.ThrowIfCancellationRequested(); }
+            }
         }
+        finally { StopListeners(); }
+    }
+
+    private void StopListeners()
+    {
+        _listener?.Stop();
+        _ipv6Listener?.Stop();
+        _queuedClient?.Dispose();
+        _queuedClient = null;
+        _listener = null;
+        _ipv6Listener = null;
     }
 
     internal static string ParseAuthorizationCode(string requestLine, string expectedState)
@@ -427,9 +479,7 @@ internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
     /// </summary>
     public ValueTask DisposeAsync()
     {
-        try { _listener?.Stop(); }
-        catch { }
-        _listener = null;
+        StopListeners();
         return ValueTask.CompletedTask;
     }
 }

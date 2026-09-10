@@ -281,6 +281,16 @@ internal sealed class LivePortableModelSettings : UserControl
                     ? selected ? "Loaded · active for dictation." : model.Downloaded ? "Downloaded · choose Use model to load it." : "Not downloaded."
                     : provider.Ready ? "Provider ready." : "Complete provider configuration before selecting a model.";
         }
+        if (_cloudMode)
+        {
+            var currentModel = _cloudModel.SelectedItem as PortableDownloadableModel;
+            var selectionId = currentModel?.SelectionId ?? _items.Values.FirstOrDefault()?.Model.SelectionId;
+            var currentProvider = _session.PluginRuntime.TranscriptionProviders.FirstOrDefault(p => p.SelectionId == selectionId);
+            _cloudModel.IsEnabled = available && currentProvider?.Ready == true;
+            _cloudUse.IsEnabled = false;
+            _cloudUse.Visibility = Visibility.Collapsed;
+            _cloudStatus.Text = currentProvider?.Ready == true ? "Choose a transcription model." : "Complete provider configuration before selecting a model.";
+        }
         if (_cloudMode && _cloudModel.SelectedItem is PortableDownloadableModel selectedModel && _items.TryGetValue((selectedModel.SelectionId, selectedModel.ModelId), out var selectedRow))
         {
             var provider = _session.PluginRuntime.TranscriptionProviders.FirstOrDefault(p => p.SelectionId == selectedModel.SelectionId);

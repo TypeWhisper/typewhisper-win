@@ -83,6 +83,7 @@ public partial class OpenAiPluginTests
     [InlineData("malformed")]
     [InlineData("{\"type\":\"error\",\"error\":{\"message\":\"private payload\"}}")]
     [InlineData("close")]
+    [InlineData("silent-close")]
     public async Task LiveFailureAfterDeltaDoesNotSucceed(string message)
     {
         using var ws = new SocketFixture(); await using var session = new OpenAiRealtimeStreamingSession(ws, new());
@@ -229,6 +230,7 @@ public partial class OpenAiPluginTests
         {
             var message = await _messages.Reader.ReadAsync(cancellationToken);
             if (message == "close") { _state = WebSocketState.CloseReceived; return new(0, WebSocketMessageType.Close, true); }
+            if (message == "silent-close") { _state = WebSocketState.Closed; message = "{}"; }
             var bytes = Encoding.UTF8.GetBytes(message); bytes.CopyTo(buffer.AsSpan());
             return new(bytes.Length, WebSocketMessageType.Text, true);
         }

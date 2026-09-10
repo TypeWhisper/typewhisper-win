@@ -123,7 +123,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>Returns known installed packages and their visible activation/capability errors.</summary>
     public IReadOnlyList<PortablePluginRuntimeState> Snapshot()
     {
-        lock (_sync) return _slots.Values.Select(slot => new PortablePluginRuntimeState(slot.Id, slot.Accepting, slot.Error, slot.Package?.Plugin is IApiKeyPlugin, slot.Package?.Plugin is IPluginTextSettings, slot.Package is not null && slot.ApiKeyConfigured)).ToArray();
+        lock (_sync) return _slots.Values.Select(slot => new PortablePluginRuntimeState(slot.Id, slot.Accepting, slot.Error, slot.Package?.Plugin is IApiKeyPlugin, slot.Package?.Plugin is IPluginTextSettings or IPluginSettingsActions, slot.Package is not null && slot.ApiKeyConfigured)).ToArray();
     }
 
     /// <summary>Restores only explicit saved enablement. Missing preferences never activate a package.</summary>

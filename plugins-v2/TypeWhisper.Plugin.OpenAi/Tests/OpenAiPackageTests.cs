@@ -16,8 +16,11 @@ public partial class OpenAiPluginTests
         Directory.CreateDirectory(root);
         try
         {
-            var source = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "net10.0"));
+            var source = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "portable-host", "Plugins", "com.typewhisper.openai"));
             Assert.True(File.Exists(Path.Combine(source, "TypeWhisper.Plugin.OpenAi.deps.json")));
+            foreach (var dependency in new[] { "NAudio.Core.dll", "NAudio.Wasapi.dll", "NAudio.WinMM.dll", "Localization/en.json", "Localization/de.json" })
+                Assert.True(File.Exists(Path.Combine(source, dependency)), dependency);
+            Assert.False(File.Exists(Path.Combine(source, "TypeWhisper.PluginSDK.dll")));
             var archive = Path.Combine(root, "openai.zip");
             ZipFile.CreateFromDirectory(source, archive);
             var bytes = await File.ReadAllBytesAsync(archive);

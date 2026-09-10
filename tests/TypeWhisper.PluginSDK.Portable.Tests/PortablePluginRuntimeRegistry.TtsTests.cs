@@ -24,8 +24,8 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Empty(registry.TtsProviders); Assert.False(disable.IsCompleted);
         Assert.Equal(0, Host(Id).GetSetting<int>("disposals"));
         Host(Id).Release.TrySetResult(null);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => speech);
-        Assert.Null(await disable);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => speech.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Null(await disable.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal("voice", Host(Id).GetSetting<string>("voice"));
         Assert.Equal("endpoint", Host(Id).GetSetting<string>("output"));
         Assert.Equal(1, Host(Id).GetSetting<int>("stops"));
@@ -38,7 +38,7 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         var store = await SpeechStore(); await using var registry = Registry(store);
         Assert.Null(await registry.SetEnabledAsync(Id, true));
         Host(Id).SetSetting("CompletedSpeech", true); Host(Id).SetSetting("FailedSpeech", true);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.SpeakAsync(Id, new("hello"), default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.SpeakAsync(Id, new("hello"), default).WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(1, Host(Id).GetSetting<int>("stops"));
     }
 }

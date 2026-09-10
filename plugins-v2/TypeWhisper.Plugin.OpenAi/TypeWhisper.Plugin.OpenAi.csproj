@@ -12,4 +12,16 @@
     <InternalsVisibleTo Include="TypeWhisper.Plugin.OpenAi.Portable.Tests" />
     <Content Include="manifest.json;Localization/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.openai/</PackageDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(TargetDir)NAudio.Core.dll;$(TargetDir)NAudio.Wasapi.dll;$(TargetDir)NAudio.WinMM.dll" />
+      <PackageLocalization Include="$(ProjectDir)Localization/*.json" />
+    </ItemGroup>
+    <MakeDir Directories="$(PackageDirectory)Localization" />
+    <Copy SourceFiles="@(PackageFile)" DestinationFolder="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageLocalization)" DestinationFolder="$(PackageDirectory)Localization" />
+  </Target>
 </Project>
