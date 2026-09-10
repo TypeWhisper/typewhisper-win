@@ -136,7 +136,13 @@ public sealed class DictionaryService : IDictionaryService
 
         foreach (var entry in corrections)
         {
+            var replacement = ExpandReplacementEscapes(entry.Replacement!);
             var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);
+            // ASR often punctuates a final spoken layout command. That period
+            // belongs to the command, not to a new line after its replacement.
+            // Preserve regex semantics and punctuation around ordinary corrections.
+            if (!entry.IsRegex && replacement.Any(c => c is '\r' or '\n') && replacement.All(char.IsWhiteSpace))
+                pattern += @"(?:[ \t]*\.[ \t]*(?=$))?";
             var options = entry.CaseSensitive
                 ? RegexOptions.CultureInvariant
                 : RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
@@ -146,7 +152,6 @@ public sealed class DictionaryService : IDictionaryService
                 if (!regex.IsMatch(text))
                     continue;
 
-                var replacement = ExpandReplacementEscapes(entry.Replacement!);
                 text = regex.Replace(text, _ => replacement);
                 onMatch?.Invoke(entry.Id);
             }

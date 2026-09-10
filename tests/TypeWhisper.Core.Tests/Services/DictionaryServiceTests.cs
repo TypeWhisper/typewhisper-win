@@ -154,6 +154,32 @@ public class DictionaryServiceTests : IDisposable
         Assert.Equal($"before {replacement} after", result);
     }
 
+    [Theory]
+    [InlineData("Hello, new line.", @"\n", "Hello, \n")]
+    [InlineData("Hello new line.  ", @"\r\n", "Hello \r\n")]
+    [InlineData("new line.", @"\n\n", "\n\n")]
+    [InlineData("new line", @"\n", "\n")]
+    [InlineData("new line Hello.", @"\n", "\n Hello.")]
+    [InlineData("Hello new line. Next sentence.", @"\n", "Hello \n. Next sentence.")]
+    [InlineData("Hello new line.", "replacement", "Hello replacement.")]
+    [InlineData("Hello new line.", @"\nItem", "Hello \nItem.")]
+    [InlineData("Hello new line.", @"\\n", @"Hello \n.")]
+    public void ApplyCorrections_RemovesOnlyTrailingCommandPeriodForStructuralNewline(
+        string input, string replacement, string expected)
+    {
+        _sut.UpsertCorrection("new line", replacement, caseSensitive: false);
+        Assert.Equal(expected, _sut.ApplyCorrections(input));
+        Assert.Equal(expected, DictionaryService.ApplyCorrectionsSnapshot(input, _sut.Entries.ToArray()));
+    }
+
+    [Fact]
+    public void ApplyCorrections_RegexLayoutCommandKeepsExplicitMatchSemantics()
+    {
+        _sut.AddEntry(new DictionaryEntry { Id = "regex-layout", EntryType = DictionaryEntryType.Correction,
+            Original = "new line", Replacement = @"\n", IsRegex = true });
+        Assert.Equal("Hello \n.", _sut.ApplyCorrections("Hello new line."));
+    }
+
     [Fact]
     public void ApplyCorrections_DoesNotInterpretOriginalAsRegex()
     {
