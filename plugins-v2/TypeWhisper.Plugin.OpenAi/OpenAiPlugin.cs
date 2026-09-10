@@ -397,6 +397,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     internal static OpenAiTranscriptionUpload CreateCompressedUpload(byte[] wavAudio)
     {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("AAC encoding requires Windows Media Foundation; use WAV on this platform.");
         ArgumentNullException.ThrowIfNull(wavAudio);
         if (wavAudio.Length == 0)
             throw new InvalidOperationException("No WAV audio bytes were provided.");

@@ -436,12 +436,18 @@ public partial class OpenAiPluginTests
     }
 
     [Fact]
-    public void CreateCompressedUpload_ProducesSmallerM4aContainer()
+    public void CreateCompressedUpload_UsesWindowsEncoderOrReportsUnsupportedPlatform()
     {
         var samples = Enumerable.Range(0, 32_000)
             .Select(index => (float)(Math.Sin(index * 2 * Math.PI * 440 / 16_000) * 0.25))
             .ToArray();
         var wavAudio = WavEncoder.Encode(samples);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => OpenAiPlugin.CreateCompressedUpload(wavAudio));
+            return;
+        }
 
         var upload = OpenAiPlugin.CreateCompressedUpload(wavAudio);
 
