@@ -346,9 +346,11 @@ public sealed partial class SettingsWindow : Window
         SettingsSearch.Focus(FocusState.Keyboard);
     }
 
-    internal void ShowSetup()
+    private bool _returnToTrayAfterSetup;
+    internal void ShowSetup(bool returnToTray = false)
     {
         if (CreateSetupWizard is null) return;
+        _returnToTrayAfterSetup = returnToTray;
         foreach (var picker in _catalogPickers.Concat(_appearancePickers)) if (picker.IsPopupOpen) picker.ClosePopup();
         CatalogContent.Children.Clear(); _catalogPickers.Clear();
         SettingsBrand.Visibility = SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Collapsed;
@@ -359,6 +361,7 @@ public sealed partial class SettingsWindow : Window
     private void ExitSetup(bool completed)
     {
         SetupHost.Child = null; SetupHost.Visibility = Visibility.Collapsed;
+        if (_returnToTrayAfterSetup) { _returnToTrayAfterSetup = false; Close(); return; }
         SettingsBrand.Visibility = SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Visible;
         ShowCategory(completed ? "Dictation" : "General");
     }

@@ -1137,10 +1137,10 @@ public sealed partial class MainWindow : Window
         { MetricsText.Text = "Could not save overlay preferences: " + ex.Message; return false; }
     }
 
-    internal void OpenSetup()
+    internal void OpenSetup(bool returnToTray = false)
     {
         OpenSettings();
-        _settingsWindow?.ShowSetup();
+        _settingsWindow?.ShowSetup(returnToTray);
     }
 
     internal void OpenLexicon(bool snippets = false, string? section = null)

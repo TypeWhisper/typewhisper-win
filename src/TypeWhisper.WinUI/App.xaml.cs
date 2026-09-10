@@ -54,7 +54,6 @@ public partial class App : Application
             return;
         }
 
-        _activations.Add(request);
         _mainInstance.Activated += (_, redirected) =>
         {
             var incoming = redirected.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs
@@ -80,11 +79,13 @@ public partial class App : Application
             ShowProfileFailure("Profile recovery could not complete. Your profile has not been opened. Close TypeWhisper before resolving this recovery error.", ex.Message);
             return;
         }
+        var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
+        var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
+        if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
         _window = new MainWindow();
         _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
         _window.RestoreProfile = (store, preview) => RestoreProfileAsync(store, preview);
         _window.RestoreApiProfile = (store, preview) => RestoreProfileAsync(store, preview, true);
-        if (request.ShowWindow) _window.ShowFromActivation();
         _tray = new TrayIconService(
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowFromActivation),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenSettings),
@@ -109,6 +110,8 @@ public partial class App : Application
             UpdateTrayActions();
         };
         var initialization = _window.InitializeDictationAsync();
+        // Do not hold onboarding behind plugin discovery, downloads or account requests.
+        if (presentation == TypeWhisper.Presentation.StartupPresentation.Setup) _window.OpenSetup(returnToTray: true);
         await initialization;
         UpdateTrayActions();
 #if DEBUG
