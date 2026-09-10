@@ -1,4 +1,5 @@
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace TypeWhisper.Plugin.Obsidian;
 
@@ -29,7 +30,7 @@ internal static class ObsidianNoteWriter
             {
                 ct.ThrowIfCancellationRequested();
                 var path = Path.Combine(directory, name + (suffix == 1 ? "" : " " + suffix) + ".md");
-                try { File.Move(temporary, path, overwrite: false); }
+                try { CommitWithoutOverwrite(temporary, path); }
                 catch (IOException) when (File.Exists(path)) { continue; }
                 // Cancellation after this atomic commit cannot undo or obscure the saved note.
                 afterCommit?.Invoke();
@@ -55,6 +56,25 @@ internal static class ObsidianNoteWriter
             }
         }
     }, ct);
+
+    private static void CommitWithoutOverwrite(string temporary, string destination)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            File.Move(temporary, destination, overwrite: false);
+            return;
+        }
+        // Unix File.Move can check existence before rename, whose replacement
+        // semantics race with another writer. link publishes the complete file
+        // atomically and fails if the destination already exists. Both paths are
+        // in the same directory/filesystem; finally removes our temporary name.
+        if (Link(temporary, destination) != 0)
+            throw new IOException($"Could not publish the note (errno {Marshal.GetLastPInvokeError()}).");
+    }
+
+    [DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int Link([MarshalAs(UnmanagedType.LPUTF8Str)] string existing,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string destination);
 
     internal static string ResolveDirectory(string vault, string subfolder, bool create)
     {

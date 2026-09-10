@@ -56,11 +56,18 @@ public sealed class ObsidianNoteWriterTests : IDisposable
     [Fact]
     public async Task ConcurrentSameNamesNeverOverwriteAndPreserveUnicode()
     {
-        var paths = await Task.WhenAll(ObsidianNoteWriter.WriteAsync(Vault, "Notes", "Grüße", "first", default),
-            ObsidianNoteWriter.WriteAsync(Vault, "Notes", "Grüße", "second", default));
-        Assert.NotEqual(paths[0], paths[1]);
-        Assert.Equal("first", File.ReadAllText(paths[0]));
-        Assert.Equal("second", File.ReadAllText(paths[1]));
+        const int count = 24;
+        var arrived = 0;
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writes = Enumerable.Range(0, count).Select(index => ObsidianNoteWriter.WriteAsync(
+            Vault, "Notes", "Grüße", $"content {index}", default, beforeCommit: async () =>
+            {
+                if (Interlocked.Increment(ref arrived) == count) ready.TrySetResult();
+                await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            })).ToArray();
+        var paths = await Task.WhenAll(writes);
+        Assert.Equal(count, paths.Distinct().Count());
+        for (var index = 0; index < count; index++) Assert.Equal($"content {index}", File.ReadAllText(paths[index]));
         Assert.All(paths, path => Assert.StartsWith("Grüße", Path.GetFileName(path)));
         Assert.Empty(Directory.GetFiles(Vault, "*.tmp", SearchOption.AllDirectories));
     }
