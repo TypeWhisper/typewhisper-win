@@ -10,6 +10,30 @@ public sealed class DeepgramPortableTests : IDisposable
     private VocabularyHostServices Host => new(_root, secrets: _secrets);
 
     [Fact]
+    public async Task LanguageCapabilitiesFollowTheSelectedModelAndSurviveReload()
+    {
+        using var plugin = new DeepgramPlugin(new HttpClient(new Handler((_, _) => throw new Exception("Unexpected network"))));
+        await plugin.ActivateAsync(Host);
+        Assert.Contains("en", plugin.SupportedLanguages);
+        Assert.Contains("de", plugin.SupportedLanguages);
+        Assert.Contains("ar", plugin.SupportedLanguages);
+        plugin.SelectModel("nova-2");
+        Assert.Contains("en", plugin.SupportedLanguages);
+        Assert.Contains("de-CH", plugin.SupportedLanguages);
+        Assert.DoesNotContain("ar", plugin.SupportedLanguages);
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(Host);
+        Assert.DoesNotContain("ar", plugin.SupportedLanguages);
+        foreach (var model in plugin.TranscriptionModels)
+        {
+            plugin.SelectModel(model.Id);
+            Assert.Equal(plugin.SupportedLanguages, model.LanguageCodes);
+            Assert.InRange(model.LanguageCount, 1, model.LanguageCodes.Count - 1);
+            Assert.Equal(model.LanguageCodes.Count, model.LanguageCodes.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        }
+    }
+
+    [Fact]
     public async Task ConfigurationAndModelSurviveReactivationWithoutNetwork()
     {
         using var plugin = new DeepgramPlugin(new HttpClient(new Handler((_, _) => throw new Exception("Unexpected network"))));
@@ -103,6 +127,8 @@ public sealed class DeepgramPortableTests : IDisposable
         Assert.IsAssignableFrom<IApiKeyPlugin>(package.Plugin);
         var engine = Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(package.Plugin);
         Assert.Equal("nova-3", engine.SelectedModelId);
+        Assert.Contains("en", engine.SupportedLanguages);
+        Assert.Contains("de", engine.SupportedLanguages);
         Assert.False(engine.SupportsLocalLivePreview);
         Assert.DoesNotContain(package.Plugin.GetType().Assembly.GetReferencedAssemblies(), reference => reference.Name == "PresentationFramework");
     }
@@ -125,7 +151,7 @@ public sealed class DeepgramPortableTests : IDisposable
         { Content = new ByteArrayContent(payload), RequestMessage = request })));
         var entry = new PortableCatalogEntry
         {
-            Id = id, Name = "Deepgram", Version = "1.1.2", MinHostVersion = "1.1.0",
+            Id = id, Name = "Deepgram", Version = "1.1.3", MinHostVersion = "1.1.0",
             DownloadUrl = "https://packages.test/deepgram.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]
@@ -145,8 +171,12 @@ public sealed class DeepgramPortableTests : IDisposable
             var provider = Assert.Single(registry.TranscriptionProviders);
             Assert.True(provider.Ready);
             Assert.True(provider.SupportsStreaming);
+            Assert.Contains("ar", provider.SupportedLanguages!);
             Assert.True(Assert.Single(registry.Snapshot()).ApiKeyConfigured);
             await registry.SelectModelAsync(provider.ModelStates.Single(model => model.ModelId == "nova-2"));
+            await registry.RefreshCapabilitiesAsync();
+            Assert.Contains("en", Assert.Single(registry.TranscriptionProviders).SupportedLanguages!);
+            Assert.DoesNotContain("ar", Assert.Single(registry.TranscriptionProviders).SupportedLanguages!);
         }
         var restarted = Store(); await restarted.InitializeAsync();
         await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 0), _ => Host))
