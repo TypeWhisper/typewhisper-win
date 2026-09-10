@@ -4,11 +4,11 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    private Func<string, CancellationToken, Task<string>> ApiTranslationProcessor(string target)
+    private Func<string, CancellationToken, Task<string>> ApiTranslationProcessor(string target, bool segmented = false)
     {
         var plan = LocalApiTranslation.Prepare(target, WorkflowDefaults.Read(), (providerId, modelId) =>
             LlmProviders.Any(provider => provider.SelectionId == providerId && provider.Ready
-                && provider.Models.Any(model => model.Id == modelId)));
+                && provider.Models.Any(model => model.Id == modelId)), segmented);
         return async (text, ct) =>
         {
             try { return await ProcessLlmAsync(plan.Provider, plan.Prompt, text, plan.Model, ct); }

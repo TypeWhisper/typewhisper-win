@@ -50,6 +50,8 @@ internal sealed partial class LocalDictationSession
             if (apiRequest is not null && hints.Count > 0 && (!registryProvider || ActiveRegistryProvider?.SupportsLanguageHints != true))
                 throw new LocalApiRequestException(422, "This provider does not support language hints. Use --language or automatic detection.");
             var translation = apiRequest?.TargetLanguage is { } target ? ApiTranslationProcessor(target) : null;
+            var segmentTranslation = apiRequest?.TargetLanguage is { } segmentTarget
+                ? ApiTranslationProcessor(segmentTarget, segmented: true) : null;
             if (apiRequest?.Language is { } requestedLanguage && requestedLanguage != "auto" &&
                 !SupportedLanguages.Contains(requestedLanguage, StringComparer.OrdinalIgnoreCase))
                 throw new LocalApiRequestException(422, "The selected model does not support this language.");
@@ -104,10 +106,20 @@ internal sealed partial class LocalDictationSession
                 refinedText = refined.Text;
                 if (refined.Error is not null) ctcWarnings.Add("Acoustic vocabulary checking was unavailable. The decoded transcript was retained.");
             }
-            var processed = apiRequest is not null
-                ? new DictationLexiconSnapshot.Result(await LocalApiTextProcessing.ProcessAsync(refinedText, apiRequest.ApplyCorrections,
-                    translation, lexicon.Dictionary is { } apiDictionary ? apiDictionary.ApplyCorrections : null, ct), [], [])
-                : await lexicon.ProcessAsync(refinedText, textPreferences, language,
+            IReadOnlyList<TranscriptionSegment> segments = decoded.Segments
+                .Select(segment => new TranscriptionSegment(segment.Text, segment.Start, segment.End)).ToArray();
+            DictationLexiconSnapshot.Result processed;
+            if (apiRequest is not null)
+            {
+                var apiText = await LocalApiTextProcessing.ProcessTranscriptAsync(refinedText,
+                    apiRequest.ResponseFormat == "text" ? [] : segments,
+                    apiRequest.ApplyCorrections, translation,
+                    segmentTranslation,
+                    lexicon.Dictionary is { } apiDictionary ? apiDictionary.ApplyCorrections : null, ct);
+                segments = apiText.Segments;
+                processed = new(apiText.Text, [], []);
+            }
+            else processed = await lexicon.ProcessAsync(refinedText, textPreferences, language,
                 DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language), boostVocabulary && !useCtc,
                 apiRequest is null ? ReadSnippetClipboardAsync : _ => Task.FromResult(""), ct, task, null, engineId, modelId, textProcessors:
                     BindTextProcessors(processors, DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language),
@@ -145,7 +157,7 @@ internal sealed partial class LocalDictationSession
                 { warnings.Add("History could not be saved. Your transcript remains available here for export."); }
             }
             return new(processed.Text, engineId, modelId ?? modelName, duration,
-                decoded.Segments.Select(segment => new TranscriptionSegment(segment.Text, segment.Start, segment.End)).ToArray(),
+                segments,
                 warnings.Count == 0 ? null : string.Join(" · ", warnings))
             {
                 DisplayName = registryProvider ? modelName : "NVIDIA · " + modelName,

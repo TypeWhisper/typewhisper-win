@@ -25,10 +25,15 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin
     private string? _apiKey;
     private string? _selectedModelId;
 
+    // https://developers.deepgram.com/docs/models-languages-overview (2026-09-10)
+    private static readonly IReadOnlyList<string> Nova2Languages = Array.AsReadOnly(
+        "multi bg ca zh zh-CN zh-Hans zh-TW zh-Hant zh-HK cs da da-DK nl en en-US en-AU en-GB en-NZ en-IN et fi nl-BE fr fr-CA de de-CH el hi hu id it ja ko ko-KR lv lt ms no pl pt pt-BR pt-PT ro ru sk es es-419 sv sv-SE th th-TH tr uk vi".Split(' '));
+    private static readonly IReadOnlyList<string> Nova3Languages = Array.AsReadOnly(
+        "multi af af-ZA ar ar-AE ar-SA ar-QA ar-KW ar-SY ar-LB ar-PS ar-JO ar-EG ar-SD ar-TD ar-MA ar-DZ ar-TN ar-IQ ar-IR hy as as-IN be bn bs bg ca zh-HK zh zh-CN zh-Hans zh-TW zh-Hant hr cs cs-CZ da da-DK nl en en-US en-AU en-GB en-IN en-NZ et fi nl-BE fr fr-CA ka ka-GE de de-CH el gu gu-IN he hi hu id it ja kn kk kk-KZ ko ko-KR lv lt mk ms mr mn ne no ps ps-AF fa pl pt pt-BR pt-PT pa pa-IN ro ru sr sk sl es es-419 sv sv-SE tl ta te th th-TH tr tr-TR uk ur vi".Split(' '));
     private static readonly IReadOnlyList<PluginModelInfo> Models =
     [
-        new("nova-3", "Nova-3"),
-        new("nova-2", "Nova-2"),
+        new("nova-3", "Nova-3") { LanguageCodes = Nova3Languages, LanguageCount = Nova3Languages.Count(code => code != "multi" && !code.Contains('-')) },
+        new("nova-2", "Nova-2") { LanguageCodes = Nova2Languages, LanguageCount = Nova2Languages.Count(code => code != "multi" && !code.Contains('-')) },
     ];
 
     // ITypeWhisperPlugin
@@ -44,7 +49,7 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.1.3";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -100,6 +105,10 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin
     /// Gets the currently selected provider model identifier.
     /// </summary>
     public string? SelectedModelId => _selectedModelId;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> SupportedLanguages =>
+        _selectedModelId == "nova-2" ? Nova2Languages : Nova3Languages;
 
     /// <summary>
     /// Gets whether the provider supports translation requests.
