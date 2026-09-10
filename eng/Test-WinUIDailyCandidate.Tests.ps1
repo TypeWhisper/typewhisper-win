@@ -40,6 +40,13 @@ try {
     Expect-Rejection '1.1.0-daily.20260910.1' 'Invalid shared .NET 10'; $checks++
     Set-Content -LiteralPath (Join-Path $fixture 'Cli/TypeWhisper.Cli.runtimeconfig.json') -Value '{"runtimeOptions":{"framework":{"name":"Microsoft.NETCore.App","version":"10.0.0"}}}'
     Expect-Rejection '1.1.0-daily.20260910.1' 'unexpected version'; $checks++
+    foreach ($name in @('.typewhisper-cli.json', '.typewhisper-shared-runtime.json', 'cli-profile.json', 'CLI-PROFILE.JSON', '', ' ')) {
+        $manifest = @{ }
+        $manifest[$name] = 'A' * 64
+        $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $fixture 'Cli/.typewhisper-shared-runtime.json')
+        Expect-Rejection '1.1.0-daily.20260910.1' 'Invalid shared CLI runtime entry'; $checks++
+    }
+    Set-Content -LiteralPath (Join-Path $fixture 'Cli/.typewhisper-shared-runtime.json') -Value '{}'
     New-Item -ItemType Directory -Path (Join-Path $fixture 'Plugins') | Out-Null
     Expect-Rejection '1.1.0-daily.20260910.1' 'development/user state: Plugins'; $checks++
     Set-Content -LiteralPath (Join-Path $fixture 'coreclr.dll') -Value 'synthetic duplicate'

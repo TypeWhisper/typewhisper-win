@@ -4,6 +4,25 @@ using Xunit;
 public class OriginalFieldFocusTests
 {
     [Fact]
+    public async Task WindowAndFieldRestorationShareOneDeadline()
+    {
+        var elapsed = TimeSpan.Zero;
+        Func<bool> expired = () => elapsed >= TimeSpan.FromSeconds(5);
+        Task Wait(CancellationToken _) { elapsed += TimeSpan.FromMilliseconds(25); return Task.CompletedTask; }
+
+        Assert.True(await OriginalFieldFocus.RestoreWindowAsync(
+            () => elapsed >= TimeSpan.FromSeconds(4), () => true,
+            () => { }, () => { }, Wait, default, expired));
+
+        // The element would become ready after the overall budget. Window activation
+        // must not give the second phase another five seconds to deliver text.
+        Assert.False(await OriginalFieldFocus.RestoreAsync(
+            () => elapsed >= TimeSpan.FromSeconds(6), () => true,
+            () => { }, Wait, default, expired));
+        Assert.Equal(TimeSpan.FromSeconds(5), elapsed);
+    }
+
+    [Fact]
     public async Task SlowProviderIsAcceptedOnlyAfterReadinessBeyondOldRetryBudget()
     {
         var observations = 0;

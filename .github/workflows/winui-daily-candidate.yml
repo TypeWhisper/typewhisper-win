@@ -135,7 +135,7 @@ jobs:
           test ! -f artifacts/releases.win-x64-daily.json
           test ! -f artifacts/releases.win-arm64-daily.json
           gh release create "$TAG" artifacts/* --target "$GITHUB_SHA" \
-            --title "TypeWhisper $TAG � Daily" --notes-file docs/releases/1.1-daily.md \
+            --title "TypeWhisper $TAG · Daily" --notes-file docs/releases/1.1-daily.md \
             --prerelease --latest=false --draft
           gh release edit "$TAG" --draft=false --prerelease --latest=false
 

@@ -61,7 +61,8 @@ internal sealed class AppReleaseGithubSource : GithubSource
             }
         }
 
-        HasMatchingRelease = false;
+        // A bounded search cannot prove that an older channel feed is absent.
+        // Keep the result unknown unless a short page establishes exhaustion.
         return [];
     }
 

@@ -108,6 +108,7 @@ public sealed class AppReleaseGithubSourceTests
 
         Assert.Single(feed.Assets);
         Assert.Equal(2, downloader.StringRequests.Count);
+        Assert.True(source.HasMatchingRelease);
         Assert.Contains(
             downloader.StringRequests,
             url => url.Contains("per_page=100&page=2", StringComparison.Ordinal));
@@ -177,6 +178,7 @@ public sealed class AppReleaseGithubSourceTests
 
         Assert.Empty(feed.Assets);
         Assert.Empty(downloader.BytesRequests);
+        Assert.False(source.HasMatchingRelease);
     }
 
     [Fact]
@@ -200,6 +202,7 @@ public sealed class AppReleaseGithubSourceTests
 
         Assert.Empty(feed.Assets);
         Assert.Equal(10, downloader.StringRequests.Count);
+        Assert.Null(source.HasMatchingRelease);
         Assert.Contains(
             downloader.StringRequests,
             url => url.Contains("per_page=100&page=10", StringComparison.Ordinal));

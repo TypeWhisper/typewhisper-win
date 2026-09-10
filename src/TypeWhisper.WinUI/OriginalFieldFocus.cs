@@ -4,7 +4,7 @@ namespace TypeWhisper.WinUI;
 
 internal static class OriginalFieldFocus
 {
-    private static Func<bool> Deadline()
+    internal static Func<bool> Deadline()
     {
         var clock = Stopwatch.StartNew();
         return () => clock.Elapsed >= TimeSpan.FromSeconds(5);

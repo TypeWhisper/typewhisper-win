@@ -85,6 +85,7 @@ internal sealed class OriginalDictationField : IDisposable
         try
         {
             cancellation.ThrowIfCancellationRequested();
+            var expired = OriginalFieldFocus.Deadline();
             // Avoid disturbing the caret when the user stayed in the original field.
             if (IsCurrent()) return true;
             if (!IsValid()) return false;
@@ -102,7 +103,7 @@ internal sealed class OriginalDictationField : IDisposable
                         _element!.SetFocus();
                     }
                 },
-                ct => Task.Delay(25, ct), cancellation))
+                ct => Task.Delay(25, ct), cancellation, expired))
             {
                 PasteDiagnostics.Write("field.restore.window-activation-failed");
                 DiagnoseFocus();
@@ -110,7 +111,7 @@ internal sealed class OriginalDictationField : IDisposable
             }
             return await OriginalFieldFocus.RestoreAsync(IsCurrent,
                 () => GetForegroundWindow() == _window && IsValid(),
-                () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation);
+                () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation, expired);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { PasteDiagnostics.Write("field.restore.exception", ex); return false; }
     }
