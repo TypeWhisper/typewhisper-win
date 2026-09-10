@@ -6,7 +6,7 @@ namespace TypeWhisper.WinUI;
 internal sealed class LocalCtcVocabulary : IAsyncDisposable
 {
     internal const string PluginId = "com.typewhisper.parakeet-ctc";
-    internal static readonly Version HostVersion = new(1, 1, 1);
+    internal static readonly Version HostVersion = new(1, 1, 2);
     internal event Action? Changed;
     internal bool Busy { get; private set; }
     internal string? Status { get; private set; }

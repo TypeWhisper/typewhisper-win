@@ -70,6 +70,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         PortableTranscriptionProvider[] TranscriptionSnapshots, PortableLlmProvider[] LlmSnapshots)
     {
         internal Dictionary<string, PostProcessorRole> PostProcessors { get; init; } = new(StringComparer.Ordinal);
+        internal PortableTtsProvider[] TtsSnapshots { get; init; } = [];
         internal Dictionary<string, ActionRole> Actions { get; init; } = new(StringComparer.Ordinal);
     }
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -407,11 +408,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         var llm = new Dictionary<string, LlmRole>(StringComparer.OrdinalIgnoreCase);
         var transcriptionSnapshots = new List<PortableTranscriptionProvider>();
         var llmSnapshots = new List<PortableLlmProvider>();
+        var ttsSnapshots = new List<PortableTtsProvider>();
         var postProcessors = new Dictionary<string, PostProcessorRole>(StringComparer.Ordinal);
         var actions = new Dictionary<string, ActionRole>(StringComparer.Ordinal);
         foreach (var slot in slots)
         {
             var plugin = slot.Package!.Plugin;
+            if (plugin is ITtsProviderPlugin tts && tts.SupportsPlaybackSelection)
+                ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())));
             if (plugin is IActionPlugin action)
             {
                 if (action.PluginId != slot.Id || string.IsNullOrWhiteSpace(action.ActionId))
@@ -451,7 +455,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable, Array.AsReadOnly(provider.SupportedModels.ToArray())));
             }
         }
-        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors, Actions = actions };
+        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray() };
     }
 
     private void Publish(Index index) { lock (_sync) _index = index; }

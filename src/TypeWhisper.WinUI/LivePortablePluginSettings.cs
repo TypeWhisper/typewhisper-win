@@ -43,7 +43,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _check = Button("Check connection", () => session.ValidateRegistryKeyAsync(id), "Connection verified. No audio was uploaded.");
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         actions.Children.Add(_save); actions.Children.Add(_remove); actions.Children.Add(_check);
-        _credentials.Children.Add(actions); content.Children.Add(_credentials); content.Children.Add(_models); content.Children.Add(_textSettings);
+        _credentials.Children.Add(actions); content.Children.Add(_textSettings);
         Content = content;
         _key.PasswordChanged += (_, _) => UpdateButtons();
         Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
@@ -59,8 +59,20 @@ internal sealed class LivePortablePluginSettings : UserControl
         _key.PlaceholderText = state?.ApiKeyConfigured == true ? "Key saved - enter a replacement" : "Enter an API key";
         _credentials.Visibility = state?.HasApiKeySettings == true ? Visibility.Visible : Visibility.Collapsed;
         if (state?.Enabled == true && state.HasTextSettings)
-            _textSettings.Content ??= new LivePluginTextSettings(_session, _id);
-        else _textSettings.Content = null;
+        {
+            if (_textSettings.Content is not LivePluginTextSettings)
+            {
+                if (_textSettings.Content is StackPanel old) old.Children.Clear();
+                _textSettings.Content = new LivePluginTextSettings(_session, _id, _credentials, _models);
+            }
+        }
+        else if (_textSettings.Content is not StackPanel)
+        {
+            if (_textSettings.Content is LivePluginTextSettings old) old.DetachHostControls();
+            var fallback = new StackPanel { Spacing = 14 };
+            fallback.Children.Add(_credentials); fallback.Children.Add(_models);
+            _textSettings.Content = fallback;
+        }
         _models.Visibility = _session.PluginRuntime.TranscriptionProviders.Any(provider => provider.PluginId == _id) ||
             _session.LlmProviders.Any(provider => provider.PluginId == _id) ||
             _session.ActiveRegistryModelDownload?.PluginId == _id ? Visibility.Visible : Visibility.Collapsed;

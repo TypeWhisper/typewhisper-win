@@ -57,7 +57,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | LiveTranscript | Separate v2 port pending |
 | Meta | Separate v2 port pending |
 | Obsidian | Existing portable build |
-| OpenAi | Separate v2 port pending |
+| OpenAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenAi`; 73 provider tests, native settings inspection, real API/ChatGPT and microphone tests passed; update acceptance and publication pending (see plugin README and live-test notes) |
 | OpenAiCompatible | Separate v2 port pending |
 | OpenAiVectorMemory | Separate v2 port pending |
 | OpenRouter | Separate v2 port pending |

@@ -9,4 +9,10 @@ namespace TypeWhisper.PluginSDK.Models;
 public sealed record TtsSpeakRequest(
     string Text,
     string? Language = null,
-    TtsPurpose Purpose = TtsPurpose.Status);
+    TtsPurpose Purpose = TtsPurpose.Status)
+{
+    /// <summary>Per-request voice override; does not change the saved provider voice.</summary>
+    public string? VoiceId { get; init; }
+    /// <summary>Selected Windows audio endpoint, or null for the system default.</summary>
+    public string? OutputDeviceId { get; init; }
+}

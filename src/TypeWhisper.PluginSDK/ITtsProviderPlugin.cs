@@ -16,6 +16,9 @@ public interface ITtsProviderPlugin : ITypeWhisperPlugin
     /// <summary>Whether the provider is configured and ready to speak.</summary>
     bool IsConfigured { get; }
 
+    /// <summary>Honors per-request voice and output endpoint selection.</summary>
+    bool SupportsPlaybackSelection => false;
+
     /// <summary>Available voices for this provider.</summary>
     IReadOnlyList<PluginVoiceInfo> AvailableVoices { get; }
 

@@ -1,0 +1,5 @@
+<Project DefaultTargets="Build">
+  <Target Name="Build"><MSBuild Projects="TypeWhisper.Plugin.OpenAi.csproj" Targets="Restore;Build" Properties="Configuration=$(Configuration)" RemoveProperties="RuntimeIdentifier;RuntimeIdentifiers;Platform" /></Target>
+  <Import Project="../../eng/PortablePlugin.targets" />
+  <Target Name="GetTargetFrameworks" /><Target Name="GetTargetPath" />
+</Project>
