@@ -171,7 +171,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation),
         _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current);
     internal string Status { get; private set; } = "Loading local transcription plugin…";
-    internal string Shortcut { get; set; } = "Ctrl+Shift+F9";
+    internal const string DefaultShortcut = "Ctrl+Shift";
+    internal string Shortcut { get; set; } = DefaultShortcut;
     internal bool IsRecording => !_recorderReserved && _audio.IsRecording;
     internal bool IsReady => UsesRegistryProvider ? ActiveRegistryProvider?.Ready == true : _transcriptionPlugin.Ready;
     internal string? LocalPluginError { get; private set; }

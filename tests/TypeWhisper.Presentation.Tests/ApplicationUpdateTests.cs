@@ -86,6 +86,36 @@ public sealed class ApplicationUpdateTests : IDisposable
         Assert.False(controller.Busy);
     }
     [Fact]
+    public async Task ActiveRecordingCanBlockRestartWithoutApplyingDownloadedUpdate()
+    {
+        var backend = new Backend();
+        var recording = true;
+        var controller = new AppUpdateController(Preferences(), backend, apply =>
+        {
+            if (recording) return Task.FromResult<string?>("Finish recording first.");
+            apply();
+            return Task.FromResult<string?>(null);
+        });
+        await controller.CheckAsync();
+        await controller.InstallAsync();
+        Assert.DoesNotContain("apply", backend.Calls);
+        Assert.Equal("Finish recording first.", controller.Status);
+        Assert.NotNull(controller.Offer);
+        recording = false;
+        await controller.InstallAsync();
+        Assert.Single(backend.Calls, call => call == "apply");
+    }
+    [Fact]
+    public async Task DowngradeIsExplainedAndNeverAppliedByChecking()
+    {
+        var backend = new Backend { Check = () => Task.FromResult(new AppUpdateCheck(true, new("1.0.0", true))) };
+        var controller = new AppUpdateController(Preferences(), backend, _ => throw new Exception("must not restart"));
+        await controller.CheckAsync();
+        Assert.True(controller.Offer!.IsDowngrade);
+        Assert.Contains("older than your installed version", controller.Status);
+        Assert.Equal(new[] { "check" }, backend.Calls);
+    }
+    [Fact]
     public async Task UnavailableHostCanSaveChannelsButCannotInstallOrCheck()
     {
         var backend = new Backend { UnavailableReason = "Development build" };

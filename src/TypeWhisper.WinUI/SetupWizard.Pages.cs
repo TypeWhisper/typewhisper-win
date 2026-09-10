@@ -134,7 +134,7 @@ public sealed partial class SetupWizard
             AutomationProperties.SetName(button, title); AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
             _body.Children.Add(button);
         }
-        _shortcutRecorder = new ShortcutRecorder("MainDictationHotkeys", "Dictation hotkey", "Ctrl+Shift+F9", _values,
+        _shortcutRecorder = new ShortcutRecorder("MainDictationHotkeys", "Dictation hotkey", LocalDictationSession.DefaultShortcut, _values,
             () => SettingsCatalog.ShortcutBindings(_values), value => _closing ? "Setup is closed." : _commitHotkeys(value));
         _body.Children.Add(new Expander { Header = "Change hotkey", Content = _shortcutRecorder, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
         _body.Children.Add(Copy("Your existing hotkey is kept until you change it."));

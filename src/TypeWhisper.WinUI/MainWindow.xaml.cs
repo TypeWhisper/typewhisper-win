@@ -137,7 +137,7 @@ public sealed partial class MainWindow : Window
             _dictation.Changed += _observeInputMode;
             _dictationHotkey = new DictationHotkeyRegistration(this, DispatchRecordingShortcut, () => _dictationInput.IsRecordingOrStarting, () => _dictation.RecordingModePreferences.Current,
                 () => DictationHotkeysPaused);
-            var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : "Ctrl+Shift+F9";
+            var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : LocalDictationSession.DefaultShortcut;
             var error = _dictationHotkey.TryChange(saved);
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
             _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;

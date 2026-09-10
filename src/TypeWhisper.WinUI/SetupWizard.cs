@@ -130,6 +130,7 @@ public sealed partial class SetupWizard : UserControl
         _body.Children.Clear(); _pickers.Clear(); _shortcutRecorder = null; _testBox = null;
         _providerPicker = _modelPicker = _languagePicker = null;
         _providerSettings = null; _modelLabel = _engineStatus = null; _renderedProvider = null;
+        _pluginInstallPanel = null;
         RenderSteps();
         string[] titles = ["Welcome to TypeWhisper", "Permissions", "Choose your hotkey", "AI & Engine", "Try it out"];
         string[] subtitles = ["Set up voice typing in a few simple steps.", "Give TypeWhisper access to work on your PC.",
@@ -202,6 +203,9 @@ public sealed partial class SetupWizard : UserControl
         {
             if (_observedProvider != _session.ActiveProviderId) _selectedProvider = _observedProvider = _session.ActiveProviderId;
             var providers = _session.DictationProviders;
+            if (_pluginInstallPanel is not null) _pluginInstallPanel.Visibility =
+                _pluginInstallation is null && _session.Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)
+                    ? Visibility.Collapsed : Visibility.Visible;
             var selected = providers.FirstOrDefault(item => item.Id == _selectedProvider);
             _providerPicker.SetOptions(providers.Select(item => new Choice(item.Id, item.Name, item.Status + (item.Cloud ? " - cloud" : " - on device"))).ToArray(), _selectedProvider ?? "", "Provider unavailable");
             _modelPicker.SetOptions(selected?.Models.Where(item => item.Ready).Select(item => new Choice(item.Id, item.Name, "Ready")).ToArray() ?? [],

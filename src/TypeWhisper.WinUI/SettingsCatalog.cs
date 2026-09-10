@@ -74,7 +74,7 @@ internal static partial class SettingsCatalog
         Toggle("Audio", "SilenceAutoStopEnabled", "Stop after silence"),
         Choice("Audio", "SilenceAutoStopSeconds", "Silence timeout", "10 seconds", "3 seconds|5 seconds|10 seconds|15 seconds|30 seconds"),
 
-        Text("Shortcuts", "MainDictationHotkeys", "Main dictation", "Ctrl+Shift+F9"),
+        Text("Shortcuts", "MainDictationHotkeys", "Main dictation", LocalDictationSession.DefaultShortcut),
         Text("Shortcuts", "CancelProcessingHotkeys", "Cancel processing", "", "Cancel final dictation processing or an active selected-text workflow. Does nothing while idle or recording."),
         Text("Shortcuts", "QuickLaunchHotkeys", "Quick Launch", "Alt+Space"),
         Text("Shortcuts", "PushToTalkHotkey", "Push to talk"),
