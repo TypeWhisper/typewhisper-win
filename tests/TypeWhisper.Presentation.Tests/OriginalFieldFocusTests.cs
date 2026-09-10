@@ -35,6 +35,20 @@ public class OriginalFieldFocusTests
     }
 
     [Fact]
+    public async Task WindowReadyAtDeadlineDoesNotRequestElementFocus()
+    {
+        var elapsed = TimeSpan.Zero;
+        Func<bool> expired = () => elapsed >= TimeSpan.FromSeconds(5);
+        Assert.True(await OriginalFieldFocus.RestoreWindowAsync(
+            () => expired(), () => true, () => { }, () => { },
+            _ => { elapsed = TimeSpan.FromSeconds(5); return Task.CompletedTask; }, default, expired));
+
+        Assert.False(await OriginalFieldFocus.RestoreAsync(() => false, () => true,
+            () => throw new Exception("Must not request focus after the shared deadline"),
+            _ => throw new Exception("Must not wait after the shared deadline"), default, expired));
+    }
+
+    [Fact]
     public async Task ExpiredDeadlineDoesNotPretendFieldIsReady()
     {
         Assert.False(await OriginalFieldFocus.RestoreAsync(() => false, () => true,

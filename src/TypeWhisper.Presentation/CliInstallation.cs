@@ -137,7 +137,10 @@ public sealed class CliInstallation
         {
             // Shared payloads are root-level runtime files, never arbitrary parent paths.
             if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0
-                || name is "." or ".." or ManifestName or SharedRuntimeName or "cli-profile.json"
+                || name is "." or ".."
+                || string.Equals(name, ManifestName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, SharedRuntimeName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "cli-profile.json", StringComparison.OrdinalIgnoreCase)
                 || !System.Text.RegularExpressions.Regex.IsMatch(hash ?? "", "\\A[0-9A-Fa-f]{64}\\z"))
                 throw new IOException("The shared CLI runtime manifest contains an invalid entry.");
             var source = Path.Combine(appRoot, name);

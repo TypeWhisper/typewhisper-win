@@ -35,6 +35,7 @@ internal static class OriginalFieldFocus
         cancellation.ThrowIfCancellationRequested();
         if (isCurrent()) return true;
         if (!canRestore()) return false;
+        if (expired()) return false;
         setFocus();
         return await WaitForStateAsync(isCurrent, canRestore, wait, cancellation, expired);
     }
