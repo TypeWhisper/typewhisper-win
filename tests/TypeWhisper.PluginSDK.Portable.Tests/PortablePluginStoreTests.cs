@@ -30,6 +30,20 @@ public sealed class PortablePluginStoreTests : IDisposable
     private VocabularyHostServices Host => new(Path.Combine(_root, "data"));
 
     [Fact]
+    public async Task EmptyHostInstallsOnDemandAndPreservesInstallationAcrossRestart()
+    {
+        var store = Store();
+        await store.InitializeAsync();
+        Assert.False(store.IsInstalled(Id));
+        Assert.False(await store.InstallAsync(Entry()));
+        var installed = store.Resolve(Id);
+        var restarted = Store();
+        await restarted.InitializeAsync();
+        Assert.Equal(installed, restarted.Resolve(Id));
+        Assert.Equal("1.0.0", restarted.InstalledVersion(Id));
+    }
+
+    [Fact]
     public async Task UpdateAllContinuesWithOtherPackagesAfterOneFailure()
     {
         const string otherId = "com.test.other";

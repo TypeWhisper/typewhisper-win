@@ -12,13 +12,13 @@ if ($ExpectedVersion -notmatch '^1\.1\.0-daily\.[0-9]{8}\.[0-9]+$') {
 $root = (Resolve-Path -LiteralPath $PublishDirectory).Path
 $required = @('TypeWhisper.WinUI.exe', 'TypeWhisper.WinUI.dll', 'TypeWhisper.WinUI.runtimeconfig.json',
     'TypeWhisper.WinUI.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'coreclr.dll', 'Cli/typewhisper.exe',
-    'Cli/TypeWhisper.Cli.dll', 'Plugins/com.typewhisper.sherpa-onnx/manifest.json')
+    'Cli/TypeWhisper.Cli.dll')
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) {
         throw "Candidate is missing $relative"
     }
 }
-foreach ($relative in @('typewhisper-dev-publication.json', 'cli-profile.json', 'Cli/cli-profile.json',
+foreach ($relative in @('Plugins', 'typewhisper-dev-publication.json', 'cli-profile.json', 'Cli/cli-profile.json',
     'api-discovery.json', 'PluginData', 'PluginPackages', 'setup.json', 'workflows.json')) {
     if (Test-Path -LiteralPath (Join-Path $root $relative)) { throw "Candidate contains development/user state: $relative" }
 }

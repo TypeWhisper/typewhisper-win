@@ -22,7 +22,7 @@ internal sealed class TrayIconService : IDisposable
     private bool _hotkeysPaused;
     private string? _pauseError;
 
-    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery)
+    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates)
     {
         var menu = new MenuFlyout();
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
@@ -61,7 +61,7 @@ internal sealed class TrayIconService : IDisposable
         recent.Items.Add(Unavailable("Read back", "\uE767"));
         menu.Items.Add(recent);
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Unavailable("Check for updates…", "\uE895"));
+        menu.Items.Add(CreateItem("Check for updates…", "\uE895", updates));
         menu.Items.Add(new MenuFlyoutSeparator());
         _exitAction = CreateItem("Exit", "\uE7E8", exit);
         menu.Items.Add(_exitAction);

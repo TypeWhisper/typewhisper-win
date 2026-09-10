@@ -22,7 +22,8 @@
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="WinUIEx" Version="2.9.3" />
     <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
@@ -38,6 +39,7 @@
     <EmbeddedResource Include="../TypeWhisper.Windows/Resources/Localization/en.json" LogicalName="TypeWhisper.LicenseStrings.json" />
     <Compile Include="../TypeWhisper.Windows/Services/LicenseService.cs" Link="Platform/LicenseService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AppDistribution.cs" Link="Platform/AppDistribution.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AppReleaseGithubSource.cs" Link="Platform/AppReleaseGithubSource.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="Platform/AudioRecordingService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/SoundService.cs" Link="Platform/SoundService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioDuckingService.cs" Link="Platform/AudioDuckingService.cs" />
@@ -58,10 +60,6 @@
     </ItemGroup>
     <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
-  <Target Name="BuildPortablePlugins" BeforeTargets="Publish">
-    <ItemGroup><PortablePluginProject Include="../../plugins/*/portable.proj" /></ItemGroup>
-    <MSBuild Projects="@(PortablePluginProject)" Targets="Build" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" BuildInParallel="false" />
-  </Target>
   <Target Name="WriteDevelopmentStartupReceipt" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
     <PropertyGroup>
       <_StartupSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))</_StartupSourceRoot>
@@ -76,9 +74,6 @@
       Lines="{&quot;Version&quot;:1,&quot;Identity&quot;:&quot;TypeWhisper.WinUI.Dev&quot;,&quot;SourceRoot&quot;:&quot;$(_StartupSourceJson)&quot;,&quot;OutputDirectory&quot;:&quot;$(_StartupOutputJson)&quot;}"
       Overwrite="true" Encoding="UTF-8"
       Condition="'$(Configuration)' == 'Debug' and '$(_StartupInsideSource)' != 'True' and '$(_StartupOutputRoot)' != '$(_StartupSourceRoot)' and Exists('$(_StartupOutputRoot)/TypeWhisper.WinUI.exe')" />
-  </Target>
-  <Target Name="PublishPortablePlugins" AfterTargets="Publish" DependsOnTargets="BuildPortablePlugins">
-    <MSBuild Projects="@(PortablePluginProject)" Targets="CopyPackage" Properties="Configuration=$(Configuration);PluginDestination=$([System.IO.Path]::GetFullPath('$(PublishDir)Plugins'))" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" />
   </Target>
   <Target Name="PublishBundledCli" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
     <PropertyGroup>

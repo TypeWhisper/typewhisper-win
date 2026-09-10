@@ -145,6 +145,7 @@ public sealed partial class SetupWizard
         _engineStatus = Copy("");
         AutomationProperties.SetLiveSetting(_engineStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _body.Children.Add(_engineStatus);
+        AddPluginInstallation();
         CreateModelPickers();
     }
 

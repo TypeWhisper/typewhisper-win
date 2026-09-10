@@ -14,7 +14,7 @@ try {
     Expect-Rejection '1.1.0-daily.20260910.1' 'missing TypeWhisper.WinUI.exe'; $checks++
     $required = @('TypeWhisper.WinUI.exe', 'TypeWhisper.WinUI.dll', 'TypeWhisper.WinUI.runtimeconfig.json',
         'TypeWhisper.WinUI.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'coreclr.dll', 'Cli/typewhisper.exe',
-        'Cli/TypeWhisper.Cli.dll', 'Plugins/com.typewhisper.sherpa-onnx/manifest.json')
+        'Cli/TypeWhisper.Cli.dll')
     foreach ($name in $required) {
         $file = Join-Path $fixture $name
         New-Item -ItemType Directory -Path (Split-Path -Parent $file) -Force | Out-Null
@@ -27,6 +27,8 @@ try {
         Remove-Item -LiteralPath $file
     }
     Expect-Rejection '1.1.0-daily.20260910.1' 'unexpected version'; $checks++
+    New-Item -ItemType Directory -Path (Join-Path $fixture 'Plugins') | Out-Null
+    Expect-Rejection '1.1.0-daily.20260910.1' 'development/user state: Plugins'; $checks++
     Write-Host "$checks candidate rejection checks passed. Version and architecture acceptance runs on the published CI candidate."
 } finally {
     $resolved = [IO.Path]::GetFullPath($fixture)

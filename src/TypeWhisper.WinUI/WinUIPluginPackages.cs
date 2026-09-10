@@ -11,8 +11,7 @@ internal sealed class WinUIPluginPackages
     internal PortablePluginCatalog Catalog { get; } = new(Http);
     internal PortablePluginUpdates Updates { get; }
     internal WinUIPluginPackages() => Updates = new(Store, Catalog, LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture);
-    internal Task InitializeAsync() => Task.Run(() => Store.InitializeAsync(Path.Combine(AppContext.BaseDirectory, "Plugins"),
-        bootstrapPluginIds: [LocalTranscriptionPlugin.PluginId, CloudTranscriptionPlugin.PluginId]));
+    internal Task InitializeAsync() => Task.Run(() => Store.InitializeAsync());
     internal static VocabularyHostServices CreateServices(string id) => Services.GetOrAdd(id, BuildServices);
     private static VocabularyHostServices BuildServices(string id)
     {

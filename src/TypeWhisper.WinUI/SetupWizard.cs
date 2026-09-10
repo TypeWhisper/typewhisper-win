@@ -25,7 +25,7 @@ public sealed partial class SetupWizard : UserControl
     private readonly SetupReadiness _feedback = new();
     private ChoicePicker? _providerPicker, _modelPicker, _languagePicker;
     private ContentControl? _providerSettings;
-    private TextBlock? _modelLabel, _engineStatus;
+    private TextBlock? _modelLabel, _providerLabel, _languageLabel, _engineStatus;
     private string? _renderedProvider;
     private string? _selectedProvider;
     private string? _observedProvider;
@@ -73,7 +73,7 @@ public sealed partial class SetupWizard : UserControl
         };
         KeyUp += (_, e) => { if (_shortcutRecorder?.IsCapturing == true) _shortcutRecorder.CaptureKeyUp(e); };
         Loaded += (_, _) => { _closing = false; _session.Changed += Changed; _session.Models.Changed += Changed; _session.SetupTestTarget = CaptureTestTarget; RefreshStatus(); _testBox?.Focus(FocusState.Programmatic); };
-        Unloaded += (_, _) => { _closing = true; _session.Changed -= Changed; _session.Models.Changed -= Changed; _session.SetupTestTarget = null; };
+        Unloaded += (_, _) => { _closing = true; _pluginInstallation?.Cancel(); _session.Changed -= Changed; _session.Models.Changed -= Changed; _session.SetupTestTarget = null; };
         _feedback.ReportPersistence(store.Error);
         Render();
     }
@@ -165,11 +165,13 @@ public sealed partial class SetupWizard : UserControl
             _body.Children.Add(picker); _pickers.Add(picker); return picker;
         }
         _providerPicker = Create("Provider");
+        _providerLabel = (TextBlock)_body.Children[^2];
         _providerSettings = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         _body.Children.Add(_providerSettings);
         _modelPicker = Create("Ready model");
         _modelLabel = (TextBlock)_body.Children[^2];
         _languagePicker = Create("Spoken language");
+        _languageLabel = (TextBlock)_body.Children[^2];
         _providerPicker.SelectionChanged += id => { if (_refreshingModels || _closing) return; _selectedProvider = id; RefreshModelPickers(); };
         _modelPicker.SelectionChanged += async id =>
         {
@@ -212,10 +214,15 @@ public sealed partial class SetupWizard : UserControl
             _modelPicker.IsEnabled = canChange && selected?.Ready == true;
             _languagePicker.IsEnabled = canChange && _session.IsReady && codes.Count > 0 && _selectedProvider == _session.ActiveProviderId;
             var local = selected?.Id == "local";
-            _modelPicker.Visibility = local ? Visibility.Collapsed : Visibility.Visible;
+            var available = providers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            _providerPicker.Visibility = _languagePicker.Visibility = available;
+            if (_providerLabel is not null) _providerLabel.Visibility = available;
+            if (_languageLabel is not null) _languageLabel.Visibility = available;
+            _modelPicker.Visibility = local ? Visibility.Collapsed : available;
             if (_modelLabel is not null) _modelLabel.Visibility = _modelPicker.Visibility;
             if (_engineStatus is not null) _engineStatus.Text = _session.IsReady
                 ? _session.ActiveModelName + " is ready for dictation."
+                : providers.Count == 0 ? "Choose a transcription plugin to get started."
                 : "Choose a model below. Download it, then select Use model to continue.";
             if (_providerSettings is not null && _renderedProvider != selected?.Id)
             {

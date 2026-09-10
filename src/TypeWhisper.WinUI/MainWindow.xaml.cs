@@ -1231,6 +1231,7 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
+                LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates);
                 if (category == "Advanced")
                 {
                     content.Children.Clear(); pickers.Clear();

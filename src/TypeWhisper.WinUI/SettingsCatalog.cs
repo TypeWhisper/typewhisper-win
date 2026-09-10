@@ -42,7 +42,7 @@ internal static partial class SettingsCatalog
     [
         Choice("General", "UiLanguage", "Interface language", "System", "System|English|Deutsch"),
         Toggle("General", "AutostartEnabled", "Start with Windows"),
-        Choice("General", "UpdateChannel", "Update channel", "Installed channel", "Installed channel|Stable|Preview"),
+        Choice("General", "UpdateChannel", "Update channel", "Stable", "Stable|Daily|Release Candidate"),
 
         Choice("Dictation", "Mode", "Recording mode", "Toggle", "Toggle|Push to talk|Hybrid"),
         Choice("Dictation", "Language", "Spoken language", "Automatic", "Automatic|English|German|French|Spanish|Italian"),
