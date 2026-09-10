@@ -7,6 +7,7 @@ using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Core.Tests.Services;
 
+[Collection(TypeWhisperEnvironmentCollection.Name)]
 public sealed class BackupRestoreServiceTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"typewhisper-backup-tests-{Guid.NewGuid():N}");
@@ -470,18 +471,23 @@ public sealed class BackupRestoreServiceTests : IDisposable
             destination.Snippets,
             destination.History);
 
+        // This collection runs without parallel tests, so a queued writer belongs to this test.
+        // Inspect the existing gate without adding a test callback to production locking code.
+        var coordinator = typeof(BackupRestoreService).Assembly
+            .GetType("TypeWhisper.Core.Services.ProfileMutationCoordinator", throwOnError: true)!;
+        var mutationGate = Assert.IsType<ReaderWriterLockSlim>(coordinator
+            .GetField("Gate", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(null));
         // The import holds the process-wide mutation gate while the dictionary write waits.
         // Dedicated threads keep these blocking operations independent of thread-pool scheduling.
         var import = Task.Factory.StartNew(() => backup.ImportAsync(json), CancellationToken.None,
             TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
-        var concurrentWriteStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task concurrentWrite = Task.CompletedTask;
         try
         {
             await workflowWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
             concurrentWrite = Task.Factory.StartNew(() =>
             {
-                concurrentWriteStarted.SetResult();
                 destination.Dictionary.AddEntry(new DictionaryEntry
                 {
                     Id = "concurrent-entry",
@@ -489,8 +495,10 @@ public sealed class BackupRestoreServiceTests : IDisposable
                     Original = "concurrent"
                 });
             }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-            await concurrentWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            await Task.Delay(100);
+            using var waitTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            while (mutationGate.WaitingWriteCount == 0 && !concurrentWrite.IsCompleted)
+                await Task.Delay(10, waitTimeout.Token);
+            Assert.Equal(1, mutationGate.WaitingWriteCount);
             Assert.False(concurrentWrite.IsCompleted);
         }
         finally
