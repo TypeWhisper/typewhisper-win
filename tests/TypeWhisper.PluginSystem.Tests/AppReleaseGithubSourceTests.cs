@@ -108,6 +108,7 @@ public sealed class AppReleaseGithubSourceTests
 
         Assert.Single(feed.Assets);
         Assert.Equal(2, downloader.StringRequests.Count);
+        Assert.True(source.HasMatchingRelease);
         Assert.Contains(
             downloader.StringRequests,
             url => url.Contains("per_page=100&page=2", StringComparison.Ordinal));
@@ -177,10 +178,11 @@ public sealed class AppReleaseGithubSourceTests
 
         Assert.Empty(feed.Assets);
         Assert.Empty(downloader.BytesRequests);
+        Assert.False(source.HasMatchingRelease);
     }
 
     [Fact]
-    public async Task GetReleaseFeed_StopsAfterMaximumNumberOfFullPages()
+    public async Task GetReleaseFeed_FailsWhenMaximumFullPagesDoNotEstablishChannelState()
     {
         var fullPage = Enumerable.Range(1, 100)
             .Select(index => CreateRelease(
@@ -196,10 +198,11 @@ public sealed class AppReleaseGithubSourceTests
             prerelease: false,
             downloader);
 
-        var feed = await source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64"));
 
-        Assert.Empty(feed.Assets);
         Assert.Equal(10, downloader.StringRequests.Count);
+        Assert.Null(source.HasMatchingRelease);
         Assert.Contains(
             downloader.StringRequests,
             url => url.Contains("per_page=100&page=10", StringComparison.Ordinal));

@@ -53,6 +53,23 @@ public sealed class CliInstallationTests : IDisposable
     }
 
     [Theory]
+    [InlineData(".typewhisper-cli.json")]
+    [InlineData(".TYPEWHISPER-CLI.JSON")]
+    [InlineData(".typewhisper-shared-runtime.json")]
+    [InlineData(".TYPEWHISPER-SHARED-RUNTIME.JSON")]
+    [InlineData("cli-profile.json")]
+    [InlineData("CLI-PROFILE.JSON")]
+    public void SharedReservedFileFailsBeforeWritingInstallationOrPath(string name)
+    {
+        Shared(name, "reserved payload with a valid hash");
+        var previousPath = _userPath;
+        var error = Assert.Throws<IOException>(() => Service().Install());
+        Assert.Contains("invalid entry", error.Message);
+        Assert.False(Directory.Exists(_install));
+        Assert.Equal(previousPath, _userPath);
+    }
+
+    [Theory]
     [InlineData("../outside.dll")]
     [InlineData("..\\outside.dll")]
     [InlineData("C:outside.dll")]

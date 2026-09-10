@@ -37,7 +37,9 @@ foreach ($relative in @('TypeWhisper.WinUI.runtimeconfig.json', 'Cli/TypeWhisper
 $shared = Get-Content -LiteralPath (Join-Path $root 'Cli/.typewhisper-shared-runtime.json') -Raw | ConvertFrom-Json -AsHashtable
 if ($null -eq $shared) { throw 'Missing shared CLI runtime metadata.' }
 foreach ($name in $shared.Keys) {
-    if ($name -match '[/\\:]' -or $name -in '.', '..' -or $shared[$name] -notmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid shared CLI runtime entry.' }
+    if ([string]::IsNullOrWhiteSpace($name) -or $name -match '[/\\:]' -or
+        $name -in '.', '..', '.typewhisper-cli.json', '.typewhisper-shared-runtime.json', 'cli-profile.json' -or
+        $shared[$name] -notmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid shared CLI runtime entry.' }
     $source = Join-Path $root $name
     if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
         (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $shared[$name]) { throw "Shared CLI runtime is missing or changed: $name" }
