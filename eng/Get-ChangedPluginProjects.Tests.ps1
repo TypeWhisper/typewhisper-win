@@ -95,3 +95,7 @@ try {
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 
+# The invalid-revision test intentionally leaves a nonzero native exit code.
+# Report the successful assertions explicitly to the GitHub PowerShell wrapper.
+exit 0
+
