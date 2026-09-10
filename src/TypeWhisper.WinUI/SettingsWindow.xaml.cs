@@ -301,7 +301,7 @@ public sealed partial class SettingsWindow : Window
             SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Development startup registration is connected · other unavailable controls are disabled";
+                SessionHint.Text = "Startup preferences are saved for this app";
             if (category == "Premium")
                 SessionHint.Text = PremiumAccessState.CanOverride ? "Development access is saved in this profile only" : "Premium access and feature availability";
             if (category == "Advanced") SessionHint.Text = "Advanced settings are saved in this profile";

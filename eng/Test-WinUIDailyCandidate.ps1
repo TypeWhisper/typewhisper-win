@@ -11,16 +11,37 @@ if ($ExpectedVersion -notmatch '^1\.1\.0-daily\.[0-9]{8}\.[0-9]+$') {
 }
 $root = (Resolve-Path -LiteralPath $PublishDirectory).Path
 $required = @('TypeWhisper.WinUI.exe', 'TypeWhisper.WinUI.dll', 'TypeWhisper.WinUI.runtimeconfig.json',
-    'TypeWhisper.WinUI.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'coreclr.dll', 'Cli/typewhisper.exe',
-    'Cli/TypeWhisper.Cli.dll', 'Plugins/com.typewhisper.sherpa-onnx/manifest.json')
+    'TypeWhisper.WinUI.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
+    'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json')
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) {
         throw "Candidate is missing $relative"
     }
 }
-foreach ($relative in @('typewhisper-dev-publication.json', 'cli-profile.json', 'Cli/cli-profile.json',
+foreach ($relative in @('Plugins', 'typewhisper-dev-publication.json', 'cli-profile.json', 'Cli/cli-profile.json',
     'api-discovery.json', 'PluginData', 'PluginPackages', 'setup.json', 'workflows.json')) {
     if (Test-Path -LiteralPath (Join-Path $root $relative)) { throw "Candidate contains development/user state: $relative" }
+}
+foreach ($relative in @('PresentationFramework.dll', 'PresentationCore.dll', 'System.Xaml.dll', 'DirectML.dll', 'onnxruntime.dll', 'coreclr.dll', 'System.Private.CoreLib.dll', 'Cli/coreclr.dll', 'Cli/System.Private.CoreLib.dll')) {
+    if (Test-Path -LiteralPath (Join-Path $root $relative)) { throw "Candidate contains an unused host dependency: $relative" }
+}
+# Both executables must use the installed .NET 10 runtime, without a desktop dependency.
+foreach ($relative in @('TypeWhisper.WinUI.runtimeconfig.json', 'Cli/TypeWhisper.Cli.runtimeconfig.json')) {
+    $config = Get-Content -LiteralPath (Join-Path $root $relative) -Raw | ConvertFrom-Json -AsHashtable
+    $options = $config['runtimeOptions']
+    $framework = $options['framework']
+    if ($null -eq $framework -or $framework['name'] -ne 'Microsoft.NETCore.App' -or
+        $framework['version'] -ne '10.0.0' -or $options.ContainsKey('includedFrameworks') -or
+        $options.ContainsKey('frameworks')) { throw "Invalid shared .NET 10 runtime configuration: $relative" }
+}
+$shared = Get-Content -LiteralPath (Join-Path $root 'Cli/.typewhisper-shared-runtime.json') -Raw | ConvertFrom-Json -AsHashtable
+if ($null -eq $shared) { throw 'Missing shared CLI runtime metadata.' }
+foreach ($name in $shared.Keys) {
+    if ($name -match '[/\\:]' -or $name -in '.', '..' -or $shared[$name] -notmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid shared CLI runtime entry.' }
+    $source = Join-Path $root $name
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $shared[$name]) { throw "Shared CLI runtime is missing or changed: $name" }
+    if (Test-Path -LiteralPath (Join-Path (Join-Path $root 'Cli') $name)) { throw "CLI runtime is duplicated: $name" }
 }
 foreach ($relative in @('TypeWhisper.WinUI.dll', 'Cli/TypeWhisper.Cli.dll')) {
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $root $relative)).ProductVersion

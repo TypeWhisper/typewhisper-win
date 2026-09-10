@@ -89,17 +89,75 @@ internal sealed class OriginalDictationField : IDisposable
             if (IsCurrent()) return true;
             if (!IsValid()) return false;
             if (IsIconic(_window)) ShowWindowAsync(_window, 9);
-            SetForegroundWindow(_window);
-            for (var attempt = 0; attempt < 8 && GetForegroundWindow() != _window; attempt++)
-                await Task.Delay(25, cancellation);
-            cancellation.ThrowIfCancellationRequested();
-            if (GetForegroundWindow() != _window || !IsValid()) return false;
+            if (!await OriginalFieldFocus.RestoreWindowAsync(() => GetForegroundWindow() == _window, IsValid,
+                () => SetForegroundWindow(_window), () =>
+                {
+                    ActivateWithInputThread();
+                    // UIA providers (including Chromium/Electron) may activate the
+                    // host only when the captured editable element receives focus.
+                    // Do not require foreground ownership before requesting it.
+                    if (IsValid())
+                    {
+                        PasteDiagnostics.Write("field.restore.request-element-focus");
+                        _element!.SetFocus();
+                    }
+                },
+                ct => Task.Delay(25, ct), cancellation))
+            {
+                PasteDiagnostics.Write("field.restore.window-activation-failed");
+                DiagnoseFocus();
+                return false;
+            }
             return await OriginalFieldFocus.RestoreAsync(IsCurrent,
                 () => GetForegroundWindow() == _window && IsValid(),
                 () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { return false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { PasteDiagnostics.Write("field.restore.exception", ex); return false; }
     }
+
+    private void ActivateWithInputThread()
+    {
+        // Input attachment must remain synchronous and be undone on the same thread.
+        // No synthetic keystrokes and no replacement of the captured UIA element.
+        var currentThread = GetCurrentThreadId();
+        var foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), out _);
+        var targetThread = GetWindowThreadProcessId(_window, out var process);
+        if (process != _process || targetThread == 0) return;
+        var foregroundAttached = foregroundThread != 0 && foregroundThread != currentThread &&
+            AttachThreadInput(currentThread, foregroundThread, true);
+        var targetAttached = false;
+        try
+        {
+            // Activation and focus belong to the target's input queue too. Connecting
+            // only to the window being left does not activate the original queue.
+            targetAttached = targetThread != currentThread && targetThread != foregroundThread &&
+                AttachThreadInput(currentThread, targetThread, true);
+            PasteDiagnostics.Write($"field.restore.queues foreground={foregroundAttached} target={targetAttached}");
+            var requested = SetForegroundWindow(_window);
+            if (targetAttached || targetThread == currentThread || (targetThread == foregroundThread && foregroundAttached))
+                SetActiveWindow(_window);
+            PasteDiagnostics.Write($"field.restore.activation accepted={requested} current={GetForegroundWindow() == _window}");
+        }
+        finally
+        {
+            if (targetAttached) AttachThreadInput(currentThread, targetThread, false);
+            if (foregroundAttached) AttachThreadInput(currentThread, foregroundThread, false);
+        }
+    }
+
+    private void DiagnoseFocus()
+    {
+        var foreground = GetForegroundWindow();
+        GetWindowThreadProcessId(foreground, out var process);
+        PasteDiagnostics.Write($"field.restore.observed targetWindow={foreground == _window} targetProcess={process == _process} ownProcess={process == Environment.ProcessId}");
+        var focused = _automation.GetFocusedElement();
+        try { PasteDiagnostics.Write($"field.restore.observed originalElement={_automation.CompareElements(_element, focused) != 0}"); }
+        finally { Release(focused); }
+    }
+
+    [DllImport("user32.dll")] private static extern IntPtr SetActiveWindow(IntPtr window);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool AttachThreadInput(uint source, uint target, bool attach);
 
     public void Dispose() { Release(_element); _element = null; Release(_automation); }
     private static void Release(object? value) { if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }

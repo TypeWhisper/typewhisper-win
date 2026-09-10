@@ -5,11 +5,14 @@
     <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>../TypeWhisper.Windows/Resources/Icons/app.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- Solution builds do not pass a RID; WinUI's native runtime cannot use AnyCPU. -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -17,19 +20,27 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
     <PackageReference Include="Velopack" Version="0.0.1298" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="WinUIEx" Version="2.9.3" />
     <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
-    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
+    <!-- The tray bridge references the old AppSDK metapackage. Restore the bridge
+         without that dependency graph; WinUI and its foundation are provided above. -->
+    <PackageDownload Include="H.NotifyIcon.WinUI" Version="[2.4.1]" />
+    <PackageReference Include="H.NotifyIcon" Version="2.4.1" />
+    <Reference Include="H.NotifyIcon.WinUI">
+      <HintPath>$(NuGetPackageRoot)h.notifyicon.winui/2.4.1/lib/net10.0-windows10.0.17763/H.NotifyIcon.WinUI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
-    <ProjectReference Include="../TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="../TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
     <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -38,6 +49,7 @@
     <EmbeddedResource Include="../TypeWhisper.Windows/Resources/Localization/en.json" LogicalName="TypeWhisper.LicenseStrings.json" />
     <Compile Include="../TypeWhisper.Windows/Services/LicenseService.cs" Link="Platform/LicenseService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AppDistribution.cs" Link="Platform/AppDistribution.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AppReleaseGithubSource.cs" Link="Platform/AppReleaseGithubSource.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="Platform/AudioRecordingService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/SoundService.cs" Link="Platform/SoundService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioDuckingService.cs" Link="Platform/AudioDuckingService.cs" />
@@ -58,10 +70,6 @@
     </ItemGroup>
     <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
-  <Target Name="BuildPortablePlugins" BeforeTargets="Publish">
-    <ItemGroup><PortablePluginProject Include="../../plugins/*/portable.proj" /></ItemGroup>
-    <MSBuild Projects="@(PortablePluginProject)" Targets="Build" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" BuildInParallel="false" />
-  </Target>
   <Target Name="WriteDevelopmentStartupReceipt" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
     <PropertyGroup>
       <_StartupSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))</_StartupSourceRoot>
@@ -77,9 +85,6 @@
       Overwrite="true" Encoding="UTF-8"
       Condition="'$(Configuration)' == 'Debug' and '$(_StartupInsideSource)' != 'True' and '$(_StartupOutputRoot)' != '$(_StartupSourceRoot)' and Exists('$(_StartupOutputRoot)/TypeWhisper.WinUI.exe')" />
   </Target>
-  <Target Name="PublishPortablePlugins" AfterTargets="Publish" DependsOnTargets="BuildPortablePlugins">
-    <MSBuild Projects="@(PortablePluginProject)" Targets="CopyPackage" Properties="Configuration=$(Configuration);PluginDestination=$([System.IO.Path]::GetFullPath('$(PublishDir)Plugins'))" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" />
-  </Target>
   <Target Name="PublishBundledCli" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
     <PropertyGroup>
       <_CliPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)Cli', '$(MSBuildProjectDirectory)'))/</_CliPublishDirectory>
@@ -88,5 +93,6 @@
       Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(_CliPublishDirectory);Platform=AnyCPU"
       RemoveProperties="TargetFramework;RuntimeIdentifiers;OutputPath;OutDir;PublishSingleFile;PublishReadyToRun;WindowsAppSDKSelfContained" />
     <Error Condition="!Exists('$(_CliPublishDirectory)typewhisper.exe')" Text="Bundled TypeWhisper CLI is missing." />
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../eng/Optimize-CliBundle.ps1&quot; -PublishDirectory &quot;$(PublishDir)/.&quot;" />
   </Target>
 </Project>

@@ -16,6 +16,7 @@ internal sealed class AppReleaseGithubSource : GithubSource
     };
 
     private readonly string _releaseIndexName;
+    internal bool? HasMatchingRelease { get; private set; }
 
     public AppReleaseGithubSource(
         string repoUrl,
@@ -30,6 +31,7 @@ internal sealed class AppReleaseGithubSource : GithubSource
 
     protected override async Task<GithubRelease[]> GetReleases(bool includePrereleases)
     {
+        HasMatchingRelease = null;
         for (var page = 1; page <= MaximumPages; page++)
         {
             var releasesPath = $"repos{RepoUri.AbsolutePath}/releases?per_page={ReleasesPerPage}&page={page}";
@@ -47,12 +49,19 @@ internal sealed class AppReleaseGithubSource : GithubSource
                 .FirstOrDefault();
 
             if (matchingRelease is not null)
+            {
+                HasMatchingRelease = true;
                 return [matchingRelease];
+            }
 
             if (releases.Length < ReleasesPerPage)
+            {
+                HasMatchingRelease = false;
                 return [];
+            }
         }
 
+        HasMatchingRelease = false;
         return [];
     }
 

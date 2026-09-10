@@ -7,6 +7,7 @@ namespace TypeWhisper.WinUI;
 // About information reflects this build; Premium owns access state.
 internal sealed class AccountView : UserControl
 {
+    internal StackPanel UpdatePanel { get; } = new() { Spacing = 10, Tag = "UpdateChannel" };
     internal AccountView(Dictionary<string, string> values, List<ChoicePicker> pickers)
     {
         var body = new StackPanel { Spacing = 22 };
@@ -18,11 +19,10 @@ internal sealed class AccountView : UserControl
         identity.Children.Add(Copy("Speak naturally. Keep your flow.", 14, true, true));
         body.Children.Add(identity);
 
-        body.Children.Add(Copy("Version " + (typeof(App).Assembly.GetName().Version?.ToString(3) ?? "Unknown"), 13, true));
         body.Children.Add(Copy("Premium and licenses", 16));
         body.Children.Add(Copy("Activate and manage your license under Premium in the sidebar.", 13, true));
-        body.Children.Add(Copy("App updates", 16));
-        body.Children.Add(Copy("Automatic app updates are not connected in this build. Plugin updates are available in Integrations.", 13, true));
+        body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush") });
+        body.Children.Add(UpdatePanel);
     }
 
     private static Brush Brush(string name) => (Brush)Application.Current.Resources[name];

@@ -90,6 +90,7 @@ public partial class App : Application
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
         _window = new MainWindow();
         _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
+        _window.InstallApplicationUpdateAsync = apply => ExitOrRestartAsync(restart: true, applyUpdate: apply);
         _window.RestoreProfile = (store, preview) => RestoreProfileAsync(store, preview);
         _window.RestoreApiProfile = (store, preview) => RestoreProfileAsync(store, preview, true);
         _tray = new TrayIconService(
@@ -101,7 +102,8 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.FinishDictationFromTray),
             () => _window.DispatcherQueue.TryEnqueue(async () => await _window.CancelProcessingAsync()),
             () => _window.DispatcherQueue.TryEnqueue(_window.ToggleDictationHotkeyPause),
-            () => _window.DispatcherQueue.TryEnqueue(_window.OpenRecoveryFromTray));
+            () => _window.DispatcherQueue.TryEnqueue(_window.OpenRecoveryFromTray),
+            () => _window.DispatcherQueue.TryEnqueue(_window.ShowApplicationUpdates));
         void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,
             _window.CanChangeDictationHotkeyPause, _window.DictationHotkeyPauseError);
         _window.TrayActionsChanged += UpdateTrayActions;
@@ -239,7 +241,7 @@ public partial class App : Application
 
     private async void ExitFromTray() => await ExitOrRestartAsync(restart: false);
 
-    private async Task<string?> ExitOrRestartAsync(bool restart)
+    private async Task<string?> ExitOrRestartAsync(bool restart, Action? applyUpdate = null)
     {
         if (_exiting) return "The app is already shutting down.";
         _exiting = true;
@@ -251,6 +253,12 @@ public partial class App : Application
             _tray = null;
             if (restart)
             {
+                if (applyUpdate is not null)
+                {
+                    applyUpdate();
+                    ShowProfileFailure("The update restart did not complete. Close and reopen TypeWhisper.", null);
+                    return "The update restart did not complete.";
+                }
                 // Restart the same host only after all profile writers and native owners have drained.
                 // On success this API terminates the process; returning means restart failed.
                 var reason = AppInstance.Restart("");

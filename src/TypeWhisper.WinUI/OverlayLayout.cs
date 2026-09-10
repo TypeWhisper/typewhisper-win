@@ -1,5 +1,6 @@
 namespace TypeWhisper.WinUI;
 
+internal enum OverlayScreen { ActiveScreen, PrimaryScreen }
 internal enum OverlayMode { Standard, Compact, Minimal }
 internal enum OverlayAnchor { TopLeft, TopCenter, TopRight, BottomLeft, BottomCenter, BottomRight }
 internal enum OverlayWidget { None, Indicator, Waveform, Timer, Clock, Profile, HotkeyMode, AppName }
@@ -9,9 +10,10 @@ internal sealed record OverlayPreferences(OverlayMode Mode, bool LiveText, bool 
     OverlayWidget Left = OverlayWidget.Waveform,
     OverlayWidget Right = OverlayWidget.Timer,
     double LiveTranscriptionFontSize = TypeWhisper.Core.Models.AppSettings.DefaultLiveTranscriptionFontSize,
-    int PreviewBubbleAutoHideMilliseconds = TypeWhisper.Core.Models.AppSettings.DefaultPreviewBubbleAutoHideMilliseconds)
+    int PreviewBubbleAutoHideMilliseconds = TypeWhisper.Core.Models.AppSettings.DefaultPreviewBubbleAutoHideMilliseconds,
+    OverlayScreen Screen = OverlayScreen.ActiveScreen)
 {
-    internal bool IsValid => Enum.IsDefined(Mode) && Enum.IsDefined(Anchor) && Enum.IsDefined(Left) && Enum.IsDefined(Right)
+    internal bool IsValid => Enum.IsDefined(Screen) && Enum.IsDefined(Mode) && Enum.IsDefined(Anchor) && Enum.IsDefined(Left) && Enum.IsDefined(Right)
         && double.IsFinite(LiveTranscriptionFontSize) && LiveTranscriptionFontSize is >= 10 and <= 18
         && PreviewBubbleAutoHideMilliseconds is >= 0 and <= 5000;
     internal bool AtTop => Anchor is OverlayAnchor.TopLeft or OverlayAnchor.TopCenter or OverlayAnchor.TopRight;
