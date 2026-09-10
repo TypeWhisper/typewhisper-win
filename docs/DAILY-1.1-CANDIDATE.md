@@ -6,6 +6,8 @@ The candidate bundles .NET, the Windows App SDK runtime, the CLI and portable pl
 
 ## Profile boundaries
 
+The first successful candidate run is [34451171076](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34451171076), built from `a2acf689`. Both x64 and ARM64 publish, rejection checks, content validation and artifact upload passed. The artifacts are validation-only; this evidence does not establish native startup, installation, or data migration acceptance. Later fixes require a new candidate before distribution.
+
 - Release WinUI: `%LOCALAPPDATA%/TypeWhisper-WinUI`.
 - Normal development WinUI: `%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData`.
 - Named debug smoke profiles: `%TEMP%/TypeWhisper-WinUI-TestProfiles/<name>`.

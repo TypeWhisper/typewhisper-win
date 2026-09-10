@@ -11,7 +11,12 @@ internal sealed class OriginalDictationField : IDisposable
     private readonly IntPtr _window;
     private readonly uint _process;
     private OriginalDictationField(IntPtr window, uint process)
-    { _window = window; _process = process; _automation.ConnectionTimeout = 200; _automation.TransactionTimeout = 200; }
+    {
+        _window = window; _process = process;
+        // A cold provider may need to initialize its accessibility tree. The old
+        // 200 ms capture budget could fail the first dictation but succeed later.
+        _automation.ConnectionTimeout = 2000; _automation.TransactionTimeout = 2000;
+    }
 
     internal static OriginalDictationField? Capture(IntPtr window, uint process)
     {
@@ -20,7 +25,12 @@ internal sealed class OriginalDictationField : IDisposable
         {
             target = new(window, process);
             target._element = target._automation.GetFocusedElement();
-            if (target.IsCurrent()) return target;
+            if (target.IsCurrent())
+            {
+                target._automation.ConnectionTimeout = 200;
+                target._automation.TransactionTimeout = 200;
+                return target;
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { }
         target?.Dispose(); return null;
@@ -65,6 +75,9 @@ internal sealed class OriginalDictationField : IDisposable
     {
         try
         {
+            cancellation.ThrowIfCancellationRequested();
+            // Avoid disturbing the caret when the user stayed in the original field.
+            if (IsCurrent()) return true;
             if (!IsValid()) return false;
             if (IsIconic(_window)) ShowWindowAsync(_window, 9);
             SetForegroundWindow(_window);
@@ -72,8 +85,9 @@ internal sealed class OriginalDictationField : IDisposable
                 await Task.Delay(25, cancellation);
             cancellation.ThrowIfCancellationRequested();
             if (GetForegroundWindow() != _window || !IsValid()) return false;
-            _element!.SetFocus();
-            return IsCurrent();
+            return await OriginalFieldFocus.RestoreAsync(IsCurrent,
+                () => GetForegroundWindow() == _window && IsValid(),
+                () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { return false; }
     }
