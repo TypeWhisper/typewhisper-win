@@ -122,7 +122,7 @@ foreach (var item in SherpaNativeLibraries)
 ]]></Code>
     </Task>
   </UsingTask>
-  <Target Name="CopyToAppPlugins" AfterTargets="Build">
+  <Target Name="CopyToAppPlugins" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
     <PropertyGroup>
       <AppOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\src\TypeWhisper.Windows\bin\$(Configuration)\$(TargetFramework)'))</AppOutputDir>
       <AppOutputDir Condition="'$(TargetFramework)' == 'net10.0'">$(MSBuildProjectDirectory)\bin\$(Configuration)\portable-host</AppOutputDir>

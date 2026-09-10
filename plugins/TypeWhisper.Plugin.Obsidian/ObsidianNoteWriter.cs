@@ -1,4 +1,5 @@
 using System.Text;
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace TypeWhisper.Plugin.Obsidian;
