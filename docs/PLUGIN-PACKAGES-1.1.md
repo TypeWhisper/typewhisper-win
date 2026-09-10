@@ -8,8 +8,8 @@ The old WPF host retains its existing feeds for maintenance releases.
 
 Each plugin owns its project, tests, manifest and complete output folder. The application
 does not reference provider assemblies or copy provider-specific dependencies itself.
-The in-repository development build discovers `plugins/*/portable.proj` and asks each
-descriptor to build and supply its folder. `eng/PortablePlugin.targets` copies that output
+Portable build descriptors live under `plugins/*/portable.proj` and
+`plugins-v2/*/portable.proj`. Each descriptor builds and supplies its own folder. `eng/PortablePlugin.targets` copies that output
 to the development bundle. Independently distributed plugins do not need a descriptor
 in the application repository; they only need to provide the package described below.
 

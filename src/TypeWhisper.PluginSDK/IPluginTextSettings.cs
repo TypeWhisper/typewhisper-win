@@ -5,7 +5,12 @@ public sealed record PluginTextSetting(string Id, string Title, string Descripti
 {
     /// <summary>Gets whether the host should allow multiple lines. Defaults to a single-line field.</summary>
     public bool IsMultiline { get; init; }
+    /// <summary>Optional allowed values rendered as a selection instead of free text.</summary>
+    public IReadOnlyList<PluginSettingChoice> Choices { get; init; } = [];
 }
+
+/// <summary>A stable setting value with a localized display title.</summary>
+public sealed record PluginSettingChoice(string Value, string Title);
 
 /// <summary>Provides persistent text settings. Hosts call this capability within the package configuration lease.</summary>
 public interface IPluginTextSettings

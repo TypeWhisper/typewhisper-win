@@ -32,7 +32,7 @@ jobs:
         run: |
           # Test projects live under plugins/*/Tests and are exercised by WinUI headless checks.
           # Only top-level plugin projects are distributable packages.
-          $allProjects = @(Get-ChildItem plugins/*/*.csproj | Sort-Object FullName)
+          $allProjects = @(Get-ChildItem plugins/*/*.csproj, plugins-v2/*/*.csproj | Sort-Object FullName)
           if ($allProjects.Count -eq 0) {
             throw "No plugin projects found under plugins/."
           }
@@ -55,8 +55,8 @@ jobs:
                 break
               }
 
-              if ($file -match '^plugins/([^/]+)/') {
-                $selectedPluginDirs[$Matches[1]] = $true
+              if ($file -match '^(plugins|plugins-v2)/([^/]+)/') {
+                $selectedPluginDirs[($Matches[1] + '/' + $Matches[2])] = $true
               }
             }
           }
@@ -65,11 +65,11 @@ jobs:
           foreach ($project in $allProjects) {
             $relativePath = $project.FullName.Replace($env:GITHUB_WORKSPACE + [System.IO.Path]::DirectorySeparatorChar, '').Replace('\', '/')
             $parts = $relativePath.Split('/')
-            $pluginDir = if ($parts.Count -ge 2) { $parts[1] } else { '' }
+            $pluginDir = if ($parts.Count -ge 2) { $parts[0] + '/' + $parts[1] } else { '' }
 
             if ($runAll -or $selectedPluginDirs.Contains($pluginDir)) {
               $projects += [ordered]@{
-                name = $project.BaseName
+                name = $parts[0] + '-' + $project.BaseName
                 path = $relativePath
               }
             }
@@ -106,7 +106,7 @@ jobs:
         run: |
           $errors = [System.Collections.Generic.List[string]]::new()
 
-          foreach ($manifestPath in Get-ChildItem plugins -Recurse -Filter manifest.json | Sort-Object FullName) {
+          foreach ($manifestPath in Get-ChildItem plugins, plugins-v2 -Recurse -Filter manifest.json | Sort-Object FullName) {
             try {
               $manifest = Get-Content $manifestPath.FullName -Raw | ConvertFrom-Json
             } catch {

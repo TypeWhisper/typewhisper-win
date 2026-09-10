@@ -45,7 +45,7 @@ internal sealed class LivePluginTextSettings : UserControl
     {
         _content.Children.Add(new TextBlock { Text = field.Title, FontSize = 16 });
         _content.Children.Add(new TextBlock { Text = field.Description, TextWrapping = TextWrapping.Wrap });
-        var input = new TextBox
+        var textInput = new TextBox
         {
             AcceptsReturn = field.IsMultiline,
             TextWrapping = field.IsMultiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
@@ -57,6 +57,16 @@ internal sealed class LivePluginTextSettings : UserControl
             MaxLength = Math.Clamp(field.MaxLength, 1, 32768),
             Text = field.Value
         };
+        var choiceInput = field.Choices.Count == 0 ? null : new ComboBox
+        {
+            ItemsSource = field.Choices,
+            DisplayMemberPath = nameof(PluginSettingChoice.Title),
+            SelectedValuePath = nameof(PluginSettingChoice.Value),
+            SelectedValue = field.Value,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MinHeight = 40
+        };
+        Control input = choiceInput is null ? textInput : choiceInput;
         AutomationProperties.SetName(input, field.Title);
         AutomationProperties.SetHelpText(input, field.Description);
         var fieldBorder = new Border
@@ -84,7 +94,7 @@ internal sealed class LivePluginTextSettings : UserControl
             SetStatus(string.Empty);
             try
             {
-                var error = await _session.SavePluginTextSettingAsync(_id, field.Id, input.Text);
+                var error = await _session.SavePluginTextSettingAsync(_id, field.Id, choiceInput?.SelectedValue as string ?? textInput.Text);
                 if (IsLoaded && generation == _generation)
                     SetStatus(error ?? "Saved. The setting applies the next time this plugin runs.");
             }
