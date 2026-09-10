@@ -89,17 +89,38 @@ internal sealed class OriginalDictationField : IDisposable
             if (IsCurrent()) return true;
             if (!IsValid()) return false;
             if (IsIconic(_window)) ShowWindowAsync(_window, 9);
-            SetForegroundWindow(_window);
-            for (var attempt = 0; attempt < 8 && GetForegroundWindow() != _window; attempt++)
-                await Task.Delay(25, cancellation);
-            cancellation.ThrowIfCancellationRequested();
-            if (GetForegroundWindow() != _window || !IsValid()) return false;
+            if (!await OriginalFieldFocus.RestoreWindowAsync(() => GetForegroundWindow() == _window, IsValid,
+                () => SetForegroundWindow(_window), ActivateWithInputThread,
+                ct => Task.Delay(25, ct), cancellation))
+            {
+                PasteDiagnostics.Write("field.restore.window-activation-failed");
+                return false;
+            }
             return await OriginalFieldFocus.RestoreAsync(IsCurrent,
                 () => GetForegroundWindow() == _window && IsValid(),
                 () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { return false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { PasteDiagnostics.Write("field.restore.exception", ex); return false; }
     }
+
+    private void ActivateWithInputThread()
+    {
+        // Input attachment must remain synchronous and be undone on the same thread.
+        // No synthetic keystrokes and no replacement of the captured UIA element.
+        var currentThread = GetCurrentThreadId();
+        var foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), out _);
+        if (foregroundThread == 0 || foregroundThread == currentThread) { SetForegroundWindow(_window); return; }
+        var attached = AttachThreadInput(currentThread, foregroundThread, true);
+        try
+        {
+            PasteDiagnostics.Write(attached ? "field.restore.input-attached" : "field.restore.input-attach-failed");
+            if (attached) SetForegroundWindow(_window);
+        }
+        finally { if (attached) AttachThreadInput(currentThread, foregroundThread, false); }
+    }
+
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool AttachThreadInput(uint source, uint target, bool attach);
 
     public void Dispose() { Release(_element); _element = null; Release(_automation); }
     private static void Release(object? value) { if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
