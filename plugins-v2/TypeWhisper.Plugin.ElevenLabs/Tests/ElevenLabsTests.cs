@@ -142,20 +142,28 @@ public sealed class ElevenLabsTests : IDisposable
     }
 
     [Theory]
-    [InlineData("missing_permissions", "The API key you used is missing the permission user_read to execute this operation.", false)]
-    [InlineData("invalid_api_key", "Invalid key", false)]
-    [InlineData("missing_permissions", "Missing speech_to_text permission", false)]
-    public async Task ValidationDoesNotClaimUnverifiedSpeechPermission(string status, string message, bool accepted)
+    [InlineData(200, null, null, null)]
+    [InlineData(401, "missing_permissions", "The API key you used is missing the permission user_read to execute this operation.", PluginRequestFailureKind.Configuration)]
+    [InlineData(401, "invalid_api_key", "Invalid key", PluginRequestFailureKind.Authentication)]
+    [InlineData(401, "missing_permissions", "Missing speech_to_text permission", PluginRequestFailureKind.Authentication)]
+    public async Task ValidationDistinguishesSuccessIncompleteChecksAndRejectedKeys(int httpStatus, string? status, string? message, PluginRequestFailureKind? expected)
     {
         using var plugin = new ElevenLabsPlugin(new HttpClient(new Handler((request, _) =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
             Assert.EndsWith("/v1/user", request.RequestUri!.AbsoluteUri);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent(JsonSerializer.Serialize(new { detail = new { status, message } })) });
+            return Task.FromResult(new HttpResponseMessage((HttpStatusCode)httpStatus) { Content = new StringContent(JsonSerializer.Serialize(new { detail = new { status, message } })) });
         })));
         await plugin.ActivateAsync(Host); await plugin.SetApiKeyAsync("test-key");
-        if (accepted) await plugin.ValidateConfigurationAsync(default);
-        else await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ValidateConfigurationAsync(default));
+        if (expected is null) await plugin.ValidateConfigurationAsync(default);
+        else
+        {
+            var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ValidateConfigurationAsync(default));
+            Assert.Equal(expected.Value, error.FailureKind);
+            if (expected == PluginRequestFailureKind.Configuration)
+                Assert.Contains("speech access could not be verified", error.Message);
+        }
+        Assert.Equal("test-key", plugin.ApiKey);
     }
 
     [Fact]
