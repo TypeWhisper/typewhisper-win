@@ -3,10 +3,15 @@ name: WinUI Daily Candidate
 # Build reviewable candidates without changing any update feed or GitHub release.
 on:
   workflow_dispatch:
+  push:
+    branches: ['seofood/release-1.1']
+    paths:
+      - '.github/workflows/winui-daily-candidate.yml'
+      - 'eng/Test-WinUIDailyCandidate*.ps1'
   pull_request:
     paths:
       - '.github/workflows/winui-daily-candidate.yml'
-      - 'eng/Test-WinUIDailyCandidate.ps1'
+      - 'eng/Test-WinUIDailyCandidate*.ps1'
 
 permissions:
   contents: read
