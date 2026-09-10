@@ -8,7 +8,8 @@ internal sealed class DictationHotkeyRegistration : IDisposable
 {
     private readonly HotkeyRegistration _regular;
     private readonly HookProc _callback;
-    private readonly IntPtr _hook;
+    private IntPtr _hook;
+    private bool _interrupted;
     private HashSet<string> _bindings = [];
     private HybridHotkeyState _state = new();
     private bool _disposed;
@@ -28,7 +29,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
         }
         _callback = (code, message, data) =>
         {
-            if (code >= 0)
+            if (code >= 0 && !_interrupted && !_disposed)
             {
                 var key = Marshal.PtrToStructure<KeyData>(data);
                 var acceptInjectedProbeInput = false;
@@ -56,6 +57,29 @@ internal sealed class DictationHotkeyRegistration : IDisposable
     }
     internal void ObservePause() => _state.Suspend();
 
+    internal void Interrupt()
+    {
+        _interrupted = true;
+        _state.ResetAfterInterruption([]);
+    }
+
+    internal string? Recover()
+    {
+        if (_disposed) return null;
+        var replacement = SetWindowsHookEx(13, _callback, GetModuleHandle(null), 0);
+        if (replacement == IntPtr.Zero)
+            return $"Could not restore dictation keyboard hook (Windows error {Marshal.GetLastWin32Error()}). Retry after unlocking, or restart TypeWhisper.";
+        var previous = _hook;
+        _hook = replacement;
+        if (previous != IntPtr.Zero) UnhookWindowsHookEx(previous);
+        // Generic modifier VKs alias the physical left/right keys. Seeding both
+        // would leave a phantom generic key down after the physical key-up.
+        _state.ResetAfterInterruption(Enumerable.Range(8, 247)
+            .Where(key => key is not (0x10 or 0x11 or 0x12) && (GetAsyncKeyState(key) & 0x8000) != 0));
+        _interrupted = false;
+        return null;
+    }
+
     internal string? TryChange(string value)
     {
         var chords = ShortcutRules.Split(value).Select(ShortcutRules.Normalize).Distinct().ToArray();
@@ -69,11 +93,12 @@ internal sealed class DictationHotkeyRegistration : IDisposable
         Value = string.Join(",", chords);
         return null;
     }
-    public void Dispose() { _disposed = true; UnhookWindowsHookEx(_hook); _regular.Dispose(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero; _regular.Dispose(); }
     private delegate IntPtr HookProc(int code, IntPtr message, IntPtr data);
     [StructLayout(LayoutKind.Sequential)] private struct KeyData { public uint Key, Scan, Flags, Time; public UIntPtr Extra; }
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint thread);
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
 }

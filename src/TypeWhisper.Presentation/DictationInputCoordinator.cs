@@ -41,6 +41,12 @@ public sealed class DictationInputCoordinator : IDisposable
     /// <summary>Completes after the accepted operation and its pending stop or cancel have finished.</summary>
     public Task Completion => _completion.Task;
 
+    /// <summary>Discards an unfinished start across lock/sleep without stopping an already established recording.</summary>
+    public void InterruptPendingGesture()
+    {
+        if (_starting) _terminal = DictationInputAction.Cancel;
+    }
+
     /// <summary>Captures intent immediately, before UI dispatch. A cancel supersedes a pending stop; competing starts are discarded.</summary>
     public Task SubmitAsync(DictationInputAction action, Func<Task>? startOverride = null)
     {

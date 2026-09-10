@@ -15,6 +15,14 @@ internal sealed class HybridHotkeyState
     private bool _blocked;
     private RecordingMode? _mode;
 
+    internal void ResetAfterInterruption(IEnumerable<int> heldKeys)
+    {
+        _down.Clear();
+        _down.UnionWith(heldKeys);
+        _armed = null; _startedByGesture = false; _mode = null;
+        _blocked = _down.Count > 0;
+    }
+
     internal void Suspend()
     {
         _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;

@@ -165,6 +165,7 @@ public sealed partial class MainWindow : Window
             InitializeWorkflowPaletteShortcut();
             InitializeRecordingShortcuts();
             InitializeRecorderShortcut();
+            InitializeHotkeyRecovery();
             await WinUILicensing.ValidateAsync();
             if (!_closing) await WinUIPremiumAccount.RefreshAsync();
             if (!_closing)
@@ -198,6 +199,7 @@ public sealed partial class MainWindow : Window
     private readonly TypeWhisper.Presentation.AsyncShutdownCoordinator _shutdown = new();
     internal async Task ShutdownDictationAsync()
     {
+        _hotkeyRecovery?.Dispose();
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();
         _workflowPaletteHotkey?.Dispose();
@@ -214,6 +216,7 @@ public sealed partial class MainWindow : Window
     private Task ShutdownCoreAsync() => _shutdown.Run(async () =>
     {
         _closing = true;
+        _hotkeyRecovery?.Dispose();
         await StopWorkflowShortcutsAsync();
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();

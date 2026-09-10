@@ -19,7 +19,7 @@ public sealed partial class MainWindow
     internal bool DictationHotkeysPaused => _hotkeyPause.Current;
     internal bool CanChangeDictationHotkeyPause => !_closing && !_profileRestoreClosing && _dictationHotkey is not null
         && !(_dictationInput?.IsRecordingOrStarting ?? _dictation.IsRecording);
-    internal string? DictationHotkeyPauseError => _hotkeyPause.Error;
+    internal string? DictationHotkeyPauseError => _hotkeyRecoveryError ?? _hotkeyPause.Error;
     internal event Action? TrayActionsChanged;
     private bool IsNormalLauncherStatus => !_closing && !_profileRestoreClosing && !_historyOpen && !_recorderOpen
         && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen && !UtilityOpen

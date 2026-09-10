@@ -25,6 +25,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs" Link="HistoryEntryAdapter.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HotkeyRecoveryState.cs" Link="HotkeyRecoveryState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OriginalFieldFocus.cs" Link="OriginalFieldFocus.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/SelectedTextCaptureOperation.cs" Link="SelectedTextCaptureOperation.cs" />
