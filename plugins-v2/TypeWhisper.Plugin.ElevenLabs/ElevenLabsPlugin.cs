@@ -282,7 +282,8 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         {
             // A Speech-to-Text-only key may legitimately lack access to the user profile.
             var body = await response.Content.ReadAsStringAsync(ct);
-            if (IsUserReadPermissionOnly(body)) return;
+            if (IsUserReadPermissionOnly(body))
+                throw new PluginRequestException("The key is saved, but speech access could not be verified because user_read is disabled. Try a dictation to verify Speech-to-Text access.", PluginRequestFailureKind.Configuration);
         }
         ThrowIfRejected(response);
     }

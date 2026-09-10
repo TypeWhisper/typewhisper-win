@@ -59,7 +59,7 @@ jobs:
         run: |
           $failed = $false
 
-          foreach ($project in Get-ChildItem src, tests, plugins -Recurse -Filter *.csproj | Sort-Object FullName) {
+          foreach ($project in Get-ChildItem src, tests, plugins, plugins-v2 -Recurse -Filter *.csproj | Sort-Object FullName) {
             $safeName = ($project.FullName.Replace($env:GITHUB_WORKSPACE, '').TrimStart('\') -replace '[\\/:*?"<>| ]', '_')
 
             Write-Host "Auditing $($project.FullName)"

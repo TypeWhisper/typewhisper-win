@@ -340,13 +340,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples)
     {
+        var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
+        var prompt = dictionary is null ? null : string.Join(",", dictionary.EnabledTerms);
         var language = _languageAtStart == "auto" ? null : _languageAtStart;
         var translate = _taskAtStart == TranscriptionTask.Translate;
         var result = await PluginRuntime.UseTranscriptionAsync(RegistrySelectionId(_providerId), (engine, ct) =>
         {
             return LanguageHintTranscription.DecodeAsync(engine, samples,
                 () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes), language,
-                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct);
+                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct, prompt);
         }, _operationCancellation.Token);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }
@@ -597,15 +599,25 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _recoveryAtStart = RecoveryPreferences.Current;
                 LivePreviewText = "";
                 _hasConfirmedPreviewText = false;
-                StartCloudStream();
+                _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
+                await StartCloudStreamAsync();
+                _operationCancellation.Token.ThrowIfCancellationRequested();
+                if (_disposed) return;
+                GetWindowThreadProcessId(_target, out currentTargetProcessId);
+                if (GetForegroundWindow() != _target || currentTargetProcessId != processId)
+                {
+                    await StopCloudStreamAsync();
+                    SetStatus("The target changed before recording. Focus your text field and try again.");
+                    return;
+                }
                 _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
                 BeginApiDictationGeneration();
-                _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
                 _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && Models.ActiveModelId == "parakeet-tdt-0.6b" && CtcVocabulary.Enabled;
-                if (_cloudStream is null && LivePreviewEnabled && SupportsLiveTranscription)
+                if (_cloudStream is null && LivePreviewEnabled && SupportsLiveTranscription &&
+                    (!UsesRegistryProvider || ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)))
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },

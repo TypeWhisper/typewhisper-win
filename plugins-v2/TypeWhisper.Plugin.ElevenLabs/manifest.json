@@ -2,7 +2,7 @@
   "id": "com.typewhisper.elevenlabs",
   "name": "ElevenLabs",
   "version": "1.1.0",
-  "minHostVersion": "1.1.0",
+  "minHostVersion": "1.1.1",
   "author": "TypeWhisper",
   "description": "Scribe v2 transcription with live text and dictionary terms",
   "categories": [

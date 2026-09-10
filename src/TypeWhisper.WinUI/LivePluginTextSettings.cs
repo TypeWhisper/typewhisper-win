@@ -94,7 +94,13 @@ internal sealed class LivePluginTextSettings : UserControl
             SetStatus(string.Empty);
             try
             {
-                var error = await _session.SavePluginTextSettingAsync(_id, field.Id, choiceInput?.SelectedValue as string ?? textInput.Text);
+                var value = choiceInput?.SelectedValue as string;
+                if (choiceInput is not null && value is null)
+                {
+                    SetStatus($"Select a valid value for {field.Title}.");
+                    return;
+                }
+                var error = await _session.SavePluginTextSettingAsync(_id, field.Id, value ?? textInput.Text);
                 if (IsLoaded && generation == _generation)
                     SetStatus(error ?? "Saved. The setting applies the next time this plugin runs.");
             }

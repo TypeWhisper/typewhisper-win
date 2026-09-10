@@ -128,6 +128,13 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
 
     private async Task ReceiveAsync(CancellationToken ct)
     {
+        try { await ReceiveFramesAsync(ct).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException)
+        { throw new IOException("Unexpected ElevenLabs live response."); }
+    }
+
+    private async Task ReceiveFramesAsync(CancellationToken ct)
+    {
         var bytes = new byte[8192];
         using var message = new MemoryStream();
         while (true)

@@ -78,6 +78,25 @@ public sealed class ElevenLabsStreamingTests
         Assert.DoesNotContain("private", ex.Message);
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("not-json")]
+    [InlineData("[]")]
+    [InlineData("{\"message_type\":42}")]
+    [InlineData("{\"message_type\":\"partial_transcript\"}")]
+    [InlineData("{\"message_type\":\"committed_transcript_with_timestamps\",\"text\":42}")]
+    public async Task MalformedFramesFailFinalizationWithoutLeakingPayload(string frame)
+    {
+        var socket = new Socket();
+        await using var session = new ElevenLabsStreamingSession(socket);
+        await session.SendAudioAsync(new byte[3200], default);
+        var finish = session.FinalizeAsync(default);
+        await socket.Commits.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+        socket.Text(frame);
+        var error = await Assert.ThrowsAsync<IOException>(() => finish.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal("Unexpected ElevenLabs live response.", error.Message);
+    }
+
     [Fact]
     public async Task CancelledCommitDisposesWithoutHanging()
     {

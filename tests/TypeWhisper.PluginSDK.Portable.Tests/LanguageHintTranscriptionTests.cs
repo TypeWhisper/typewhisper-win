@@ -26,6 +26,28 @@ public sealed class LanguageHintTranscriptionTests
         engine.Verify(e => e.TranscribeAsync(wav, language, false, null, default), hints ? Times.Never() : Times.Once());
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task DictionaryPromptReachesOnlyCapableProvidersInBothWavPaths(bool dictionary, bool hints)
+    {
+        var engine = new Mock<ITranscriptionEnginePlugin>();
+        engine.SetupGet(e => e.SupportsDictionaryTerms).Returns(dictionary);
+        engine.SetupGet(e => e.SupportsLanguageHints).Returns(hints);
+        engine.SetupGet(e => e.SupportedLanguages).Returns([]);
+        var prompt = dictionary ? "TypeWhisper,Grüße" : null;
+        byte[] wav = [1]; string[] preferred = ["de", "en"];
+        var response = new PluginTranscriptionResult("Hello", "en", 1, null);
+        engine.Setup(e => e.TranscribeAsync(wav, null, false, prompt, default)).ReturnsAsync(response);
+        engine.Setup(e => e.TranscribeWithLanguageHintsAsync(wav, preferred, false, prompt, default)).ReturnsAsync(response);
+        Assert.Same(response, await LanguageHintTranscription.DecodeAsync(engine.Object, ReadOnlyMemory<float>.Empty, () => wav,
+            null, preferred, false, default, "TypeWhisper,Grüße"));
+        engine.Verify(e => e.TranscribeAsync(wav, null, false, prompt, default), hints ? Times.Never() : Times.Once());
+        engine.Verify(e => e.TranscribeWithLanguageHintsAsync(wav, preferred, false, prompt, default), hints ? Times.Once() : Times.Never());
+    }
+
     [Fact]
     public async Task UnsupportedPcmKeepsOriginalSamplesAndDoesNotEncodeOrForceFirstHint()
     {

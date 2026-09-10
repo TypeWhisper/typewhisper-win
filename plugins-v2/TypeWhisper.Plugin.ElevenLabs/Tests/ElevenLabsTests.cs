@@ -18,6 +18,30 @@ public sealed class ElevenLabsTests : IDisposable
         """;
 
     [Fact]
+    public async Task GermanSettingsUseUtf8AndOlderHostsRejectThePackage()
+    {
+        var previous = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = new("de-DE");
+            using var plugin = new ElevenLabsPlugin();
+            await plugin.ActivateAsync(Host);
+            var text = string.Join(" ", plugin.TextSettings.Select(s => s.Title + " " + s.Description));
+            Assert.Contains("Wörterbuchbegriffe", text);
+            Assert.Contains("vollständige", text);
+            Assert.Contains("Füllwörter und Satzabbrüche", text);
+            Assert.DoesNotContain("Ã", text);
+            Assert.DoesNotContain("\uFFFD", text);
+        }
+        finally { System.Globalization.CultureInfo.CurrentUICulture = previous; }
+        var directory = Path.Combine(_root, "older-host-package");
+        Directory.CreateDirectory(directory);
+        File.Copy(typeof(ElevenLabsPlugin).Assembly.Location, Path.Combine(directory, "TypeWhisper.Plugin.ElevenLabs.dll"));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "manifest.json"), Path.Combine(directory, "manifest.json"));
+        await Assert.ThrowsAsync<InvalidDataException>(() => PortablePluginPackage.LoadAsync(directory, Host, new(1, 1, 0)));
+    }
+
+    [Fact]
     public async Task RestPreservesAudioLanguageOptionsKeytermsAndTimings()
     {
         using var plugin = new ElevenLabsPlugin(new HttpClient(new Handler(async (request, ct) =>
@@ -33,7 +57,7 @@ public sealed class ElevenLabsTests : IDisposable
             Assert.DoesNotContain(parts, p => p.Headers.ContentDisposition!.Name!.Trim('"') == "num_speakers");
             Assert.Equal(new byte[] { 1, 2, 3 }, await parts.Single(p => p.Headers.ContentDisposition!.Name!.Trim('"') == "file").ReadAsByteArrayAsync(ct));
             var terms = await Task.WhenAll(parts.Where(p => p.Headers.ContentDisposition!.Name!.Trim('"') == "keyterms").Select(p => p.ReadAsStringAsync(ct)));
-            Assert.Equal(new[] { "TypeWhisper", "GrÃƒÂ¼ÃƒÅ¸e" }, terms);
+            Assert.Equal(new[] { "TypeWhisper", "Grüße" }, terms);
             return Ok(Transcript);
         })));
         await plugin.ActivateAsync(Host);
@@ -41,7 +65,7 @@ public sealed class ElevenLabsTests : IDisposable
         await plugin.SaveTextSettingAsync("noVerbatim", "false", default);
         await plugin.SaveTextSettingAsync("tagAudioEvents", "true", default);
         await plugin.SaveTextSettingAsync("numSpeakers", "0", default);
-        var result = await plugin.TranscribeAsync([1, 2, 3], "de", false, "TypeWhisper,GrÃƒÂ¼ÃƒÅ¸e,typewhisper,<invalid>", default);
+        var result = await LanguageHintTranscription.DecodeAsync(plugin, ReadOnlyMemory<float>.Empty, () => [1, 2, 3], "de", [], false, default, "TypeWhisper,Grüße,typewhisper,<invalid>");
         Assert.Equal("Guten Tag.", result.Text);
         Assert.Equal("deu", result.DetectedLanguage);
         Assert.Equal(0.9, result.DurationSeconds);
@@ -118,10 +142,10 @@ public sealed class ElevenLabsTests : IDisposable
     }
 
     [Theory]
-    [InlineData("missing_permissions", "The API key you used is missing the permission user_read to execute this operation.", true)]
+    [InlineData("missing_permissions", "The API key you used is missing the permission user_read to execute this operation.", false)]
     [InlineData("invalid_api_key", "Invalid key", false)]
     [InlineData("missing_permissions", "Missing speech_to_text permission", false)]
-    public async Task ValidationAcceptsOnlyTheKnownUserReadRestriction(string status, string message, bool accepted)
+    public async Task ValidationDoesNotClaimUnverifiedSpeechPermission(string status, string message, bool accepted)
     {
         using var plugin = new ElevenLabsPlugin(new HttpClient(new Handler((request, _) =>
         {
@@ -160,7 +184,7 @@ public sealed class ElevenLabsTests : IDisposable
         Directory.CreateDirectory(directory);
         File.Copy(typeof(ElevenLabsPlugin).Assembly.Location, Path.Combine(directory, "TypeWhisper.Plugin.ElevenLabs.dll"));
         File.Copy(Path.Combine(AppContext.BaseDirectory, "manifest.json"), Path.Combine(directory, "manifest.json"));
-        await using var package = await PortablePluginPackage.LoadAsync(directory, Host, new(1, 1, 0));
+        await using var package = await PortablePluginPackage.LoadAsync(directory, Host, new(1, 1, 1));
         Assert.IsAssignableFrom<IApiKeyPlugin>(package.Plugin);
         var engine = Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(package.Plugin);
         Assert.Equal("scribe_v2", engine.SelectedModelId);
@@ -188,15 +212,15 @@ public sealed class ElevenLabsTests : IDisposable
         { Content = new ByteArrayContent(payload), RequestMessage = request })));
         var entry = new PortableCatalogEntry
         {
-            Id = id, Name = "ElevenLabs", Version = "1.1.0", MinHostVersion = "1.1.0",
+            Id = id, Name = "ElevenLabs", Version = "1.1.0", MinHostVersion = "1.1.1",
             DownloadUrl = "https://packages.test/elevenlabs.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };
-        PortablePluginStore Store() => new(Path.Combine(_root, "store"), new(1, 1, 0), http, _ => Host);
+        PortablePluginStore Store() => new(Path.Combine(_root, "store"), new(1, 1, 1), http, _ => Host);
         var store = Store(); await store.InitializeAsync();
         await store.InstallAsync(entry);
-        await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 1, 0), _ => Host))
+        await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 1, 1), _ => Host))
         {
             await registry.InitializeAsync();
             Assert.Empty(registry.TranscriptionProviders);
@@ -216,7 +240,7 @@ public sealed class ElevenLabsTests : IDisposable
             Assert.Contains("ar", Assert.Single(registry.TranscriptionProviders).SupportedLanguages!);
         }
         var restarted = Store(); await restarted.InitializeAsync();
-        await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 0), _ => Host))
+        await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 1), _ => Host))
         {
             await registry.InitializeAsync();
             Assert.Equal("scribe_v2", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
@@ -227,7 +251,7 @@ public sealed class ElevenLabsTests : IDisposable
         Assert.Equal("saved-key", _secrets.Value);
         var reinstall = Store(); await reinstall.InitializeAsync();
         await reinstall.InstallAsync(entry);
-        await using var finalRegistry = new PortablePluginRuntimeRegistry(reinstall, new(1, 1, 0), _ => Host);
+        await using var finalRegistry = new PortablePluginRuntimeRegistry(reinstall, new(1, 1, 1), _ => Host);
         await finalRegistry.InitializeAsync();
         Assert.Empty(finalRegistry.TranscriptionProviders);
         Assert.Null(await finalRegistry.SetEnabledAsync(id, true));

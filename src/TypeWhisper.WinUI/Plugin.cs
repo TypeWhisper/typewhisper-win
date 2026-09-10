@@ -4,7 +4,7 @@ namespace TypeWhisper.WinUI;
 public sealed record Plugin(string Id, string Title, string Description, string IconKind,
     string Categories, string Permissions, string Version, string MinimumHostVersion)
 {
-    internal static readonly Version DemoHostVersion = new(1, 1, 0);
+    internal static readonly Version DemoHostVersion = LocalCtcVocabulary.HostVersion;
     public bool Enabled { get; init; } = true;
     public bool RequiresConnection { get; init; }
     public bool Connected { get; init; }
