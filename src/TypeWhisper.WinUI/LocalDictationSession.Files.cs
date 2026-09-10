@@ -111,7 +111,8 @@ internal sealed partial class LocalDictationSession
             DictationLexiconSnapshot.Result processed;
             if (apiRequest is not null)
             {
-                var apiText = await LocalApiTextProcessing.ProcessTranscriptAsync(refinedText, segments,
+                var apiText = await LocalApiTextProcessing.ProcessTranscriptAsync(refinedText,
+                    apiRequest.ResponseFormat == "text" ? [] : segments,
                     apiRequest.ApplyCorrections, translation,
                     segmentTranslation,
                     lexicon.Dictionary is { } apiDictionary ? apiDictionary.ApplyCorrections : null, ct);
