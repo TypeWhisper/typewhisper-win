@@ -65,7 +65,7 @@ public sealed class ElevenLabsTests : IDisposable
         await plugin.SaveTextSettingAsync("noVerbatim", "false", default);
         await plugin.SaveTextSettingAsync("tagAudioEvents", "true", default);
         await plugin.SaveTextSettingAsync("numSpeakers", "0", default);
-        var result = await LanguageHintTranscription.DecodeAsync(plugin, ReadOnlyMemory<float>.Empty, () => [1, 2, 3], "de", [], false, default, "TypeWhisper,Grüße,typewhisper,<invalid>");
+        var result = await LanguageHintTranscription.DecodeAsync(plugin, ReadOnlyMemory<float>.Empty, () => [1, 2, 3], "de", [], false, default, ["TypeWhisper", "Grüße", "typewhisper", "<invalid>"]);
         Assert.Equal("Guten Tag.", result.Text);
         Assert.Equal("deu", result.DetectedLanguage);
         Assert.Equal(0.9, result.DurationSeconds);

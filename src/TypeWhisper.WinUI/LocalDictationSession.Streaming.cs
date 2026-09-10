@@ -10,9 +10,8 @@ internal sealed partial class LocalDictationSession
             ActiveRegistryProvider is not { SupportsStreaming: true }) return;
         var selection = RegistrySelectionId(_providerId);
         var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
-        var prompt = dictionary is null ? null : string.Join(",", dictionary.EnabledTerms);
         var canStream = await PluginRuntime.UseTranscriptionAsync(selection, (engine, _) =>
-            Task.FromResult(engine.SupportsStreamingForPrompt(engine.SupportsDictionaryTerms ? prompt : null)), _operationCancellation.Token);
+            Task.FromResult(engine.SupportsStreamingForPrompt(LanguageHintTranscription.CreateDictionaryPrompt(engine, dictionary?.EnabledTerms))), _operationCancellation.Token);
         if (!canStream) return;
         var languages = _languageAtStart != "auto" ? new[] { _languageAtStart }
             : ActiveRegistryProvider.SupportsLanguageHints
@@ -31,7 +30,7 @@ internal sealed partial class LocalDictationSession
                 if (_disposed || !ReferenceEquals(_cloudStream, stream) || !_audio.IsRecording) return;
                 LivePreviewText = "Live connection interrupted. The full recording will be transcribed after stopping.";
                 LivePreviewChanged?.Invoke();
-            }), _operationCancellation.Token);
+            }), _operationCancellation.Token, dictionary?.EnabledTerms);
         _cloudStream = stream;
     }
 

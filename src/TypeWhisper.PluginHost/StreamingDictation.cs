@@ -20,10 +20,10 @@ public sealed class StreamingDictation : IAsyncDisposable
     /// <summary>The callback must retain the provider for the entire streaming operation.</summary>
     public StreamingDictation(
         Func<Func<ITranscriptionEnginePlugin, CancellationToken, Task<string>>, CancellationToken, Task<string>> use,
-        IReadOnlyList<string> languages, Action<string> publish, Action failed, CancellationToken ct)
+        IReadOnlyList<string> languages, Action<string> publish, Action failed, CancellationToken ct, IReadOnlyList<string>? dictionaryTerms = null)
     {
         _cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _result = RunAsync(use, languages.ToArray(), publish, failed);
+        _result = RunAsync(use, languages.ToArray(), publish, failed, dictionaryTerms?.ToArray());
     }
 
     /// <summary>Copies capture samples without blocking the audio thread. An overflow invalidates the entire stream.</summary>
@@ -50,16 +50,17 @@ public sealed class StreamingDictation : IAsyncDisposable
 
     private async Task<string?> RunAsync(
         Func<Func<ITranscriptionEnginePlugin, CancellationToken, Task<string>>, CancellationToken, Task<string>> use,
-        IReadOnlyList<string> languages, Action<string> publish, Action failed)
+        IReadOnlyList<string> languages, Action<string> publish, Action failed, IReadOnlyList<string>? dictionaryTerms)
     {
         try
         {
             return await use(async (engine, ct) =>
             {
-                if (!engine.SupportsStreaming || !engine.SupportsStreamingCompletion) throw new NotSupportedException("Live transcription is unavailable.");
+                var prompt = LanguageHintTranscription.CreateDictionaryPrompt(engine, dictionaryTerms);
+                if (!engine.SupportsStreaming || !engine.SupportsStreamingCompletion || !engine.SupportsStreamingForPrompt(prompt)) throw new NotSupportedException("Live transcription is unavailable.");
                 using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 connect.CancelAfter(TimeSpan.FromSeconds(15));
-                await using var session = await engine.StartStreamingWithLanguageHintsAsync(languages, connect.Token).ConfigureAwait(false);
+                await using var session = await engine.StartStreamingWithLanguageHintsAndPromptAsync(languages, prompt, connect.Token).ConfigureAwait(false);
                 connect.CancelAfter(Timeout.InfiniteTimeSpan);
                 var confirmed = new List<string>();
                 void OnTranscript(StreamingTranscriptEvent update)

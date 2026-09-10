@@ -341,14 +341,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples)
     {
         var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
-        var prompt = dictionary is null ? null : string.Join(",", dictionary.EnabledTerms);
         var language = _languageAtStart == "auto" ? null : _languageAtStart;
         var translate = _taskAtStart == TranscriptionTask.Translate;
         var result = await PluginRuntime.UseTranscriptionAsync(RegistrySelectionId(_providerId), (engine, ct) =>
         {
             return LanguageHintTranscription.DecodeAsync(engine, samples,
                 () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes), language,
-                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct, prompt);
+                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct, dictionary?.EnabledTerms);
         }, _operationCancellation.Token);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }
