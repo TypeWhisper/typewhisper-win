@@ -18,10 +18,15 @@ internal static class OriginalFieldFocus
         cancellation.ThrowIfCancellationRequested();
         if (!isValid()) return false;
         if (isCurrent()) return true;
+        if (expired()) return false;
         activate();
         if (!isValid()) return false;
         // React to unconfirmed activation, not a fixed delay before requesting focus.
-        if (!isCurrent()) activateAttached();
+        if (!isCurrent())
+        {
+            if (expired()) return false;
+            activateAttached();
+        }
         return await WaitForStateAsync(isCurrent, isValid, wait, cancellation, expired);
     }
 

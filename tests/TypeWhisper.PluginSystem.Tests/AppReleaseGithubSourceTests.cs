@@ -182,7 +182,7 @@ public sealed class AppReleaseGithubSourceTests
     }
 
     [Fact]
-    public async Task GetReleaseFeed_StopsAfterMaximumNumberOfFullPages()
+    public async Task GetReleaseFeed_FailsWhenMaximumFullPagesDoNotEstablishChannelState()
     {
         var fullPage = Enumerable.Range(1, 100)
             .Select(index => CreateRelease(
@@ -198,9 +198,9 @@ public sealed class AppReleaseGithubSourceTests
             prerelease: false,
             downloader);
 
-        var feed = await source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64"));
 
-        Assert.Empty(feed.Assets);
         Assert.Equal(10, downloader.StringRequests.Count);
         Assert.Null(source.HasMatchingRelease);
         Assert.Contains(

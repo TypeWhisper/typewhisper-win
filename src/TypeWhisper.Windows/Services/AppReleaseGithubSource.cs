@@ -62,8 +62,8 @@ internal sealed class AppReleaseGithubSource : GithubSource
         }
 
         // A bounded search cannot prove that an older channel feed is absent.
-        // Keep the result unknown unless a short page establishes exhaustion.
-        return [];
+        // Propagate failure so callers cannot present an empty feed as up to date.
+        throw new InvalidOperationException("The release search could not be completed. Please try again later.");
     }
 
     private bool ContainsReleaseIndex(GithubRelease release) =>

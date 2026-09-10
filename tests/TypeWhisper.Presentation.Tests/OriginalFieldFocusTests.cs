@@ -4,6 +4,25 @@ using Xunit;
 public class OriginalFieldFocusTests
 {
     [Fact]
+    public async Task ExpiredWindowDeadlineDoesNotActivate()
+    {
+        Assert.False(await OriginalFieldFocus.RestoreWindowAsync(() => false, () => true,
+            () => throw new Exception("Must not activate after the deadline"),
+            () => throw new Exception("Must not attach and activate after the deadline"),
+            _ => throw new Exception("Must not wait after the deadline"), default, () => true));
+    }
+
+    [Fact]
+    public async Task SlowWindowActivationDoesNotAttemptAttachedActivationAfterDeadline()
+    {
+        var expired = false;
+        Assert.False(await OriginalFieldFocus.RestoreWindowAsync(() => false, () => true,
+            () => expired = true,
+            () => throw new Exception("Must not retry activation after the deadline"),
+            _ => throw new Exception("Must not wait after the deadline"), default, () => expired));
+    }
+
+    [Fact]
     public async Task WindowAndFieldRestorationShareOneDeadline()
     {
         var elapsed = TimeSpan.Zero;

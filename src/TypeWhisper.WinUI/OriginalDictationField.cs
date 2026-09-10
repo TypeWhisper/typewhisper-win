@@ -89,15 +89,16 @@ internal sealed class OriginalDictationField : IDisposable
             // Avoid disturbing the caret when the user stayed in the original field.
             if (IsCurrent()) return true;
             if (!IsValid()) return false;
+            if (expired()) return false;
             if (IsIconic(_window)) ShowWindowAsync(_window, 9);
             if (!await OriginalFieldFocus.RestoreWindowAsync(() => GetForegroundWindow() == _window, IsValid,
                 () => SetForegroundWindow(_window), () =>
                 {
-                    ActivateWithInputThread();
+                    ActivateWithInputThread(expired);
                     // UIA providers (including Chromium/Electron) may activate the
                     // host only when the captured editable element receives focus.
                     // Do not require foreground ownership before requesting it.
-                    if (IsValid())
+                    if (IsValid() && !expired())
                     {
                         PasteDiagnostics.Write("field.restore.request-element-focus");
                         _element!.SetFocus();
@@ -116,7 +117,7 @@ internal sealed class OriginalDictationField : IDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { PasteDiagnostics.Write("field.restore.exception", ex); return false; }
     }
 
-    private void ActivateWithInputThread()
+    private void ActivateWithInputThread(Func<bool> expired)
     {
         // Input attachment must remain synchronous and be undone on the same thread.
         // No synthetic keystrokes and no replacement of the captured UIA element.
@@ -134,8 +135,9 @@ internal sealed class OriginalDictationField : IDisposable
             targetAttached = targetThread != currentThread && targetThread != foregroundThread &&
                 AttachThreadInput(currentThread, targetThread, true);
             PasteDiagnostics.Write($"field.restore.queues foreground={foregroundAttached} target={targetAttached}");
+            if (expired()) return;
             var requested = SetForegroundWindow(_window);
-            if (targetAttached || targetThread == currentThread || (targetThread == foregroundThread && foregroundAttached))
+            if (!expired() && (targetAttached || targetThread == currentThread || (targetThread == foregroundThread && foregroundAttached)))
                 SetActiveWindow(_window);
             PasteDiagnostics.Write($"field.restore.activation accepted={requested} current={GetForegroundWindow() == _window}");
         }
