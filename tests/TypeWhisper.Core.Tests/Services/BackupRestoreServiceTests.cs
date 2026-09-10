@@ -450,15 +450,17 @@ public sealed class BackupRestoreServiceTests : IDisposable
         });
         var json = await source.Backup.ExportAsync();
         var destination = CreateProfile("destination-concurrent-write");
-        using var workflowWriteStarted = new ManualResetEventSlim();
+        await destination.History.EnsureLoadedAsync();
+        var workflowWriteStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var releaseWorkflowWrite = new ManualResetEventSlim();
         var workflows = new Mock<IWorkflowService>();
         workflows.SetupGet(service => service.Workflows).Returns([]);
         workflows.Setup(service => service.TryReplaceAll(It.IsAny<IReadOnlyList<Workflow>>()))
             .Returns(() =>
             {
-                workflowWriteStarted.Set();
-                releaseWorkflowWrite.Wait(TimeSpan.FromSeconds(5));
+                workflowWriteStarted.TrySetResult();
+                if (!releaseWorkflowWrite.Wait(TimeSpan.FromSeconds(30)))
+                    throw new TimeoutException("The test did not release the workflow write.");
                 return true;
             });
         var backup = new BackupRestoreService(
@@ -468,20 +470,35 @@ public sealed class BackupRestoreServiceTests : IDisposable
             destination.Snippets,
             destination.History);
 
-        var import = Task.Run(() => backup.ImportAsync(json));
-        Assert.True(workflowWriteStarted.Wait(TimeSpan.FromSeconds(5)));
-        var concurrentWrite = Task.Run(() => destination.Dictionary.AddEntry(new DictionaryEntry
+        // The import holds the process-wide mutation gate while the dictionary write waits.
+        // Dedicated threads keep these blocking operations independent of thread-pool scheduling.
+        var import = Task.Factory.StartNew(() => backup.ImportAsync(json), CancellationToken.None,
+            TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
+        var concurrentWriteStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task concurrentWrite = Task.CompletedTask;
+        try
         {
-            Id = "concurrent-entry",
-            EntryType = DictionaryEntryType.Term,
-            Original = "concurrent"
-        }));
-        await Task.Delay(100);
-        Assert.False(concurrentWrite.IsCompleted);
-
-        releaseWorkflowWrite.Set();
+            await workflowWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            concurrentWrite = Task.Factory.StartNew(() =>
+            {
+                concurrentWriteStarted.SetResult();
+                destination.Dictionary.AddEntry(new DictionaryEntry
+                {
+                    Id = "concurrent-entry",
+                    EntryType = DictionaryEntryType.Term,
+                    Original = "concurrent"
+                });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            await concurrentWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await Task.Delay(100);
+            Assert.False(concurrentWrite.IsCompleted);
+        }
+        finally
+        {
+            releaseWorkflowWrite.Set();
+            await Task.WhenAll(import, concurrentWrite).WaitAsync(TimeSpan.FromSeconds(30));
+        }
         var result = await import;
-        await concurrentWrite;
 
         Assert.True(result.Success, result.Error);
         Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == "restored");
