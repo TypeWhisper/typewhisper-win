@@ -8,6 +8,8 @@ The candidate bundles .NET, the Windows App SDK runtime, the CLI and portable pl
 
 The first successful candidate run is [34451171076](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34451171076), built from `a2acf689`. Both x64 and ARM64 publish, rejection checks, content validation and artifact upload passed. The artifacts are validation-only; this evidence does not establish native startup, installation, or data migration acceptance. Later fixes require a new candidate before distribution.
 
+The installer candidate from `ed83c032` passed both architectures in [34455620426](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34455620426), including Velopack packing and artifact upload. [Headless checks 34455620383](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34455620383) passed on Windows and Linux. Locally, 31 focused migration/backup tests and the prescribed development build/relaunch passed. These results do not replace clean-machine installer acceptance or an actual historical-profile migration check.
+
 - Release WinUI: `%LOCALAPPDATA%/TypeWhisper-WinUI`.
 - Normal development WinUI: `%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData`.
 - Named debug smoke profiles: `%TEMP%/TypeWhisper-WinUI-TestProfiles/<name>`.
