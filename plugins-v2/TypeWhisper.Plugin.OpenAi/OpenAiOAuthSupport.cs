@@ -349,7 +349,7 @@ internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
         }
         finally
         {
-            _listener?.Stop();
+            listener.Stop();
             _listener = null;
         }
     }

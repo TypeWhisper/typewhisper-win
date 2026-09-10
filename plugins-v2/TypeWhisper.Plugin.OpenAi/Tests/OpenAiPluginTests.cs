@@ -439,7 +439,7 @@ public partial class OpenAiPluginTests
     public void CreateCompressedUpload_UsesWindowsEncoderOrReportsUnsupportedPlatform()
     {
         var samples = Enumerable.Range(0, 32_000)
-            .Select(index => (float)(Math.Sin(index * 2 * Math.PI * 440 / 16_000) * 0.25))
+            .Select(index => (float)(Math.Sin(index * 2.0 * Math.PI * 440 / 16_000) * 0.25))
             .ToArray();
         var wavAudio = WavEncoder.Encode(samples);
 
@@ -1086,7 +1086,7 @@ public partial class OpenAiPluginTests
         host.SetSetting("oauthAccountID", "acct_123");
         host.SetSetting("oauthExpiresAt", DateTimeOffset.UtcNow.AddHours(1));
 
-        var sut = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse("{}")))));
+        using var sut = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse("{}")))));
         await sut.ActivateAsync(host);
 
         Assert.Equal(OpenAiAuthMode.ChatGpt, sut.AuthMode);
