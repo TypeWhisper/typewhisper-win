@@ -3,7 +3,7 @@ name: WinUI headless checks
 on:
   pull_request:
   push:
-    branches: [seofood/release-1.1]
+    branches: [main, seofood/release-1.1]
   workflow_dispatch:
 
 permissions:

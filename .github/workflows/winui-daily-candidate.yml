@@ -1,8 +1,15 @@
-name: WinUI Daily Candidate
+name: WinUI Daily
 
-# Build reviewable candidates without changing any update feed or GitHub release.
+# PR/branch runs only validate. Publishing is restricted to scheduled or explicit main runs.
 on:
   workflow_dispatch:
+    inputs:
+      publish_daily:
+        description: 'Publish a WinUI Daily prerelease from main after validation'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 4 * * *'
   push:
     branches: ['seofood/release-1.1']
     paths:
@@ -21,7 +28,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.version.outputs.value }}
+    steps:
+      - id: version
+        run: echo "value=1.1.0-daily.$(date -u +%Y%m%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
   candidate:
+    needs: version
+    env:
+      CANDIDATE_VERSION: ${{ needs.version.outputs.value }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -36,11 +53,6 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
-      - name: Resolve candidate version
-        shell: pwsh
-        run: |
-          $date = (Get-Date).ToUniversalTime().ToString('yyyyMMdd')
-          "CANDIDATE_VERSION=1.1.0-daily.$date.${{ github.run_number }}" >> $env:GITHUB_ENV
       - name: Test portable host and application logic
         if: matrix.rid == 'win-x64'
         shell: pwsh
@@ -68,7 +80,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./tools/vpk.exe pack --packId TypeWhisperDaily --packTitle 'TypeWhisper Daily' `
             --packVersion $env:CANDIDATE_VERSION --packDir candidate `
-            --mainExe TypeWhisper.WinUI.exe --channel '${{ matrix.rid }}-daily' `
+            --mainExe TypeWhisper.WinUI.exe --channel '${{ matrix.rid }}-winui-daily' `
+            --runtime '${{ matrix.rid }}' `
             --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
             --outputDir installer
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -80,7 +93,7 @@ jobs:
           $name = "TypeWhisper-$env:CANDIDATE_VERSION-${{ matrix.rid }}-candidate"
           @{ version = $env:CANDIDATE_VERSION; commit = '${{ github.sha }}'; runtime = '${{ matrix.rid }}';
              minimumWindowsBuild = 26100; profile = 'TypeWhisper-WinUI';
-             distribution = 'validation-only'; automaticUpdates = $false } |
+             distribution = 'daily-candidate'; automaticUpdates = $false } |
             ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
           Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
           Copy-Item installer/* artifacts/candidate/
@@ -94,3 +107,32 @@ jobs:
           name: winui-daily-candidate-${{ matrix.rid }}
           path: artifacts/candidate/*
           if-no-files-found: error
+
+  release:
+    needs: [version, candidate]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_daily))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: winui-daily-candidate-*
+          path: artifacts
+          merge-multiple: true
+      - name: Publish Daily prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          test -f artifacts/releases.win-x64-winui-daily.json
+          test -f artifacts/releases.win-arm64-winui-daily.json
+          # Never publish a feed consumed by the legacy application's incompatible package identity.
+          test ! -f artifacts/releases.win-x64-daily.json
+          test ! -f artifacts/releases.win-arm64-daily.json
+          gh release create "$TAG" artifacts/* --target "$GITHUB_SHA" \
+            --title "TypeWhisper $TAG — Daily" --notes-file docs/releases/1.1-daily.md \
+            --prerelease --latest=false --draft
+          gh release edit "$TAG" --draft=false --prerelease --latest=false

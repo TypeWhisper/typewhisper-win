@@ -1,6 +1,6 @@
 # WinUI 1.1 Daily candidate
 
-The `WinUI Daily Candidate` workflow creates validation artifacts for x64 and ARM64. It does not publish a GitHub release, replace the legacy release pipeline, or modify any update feed. Candidate versions are `1.1.0-daily.YYYYMMDD.RUN`.
+The `WinUI Daily` workflow creates validation artifacts for x64 and ARM64 on pull requests and release-branch pushes. Scheduled main runs and explicit main dispatches with `publish_daily=true` publish a GitHub prerelease after both architectures pass. The legacy workflow no longer schedules Daily builds; stable release delivery is unchanged. Candidate versions are `1.1.0-daily.YYYYMMDD.RUN`.
 
 The candidate bundles .NET, the Windows App SDK runtime, the CLI and portable plugin packages. It currently targets Windows build 26100 or newer. CI runs the headless suites, checks package contents, verifies application/CLI versions and executable architecture, rejects development/user state, and records the commit plus ZIP SHA-256. Cross-building ARM64 does not count as testing on ARM64 hardware.
 
@@ -27,7 +27,7 @@ Settings, sign-ins, license credentials, plugins, model files, audio, recorder a
 
 The candidate workflow also packs a Velopack `TypeWhisperDaily` installer for each architecture, using pinned tooling `0.0.1298`. It installs separately from legacy `TypeWhisper`; shortcuts and uninstall identity use **TypeWhisper Daily**. The WinUI entry point handles Velopack callbacks before XAML and profile access. Installed Daily builds can register their own `TypeWhisperDaily` startup value, and uninstall removes only that owned value. Startup is unavailable for the standalone ZIP.
 
-Artifacts include the setup executable, packages, local feed metadata and SHA-256 files. They remain CI artifacts, not published releases. There is no automatic update polling or feed transition; existing Daily users must explicitly install this candidate. Close the old app before testing to avoid competing hotkeys. The old installation and its update feed remain available for rollback.
+Artifacts include the setup executable, packages, feed metadata and SHA-256 files. Main publishing runs attach them to a Daily prerelease without marking it as the latest stable release. The new `win-x64-winui-daily` and `win-arm64-winui-daily` channels are distinct from the legacy Daily channels; old clients must not receive packages with a different installation identity. There is no automatic update polling or feed transition; existing Daily users must explicitly install this candidate. Close the old app before testing to avoid competing hotkeys. The old installation and its update feed remain available for rollback.
 
 ## Before distributing to existing Daily users
 
