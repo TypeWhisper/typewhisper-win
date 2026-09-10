@@ -4,6 +4,41 @@ using Xunit;
 public class OriginalFieldFocusTests
 {
     [Fact]
+    public async Task SlowProviderIsAcceptedOnlyAfterReadinessBeyondOldRetryBudget()
+    {
+        var observations = 0;
+        var focusRequests = 0;
+        Assert.True(await OriginalFieldFocus.RestoreAsync(() => observations >= 40, () => true,
+            () => focusRequests++, _ => { observations++; return Task.CompletedTask; }, default,
+            () => observations >= 100));
+        Assert.Equal(40, observations);
+        Assert.Equal(1, focusRequests);
+    }
+
+    [Fact]
+    public async Task ExpiredDeadlineDoesNotPretendFieldIsReady()
+    {
+        Assert.False(await OriginalFieldFocus.RestoreAsync(() => false, () => true,
+            () => { }, _ => throw new Exception("Must stop"), default, () => true));
+    }
+
+    [Fact]
+    public async Task ProviderCanActivateWindowWhenOriginalElementReceivesFocus()
+    {
+        var foreground = false;
+        var requested = false;
+        var waits = 0;
+        Assert.True(await OriginalFieldFocus.RestoreWindowAsync(() => foreground, () => true,
+            () => { }, () => requested = true, _ =>
+            {
+                if (requested && ++waits == 3) foreground = true;
+                return Task.CompletedTask;
+            }, default));
+        Assert.True(requested);
+        Assert.Equal(3, waits);
+    }
+
+    [Fact]
     public async Task DeniedWindowActivationRetriesBeforeRestoringOriginalField()
     {
         var focused = false;
@@ -30,7 +65,7 @@ public class OriginalFieldFocusTests
         var waits = 0;
         var fallback = 0;
         Assert.False(await OriginalFieldFocus.RestoreWindowAsync(() => false, () => true,
-            () => { }, () => fallback++, _ => { waits++; return Task.CompletedTask; }, default));
+            () => { }, () => fallback++, _ => { waits++; return Task.CompletedTask; }, default, () => waits >= 16));
         Assert.Equal(16, waits);
         Assert.Equal(1, fallback);
     }
@@ -67,7 +102,7 @@ public class OriginalFieldFocusTests
     {
         var waits = 0;
         Assert.False(await OriginalFieldFocus.RestoreAsync(() => false, () => true,
-            () => { }, _ => { waits++; return Task.CompletedTask; }, default));
+            () => { }, _ => { waits++; return Task.CompletedTask; }, default, () => waits >= 8));
         Assert.Equal(8, waits);
     }
 

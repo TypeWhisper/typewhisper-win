@@ -90,7 +90,18 @@ internal sealed class OriginalDictationField : IDisposable
             if (!IsValid()) return false;
             if (IsIconic(_window)) ShowWindowAsync(_window, 9);
             if (!await OriginalFieldFocus.RestoreWindowAsync(() => GetForegroundWindow() == _window, IsValid,
-                () => SetForegroundWindow(_window), ActivateWithInputThread,
+                () => SetForegroundWindow(_window), () =>
+                {
+                    ActivateWithInputThread();
+                    // UIA providers (including Chromium/Electron) may activate the
+                    // host only when the captured editable element receives focus.
+                    // Do not require foreground ownership before requesting it.
+                    if (IsValid())
+                    {
+                        PasteDiagnostics.Write("field.restore.request-element-focus");
+                        _element!.SetFocus();
+                    }
+                },
                 ct => Task.Delay(25, ct), cancellation))
             {
                 PasteDiagnostics.Write("field.restore.window-activation-failed");
