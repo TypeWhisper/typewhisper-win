@@ -11,7 +11,14 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null)
     {
         await TransactionGate.WaitAsync();
-        try { return await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text); }
+        try
+        {
+            var inserted = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text);
+            PasteDiagnostics.Write(inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
+            return inserted;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { PasteDiagnostics.Write("clipboard.paste.exception", ex); throw; }
         finally { TransactionGate.Release(); }
     }
     public void Dispose() => _clipboard.Dispose();

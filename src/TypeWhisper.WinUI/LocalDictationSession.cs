@@ -564,6 +564,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return;
                 }
                 _targetProcessId = processId;
+                PasteDiagnostics.Write("dictation.start");
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
                     _originalField = OriginalDictationField.Capture(_target, processId);
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
@@ -713,6 +714,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 AppUrl = _targetHostAtStart
             };
             var delivery = new DictationOutputDelivery(_history);
+            PasteDiagnostics.Write("delivery.begin");
             var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null ? _outputAtStart : _outputAtStart with { AutoPaste = false },
                 () => OutputPreferences.Current, async () =>
                 {
@@ -720,16 +722,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     for (var attempt = 0; attempt < 40 && ModifiersHeld(); attempt++) await Task.Delay(25, _operationCancellation.Token);
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
-                        ModifiersHeld()) return false;
+                        ModifiersHeld()) { PasteDiagnostics.Write("delivery.blocked-settings-modifiers-or-disposed"); return false; }
                     var lockField = _outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField;
                     if (lockField)
                     {
-                        if (_originalField is null) return false;
+                        if (_originalField is null) { PasteDiagnostics.Write("delivery.no-captured-field"); return false; }
                         if (OutputPreferences.Current.LockPasteToFocusedField &&
-                            !await _originalField.RestoreAsync(_operationCancellation.Token)) return false;
-                        if (!_originalField.IsCurrent()) return false;
+                            !await _originalField.RestoreAsync(_operationCancellation.Token)) { PasteDiagnostics.Write("delivery.restore-failed"); return false; }
+                        if (!_originalField.IsCurrent()) { PasteDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
-                    if (GetForegroundWindow() != _target) return false;
+                    if (GetForegroundWindow() != _target) { PasteDiagnostics.Write("delivery.target-not-foreground"); return false; }
                     var inserted = await _inserter.InsertAsync(text, _target, () =>
                         !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
@@ -739,6 +741,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return inserted;
                 }, _operationCancellation.Token, samples, 16000);
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
+            PasteDiagnostics.Write(outcome.NeedsReview ? "delivery.review" : "delivery.completed");
             if (_disposed) return;
             _operationCancellation.Token.ThrowIfCancellationRequested();
             if (_lastCompletedDictation.TryPublish(outcome, _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);

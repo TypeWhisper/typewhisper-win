@@ -25,14 +25,17 @@ internal sealed class OriginalDictationField : IDisposable
         {
             target = new(window, process);
             target._element = target._automation.GetFocusedElement();
+            PasteDiagnostics.Write(target._element is null ? "field.capture.no-element" : $"field.capture.type={target._element.CurrentControlType}");
             if (target.IsCurrent())
             {
                 target._automation.ConnectionTimeout = 200;
                 target._automation.TransactionTimeout = 200;
+                PasteDiagnostics.Write("field.capture.success");
                 return target;
             }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { PasteDiagnostics.Write("field.capture.exception", ex); }
+        PasteDiagnostics.Write("field.capture.failed");
         target?.Dispose(); return null;
     }
 
@@ -63,12 +66,18 @@ internal sealed class OriginalDictationField : IDisposable
     {
         try
         {
-            if (GetForegroundWindow() != _window || !IsValid()) return false;
+            if (GetForegroundWindow() != _window) { PasteDiagnostics.Write("field.verify.other-window"); return false; }
+            if (!IsValid()) { PasteDiagnostics.Write("field.verify.invalid-element"); return false; }
             var focused = _automation.GetFocusedElement();
-            try { return _automation.CompareElements(_element, focused) != 0; }
+            try
+            {
+                var matches = _automation.CompareElements(_element, focused) != 0;
+                if (!matches) PasteDiagnostics.Write("field.verify.different-element");
+                return matches;
+            }
             finally { Release(focused); }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { PasteDiagnostics.Write("field.verify.exception", ex); return false; }
     }
 
     internal async Task<bool> RestoreAsync(CancellationToken cancellation)
