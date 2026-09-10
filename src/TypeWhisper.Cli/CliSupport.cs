@@ -70,7 +70,7 @@ public static class CliConnectionResolver
         var explicitProfile = options.DevMode ? Path.Join(root, "TypeWhisper-WinUI-DevUserData")
             : FirstNonBlank(options.ProfileDirectory, bound);
         var directories = explicitProfile is not null ? new[] { Path.GetFullPath(explicitProfile) }
-            : new[] { Path.Join(root, "TypeWhisper-WinUI-DevUserData"), Path.Join(root, "TypeWhisper") };
+            : new[] { Path.Join(root, "TypeWhisper-WinUI"), Path.Join(root, "TypeWhisper"), Path.Join(root, "TypeWhisper-WinUI-DevUserData") };
         var candidates = directories.Select(directory => new
         {
             Discovery = ReadDiscovery(Path.Join(directory, "api-discovery.json")),

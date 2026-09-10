@@ -14,10 +14,21 @@ public sealed class DiscoveryTests : IDisposable
     [Fact]
     public void PrefersWinUiProfileAndDiscoversRequiredToken()
     {
-        Discovery("TypeWhisper", 8978); Discovery("TypeWhisper-WinUI-DevUserData", 18979, true);
+        Discovery("TypeWhisper", 8978); Discovery("TypeWhisper-WinUI-DevUserData", 18980);
+        Discovery("TypeWhisper-WinUI", 18979, true);
         var value = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root));
         Assert.Equal(18979, value.Port); Assert.Equal("synthetic-discovery-token", value.ApiToken);
     }
+    [Fact]
+    public void LegacyProductionTakesPrecedenceOverDevelopment()
+    {
+        Discovery("TypeWhisper", 18981, false);
+        Discovery("TypeWhisper-WinUI-DevUserData", 18982, true);
+        var result = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root));
+        Assert.Equal(18981, result.Port);
+        Assert.Null(result.ApiToken);
+    }
+
     [Fact]
     public void ExplicitProfileIsIsolatedAndOptionalAuthenticationOmitsToken()
     {

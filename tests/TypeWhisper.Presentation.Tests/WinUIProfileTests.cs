@@ -11,6 +11,18 @@ public sealed class WinUIProfileTests
         Assert.Equal(Path.Combine("local", "TypeWhisper-WinUI-DevUserData"), WinUIProfile.ResolveRoot(name, "local", "temp"));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("smoke-1_a")]
+    [InlineData("../profile")]
+    public void ProductionIgnoresSmokeOverridesAndNeverUsesDevelopmentProfile(string? name)
+    {
+        var path = WinUIProfile.ResolveRoot(name, "local", "temp", development: false);
+        Assert.Equal(Path.Combine("local", "TypeWhisper-WinUI"), path);
+        Assert.NotEqual(WinUIProfile.ResolveRoot(null, "local", "temp", development: true), path);
+        Assert.NotEqual(Path.Combine("local", "TypeWhisper"), path);
+    }
+
     [Fact]
     public void NamedSmokeProfileLivesOnlyInTemporaryDirectory()
     {

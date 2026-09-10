@@ -5,7 +5,6 @@ namespace TypeWhisper.WinUI;
 
 public partial class App : Application
 {
-    private const string InstanceKey = "TypeWhisper.WinUI.Dev.Primary";
     private MainWindow? _window;
     private AppInstance? _mainInstance;
     private TrayIconService? _tray;
@@ -38,7 +37,7 @@ public partial class App : Application
             : TypeWhisper.Presentation.ApplicationActivationRequest.Parse(Environment.GetCommandLineArgs().Skip(1),
             activation.Kind == ExtendedActivationKind.StartupTask);
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-        _mainInstance = AppInstance.FindOrRegisterForKey(InstanceKey);
+        _mainInstance = AppInstance.FindOrRegisterForKey(WinUIProfile.InstanceKey);
         if (!_mainInstance.IsCurrent)
         {
             try

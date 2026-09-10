@@ -1,0 +1,75 @@
+name: WinUI Daily Candidate
+
+# Build reviewable candidates without changing any update feed or GitHub release.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/winui-daily-candidate.yml'
+      - 'eng/Test-WinUIDailyCandidate.ps1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: winui-daily-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            platform: x64
+          - rid: win-arm64
+            platform: ARM64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Resolve candidate version
+        shell: pwsh
+        run: |
+          $date = (Get-Date).ToUniversalTime().ToString('yyyyMMdd')
+          "CANDIDATE_VERSION=1.1.0-daily.$date.${{ github.run_number }}" >> $env:GITHUB_ENV
+      - name: Test portable host and application logic
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release
+      - name: Publish WinUI with its runtimes and bundled CLI
+        shell: pwsh
+        run: |
+          dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj `
+            -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.platform }} `
+            -p:Version=$env:CANDIDATE_VERSION --self-contained true `
+            -p:WindowsAppSDKSelfContained=true -o candidate
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test candidate rejection checks
+        shell: pwsh
+        run: ./eng/Test-WinUIDailyCandidate.Tests.ps1
+      - name: Validate candidate contents
+        shell: pwsh
+        run: |
+          ./eng/Test-WinUIDailyCandidate.ps1 -PublishDirectory candidate `
+            -ExpectedVersion $env:CANDIDATE_VERSION -RuntimeIdentifier '${{ matrix.rid }}'
+      - name: Archive candidate and record provenance
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory artifacts/candidate -Force | Out-Null
+          $name = "TypeWhisper-$env:CANDIDATE_VERSION-${{ matrix.rid }}-candidate"
+          @{ version = $env:CANDIDATE_VERSION; commit = '${{ github.sha }}'; runtime = '${{ matrix.rid }}';
+             minimumWindowsBuild = 26100; profile = 'TypeWhisper-WinUI';
+             distribution = 'validation-only'; automaticUpdates = $false } |
+            ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
+          Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
+          (Get-FileHash "artifacts/candidate/$name.zip" -Algorithm SHA256).Hash |
+            Set-Content "artifacts/candidate/$name.zip.sha256"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: winui-daily-candidate-${{ matrix.rid }}
+          path: artifacts/candidate/*
+          if-no-files-found: error
