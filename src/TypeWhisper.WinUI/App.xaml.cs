@@ -67,6 +67,12 @@ public partial class App : Application
         };
         try
         {
+#if !DEBUG
+            var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var legacy = Path.Combine(localData, "TypeWhisper-UserData");
+            if (!Directory.Exists(legacy)) legacy = Path.Combine(localData, "TypeWhisper");
+            await TypeWhisper.Core.Services.LegacyDailyProfileMigration.ImportAsync(legacy, WinUIProfile.Root);
+#endif
             var recovery = new TypeWhisper.Core.Services.PersistedProfileBackup(WinUIProfile.Root).RecoverPending();
             if (!recovery.CanOpenProfile)
             {

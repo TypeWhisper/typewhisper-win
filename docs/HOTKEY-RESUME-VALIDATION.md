@@ -16,6 +16,8 @@ Resume, unlock and reconnect notifications schedule one recovery after a 500 ms 
 
 On 2026-09-10 Marco put the development machine into standby and confirmed that the dictation shortcut, microphone capture, overlay and text insertion worked after waking without restarting TypeWhisper (build from `f972dc43`). This validates one real cycle. Alternate shortcut modes, held-key unlock, paused-hotkey persistence and repeated cycles below still need explicit hardware confirmation.
 
+Marco also confirmed a physical USB microphone disconnect/reconnect using a USB switch to his Mac: dictation worked again after switching back to Windows without restarting TypeWhisper. This is one successful device-reconnection test, not just muting the microphone.
+
 1. With TypeWhisper only in the tray, dictate once, sleep, wake, unlock, release the wake/unlock keys, then dictate again without restarting the app.
 2. Repeat with the main modifier-only chord and configured alternate Hold/Toggle shortcuts.
 3. Lock/unlock without sleep, including a modifier held during unlock. No recording should start until the keys are released and a fresh chord is pressed.

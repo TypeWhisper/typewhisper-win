@@ -25,8 +25,16 @@ internal static class WindowsStartupRegistration
                 "Startup is available only from the development launcher's published output. " + ex.Message);
         }
 #else
-        return new(backend, StartupPublication.DevelopmentIdentity, null,
-            "Startup is unavailable until this build has an explicit installation identity.");
+        var locator = Velopack.Locators.VelopackLocator.Current;
+        if (locator.AppId == "TypeWhisperDaily" && locator.CurrentlyInstalledVersion is not null &&
+            !string.IsNullOrEmpty(locator.RootAppDir))
+        {
+            var executable = Path.Combine(locator.RootAppDir, "current", "TypeWhisper.WinUI.exe");
+            if (File.Exists(executable) && string.Equals(Path.GetFullPath(executable), Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
+                return new(backend, "TypeWhisperDaily", executable);
+        }
+        return new(backend, "TypeWhisperDaily", null,
+            "Windows startup is available after installing TypeWhisper Daily.");
 #endif
     }
 

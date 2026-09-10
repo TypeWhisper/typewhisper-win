@@ -61,6 +61,18 @@ jobs:
         run: |
           ./eng/Test-WinUIDailyCandidate.ps1 -PublishDirectory candidate `
             -ExpectedVersion $env:CANDIDATE_VERSION -RuntimeIdentifier '${{ matrix.rid }}'
+      - name: Build side-by-side Daily installer
+        shell: pwsh
+        run: |
+          dotnet tool install vpk --version 0.0.1298 --tool-path tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./tools/vpk.exe pack --packId TypeWhisperDaily --packTitle 'TypeWhisper Daily' `
+            --packVersion $env:CANDIDATE_VERSION --packDir candidate `
+            --mainExe TypeWhisper.WinUI.exe --channel '${{ matrix.rid }}-daily' `
+            --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
+            --outputDir installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Get-ChildItem installer -Filter '*Setup.exe')) { throw 'Daily installer is missing.' }
       - name: Archive candidate and record provenance
         shell: pwsh
         run: |
@@ -71,6 +83,10 @@ jobs:
              distribution = 'validation-only'; automaticUpdates = $false } |
             ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
           Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
+          Copy-Item installer/* artifacts/candidate/
+          Get-ChildItem artifacts/candidate -File | Where-Object Extension -In '.exe', '.nupkg' | ForEach-Object {
+            (Get-FileHash $_.FullName -Algorithm SHA256).Hash | Set-Content ($_.FullName + '.sha256')
+          }
           (Get-FileHash "artifacts/candidate/$name.zip" -Algorithm SHA256).Hash |
             Set-Content "artifacts/candidate/$name.zip.sha256"
       - uses: actions/upload-artifact@v7

@@ -15,14 +15,24 @@ The first successful candidate run is [34451171076](https://github.com/TypeWhisp
 - Development and release use different single-instance identities.
 - Unbound CLI discovery prefers release WinUI, then legacy production, then development. Explicit `--dev`, `--profile`, and installed CLI profile bindings retain their precedence.
 
-Opening a candidate does not import or modify legacy settings. Data migration is a separate, explicit operation; a separate empty profile is not a completed upgrade experience. Do not tell testers their existing settings have migrated yet.
+On first Release launch, an absent WinUI profile receives a copy of dictionary, snippets, workflows and history from `%LOCALAPPDATA%/TypeWhisper-UserData/Data`. Only when that legacy root is absent does the importer try `%LOCALAPPDATA%/TypeWhisper/Data`. An existing WinUI profile, even an empty directory, is never merged or replaced. Debug builds never invoke this importer.
+
+The importer uses the validated portable backup format, stages privately on the destination volume, and publishes by a no-overwrite directory rename before opening profile stores. Failure or cancellation leaves the source and destination unchanged; retry is safe. A process termination can leave an unused `.typewhisper-import-*` staging directory beside the profile; it is never treated as a completed import. Unknown fields, malformed data and linked source paths fail closed. The previous app should be closed during migration.
+
+Settings, sign-ins, license credentials, plugins, model files, audio, recorder archives and recovery recordings remain in the old installation. History is imported as text without device-bound audio references. The wizard explains these limits and configures the new app. This is a portable-data migration, not complete settings/plugin parity. `legacy-import.json` records completion without storing user content or source paths. Removing the Daily installation does not delete either user-data directory.
+
+## Side-by-side installer
+
+The candidate workflow also packs a Velopack `TypeWhisperDaily` installer for each architecture, using pinned tooling `0.0.1298`. It installs separately from legacy `TypeWhisper`; shortcuts and uninstall identity use **TypeWhisper Daily**. The WinUI entry point handles Velopack callbacks before XAML and profile access. Installed Daily builds can register their own `TypeWhisperDaily` startup value, and uninstall removes only that owned value. Startup is unavailable for the standalone ZIP.
+
+Artifacts include the setup executable, packages, local feed metadata and SHA-256 files. They remain CI artifacts, not published releases. There is no automatic update polling or feed transition; existing Daily users must explicitly install this candidate. Close the old app before testing to avoid competing hotkeys. The old installation and its update feed remain available for rollback.
 
 ## Before distributing to existing Daily users
 
 1. Produce and inspect both candidate artifacts; launch the x64 candidate on a clean supported Windows machine and confirm runtime prerequisites. Test ARM64 on hardware before claiming support.
-2. Connect the WinUI executable to the installer/update lifecycle. The existing Release workflow still packages WPF; this candidate ZIP is not a Velopack update and has no automatic-update implementation.
-3. Define and test the legacy-to-WinUI data copy, preserving original settings, history, credentials and plugin files. Include failure/retry and return-to-old-version cases.
+2. Test installer install/reinstall/uninstall and startup on a clean supported Windows machine. The existing Release workflow still packages WPF; automatic Daily update delivery remains separate work.
+3. Validate the copied portable data against an actual old Daily profile and confirm rollback to the preserved old app. Automated fixture tests cover source preservation, existing destinations, failure/retry, cancellation and invalid data; they do not establish compatibility with every historical profile.
 4. Validate the supported v2 plugin catalog/packages and clearly list unavailable plugins. See `PLUGIN-MIGRATION-1.1.md`.
 5. Check dictation, workflows, API/CLI/Raycast and account/sync in the actual candidate. Publish only to the intended Daily track; do not alter stable or RC feeds.
 
-Release startup registration is currently unavailable until an installation identity is connected. This must be resolved or explicitly included in Daily limitations. Calendar OAuth and pending plugin ports are not completed by packaging the app.
+Calendar OAuth and pending plugin ports are not completed by packaging the app.
