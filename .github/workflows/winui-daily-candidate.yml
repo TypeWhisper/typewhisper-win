@@ -46,8 +46,10 @@ jobs:
         include:
           - rid: win-x64
             platform: x64
+            framework: net10.0-x64-runtime
           - rid: win-arm64
             platform: ARM64
+            framework: net10.0-arm64-runtime
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -57,12 +59,12 @@ jobs:
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release
-      - name: Publish WinUI with its runtimes and bundled CLI
+      - name: Publish WinUI with shared .NET and bundled CLI
         shell: pwsh
         run: |
           dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj `
             -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.platform }} `
-            -p:Version=$env:CANDIDATE_VERSION --self-contained true `
+            -p:Version=$env:CANDIDATE_VERSION --self-contained false `
             -p:WindowsAppSDKSelfContained=true -o candidate
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test candidate rejection checks
@@ -81,7 +83,7 @@ jobs:
           ./tools/vpk.exe pack --packId TypeWhisperDaily --packTitle 'TypeWhisper Daily' `
             --packVersion $env:CANDIDATE_VERSION --packDir candidate `
             --mainExe TypeWhisper.WinUI.exe --channel '${{ matrix.rid }}-winui-daily' `
-            --runtime '${{ matrix.rid }}' `
+            --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
             --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
             --outputDir installer
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -133,6 +135,7 @@ jobs:
           test ! -f artifacts/releases.win-x64-daily.json
           test ! -f artifacts/releases.win-arm64-daily.json
           gh release create "$TAG" artifacts/* --target "$GITHUB_SHA" \
-            --title "TypeWhisper $TAG — Daily" --notes-file docs/releases/1.1-daily.md \
+            --title "TypeWhisper $TAG ï¿½ Daily" --notes-file docs/releases/1.1-daily.md \
             --prerelease --latest=false --draft
           gh release edit "$TAG" --draft=false --prerelease --latest=false
+
