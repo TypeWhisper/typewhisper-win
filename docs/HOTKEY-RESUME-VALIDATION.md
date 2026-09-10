@@ -12,7 +12,9 @@ Resume, unlock and reconnect notifications schedule one recovery after a 500 ms 
 - The prescribed local WinUI development build and relaunch succeeded.
 - These tests do not simulate the Windows power subsystem or prove physical sleep/resume behavior.
 
-## Physical acceptance still required
+## Physical acceptance
+
+On 2026-09-10 Marco put the development machine into standby and confirmed that the dictation shortcut, microphone capture, overlay and text insertion worked after waking without restarting TypeWhisper (build from `f972dc43`). This validates one real cycle. Alternate shortcut modes, held-key unlock, paused-hotkey persistence and repeated cycles below still need explicit hardware confirmation.
 
 1. With TypeWhisper only in the tray, dictate once, sleep, wake, unlock, release the wake/unlock keys, then dictate again without restarting the app.
 2. Repeat with the main modifier-only chord and configured alternate Hold/Toggle shortcuts.
