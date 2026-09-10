@@ -144,7 +144,8 @@ public sealed partial class SetupWizard
     private void RenderTest()
     {
         var shortcut = CardContent("keyboard", _session.Shortcut, ""); shortcut.HorizontalAlignment = HorizontalAlignment.Center; _body.Children.Add(shortcut);
-        _testBox = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 180, FontSize = 18, Padding = new Thickness(18), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Text = _testText, PlaceholderText = "Your dictation appears here…" };
+        _testBox = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 144, FontSize = 18, Padding = new Thickness(18), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Text = _testText, PlaceholderText = "Your dictation appears here…" };
+        ScrollViewer.SetVerticalScrollBarVisibility(_testBox, ScrollBarVisibility.Auto);
         AutomationProperties.SetName(_testBox, "Try dictation");
         _testBox.TextChanged += (_, _) => { if (_testBox is not null) _testText = _testBox.Text; };
         _body.Children.Add(_testBox);

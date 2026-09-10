@@ -49,16 +49,20 @@ public sealed partial class SetupWizard : UserControl
         _scroll.SizeChanged += (_, _) => _body.Width = Math.Max(0, Math.Min(720, _scroll.ActualWidth - 24));
         Grid.SetRow(_scroll, 1); shell.Children.Add(_scroll);
         var footer = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 18, 0, 0), BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = Resource("HairlineBrush") };
+        footer.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        footer.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        _message.Margin = new Thickness(0, 0, 0, 12);
+        Grid.SetColumnSpan(_message, 4); footer.Children.Add(_message);
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new());
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        _back = Button("Back", () => Move(Math.Max(0, _state.Step - 1))); footer.Children.Add(_back);
+        _back = Button("Back", () => Move(Math.Max(0, _state.Step - 1))); Grid.SetRow(_back, 1); footer.Children.Add(_back);
         var skip = Button("Skip setup", () => { if (!_closing) _exit(false); });
-        Grid.SetColumn(skip, 2); footer.Children.Add(skip);
+        Grid.SetRow(skip, 1); Grid.SetColumn(skip, 2); footer.Children.Add(skip);
         _next = Button("Continue", Next);
         _next.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
-        Grid.SetColumn(_next, 3); footer.Children.Add(_next);
+        Grid.SetRow(_next, 1); Grid.SetColumn(_next, 3); footer.Children.Add(_next);
         Grid.SetRow(footer, 2); shell.Children.Add(footer); Content = shell;
         AutomationProperties.SetLiveSetting(_message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         PageKeyboardNavigation.Attach(shell);
@@ -142,7 +146,7 @@ public sealed partial class SetupWizard : UserControl
             case 3: RenderEngines(); break;
             case 4: RenderTest(); break;
         }
-        _body.Children.Add(_message); RefreshStatus();
+        RefreshStatus();
         _scroll.ChangeView(null, 0, null, true);
         DispatcherQueue.TryEnqueue(() =>
         {
