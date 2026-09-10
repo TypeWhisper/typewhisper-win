@@ -14,7 +14,8 @@
         "windows"
       ],
       "supportedArchitectures": [
-        "x64"
+        "x64",
+        "arm64"
       ],
       "categories": [
         "transcription"
