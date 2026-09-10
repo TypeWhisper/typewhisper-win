@@ -8,8 +8,8 @@ internal static class LiveApplicationUpdateSettings
 {
     internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers, AppUpdateController controller)
     {
-        if (category != "General") return;
-        var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "UpdateChannel"));
+        if (category != "Account & about") return;
+        var row = content.Children.OfType<AccountView>().Single().UpdatePanel;
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear(); row.IsHitTestVisible = true;
         row.Children.Add(SettingsHelp.Label("App updates", "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release. Changing channels does not install anything until you choose Download and restart. Only compatible WinUI releases are offered."));

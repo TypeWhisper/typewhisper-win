@@ -17,7 +17,7 @@ public sealed partial class MainWindow
     internal async void ShowApplicationUpdates()
     {
         OpenSettings();
-        _settingsWindow?.ShowCategory("General");
+        _settingsWindow?.ShowCategory("Account & about");
         await ApplicationUpdates.CheckAsync();
     }
 }
