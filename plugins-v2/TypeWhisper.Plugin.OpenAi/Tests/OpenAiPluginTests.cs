@@ -1304,6 +1304,7 @@ public partial class OpenAiPluginTests
 
         private readonly Dictionary<string, JsonElement> _settings = [];
         public bool FailWrites { get; set; }
+        public string? FailSettingKey { get; set; }
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
@@ -1330,7 +1331,7 @@ public partial class OpenAiPluginTests
 
         public void SetSetting<T>(string key, T value)
         {
-            if (FailWrites) throw new IOException("Fixture write failed.");
+            if (FailWrites || key == FailSettingKey) throw new IOException("Fixture write failed.");
             _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
         }
 

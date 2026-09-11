@@ -5,6 +5,26 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public partial class OpenAiPluginTests
 {
+    [Fact]
+    public async Task FailedChatGptSnapshotWriteDoesNotPersistFetchedMarker()
+    {
+        using var client = new HttpClient(new CapturingHandler((_, _) =>
+            Task.FromResult(JsonResponse("""{"models":[]}"""))));
+        var host = new TestPluginHostServices();
+        host.SetSetting("authMode", "chatgpt");
+        host.SetSetting("oauthExpiresAt", DateTimeOffset.UtcNow.AddHours(1));
+        host.Secrets["oauth-access-token"] = "access-token";
+        host.Secrets["oauth-refresh-token"] = "refresh-token";
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(host);
+        host.FailSettingKey = "fetchedChatGPTModels";
+        await Assert.ThrowsAsync<IOException>(() => plugin.RefreshAvailableLlmModelsAsync());
+        Assert.False(host.GetSetting<bool>("hasFetchedChatGPTModelCatalog"));
+        using var reloaded = new OpenAiPlugin();
+        await reloaded.ActivateAsync(host);
+        Assert.NotEmpty(reloaded.SupportedModels);
+    }
+
     [Theory]
     [InlineData("""{"models":[{"slug":"gpt-5.5","visibility":"list","available_in_plans":["pro"]}]}""")]
     [InlineData("""{"models":[{"slug":"gpt-5.5","visibility":"hide"}]}""")]

@@ -669,9 +669,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
                 return [];
 
             _fetchedChatGptModels = chatGptModels.ToList();
+            _host?.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
             _hasFetchedChatGptCatalog = true;
             _host?.SetSetting(HasFetchedChatGptCatalogSettingName, true);
-            _host?.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
             NormalizeSelectedLlmModel(persist: true);
             _host?.NotifyCapabilitiesChanged();
             _lastModelRefreshSucceeded = true;
