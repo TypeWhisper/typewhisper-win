@@ -49,6 +49,7 @@ public sealed partial class MainWindow
         _integrationSearch!.Visibility = _discoverSettings ? Visibility.Visible : Visibility.Collapsed;
         PluginsView.Visibility = _discoverSettings ? Visibility.Collapsed : Visibility.Visible;
         MarketplaceView.Visibility = _discoverSettings ? Visibility.Visible : Visibility.Collapsed;
+        if (_discoverSettings && MarketplaceView.IsDetail) MarketplaceView.ResetNavigation();
         _integrationSearch.IsEnabled = _discoverSettings && !MarketplaceView.IsDetail;
         if (!_discoverSettings) _integrationSearch.Text = "";
         if (_discoverSettings) MarketplaceView.Filter(_integrationSearch.Text);
@@ -59,7 +60,8 @@ public sealed partial class MainWindow
     {
         if (_discoverSettings && MarketplaceView.IsDetail) { MarketplaceView.GoBack(); return true; }
         if (_integrationSearch?.Text.Length > 0) { _integrationSearch.Text = ""; return true; }
-        if (_discoverSettings) { ShowIntegrationSettings(false); return true; }
+        if (_discoverSettings && PluginsView.SettingsNavigationItems.Count > 0)
+        { ShowIntegrationSettings(false); return true; }
         return false;
     }
 }

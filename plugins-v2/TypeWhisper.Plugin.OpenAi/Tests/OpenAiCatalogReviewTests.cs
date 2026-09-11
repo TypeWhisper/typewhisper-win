@@ -5,6 +5,39 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public partial class OpenAiPluginTests
 {
+    [Theory]
+    [InlineData("""{"models":[{"slug":"gpt-5.5","visibility":"list","available_in_plans":["pro"]}]}""")]
+    [InlineData("""{"models":[{"slug":"gpt-5.5","visibility":"hide"}]}""")]
+    [InlineData("""{"models":[]}""")]
+    public async Task EmptyChatGptCatalogReplacesCachedModelsAndSurvivesReload(string catalog)
+    {
+        var fail = false;
+        using var client = new HttpClient(new CapturingHandler((_, _) =>
+            Task.FromResult(JsonResponse(fail ? "invalid" : catalog))));
+        var host = new TestPluginHostServices();
+        host.SetSetting("authMode", "chatgpt");
+        host.SetSetting("oauthPlanType", "plus");
+        host.SetSetting("oauthExpiresAt", DateTimeOffset.UtcNow.AddHours(1));
+        host.Secrets["oauth-access-token"] = "access-token";
+        host.Secrets["oauth-refresh-token"] = "refresh-token";
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(host);
+        Assert.NotEmpty(plugin.SupportedModels);
+        await plugin.RefreshAvailableLlmModelsAsync();
+        Assert.Empty(plugin.SupportedModels);
+        Assert.Null(plugin.SelectedLlmModelId);
+        Assert.True(host.GetSetting<bool>("hasFetchedChatGPTModelCatalog"));
+        fail = true;
+        await plugin.RefreshAvailableLlmModelsAsync();
+        Assert.Empty(plugin.SupportedModels);
+        using var reloaded = new OpenAiPlugin();
+        await reloaded.ActivateAsync(host);
+        Assert.Empty(reloaded.SupportedModels);
+        Assert.Null(reloaded.SelectedLlmModelId);
+        await reloaded.ClearChatGptLoginAsync();
+        Assert.False(host.GetSetting<bool>("hasFetchedChatGPTModelCatalog"));
+    }
+
     [Fact]
     public async Task EmptyDiscoveredTranscriptionCatalogSurvivesReloadAndLaterRecovers()
     {
