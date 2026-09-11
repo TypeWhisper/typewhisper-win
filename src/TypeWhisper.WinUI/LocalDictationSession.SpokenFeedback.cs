@@ -5,7 +5,9 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    internal SpokenFeedbackController SpokenFeedback { get; } = new(new WindowsSystemVoiceBackend());
+    private readonly PluginSpokenFeedbackBackend _speechBackend;
+    internal SpokenFeedbackController SpokenFeedback { get; }
+    internal IReadOnlyList<SpokenFeedbackVoice> GetSpokenFeedbackVoices() => _speechBackend.GetVoices();
     private DictationAudioPreferences _spokenFeedbackAtStart = new();
     private Task _spokenFeedbackActivity = Task.CompletedTask;
     internal Action? StopHistoryPlayback { get; set; }
@@ -61,7 +63,7 @@ internal sealed partial class LocalDictationSession
                 "Finish the current recording or model operation before testing spoken feedback."));
         try
         {
-            var playback = RunSpokenFeedbackAsync(new("This is a test of Windows spoken feedback.", "en",
+            var playback = RunSpokenFeedbackAsync(new("This is a test of TypeWhisper spoken feedback.", "en",
                 AudioPreferences.SpokenFeedbackVoiceId, AudioPreferences.OutputDeviceId), reportFailure: false);
             _spokenFeedbackActivity = playback;
             return playback;

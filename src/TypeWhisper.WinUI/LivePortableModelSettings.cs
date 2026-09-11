@@ -13,6 +13,13 @@ internal sealed class LivePortableModelSettings : UserControl
     private readonly TextBlock _status = Label("");
     private readonly TextBlock _llm = Label("");
     private readonly HandCursorButton _refresh;
+    private readonly StackPanel _cloudPanel = new() { Spacing = 8 };
+    private readonly ComboBox _cloudModel = new() { DisplayMemberPath = nameof(PortableDownloadableModel.DisplayName), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 40 };
+    private readonly TextBlock _cloudStatus = Label("");
+    private readonly HandCursorButton _cloudUse = Button("Use selected model");
+    private bool _cloudMode;
+    private bool _settingCloudModel;
+    internal bool ShowLlmSummary { get; set; } = true;
     private readonly Dictionary<(string Provider, string Model), Row> _items = [];
     private CancellationTokenSource? _lifetime;
     private bool _reading;
@@ -26,7 +33,18 @@ internal sealed class LivePortableModelSettings : UserControl
         _session = session; _pluginId = pluginId;
         _refresh = Button("Refresh models");
         var content = new StackPanel { Spacing = 10 };
-        content.Children.Add(_refresh); content.Children.Add(_status); content.Children.Add(_rows); content.Children.Add(_llm);
+        _cloudPanel.Children.Add(new TextBlock { Text = "Transcription model", FontSize = 16 });
+        _cloudPanel.Children.Add(_cloudModel); _cloudPanel.Children.Add(_cloudStatus); _cloudPanel.Children.Add(_cloudUse);
+        _cloudPanel.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetName(_cloudModel, "Transcription model");
+        _cloudUse.Click += async (_, _) =>
+        { if (_cloudModel.SelectedItem is PortableDownloadableModel model && _items.TryGetValue((model.SelectionId, model.ModelId), out var row)) await UseAsync(row); };
+        _cloudModel.SelectionChanged += async (_, _) =>
+        {
+            if (_settingCloudModel || !_cloudModel.IsLoaded || _cloudModel.SelectedItem is not PortableDownloadableModel model) return;
+            if (_items.TryGetValue((model.SelectionId, model.ModelId), out var row)) await UseAsync(row);
+        };
+        content.Children.Add(_refresh); content.Children.Add(_status); content.Children.Add(_cloudPanel); content.Children.Add(_rows); content.Children.Add(_llm);
         Content = content;
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _refresh.Click += (_, _) => RequestRefresh();
@@ -97,6 +115,20 @@ internal sealed class LivePortableModelSettings : UserControl
                 _rows.Children.Remove(panel);
                 _rows.Children.Insert(index, panel);
             }
+            _cloudMode = models.Count > 0 && models.All(m => !m.SupportsDownload && !m.SupportsRemoval)
+                && models.Select(m => m.SelectionId).Distinct().Count() == 1;
+            _cloudPanel.Visibility = _cloudMode ? Visibility.Visible : Visibility.Collapsed;
+            _rows.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
+            _refresh.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
+            _settingCloudModel = true;
+            try
+            {
+                _cloudModel.ItemsSource = _cloudMode ? models : [];
+                var selectedId = _session.PluginRuntime.TranscriptionProviders.FirstOrDefault(p => p.PluginId == _pluginId)?.SelectedModelId;
+                _cloudModel.SelectedItem = models.FirstOrDefault(m => m.ModelId == selectedId);
+            }
+            finally { _settingCloudModel = false; }
+            _llm.Visibility = ShowLlmSummary ? Visibility.Visible : Visibility.Collapsed;
             var llms = _session.LlmProviders.Where(p => p.PluginId == _pluginId).ToArray();
             _llm.Text = models.Count == 0 && llms.Length == 0 ? "No model providers are currently enabled." :
                 string.Join("\n", llms.Select(p => p.Name + " · Text processing: " + string.Join(", ", p.Models.Select(m => m.DisplayName))));
@@ -248,6 +280,26 @@ internal sealed class LivePortableModelSettings : UserControl
                 ? "Provider unavailable. Refresh after enabling the plugin." : model.SupportsDownload
                     ? selected ? "Loaded · active for dictation." : model.Downloaded ? "Downloaded · choose Use model to load it." : "Not downloaded."
                     : provider.Ready ? "Provider ready." : "Complete provider configuration before selecting a model.";
+        }
+        if (_cloudMode)
+        {
+            var currentModel = _cloudModel.SelectedItem as PortableDownloadableModel;
+            var selectionId = currentModel?.SelectionId ?? _items.Values.FirstOrDefault()?.Model.SelectionId;
+            var currentProvider = _session.PluginRuntime.TranscriptionProviders.FirstOrDefault(p => p.SelectionId == selectionId);
+            _cloudModel.IsEnabled = available && currentProvider?.Ready == true;
+            _cloudUse.IsEnabled = false;
+            _cloudUse.Visibility = Visibility.Collapsed;
+            _cloudStatus.Text = currentProvider?.Ready == true ? "Choose a transcription model." : "Complete provider configuration before selecting a model.";
+        }
+        if (_cloudMode && _cloudModel.SelectedItem is PortableDownloadableModel selectedModel && _items.TryGetValue((selectedModel.SelectionId, selectedModel.ModelId), out var selectedRow))
+        {
+            var provider = _session.PluginRuntime.TranscriptionProviders.FirstOrDefault(p => p.SelectionId == selectedModel.SelectionId);
+            _cloudModel.IsEnabled = available && provider?.Ready == true;
+            _cloudUse.IsEnabled = selectedRow.Use.IsEnabled;
+            _cloudUse.Visibility = _session.IsRegistryModelSelected(selectedModel) ? Visibility.Collapsed : Visibility.Visible;
+            _cloudStatus.Text = provider?.Ready == true
+                ? _session.IsRegistryModelSelected(selectedModel) ? "Selected for dictation." : "Choose this model to use it for dictation."
+                : "An API key is required for transcription.";
         }
     }
 

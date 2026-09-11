@@ -146,7 +146,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
-    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !PluginRuntime.IsBusy;
+    private bool CanStartSessionOperation => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel);
+    internal bool CanChangeProvider => CanStartSessionOperation && !PluginRuntime.IsBusy;
+    internal bool CanStartPluginSettingsAction => CanChangeProvider && _gate.CurrentCount > 0;
+    internal event Action? RecordingStarting;
     internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
     private OriginalDictationField? _originalField;
@@ -394,6 +397,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
         PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
             id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId));
+        _speechBackend = new(PluginRuntime, new WindowsSystemVoiceBackend());
+        SpokenFeedback = new(_speechBackend);
         PluginRuntime.Changed += () => Changed?.Invoke();
         _history = history;
         HistoryRetention = new(history, new HistoryRetentionPreferencesStore(WinUIProfile.DataPath("history-retention.json")));
@@ -480,11 +485,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     internal Task ToggleAsync() => SetRecordingAsync(null);
-    internal bool CanStartFromShortcut => IsReady
+    // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
+    // hotkey while one is active so it can reach that cancellation before using a provider.
+    internal bool CanStartFromShortcut => CanStartSessionOperation
+        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy) && (IsReady
 #if DEBUG
         || CorrectionProbeEnabled
 #endif
-        ;
+        );
 #if DEBUG
     internal static bool CorrectionProbeEnabled => WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_CORRECTION_PROBE") == "1";
 #endif
@@ -546,6 +554,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
+                RecordingStarting?.Invoke();
                 await CorrectionLearning.Cancel();
                 _operationCancellation.Begin();
                 if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)

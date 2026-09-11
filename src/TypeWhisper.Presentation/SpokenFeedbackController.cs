@@ -1,15 +1,15 @@
 namespace TypeWhisper.Presentation;
 
-/// <summary>An installed local voice offered by the playback backend.</summary>
-/// <param name="Id">Stable system voice identifier.</param>
+/// <summary>An available voice offered by the playback backend.</summary>
+/// <param name="Id">Stable voice identifier.</param>
 /// <param name="DisplayName">User-facing installed voice name.</param>
 /// <param name="Language">Optional language tag reported by the system.</param>
 public sealed record SpokenFeedbackVoice(string Id, string DisplayName, string? Language = null);
 
-/// <summary>One bounded, local speech request. Null voice and output IDs select system defaults.</summary>
+/// <summary>One bounded speech request. Null voice and output IDs select system defaults.</summary>
 /// <param name="Text">Complete text to speak; never silently truncated.</param>
 /// <param name="Language">Optional language hint.</param>
-/// <param name="VoiceId">Explicit installed voice, or the system default.</param>
+/// <param name="VoiceId">Explicit voice, or the local system default.</param>
 /// <param name="OutputDeviceId">Explicit output endpoint, or the system default.</param>
 public sealed record SpokenFeedbackRequest(string Text, string? Language = null,
     string? VoiceId = null, string? OutputDeviceId = null)
@@ -22,7 +22,7 @@ public sealed record SpokenFeedbackRequest(string Text, string? Language = null,
     public const int MaxAudioSeconds = 120;
 }
 
-/// <summary>Local synthesis and playback boundary. Implementations never contact a cloud provider.</summary>
+/// <summary>Synthesis and playback boundary. Cloud synthesis requires an explicitly selected provider voice.</summary>
 public interface ISpokenFeedbackBackend
 {
     /// <summary>Enumerates installed voices without synthesizing or downloading audio.</summary>

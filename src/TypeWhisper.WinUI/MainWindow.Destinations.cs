@@ -14,7 +14,6 @@ public sealed partial class MainWindow
         Destination("Recordings", "library", "Recorder · saved audio library", "recordings"),
         Destination("Dictation history", "speech-history", "History · dictated transcriptions", "history-dictation"),
         Destination("Recording history", "wave-history", "History · transcribed recordings", "history-recording"),
-        Destination("Discover plugins", "discover", "Integrations · browse the marketplace", "discover"),
         Destination("Overlay editor", "layout", "Appearance · customize the recording overlay", "settings:Overlay editor")
     }.Concat(SettingsDestinations.Select(category => Destination(category + " settings", SettingsIcon(category), "Settings · " + category, "settings:" + category)));
 

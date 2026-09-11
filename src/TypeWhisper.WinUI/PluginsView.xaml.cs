@@ -140,6 +140,13 @@ public sealed partial class PluginsView : UserControl
 
     internal async Task OpenProviderSettingsAsync(string pluginId)
     {
+        if (_settingsLayout)
+        {
+            // Record navigation before awaiting: every refresh renders the latest selection.
+            SelectSettingsPlugin(pluginId);
+            await RefreshRuntimeAsync();
+            return;
+        }
         await RefreshRuntimeAsync();
         var plugin = _plugins.FirstOrDefault(item => Path.GetFileName(item.Id) == pluginId);
         if (plugin is null) return;
@@ -196,6 +203,7 @@ public sealed partial class PluginsView : UserControl
         PluginSummary.Text = Summary;
         UpdateUpdateAction();
         UpdateBreadcrumbs();
+        if (_settingsLayout) RefreshSettingsPages();
     }
 
     internal void MoveSelection(int delta)
@@ -301,6 +309,7 @@ public sealed partial class PluginsView : UserControl
 
     private void UpdateBreadcrumbs()
     {
+        if (_settingsLayout) { PluginBreadcrumbs.Visibility = Visibility.Collapsed; return; }
         var crumbs = new List<Crumb> { new("Quick Launch", () => Navigate(() =>
         {
             ShowList(true);

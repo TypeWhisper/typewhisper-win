@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.OpenAi.Portable.Tests" />
+    <Content Include="manifest.json;Localization/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.openai/</PackageDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(TargetDir)NAudio.Core.dll;$(TargetDir)NAudio.Wasapi.dll;$(TargetDir)NAudio.WinMM.dll" />
+      <PackageLocalization Include="$(ProjectDir)Localization/*.json" />
+    </ItemGroup>
+    <MakeDir Directories="$(PackageDirectory)Localization" />
+    <Copy SourceFiles="@(PackageFile)" DestinationFolder="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageLocalization)" DestinationFolder="$(PackageDirectory)Localization" />
+  </Target>
+</Project>

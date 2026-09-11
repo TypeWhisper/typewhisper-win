@@ -1,0 +1,507 @@
+using System.Diagnostics;
+using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
+
+namespace TypeWhisper.Plugin.OpenAi;
+
+internal enum OpenAiAuthMode
+{
+    ApiKey,
+    ChatGpt
+}
+
+internal static class OpenAiAuthModeExtensions
+{
+    /// <summary>
+    /// Converts to storage value.
+    /// </summary>
+    public static string ToStorageValue(this OpenAiAuthMode mode) =>
+        mode == OpenAiAuthMode.ChatGpt ? "chatgpt" : "api-key";
+
+    /// <summary>
+    /// Parses the supplied value into the expected representation.
+    /// </summary>
+    public static OpenAiAuthMode Parse(string? value) =>
+        string.Equals(value, "chatgpt", StringComparison.OrdinalIgnoreCase)
+            ? OpenAiAuthMode.ChatGpt
+            : OpenAiAuthMode.ApiKey;
+}
+
+internal sealed record OpenAiPkceCodes(string Verifier, string Challenge);
+
+internal sealed record OpenAiOAuthTokenResponse(
+    [property: JsonPropertyName("id_token")] string? IdToken,
+    [property: JsonPropertyName("access_token")] string AccessToken,
+    [property: JsonPropertyName("refresh_token")] string RefreshToken,
+    [property: JsonPropertyName("expires_in")] int? ExpiresIn);
+
+internal sealed record OpenAiOAuthMetadata(string? AccountId, string? PlanType, DateTimeOffset? ExpiresAt);
+
+internal static class OpenAiOAuthClient
+{
+    /// <summary>
+    /// Defines the client id constant.
+    /// </summary>
+    public const string ClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
+    /// <summary>
+    /// Defines the issuer constant.
+    /// </summary>
+    public const string Issuer = "https://auth.openai.com";
+    /// <summary>
+    /// Defines the redirect uri constant.
+    /// </summary>
+    public const string RedirectUri = "http://localhost:1455/auth/callback";
+    /// <summary>
+    /// Defines the callback port constant.
+    /// </summary>
+    public const int CallbackPort = 1455;
+
+    private const string AuthorizeOriginator = "opencode";
+
+    /// <summary>
+    /// Generates pkce codes.
+    /// </summary>
+    public static OpenAiPkceCodes GeneratePkceCodes()
+    {
+        var verifier = RandomOAuthString(64);
+        var challenge = Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+        return new OpenAiPkceCodes(verifier, challenge);
+    }
+
+    /// <summary>
+    /// Generates random state.
+    /// </summary>
+    public static string RandomState() =>
+        Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+
+    /// <summary>
+    /// Builds authorize uri.
+    /// </summary>
+    public static Uri BuildAuthorizeUri(string state, OpenAiPkceCodes pkce)
+    {
+        var query = new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = ClientId,
+            ["redirect_uri"] = RedirectUri,
+            ["scope"] = "openid profile email offline_access",
+            ["code_challenge"] = pkce.Challenge,
+            ["code_challenge_method"] = "S256",
+            ["id_token_add_organizations"] = "true",
+            ["codex_cli_simplified_flow"] = "true",
+            ["state"] = state,
+            ["originator"] = AuthorizeOriginator,
+        };
+
+        return new Uri($"{Issuer}/oauth/authorize?{BuildQuery(query)}");
+    }
+
+    /// <summary>
+    /// Performs exchange authorization code asynchronously.
+    /// </summary>
+    public static async Task<OpenAiOAuthTokenResponse> ExchangeAuthorizationCodeAsync(
+        HttpClient httpClient,
+        string code,
+        OpenAiPkceCodes pkce,
+        CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{Issuer}/oauth/token")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "authorization_code",
+                ["code"] = code,
+                ["redirect_uri"] = RedirectUri,
+                ["client_id"] = ClientId,
+                ["code_verifier"] = pkce.Verifier,
+            })
+        };
+
+        return await SendTokenRequestAsync(httpClient, request, ct);
+    }
+
+    /// <summary>
+    /// Refreshes token asynchronously.
+    /// </summary>
+    public static async Task<OpenAiOAuthTokenResponse> RefreshTokenAsync(
+        HttpClient httpClient,
+        string refreshToken,
+        CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{Issuer}/oauth/token")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = refreshToken,
+                ["client_id"] = ClientId,
+            })
+        };
+
+        return await SendTokenRequestAsync(httpClient, request, ct, refreshToken);
+    }
+
+    /// <summary>
+    /// Performs extract metadata.
+    /// </summary>
+    public static OpenAiOAuthMetadata ExtractMetadata(OpenAiOAuthTokenResponse tokens, string? preferredAccountId = null, string? fallbackPlanType = null)
+    {
+        var idClaims = ParseJwtPayload(tokens.IdToken);
+        var accessClaims = ParseJwtPayload(tokens.AccessToken);
+        var accountId = preferredAccountId
+            ?? AccountId(idClaims) ?? AccountId(accessClaims);
+        var planType = PlanType(idClaims) ?? PlanType(accessClaims) ?? fallbackPlanType;
+        var expiresAt = GetDouble(accessClaims, "exp") is { } exp
+            ? DateTimeOffset.FromUnixTimeSeconds((long)exp)
+            : DateTimeOffset.UtcNow.AddSeconds(tokens.ExpiresIn ?? 3600);
+
+        return new OpenAiOAuthMetadata(accountId, planType, expiresAt);
+    }
+
+    private static string? AccountId(Dictionary<string, JsonElement>? claims) =>
+        GetString(claims, "chatgpt_account_id")
+        ?? GetNestedString(claims, "https://api.openai.com/auth", "chatgpt_account_id")
+        ?? GetFirstOrganizationId(claims);
+
+    private static string? PlanType(Dictionary<string, JsonElement>? claims) =>
+        GetString(claims, "chatgpt_plan_type")
+        ?? GetNestedString(claims, "https://api.openai.com/auth", "chatgpt_plan_type");
+
+    private static async Task<OpenAiOAuthTokenResponse> SendTokenRequestAsync(
+        HttpClient httpClient,
+        HttpRequestMessage request,
+        CancellationToken ct, string? existingRefreshToken = null)
+    {
+        using var response = await OpenAiApiTransport.SendWithErrorHandlingAsync(httpClient, request, ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+        try
+        {
+            var tokens = JsonSerializer.Deserialize<OpenAiOAuthTokenResponse>(
+                json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (tokens is null || string.IsNullOrWhiteSpace(tokens.AccessToken))
+                throw new PluginRequestException("OpenAI token response could not be parsed.", PluginRequestFailureKind.Authentication);
+            var refreshToken = tokens.RefreshToken ?? existingRefreshToken;
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                throw new PluginRequestException("OpenAI token response could not be parsed.", PluginRequestFailureKind.Authentication);
+            return tokens with { RefreshToken = refreshToken };
+        }
+        catch (JsonException ex)
+        {
+            throw new PluginRequestException(
+                "OpenAI token response could not be parsed.",
+                PluginRequestFailureKind.Authentication,
+                innerException: ex);
+        }
+    }
+
+    private static string RandomOAuthString(int length)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+        var bytes = RandomNumberGenerator.GetBytes(length);
+        var chars = new char[length];
+        for (var i = 0; i < bytes.Length; i++)
+            chars[i] = alphabet[bytes[i] % alphabet.Length];
+        return new string(chars);
+    }
+
+    private static string BuildQuery(IReadOnlyDictionary<string, string> values) =>
+        string.Join("&", values.Select(pair =>
+            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+
+    private static Dictionary<string, JsonElement>? ParseJwtPayload(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        var parts = token.Split('.');
+        if (parts.Length != 3)
+            return null;
+
+        try
+        {
+            var bytes = Base64UrlDecode(parts[1]);
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(bytes);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? GetString(Dictionary<string, JsonElement>? claims, string key) =>
+        claims is not null
+        && claims.TryGetValue(key, out var element)
+        && element.ValueKind == JsonValueKind.String
+            ? element.GetString()
+            : null;
+
+    private static string? GetNestedString(Dictionary<string, JsonElement>? claims, string parent, string key)
+    {
+        if (claims is null
+            || !claims.TryGetValue(parent, out var parentElement)
+            || parentElement.ValueKind != JsonValueKind.Object
+            || !parentElement.TryGetProperty(key, out var element)
+            || element.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return element.GetString();
+    }
+
+    private static double? GetDouble(Dictionary<string, JsonElement>? claims, string key) =>
+        claims is not null
+        && claims.TryGetValue(key, out var element)
+        && element.ValueKind == JsonValueKind.Number
+        && element.TryGetDouble(out var value)
+            ? value
+            : null;
+
+    private static string? GetFirstOrganizationId(Dictionary<string, JsonElement>? claims)
+    {
+        if (claims is null
+            || !claims.TryGetValue("organizations", out var organizations)
+            || organizations.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var organization in organizations.EnumerateArray())
+        {
+            if (organization.TryGetProperty("id", out var id)
+                && id.ValueKind == JsonValueKind.String)
+            {
+                return id.GetString();
+            }
+        }
+
+        return null;
+    }
+
+    private static string Base64UrlEncode(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static byte[] Base64UrlDecode(string value)
+    {
+        var padded = value.Replace('-', '+').Replace('_', '/');
+        padded += new string('=', (4 - padded.Length % 4) % 4);
+        return Convert.FromBase64String(padded);
+    }
+}
+
+internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
+{
+    private readonly string _expectedState;
+    private readonly int _port;
+    private TcpListener? _listener;
+    private TcpListener? _ipv6Listener;
+    private TcpClient? _queuedClient;
+    internal int Port => (_listener?.LocalEndpoint as IPEndPoint)?.Port
+        ?? throw new InvalidOperationException("OAuth callback server was not started.");
+
+    /// <summary>Initializes a server bound only to the local loopback interfaces.</summary>
+    public OpenAiLoopbackOAuthServer(string expectedState, int port = OpenAiOAuthClient.CallbackPort)
+    {
+        _expectedState = expectedState;
+        _port = port;
+    }
+
+    /// <summary>Starts the service or session.</summary>
+    public void Start()
+    {
+        if (_listener is not null) throw new InvalidOperationException("OAuth callback server was already started.");
+        try
+        {
+            _listener = new TcpListener(IPAddress.Loopback, _port);
+            _listener.Start();
+            if (Socket.OSSupportsIPv6)
+            {
+                _ipv6Listener = new TcpListener(IPAddress.IPv6Loopback, Port);
+                _ipv6Listener.Server.DualMode = false;
+                _ipv6Listener.Start();
+            }
+        }
+        catch { StopListeners(); throw; }
+    }
+
+    private async Task<TcpClient> AcceptClientAsync(CancellationToken ct)
+    {
+        if (_queuedClient is { } queued)
+        {
+            _queuedClient = null;
+            return queued;
+        }
+        var listener = _listener ?? throw new InvalidOperationException("OAuth callback server was not started.");
+        var ipv6Listener = _ipv6Listener;
+        if (ipv6Listener is null) return await listener.AcceptTcpClientAsync(ct);
+        using var pending = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var ipv4 = listener.AcceptTcpClientAsync(pending.Token).AsTask();
+        var ipv6 = ipv6Listener.AcceptTcpClientAsync(pending.Token).AsTask();
+        var winner = await Task.WhenAny(ipv4, ipv6);
+        var loser = ReferenceEquals(winner, ipv4) ? ipv6 : ipv4;
+        await pending.CancelAsync();
+        // Preserve a simultaneous IPv4/IPv6 connection for the next request.
+        try { _queuedClient = await loser; }
+        catch (OperationCanceledException) when (pending.IsCancellationRequested) { }
+        catch (SocketException) when (pending.IsCancellationRequested) { }
+        catch (ObjectDisposedException) when (pending.IsCancellationRequested) { }
+        return await winner;
+    }
+
+    /// <summary>Performs wait for code asynchronously.</summary>
+    public async Task<string> WaitForCodeAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                using var client = await AcceptClientAsync(ct);
+                // Speculative connections must not block the real redirect indefinitely.
+                using var requestTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                requestTimeout.CancelAfter(TimeSpan.FromSeconds(2));
+                var requestToken = requestTimeout.Token;
+                try
+                {
+                    await using var stream = client.GetStream();
+                    using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+                    var request = new StringBuilder();
+                    var character = new char[1];
+                    while (request.Length < 8192)
+                    {
+                        if (await reader.ReadAsync(character.AsMemory(), requestToken) == 0) break;
+                        if (character[0] == '\n') break;
+                        request.Append(character[0]);
+                    }
+                    if (request.Length == 8192) continue;
+                    string code;
+                    try { code = ParseAuthorizationCode(request.ToString().TrimEnd('\r'), _expectedState); }
+                    catch (PluginRequestException)
+                    {
+                        try { await SendHtmlAsync(stream, ErrorHtml("Sign-in was declined or cancelled. Return to TypeWhisper to try again."), requestToken); }
+                        catch (IOException) { ct.ThrowIfCancellationRequested(); }
+                        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                        throw;
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or UriFormatException)
+                    {
+                        await SendHtmlAsync(stream, ErrorHtml("This request was not a valid login callback. Please finish signing in."), requestToken);
+                        continue;
+                    }
+                    // A closed browser tab must not discard an already validated code.
+                    try { await SendHtmlAsync(stream, SuccessHtml, requestToken); }
+                    catch (IOException) { ct.ThrowIfCancellationRequested(); }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                    return code;
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                catch (IOException) { ct.ThrowIfCancellationRequested(); }
+                catch (SocketException) { ct.ThrowIfCancellationRequested(); }
+            }
+        }
+        finally { StopListeners(); }
+    }
+
+    private void StopListeners()
+    {
+        _listener?.Stop();
+        _ipv6Listener?.Stop();
+        _queuedClient?.Dispose();
+        _queuedClient = null;
+        _listener = null;
+        _ipv6Listener = null;
+    }
+
+    internal static string ParseAuthorizationCode(string requestLine, string expectedState)
+    {
+        var parts = requestLine.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+            throw new InvalidOperationException("The OAuth callback was invalid.");
+
+        var target = parts[1];
+        var uri = new Uri("http://localhost" + target);
+        if (!string.Equals(uri.AbsolutePath, "/auth/callback", StringComparison.Ordinal))
+            throw new InvalidOperationException("The OAuth callback path was invalid.");
+
+        var query = uri.Query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(
+                pair => Uri.UnescapeDataString(pair[0]),
+                pair => pair.Length > 1 ? Uri.UnescapeDataString(pair[1].Replace("+", " ")) : "");
+
+        if (!query.TryGetValue("state", out var state) || state != expectedState)
+            throw new InvalidOperationException("The OAuth callback state did not match.");
+        if (query.TryGetValue("error", out var error) && !string.IsNullOrWhiteSpace(error))
+            throw new PluginRequestException("ChatGPT sign-in was declined or cancelled.", PluginRequestFailureKind.Authentication);
+        if (!query.TryGetValue("code", out var code) || string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException("The OAuth callback did not include an authorization code.");
+
+        return code;
+    }
+
+    private static async Task SendHtmlAsync(Stream stream, string html, CancellationToken ct)
+    {
+        var body = Encoding.UTF8.GetBytes(html);
+        var header = Encoding.UTF8.GetBytes(
+            "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: text/html; charset=utf-8\r\n" +
+            $"Content-Length: {body.Length}\r\n" +
+            "Connection: close\r\n\r\n");
+        await stream.WriteAsync(header, ct);
+        await stream.WriteAsync(body, ct);
+    }
+
+    private const string SuccessHtml = """
+        <!doctype html>
+        <html>
+          <head><meta charset="utf-8"><title>TypeWhisper Login</title></head>
+          <body style="font-family:Segoe UI,sans-serif;background:#111827;color:#f9fafb;display:grid;min-height:100vh;place-items:center;margin:0">
+            <main style="max-width:460px;padding:28px;border-radius:12px;background:#1f2937">
+              <h1 style="margin-top:0">Login complete</h1>
+              <p>You can close this window and return to TypeWhisper.</p>
+            </main>
+            <script>setTimeout(() => window.close(), 1800)</script>
+          </body>
+        </html>
+        """;
+
+    private static string ErrorHtml(string message) =>
+        $$"""
+        <!doctype html>
+        <html>
+          <head><meta charset="utf-8"><title>TypeWhisper Login</title></head>
+          <body style="font-family:Segoe UI,sans-serif;background:#111827;color:#f9fafb;display:grid;min-height:100vh;place-items:center;margin:0">
+            <main style="max-width:520px;padding:28px;border-radius:12px;background:#1f2937">
+              <h1 style="margin-top:0;color:#fca5a5">Login failed</h1>
+              <p>{{message}}</p>
+            </main>
+          </body>
+        </html>
+        """;
+
+    /// <summary>
+    /// Releases asynchronous resources owned by this session.
+    /// </summary>
+    public ValueTask DisposeAsync()
+    {
+        StopListeners();
+        return ValueTask.CompletedTask;
+    }
+}
+
+internal sealed record OpenAiExistingLoginStore(OpenAiExistingLoginTokens Tokens);
+
+internal sealed record OpenAiExistingLoginTokens(
+    [property: JsonPropertyName("access_token")] string AccessToken,
+    [property: JsonPropertyName("refresh_token")] string RefreshToken,
+    [property: JsonPropertyName("id_token")] string? IdToken,
+    [property: JsonPropertyName("account_id")] string? AccountId);

@@ -22,7 +22,7 @@
                     <DataTemplate x:DataType="local:MarketplaceItem">
                         <Grid Padding="12,12" ColumnSpacing="12" AutomationProperties.Name="{x:Bind Title}">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="24" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <local:TypeWhisperGlyph Kind="{x:Bind IconKind}" Width="21" Height="21" />
+                            <local:PluginBrandIcon PluginId="{x:Bind Plugin.Id}" Width="21" Height="21" />
                             <StackPanel Grid.Column="1" Spacing="4">
                                 <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind Description}" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextTrimming="CharacterEllipsis" />

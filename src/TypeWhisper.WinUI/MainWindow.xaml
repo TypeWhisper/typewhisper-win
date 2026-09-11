@@ -201,8 +201,6 @@
         <local:HistoryView x:Name="HistoryView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
         <local:RecorderView x:Name="RecorderView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
         <local:WorkflowsView x:Name="WorkflowsView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
-        <local:PluginsView x:Name="PluginsView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
-        <local:MarketplaceView x:Name="MarketplaceView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
 
         <Border x:Name="OverlayPreviewPanel" Grid.Row="3" VerticalAlignment="Bottom"
                 Margin="14,0,14,0" Padding="14,12" Visibility="Collapsed"

@@ -12,33 +12,124 @@ internal sealed class LivePluginTextSettings : UserControl
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly LocalDictationSession _session;
     private readonly string _id;
+    private readonly UIElement _credentials;
+    private readonly UIElement _models;
     private bool _loaded;
     private int _generation;
 
-    internal LivePluginTextSettings(LocalDictationSession session, string id)
+    internal LivePluginTextSettings(LocalDictationSession session, string id, UIElement credentials, UIElement models)
     {
-        _session = session; _id = id;
+        _session = session; _id = id; _credentials = credentials; _models = models;
         _content.Children.Add(_status); Content = _content;
-        Unloaded += (_, _) => _generation++;
+        Unloaded += (_, _) => { _generation++; _lifetime.Cancel(); _loaded = false; };
         Loaded += async (_, _) =>
         {
             if (_loaded) return;
-            var generation = ++_generation;
+            _lifetime.Dispose(); _lifetime = new();
+            await ReloadAsync();
+        };
+    }
+
+    internal void DetachHostControls() { _content.Children.Remove(_credentials); _content.Children.Remove(_models); }
+
+    private CancellationTokenSource _lifetime = new();
+    private readonly Dictionary<string, string> _drafts = new();
+    private bool _busy;
+    private bool _refreshRequested;
+
+    internal async void RequestRefresh()
+    {
+        if (!IsLoaded) return;
+        if (_busy) { _refreshRequested = true; return; }
+        _refreshRequested = false;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var generation = ++_generation;
+        try
+        {
+            var snapshot = await _session.PluginRuntime.UseConfigurationAsync(_id, (plugin, _) =>
+                Task.FromResult((Fields: plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : [],
+                    Actions: plugin is IPluginSettingsActions actions ? actions.SettingsActions.ToArray() : [],
+                    ShowKey: plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings)), _lifetime.Token);
+            if (!IsLoaded || generation != _generation) return;
+            _content.Children.Clear(); _content.Children.Add(_status);
+            void Fields(PluginSettingsSection section)
+            {
+                foreach (var field in snapshot.Fields.Where(f => f.Section == section))
+                {
+                    if (_drafts.TryGetValue(field.Id, out var draft) &&
+                        (field.Choices.Count == 0 || field.Choices.Any(choice => choice.Value == draft)))
+                        AddField(field with { Value = draft });
+                    else { _drafts.Remove(field.Id); AddField(field); }
+                }
+            }
+            void Actions(PluginSettingsSection section)
+            { foreach (var action in snapshot.Actions.Where(a => a.Section == section)) AddAction(action); }
+            Fields(PluginSettingsSection.Connection);
+            if (snapshot.ShowKey) _content.Children.Add(_credentials);
+            Actions(PluginSettingsSection.Connection);
+            if (_models is LivePortableModelSettings modelSettings)
+                modelSettings.ShowLlmSummary = !snapshot.Fields.Any(f => f.Section == PluginSettingsSection.TextProcessing);
+            _content.Children.Add(_models);
+            foreach (var section in new[] { PluginSettingsSection.Transcription, PluginSettingsSection.Speech, PluginSettingsSection.TextProcessing, PluginSettingsSection.General })
+            {
+                if (section is PluginSettingsSection.Speech or PluginSettingsSection.TextProcessing && snapshot.Fields.Any(f => f.Section == section))
+                    _content.Children.Add(new Border { Height = 1, Margin = new(0, 12, 0, 6), Background = (Brush)Application.Current.Resources["HairlineBrush"] });
+                Actions(section); Fields(section);
+            }
+            _loaded = true;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (IsLoaded && generation == _generation)
+                SetStatus("Plugin settings could not be loaded. Reopen this page to retry.");
+        }
+    }
+
+    private void AddAction(PluginSettingsAction action)
+    {
+        _content.Children.Add(new TextBlock { Text = action.Description, TextWrapping = TextWrapping.Wrap });
+        var button = new HandCursorButton { Content = action.Title, HorizontalAlignment = HorizontalAlignment.Left,
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
+        button.Click += async (_, _) =>
+        {
+            if (_busy || !IsLoaded) return;
+            if (!_session.CanStartPluginSettingsAction)
+            { SetStatus("Finish dictation and other plugin operations before starting this action."); return; }
+            _busy = true; IsEnabled = false;
+            var generation = _generation;
+            SetStatus(action.Title + "…");
             try
             {
-                var fields = await session.PluginRuntime.UseConfigurationAsync(id, (plugin, _) =>
-                    Task.FromResult(plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : []));
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+                timeout.CancelAfter(TimeSpan.FromMinutes(3));
+                void CancelForRecording() => timeout.Cancel();
+                _session.RecordingStarting += CancelForRecording;
+                string? result;
+                try
+                {
+                    result = await _session.PluginRuntime.UseConfigurationAsync(_id, async (plugin, ct) =>
+                    {
+                        if (plugin is not IPluginSettingsActions actions) throw new InvalidOperationException();
+                        return await actions.ExecuteSettingsActionAsync(action.Id, ct);
+                    }, timeout.Token);
+                }
+                finally { _session.RecordingStarting -= CancelForRecording; }
                 if (!IsLoaded || generation != _generation) return;
-                foreach (var field in fields) AddField(field);
-                _loaded = true;
-                SetStatus(string.Empty);
+                await ReloadAsync();
+                SetStatus(result ?? "Completed.");
             }
+            catch (OperationCanceledException)
+            { if (IsLoaded && generation == _generation) SetStatus("The action was cancelled or timed out. You can retry."); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                if (IsLoaded && generation == _generation)
-                    SetStatus("Plugin settings could not be loaded. Reopen this page to retry.");
-            }
+            { if (IsLoaded && generation == _generation) SetStatus("The action failed. Check the account and connection, then retry."); }
+            finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         };
+        _content.Children.Add(button);
     }
 
     private void AddField(PluginTextSetting field)
@@ -67,6 +158,9 @@ internal sealed class LivePluginTextSettings : UserControl
             MinHeight = 40
         };
         Control input = choiceInput is null ? textInput : choiceInput;
+        textInput.TextChanged += (_, _) => _drafts[field.Id] = textInput.Text;
+        if (choiceInput is not null) choiceInput.SelectionChanged += (_, _) =>
+        { if (choiceInput.SelectedValue is string value) _drafts[field.Id] = value; };
         AutomationProperties.SetName(input, field.Title);
         AutomationProperties.SetHelpText(input, field.Description);
         var fieldBorder = new Border
@@ -85,10 +179,11 @@ internal sealed class LivePluginTextSettings : UserControl
         var saving = false;
         input.Loaded += (_, _) => input.IsEnabled = !saving;
         save.Loaded += (_, _) => save.IsEnabled = !saving;
-        save.Click += async (_, _) =>
+        async Task SaveAsync()
         {
-            if (saving || !IsLoaded) return;
-            saving = true;
+            if (saving || _busy || !IsLoaded) return;
+            saving = _busy = true;
+            IsEnabled = false;
             var generation = _generation;
             save.IsEnabled = input.IsEnabled = false;
             SetStatus(string.Empty);
@@ -102,7 +197,10 @@ internal sealed class LivePluginTextSettings : UserControl
                 }
                 var error = await _session.SavePluginTextSettingAsync(_id, field.Id, value ?? textInput.Text);
                 if (IsLoaded && generation == _generation)
+                {
+                    if (error is null) { _drafts.Remove(field.Id); await ReloadAsync(); }
                     SetStatus(error ?? "Saved. The setting applies the next time this plugin runs.");
+                }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -111,11 +209,20 @@ internal sealed class LivePluginTextSettings : UserControl
             }
             finally
             {
-                saving = false;
+                saving = _busy = false;
+                IsEnabled = true;
                 if (IsLoaded) save.IsEnabled = input.IsEnabled = true;
+                if (_refreshRequested) RequestRefresh();
             }
-        };
-        _content.Children.Add(save);
+        }
+        save.Click += async (_, _) => await SaveAsync();
+        if (field.SaveChoiceOnChange && choiceInput is not null)
+            choiceInput.SelectionChanged += async (_, _) =>
+            {
+                if (choiceInput.IsLoaded && choiceInput.SelectedValue is string value && value != field.Value)
+                    await SaveAsync();
+            };
+        else _content.Children.Add(save);
     }
 
     private void SetStatus(string message)

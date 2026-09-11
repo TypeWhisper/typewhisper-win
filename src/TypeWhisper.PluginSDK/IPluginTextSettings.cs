@@ -3,6 +3,10 @@ namespace TypeWhisper.PluginSDK;
 /// <summary>A bounded text setting rendered by the host without a framework-specific plugin view.</summary>
 public sealed record PluginTextSetting(string Id, string Title, string Description, string Value, int MaxLength = 32768)
 {
+    /// <summary>Logical section used by the host to place related settings together.</summary>
+    public PluginSettingsSection Section { get; init; } = PluginSettingsSection.General;
+    /// <summary>Choice changes are committed immediately; text fields always require explicit saving.</summary>
+    public bool SaveChoiceOnChange { get; init; }
     /// <summary>Gets whether the host should allow multiple lines. Defaults to a single-line field.</summary>
     public bool IsMultiline { get; init; }
     /// <summary>Optional allowed values rendered as a selection instead of free text.</summary>
@@ -19,4 +23,26 @@ public interface IPluginTextSettings
     IReadOnlyList<PluginTextSetting> TextSettings { get; }
     /// <summary>Persists a value before publishing it. Failed writes must retain the preceding value.</summary>
     Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken);
+}
+
+/// <summary>Host-owned settings sections in display order.</summary>
+public enum PluginSettingsSection
+{
+    /// <summary>Provider authentication, before models and other settings.</summary>
+    Connection,
+    /// <summary>Audio transcription preferences.</summary>
+    Transcription,
+    /// <summary>Speech synthesis preferences.</summary>
+    Speech,
+    /// <summary>Text processing preferences.</summary>
+    TextProcessing,
+    /// <summary>Unsectioned settings for existing plugins.</summary>
+    General
+}
+
+/// <summary>Optional connection UI state. Hiding key entry never removes the stored key.</summary>
+public interface IPluginConnectionSettings
+{
+    /// <summary>Whether the currently selected connection method exposes host API-key entry.</summary>
+    bool ShowApiKeySettings { get; }
 }

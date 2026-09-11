@@ -9,6 +9,7 @@ internal sealed class LivePortablePluginSettings : UserControl
 {
     private readonly LocalDictationSession _session;
     private readonly string _id;
+    private readonly bool _showEnableAction;
     private readonly TextBlock _status = Label("");
     private readonly PasswordBox _key = new() { PlaceholderText = "Enter an API key" };
     private readonly StackPanel _credentials = new() { Spacing = 8 };
@@ -21,9 +22,10 @@ internal sealed class LivePortablePluginSettings : UserControl
     private bool _working;
     private string? _message;
 
-    internal LivePortablePluginSettings(LocalDictationSession session, string id)
+    internal LivePortablePluginSettings(LocalDictationSession session, string id, bool showEnableAction = true)
     {
         _session = session; _id = id;
+        _showEnableAction = showEnableAction;
         _models = new(session, id);
         var content = new StackPanel { Spacing = 14, Margin = new Thickness(0, 0, 14, 14) };
         content.Children.Add(_status);
@@ -43,7 +45,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _check = Button("Check connection", () => session.ValidateRegistryKeyAsync(id), "Connection verified. No audio was uploaded.");
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         actions.Children.Add(_save); actions.Children.Add(_remove); actions.Children.Add(_check);
-        _credentials.Children.Add(actions); content.Children.Add(_credentials); content.Children.Add(_models); content.Children.Add(_textSettings);
+        _credentials.Children.Add(actions); content.Children.Add(_textSettings);
         Content = content;
         _key.PasswordChanged += (_, _) => UpdateButtons();
         Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
@@ -55,12 +57,24 @@ internal sealed class LivePortablePluginSettings : UserControl
     {
         var state = _session.PluginRuntime.Snapshot().FirstOrDefault(item => item.PluginId == _id);
         _status.Text = _message ?? state?.Error ?? (state?.Enabled == true ? "Plugin enabled." : "Enable this plugin to configure its providers.");
-        _enable.Visibility = state?.Enabled == true ? Visibility.Collapsed : Visibility.Visible;
+        _enable.Visibility = _showEnableAction && state?.Enabled != true ? Visibility.Visible : Visibility.Collapsed;
         _key.PlaceholderText = state?.ApiKeyConfigured == true ? "Key saved - enter a replacement" : "Enter an API key";
         _credentials.Visibility = state?.HasApiKeySettings == true ? Visibility.Visible : Visibility.Collapsed;
         if (state?.Enabled == true && state.HasTextSettings)
-            _textSettings.Content ??= new LivePluginTextSettings(_session, _id);
-        else _textSettings.Content = null;
+        {
+            if (_textSettings.Content is not LivePluginTextSettings)
+            {
+                if (_textSettings.Content is StackPanel old) old.Children.Clear();
+                _textSettings.Content = new LivePluginTextSettings(_session, _id, _credentials, _models);
+            }
+        }
+        else if (_textSettings.Content is not StackPanel)
+        {
+            if (_textSettings.Content is LivePluginTextSettings old) old.DetachHostControls();
+            var fallback = new StackPanel { Spacing = 14 };
+            fallback.Children.Add(_credentials); fallback.Children.Add(_models);
+            _textSettings.Content = fallback;
+        }
         _models.Visibility = _session.PluginRuntime.TranscriptionProviders.Any(provider => provider.PluginId == _id) ||
             _session.LlmProviders.Any(provider => provider.PluginId == _id) ||
             _session.ActiveRegistryModelDownload?.PluginId == _id ? Visibility.Visible : Visibility.Collapsed;
@@ -86,7 +100,12 @@ internal sealed class LivePortablePluginSettings : UserControl
             finally
             {
                 _working = false;
-                DispatcherQueue.TryEnqueue(() => { if (IsLoaded) { Refresh(); _models.RequestRefresh(); } });
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!IsLoaded) return;
+                    Refresh(); _models.RequestRefresh();
+                    if (_textSettings.Content is LivePluginTextSettings textSettings) textSettings.RequestRefresh();
+                });
             }
         };
         return button;
