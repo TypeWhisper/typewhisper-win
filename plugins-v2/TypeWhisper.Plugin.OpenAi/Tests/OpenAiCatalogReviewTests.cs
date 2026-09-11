@@ -7,6 +7,30 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class OpenAiPluginTests
 {
     [Theory]
+    [InlineData("replacement-key")]
+    [InlineData("")]
+    public async Task FailedApiCatalogInvalidationKeepsTheExistingKeyAndModels(string replacement)
+    {
+        using var client = new HttpClient(new CapturingHandler((_, _) => Task.FromResult(
+            JsonResponse("""{"data":[{"id":"whisper-1"},{"id":"o3"}]}"""))));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "existing-key";
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(host);
+        await plugin.RefreshAvailableLlmModelsAsync();
+        host.FailSettingKey = "apiModelCatalogSnapshot";
+        await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync(replacement));
+        Assert.Equal("existing-key", host.Secrets["api-key"]);
+        Assert.Equal("existing-key", plugin.ApiKey);
+        Assert.Equal("o3", Assert.Single(plugin.SupportedModels).Id);
+        using var reloaded = new OpenAiPlugin();
+        await reloaded.ActivateAsync(host);
+        Assert.Equal("existing-key", reloaded.ApiKey);
+        Assert.Equal("o3", Assert.Single(reloaded.SupportedModels).Id);
+        Assert.Equal("whisper-1", Assert.Single(reloaded.TranscriptionModels).Id);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task FailedApiSnapshotWriteKeepsBothPreviousCatalogs(bool previouslyFetched)

@@ -5,6 +5,32 @@ using TypeWhisper.PluginSDK.PortableFixture;
 public sealed partial class PortablePluginRuntimeRegistryTests
 {
     [Fact]
+    public async Task CancelingInteractiveConfigurationReleasesUnrelatedTranscription()
+    {
+        var store = await Store(second: true);
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Assert.Null(await registry.SetEnabledAsync(OtherId, true));
+        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var configuration = registry.UseConfigurationAsync(Id, async (_, ct) =>
+        {
+            entered.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return true;
+        }, lifetime.Token);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var transcription = registry.UseTranscriptionAsync(OtherId,
+            (plugin, ct) => plugin.TranscribeAsync([], "de", false, null, ct));
+        Assert.False(transcription.IsCompleted);
+        lifetime.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => configuration);
+        Assert.Equal("transcribed", (await transcription.WaitAsync(TimeSpan.FromSeconds(10))).Text);
+        Assert.Equal(0, Host(Id).GetSetting<int>("disposals"));
+        Assert.Equal(0, Host(OtherId).GetSetting<int>("disposals"));
+    }
+
+    [Fact]
     public async Task ActionsOnlyPluginExposesSettingsPageAndExecutesActionUnderLease()
     {
         var bundles = Path.Combine(_root, "actions-bundles");

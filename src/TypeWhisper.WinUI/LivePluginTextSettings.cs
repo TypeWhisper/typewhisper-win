@@ -84,6 +84,8 @@ internal sealed class LivePluginTextSettings : UserControl
         button.Click += async (_, _) =>
         {
             if (_busy || !IsLoaded) return;
+            if (!_session.CanStartPluginSettingsAction)
+            { SetStatus("Finish dictation and other plugin operations before starting this action."); return; }
             _busy = true; IsEnabled = false;
             var generation = _generation;
             SetStatus(action.Title + "…");
@@ -91,11 +93,18 @@ internal sealed class LivePluginTextSettings : UserControl
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
                 timeout.CancelAfter(TimeSpan.FromMinutes(3));
-                var result = await _session.PluginRuntime.UseConfigurationAsync(_id, async (plugin, ct) =>
+                void CancelForRecording() => timeout.Cancel();
+                _session.RecordingStarting += CancelForRecording;
+                string? result;
+                try
                 {
-                    if (plugin is not IPluginSettingsActions actions) throw new InvalidOperationException();
-                    return await actions.ExecuteSettingsActionAsync(action.Id, ct);
-                }, timeout.Token);
+                    result = await _session.PluginRuntime.UseConfigurationAsync(_id, async (plugin, ct) =>
+                    {
+                        if (plugin is not IPluginSettingsActions actions) throw new InvalidOperationException();
+                        return await actions.ExecuteSettingsActionAsync(action.Id, ct);
+                    }, timeout.Token);
+                }
+                finally { _session.RecordingStarting -= CancelForRecording; }
                 if (!IsLoaded || generation != _generation) return;
                 await ReloadAsync();
                 SetStatus(result ?? "Completed.");

@@ -1044,6 +1044,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
         if (_host is not null)
         {
+            if (changed)
+                _host.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(false, [], []));
+
             if (normalized is null)
                 await _host.DeleteSecretAsync(ApiKeySecretName);
             else
@@ -1053,7 +1056,6 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
             if (changed)
             {
-                _host.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(false, [], []));
                 _fetchedLlmModels = [];
                 _hasFetchedApiCatalog = false;
                 _fetchedTranscriptionModels = [];
