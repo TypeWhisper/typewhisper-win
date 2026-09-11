@@ -1,8 +1,31 @@
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK.PortableFixture;
+using TypeWhisper.Presentation;
+using TypeWhisper.WinUI;
 
 public sealed partial class PortablePluginRuntimeRegistryTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CloudVoicesRemainAvailableWhenWindowsVoiceEnumerationFails(bool localFails)
+    {
+        var store = await SpeechStore(); await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var local = new Moq.Mock<ISpokenFeedbackBackend>();
+        if (localFails) local.Setup(backend => backend.GetVoices()).Throws(new InvalidOperationException("No SAPI voices"));
+        else local.Setup(backend => backend.GetVoices()).Returns([new SpokenFeedbackVoice("local", "Local voice")]);
+        var backend = new PluginSpokenFeedbackBackend(registry, local.Object);
+
+        var voices = backend.GetVoices();
+        Assert.Contains(voices, voice => voice.Id == "plugin:" + Id + ":voice");
+        Assert.Equal(localFails ? 1 : 2, voices.Count);
+        Host(Id).SetSetting("CompletedSpeech", true);
+        await backend.SpeakAsync(new("Hello", VoiceId: "plugin:" + Id + ":voice"), default).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("voice", Host(Id).GetSetting<string>("voice"));
+        local.Verify(voice => voice.SpeakAsync(Moq.It.IsAny<SpokenFeedbackRequest>(), Moq.It.IsAny<CancellationToken>()), Moq.Times.Never);
+    }
+
     private async Task<PortablePluginStore> SpeechStore()
     {
         var bundles = Path.Combine(_root, "speech-bundles");

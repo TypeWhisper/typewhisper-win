@@ -394,7 +394,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
         PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
             id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId));
-        _speechBackend = new(PluginRuntime);
+        _speechBackend = new(PluginRuntime, new WindowsSystemVoiceBackend());
         SpokenFeedback = new(_speechBackend);
         PluginRuntime.Changed += () => Changed?.Invoke();
         _history = history;

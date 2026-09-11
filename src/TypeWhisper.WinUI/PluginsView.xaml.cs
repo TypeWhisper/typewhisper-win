@@ -140,8 +140,14 @@ public sealed partial class PluginsView : UserControl
 
     internal async Task OpenProviderSettingsAsync(string pluginId)
     {
+        if (_settingsLayout)
+        {
+            // Record navigation before awaiting: every refresh renders the latest selection.
+            SelectSettingsPlugin(pluginId);
+            await RefreshRuntimeAsync();
+            return;
+        }
         await RefreshRuntimeAsync();
-        if (_settingsLayout) { SelectSettingsPlugin(pluginId); return; }
         var plugin = _plugins.FirstOrDefault(item => Path.GetFileName(item.Id) == pluginId);
         if (plugin is null) return;
         OpenEntry(plugin.Id);
