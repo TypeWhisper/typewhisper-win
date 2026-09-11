@@ -27,6 +27,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private const string TtsInstructionsSettingName = "ttsInstructions";
     private const string ReasoningEffortSettingName = "reasoningEffort";
     private const string FetchedLlmModelsSettingName = "fetchedLLMModels";
+    private const string HasFetchedApiCatalogSettingName = "hasFetchedApiModelCatalog";
     private const string FetchedTranscriptionModelsSettingName = "fetchedTranscriptionModels";
     private const string FetchedChatGptModelsSettingName = "fetchedChatGPTModels";
     private const string AuthModeSettingName = "authMode";
@@ -62,6 +63,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private string _temperatureMode = TemperatureModeProviderDefault;
     private double _temperatureValue = 0.3;
     private List<OpenAiFetchedModel> _fetchedLlmModels = [];
+    private bool _hasFetchedApiCatalog;
+    private bool _lastModelRefreshSucceeded;
     private List<OpenAiFetchedModel> _fetchedTranscriptionModels = [];
     private List<OpenAiChatGptModel> _fetchedChatGptModels = [];
     private IReadOnlyList<TranscriptionModelEntry> _availableTranscriptionModelEntries = [];
@@ -184,6 +187,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _temperatureMode = NormalizeTemperatureMode(host.GetSetting<string>(TemperatureModeSettingName));
         _temperatureValue = NormalizeTemperatureValue(host.GetSetting<double?>(TemperatureValueSettingName));
         _fetchedLlmModels = host.GetSetting<List<OpenAiFetchedModel>>(FetchedLlmModelsSettingName) ?? [];
+        _hasFetchedApiCatalog = host.GetSetting<bool>(HasFetchedApiCatalogSettingName) || _fetchedLlmModels.Count > 0;
         _fetchedTranscriptionModels =
             host.GetSetting<List<OpenAiFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? [];
         _fetchedChatGptModels =
@@ -523,7 +527,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     public IReadOnlyList<PluginModelInfo> SupportedModels =>
         _authMode == OpenAiAuthMode.ChatGpt
             ? AvailableChatGptModels
-            : _fetchedLlmModels.Count > 0
+            : _hasFetchedApiCatalog
             ? _fetchedLlmModels.Select(model => new PluginModelInfo(model.Id, model.Id)).ToList()
             : FallbackLlmModels;
 
@@ -543,7 +547,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         var modelId = string.IsNullOrWhiteSpace(model)
-            ? _selectedLlmModelId ?? SupportedModels.First().Id
+            ? _selectedLlmModelId ?? SupportedModels.FirstOrDefault()?.Id
+                ?? throw new InvalidOperationException("No text models are available for this account. Refresh models or select another provider.")
             : model;
 
         if (_authMode == OpenAiAuthMode.ChatGpt)
@@ -652,6 +657,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     internal async Task<IReadOnlyList<PluginModelInfo>> RefreshAvailableLlmModelsAsync(CancellationToken ct = default)
     {
+        _lastModelRefreshSucceeded = false;
         if (_authMode == OpenAiAuthMode.ChatGpt)
         {
             var chatGptModels = await FetchChatGptModelsAsync(ct);
@@ -662,6 +668,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             _host?.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
             NormalizeSelectedLlmModel(persist: true);
             _host?.NotifyCapabilitiesChanged();
+            _lastModelRefreshSucceeded = true;
             return SupportedModels;
         }
 
@@ -678,10 +685,13 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
         _host?.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+        _hasFetchedApiCatalog = true;
+        _host?.SetSetting(HasFetchedApiCatalogSettingName, true);
         _host?.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
         ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
         NormalizeSelectedLlmModel(persist: true);
         _host?.NotifyCapabilitiesChanged();
+        _lastModelRefreshSucceeded = true;
         return SupportedModels;
     }
 
@@ -796,6 +806,12 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     internal static bool IsChatModel(string id)
     {
         var lowered = id.ToLowerInvariant();
+        if (lowered.StartsWith("ft:", StringComparison.Ordinal))
+        {
+            var parts = lowered.Split(':', 3);
+            if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[2])) return false;
+            lowered = parts[1];
+        }
         var hasChatPrefix = lowered.StartsWith("gpt-", StringComparison.Ordinal)
             || lowered is "o1" or "o3"
             || lowered.StartsWith("o1-", StringComparison.Ordinal)
@@ -1009,7 +1025,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     {
         var normalized = NormalizeApiKey(apiKey);
         var wasConfigured = IsConfigured;
-        var hadFetchedModels = _fetchedLlmModels.Count > 0 || _fetchedTranscriptionModels.Count > 0;
+        var hadFetchedModels = _hasFetchedApiCatalog || _fetchedTranscriptionModels.Count > 0;
         var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
         if (_host is not null)
@@ -1024,6 +1040,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             if (changed)
             {
                 _fetchedLlmModels = [];
+                _hasFetchedApiCatalog = false;
+                _host.SetSetting(HasFetchedApiCatalogSettingName, false);
                 _fetchedTranscriptionModels = [];
                 _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
                 _host.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
@@ -1246,11 +1264,18 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     {
         var available = SupportedModels;
         if (available.Count == 0)
+        {
+            if (_authMode == OpenAiAuthMode.ApiKey && _hasFetchedApiCatalog)
+            {
+                _selectedLlmModelId = null;
+                if (persist) _host?.SetSetting<string?>(SelectedLlmModelSettingName, null);
+            }
             return;
+        }
 
         var hasFetchedCatalog = _authMode == OpenAiAuthMode.ChatGpt
             ? _fetchedChatGptModels.Count > 0
-            : _fetchedLlmModels.Count > 0;
+            : _hasFetchedApiCatalog;
         if (_selectedLlmModelId is null
             || (!preserveUnknownWhenCatalogUnavailable || hasFetchedCatalog)
             && available.All(model =>

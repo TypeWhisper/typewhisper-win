@@ -377,6 +377,13 @@ internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
                     if (request.Length == 8192) continue;
                     string code;
                     try { code = ParseAuthorizationCode(request.ToString().TrimEnd('\r'), _expectedState); }
+                    catch (PluginRequestException)
+                    {
+                        try { await SendHtmlAsync(stream, ErrorHtml("Sign-in was declined or cancelled. Return to TypeWhisper to try again."), requestToken); }
+                        catch (IOException) { ct.ThrowIfCancellationRequested(); }
+                        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                        throw;
+                    }
                     catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or UriFormatException)
                     {
                         await SendHtmlAsync(stream, ErrorHtml("This request was not a valid login callback. Please finish signing in."), requestToken);
@@ -424,10 +431,10 @@ internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
                 pair => Uri.UnescapeDataString(pair[0]),
                 pair => pair.Length > 1 ? Uri.UnescapeDataString(pair[1].Replace("+", " ")) : "");
 
-        if (query.TryGetValue("error", out var error) && !string.IsNullOrWhiteSpace(error))
-            throw new InvalidOperationException("The OAuth callback returned an error.");
         if (!query.TryGetValue("state", out var state) || state != expectedState)
             throw new InvalidOperationException("The OAuth callback state did not match.");
+        if (query.TryGetValue("error", out var error) && !string.IsNullOrWhiteSpace(error))
+            throw new PluginRequestException("ChatGPT sign-in was declined or cancelled.", PluginRequestFailureKind.Authentication);
         if (!query.TryGetValue("code", out var code) || string.IsNullOrWhiteSpace(code))
             throw new InvalidOperationException("The OAuth callback did not include an authorization code.");
 

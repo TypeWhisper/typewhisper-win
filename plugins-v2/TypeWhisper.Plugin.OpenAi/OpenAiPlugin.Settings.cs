@@ -96,8 +96,10 @@ public sealed partial class OpenAiPlugin
             case "login": await LoginWithChatGptInBrowserAsync(cancellationToken); return "Signed in with ChatGPT.";
             case "import": await ImportExistingLoginAsync(ct: cancellationToken); return "Existing ChatGPT login imported.";
             case "logout": await ClearChatGptLoginAsync(); return "Signed out of ChatGPT.";
-            case "refresh": return (await RefreshAvailableLlmModelsAsync(cancellationToken)).Count > 0
-                ? "Model list refreshed." : "Models could not be refreshed. The previous list has been retained. Check your account and connection.";
+            case "refresh":
+                await RefreshAvailableLlmModelsAsync(cancellationToken);
+                return _lastModelRefreshSucceeded
+                    ? "Model list refreshed." : "Models could not be refreshed. The previous list has been retained. Check your account and connection.";
             default: throw new ArgumentException("Unknown settings action.");
         }
     }

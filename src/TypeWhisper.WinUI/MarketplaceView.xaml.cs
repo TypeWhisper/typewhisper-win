@@ -292,7 +292,7 @@ public sealed partial class MarketplaceView : UserControl
                 if (openSettings)
                 {
                     ShowList(true);
-                    ManageRequested?.Invoke(item.Plugin.Id);
+                    if (IsLoaded) ManageRequested?.Invoke(item.Plugin.Id);
                 }
                 else if (IsDetail) { UpdateDetail(); MarketPrimaryButton.Focus(FocusState.Programmatic); }
                 else Filter(_query);

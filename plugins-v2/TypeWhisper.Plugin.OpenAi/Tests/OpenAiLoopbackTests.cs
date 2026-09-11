@@ -2,11 +2,30 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using TypeWhisper.Plugin.OpenAi;
+using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class OpenAiLoopbackTests
 {
+    [Fact]
+    public async Task ProviderDenialEndsLoginAndReleasesTheListeners()
+    {
+        await using var server = new OpenAiLoopbackOAuthServer("fixture-state", 0);
+        server.Start();
+        var port = server.Port;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var callback = server.WaitForCodeAsync(timeout.Token);
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, port, timeout.Token);
+        await client.GetStream().WriteAsync("GET /auth/callback?state=fixture-state&error=access_denied HTTP/1.1\r\n\r\n"u8.ToArray(), timeout.Token);
+        using var reader = new StreamReader(client.GetStream());
+        Assert.Contains("Login failed", await reader.ReadToEndAsync(timeout.Token));
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => callback.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(PluginRequestFailureKind.Authentication, error.FailureKind);
+        AssertPortsReleased(port);
+    }
+
     [Fact]
     public async Task SimultaneousLoopbackConnectionsPreserveTheValidCallback()
     {
@@ -83,9 +102,10 @@ public sealed class OpenAiLoopbackTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task InvalidCallbackDoesNotConsumeLoginAttempt(bool oversized)
+    [InlineData("GET /auth/callback?state=wrong&code=fixture HTTP/1.1\r\n\r\n")]
+    [InlineData("GET /auth/callback?state=wrong&error=access_denied HTTP/1.1\r\n\r\n")]
+    [InlineData(null)]
+    public async Task InvalidCallbackDoesNotConsumeLoginAttempt(string? request)
     {
         await using var server = new OpenAiLoopbackOAuthServer("fixture-state", 0);
         server.Start();
@@ -94,7 +114,7 @@ public sealed class OpenAiLoopbackTests
         var callback = server.WaitForCodeAsync(timeout.Token);
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, port, timeout.Token);
-        var request = oversized ? new string('x', 8192) : "GET /auth/callback?state=wrong&code=fixture HTTP/1.1\r\n\r\n";
+        request ??= new string('x', 8192);
         await client.GetStream().WriteAsync(Encoding.UTF8.GetBytes(request), timeout.Token);
         using (var reader = new StreamReader(client.GetStream()))
             await reader.ReadToEndAsync(timeout.Token);
