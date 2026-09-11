@@ -26,6 +26,7 @@ public sealed partial class MarketplaceView : UserControl
     private bool _reviewing;
     private CancellationTokenSource? _installation;
     internal bool IsDetail { get; private set; }
+    internal bool IsInstalling => _installation is not null;
     internal ObservableCollection<MarketplaceItem> FilteredItems { get; } = [];
     internal event EventHandler? InstalledRequested;
     private void Installed_Click(object sender, RoutedEventArgs e) => InstalledRequested?.Invoke(this, EventArgs.Empty);

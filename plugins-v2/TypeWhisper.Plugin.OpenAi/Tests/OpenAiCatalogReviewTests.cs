@@ -1,10 +1,38 @@
 using System.Net;
 using TypeWhisper.Plugin.OpenAi;
+using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
 public partial class OpenAiPluginTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedApiSnapshotWriteKeepsBothPreviousCatalogs(bool previouslyFetched)
+    {
+        var next = false;
+        using var client = new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse(next
+            ? """{"data":[{"id":"gpt-4.1-mini"}]}"""
+            : """{"data":[{"id":"whisper-1"},{"id":"o3"}]}"""))));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "fixture-key";
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(host);
+        if (previouslyFetched) await plugin.RefreshAvailableLlmModelsAsync();
+        var text = plugin.SupportedModels.Select(model => model.Id).ToArray();
+        var audio = plugin.TranscriptionModels.Select(model => model.Id).ToArray();
+        next = true;
+        host.FailSettingKey = "apiModelCatalogSnapshot";
+        await Assert.ThrowsAsync<IOException>(() => plugin.RefreshAvailableLlmModelsAsync());
+        Assert.Equal(text, plugin.SupportedModels.Select(model => model.Id));
+        Assert.Equal(audio, plugin.TranscriptionModels.Select(model => model.Id));
+        using var reloaded = new OpenAiPlugin();
+        await reloaded.ActivateAsync(host);
+        Assert.Equal(text, reloaded.SupportedModels.Select(model => model.Id));
+        Assert.Equal(audio, reloaded.TranscriptionModels.Select(model => model.Id));
+    }
+
     [Fact]
     public async Task FailedChatGptSnapshotWriteDoesNotPersistFetchedMarker()
     {
@@ -71,6 +99,9 @@ public partial class OpenAiPluginTests
         await plugin.ActivateAsync(host);
         await plugin.RefreshAvailableLlmModelsAsync();
         Assert.Empty(plugin.TranscriptionModels);
+        Assert.False(((ITranscriptionEnginePlugin)plugin).IsConfigured);
+        Assert.True(((IApiKeyPlugin)plugin).IsConfigured);
+        Assert.True(((ITtsProviderPlugin)plugin).IsConfigured);
         Assert.Null(plugin.SelectedModelId);
         plugin.SelectModel("whisper-1");
         Assert.Null(plugin.SelectedModelId);
@@ -83,6 +114,7 @@ public partial class OpenAiPluginTests
         await plugin.RefreshAvailableLlmModelsAsync();
         Assert.Equal("whisper-1", Assert.Single(plugin.TranscriptionModels).Id);
         Assert.Equal("whisper-1", plugin.SelectedModelId);
+        Assert.True(((ITranscriptionEnginePlugin)plugin).IsConfigured);
         await reloaded.SetApiKeyAsync("replacement-key");
         Assert.NotEmpty(reloaded.TranscriptionModels);
         Assert.NotNull(reloaded.SelectedModelId);

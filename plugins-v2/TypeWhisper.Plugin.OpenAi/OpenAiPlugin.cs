@@ -28,6 +28,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private const string ReasoningEffortSettingName = "reasoningEffort";
     private const string FetchedLlmModelsSettingName = "fetchedLLMModels";
     private const string HasFetchedApiCatalogSettingName = "hasFetchedApiModelCatalog";
+    private const string ApiCatalogSnapshotSettingName = "apiModelCatalogSnapshot";
     private const string FetchedTranscriptionModelsSettingName = "fetchedTranscriptionModels";
     private const string FetchedChatGptModelsSettingName = "fetchedChatGPTModels";
     private const string HasFetchedChatGptCatalogSettingName = "hasFetchedChatGPTModelCatalog";
@@ -193,6 +194,12 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _fetchedTranscriptionModels =
             host.GetSetting<List<OpenAiFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? [];
         _hasFetchedApiCatalog |= _fetchedTranscriptionModels.Count > 0;
+        if (host.GetSetting<ApiCatalogSnapshot>(ApiCatalogSnapshotSettingName) is { } snapshot)
+        {
+            _hasFetchedApiCatalog = snapshot.HasFetched;
+            _fetchedLlmModels = snapshot.LlmModels ?? [];
+            _fetchedTranscriptionModels = snapshot.TranscriptionModels ?? [];
+        }
         _fetchedChatGptModels =
             host.GetSetting<List<OpenAiChatGptModel>>(FetchedChatGptModelsSettingName) ?? [];
         _hasFetchedChatGptCatalog = host.GetSetting<bool>(HasFetchedChatGptCatalogSettingName) || _fetchedChatGptModels.Count > 0;
@@ -247,6 +254,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// Gets whether the provider has the configuration required to run.
     /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
+
+    bool ITranscriptionEnginePlugin.IsConfigured => IsConfigured && SelectedModelEntry is not null;
 
     /// <summary>
     /// Gets whether the host is running the isolated UI automation fixture.
@@ -682,18 +691,18 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         if (models is null)
             return [];
 
-        _fetchedLlmModels = models
+        var llmModels = models
             .Where(model => IsChatModel(model.Id))
             .OrderBy(model => model.Id, StringComparer.Ordinal)
             .ToList();
-        _fetchedTranscriptionModels = models
+        var transcriptionModels = models
             .Where(model => CreateDiscoveredTranscriptionModelEntry(model.Id) is not null)
             .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        _host?.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+        _host?.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(true, llmModels, transcriptionModels));
+        _fetchedLlmModels = llmModels;
+        _fetchedTranscriptionModels = transcriptionModels;
         _hasFetchedApiCatalog = true;
-        _host?.SetSetting(HasFetchedApiCatalogSettingName, true);
-        _host?.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
         ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
         NormalizeSelectedLlmModel(persist: true);
         _host?.NotifyCapabilitiesChanged();
@@ -1044,12 +1053,10 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
             if (changed)
             {
+                _host.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(false, [], []));
                 _fetchedLlmModels = [];
                 _hasFetchedApiCatalog = false;
-                _host.SetSetting(HasFetchedApiCatalogSettingName, false);
                 _fetchedTranscriptionModels = [];
-                _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
-                _host.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
                 ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
             }
 
@@ -1397,5 +1404,6 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     }
 
     private sealed record OpenAiModelsResponse(List<OpenAiFetchedModel?> Data);
+    internal sealed record ApiCatalogSnapshot(bool HasFetched, List<OpenAiFetchedModel> LlmModels, List<OpenAiFetchedModel> TranscriptionModels);
     private sealed record OpenAiChatGptModelsResponse(List<OpenAiChatGptModel?> Models);
 }

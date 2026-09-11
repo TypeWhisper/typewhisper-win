@@ -836,13 +836,13 @@ public partial class OpenAiPluginTests
         Assert.Equal("sk-live", capturedRequest?.Headers.Authorization?.Parameter);
         Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
 
-        var cachedModels = host.GetSetting<List<OpenAiFetchedModel>>("fetchedLLMModels");
-        Assert.NotNull(cachedModels);
+        var snapshot = host.GetSetting<OpenAiPlugin.ApiCatalogSnapshot>("apiModelCatalogSnapshot");
+        Assert.NotNull(snapshot);
+        Assert.True(snapshot.HasFetched);
+        var cachedModels = snapshot.LlmModels;
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], cachedModels.Select(m => m.Id).ToArray());
 
-        var cachedTranscriptionModels =
-            host.GetSetting<List<OpenAiFetchedModel>>("fetchedTranscriptionModels");
-        Assert.NotNull(cachedTranscriptionModels);
+        var cachedTranscriptionModels = snapshot.TranscriptionModels;
         Assert.Equal(7, cachedTranscriptionModels.Count);
     }
 

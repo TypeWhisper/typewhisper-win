@@ -49,7 +49,8 @@ public sealed partial class MainWindow
         _integrationSearch!.Visibility = _discoverSettings ? Visibility.Visible : Visibility.Collapsed;
         PluginsView.Visibility = _discoverSettings ? Visibility.Collapsed : Visibility.Visible;
         MarketplaceView.Visibility = _discoverSettings ? Visibility.Visible : Visibility.Collapsed;
-        if (_discoverSettings && MarketplaceView.IsDetail) MarketplaceView.ResetNavigation();
+        if (_discoverSettings && MarketplaceView.IsDetail && !MarketplaceView.IsInstalling)
+            MarketplaceView.ResetNavigation();
         _integrationSearch.IsEnabled = _discoverSettings && !MarketplaceView.IsDetail;
         if (!_discoverSettings) _integrationSearch.Text = "";
         if (_discoverSettings) MarketplaceView.Filter(_integrationSearch.Text);
