@@ -27,6 +27,13 @@ public sealed partial class MarketplaceView : UserControl
     private CancellationTokenSource? _installation;
     internal bool IsDetail { get; private set; }
     internal bool IsInstalling => _installation is not null;
+    private bool IsPageVisible()
+    {
+        if (!IsLoaded) return false;
+        for (DependencyObject? element = this; element is not null; element = VisualTreeHelper.GetParent(element))
+            if (element is UIElement { Visibility: Visibility.Collapsed }) return false;
+        return true;
+    }
     internal ObservableCollection<MarketplaceItem> FilteredItems { get; } = [];
     internal event EventHandler? InstalledRequested;
     private void Installed_Click(object sender, RoutedEventArgs e) => InstalledRequested?.Invoke(this, EventArgs.Empty);
@@ -290,12 +297,12 @@ public sealed partial class MarketplaceView : UserControl
             if (ReferenceEquals(_installation, operation))
             {
                 _installation = null;
-                if (openSettings)
+                if (openSettings && IsPageVisible())
                 {
                     ShowList(true);
-                    if (IsLoaded) ManageRequested?.Invoke(item.Plugin.Id);
+                    ManageRequested?.Invoke(item.Plugin.Id);
                 }
-                else if (IsDetail) { UpdateDetail(); MarketPrimaryButton.Focus(FocusState.Programmatic); }
+                else if (IsDetail) { UpdateDetail(); if (IsPageVisible()) MarketPrimaryButton.Focus(FocusState.Programmatic); }
                 else Filter(_query);
             }
         }

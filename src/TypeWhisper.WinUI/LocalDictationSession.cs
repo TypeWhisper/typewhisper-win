@@ -485,10 +485,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     internal Task ToggleAsync() => SetRecordingAsync(null);
-    // Interactive settings actions are cancellable at recording startup. Admit the
+    // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
     // hotkey while one is active so it can reach that cancellation before using a provider.
     internal bool CanStartFromShortcut => CanStartSessionOperation
-        && (!PluginRuntime.IsBusy || RecordingStarting is not null) && (IsReady
+        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy) && (IsReady
 #if DEBUG
         || CorrectionProbeEnabled
 #endif
