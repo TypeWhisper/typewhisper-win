@@ -5,6 +5,57 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class OpenAiPluginTests
 {
     [Fact]
+    public async Task ConnectionModeAndTextModelAreSavedTogether()
+    {
+        var host = new TestPluginHostServices();
+        using var plugin = new OpenAiPlugin();
+        await plugin.ActivateAsync(host);
+        plugin.SelectLlmModel("gpt-4o");
+        host.FailSettingKey = "llmSelection";
+        Assert.Throws<IOException>(() => plugin.SetAuthMode(OpenAiAuthMode.ChatGpt));
+        Assert.Equal(OpenAiAuthMode.ApiKey, plugin.AuthMode);
+        Assert.Equal("gpt-4o", plugin.SelectedLlmModelId);
+        using var afterFailure = new OpenAiPlugin();
+        await afterFailure.ActivateAsync(host);
+        Assert.Equal(OpenAiAuthMode.ApiKey, afterFailure.AuthMode);
+        Assert.Equal("gpt-4o", afterFailure.SelectedLlmModelId);
+        host.FailSettingKey = null;
+        plugin.SetAuthMode(OpenAiAuthMode.ChatGpt);
+        Assert.Contains(plugin.SupportedModels, model => model.Id == plugin.SelectedLlmModelId);
+        using var afterSuccess = new OpenAiPlugin();
+        await afterSuccess.ActivateAsync(host);
+        Assert.Equal(OpenAiAuthMode.ChatGpt, afterSuccess.AuthMode);
+        Assert.Equal(plugin.SelectedLlmModelId, afterSuccess.SelectedLlmModelId);
+    }
+
+    [Theory]
+    [InlineData(null, "plus")]
+    [InlineData("pro", "pro")]
+    public async Task TokenRefreshPreservesMissingPlanClaimsAndAcceptsNewOnes(string? newPlan, string expectedPlan)
+    {
+        using var client = new HttpClient(new CapturingHandler((request, _) => Task.FromResult(JsonResponse(
+            request.RequestUri!.AbsolutePath.EndsWith("/oauth/token", StringComparison.Ordinal)
+                ? System.Text.Json.JsonSerializer.Serialize(new { access_token = "fresh-access", expires_in = 3600,
+                    id_token = newPlan is null ? null : Token("{\"chatgpt_plan_type\":\"" + newPlan + "\"}") })
+                : """{"models":[{"slug":"plus-model","visibility":"list","available_in_plans":["plus"]},{"slug":"pro-model","visibility":"list","available_in_plans":["pro"]}]}"""))));
+        var host = new TestPluginHostServices();
+        host.SetSetting("authMode", "chatgpt");
+        host.SetSetting("oauthAccountID", "existing-account");
+        host.SetSetting("oauthPlanType", "plus");
+        host.SetSetting("oauthExpiresAt", DateTimeOffset.UtcNow.AddMinutes(-1));
+        host.Secrets["oauth-access-token"] = "old-access";
+        host.Secrets["oauth-refresh-token"] = "old-refresh";
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(host);
+        await plugin.RefreshAvailableLlmModelsAsync();
+        Assert.Equal(expectedPlan, plugin.ChatGptPlanType);
+        Assert.Equal(expectedPlan + "-model", Assert.Single(plugin.SupportedModels).Id);
+        using var reloaded = new OpenAiPlugin();
+        await reloaded.ActivateAsync(host);
+        Assert.Equal(expectedPlan, reloaded.ChatGptPlanType);
+    }
+
+    [Fact]
     public async Task FailedTranscriptionSelectionKeepsThePreviousModel()
     {
         var host = new TestPluginHostServices();

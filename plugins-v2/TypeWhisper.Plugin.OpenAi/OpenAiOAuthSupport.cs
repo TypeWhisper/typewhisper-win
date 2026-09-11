@@ -152,13 +152,13 @@ internal static class OpenAiOAuthClient
     /// <summary>
     /// Performs extract metadata.
     /// </summary>
-    public static OpenAiOAuthMetadata ExtractMetadata(OpenAiOAuthTokenResponse tokens, string? preferredAccountId = null)
+    public static OpenAiOAuthMetadata ExtractMetadata(OpenAiOAuthTokenResponse tokens, string? preferredAccountId = null, string? fallbackPlanType = null)
     {
         var idClaims = ParseJwtPayload(tokens.IdToken);
         var accessClaims = ParseJwtPayload(tokens.AccessToken);
         var accountId = preferredAccountId
             ?? AccountId(idClaims) ?? AccountId(accessClaims);
-        var planType = PlanType(idClaims) ?? PlanType(accessClaims);
+        var planType = PlanType(idClaims) ?? PlanType(accessClaims) ?? fallbackPlanType;
         var expiresAt = GetDouble(accessClaims, "exp") is { } exp
             ? DateTimeOffset.FromUnixTimeSeconds((long)exp)
             : DateTimeOffset.UtcNow.AddSeconds(tokens.ExpiresIn ?? 3600);

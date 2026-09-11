@@ -148,7 +148,7 @@ public partial class OpenAiPluginTests
         sut.SelectLlmModel("gpt-4o");
 
         Assert.Equal("nova", host.GetSetting<string>("selectedVoice"));
-        Assert.Equal("gpt-4o", host.GetSetting<string>("selectedLLMModel"));
+        Assert.Equal("gpt-4o", host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection")?.ModelId);
         Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
     }
 
@@ -815,7 +815,7 @@ public partial class OpenAiPluginTests
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], models.Select(m => m.Id).ToArray());
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], sut.SupportedModels.Select(m => m.Id).ToArray());
         Assert.Equal("gpt-4.1-mini", sut.SelectedLlmModelId);
-        Assert.Equal("gpt-4.1-mini", host.GetSetting<string>("selectedLLMModel"));
+        Assert.Equal("gpt-4.1-mini", host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection")?.ModelId);
         Assert.Equal("whisper-1", sut.SelectedModelId);
         Assert.Equal(
             [
@@ -934,7 +934,7 @@ public partial class OpenAiPluginTests
         Assert.Equal(["gpt-5.6-sol", "gpt-5.5"], models.Select(model => model.Id).ToArray());
         Assert.Equal("GPT-5.6-Sol", models.First().DisplayName);
         Assert.Equal("gpt-5.6-sol", sut.SelectedLlmModelId);
-        Assert.Equal("gpt-5.6-sol", host.GetSetting<string>("selectedLLMModel"));
+        Assert.Equal("gpt-5.6-sol", host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection")?.ModelId);
         Assert.Equal(
             "https://chatgpt.com/backend-api/codex/models?client_version=1.1.4",
             capturedRequest?.RequestUri?.ToString());
