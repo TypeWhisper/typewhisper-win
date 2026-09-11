@@ -100,7 +100,12 @@ internal sealed class LivePortablePluginSettings : UserControl
             finally
             {
                 _working = false;
-                DispatcherQueue.TryEnqueue(() => { if (IsLoaded) { Refresh(); _models.RequestRefresh(); } });
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!IsLoaded) return;
+                    Refresh(); _models.RequestRefresh();
+                    if (_textSettings.Content is LivePluginTextSettings textSettings) textSettings.RequestRefresh();
+                });
             }
         };
         return button;

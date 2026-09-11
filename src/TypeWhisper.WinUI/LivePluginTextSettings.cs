@@ -35,6 +35,15 @@ internal sealed class LivePluginTextSettings : UserControl
     private CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, string> _drafts = new();
     private bool _busy;
+    private bool _refreshRequested;
+
+    internal async void RequestRefresh()
+    {
+        if (!IsLoaded) return;
+        if (_busy) { _refreshRequested = true; return; }
+        _refreshRequested = false;
+        await ReloadAsync();
+    }
 
     private async Task ReloadAsync()
     {
@@ -50,7 +59,12 @@ internal sealed class LivePluginTextSettings : UserControl
             void Fields(PluginSettingsSection section)
             {
                 foreach (var field in snapshot.Fields.Where(f => f.Section == section))
-                    AddField(_drafts.TryGetValue(field.Id, out var draft) ? field with { Value = draft } : field);
+                {
+                    if (_drafts.TryGetValue(field.Id, out var draft) &&
+                        (field.Choices.Count == 0 || field.Choices.Any(choice => choice.Value == draft)))
+                        AddField(field with { Value = draft });
+                    else { _drafts.Remove(field.Id); AddField(field); }
+                }
             }
             void Actions(PluginSettingsSection section)
             { foreach (var action in snapshot.Actions.Where(a => a.Section == section)) AddAction(action); }
@@ -113,7 +127,7 @@ internal sealed class LivePluginTextSettings : UserControl
             { if (IsLoaded && generation == _generation) SetStatus("The action was cancelled or timed out. You can retry."); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { if (IsLoaded && generation == _generation) SetStatus("The action failed. Check the account and connection, then retry."); }
-            finally { _busy = false; IsEnabled = true; }
+            finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         };
         _content.Children.Add(button);
     }
@@ -198,6 +212,7 @@ internal sealed class LivePluginTextSettings : UserControl
                 saving = _busy = false;
                 IsEnabled = true;
                 if (IsLoaded) save.IsEnabled = input.IsEnabled = true;
+                if (_refreshRequested) RequestRefresh();
             }
         }
         save.Click += async (_, _) => await SaveAsync();

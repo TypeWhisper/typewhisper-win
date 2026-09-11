@@ -946,7 +946,7 @@ public partial class OpenAiPluginTests
         Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
 
         var cachedModels =
-            host.GetSetting<List<OpenAiChatGptModel>>("fetchedChatGPTModels");
+            host.GetSetting<OpenAiPlugin.ChatGptCatalogSnapshot>("chatGPTModelCatalogSnapshot")?.Models;
         Assert.NotNull(cachedModels);
         Assert.Equal(["gpt-5.6-sol", "gpt-5.5"], cachedModels.Select(model => model.Slug).ToArray());
     }
@@ -1304,14 +1304,17 @@ public partial class OpenAiPluginTests
 
         private readonly Dictionary<string, JsonElement> _settings = [];
         public bool FailWrites { get; set; }
+        public bool FailSecretWrites { get; set; }
+        public bool FailAfterSecretWrite { get; set; }
         public string? FailSettingKey { get; set; }
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
         public Task StoreSecretAsync(string key, string value)
         {
-            if (FailWrites) throw new IOException("Fixture write failed.");
+            if (FailWrites || FailSecretWrites) throw new IOException("Fixture write failed.");
             Secrets[key] = value;
+            if (FailAfterSecretWrite) throw new IOException("Fixture failure after write.");
             return Task.CompletedTask;
         }
 
@@ -1320,7 +1323,9 @@ public partial class OpenAiPluginTests
 
         public Task DeleteSecretAsync(string key)
         {
+            if (FailSecretWrites) throw new IOException("Fixture write failed.");
             Secrets.Remove(key);
+            if (FailAfterSecretWrite) throw new IOException("Fixture failure after write.");
             return Task.CompletedTask;
         }
 

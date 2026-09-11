@@ -33,7 +33,7 @@ public sealed partial class OpenAiPlugin
         new(TemperatureValueSettingName, "Custom temperature", "Number between 0 and 2.", _temperatureValue.ToString(CultureInfo.InvariantCulture), 8),
         new("transcriptionContext", "Transcription context", "Optional background for GPT Transcribe and GPT Live Transcribe. Dictionary words are sent separately. This context is sent to OpenAI with your audio.", _transcriptionContext, 8000) { IsMultiline = true },
         Choice("liveDelay", "Live transcription delay", "Lower delay shows results sooner; higher delay gives the model more context.", _liveDelay, LiveDelays.Select(v => new PluginSettingChoice(v, v)).ToArray()),
-        Choice(SelectedVoiceSettingName, "Speech voice", "OpenAI cloud voice used when this provider is selected for readback.", SelectedVoiceId!, AvailableVoices.Select(v => new PluginSettingChoice(v.Id, v.DisplayName)).ToArray()),
+        Choice(SelectedVoiceSettingName, "Default speech voice", "Default for speech requests without a voice selection. Choose the dictation readback voice in Audio settings.", SelectedVoiceId!, AvailableVoices.Select(v => new PluginSettingChoice(v.Id, v.DisplayName)).ToArray()),
         new(TtsInstructionsSettingName, "Speech instructions", "Optional tone, pace or accent instructions sent to OpenAI.", _ttsInstructions, 4000) { IsMultiline = true }
     ];
 
@@ -84,7 +84,7 @@ public sealed partial class OpenAiPlugin
         new("login", "Sign in with ChatGPT", "Opens your browser. Sign in there to use ChatGPT for text processing."),
         new("import", "Import existing Codex login", "Explicitly copies the login from your local Codex auth file into this plugin's protected storage."),
         new("logout", "Sign out of ChatGPT", "Removes this plugin's ChatGPT credentials; your API key is retained."),
-        new("refresh", "Refresh models", "Fetches available models for the selected text processing account.")
+        new("refresh", "Refresh models", "Fetches text models for the selected account and transcription models for the saved API key.")
     ];
 
     /// <inheritdoc />
@@ -99,7 +99,7 @@ public sealed partial class OpenAiPlugin
             case "refresh":
                 await RefreshAvailableLlmModelsAsync(cancellationToken);
                 return _lastModelRefreshSucceeded
-                    ? "Model list refreshed." : "Models could not be refreshed. The previous list has been retained. Check your account and connection.";
+                    ? "Model list refreshed." : "Some models could not be refreshed. Saved models are kept for unavailable lists. Check your account and connection.";
             default: throw new ArgumentException("Unknown settings action.");
         }
     }

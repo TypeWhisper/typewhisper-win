@@ -7,6 +7,39 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class OpenAiPluginTests
 {
     [Theory]
+    [InlineData("replacement-key", false)]
+    [InlineData("", false)]
+    [InlineData("replacement-key", true)]
+    [InlineData("", true)]
+    public async Task SecretFailureRestoresCatalogOnlyWhenTheSavedKeyIsUnchanged(string replacement, bool afterCommit)
+    {
+        using var client = new HttpClient(new CapturingHandler((_, _) => Task.FromResult(
+            JsonResponse("""{"data":[{"id":"whisper-1"},{"id":"o3"}]}"""))));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "existing-key";
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(host);
+        await plugin.RefreshAvailableLlmModelsAsync();
+        host.FailSecretWrites = !afterCommit;
+        host.FailAfterSecretWrite = afterCommit;
+        await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync(replacement));
+        Assert.Equal("existing-key", plugin.ApiKey);
+        using var reloaded = new OpenAiPlugin();
+        await reloaded.ActivateAsync(host);
+        var snapshot = host.GetSetting<OpenAiPlugin.ApiCatalogSnapshot>("apiModelCatalogSnapshot");
+        Assert.NotNull(snapshot);
+        Assert.Equal(!afterCommit, snapshot.HasFetched);
+        if (afterCommit)
+            Assert.Equal(string.IsNullOrEmpty(replacement) ? null : replacement, reloaded.ApiKey);
+        else
+        {
+            Assert.Equal("existing-key", reloaded.ApiKey);
+            Assert.Equal("o3", Assert.Single(reloaded.SupportedModels).Id);
+            Assert.Equal("whisper-1", Assert.Single(reloaded.TranscriptionModels).Id);
+        }
+    }
+
+    [Theory]
     [InlineData("replacement-key")]
     [InlineData("")]
     public async Task FailedApiCatalogInvalidationKeepsTheExistingKeyAndModels(string replacement)
@@ -69,9 +102,9 @@ public partial class OpenAiPluginTests
         host.Secrets["oauth-refresh-token"] = "refresh-token";
         using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
         await plugin.ActivateAsync(host);
-        host.FailSettingKey = "fetchedChatGPTModels";
+        host.FailSettingKey = "chatGPTModelCatalogSnapshot";
         await Assert.ThrowsAsync<IOException>(() => plugin.RefreshAvailableLlmModelsAsync());
-        Assert.False(host.GetSetting<bool>("hasFetchedChatGPTModelCatalog"));
+        Assert.Null(host.GetSetting<OpenAiPlugin.ChatGptCatalogSnapshot>("chatGPTModelCatalogSnapshot"));
         using var reloaded = new OpenAiPlugin();
         await reloaded.ActivateAsync(host);
         Assert.NotEmpty(reloaded.SupportedModels);
@@ -98,7 +131,7 @@ public partial class OpenAiPluginTests
         await plugin.RefreshAvailableLlmModelsAsync();
         Assert.Empty(plugin.SupportedModels);
         Assert.Null(plugin.SelectedLlmModelId);
-        Assert.True(host.GetSetting<bool>("hasFetchedChatGPTModelCatalog"));
+        Assert.True(host.GetSetting<OpenAiPlugin.ChatGptCatalogSnapshot>("chatGPTModelCatalogSnapshot")!.HasFetched);
         fail = true;
         await plugin.RefreshAvailableLlmModelsAsync();
         Assert.Empty(plugin.SupportedModels);
@@ -107,7 +140,7 @@ public partial class OpenAiPluginTests
         Assert.Empty(reloaded.SupportedModels);
         Assert.Null(reloaded.SelectedLlmModelId);
         await reloaded.ClearChatGptLoginAsync();
-        Assert.False(host.GetSetting<bool>("hasFetchedChatGPTModelCatalog"));
+        Assert.False(host.GetSetting<OpenAiPlugin.ChatGptCatalogSnapshot>("chatGPTModelCatalogSnapshot")!.HasFetched);
     }
 
     [Fact]

@@ -32,6 +32,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private const string FetchedTranscriptionModelsSettingName = "fetchedTranscriptionModels";
     private const string FetchedChatGptModelsSettingName = "fetchedChatGPTModels";
     private const string HasFetchedChatGptCatalogSettingName = "hasFetchedChatGPTModelCatalog";
+    private const string ChatGptCatalogSnapshotSettingName = "chatGPTModelCatalogSnapshot";
     private const string AuthModeSettingName = "authMode";
     private const string SelectedLlmModelSettingName = "selectedLLMModel";
     private const string TemperatureModeSettingName = "llmTemperatureMode";
@@ -203,6 +204,11 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _fetchedChatGptModels =
             host.GetSetting<List<OpenAiChatGptModel>>(FetchedChatGptModelsSettingName) ?? [];
         _hasFetchedChatGptCatalog = host.GetSetting<bool>(HasFetchedChatGptCatalogSettingName) || _fetchedChatGptModels.Count > 0;
+        if (host.GetSetting<ChatGptCatalogSnapshot>(ChatGptCatalogSnapshotSettingName) is { } chatSnapshot)
+        {
+            _hasFetchedChatGptCatalog = chatSnapshot.HasFetched;
+            _fetchedChatGptModels = chatSnapshot.Models ?? [];
+        }
         _oauthAccountId = host.GetSetting<string>(OAuthAccountIdSettingName);
         _oauthPlanType = host.GetSetting<string>(OAuthPlanTypeSettingName);
         _oauthExpiresAt = LoadExpiresAt(host);
@@ -673,23 +679,30 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _lastModelRefreshSucceeded = false;
         if (_authMode == OpenAiAuthMode.ChatGpt)
         {
+            var apiRefreshed = !IsConfigured || await RefreshApiCatalogAsync(ct);
             var chatGptModels = await FetchChatGptModelsAsync(ct);
             if (chatGptModels is null)
                 return [];
 
-            _fetchedChatGptModels = chatGptModels.ToList();
-            _host?.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
+            var catalog = chatGptModels.ToList();
+            _host?.SetSetting(ChatGptCatalogSnapshotSettingName, new ChatGptCatalogSnapshot(true, catalog));
+            _fetchedChatGptModels = catalog;
             _hasFetchedChatGptCatalog = true;
-            _host?.SetSetting(HasFetchedChatGptCatalogSettingName, true);
             NormalizeSelectedLlmModel(persist: true);
             _host?.NotifyCapabilitiesChanged();
-            _lastModelRefreshSucceeded = true;
+            _lastModelRefreshSucceeded = apiRefreshed;
             return SupportedModels;
         }
 
+        _lastModelRefreshSucceeded = await RefreshApiCatalogAsync(ct);
+        return _lastModelRefreshSucceeded ? SupportedModels : [];
+    }
+
+    private async Task<bool> RefreshApiCatalogAsync(CancellationToken ct)
+    {
         var models = await FetchApiModelsAsync(ct);
         if (models is null)
-            return [];
+            return false;
 
         var llmModels = models
             .Where(model => IsChatModel(model.Id))
@@ -706,8 +719,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
         NormalizeSelectedLlmModel(persist: true);
         _host?.NotifyCapabilitiesChanged();
-        _lastModelRefreshSucceeded = true;
-        return SupportedModels;
+        return true;
     }
 
     internal async Task<IReadOnlyList<OpenAiFetchedModel>?> FetchApiModelsAsync(
@@ -951,14 +963,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         {
             // A single protected record is authoritative. An empty record also prevents
             // interrupted cleanup from restoring obsolete split credentials on restart.
-            await _host.StoreSecretAsync(OAuthSessionSecretName, JsonSerializer.Serialize(new SavedOAuthSession("", "", null, null, null, null)));
+            await CommitOAuthSessionAsync(new("", "", null, null, null, null), resetCatalog: true);
         }
-        ApplyOAuthSession(new("", "", null, null, null, null));
-        _fetchedChatGptModels = [];
-        _hasFetchedChatGptCatalog = false;
-        _host?.SetSetting(HasFetchedChatGptCatalogSettingName, false);
-        _host?.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
-        _host?.NotifyCapabilitiesChanged();
         if (_host is not null)
         {
             await _host.DeleteSecretAsync(OAuthAccessTokenSecretName);
@@ -1044,13 +1050,33 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
         if (_host is not null)
         {
+            var previousCatalog = new ApiCatalogSnapshot(_hasFetchedApiCatalog, _fetchedLlmModels, _fetchedTranscriptionModels);
             if (changed)
                 _host.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(false, [], []));
 
-            if (normalized is null)
-                await _host.DeleteSecretAsync(ApiKeySecretName);
-            else
-                await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+            try
+            {
+                if (normalized is null)
+                    await _host.DeleteSecretAsync(ApiKeySecretName);
+                else
+                    await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                if (changed)
+                {
+                    try
+                    {
+                        // A host can throw after committing a secret. Restore only for the unchanged key.
+                        var savedKey = NormalizeApiKey(await _host.LoadSecretAsync(ApiKeySecretName));
+                        if (string.Equals(savedKey, _apiKey, StringComparison.Ordinal))
+                            _host.SetSetting(ApiCatalogSnapshotSettingName, previousCatalog);
+                    }
+                    catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
+                    { _host.Log(PluginLogLevel.Warning, "Could not restore the previous model catalog after a failed API key change."); }
+                }
+                throw;
+            }
 
             _apiKey = normalized;
 
@@ -1121,8 +1147,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     {
         if (AvailableTranscriptionModelEntries.Count == 0)
         {
-            _selectedModelId = _selectedApiModelName = null;
             if (persist) _host?.SetSetting<string?>(SelectedModelSettingName, null);
+            _selectedModelId = _selectedApiModelName = null;
             return;
         }
         var entry = AvailableTranscriptionModelEntries.FirstOrDefault(model =>
@@ -1133,11 +1159,10 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
                     FallbackTranscriptionModelEntries[0].Id,
                     StringComparison.OrdinalIgnoreCase))
             ?? AvailableTranscriptionModelEntries[0];
-        _selectedModelId = entry.Id;
-        _selectedApiModelName = entry.ApiModelName;
-
         if (persist)
             _host?.SetSetting(SelectedModelSettingName, entry.Id);
+        _selectedModelId = entry.Id;
+        _selectedApiModelName = entry.ApiModelName;
     }
 
     private void ApplyTranscriptionCatalog(
@@ -1255,15 +1280,36 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             throw new InvalidDataException("ChatGPT did not return a complete login.");
         var session = new SavedOAuthSession(tokens.AccessToken, tokens.RefreshToken, tokens.IdToken,
             metadata.AccountId, metadata.PlanType, metadata.ExpiresAt);
+        await CommitOAuthSessionAsync(session, accountChanged);
+    }
+
+    private async Task CommitOAuthSessionAsync(SavedOAuthSession session, bool resetCatalog)
+    {
         if (_host is null) throw new InvalidOperationException("The plugin is not active.");
-        await _host.StoreSecretAsync(OAuthSessionSecretName, JsonSerializer.Serialize(session));
+        var previousCatalog = new ChatGptCatalogSnapshot(_hasFetchedChatGptCatalog, _fetchedChatGptModels);
+        var previousSession = resetCatalog ? await _host.LoadSecretAsync(OAuthSessionSecretName) : null;
+        if (resetCatalog)
+            _host.SetSetting(ChatGptCatalogSnapshotSettingName, new ChatGptCatalogSnapshot(false, []));
+        try { await _host.StoreSecretAsync(OAuthSessionSecretName, JsonSerializer.Serialize(session)); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (resetCatalog)
+            {
+                try
+                {
+                    if (string.Equals(await _host.LoadSecretAsync(OAuthSessionSecretName), previousSession, StringComparison.Ordinal))
+                        _host.SetSetting(ChatGptCatalogSnapshotSettingName, previousCatalog);
+                }
+                catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
+                { _host.Log(PluginLogLevel.Warning, "Could not restore the previous model catalog after a failed ChatGPT account change."); }
+            }
+            throw;
+        }
         ApplyOAuthSession(session);
-        if (accountChanged)
+        if (resetCatalog)
         {
             _fetchedChatGptModels = [];
             _hasFetchedChatGptCatalog = false;
-            _host.SetSetting(HasFetchedChatGptCatalogSettingName, false);
-            _host.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
         }
         NormalizeSelectedLlmModel(persist: true);
         _host.NotifyCapabilitiesChanged();
@@ -1407,5 +1453,6 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     private sealed record OpenAiModelsResponse(List<OpenAiFetchedModel?> Data);
     internal sealed record ApiCatalogSnapshot(bool HasFetched, List<OpenAiFetchedModel> LlmModels, List<OpenAiFetchedModel> TranscriptionModels);
+    internal sealed record ChatGptCatalogSnapshot(bool HasFetched, List<OpenAiChatGptModel> Models);
     private sealed record OpenAiChatGptModelsResponse(List<OpenAiChatGptModel?> Models);
 }
