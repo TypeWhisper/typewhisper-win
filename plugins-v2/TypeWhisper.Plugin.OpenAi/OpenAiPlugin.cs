@@ -190,6 +190,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _hasFetchedApiCatalog = host.GetSetting<bool>(HasFetchedApiCatalogSettingName) || _fetchedLlmModels.Count > 0;
         _fetchedTranscriptionModels =
             host.GetSetting<List<OpenAiFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? [];
+        _hasFetchedApiCatalog |= _fetchedTranscriptionModels.Count > 0;
         _fetchedChatGptModels =
             host.GetSetting<List<OpenAiChatGptModel>>(FetchedChatGptModelsSettingName) ?? [];
         _oauthAccountId = host.GetSetting<string>(OAuthAccountIdSettingName);
@@ -1084,7 +1085,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     }
 
     private IReadOnlyList<TranscriptionModelEntry> AvailableTranscriptionModelEntries =>
-        _availableTranscriptionModelEntries.Count > 0
+        _hasFetchedApiCatalog || _availableTranscriptionModelEntries.Count > 0
             ? _availableTranscriptionModelEntries
             : FallbackTranscriptionModelEntries;
 
@@ -1105,6 +1106,12 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     private void SelectModelCore(string modelId, bool persist)
     {
+        if (AvailableTranscriptionModelEntries.Count == 0)
+        {
+            _selectedModelId = _selectedApiModelName = null;
+            if (persist) _host?.SetSetting<string?>(SelectedModelSettingName, null);
+            return;
+        }
         var entry = AvailableTranscriptionModelEntries.FirstOrDefault(model =>
                 string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase))
             ?? AvailableTranscriptionModelEntries.FirstOrDefault(model =>
@@ -1133,12 +1140,11 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             .ThenBy(model => IsBaseTranscriptionModel(model.Id) ? 0 : 1)
             .ThenBy(model => model.Id, StringComparer.Ordinal)
             .ToList();
-        _availableTranscriptionModelEntries = discoveredModels.Count > 0
+        _availableTranscriptionModelEntries = _hasFetchedApiCatalog || discoveredModels.Count > 0
             ? discoveredModels
             : FallbackTranscriptionModelEntries;
 
-        if (_selectedModelId is not null)
-            SelectModelCore(_selectedModelId, persist);
+        SelectModelCore(_selectedModelId ?? FallbackTranscriptionModelEntries[0].Id, persist);
     }
 
     private static TranscriptionModelEntry? CreateDiscoveredTranscriptionModelEntry(string modelId)

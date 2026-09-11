@@ -44,7 +44,6 @@ public partial class OpenAiPluginTests
 
     [Theory]
     [InlineData("{}")]
-    [InlineData("{\"access_token\":\"access\"}")]
     [InlineData("{\"refresh_token\":\"refresh\"}")]
     [InlineData("{\"access_token\":\" \",\"refresh_token\":\"refresh\"}")]
     public async Task IncompleteTokenResponseIsAnAuthenticationFailure(string json)

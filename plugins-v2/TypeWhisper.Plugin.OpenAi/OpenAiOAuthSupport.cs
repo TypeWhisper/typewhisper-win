@@ -146,7 +146,7 @@ internal static class OpenAiOAuthClient
             })
         };
 
-        return await SendTokenRequestAsync(httpClient, request, ct);
+        return await SendTokenRequestAsync(httpClient, request, ct, refreshToken);
     }
 
     /// <summary>
@@ -156,14 +156,9 @@ internal static class OpenAiOAuthClient
     {
         var idClaims = ParseJwtPayload(tokens.IdToken);
         var accessClaims = ParseJwtPayload(tokens.AccessToken);
-        var claims = idClaims ?? accessClaims;
-
         var accountId = preferredAccountId
-            ?? GetString(claims, "chatgpt_account_id")
-            ?? GetNestedString(claims, "https://api.openai.com/auth", "chatgpt_account_id")
-            ?? GetFirstOrganizationId(claims);
-        var planType = GetString(claims, "chatgpt_plan_type")
-            ?? GetNestedString(claims, "https://api.openai.com/auth", "chatgpt_plan_type");
+            ?? AccountId(idClaims) ?? AccountId(accessClaims);
+        var planType = PlanType(idClaims) ?? PlanType(accessClaims);
         var expiresAt = GetDouble(accessClaims, "exp") is { } exp
             ? DateTimeOffset.FromUnixTimeSeconds((long)exp)
             : DateTimeOffset.UtcNow.AddSeconds(tokens.ExpiresIn ?? 3600);
@@ -171,10 +166,19 @@ internal static class OpenAiOAuthClient
         return new OpenAiOAuthMetadata(accountId, planType, expiresAt);
     }
 
+    private static string? AccountId(Dictionary<string, JsonElement>? claims) =>
+        GetString(claims, "chatgpt_account_id")
+        ?? GetNestedString(claims, "https://api.openai.com/auth", "chatgpt_account_id")
+        ?? GetFirstOrganizationId(claims);
+
+    private static string? PlanType(Dictionary<string, JsonElement>? claims) =>
+        GetString(claims, "chatgpt_plan_type")
+        ?? GetNestedString(claims, "https://api.openai.com/auth", "chatgpt_plan_type");
+
     private static async Task<OpenAiOAuthTokenResponse> SendTokenRequestAsync(
         HttpClient httpClient,
         HttpRequestMessage request,
-        CancellationToken ct)
+        CancellationToken ct, string? existingRefreshToken = null)
     {
         using var response = await OpenAiApiTransport.SendWithErrorHandlingAsync(httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
@@ -182,9 +186,12 @@ internal static class OpenAiOAuthClient
         {
             var tokens = JsonSerializer.Deserialize<OpenAiOAuthTokenResponse>(
                 json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (tokens is null || string.IsNullOrWhiteSpace(tokens.AccessToken) || string.IsNullOrWhiteSpace(tokens.RefreshToken))
+            if (tokens is null || string.IsNullOrWhiteSpace(tokens.AccessToken))
                 throw new PluginRequestException("OpenAI token response could not be parsed.", PluginRequestFailureKind.Authentication);
-            return tokens;
+            var refreshToken = tokens.RefreshToken ?? existingRefreshToken;
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                throw new PluginRequestException("OpenAI token response could not be parsed.", PluginRequestFailureKind.Authentication);
+            return tokens with { RefreshToken = refreshToken };
         }
         catch (JsonException ex)
         {

@@ -6,6 +6,36 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class OpenAiPluginTests
 {
     [Fact]
+    public async Task EmptyDiscoveredTranscriptionCatalogSurvivesReloadAndLaterRecovers()
+    {
+        var audio = false;
+        using var client = new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse(audio
+            ? """{"data":[{"id":"whisper-1"}]}"""
+            : """{"data":[{"id":"gpt-4.1-mini"}]}"""))));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "fixture-key";
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(host);
+        await plugin.RefreshAvailableLlmModelsAsync();
+        Assert.Empty(plugin.TranscriptionModels);
+        Assert.Null(plugin.SelectedModelId);
+        plugin.SelectModel("whisper-1");
+        Assert.Null(plugin.SelectedModelId);
+        using var reloaded = new OpenAiPlugin();
+        await reloaded.ActivateAsync(host);
+        Assert.Empty(reloaded.TranscriptionModels);
+        Assert.Null(reloaded.SelectedModelId);
+
+        audio = true;
+        await plugin.RefreshAvailableLlmModelsAsync();
+        Assert.Equal("whisper-1", Assert.Single(plugin.TranscriptionModels).Id);
+        Assert.Equal("whisper-1", plugin.SelectedModelId);
+        await reloaded.SetApiKeyAsync("replacement-key");
+        Assert.NotEmpty(reloaded.TranscriptionModels);
+        Assert.NotNull(reloaded.SelectedModelId);
+    }
+
+    [Fact]
     public async Task EmptyDiscoveredTextCatalogSurvivesReloadFailureAndKeyReplacement()
     {
         var fail = false;
