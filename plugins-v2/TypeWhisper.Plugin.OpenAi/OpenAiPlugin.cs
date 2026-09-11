@@ -797,6 +797,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     {
         var lowered = id.ToLowerInvariant();
         var hasChatPrefix = lowered.StartsWith("gpt-", StringComparison.Ordinal)
+            || lowered is "o1" or "o3"
             || lowered.StartsWith("o1-", StringComparison.Ordinal)
             || lowered.StartsWith("o3-", StringComparison.Ordinal)
             || lowered.StartsWith("o4-", StringComparison.Ordinal)

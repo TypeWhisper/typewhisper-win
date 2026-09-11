@@ -608,6 +608,15 @@ public partial class OpenAiPluginTests
     }
 
     [Theory]
+    [InlineData("o1")]
+    [InlineData("o3")]
+    [InlineData("o1-2024-12-17")]
+    [InlineData("o3-mini")]
+    public void ModelDiscovery_IncludesReasoningModelsWithAndWithoutSuffix(string model) => Assert.True(OpenAiPlugin.IsChatModel(model));
+
+    [Theory]
+    [InlineData("o10")]
+    [InlineData("o30")]
     [InlineData("gpt-live-1")]
     [InlineData("gpt-3.5-turbo-instruct")]
     [InlineData("gpt-3.5-turbo-instruct-0914")]
