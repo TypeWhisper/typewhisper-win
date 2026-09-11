@@ -606,7 +606,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             systemPrompt,
             userText,
             ct,
-            maxOutputTokens: SupportsReasoningEffort(modelId)
+            maxOutputTokens: UsesReasoningTokens(modelId)
                 ? LlmOutputTokenBudget.CalculateWithReasoningReserve(systemPrompt, userText)
                 : LlmOutputTokenBudget.Calculate(systemPrompt, userText),
             maxOutputTokenParameter: OutputTokenParameter(modelId),
@@ -616,10 +616,20 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     internal static bool UsesResponsesApi(string modelId) =>
         modelId.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase)
+        || modelId.Equals("o1-pro", StringComparison.OrdinalIgnoreCase)
+        || modelId.StartsWith("o1-pro-", StringComparison.OrdinalIgnoreCase)
+        || modelId.Equals("o3-pro", StringComparison.OrdinalIgnoreCase)
+        || modelId.StartsWith("o3-pro-", StringComparison.OrdinalIgnoreCase)
         || modelId.Equals("gpt-6-astra", StringComparison.OrdinalIgnoreCase)
         || modelId.StartsWith("gpt-6-astra-", StringComparison.OrdinalIgnoreCase);
 
     internal static bool SupportsReasoningEffort(string modelId) => SupportedReasoningEfforts(modelId).Length > 0;
+
+    internal static bool UsesReasoningTokens(string modelId) =>
+        !modelId.Contains("-chat", StringComparison.OrdinalIgnoreCase) &&
+        (UsesResponsesApi(modelId) || modelId.StartsWith("o1", StringComparison.OrdinalIgnoreCase)
+            || modelId.StartsWith("o3", StringComparison.OrdinalIgnoreCase)
+            || modelId.StartsWith("o4", StringComparison.OrdinalIgnoreCase));
 
     // Matches the macOS plugin's per-model reasoning capabilities.
     internal static string[] SupportedReasoningEfforts(string modelId)

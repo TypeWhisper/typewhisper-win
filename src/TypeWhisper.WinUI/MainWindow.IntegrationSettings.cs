@@ -46,6 +46,7 @@ public sealed partial class MainWindow
     private async void ShowIntegrationPage(string? pluginId)
     {
         _discoverSettings = pluginId is null;
+        if (_discoverSettings) PluginsView.CloseSettingsPage();
         _integrationSearch!.Visibility = _discoverSettings ? Visibility.Visible : Visibility.Collapsed;
         PluginsView.Visibility = _discoverSettings ? Visibility.Collapsed : Visibility.Visible;
         MarketplaceView.Visibility = _discoverSettings ? Visibility.Visible : Visibility.Collapsed;

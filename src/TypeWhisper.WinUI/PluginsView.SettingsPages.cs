@@ -51,6 +51,7 @@ public sealed partial class PluginsView
             row.Update.IsEnabled = !_changingPlugin && !_runtime.Packages.Updates.Busy && _runtime.CanChangeProvider;
             var selected = Path.GetFileName(plugin.Id) == _selectedSettingsPlugin;
             row.Page.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            if (!selected) row.Settings.Content = null;
             if (selected)
             {
                 PluginPageTitle.Text = plugin.Title;
@@ -123,6 +124,12 @@ public sealed partial class PluginsView
         _selectedSettingsPlugin = Path.GetFileName(pluginId);
         RefreshSettingsPages();
         PluginContentScroll.ChangeView(null, 0, null, true);
+    }
+
+    internal void CloseSettingsPage()
+    {
+        _selectedSettingsPlugin = null;
+        foreach (var row in _settingsRows.Values) row.Settings.Content = null;
     }
 
     private static HandCursorButton SettingsButton(string title) => new() { Content = title,

@@ -70,7 +70,7 @@ internal sealed class OpenAiResponsesClient
             }),
             ["store"] = OpenAiJson.Element(false),
             ["max_output_tokens"] = OpenAiJson.Element(
-                string.IsNullOrWhiteSpace(reasoningEffort)
+                string.IsNullOrWhiteSpace(reasoningEffort) && !OpenAiPlugin.UsesReasoningTokens(model)
                     ? LlmOutputTokenBudget.Calculate(systemPrompt, userText)
                     : LlmOutputTokenBudget.CalculateWithReasoningReserve(systemPrompt, userText)),
         };

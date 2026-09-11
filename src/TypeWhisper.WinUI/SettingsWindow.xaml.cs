@@ -32,6 +32,7 @@ public sealed partial class SettingsWindow : Window
     private readonly List<HandCursorButton> _pluginNavigationButtons = [];
     private (string Id, string Title)[] _integrationItems = [];
     internal event Action<string?>? IntegrationRequested;
+    internal event Action? IntegrationDismissed;
     private bool _updating = true;
     private bool _liveTranscriptionAvailable = true;
     internal void SetLiveTranscriptionAvailability(bool available)
@@ -306,6 +307,7 @@ public sealed partial class SettingsWindow : Window
         SettingsScroll.Visibility = category == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         EditorScroll.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
         var integration = category == "Integrations" || category.StartsWith("plugin:", StringComparison.Ordinal);
+        if (!integration) IntegrationDismissed?.Invoke();
         IntegrationsHost.Visibility = integration ? Visibility.Visible : Visibility.Collapsed;
         var catalog = category != "Appearance" && category != "Overlay editor" && !integration;
         CatalogScroll.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;

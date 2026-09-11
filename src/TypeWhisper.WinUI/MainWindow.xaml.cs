@@ -1189,6 +1189,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.SetIntegrationsContent(_integrationSettingsHost!);
             _settingsWindow.NavigateIntegrationBack = NavigateIntegrationSettingsBack;
             _settingsWindow.IntegrationRequested += ShowIntegrationPage;
+            _settingsWindow.IntegrationDismissed += PluginsView.CloseSettingsPage;
             _settingsWindow.UpdateIntegrationNavigation(PluginsView.SettingsNavigationItems);
             _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
