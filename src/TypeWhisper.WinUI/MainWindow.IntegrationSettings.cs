@@ -50,6 +50,7 @@ public sealed partial class MainWindow
         PluginsView.Visibility = _discoverSettings ? Visibility.Collapsed : Visibility.Visible;
         MarketplaceView.Visibility = _discoverSettings ? Visibility.Visible : Visibility.Collapsed;
         _integrationSearch.IsEnabled = _discoverSettings && !MarketplaceView.IsDetail;
+        if (!_discoverSettings) _integrationSearch.Text = "";
         if (_discoverSettings) MarketplaceView.Filter(_integrationSearch.Text);
         else await PluginsView.OpenProviderSettingsAsync(pluginId!);
     }
