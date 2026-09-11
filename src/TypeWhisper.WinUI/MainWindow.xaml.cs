@@ -59,7 +59,6 @@ public sealed partial class MainWindow : Window
         new("Pinned", "history", "History", "Browse, search, copy, and export transcriptions", "H", "Opens History in workspace mode. Full transcript search remains inside this explicit scope."),
         new("Pinned", "recorder", "Recorder", "Record microphone and system audio", "R", "Opens the recorder workspace without interrupting active dictation."),
         new("Pinned", "workflow", "Workflows", "Run and manage reusable text workflows", "W", "Choose a workflow, inspect its provider, and run it against selected or dictated text."),
-        new("Suggested", "plugin", "Integrations", "Discover plugins and manage provider settings", "", "Shows installed plugins, their health, permissions, settings, and updates."),
         new("Suggested", "settings", "Settings", "Audio, hotkeys, privacy, account, and updates", "Ctrl ,", "Opens the dedicated Settings surface for global application configuration."),
         new("Suggested", "file", "Transcribe file", "Drop or choose audio and video files", "", "Opens the file transcription queue in workspace mode."),
         new("Suggested", "dictionary", "Dictionary", "Your words and preferred spellings", "D", "Manage words and correction rules used by TypeWhisper."),
@@ -474,43 +473,17 @@ public sealed partial class MainWindow : Window
         HistoryView.LauncherRequested += (_, _) => { CloseHistory(); SearchBox.Text = string.Empty; };
         RecorderView.LauncherRequested += (_, _) => { CloseRecorder(); SearchBox.Text = string.Empty; };
         WorkflowsView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
-        PluginsView.ExitRequested += (_, _) => ClosePlugins();
-        PluginsView.LauncherRequested += (_, _) => { ClosePlugins(); SearchBox.Text = string.Empty; };
-        PluginsView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
         MarketplaceView.ConfigureRuntime(_dictation);
-        MarketplaceView.ExitRequested += (_, _) => CloseMarketplace();
-        MarketplaceView.LauncherRequested += (_, _) => { CloseMarketplace(); SearchBox.Text = string.Empty; };
-        MarketplaceView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
-        MarketplaceView.DetailModeChanged += detail =>
-        {
-            if (!_marketplaceOpen) return;
-            SearchBox.IsEnabled = !detail;
-            SearchSurface.IsHitTestVisible = !detail;
-            SearchSurface.Opacity = detail ? 0.5 : 1;
-        };
-        MarketplaceView.ManageRequested += async id =>
-        {
-            CloseMarketplace();
-            SearchBox.Text = string.Empty;
-            OpenPlugins();
-            await PluginsView.OpenInstalledAsync(id);
-        };
+        PluginsView.UseSettingsLayout();
+        MarketplaceView.UseSettingsLayout();
         PluginsView.MarketplaceRequested += (_, _) => SwitchIntegrationTab(discover: true);
+        MarketplaceView.InstalledRequested += (_, _) => SwitchIntegrationTab(discover: false);
+        MarketplaceView.ExitRequested += (_, _) => SwitchIntegrationTab(discover: false);
+        MarketplaceView.LauncherRequested += (_, _) => SwitchIntegrationTab(discover: false);
+        MarketplaceView.ManageRequested += id => OpenProviderSettings(id);
         MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
         PluginsView.RestartRequested = RestartForPluginUpdateAsync;
-        MarketplaceView.InstalledRequested += (_, _) => SwitchIntegrationTab(discover: false);
-        PluginsView.ReturnToDictationRequested += (_, _) =>
-        {
-            if (_pluginsOpen) ClosePlugins();
-            OpenSettings();
-        };
-        PluginsView.DetailModeChanged += detail =>
-        {
-            if (!_pluginsOpen) return;
-            SearchBox.IsEnabled = !detail;
-            SearchSurface.IsHitTestVisible = !detail;
-            SearchSurface.Opacity = detail ? 0.5 : 1;
-        };
+        InitializeIntegrationSettings();
         WorkflowsView.ConfigurationModeChanged += editing =>
         {
             SearchBox.IsEnabled = !editing;
@@ -1213,6 +1186,10 @@ public sealed partial class MainWindow : Window
         if (_settingsWindow is null)
         {
             _settingsWindow = new SettingsWindow(OverlayPreferences, _settingsValues);
+            _settingsWindow.SetIntegrationsContent(_integrationSettingsHost!);
+            _settingsWindow.NavigateIntegrationBack = NavigateIntegrationSettingsBack;
+            _settingsWindow.IntegrationRequested += ShowIntegrationPage;
+            _settingsWindow.UpdateIntegrationNavigation(PluginsView.SettingsNavigationItems);
             _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
@@ -1274,6 +1251,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.WorkspaceRequested += OpenUtility;
             _settingsWindow.Closed += (_, _) =>
             {
+                _settingsWindow?.DetachIntegrationsContent();
                 CloseRecoveryView(recoveryView);
                 _settingsWindow = null;
             };
@@ -1336,43 +1314,15 @@ public sealed partial class MainWindow : Window
         _settingsWindow!.ShowSelectComparison();
     }
 
-    private void SwitchIntegrationTab(bool discover)
+    private void SwitchIntegrationTab(bool discover) => ShowIntegrationSettings(discover);
+
+    private void OpenProviderSettings(string pluginId)
     {
-        var launcherQuery = _launcherQuery;
-        if (_pluginsOpen) ClosePlugins();
-        if (_marketplaceOpen) CloseMarketplace();
-        if (discover) OpenMarketplace(); else OpenPlugins();
-        _launcherQuery = launcherQuery;
+        OpenSettings();
+        _settingsWindow?.ShowCategory("plugin:" + pluginId);
     }
 
-    private async void OpenProviderSettings(string pluginId)
-    {
-        if (_historyOpen || _recorderOpen || _workflowsOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen)
-        {
-            _settingsWindow?.ShowIntegrationNavigationHint();
-            return;
-        }
-        _settingsWindow?.AppWindow.Hide();
-        ShowFromActivation();
-        if (_marketplaceOpen) SwitchIntegrationTab(discover: false);
-        else if (!_pluginsOpen) OpenPlugins();
-        await PluginsView.OpenProviderSettingsAsync(pluginId);
-    }
-
-    private void OpenMarketplace()
-    {
-        _launcherQuery = SearchBox.Text;
-        _marketplaceOpen = true;
-        CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
-        MarketplaceView.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search plugins by name or purpose…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Marketplace search");
-        SearchBox.Text = string.Empty;
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        MarketplaceView.Filter(string.Empty);
-        SearchBox.Focus(FocusState.Programmatic);
-    }
+    private void OpenMarketplace() => ShowIntegrationSettings(true);
 
     private void CloseMarketplace()
     {
@@ -1393,20 +1343,7 @@ public sealed partial class MainWindow : Window
         SearchBox.Focus(FocusState.Programmatic);
     }
 
-    private void OpenPlugins()
-    {
-        _launcherQuery = SearchBox.Text;
-        _pluginsOpen = true;
-        CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
-        PluginsView.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search plugins by name or category…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Plugin search");
-        SearchBox.Text = string.Empty;
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        PluginsView.Filter(string.Empty);
-        SearchBox.Focus(FocusState.Programmatic);
-    }
+    private void OpenPlugins() => ShowIntegrationSettings(false);
 
     private void ClosePlugins()
     {

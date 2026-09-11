@@ -33,6 +33,9 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </local:HandCursorListView>
+            <ScrollViewer x:Name="PluginContentScroll" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="SettingsPages" Spacing="8" Margin="4,4,18,16" />
+            </ScrollViewer>
             <StackPanel x:Name="PluginEmptyState" Grid.Row="1" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                 <local:TypeWhisperGlyph Kind="search" Width="28" Height="28" />
                 <TextBlock Text="No matching plugins" FontSize="18" FontWeight="SemiBold" />

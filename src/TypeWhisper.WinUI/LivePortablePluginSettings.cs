@@ -9,6 +9,7 @@ internal sealed class LivePortablePluginSettings : UserControl
 {
     private readonly LocalDictationSession _session;
     private readonly string _id;
+    private readonly bool _showEnableAction;
     private readonly TextBlock _status = Label("");
     private readonly PasswordBox _key = new() { PlaceholderText = "Enter an API key" };
     private readonly StackPanel _credentials = new() { Spacing = 8 };
@@ -21,9 +22,10 @@ internal sealed class LivePortablePluginSettings : UserControl
     private bool _working;
     private string? _message;
 
-    internal LivePortablePluginSettings(LocalDictationSession session, string id)
+    internal LivePortablePluginSettings(LocalDictationSession session, string id, bool showEnableAction = true)
     {
         _session = session; _id = id;
+        _showEnableAction = showEnableAction;
         _models = new(session, id);
         var content = new StackPanel { Spacing = 14, Margin = new Thickness(0, 0, 14, 14) };
         content.Children.Add(_status);
@@ -55,7 +57,7 @@ internal sealed class LivePortablePluginSettings : UserControl
     {
         var state = _session.PluginRuntime.Snapshot().FirstOrDefault(item => item.PluginId == _id);
         _status.Text = _message ?? state?.Error ?? (state?.Enabled == true ? "Plugin enabled." : "Enable this plugin to configure its providers.");
-        _enable.Visibility = state?.Enabled == true ? Visibility.Collapsed : Visibility.Visible;
+        _enable.Visibility = _showEnableAction && state?.Enabled != true ? Visibility.Visible : Visibility.Collapsed;
         _key.PlaceholderText = state?.ApiKeyConfigured == true ? "Key saved - enter a replacement" : "Enter an API key";
         _credentials.Visibility = state?.HasApiKeySettings == true ? Visibility.Visible : Visibility.Collapsed;
         if (state?.Enabled == true && state.HasTextSettings)

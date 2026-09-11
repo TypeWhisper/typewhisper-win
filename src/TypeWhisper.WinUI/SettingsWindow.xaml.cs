@@ -25,6 +25,13 @@ public sealed partial class SettingsWindow : Window
     internal Func<string, string?>? CommitRecorderHotkeys { get; set; }
     internal Action<string, StackPanel, List<ChoicePicker>>? ConfigureLiveSettings { get; set; }
     internal event Action<string>? WorkspaceRequested;
+    internal void SetIntegrationsContent(UIElement content) => IntegrationsHost.Child = content;
+    internal void DetachIntegrationsContent() => IntegrationsHost.Child = null;
+    internal Func<bool>? NavigateIntegrationBack { get; set; }
+    private readonly StackPanel _integrationNavigation = new() { Spacing = 2 };
+    private readonly List<HandCursorButton> _pluginNavigationButtons = [];
+    private (string Id, string Title)[] _integrationItems = [];
+    internal event Action<string?>? IntegrationRequested;
     private bool _updating = true;
     private bool _liveTranscriptionAvailable = true;
     internal void SetLiveTranscriptionAvailability(bool available)
@@ -62,6 +69,7 @@ public sealed partial class SettingsWindow : Window
             ("APP", [("General", "settings"), ("Shortcuts", "keyboard")]),
             ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
             ("PERSONALIZATION", [("Appearance", "desktop")]),
+            ("INTEGRATIONS", []),
             ("DATA & SYSTEM", [("Privacy", "lock"), ("Advanced", "settings"), ("Premium", "lock"), ("Account & about", "info")])
         ];
         foreach (var group in groups)
@@ -69,6 +77,7 @@ public sealed partial class SettingsWindow : Window
             var section = new StackPanel { Spacing = 2 };
             section.Children.Add(new TextBlock { Text = group.Heading, FontSize = 10, CharacterSpacing = 70,
                 Foreground = (Brush)Application.Current.Resources["MutedBrush"], Margin = new Thickness(10, 0, 0, 6) });
+            if (group.Heading == "INTEGRATIONS") section.Children.Add(_integrationNavigation);
             foreach (var (category, icon) in group.Items)
             {
                 var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
@@ -253,6 +262,11 @@ public sealed partial class SettingsWindow : Window
         }
         if (e.Key == global::Windows.System.VirtualKey.Escape)
         {
+            if ((_currentCategory == "Integrations" || _currentCategory.StartsWith("plugin:", StringComparison.Ordinal)) && !_searchActive && NavigateIntegrationBack?.Invoke() == true)
+            {
+                e.Handled = true;
+                return;
+            }
             if (ComparisonScroll.Visibility == Visibility.Visible)
             {
                 if (!SelectComparison.CloseOpenPicker()) ShowCategory("Appearance");
@@ -291,10 +305,17 @@ public sealed partial class SettingsWindow : Window
         }
         SettingsScroll.Visibility = category == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         EditorScroll.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
-        var catalog = category != "Appearance" && category != "Overlay editor";
+        var integration = category == "Integrations" || category.StartsWith("plugin:", StringComparison.Ordinal);
+        IntegrationsHost.Visibility = integration ? Visibility.Visible : Visibility.Collapsed;
+        var catalog = category != "Appearance" && category != "Overlay editor" && !integration;
         CatalogScroll.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;
-        PreviewButton.Visibility = catalog ? Visibility.Collapsed : Visibility.Visible;
+        PreviewButton.Visibility = catalog || integration ? Visibility.Collapsed : Visibility.Visible;
         SessionHint.Text = catalog ? "UI preview only · no system changes" : "Overlay preferences are saved on this device";
+        if (integration)
+        {
+            SessionHint.Text = "Plugin settings are saved on this device";
+            IntegrationRequested?.Invoke(category == "Integrations" ? null : category[7..]);
+        }
         if (catalog)
         {
             _catalogPickers.Clear();
@@ -337,7 +358,7 @@ public sealed partial class SettingsWindow : Window
         else SessionHint.Text = "Open Files & recovery from the sidebar to review saved audio. Your current settings are kept intact.";
     }
     internal void ShowAccount() => ShowCategory("Account & about");
-    internal void ShowIntegrationNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open Integrations. Your current workspace is kept intact.";
+
     internal void ShowHistoryNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open History. Your current workspace is kept intact.";
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e)
@@ -386,6 +407,7 @@ public sealed partial class SettingsWindow : Window
         new("Appearance", "LiveTextToggle", "Live transcription", "Show streaming text beside the recording block.", "text"),
         new("Appearance", "DetailsToggle", "Technical details", "Show audio level and render frequency.", "signal", "dB FPS"),
         new("Overlay editor", "", "Customize layout", "Choose screen position and arrange the left and right widgets.", "layout", "appearance monitor top bottom drag"),
+        new("Integrations", "", "Integrations", "Manage installed plugins, accounts, models and updates.", "plugin", "OpenAI ChatGPT Groq ElevenLabs API key login discover marketplace"),
         new("Advanced", "", "HTTP API", "Connect local scripts and apps, configure the port, and copy the API token.", "settings", "advanced server localhost auto-discovery automation"),
         new("Premium", "", "Premium", "Premium access, commercial license and development activation.", "lock", "supporter calendar correction learning cloud sync"),
         new("Account & about", "", "Account & about", "License, Premium, updates and app information.", "info")
@@ -403,6 +425,7 @@ public sealed partial class SettingsWindow : Window
             return;
         }
         _searchActive = true;
+        IntegrationsHost.Visibility = Visibility.Collapsed;
         SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = PreviewButton.Visibility = Visibility.Collapsed;
         CatalogScroll.Visibility = Visibility.Visible;
         _catalogPickers.Clear();

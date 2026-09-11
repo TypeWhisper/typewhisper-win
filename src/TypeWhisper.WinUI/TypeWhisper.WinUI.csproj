@@ -42,6 +42,7 @@
     <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
     <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/PluginLogos/*.svg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

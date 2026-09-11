@@ -97,6 +97,7 @@
         <ScrollViewer x:Name="CatalogScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel x:Name="CatalogContent" Spacing="20" Margin="24,16,24,20" />
         </ScrollViewer>
+        <Border x:Name="IntegrationsHost" Grid.Column="1" Margin="16,16,16,0" Visibility="Collapsed" />
         <ScrollViewer x:Name="ComparisonScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <local:SelectComparison x:Name="SelectComparison" Margin="24,16,24,20" />
         </ScrollViewer>
