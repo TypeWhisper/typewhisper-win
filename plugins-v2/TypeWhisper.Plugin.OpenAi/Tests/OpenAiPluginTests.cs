@@ -1239,7 +1239,7 @@ public partial class OpenAiPluginTests
         }
         """);
         var host = new TestPluginHostServices();
-        var sut = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse("{}")))));
+        using var sut = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse("{}")))));
         await sut.ActivateAsync(host);
 
         try
