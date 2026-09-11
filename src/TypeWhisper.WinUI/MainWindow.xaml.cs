@@ -124,7 +124,7 @@ public sealed partial class MainWindow : Window
             _dictationInput = new(
                 () => { _dictation.LivePreviewEnabled = _transcriptPreviewEnabled; return _dictation.StartAsync(); },
                 _dictation.StopAsync, _dictation.CancelAsync,
-                () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanChangeProvider && _dictation.CanStartFromShortcut,
+                () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanStartFromShortcut,
                 () => _dictation.RecordingModePreferences.Current,
                 dispatch: action => DispatcherQueue.TryEnqueue(() => action()),
                 reportError: error => System.Diagnostics.Debug.WriteLine("Dictation input failed: " + error.GetType().Name));

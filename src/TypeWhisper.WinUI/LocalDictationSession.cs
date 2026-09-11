@@ -146,7 +146,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
-    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !PluginRuntime.IsBusy;
+    private bool CanStartSessionOperation => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel);
+    internal bool CanChangeProvider => CanStartSessionOperation && !PluginRuntime.IsBusy;
     internal bool CanStartPluginSettingsAction => CanChangeProvider && _gate.CurrentCount > 0;
     internal event Action? RecordingStarting;
     internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
@@ -484,11 +485,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     internal Task ToggleAsync() => SetRecordingAsync(null);
-    internal bool CanStartFromShortcut => IsReady
+    // Interactive settings actions are cancellable at recording startup. Admit the
+    // hotkey while one is active so it can reach that cancellation before using a provider.
+    internal bool CanStartFromShortcut => CanStartSessionOperation
+        && (!PluginRuntime.IsBusy || RecordingStarting is not null) && (IsReady
 #if DEBUG
         || CorrectionProbeEnabled
 #endif
-        ;
+        );
 #if DEBUG
     internal static bool CorrectionProbeEnabled => WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_CORRECTION_PROBE") == "1";
 #endif
