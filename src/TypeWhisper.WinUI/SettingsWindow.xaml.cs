@@ -315,7 +315,7 @@ public sealed partial class SettingsWindow : Window
 
     private async Task<bool> TryShowCategoryAsync(string category)
     {
-        if (!await ConfirmLeaveIntegrationAsync()) return false;
+        if (_checkingNavigation || category != _currentCategory && !await ConfirmLeaveIntegrationAsync()) return false;
         ShowCategoryCore(category);
         return true;
     }
