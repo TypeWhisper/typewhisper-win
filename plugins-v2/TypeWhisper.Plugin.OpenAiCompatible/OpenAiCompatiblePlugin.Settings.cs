@@ -1,18 +1,26 @@
 using System.Globalization;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenAiCompatible;
 
 public sealed partial class OpenAiCompatiblePlugin
 {
     private string _settingsProfileId = DefaultProfileId;
+    private readonly Dictionary<string, (string Url, string Version, List<FetchedModel> Models)> _draftCatalogs = new();
     private OpenAiCompatibleProfile SettingsProfile => RequireProfile(_settingsProfileId);
 
     /// <inheritdoc />
     public bool ShowApiKeySettings => true;
     /// <inheritdoc />
     public string ConnectionIdentity => _settingsProfileId;
+    /// <inheritdoc />
+    public string ProfileSelectorId => "profile";
+    /// <inheritdoc />
+    public string? AddProfileActionId => "add";
+    /// <inheritdoc />
+    public string? RemoveProfileActionId => IsDefaultProfile(_settingsProfileId) ? null : _settingsProfileId + "/delete";
     bool IApiKeyPlugin.IsConfigured => !string.IsNullOrWhiteSpace(GetApiKey(_settingsProfileId));
     Task IApiKeyPlugin.SetApiKeyAsync(string apiKey) => SetApiKeyAsync(apiKey, _settingsProfileId);
 
@@ -30,6 +38,8 @@ public sealed partial class OpenAiCompatiblePlugin
         get
         {
             var profile = SettingsProfile;
+            var catalog = _draftCatalogs.TryGetValue(profile.Id, out var draftCatalog) ? draftCatalog.Models : profile.FetchedModels;
+            var models = catalog.Select(m => m.Id).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
             string Id(string name) => profile.Id + "/" + name;
             return
             [
@@ -39,12 +49,26 @@ public sealed partial class OpenAiCompatiblePlugin
                     Choices = _profiles.Select(p => new PluginSettingChoice(p.Id, p.DisplayName)).ToArray()
                 },
                 new(Id("name"), L("Profile name", "Profilname"), L("Shown in model and workflow selections.", "Wird bei der Modell- und Workflow-Auswahl angezeigt."), profile.Name, 100) { Section = PluginSettingsSection.Connection },
-                new(Id("url"), L("Server URL", "Server-URL"), L("For example http://localhost:11434. A trailing /v1 is optional. Save before checking the connection.", "Zum Beispiel http://localhost:11434. Ein abschließendes /v1 ist optional. Vor dem Verbindungstest speichern."), profile.BaseUrl, 2048) { Section = PluginSettingsSection.Connection },
-                new(Id("transcription"), L("Transcription model ID", "Transkriptionsmodell-ID"), L("Enter the model ID accepted by your server. Leave empty if this server only processes text.", "Gib die Modell-ID deines Servers ein. Für reine Textverarbeitung leer lassen."), profile.SelectedModelId ?? "", 256) { Section = PluginSettingsSection.Transcription },
-                new(Id("text"), L("Text model ID", "Textmodell-ID"), L("Default model for text processing. You can enter a model missing from the server catalog.", "Standardmodell für die Textverarbeitung. Modelle außerhalb des Serverkatalogs sind ebenfalls möglich."), profile.SelectedLlmModelId ?? "", 256) { Section = PluginSettingsSection.TextProcessing },
+                new(Id("url"), L("Server URL", "Server-URL"), L("For example http://localhost:11434. A trailing /v1 is optional. You can test the connection before saving.", "Zum Beispiel http://localhost:11434. Ein abschließendes /v1 ist optional. Du kannst die Verbindung vor dem Speichern testen."), profile.BaseUrl, 2048) { Section = PluginSettingsSection.Connection },
+                new(Id("api-version"), L("API version (optional)", "API-Version (optional)"), L("Leave empty unless your server requires a version. Deployment-scoped batch endpoints need a dated version, such as 2025-03-01-preview.", "Leer lassen, wenn der Server keine Version benötigt. Bereitstellungsbezogene Batch-Endpunkte benötigen eine datierte Version, etwa 2025-03-01-preview."), profile.ApiVersion, 100) { Section = PluginSettingsSection.Connection },
+                new(Id("transcription"), L("Transcription model ID", "Transkriptionsmodell-ID"), L("Enter the model ID accepted by your server. Leave empty if this server only processes text.", "Gib die Modell-ID deines Servers ein. Für reine Textverarbeitung leer lassen."), profile.SelectedModelId ?? "", 256) { Section = PluginSettingsSection.Transcription, Suggestions = models },
+                new(Id("transport"), L("Transcription mode", "Transkriptionsmodus"), L("Auto uses realtime for gpt-live-transcribe and gpt-realtime-whisper; other models use batch. Choose Realtime for custom deployment aliases.", "Automatisch verwendet Echtzeit für gpt-live-transcribe und gpt-realtime-whisper, sonst Batch. Für eigene Echtzeit-Bereitstellungsnamen Echtzeit wählen."), profile.TranscriptionTransport)
+                { Section = PluginSettingsSection.Transcription, Choices = [new("auto", L("Automatic", "Automatisch")), new("batch", "Batch"), new("realtime", L("Realtime", "Echtzeit"))] },
+                new(Id("batch-endpoint"), L("Batch transcription endpoint", "Endpunkt für Batch-Transkription"), L("Deployment-scoped uses /deployments/{model}/audio/transcriptions and requires a dated API version. Realtime always uses /v1/realtime.", "Bereitstellungsbezogen verwendet /deployments/{model}/audio/transcriptions und benötigt eine datierte API-Version. Echtzeit verwendet immer /v1/realtime."), profile.BatchEndpoint)
+                { Section = PluginSettingsSection.Transcription, Choices = [new("standard", "Standard v1"), new("deployment-scoped", L("Deployment-scoped", "Bereitstellungsbezogen"))], VisibleWhen = new(Id("transport"), ["auto", "batch"]) },
+                new(Id("text"), L("Text model ID", "Textmodell-ID"), L("Default model for text processing. You can enter a model missing from the server catalog.", "Standardmodell für die Textverarbeitung. Modelle außerhalb des Serverkatalogs sind ebenfalls möglich."), profile.SelectedLlmModelId ?? "", 256) { Section = PluginSettingsSection.TextProcessing, Suggestions = models },
+                new(Id("llm-api"), L("Text API", "Text-API"), L("Choose the API supported by your server.", "Wähle die API deines Servers."), profile.LlmApi)
+                { Section = PluginSettingsSection.TextProcessing, Choices = [new("chat-completions", "Chat Completions"), new("responses", "Responses")] },
+                new(Id("reasoning"), L("Reasoning effort", "Reasoning-Stufe"), L("For the Responses API. An explicit effort omits temperature because reasoning models may reject it.", "Für die Responses-API. Bei einer expliziten Stufe wird keine Temperatur gesendet, da Reasoning-Modelle diese ablehnen können."), profile.ReasoningEffort)
+                { Section = PluginSettingsSection.TextProcessing, Choices = [new("", L("Provider default", "Anbieterstandard")), new("low", "Low"), new("medium", "Medium"), new("high", "High"), new("xhigh", "X High"), new("max", "Max")], VisibleWhen = new(Id("llm-api"), ["responses"]) },
+                new(Id("temperature-mode"), L("Temperature", "Temperatur"), L("Provider default sends no temperature override.", "Anbieterstandard sendet keine Temperaturvorgabe."), profile.TemperatureMode)
+                { Section = PluginSettingsSection.TextProcessing, Choices = [new("provider-default", L("Provider default", "Anbieterstandard")), new("custom", L("Custom", "Benutzerdefiniert"))] },
+                new(Id("temperature"), L("Temperature value", "Temperaturwert"), L("From 0 to 2. Lower values give more consistent results.", "Von 0 bis 2. Niedrigere Werte liefern gleichmäßigere Ergebnisse."), profile.Temperature.ToString(CultureInfo.InvariantCulture), 16)
+                { Section = PluginSettingsSection.TextProcessing, VisibleWhen = new(Id("temperature-mode"), ["custom"]) },
                 new(Id("thinking"), L("Thinking mode", "Denkmodus"), L("Uses reasoning_effort for DeepInfra and thinking.type for other compatible servers.", "Verwendet reasoning_effort für DeepInfra und thinking.type für andere kompatible Server."), profile.ThinkingEnabled ? "on" : "off")
                 {
                     Section = PluginSettingsSection.TextProcessing,
+                    VisibleWhen = new(Id("llm-api"), ["chat-completions"]),
                     Choices = [new("off", L("Off", "Aus")), new("on", L("On", "An"))]
                 },
                 new(Id("timeout"), L("Text request timeout", "Zeitlimit für Textanfragen"), L("Seconds, from 5 to 3600. Local models may need more time.", "Sekunden, zwischen 5 und 3600. Lokale Modelle benötigen eventuell mehr Zeit."), profile.LlmRequestTimeoutSeconds.ToString(CultureInfo.InvariantCulture), 4) { Section = PluginSettingsSection.TextProcessing }
@@ -67,9 +91,69 @@ public sealed partial class OpenAiCompatiblePlugin
             return Task.CompletedTask;
         }
 
-        // Only publish the edited profile after the durable write succeeds.
+        return SaveProfileSettingsAsync(new Dictionary<string, string> { [id] = value }, cancellationToken);
+    }
+
+    /// <summary>Saves non-secret profile fields together, preserving the stored API key.</summary>
+    public Task SaveProfileSettingsAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken)
+        => SaveProfileSettingsAsync(_settingsProfileId, values, null, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task SaveProfileSettingsAsync(string profileId, IReadOnlyDictionary<string, string> values,
+        string? apiKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (profileId != _settingsProfileId) throw new ArgumentException("Select the profile again before saving.");
         var profiles = CloneProfiles();
         var profile = profiles.Single(p => p.Id == _settingsProfileId);
+        var fields = TextSettings.Where(f => f.Id != ProfileSelectorId).ToDictionary(f => f.Id);
+        foreach (var (id, value) in values)
+        {
+            if (!fields.TryGetValue(id, out var field))
+                throw new ArgumentException("Setting is no longer available. Select the profile again.");
+            if (value.Length > field.MaxLength || field.Choices.Count > 0 && !field.Choices.Any(c => c.Value == value))
+                throw new ArgumentException("Invalid setting value for " + field.Title + ".");
+            ApplyProfileField(profile, id, value);
+        }
+        if (profile.BatchEndpoint == "deployment-scoped" && !UsesRealtime(profile) && !IsDatedApiVersion(profile.ApiVersion))
+            throw new ArgumentException("Deployment-scoped batch transcription requires a dated API version, such as 2025-03-01-preview.");
+        if (_draftCatalogs.TryGetValue(profileId, out var catalog) && catalog.Url == profile.BaseUrl && catalog.Version == profile.ApiVersion)
+            profile.FetchedModels = catalog.Models;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(apiKey)) { CommitProfiles(profiles); _draftCatalogs.Remove(profileId); return; }
+
+        // Stage a replacement in encrypted storage. The profile write is the commit point:
+        // neither a failed write nor a process exit can replace the preceding active key.
+        var oldSecret = SecretKey(profileId);
+        profile.ApiKeyRevision = Guid.NewGuid().ToString("N");
+        var newSecret = SecretKey(profileId, profile.ApiKeyRevision);
+        var normalizedKey = apiKey.Trim();
+        if (_host is not null) await _host.StoreSecretAsync(newSecret, normalizedKey);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommitProfiles(profiles, notify: false);
+        }
+        catch
+        {
+            await TryDeleteUnusedSecretAsync(newSecret);
+            throw;
+        }
+        _apiKeys[profileId] = normalizedKey;
+        _draftCatalogs.Remove(profileId);
+        _host?.NotifyCapabilitiesChanged();
+        await TryDeleteUnusedSecretAsync(oldSecret);
+    }
+
+    private async Task TryDeleteUnusedSecretAsync(string secret)
+    {
+        try { if (_host is not null) await _host.DeleteSecretAsync(secret); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { _host?.Log(PluginLogLevel.Warning, "An unused encrypted key could not be cleaned up."); }
+    }
+
+    private static void ApplyProfileField(OpenAiCompatibleProfile profile, string id, string value)
+    {
         switch (id[(id.IndexOf('/') + 1)..])
         {
             case "name":
@@ -83,6 +167,18 @@ public sealed partial class OpenAiCompatiblePlugin
                 if (profile.BaseUrl != url) profile.FetchedModels = [];
                 profile.BaseUrl = url; break;
             case "transcription": profile.SelectedModelId = NullIfWhiteSpace(value); break;
+            case "api-version":
+                if (profile.ApiVersion != value.Trim()) profile.FetchedModels = [];
+                profile.ApiVersion = value.Trim(); break;
+            case "transport": profile.TranscriptionTransport = value; break;
+            case "batch-endpoint": profile.BatchEndpoint = value; break;
+            case "llm-api": profile.LlmApi = value; break;
+            case "reasoning": profile.ReasoningEffort = value; break;
+            case "temperature-mode": profile.TemperatureMode = value; break;
+            case "temperature":
+                if (!double.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var temperature) || !double.IsFinite(temperature) || temperature is < 0 or > 2)
+                    throw new ArgumentException("Enter a temperature from 0 to 2 using a decimal point.");
+                profile.Temperature = temperature; break;
             case "text": profile.SelectedLlmModelId = NullIfWhiteSpace(value); break;
             case "thinking": profile.ThinkingEnabled = value == "on"; break;
             case "timeout":
@@ -91,8 +187,6 @@ public sealed partial class OpenAiCompatiblePlugin
                 profile.LlmRequestTimeoutSeconds = seconds; break;
             default: throw new ArgumentException("Unknown setting.");
         }
-        CommitProfiles(profiles);
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -103,7 +197,8 @@ public sealed partial class OpenAiCompatiblePlugin
             var actions = new List<PluginSettingsAction>
             {
                 new("add", L("Add server profile", "Serverprofil hinzufügen"), L("Creates an empty profile with its own key and model choices.", "Erstellt ein leeres Profil mit eigenem Schlüssel und eigener Modellwahl.")) { Section = PluginSettingsSection.Connection },
-                new(_settingsProfileId + "/refresh", L("Refresh models", "Modelle aktualisieren"), L("Fetches the model catalog from the saved server URL. Existing choices are retained.", "Lädt den Modellkatalog von der gespeicherten Server-URL. Die Modellwahl bleibt erhalten.")) { Section = PluginSettingsSection.Connection }
+                new(_settingsProfileId + "/check", L("Test connection", "Verbindung testen"), L("Tests the entered URL and API key without saving.", "Prüft die eingegebene URL und den API-Schlüssel, ohne zu speichern.")) { Section = PluginSettingsSection.Connection },
+                new(_settingsProfileId + "/refresh", L("Refresh models", "Modelle aktualisieren"), L("Fetches models using the entered server URL and API key. Save profile to keep the catalog and your choices.", "Lädt Modelle mit der eingegebenen Server-URL und dem API-Schlüssel. Profil speichern übernimmt den Katalog und deine Auswahl.")) { Section = PluginSettingsSection.Transcription }
             };
             if (!IsDefaultProfile(_settingsProfileId))
                 actions.Add(new(_settingsProfileId + "/delete", L("Remove this profile", "Dieses Profil entfernen"), L("Removes this profile and its saved key. Workflows using it will need another provider.", "Entfernt dieses Profil und seinen gespeicherten Schlüssel. Zugehörige Workflows benötigen danach einen anderen Anbieter.")) { Section = PluginSettingsSection.Connection });
@@ -119,7 +214,11 @@ public sealed partial class OpenAiCompatiblePlugin
         var profiles = CloneProfiles();
         if (id == "add")
         {
-            var profile = new OpenAiCompatibleProfile { Id = CreateProfileId(), Name = L("Custom Server", "Eigener Server") };
+            var baseName = L("Custom Server", "Eigener Server");
+            var name = baseName;
+            for (var suffix = 2; profiles.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)); suffix++)
+                name = baseName + " " + suffix;
+            var profile = new OpenAiCompatibleProfile { Id = CreateProfileId(), Name = name };
             profiles.Add(profile);
             CommitProfiles(profiles);
             _settingsProfileId = profile.Id;
@@ -129,22 +228,57 @@ public sealed partial class OpenAiCompatiblePlugin
         if (id.EndsWith("/delete", StringComparison.Ordinal))
         {
             var removedId = _settingsProfileId;
+            var removedSecret = SecretKey(removedId);
             // Persist removal first. A storage failure leaves the usable profile intact.
             profiles.RemoveAll(p => p.Id == removedId);
             CommitProfiles(profiles, notify: false);
             _settingsProfileId = DefaultProfileId;
-            try { if (_host is not null) await _host.DeleteSecretAsync(SecretKey(removedId)); }
+            _draftCatalogs.Remove(removedId);
+            try { if (_host is not null) await _host.DeleteSecretAsync(removedSecret); }
             finally { _apiKeys.Remove(removedId); _host?.NotifyCapabilitiesChanged(); }
             return L("Profile removed.", "Profil entfernt.");
         }
 
         using var timeout = CreateRequestTimeoutSource(cancellationToken, TimeSpan.FromSeconds(10));
+        if (id.EndsWith("/check", StringComparison.Ordinal))
+            return await ValidateConnectionAsync(_settingsProfileId, timeout.Token) ? L("Connection verified.", "Verbindung bestätigt.") : L("Connection failed. Check the server URL and key.", "Verbindung fehlgeschlagen. Prüfe Server-URL und Schlüssel.");
         var models = await FetchModelsAsync(_settingsProfileId, timeout.Token);
         if (models.Count == 0)
             return L("No models returned. Check the server and optional key. Saved models are unchanged.", "Keine Modelle erhalten. Prüfe Server und optionalen Schlüssel. Gespeicherte Modelle bleiben unverändert.");
         profiles.Single(p => p.Id == _settingsProfileId).FetchedModels = models;
         CommitProfiles(profiles);
         return L("Model list refreshed.", "Modellliste aktualisiert.");
+    }
+
+    /// <inheritdoc />
+    public async Task<PluginProfileActionResult> ExecuteProfileActionAsync(string profileId, string actionId, IReadOnlyDictionary<string, string> values,
+        string? apiKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (profileId != _settingsProfileId || actionId != profileId + "/check" && actionId != profileId + "/refresh")
+            throw new ArgumentException("Select the profile again before testing.");
+        var profile = CloneProfiles().Single(p => p.Id == profileId);
+        var fields = TextSettings.Where(f => f.Id != ProfileSelectorId).ToDictionary(f => f.Id);
+        foreach (var (id, value) in values)
+        {
+            if (!fields.TryGetValue(id, out var field) || value.Length > field.MaxLength ||
+                field.Choices.Count > 0 && !field.Choices.Any(c => c.Value == value)) throw new ArgumentException("Invalid profile setting.");
+            ApplyProfileField(profile, id, value);
+        }
+        using var timeout = CreateRequestTimeoutSource(cancellationToken, TimeSpan.FromSeconds(15));
+        using var request = new HttpRequestMessage(HttpMethod.Get, RequestUri(profile, "/v1/models"));
+        Authenticate(request, string.IsNullOrWhiteSpace(apiKey) ? GetApiKey(profileId) : apiKey);
+        using var response = await TypeWhisper.PluginSDK.Helpers.OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, timeout.Token);
+        if (actionId.EndsWith("/check", StringComparison.Ordinal)) return new(L("Connection verified.", "Verbindung bestätigt."));
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
+        var models = document.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array
+            ? data.EnumerateArray().Where(e => e.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+                .Select(e => new FetchedModel(e.GetProperty("id").GetString()!, null)).Where(m => !string.IsNullOrWhiteSpace(m.Id))
+                .DistinctBy(m => m.Id).OrderBy(m => m.Id, StringComparer.Ordinal).ToList() : [];
+        if (models.Count == 0) return new(L("No models returned. You can enter model IDs manually.", "Keine Modelle erhalten. Du kannst Modell-IDs manuell eingeben."));
+        cancellationToken.ThrowIfCancellationRequested();
+        _draftCatalogs[profileId] = (profile.BaseUrl, profile.ApiVersion, models);
+        return new(L($"{models.Count} models found. Choose models and save the profile.", $"{models.Count} Modelle gefunden. Wähle Modelle und speichere das Profil."), true);
     }
 
     private List<OpenAiCompatibleProfile> CloneProfiles() =>

@@ -28,4 +28,20 @@ internal sealed partial class LocalDictationSession
                 return true;
             });
         });
+
+    internal async Task<string?> SavePluginProfileSettingsAsync(string id, string profileId, IReadOnlyDictionary<string, string> values, string? apiKey)
+    {
+        string? validationError = null;
+        var error = await ChangeRegistryPluginAsync(id, async () =>
+        {
+            await PluginRuntime.UseConfigurationAsync(id, async (plugin, ct) =>
+            {
+                if (plugin is not IPluginProfileSettings settings) throw new NotSupportedException("Profile settings are unavailable.");
+                try { await settings.SaveProfileSettingsAsync(profileId, values, apiKey, ct); }
+                catch (ArgumentException ex) { validationError = ex.Message; }
+                return true;
+            });
+        });
+        return error ?? validationError;
+    }
 }

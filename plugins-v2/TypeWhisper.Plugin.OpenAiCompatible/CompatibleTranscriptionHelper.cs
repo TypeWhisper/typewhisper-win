@@ -68,7 +68,7 @@ internal static class CompatibleTranscriptionHelper
     public static async Task<PluginTranscriptionResult> TranscribeAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
         string model, OpenAiTranscriptionUpload upload, string? language, bool translate,
-        string responseFormat, CancellationToken ct, string? prompt = null)
+        string responseFormat, CancellationToken ct, string? prompt = null, Uri? endpointOverride = null)
     {
         ArgumentNullException.ThrowIfNull(upload);
 
@@ -89,12 +89,11 @@ internal static class CompatibleTranscriptionHelper
         if (!string.IsNullOrWhiteSpace(prompt))
             content.Add(new StringContent(prompt), "prompt");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        if (!string.IsNullOrWhiteSpace(apiKey))
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpointOverride ?? new Uri(endpoint));
+        OpenAiCompatiblePlugin.Authenticate(request, apiKey);
         request.Content = content;
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseTranscriptionResponse(json);
     }

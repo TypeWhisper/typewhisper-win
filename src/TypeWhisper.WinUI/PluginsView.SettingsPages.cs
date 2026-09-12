@@ -56,6 +56,7 @@ public sealed partial class PluginsView
             {
                 PluginPageTitle.Text = plugin.Title;
                 PluginSummary.Text = plugin.Status;
+                SettingsPluginActions.Content = row.Options;
                 row.Settings.Content ??= CreatePluginSettings(plugin);
             }
         }
@@ -67,33 +68,49 @@ public sealed partial class PluginsView
         }
     }
 
-    private UIElement CreatePluginSettings(Plugin plugin) => Path.GetFileName(plugin.Id) switch
+    private UIElement CreatePluginSettings(Plugin plugin)
     {
-        LocalTranscriptionPlugin.PluginId => new LiveModelsView(_runtime!),
-        _ => new LivePortablePluginSettings(_runtime!, Path.GetFileName(plugin.Id), showEnableAction: false)
-    };
+        var id = Path.GetFileName(plugin.Id);
+        SetProfileLayout(false);
+        if (id == LocalTranscriptionPlugin.PluginId) return new LiveModelsView(_runtime!);
+        var settings = new LivePortablePluginSettings(_runtime!, id, showEnableAction: false);
+        settings.ProfileLayoutChanged += profile => { if (_selectedSettingsPlugin == id) SetProfileLayout(profile); };
+        return settings;
+    }
+
+    private void SetProfileLayout(bool profile)
+    {
+        // The plugin summary describes its default provider, not the profile being edited.
+        PluginSummary.Visibility = profile ? Visibility.Collapsed : Visibility.Visible;
+        PluginContentScroll.VerticalScrollMode = profile ? ScrollMode.Disabled : ScrollMode.Auto;
+        PluginContentScroll.VerticalScrollBarVisibility = profile ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+        ContextActionsFooter.Visibility = profile ? Visibility.Collapsed : Visibility.Visible;
+    }
 
     private SettingsRow CreateSettingsRow(Plugin plugin)
     {
         var status = new TextBlock { FontSize = 12, Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
         var page = new Border { HorizontalAlignment = HorizontalAlignment.Stretch };
-        var body = new StackPanel { Spacing = 16, Margin = new Thickness(0, 4, 0, 4) };
-        body.Children.Add(new TextBlock { Text = plugin.Description, TextWrapping = TextWrapping.Wrap, FontSize = 12,
-            Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
-        var actions = new StackPanel { Spacing = 8, Orientation = Orientation.Horizontal };
+        var body = new Grid { RowSpacing = 8 };
+        body.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        body.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
+        var actions = new StackPanel { Spacing = 8 };
+        actions.Children.Add(new TextBlock { Text = plugin.Description, TextWrapping = TextWrapping.Wrap, FontSize = 12, MaxWidth = 280 });
         var toggle = SettingsButton("Enable plugin");
         var update = SettingsButton("Update plugin");
         var remove = SettingsButton("Uninstall…");
         actions.Children.Add(toggle); actions.Children.Add(update); actions.Children.Add(remove);
-        body.SizeChanged += (_, e) => actions.Orientation = e.NewSize.Width < 410 ? Orientation.Vertical : Orientation.Horizontal;
-        body.Children.Add(actions);
+        var options = SettingsButton("•••");
+        AutomationProperties.SetName(options, "Manage " + plugin.Title);
+        ToolTipService.SetToolTip(options, "Manage plugin");
+        options.Flyout = new Flyout { Content = actions };
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed };
         AutomationProperties.SetLiveSetting(message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         body.Children.Add(message);
-        body.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });
-        var settings = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        var settings = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
+        Grid.SetRow(settings, 1);
         body.Children.Add(settings); page.Child = body;
-        var row = new SettingsRow(plugin, page, status, toggle, update, remove, settings);
+        var row = new SettingsRow(plugin, page, status, toggle, update, remove, settings, options);
         async Task Run(Func<Task<string?>> operation)
         {
             if (_changingPlugin || _runtime?.CanChangeProvider != true) return;
@@ -129,6 +146,8 @@ public sealed partial class PluginsView
     internal void CloseSettingsPage()
     {
         _selectedSettingsPlugin = null;
+        SettingsPluginActions.Content = null;
+        SetProfileLayout(false);
         foreach (var row in _settingsRows.Values) row.Settings.Content = null;
     }
 
@@ -136,12 +155,13 @@ public sealed partial class PluginsView
         Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], HorizontalAlignment = HorizontalAlignment.Left };
 
     private sealed class SettingsRow(Plugin plugin, Border page, TextBlock status, HandCursorButton toggle,
-        HandCursorButton update, HandCursorButton remove, ContentControl settings)
+        HandCursorButton update, HandCursorButton remove, ContentControl settings, HandCursorButton options)
     {
         internal Plugin Plugin = plugin;
         internal readonly Border Page = page;
         internal readonly TextBlock Status = status;
         internal readonly HandCursorButton Toggle = toggle, Update = update, Remove = remove;
         internal readonly ContentControl Settings = settings;
+        internal readonly HandCursorButton Options = options;
     }
 }

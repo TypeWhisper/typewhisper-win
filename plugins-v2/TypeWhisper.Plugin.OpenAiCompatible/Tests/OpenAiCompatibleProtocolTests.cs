@@ -261,7 +261,7 @@ public partial class OpenAiCompatiblePluginTests
             Assert.False(defaultBody.RootElement.TryGetProperty("reasoning", out _));
             Assert.False(defaultBody.RootElement.TryGetProperty("reasoning_effort", out _));
             Assert.Equal(2048, defaultBody.RootElement.GetProperty("max_tokens").GetInt32());
-            Assert.Equal(0.1, defaultBody.RootElement.GetProperty("temperature").GetDouble());
+            Assert.False(defaultBody.RootElement.TryGetProperty("temperature", out _));
         }
 
         var profileChat = requests.Single(request =>
@@ -327,7 +327,7 @@ public partial class OpenAiCompatiblePluginTests
             Assert.False(root.TryGetProperty("reasoning", out _));
             Assert.False(root.TryGetProperty("thinking", out _));
             Assert.Equal(2048, root.GetProperty("max_tokens").GetInt32());
-            Assert.Equal(0.1, root.GetProperty("temperature").GetDouble());
+            Assert.False(root.TryGetProperty("temperature", out _));
 
             var messages = root.GetProperty("messages");
             Assert.Equal("system", messages[0].GetProperty("role").GetString());
@@ -644,6 +644,7 @@ public partial class OpenAiCompatiblePluginTests
         public List<string> Logs { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
         public bool FailWrites { get; set; }
+        public bool FailProfileWrites { get; set; }
 
         public Task StoreSecretAsync(string key, string value)
         {
@@ -669,7 +670,7 @@ public partial class OpenAiCompatiblePluginTests
 
         public void SetSetting<T>(string key, T value)
         {
-            if (FailWrites) throw new IOException("fixture storage failure");
+            if (FailWrites || FailProfileWrites && key == "profiles") throw new IOException("fixture storage failure");
             _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
         }
 
