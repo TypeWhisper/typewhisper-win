@@ -25,7 +25,14 @@ public sealed partial class OpenAiCompatiblePlugin
     }
 
     internal static bool UsesRealtime(OpenAiCompatibleProfile profile) => profile.TranscriptionTransport == "realtime" ||
-        profile.TranscriptionTransport == "auto" && profile.SelectedModelId?.Trim().ToLowerInvariant() is "gpt-live-transcribe" or "gpt-realtime-whisper";
+        profile.TranscriptionTransport == "auto" && (IsModelFamily(profile.SelectedModelId, "gpt-live-transcribe") || IsModelFamily(profile.SelectedModelId, "gpt-realtime-whisper"));
+
+    internal static bool IsModelFamily(string? modelId, string family)
+    {
+        var model = modelId?.Trim();
+        return string.Equals(model, family, StringComparison.OrdinalIgnoreCase) ||
+            model?.StartsWith(family + "-", StringComparison.OrdinalIgnoreCase) == true;
+    }
 
     internal static bool IsDatedApiVersion(string version) => Regex.IsMatch(version.Trim(), @"^\d{4}-\d{2}-\d{2}");
 

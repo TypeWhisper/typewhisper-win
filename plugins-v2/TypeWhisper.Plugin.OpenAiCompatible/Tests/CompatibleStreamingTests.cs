@@ -7,6 +7,28 @@ namespace TypeWhisper.Plugin.OpenAiCompatible.Portable.Tests;
 
 public sealed class CompatibleStreamingTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MissingItemIdsStillCompleteTheCommittedSession(bool completedFirst)
+    {
+        var socket = new ScriptedSocket();
+        await using var session = new CompatibleRealtimeStreamingSession(socket, new());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        socket.Push("""{"type":"session.updated"}""");
+        await session.StartAsync("custom", [], null, timeout.Token);
+        var updates = new List<string>();
+        session.TranscriptReceived += e => { if (e.IsFinal) updates.Add(e.Text); };
+        var finish = session.FinalizeAsync(timeout.Token);
+        const string committed = """{"type":"input_audio_buffer.committed"}""";
+        const string completed = """{"type":"conversation.item.input_audio_transcription.completed","transcript":"Hello world"}""";
+        socket.Push(completedFirst ? completed : committed);
+        socket.Push(completedFirst ? committed : completed);
+        await finish;
+        Assert.Equal(["Hello world"], updates);
+        Assert.Single(socket.Sent, s => s.Contains("input_audio_buffer.commit"));
+    }
+
     [Fact]
     public async Task RealtimeSessionWaitsForItsCommittedFinalTranscript()
     {

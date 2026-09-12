@@ -5,6 +5,20 @@ namespace TypeWhisper.Plugin.OpenAiCompatible.Portable.Tests;
 
 public partial class OpenAiCompatiblePluginTests
 {
+    [Theory]
+    [InlineData("gpt-live-transcribe-2026-07-28", true, true)]
+    [InlineData(" GPT-REALTIME-WHISPER-2026-07-28 ", true, false)]
+    [InlineData("custom-deployment", false, true)]
+    [InlineData("gpt-live-transcribex", false, true)]
+    public void AutomaticTransportRecognizesCanonicalModelFamilies(string model, bool realtime, bool live)
+    {
+        var profile = new OpenAiCompatibleProfile { SelectedModelId = model };
+        Assert.Equal(realtime, OpenAiCompatiblePlugin.UsesRealtime(profile));
+        Assert.Equal(live, CompatibleRealtimeStreamingSession.IsLiveModel(model));
+        profile.TranscriptionTransport = "batch";
+        Assert.False(OpenAiCompatiblePlugin.UsesRealtime(profile));
+    }
+
     [Fact]
     public void LanguageHintsNormalizeBeforeFilteringTheAutomaticSentinel()
     {

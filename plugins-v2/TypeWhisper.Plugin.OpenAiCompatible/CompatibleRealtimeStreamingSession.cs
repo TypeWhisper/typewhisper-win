@@ -154,7 +154,7 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
     }
 
     internal static bool IsLiveModel(string modelId, string protocol = "auto") => protocol == "live" ||
-        protocol != "whisper" && !string.Equals(modelId.Trim(), LegacyModelId, StringComparison.OrdinalIgnoreCase);
+        protocol != "whisper" && !OpenAiCompatiblePlugin.IsModelFamily(modelId, LegacyModelId);
 
     internal static string CreateAudioAppendPayload(ReadOnlySpan<byte> pcm16Audio)
     {
@@ -246,11 +246,9 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
                 using var document = JsonDocument.Parse(json);
                 var root = document.RootElement;
                 var type = root.TryGetProperty("type", out var typeValue) ? typeValue.GetString() : null;
-                if (root.TryGetProperty("item_id", out var itemValue) && itemValue.GetString() is { } itemId)
-                {
-                    if (type == "input_audio_buffer.committed") _committedItemId = itemId;
-                    if (type == "conversation.item.input_audio_transcription.completed") _completedItems.Add(itemId);
-                }
+                var itemId = CompatibleRealtimeTranscriptCollector.GetItemId(root);
+                if (type == "input_audio_buffer.committed") _committedItemId = itemId;
+                if (type == "conversation.item.input_audio_transcription.completed") _completedItems.Add(itemId);
                 if (changed && transcriptEvent is not null) TranscriptReceived?.Invoke(transcriptEvent);
                 if (_committedItemId is not null && _completedItems.Contains(_committedItemId)) _final.TrySetResult();
             }
@@ -403,7 +401,7 @@ internal sealed class CompatibleRealtimeTranscriptCollector
         {
             case "conversation.item.input_audio_transcription.delta":
             {
-                var itemId = GetString(root, "item_id") ?? "__unidentified_item__";
+                var itemId = GetItemId(root);
                 if (_completedTexts.ContainsKey(itemId)) return false;
                 var delta = GetString(root, "delta") ?? "";
                 _deltaTexts[itemId] = _deltaTexts.TryGetValue(itemId, out var current)
@@ -414,7 +412,7 @@ internal sealed class CompatibleRealtimeTranscriptCollector
             }
             case "conversation.item.input_audio_transcription.completed":
             {
-                var itemId = GetString(root, "item_id") ?? "__unidentified_item__";
+                var itemId = GetItemId(root);
                 if (_completedTexts.ContainsKey(itemId)) return false;
                 var transcript = (GetString(root, "transcript") ?? "").Trim();
                 if (!_completedTexts.ContainsKey(itemId))
@@ -436,6 +434,9 @@ internal sealed class CompatibleRealtimeTranscriptCollector
                 return false;
         }
     }
+
+    internal static string GetItemId(JsonElement root) =>
+        GetString(root, "item_id") is { Length: > 0 } id ? id : "__unidentified_item__";
 
     private static string? GetString(JsonElement root, string propertyName) =>
         root.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.String
