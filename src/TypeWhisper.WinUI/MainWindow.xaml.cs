@@ -1188,6 +1188,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow = new SettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.SetIntegrationsContent(_integrationSettingsHost!);
             _settingsWindow.NavigateIntegrationBack = NavigateIntegrationSettingsBack;
+            _settingsWindow.CanLeaveIntegrationAsync = PluginsView.CanLeaveSettingsAsync;
             _settingsWindow.IntegrationRequested += ShowIntegrationPage;
             _settingsWindow.IntegrationDismissed += PluginsView.CloseSettingsPage;
             _settingsWindow.UpdateIntegrationNavigation(PluginsView.SettingsNavigationItems);

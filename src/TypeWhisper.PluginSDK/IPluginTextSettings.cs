@@ -11,7 +11,14 @@ public sealed record PluginTextSetting(string Id, string Title, string Descripti
     public bool IsMultiline { get; init; }
     /// <summary>Optional allowed values rendered as a selection instead of free text.</summary>
     public IReadOnlyList<PluginSettingChoice> Choices { get; init; } = [];
+    /// <summary>Optional suggestions for free text. Values outside this list remain valid.</summary>
+    public IReadOnlyList<string> Suggestions { get; init; } = [];
+    /// <summary>Optional display condition evaluated against current editor values, including unsaved edits.</summary>
+    public PluginSettingCondition? VisibleWhen { get; init; }
 }
+
+/// <summary>A setting is shown when another setting has one of the given values.</summary>
+public sealed record PluginSettingCondition(string SettingId, IReadOnlyList<string> Values);
 
 /// <summary>A stable setting value with a localized display title.</summary>
 public sealed record PluginSettingChoice(string Value, string Title);
@@ -43,6 +50,9 @@ public enum PluginSettingsSection
 /// <summary>Optional connection UI state. Hiding key entry never removes the stored key.</summary>
 public interface IPluginConnectionSettings
 {
+    /// <summary>Opaque identity of the configured connection. Hosts discard unsaved key input when it changes.</summary>
+    string? ConnectionIdentity => null;
+
     /// <summary>Whether the currently selected connection method exposes host API-key entry.</summary>
     bool ShowApiKeySettings { get; }
 }

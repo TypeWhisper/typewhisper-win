@@ -9,9 +9,10 @@
         <Grid Grid.Row="1" PreviewKeyDown="View_PreviewKeyDown">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid Grid.Row="1" Margin="12,0,12,12" MinHeight="32" ColumnSpacing="12">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <TextBlock x:Name="PluginPageTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="PluginSummary" Grid.Column="1" Text="Loading installed plugins…" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+            <ContentControl x:Name="SettingsPluginActions" Grid.Column="2" VerticalAlignment="Center" />
         </Grid>
         <local:TabBar x:Name="IntegrationTabs" Grid.Row="0" Margin="8,0,8,12" />
         <Grid x:Name="PluginListPage" Grid.Row="2" RowSpacing="10">
@@ -33,8 +34,8 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </local:HandCursorListView>
-            <ScrollViewer x:Name="PluginContentScroll" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="SettingsPages" Spacing="8" Margin="4,4,18,16" />
+            <ScrollViewer x:Name="PluginContentScroll" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                <Grid x:Name="SettingsPages" Margin="4,4,4,0" />
             </ScrollViewer>
             <StackPanel x:Name="PluginEmptyState" Grid.Row="1" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                 <local:TypeWhisperGlyph Kind="search" Width="28" Height="28" />

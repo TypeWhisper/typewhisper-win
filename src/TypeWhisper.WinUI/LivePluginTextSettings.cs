@@ -6,20 +6,30 @@ using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.WinUI;
 
-internal sealed class LivePluginTextSettings : UserControl
+internal sealed partial class LivePluginTextSettings : UserControl
 {
+    internal event Action<bool>? ProfileLayoutChanged;
     private readonly StackPanel _content = new() { Spacing = 10 };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly LocalDictationSession _session;
     private readonly string _id;
     private readonly UIElement _credentials;
     private readonly UIElement _models;
+    private readonly Action<string?, string?> _connectionChanged;
+    private readonly Func<Task<bool>> _canLeaveConnection;
+    private readonly Func<string?> _pendingApiKey;
+    private readonly Action _clearApiKey;
     private bool _loaded;
     private int _generation;
 
-    internal LivePluginTextSettings(LocalDictationSession session, string id, UIElement credentials, UIElement models)
+    internal LivePluginTextSettings(LocalDictationSession session, string id, UIElement credentials, UIElement models,
+        Action<string?, string?> connectionChanged, Func<Task<bool>> canLeaveConnection,
+        Func<string?> pendingApiKey, Action clearApiKey)
     {
-        _session = session; _id = id; _credentials = credentials; _models = models;
+        _session = session; _id = id; _credentials = credentials; _models = models; _connectionChanged = connectionChanged;
+        _canLeaveConnection = canLeaveConnection;
+        _pendingApiKey = pendingApiKey; _clearApiKey = clearApiKey;
+        AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _content.Children.Add(_status); Content = _content;
         Unloaded += (_, _) => { _generation++; _lifetime.Cancel(); _loaded = false; };
         Loaded += async (_, _) =>
@@ -30,7 +40,11 @@ internal sealed class LivePluginTextSettings : UserControl
         };
     }
 
-    internal void DetachHostControls() { _content.Children.Remove(_credentials); _content.Children.Remove(_models); }
+    internal void DetachHostControls()
+    {
+        if (_credentials is FrameworkElement { Parent: Panel credentialsParent }) credentialsParent.Children.Remove(_credentials);
+        if (_models is FrameworkElement { Parent: Panel modelsParent }) modelsParent.Children.Remove(_models);
+    }
 
     private CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, string> _drafts = new();
@@ -53,9 +67,25 @@ internal sealed class LivePluginTextSettings : UserControl
             var snapshot = await _session.PluginRuntime.UseConfigurationAsync(_id, (plugin, _) =>
                 Task.FromResult((Fields: plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : [],
                     Actions: plugin is IPluginSettingsActions actions ? actions.SettingsActions.ToArray() : [],
-                    ShowKey: plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings)), _lifetime.Token);
+                    ShowKey: plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings,
+                    ConnectionId: (plugin as IPluginConnectionSettings)?.ConnectionIdentity,
+                    ProfileSelector: (plugin as IPluginProfileSettings)?.ProfileSelectorId,
+                    AddProfile: (plugin as IPluginProfileSettings)?.AddProfileActionId,
+                    RemoveProfile: (plugin as IPluginProfileSettings)?.RemoveProfileActionId)), _lifetime.Token);
             if (!IsLoaded || generation != _generation) return;
+            var selector = snapshot.Fields.FirstOrDefault(f => f.Id == snapshot.ProfileSelector);
+            _connectionChanged(snapshot.ConnectionId, selector?.Choices.FirstOrDefault(c => c.Value == selector.Value)?.Title);
+            DetachHostControls();
+            if (_status.Parent is Panel statusParent) statusParent.Children.Remove(_status);
             _content.Children.Clear(); _content.Children.Add(_status);
+            ProfileLayoutChanged?.Invoke(selector is not null);
+            if (selector is not null)
+            {
+                RenderProfileEditor(selector, snapshot.Fields, snapshot.Actions, snapshot.AddProfile, snapshot.RemoveProfile, snapshot.ShowKey);
+                _loaded = true;
+                return;
+            }
+            Content = _content;
             void Fields(PluginSettingsSection section)
             {
                 foreach (var field in snapshot.Fields.Where(f => f.Section == section))

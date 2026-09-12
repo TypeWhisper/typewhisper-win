@@ -28,6 +28,9 @@ public sealed partial class SettingsWindow : Window
     internal void SetIntegrationsContent(UIElement content) => IntegrationsHost.Child = content;
     internal void DetachIntegrationsContent() => IntegrationsHost.Child = null;
     internal Func<bool>? NavigateIntegrationBack { get; set; }
+    internal Func<Task<bool>>? CanLeaveIntegrationAsync { get; set; }
+    private bool _checkingNavigation;
+    private bool _allowClose;
     private readonly StackPanel _integrationNavigation = new() { Spacing = 2 };
     private readonly List<HandCursorButton> _pluginNavigationButtons = [];
     private (string Id, string Title)[] _integrationItems = [];
@@ -131,6 +134,12 @@ public sealed partial class SettingsWindow : Window
             if (currentDpi != _dpi) PlaceOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
         };
         SetPreferences(preferences);
+        AppWindow.Closing += async (_, args) =>
+        {
+            if (_allowClose) return;
+            args.Cancel = true;
+            await RequestCloseAsync();
+        };
     }
 
     internal void ShowOn(DisplayArea area)
@@ -223,7 +232,15 @@ public sealed partial class SettingsWindow : Window
     internal void ShowOverlaySaveError(string error) => SessionHint.Text = error;
 
     private void Preview_Click(object sender, RoutedEventArgs e) => PreviewRequested?.Invoke(this, EventArgs.Empty);
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private async void Close_Click(object sender, RoutedEventArgs e) => await RequestCloseAsync();
+
+    private async Task RequestCloseAsync()
+    {
+        if (!await ConfirmLeaveIntegrationAsync()) return;
+        IntegrationDismissed?.Invoke();
+        _allowClose = true;
+        Close();
+    }
     private void CustomizeLayout_Click(object sender, RoutedEventArgs e) => ShowCategory("Overlay editor");
     private void BackToAppearance_Click(object sender, RoutedEventArgs e) => ShowCategory("Appearance");
     internal void ShowSelectComparison()
@@ -279,12 +296,31 @@ public sealed partial class SettingsWindow : Window
             else if (Descendants(CatalogContent).OfType<SyncBackupView>().FirstOrDefault()?.ClosePreview() == true) { }
             else if (OverlayEditor.CloseOpenPicker()) { }
             else if (SettingsSearch.Text.Length > 0) ClearSearch_Click(this, new RoutedEventArgs());
-            else Close();
+            else Close_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
     }
 
-    internal void ShowCategory(string category)
+    internal async void ShowCategory(string category) => await TryShowCategoryAsync(category);
+
+    private async Task<bool> ConfirmLeaveIntegrationAsync()
+    {
+        if (_checkingNavigation) return false;
+        _checkingNavigation = true;
+        try { return CanLeaveIntegrationAsync is null || await CanLeaveIntegrationAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { SessionHint.Text = "Could not leave this page. Save your profile changes and try again."; return false; }
+        finally { _checkingNavigation = false; }
+    }
+
+    private async Task<bool> TryShowCategoryAsync(string category)
+    {
+        if (_checkingNavigation || category != _currentCategory && !await ConfirmLeaveIntegrationAsync()) return false;
+        ShowCategoryCore(category);
+        return true;
+    }
+
+    private void ShowCategoryCore(string category)
     {
         if (category is "Statistics" or "Sync & backup") { WorkspaceRequested?.Invoke(category); return; }
         // TextChanged can arrive after the programmatic clear. It must not rebuild
@@ -482,9 +518,9 @@ public sealed partial class SettingsWindow : Window
         Foreground = (Brush)Application.Current.Resources[muted ? "MutedBrush" : "TextBrush"]
     };
 
-    private void OpenSearchResult(SettingSearchEntry entry)
+    private async void OpenSearchResult(SettingSearchEntry entry)
     {
-        ShowCategory(entry.Category);
+        if (!await TryShowCategoryAsync(entry.Category)) return;
         DispatcherQueue.TryEnqueue(() =>
         {
             SettingsRoot.UpdateLayout();
