@@ -357,9 +357,18 @@ public sealed partial class PluginsView : UserControl
     private bool IsDirty => _runtime is null && _opened is { } plugin && (plugin.Preference != PreferencePicker.SelectedId
         || plugin.Language != LanguagePicker.SelectedId || plugin.Connected != _draftConnected);
 
-    private void Navigate(Action destination)
+    private bool _checkingRuntimeNavigation;
+
+    private async void Navigate(Action destination)
     {
-        if (PluginDiscardPrompt.Visibility == Visibility.Visible) return;
+        if (_checkingRuntimeNavigation || PluginDiscardPrompt.Visibility == Visibility.Visible) return;
+        if (_page == Page.Settings && RuntimePluginSettingsPage.Content is LivePortablePluginSettings editor)
+        {
+            _checkingRuntimeNavigation = true;
+            try { if (!await editor.CanLeaveAsync()) return; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { return; }
+            finally { _checkingRuntimeNavigation = false; }
+        }
         if (_page == Page.Settings && IsDirty)
         {
             _pendingNavigation = destination;

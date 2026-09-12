@@ -138,7 +138,7 @@ public sealed partial class SettingsWindow : Window
         {
             if (_allowClose) return;
             args.Cancel = true;
-            if (await ConfirmLeaveIntegrationAsync()) { _allowClose = true; Close(); }
+            await RequestCloseAsync();
         };
     }
 
@@ -237,6 +237,7 @@ public sealed partial class SettingsWindow : Window
     private async Task RequestCloseAsync()
     {
         if (!await ConfirmLeaveIntegrationAsync()) return;
+        IntegrationDismissed?.Invoke();
         _allowClose = true;
         Close();
     }

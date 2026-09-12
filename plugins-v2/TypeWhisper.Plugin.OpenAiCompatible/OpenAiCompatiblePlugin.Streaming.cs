@@ -50,10 +50,20 @@ public sealed partial class OpenAiCompatiblePlugin
         if (translate) throw new PluginRequestException("Realtime transcription does not support translation. Use batch mode.", PluginRequestFailureKind.Configuration);
         if (string.IsNullOrWhiteSpace(profile.SelectedModelId)) throw new PluginRequestException("Select a transcription model.", PluginRequestFailureKind.Configuration);
         using var timeout = CreateRequestTimeoutSource(ct, DefaultHttpRequestTimeout);
-        return await CompatibleRealtimeStreamingSession.TranscribeWavAsync(RealtimeUri(profile), GetApiKey(profileId) ?? "", profile.SelectedModelId,
-            audio, NormalizeHints(hints), prompt, timeout.Token, protocol: profile.RealtimeProtocol);
+        try
+        {
+            return await CompatibleRealtimeStreamingSession.TranscribeWavAsync(RealtimeUri(profile), GetApiKey(profileId) ?? "", profile.SelectedModelId,
+                audio, NormalizeHints(hints), prompt, timeout.Token, protocol: profile.RealtimeProtocol);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
+        {
+            throw new PluginRequestException(
+                $"OpenAI-compatible transcription request timed out after {DefaultHttpRequestTimeout.TotalSeconds:0} seconds.",
+                PluginRequestFailureKind.Timeout, innerException: ex);
+        }
     }
 
-    private static string[] NormalizeHints(IReadOnlyList<string> hints) => hints.Where(h => !string.IsNullOrWhiteSpace(h) && h != "auto")
-        .Select(h => h.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    internal static string[] NormalizeHints(IReadOnlyList<string> hints) => hints.Select(h => h?.Trim())
+        .Where(h => !string.IsNullOrWhiteSpace(h) && !string.Equals(h, "auto", StringComparison.OrdinalIgnoreCase))
+        .Select(h => h!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 }

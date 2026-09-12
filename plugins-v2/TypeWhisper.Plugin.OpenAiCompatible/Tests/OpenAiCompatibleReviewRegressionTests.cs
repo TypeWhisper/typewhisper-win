@@ -5,6 +5,12 @@ namespace TypeWhisper.Plugin.OpenAiCompatible.Portable.Tests;
 
 public partial class OpenAiCompatiblePluginTests
 {
+    [Fact]
+    public void LanguageHintsNormalizeBeforeFilteringTheAutomaticSentinel()
+    {
+        Assert.Equal(["de", "en"], OpenAiCompatiblePlugin.NormalizeHints([" auto ", "AUTO", " de ", "DE", "", "  ", "en", null!]));
+    }
+
     [Theory]
     [InlineData("{\"text\":42}")]
     [InlineData("[]")]
@@ -105,6 +111,31 @@ public partial class OpenAiCompatiblePluginTests
         Assert.Equal(live, transcription.TryGetProperty("languages", out _));
         Assert.Equal(!live, transcription.TryGetProperty("language", out _));
         Assert.Equal(live, transcription.TryGetProperty("prompt", out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplacementKeyCleanupRetriesWithoutDeletingTheCommittedKey(bool failProfileWrite)
+    {
+        var host = new TestPluginHostServices();
+        using var plugin = new OpenAiCompatiblePlugin();
+        await plugin.ActivateAsync(host);
+        await plugin.SaveProfileSettingsAsync(Default, new Dictionary<string, string>(), "original-key", default);
+        host.FailSecretDeletes = true;
+        host.FailProfileWrites = failProfileWrite;
+        var save = plugin.SaveProfileSettingsAsync(Default, new Dictionary<string, string>(), "replacement-key", default);
+        if (failProfileWrite) await Assert.ThrowsAsync<IOException>(() => save);
+        else await save;
+        Assert.Equal(2, host.Secrets.Count);
+        Assert.Single(host.GetSetting<List<string>>("pendingSecretDeletions")!);
+        host.FailSecretDeletes = host.FailProfileWrites = false;
+        using var restarted = new OpenAiCompatiblePlugin();
+        await restarted.ActivateAsync(host);
+        var expected = failProfileWrite ? "original-key" : "replacement-key";
+        Assert.Equal(expected, restarted.GetApiKey());
+        Assert.Equal(expected, Assert.Single(host.Secrets).Value);
+        Assert.Empty(host.GetSetting<List<string>>("pendingSecretDeletions")!);
     }
 
     [Fact]

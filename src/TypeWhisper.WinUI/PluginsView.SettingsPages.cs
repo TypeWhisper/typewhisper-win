@@ -121,6 +121,9 @@ public sealed partial class PluginsView
             _changingPlugin = true; RefreshSettingsPages();
             try
             {
+                options.Flyout?.Hide();
+                if (settings.Content is LivePortablePluginSettings editor && !await editor.CanLeaveAsync()) return;
+                if (_runtime?.CanChangeProvider != true) return;
                 var error = await operation();
                 message.Text = error ?? ""; message.Visibility = error is null ? Visibility.Collapsed : Visibility.Visible;
             }

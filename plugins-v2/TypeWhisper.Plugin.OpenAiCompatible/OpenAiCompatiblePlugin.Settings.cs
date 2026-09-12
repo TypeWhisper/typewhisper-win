@@ -130,28 +130,23 @@ public sealed partial class OpenAiCompatiblePlugin
         profile.ApiKeyRevision = Guid.NewGuid().ToString("N");
         var newSecret = SecretKey(profileId, profile.ApiKeyRevision);
         var normalizedKey = apiKey.Trim();
-        if (_host is not null) await _host.StoreSecretAsync(newSecret, normalizedKey);
+        QueueSecretCleanup(oldSecret);
+        QueueSecretCleanup(newSecret);
         try
         {
+            if (_host is not null) await _host.StoreSecretAsync(newSecret, normalizedKey);
             cancellationToken.ThrowIfCancellationRequested();
             CommitProfiles(profiles, notify: false);
         }
         catch
         {
-            await TryDeleteUnusedSecretAsync(newSecret);
+            await RetrySecretCleanupAsync();
             throw;
         }
         _apiKeys[profileId] = normalizedKey;
         _draftCatalogs.Remove(profileId);
         _host?.NotifyCapabilitiesChanged();
-        await TryDeleteUnusedSecretAsync(oldSecret);
-    }
-
-    private async Task TryDeleteUnusedSecretAsync(string secret)
-    {
-        try { if (_host is not null) await _host.DeleteSecretAsync(secret); }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        { _host?.Log(PluginLogLevel.Warning, "An unused encrypted key could not be cleaned up."); }
+        await RetrySecretCleanupAsync();
     }
 
     private static void ApplyProfileField(OpenAiCompatibleProfile profile, string id, string value)
