@@ -113,6 +113,7 @@ public sealed partial class OpenAiCompatiblePlugin :
             _apiKeys[profile.Id] = await host.LoadSecretAsync(SecretKey(profile.Id));
 
         PersistProfiles(notifyCapabilitiesChanged: false);
+        await RetrySecretCleanupAsync();
         host.Log(
             PluginLogLevel.Info,
             $"Activated profiles={_profiles.Count} configured={IsConfigured}");
@@ -249,12 +250,15 @@ public sealed partial class OpenAiCompatiblePlugin :
             return false;
 
         var removedSecret = SecretKey(profile.Id);
-        _profiles.Remove(profile);
+        QueueSecretCleanup(removedSecret);
+        var profiles = CloneProfiles();
+        profiles.RemoveAll(p => p.Id == profile.Id);
+        CommitProfiles(profiles, notify: false);
         _apiKeys.Remove(profile.Id);
-        if (_host is not null)
-            await _host.DeleteSecretAsync(removedSecret);
-
-        PersistProfiles();
+        _draftCatalogs.Remove(profile.Id);
+        if (_settingsProfileId == profile.Id) _settingsProfileId = DefaultProfileId;
+        _host?.NotifyCapabilitiesChanged();
+        await RetrySecretCleanupAsync();
         return true;
     }
 
@@ -292,8 +296,9 @@ public sealed partial class OpenAiCompatiblePlugin :
     /// <summary>Selects the transcription model for a profile.</summary>
     public void SelectModelForProfile(string profileId, string modelId)
     {
+        var canonicalId = RequireProfile(profileId).Id;
         var profiles = CloneProfiles();
-        profiles.Single(p => p.Id == profileId).SelectedModelId = NullIfWhiteSpace(modelId);
+        profiles.Single(p => p.Id == canonicalId).SelectedModelId = NullIfWhiteSpace(modelId);
         CommitProfiles(profiles);
     }
 
@@ -372,23 +377,13 @@ public sealed partial class OpenAiCompatiblePlugin :
             var json = await response.Content.ReadAsStringAsync(timeout.Token);
             using var doc = JsonDocument.Parse(json);
 
-            if (!doc.RootElement.TryGetProperty("data", out var data))
-                return [];
-
-            return data.EnumerateArray()
-                .Select(e => new FetchedModel(
-                    e.GetProperty("id").GetString() ?? "",
-                    e.TryGetProperty("owned_by", out var ob) ? ob.GetString() : null))
-                .Where(m => !string.IsNullOrEmpty(m.Id))
-                .DistinctBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            return ParseModelCatalog(doc.RootElement);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException)
         {
             return [];
         }
@@ -418,7 +413,7 @@ public sealed partial class OpenAiCompatiblePlugin :
         {
             throw;
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
         {
             return false;
         }
@@ -473,7 +468,7 @@ public sealed partial class OpenAiCompatiblePlugin :
                 "Server URL not configured",
                 PluginRequestFailureKind.Configuration);
         if (string.IsNullOrEmpty(profile.SelectedModelId))
-            throw new InvalidOperationException("Kein Transkriptions-Modell ausgewählt");
+            throw new PluginRequestException("Select a transcription model.", PluginRequestFailureKind.Configuration);
 
         using var timeout = CreateRequestTimeoutSource(ct, DefaultHttpRequestTimeout);
         try
@@ -482,7 +477,7 @@ public sealed partial class OpenAiCompatiblePlugin :
             {
                 if (translate) throw new PluginRequestException("Realtime transcription does not support translation. Use batch mode.", PluginRequestFailureKind.Configuration);
                 return await CompatibleRealtimeStreamingSession.TranscribeWavAsync(RealtimeUri(profile), GetApiKey(profile.Id) ?? "",
-                    profile.SelectedModelId, wavAudio, LanguageHints(language), prompt, timeout.Token);
+                    profile.SelectedModelId, wavAudio, LanguageHints(language), prompt, timeout.Token, protocol: profile.RealtimeProtocol);
             }
             var endpoint = BatchUri(profile);
             if (translate) endpoint = new Uri(endpoint.AbsoluteUri.Replace("/audio/transcriptions", "/audio/translations", StringComparison.Ordinal));
@@ -555,6 +550,9 @@ public sealed partial class OpenAiCompatiblePlugin :
         if (responses)
         {
             body.Remove("messages"); body.Remove("max_tokens");
+            body["max_output_tokens"] = profile.ReasoningEffort.Length > 0
+                ? LlmOutputTokenBudget.CalculateWithReasoningReserve(systemPrompt, userText)
+                : LlmOutputTokenBudget.Calculate(systemPrompt, userText);
             body["instructions"] = string.IsNullOrWhiteSpace(systemPrompt) ? "You are a helpful assistant." : systemPrompt;
             body["input"] = new[] { new { type = "message", role = "user", content = new[] { new { type = "input_text", text = userText } } } };
             body["store"] = false;
@@ -796,6 +794,7 @@ public sealed partial class OpenAiCompatiblePlugin :
             profile.BaseUrl = NormalizeBaseUrl(profile.BaseUrl ?? "");
             profile.ApiVersion = (profile.ApiVersion ?? "").Trim();
             profile.TranscriptionTransport = profile.TranscriptionTransport is "batch" or "realtime" ? profile.TranscriptionTransport : "auto";
+            profile.RealtimeProtocol = profile.RealtimeProtocol is "live" or "whisper" ? profile.RealtimeProtocol : "auto";
             profile.BatchEndpoint = profile.BatchEndpoint == "deployment-scoped" ? "deployment-scoped" : "standard";
             profile.LlmApi = profile.LlmApi == "responses" ? "responses" : "chat-completions";
             profile.ReasoningEffort = profile.ReasoningEffort is "low" or "medium" or "high" or "xhigh" or "max" ? profile.ReasoningEffort : "";
@@ -866,10 +865,10 @@ public sealed partial class OpenAiCompatiblePlugin :
         public bool SupportsTranslation => !SupportsStreaming;
         public bool SupportsStreaming => UsesRealtime(owner.RequireProfile(profileId));
         public bool SupportsStreamingCompletion => true;
-        public bool SupportsLanguageHints => SupportsStreaming && CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "");
-        public bool SupportsDictionaryTerms => !SupportsStreaming || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "");
+        public bool SupportsLanguageHints => SupportsStreaming && CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "", owner.RequireProfile(profileId).RealtimeProtocol);
+        public bool SupportsDictionaryTerms => !SupportsStreaming || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "", owner.RequireProfile(profileId).RealtimeProtocol);
         public bool SupportsStreamingForPrompt(string? prompt) => SupportsStreaming &&
-            (string.IsNullOrWhiteSpace(prompt) || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? ""));
+            (string.IsNullOrWhiteSpace(prompt) || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "", owner.RequireProfile(profileId).RealtimeProtocol));
         public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) => owner.StartProfileStreamingAsync(profileId, LanguageHints(language), null, ct);
         public Task<IStreamingSession> StartStreamingWithLanguageHintsAsync(IReadOnlyList<string> hints, CancellationToken ct) => owner.StartProfileStreamingAsync(profileId, hints, null, ct);
         public Task<IStreamingSession> StartStreamingWithLanguageHintsAndPromptAsync(IReadOnlyList<string> hints, string? prompt, CancellationToken ct) => owner.StartProfileStreamingAsync(profileId, hints, prompt, ct);
@@ -912,6 +911,8 @@ public sealed class OpenAiCompatibleProfile
     public string ApiVersion { get; set; } = "";
     /// <summary>auto, batch, or realtime transcription transport.</summary>
     public string TranscriptionTransport { get; set; } = "auto";
+    /// <summary>Realtime payload family: auto recognizes canonical IDs, live and whisper support arbitrary deployment aliases.</summary>
+    public string RealtimeProtocol { get; set; } = "auto";
     /// <summary>standard or deployment-scoped batch route.</summary>
     public string BatchEndpoint { get; set; } = "standard";
     /// <summary>chat-completions or responses text API.</summary>

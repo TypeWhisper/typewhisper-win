@@ -14,6 +14,9 @@ public sealed partial class PluginsView
         .OrderBy(p => p.Title, StringComparer.CurrentCultureIgnoreCase)
         .Select(p => (Path.GetFileName(p.Id), p.Title)).ToArray();
     private readonly Dictionary<string, SettingsRow> _settingsRows = [];
+    internal Task<bool> CanLeaveSettingsAsync() => _settingsRows.Values
+        .Select(row => row.Settings.Content).OfType<LivePortablePluginSettings>().FirstOrDefault()?.CanLeaveAsync()
+        ?? Task.FromResult(true);
 
     internal void UseSettingsLayout()
     {
@@ -63,6 +66,7 @@ public sealed partial class PluginsView
         SettingsNavigationChanged?.Invoke();
         if (_selectedSettingsPlugin is not null && !_plugins.Any(p => Path.GetFileName(p.Id) == _selectedSettingsPlugin))
         {
+            CloseSettingsPage();
             PluginPageTitle.Text = "Plugin unavailable";
             PluginSummary.Text = "Choose another integration from the sidebar.";
         }

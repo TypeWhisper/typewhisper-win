@@ -54,6 +54,8 @@ public sealed partial class OpenAiCompatiblePlugin
                 new(Id("transcription"), L("Transcription model ID", "Transkriptionsmodell-ID"), L("Enter the model ID accepted by your server. Leave empty if this server only processes text.", "Gib die Modell-ID deines Servers ein. Für reine Textverarbeitung leer lassen."), profile.SelectedModelId ?? "", 256) { Section = PluginSettingsSection.Transcription, Suggestions = models },
                 new(Id("transport"), L("Transcription mode", "Transkriptionsmodus"), L("Auto uses realtime for gpt-live-transcribe and gpt-realtime-whisper; other models use batch. Choose Realtime for custom deployment aliases.", "Automatisch verwendet Echtzeit für gpt-live-transcribe und gpt-realtime-whisper, sonst Batch. Für eigene Echtzeit-Bereitstellungsnamen Echtzeit wählen."), profile.TranscriptionTransport)
                 { Section = PluginSettingsSection.Transcription, Choices = [new("auto", L("Automatic", "Automatisch")), new("batch", "Batch"), new("realtime", L("Realtime", "Echtzeit"))] },
+                new(Id("realtime-protocol"), L("Realtime protocol", "Echtzeitprotokoll"), L("For deployment aliases, select the underlying model family. Automatic recognizes gpt-realtime-whisper exactly and otherwise uses Live Transcribe.", "Für Bereitstellungsnamen die zugrunde liegende Modellfamilie wählen. Automatisch erkennt gpt-realtime-whisper exakt und verwendet sonst Live Transcribe."), profile.RealtimeProtocol)
+                { Section = PluginSettingsSection.Transcription, Choices = [new("auto", L("Automatic", "Automatisch")), new("live", "Live Transcribe"), new("whisper", "Realtime Whisper")], VisibleWhen = new(Id("transport"), ["auto", "realtime"]) },
                 new(Id("batch-endpoint"), L("Batch transcription endpoint", "Endpunkt für Batch-Transkription"), L("Deployment-scoped uses /deployments/{model}/audio/transcriptions and requires a dated API version. Realtime always uses /v1/realtime.", "Bereitstellungsbezogen verwendet /deployments/{model}/audio/transcriptions und benötigt eine datierte API-Version. Echtzeit verwendet immer /v1/realtime."), profile.BatchEndpoint)
                 { Section = PluginSettingsSection.Transcription, Choices = [new("standard", "Standard v1"), new("deployment-scoped", L("Deployment-scoped", "Bereitstellungsbezogen"))], VisibleWhen = new(Id("transport"), ["auto", "batch"]) },
                 new(Id("text"), L("Text model ID", "Textmodell-ID"), L("Default model for text processing. You can enter a model missing from the server catalog.", "Standardmodell für die Textverarbeitung. Modelle außerhalb des Serverkatalogs sind ebenfalls möglich."), profile.SelectedLlmModelId ?? "", 256) { Section = PluginSettingsSection.TextProcessing, Suggestions = models },
@@ -171,6 +173,7 @@ public sealed partial class OpenAiCompatiblePlugin
                 if (profile.ApiVersion != value.Trim()) profile.FetchedModels = [];
                 profile.ApiVersion = value.Trim(); break;
             case "transport": profile.TranscriptionTransport = value; break;
+            case "realtime-protocol": profile.RealtimeProtocol = value; break;
             case "batch-endpoint": profile.BatchEndpoint = value; break;
             case "llm-api": profile.LlmApi = value; break;
             case "reasoning": profile.ReasoningEffort = value; break;
@@ -230,12 +233,14 @@ public sealed partial class OpenAiCompatiblePlugin
             var removedId = _settingsProfileId;
             var removedSecret = SecretKey(removedId);
             // Persist removal first. A storage failure leaves the usable profile intact.
+            QueueSecretCleanup(removedSecret);
             profiles.RemoveAll(p => p.Id == removedId);
             CommitProfiles(profiles, notify: false);
             _settingsProfileId = DefaultProfileId;
             _draftCatalogs.Remove(removedId);
-            try { if (_host is not null) await _host.DeleteSecretAsync(removedSecret); }
-            finally { _apiKeys.Remove(removedId); _host?.NotifyCapabilitiesChanged(); }
+            _apiKeys.Remove(removedId);
+            _host?.NotifyCapabilitiesChanged();
+            await RetrySecretCleanupAsync();
             return L("Profile removed.", "Profil entfernt.");
         }
 
@@ -271,10 +276,7 @@ public sealed partial class OpenAiCompatiblePlugin
         using var response = await TypeWhisper.PluginSDK.Helpers.OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, timeout.Token);
         if (actionId.EndsWith("/check", StringComparison.Ordinal)) return new(L("Connection verified.", "Verbindung bestätigt."));
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
-        var models = document.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array
-            ? data.EnumerateArray().Where(e => e.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
-                .Select(e => new FetchedModel(e.GetProperty("id").GetString()!, null)).Where(m => !string.IsNullOrWhiteSpace(m.Id))
-                .DistinctBy(m => m.Id).OrderBy(m => m.Id, StringComparer.Ordinal).ToList() : [];
+        var models = ParseModelCatalog(document.RootElement);
         if (models.Count == 0) return new(L("No models returned. You can enter model IDs manually.", "Keine Modelle erhalten. Du kannst Modell-IDs manuell eingeben."));
         cancellationToken.ThrowIfCancellationRequested();
         _draftCatalogs[profileId] = (profile.BaseUrl, profile.ApiVersion, models);
@@ -283,6 +285,17 @@ public sealed partial class OpenAiCompatiblePlugin
 
     private List<OpenAiCompatibleProfile> CloneProfiles() =>
         JsonSerializer.Deserialize<List<OpenAiCompatibleProfile>>(JsonSerializer.Serialize(_profiles))!;
+
+    private static List<FetchedModel> ParseModelCatalog(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array) return [];
+        return data.EnumerateArray()
+            .Where(e => e.ValueKind == JsonValueKind.Object && e.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+            .Select(e => new FetchedModel(e.GetProperty("id").GetString()!,
+                e.TryGetProperty("owned_by", out var owner) && owner.ValueKind == JsonValueKind.String ? owner.GetString() : null))
+            .Where(m => !string.IsNullOrWhiteSpace(m.Id)).DistinctBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(m => m.Id, StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     private void CommitProfiles(List<OpenAiCompatibleProfile> profiles, bool notify = true)
     {

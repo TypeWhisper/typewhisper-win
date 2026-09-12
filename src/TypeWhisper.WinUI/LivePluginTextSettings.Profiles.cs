@@ -16,6 +16,16 @@ internal sealed partial class LivePluginTextSettings
     private readonly HashSet<string> _profileActionDrafts = [];
     internal void NotifyProfileKeyChanged() => _profileDirtyChanged?.Invoke();
 
+    internal async Task<bool> CanLeaveAsync()
+    {
+        if (_busy) { SetStatus("Wait for the current profile operation to finish."); return false; }
+        if (!_dirtyProfiles.Values.Any(dirty => dirty) && _pendingApiKey() is null) return true;
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Discard unsaved profile changes?",
+            Content = "Your profile edits and any entered API key have not been saved. Stay here to save them, or discard them and leave.",
+            PrimaryButtonText = "Discard changes", CloseButtonText = "Keep editing", DefaultButton = ContentDialogButton.Close };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
     private void RenderProfileEditor(PluginTextSetting selector, PluginTextSetting[] fields,
         PluginSettingsAction[] actions, string? addId, string? removeId, bool showKey)
     {
@@ -300,7 +310,13 @@ internal sealed partial class LivePluginTextSettings
             finally { _session.RecordingStarting -= CancelForRecording; }
             if (!IsLoaded || generation != _generation) return;
             if (hasPendingChanges && profileId is not null) _profileActionDrafts.Add(profileId);
-            if (removedFields is not null) foreach (var field in removedFields) _drafts.Remove(field);
+            if (removedFields is not null)
+            {
+                foreach (var field in removedFields) _drafts.Remove(field);
+                var removedId = action.Id[..action.Id.LastIndexOf('/')];
+                _dirtyProfiles.Remove(removedId);
+                _profileActionDrafts.Remove(removedId);
+            }
             if (leaveProfile) _profileScrollOffset = 0;
             await ReloadAsync();
             SetStatus(leaveProfile ? result ?? "Profile added." : "“" + name + "”: " + (result ?? "Completed."));

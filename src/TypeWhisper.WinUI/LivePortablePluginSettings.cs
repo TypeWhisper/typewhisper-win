@@ -8,6 +8,8 @@ namespace TypeWhisper.WinUI;
 internal sealed class LivePortablePluginSettings : UserControl
 {
     internal event Action<bool>? ProfileLayoutChanged;
+    internal Task<bool> CanLeaveAsync() => _textSettings.Content is LivePluginTextSettings editor
+        ? editor.CanLeaveAsync() : Task.FromResult(true);
     private readonly LocalDictationSession _session;
     private readonly string _id;
     private readonly bool _showEnableAction;

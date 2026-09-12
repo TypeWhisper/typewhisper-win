@@ -645,6 +645,7 @@ public partial class OpenAiCompatiblePluginTests
         public int NotifyCapabilitiesChangedCount { get; private set; }
         public bool FailWrites { get; set; }
         public bool FailProfileWrites { get; set; }
+        public bool FailSecretDeletes { get; set; }
 
         public Task StoreSecretAsync(string key, string value)
         {
@@ -658,7 +659,7 @@ public partial class OpenAiCompatiblePluginTests
 
         public Task DeleteSecretAsync(string key)
         {
-            if (FailWrites) throw new IOException("fixture storage failure");
+            if (FailWrites || FailSecretDeletes) throw new IOException("fixture storage failure");
             Secrets.Remove(key);
             return Task.CompletedTask;
         }

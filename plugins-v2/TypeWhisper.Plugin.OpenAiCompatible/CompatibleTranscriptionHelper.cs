@@ -103,12 +103,16 @@ internal static class CompatibleTranscriptionHelper
     /// </summary>
     internal static PluginTranscriptionResult ParseTranscriptionResponse(string json)
     {
-        using var doc = JsonDocument.Parse(json);
+        JsonDocument parsed;
+        try { parsed = JsonDocument.Parse(json); }
+        catch (JsonException ex) { throw new PluginRequestException("The provider returned invalid transcription JSON.", PluginRequestFailureKind.OutputIncomplete, innerException: ex); }
+        using var doc = parsed;
         var root = doc.RootElement;
-
-        var text = root.TryGetProperty("text", out var textEl) ? textEl.GetString() ?? "" : "";
-        var language = root.TryGetProperty("language", out var langEl) ? langEl.GetString() : null;
-        var duration = root.TryGetProperty("duration", out var durEl) ? durEl.GetDouble() : 0;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("text", out var textEl) || textEl.ValueKind != JsonValueKind.String)
+            throw new PluginRequestException("The provider returned no valid transcription text.", PluginRequestFailureKind.OutputIncomplete);
+        var text = textEl.GetString()!;
+        var language = root.TryGetProperty("language", out var langEl) && langEl.ValueKind == JsonValueKind.String ? langEl.GetString() : null;
+        var duration = Number(root, "duration") ?? 0;
 
         var segments = new List<PluginTranscriptionSegment>();
 
@@ -120,20 +124,17 @@ internal static class CompatibleTranscriptionHelper
         {
             foreach (var seg in segmentsEl.EnumerateArray())
             {
-                var segmentText = seg.TryGetProperty("text", out var segTextEl)
+                if (seg.ValueKind != JsonValueKind.Object) continue;
+                var segmentText = seg.TryGetProperty("text", out var segTextEl) && segTextEl.ValueKind == JsonValueKind.String
                     ? segTextEl.GetString() ?? ""
                     : "";
-                var start = seg.TryGetProperty("start", out var startEl)
-                    ? startEl.GetDouble()
-                    : 0;
-                var end = seg.TryGetProperty("end", out var endEl)
-                    ? endEl.GetDouble()
-                    : 0;
+                var start = Number(seg, "start") ?? 0;
+                var end = Number(seg, "end") ?? 0;
                 segments.Add(new PluginTranscriptionSegment(segmentText, start, end));
 
-                if (seg.TryGetProperty("no_speech_prob", out var nspEl))
+                if (Number(seg, "no_speech_prob") is { } noSpeech && noSpeech is >= 0 and <= 1)
                 {
-                    var prob = (float)nspEl.GetDouble();
+                    var prob = (float)noSpeech;
                     minNoSpeechProb = minNoSpeechProb is null
                         ? prob
                         : Math.Min(minNoSpeechProb.Value, prob);
@@ -146,4 +147,7 @@ internal static class CompatibleTranscriptionHelper
             Segments = segments
         };
     }
+
+    private static double? Number(JsonElement root, string name) => root.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number) ? number : null;
 }

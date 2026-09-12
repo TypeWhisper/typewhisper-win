@@ -9,12 +9,12 @@ public sealed partial class OpenAiCompatiblePlugin
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => true;
     /// <inheritdoc />
-    public bool SupportsLanguageHints => SupportsStreaming && CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "");
+    public bool SupportsLanguageHints => SupportsStreaming && CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "", DefaultProfile.RealtimeProtocol);
     /// <inheritdoc />
-    public bool SupportsDictionaryTerms => !SupportsStreaming || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "");
+    public bool SupportsDictionaryTerms => !SupportsStreaming || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "", DefaultProfile.RealtimeProtocol);
     /// <inheritdoc />
     public bool SupportsStreamingForPrompt(string? prompt) => SupportsStreaming &&
-        (string.IsNullOrWhiteSpace(prompt) || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? ""));
+        (string.IsNullOrWhiteSpace(prompt) || CompatibleRealtimeStreamingSession.IsLiveModel(SelectedModelId ?? "", DefaultProfile.RealtimeProtocol));
     /// <inheritdoc />
     public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
         StartProfileStreamingAsync(DefaultProfileId, LanguageHints(language), null, ct);
@@ -39,7 +39,7 @@ public sealed partial class OpenAiCompatiblePlugin
         if (!UsesRealtime(profile)) throw new NotSupportedException("This profile uses batch transcription.");
         if (string.IsNullOrWhiteSpace(profile.SelectedModelId)) throw new PluginRequestException("Select a transcription model.", PluginRequestFailureKind.Configuration);
         return await CompatibleRealtimeStreamingSession.ConnectAsync(RealtimeUri(profile), GetApiKey(profileId) ?? "", profile.SelectedModelId,
-            NormalizeHints(hints), prompt, ct);
+            NormalizeHints(hints), prompt, ct, protocol: profile.RealtimeProtocol);
     }
 
     private async Task<TypeWhisper.PluginSDK.Models.PluginTranscriptionResult> TranscribeProfileWithHintsAsync(string profileId, byte[] audio,
@@ -51,7 +51,7 @@ public sealed partial class OpenAiCompatiblePlugin
         if (string.IsNullOrWhiteSpace(profile.SelectedModelId)) throw new PluginRequestException("Select a transcription model.", PluginRequestFailureKind.Configuration);
         using var timeout = CreateRequestTimeoutSource(ct, DefaultHttpRequestTimeout);
         return await CompatibleRealtimeStreamingSession.TranscribeWavAsync(RealtimeUri(profile), GetApiKey(profileId) ?? "", profile.SelectedModelId,
-            audio, NormalizeHints(hints), prompt, timeout.Token);
+            audio, NormalizeHints(hints), prompt, timeout.Token, protocol: profile.RealtimeProtocol);
     }
 
     private static string[] NormalizeHints(IReadOnlyList<string> hints) => hints.Where(h => !string.IsNullOrWhiteSpace(h) && h != "auto")

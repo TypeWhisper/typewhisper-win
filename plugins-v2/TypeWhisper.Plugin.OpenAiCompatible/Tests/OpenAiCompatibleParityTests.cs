@@ -65,6 +65,7 @@ public partial class OpenAiCompatiblePluginTests
             Assert.Equal("Grüße", root.GetProperty("input")[0].GetProperty("content")[0].GetProperty("text").GetString());
             Assert.False(root.GetProperty("store").GetBoolean());
             Assert.False(root.TryGetProperty("messages", out _));
+            Assert.Equal(reasoning ? 27048 : 2048, root.GetProperty("max_output_tokens").GetInt32());
             Assert.False(root.TryGetProperty("thinking", out _));
             Assert.Equal(reasoning, root.TryGetProperty("reasoning", out _));
             Assert.Equal(temperature, root.TryGetProperty("temperature", out _));
@@ -144,7 +145,7 @@ public partial class OpenAiCompatiblePluginTests
         Assert.Equal(24000, config.GetProperty("format").GetProperty("rate").GetInt32());
         Assert.Equal(2, config.GetProperty("transcription").GetProperty("languages").GetArrayLength());
         Assert.False(config.GetProperty("transcription").TryGetProperty("delay", out _));
-        using var legacy = JsonDocument.Parse(CompatibleRealtimeStreamingSession.CreateSessionUpdatePayload("custom-whisper", ["de", "en"], "Names"));
+        using var legacy = JsonDocument.Parse(CompatibleRealtimeStreamingSession.CreateSessionUpdatePayload("custom-whisper", ["de", "en"], "Names", protocol: "whisper"));
         var legacyConfig = legacy.RootElement.GetProperty("session").GetProperty("audio").GetProperty("input").GetProperty("transcription");
         Assert.Equal("de", legacyConfig.GetProperty("language").GetString());
         Assert.False(legacyConfig.TryGetProperty("languages", out _));

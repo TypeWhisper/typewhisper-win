@@ -49,7 +49,7 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
         string modelId,
         IReadOnlyList<string> languageHints,
         string? prompt,
-        CancellationToken ct, IReadOnlyList<string>? keywords = null, string delay = "")
+        CancellationToken ct, IReadOnlyList<string>? keywords = null, string delay = "", string protocol = "auto")
     {
         var ws = new ClientWebSocket(); foreach (var header in OpenAiCompatiblePlugin.AuthenticationHeaders(endpoint, apiKey)) ws.Options.SetRequestHeader(header.Key, header.Value);
         CompatibleRealtimeStreamingSession? session = null;
@@ -57,7 +57,7 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
         {
             await ws.ConnectAsync(endpoint, ct);
             session = new(ws, new());
-            await session.StartAsync(modelId, languageHints, prompt, ct, keywords, delay);
+            await session.StartAsync(modelId, languageHints, prompt, ct, keywords, delay, protocol);
             return session;
         }
         catch { if (session is not null) await session.DisposeAsync(); else ws.Dispose(); throw; }
@@ -73,9 +73,9 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
         byte[] wavAudio,
         IReadOnlyList<string> languageHints,
         string? prompt,
-        CancellationToken ct, IReadOnlyList<string>? keywords = null, string delay = "")
+        CancellationToken ct, IReadOnlyList<string>? keywords = null, string delay = "", string protocol = "auto")
     {
-        await using var session = await ConnectAsync(endpoint, apiKey, modelId, languageHints, prompt, ct, keywords, delay);
+        await using var session = await ConnectAsync(endpoint, apiKey, modelId, languageHints, prompt, ct, keywords, delay, protocol);
         var pcm = ExtractPcm16Data(wavAudio);
         const int chunkBytes = SourceSampleRate * sizeof(short) / 5; // 200ms
         for (var offset = 0; offset < pcm.Length; offset += chunkBytes)
@@ -85,7 +85,7 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
         }
 
         await session.FinalizeAsync(ct);
-        var fallbackLanguage = IsLiveModel(modelId)
+        var fallbackLanguage = IsLiveModel(modelId, protocol)
             ? null
             : languageHints.FirstOrDefault();
         return new PluginTranscriptionResult(
@@ -96,10 +96,10 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
     }
 
     internal async Task StartAsync(string modelId, IReadOnlyList<string> hints, string? prompt, CancellationToken ct,
-        IReadOnlyList<string>? keywords = null, string delay = "")
+        IReadOnlyList<string>? keywords = null, string delay = "", string protocol = "auto")
     {
         _receiveTask = ReceiveLoopAsync(_receiveCts.Token);
-        await SendTextAsync(CreateSessionUpdatePayload(modelId, hints, prompt, keywords, delay), ct);
+        await SendTextAsync(CreateSessionUpdatePayload(modelId, hints, prompt, keywords, delay, protocol), ct);
         try { await _ready.Task.WaitAsync(TimeSpan.FromSeconds(15), ct); }
         catch (TimeoutException) { throw new IOException("OpenAI did not acknowledge the live session settings."); }
     }
@@ -107,14 +107,14 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
     internal static string CreateSessionUpdatePayload(
         string modelId,
         IReadOnlyList<string> languageHints,
-        string? prompt, IReadOnlyList<string>? keywords = null, string delay = "")
+        string? prompt, IReadOnlyList<string>? keywords = null, string delay = "", string protocol = "auto")
     {
         var transcription = new Dictionary<string, object?>
         {
             ["model"] = modelId
         };
 
-        if (IsLiveModel(modelId))
+        if (IsLiveModel(modelId, protocol))
         {
             if (languageHints.Count > 0)
                 transcription["languages"] = languageHints;
@@ -153,7 +153,8 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
         return JsonSerializer.Serialize(payload);
     }
 
-    internal static bool IsLiveModel(string modelId) => !modelId.Contains("whisper", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsLiveModel(string modelId, string protocol = "auto") => protocol == "live" ||
+        protocol != "whisper" && !string.Equals(modelId.Trim(), LegacyModelId, StringComparison.OrdinalIgnoreCase);
 
     internal static string CreateAudioAppendPayload(ReadOnlySpan<byte> pcm16Audio)
     {
@@ -337,7 +338,7 @@ internal sealed class CompatibleRealtimeStreamingSession : IStreamingSession
         if (_receiveTask is not null)
         {
             try { await _receiveTask; }
-            catch { }
+            catch (OperationCanceledException) { }
         }
 
         _sendLock.Dispose();
@@ -403,22 +404,24 @@ internal sealed class CompatibleRealtimeTranscriptCollector
             case "conversation.item.input_audio_transcription.delta":
             {
                 var itemId = GetString(root, "item_id") ?? "__unidentified_item__";
+                if (_completedTexts.ContainsKey(itemId)) return false;
                 var delta = GetString(root, "delta") ?? "";
                 _deltaTexts[itemId] = _deltaTexts.TryGetValue(itemId, out var current)
                     ? current + delta
                     : delta;
-                transcriptEvent = new StreamingTranscriptEvent(CurrentText, false);
+                transcriptEvent = new StreamingTranscriptEvent(_deltaTexts[itemId], false);
                 return !string.IsNullOrWhiteSpace(transcriptEvent.Text);
             }
             case "conversation.item.input_audio_transcription.completed":
             {
                 var itemId = GetString(root, "item_id") ?? "__unidentified_item__";
+                if (_completedTexts.ContainsKey(itemId)) return false;
                 var transcript = (GetString(root, "transcript") ?? "").Trim();
                 if (!_completedTexts.ContainsKey(itemId))
                     _completedOrder.Add(itemId);
                 _completedTexts[itemId] = transcript;
                 _deltaTexts.Remove(itemId);
-                transcriptEvent = new StreamingTranscriptEvent(CurrentText, true);
+                transcriptEvent = new StreamingTranscriptEvent(transcript, true);
                 return true;
             }
             case "session.updated":
@@ -457,4 +460,3 @@ internal sealed class CompatibleRealtimeTranscriptCollector
         return GetString(root, "message");
     }
 }
-
