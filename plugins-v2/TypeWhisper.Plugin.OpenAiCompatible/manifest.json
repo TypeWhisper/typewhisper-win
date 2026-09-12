@@ -1,0 +1,19 @@
+{
+  "id": "com.typewhisper.openai-compatible",
+  "name": "OpenAI Compatible",
+  "version": "1.1.0",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
+  "category": "transcription",
+  "categories": [
+    "transcription",
+    "llm"
+  ],
+  "assemblyName": "TypeWhisper.Plugin.OpenAiCompatible.dll",
+  "pluginClass": "TypeWhisper.Plugin.OpenAiCompatible.OpenAiCompatiblePlugin",
+  "requiresApiKey": false,
+  "descriptions": {
+    "de": "Transkription und Textverarbeitung mit eigenen OpenAI-kompatiblen Servern, getrennten Profilen und optionalen API-Schlüsseln."
+  }
+}

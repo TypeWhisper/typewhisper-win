@@ -21,6 +21,15 @@ internal sealed class LivePortablePluginSettings : UserControl
     private readonly HandCursorButton _check;
     private bool _working;
     private string? _message;
+    private string? _connectionIdentity;
+
+    private void OnConnectionChanged(string? identity)
+    {
+        if (_connectionIdentity == identity) return;
+        _connectionIdentity = identity;
+        _key.Password = "";
+        _message = null;
+    }
 
     internal LivePortablePluginSettings(LocalDictationSession session, string id, bool showEnableAction = true)
     {
@@ -65,7 +74,7 @@ internal sealed class LivePortablePluginSettings : UserControl
             if (_textSettings.Content is not LivePluginTextSettings)
             {
                 if (_textSettings.Content is StackPanel old) old.Children.Clear();
-                _textSettings.Content = new LivePluginTextSettings(_session, _id, _credentials, _models);
+                _textSettings.Content = new LivePluginTextSettings(_session, _id, _credentials, _models, OnConnectionChanged);
             }
         }
         else if (_textSettings.Content is not StackPanel)

@@ -43,6 +43,9 @@ public enum PluginSettingsSection
 /// <summary>Optional connection UI state. Hiding key entry never removes the stored key.</summary>
 public interface IPluginConnectionSettings
 {
+    /// <summary>Opaque identity of the configured connection. Hosts discard unsaved key input when it changes.</summary>
+    string? ConnectionIdentity => null;
+
     /// <summary>Whether the currently selected connection method exposes host API-key entry.</summary>
     bool ShowApiKeySettings { get; }
 }

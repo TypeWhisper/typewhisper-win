@@ -14,12 +14,13 @@ internal sealed class LivePluginTextSettings : UserControl
     private readonly string _id;
     private readonly UIElement _credentials;
     private readonly UIElement _models;
+    private readonly Action<string?> _connectionChanged;
     private bool _loaded;
     private int _generation;
 
-    internal LivePluginTextSettings(LocalDictationSession session, string id, UIElement credentials, UIElement models)
+    internal LivePluginTextSettings(LocalDictationSession session, string id, UIElement credentials, UIElement models, Action<string?> connectionChanged)
     {
-        _session = session; _id = id; _credentials = credentials; _models = models;
+        _session = session; _id = id; _credentials = credentials; _models = models; _connectionChanged = connectionChanged;
         _content.Children.Add(_status); Content = _content;
         Unloaded += (_, _) => { _generation++; _lifetime.Cancel(); _loaded = false; };
         Loaded += async (_, _) =>
@@ -53,8 +54,10 @@ internal sealed class LivePluginTextSettings : UserControl
             var snapshot = await _session.PluginRuntime.UseConfigurationAsync(_id, (plugin, _) =>
                 Task.FromResult((Fields: plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : [],
                     Actions: plugin is IPluginSettingsActions actions ? actions.SettingsActions.ToArray() : [],
-                    ShowKey: plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings)), _lifetime.Token);
+                    ShowKey: plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings,
+                    ConnectionId: (plugin as IPluginConnectionSettings)?.ConnectionIdentity)), _lifetime.Token);
             if (!IsLoaded || generation != _generation) return;
+            _connectionChanged(snapshot.ConnectionId);
             _content.Children.Clear(); _content.Children.Add(_status);
             void Fields(PluginSettingsSection section)
             {
