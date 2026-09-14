@@ -8,6 +8,19 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class OpenRouterPluginTests
 {
     [Fact]
+    public async Task LanguageMetadataFollowsModelSelectionAndRestart()
+    {
+        var host = new TestPluginHostServices(); using var plugin = new OpenRouterPlugin();
+        await plugin.ActivateAsync(host);
+        Assert.Contains("en", plugin.SupportedLanguages); Assert.Contains("de", plugin.SupportedLanguages);
+        Assert.Contains("de", plugin.TranscriptionModels.Single(m => m.Id == plugin.SelectedModelId).LanguageCodes);
+        plugin.SelectModel("google/chirp-3"); Assert.Empty(plugin.SupportedLanguages);
+        plugin.SelectModel("openai/gpt-4o-mini-transcribe");
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Contains("de", plugin.SupportedLanguages);
+    }
+
+    [Fact]
     public async Task PortableSettingsDoNotFetchOrExposeSecretsAndPersistAcrossRestart()
     {
         using var plugin = new OpenRouterPlugin(new HttpClient(new CapturingHandler((_, _) => throw new Exception("Unexpected request"))));

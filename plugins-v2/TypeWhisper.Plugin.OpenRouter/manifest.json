@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.openrouter",
   "name": "OpenRouter",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
   "description": "Text processing and speech-to-text via OpenRouter, with model discovery, text model pricing and API key budget checks.",

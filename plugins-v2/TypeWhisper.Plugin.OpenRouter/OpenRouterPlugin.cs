@@ -98,7 +98,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -156,8 +156,8 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels =>
         _fetchedTranscriptionModels.Count > 0
-            ? _fetchedTranscriptionModels.Select(model => new PluginModelInfo(model.Id, model.Name)).ToList()
-            : FallbackTranscriptionModels;
+            ? _fetchedTranscriptionModels.Select(model => WithLanguages(new PluginModelInfo(model.Id, model.Name))).ToList()
+            : FallbackTranscriptionModels.Select(WithLanguages).ToList();
 
     /// <summary>
     /// Gets the currently selected provider model identifier.
@@ -178,6 +178,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
 
         _host?.SetSetting(SelectedTranscriptionModelSettingName, modelId);
         _selectedTranscriptionModelId = modelId;
+        _host?.NotifyCapabilitiesChanged();
     }
 
     /// <summary>
