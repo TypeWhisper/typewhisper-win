@@ -42,6 +42,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.github-copilot" => "github-copilot",
             LocalTranscriptionPlugin.PluginId => "nvidia",
             "com.typewhisper.openai" => "openai",
+            "com.typewhisper.openrouter" => "openrouter",
             _ => null
         };
         if (brand is null) { ShowFallback(); return; }
@@ -50,6 +51,7 @@ public sealed class PluginBrandIcon : UserControl
         {
             "openai" => light ? "openai-light" : "openai-dark",
             "github-copilot" => light ? "github-copilot-light" : "github-copilot-dark",
+            "openrouter" => light ? "openrouter-light" : "openrouter-dark",
             "elevenlabs" when light => "elevenlabs-light",
             _ => brand
         };

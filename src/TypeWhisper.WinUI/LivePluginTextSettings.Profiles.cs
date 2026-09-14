@@ -10,6 +10,7 @@ internal sealed partial class LivePluginTextSettings
 {
     private Action? _profileDirtyChanged;
     private string? _profileName;
+    private bool _singleConfiguration;
     private ListView? _profilePicker;
     private double _profileScrollOffset;
     private readonly Dictionary<string, bool> _dirtyProfiles = new();
@@ -20,8 +21,8 @@ internal sealed partial class LivePluginTextSettings
     {
         if (_busy) { SetStatus("Wait for the current profile operation to finish."); return false; }
         if (!_dirtyProfiles.Values.Any(dirty => dirty) && _pendingApiKey() is null) return true;
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Discard unsaved profile changes?",
-            Content = "Your profile edits and any entered API key have not been saved. Stay here to save them, or discard them and leave.",
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = _singleConfiguration ? "Discard unsaved changes?" : "Discard unsaved profile changes?",
+            Content = "Your edits and any entered API key have not been saved. Stay here to save them, or discard them and leave.",
             PrimaryButtonText = "Discard changes", CloseButtonText = "Keep editing", DefaultButton = ContentDialogButton.Close };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
@@ -31,6 +32,8 @@ internal sealed partial class LivePluginTextSettings
     {
         var name = selector.Choices.FirstOrDefault(c => c.Value == selector.Value)?.Title ?? selector.Value;
         _profileName = name;
+        var singleConfiguration = selector.Choices.Count == 1 && addId is null && removeId is null;
+        _singleConfiguration = singleConfiguration;
         var editable = fields.Where(f => f.Id != selector.Id).ToArray();
         var values = editable.ToDictionary(f => f.Id,
             f => _drafts.TryGetValue(f.Id, out var draft) ? draft : f.Value);
@@ -77,6 +80,7 @@ internal sealed partial class LivePluginTextSettings
             button.MinWidth = 32; button.Padding = new(8, 4, 8, 4);
             Grid.SetColumn(button, 1); sidebarHeader.Children.Add(button);
         }
+        sidebar.Visibility = singleConfiguration ? Visibility.Collapsed : Visibility.Visible;
         layout.Children.Add(sidebar);
         var content = new StackPanel { Spacing = 20, Margin = new(0, 0, 14, 12) };
         var scroll = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -100,7 +104,7 @@ internal sealed partial class LivePluginTextSettings
         var saveState = ProfileNote("");
         var fieldGroups = new Dictionary<string, FrameworkElement>();
         AutomationProperties.SetLiveSetting(saveState, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        var save = ProfileButton("Save profile", async () =>
+        var save = ProfileButton(singleConfiguration ? "Save settings" : "Save profile", async () =>
         {
             if (_busy || !_session.CanStartPluginSettingsAction || !IsLoaded || generation != _generation) return;
             _busy = true; IsEnabled = false;
@@ -121,7 +125,7 @@ internal sealed partial class LivePluginTextSettings
             { if (IsLoaded && generation == _generation) SetStatus("Could not save “" + name + "”. Your edits are still here; retry saving."); }
             finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         });
-        AutomationProperties.SetName(save, "Save profile “" + name + "”");
+        AutomationProperties.SetName(save, singleConfiguration ? "Save settings" : "Save profile “" + name + "”");
         void UpdateDirty()
         {
             foreach (var field in editable)
@@ -200,7 +204,15 @@ internal sealed partial class LivePluginTextSettings
             var button = ProfileButton(action.Title, () => RunProfileActionAsync(action, name, profileId: selector.Value, values: values));
             AutomationProperties.SetName(button, action.Title + " for “" + name + "”");
             ToolTipService.SetToolTip(button, action.Description);
-            if (action.Section == PluginSettingsSection.Connection) connectionPanel.Children.Add(button);
+            if (action.Section == PluginSettingsSection.Connection)
+            {
+                if (showKey)
+                {
+                    _connectionActions.Children.Add(button);
+                    _profileConnectionButtons.Add(button);
+                }
+                else connectionPanel.Children.Add(button);
+            }
             else { Grid.SetColumn(button, 1); modelHeader.Children.Add(button); }
         }
         var footerContent = new Grid { ColumnSpacing = 12, RowSpacing = 4 };
@@ -231,6 +243,12 @@ internal sealed partial class LivePluginTextSettings
         }
         layout.SizeChanged += (_, e) =>
         {
+            if (singleConfiguration)
+            {
+                layout.ColumnDefinitions[0].Width = new GridLength(0);
+                layout.ColumnSpacing = 0;
+                return;
+            }
             var narrow = e.NewSize.Width < 620;
             layout.ColumnDefinitions[0].Width = narrow ? new GridLength(0) : new GridLength(185);
             layout.ColumnSpacing = narrow ? 0 : 22;

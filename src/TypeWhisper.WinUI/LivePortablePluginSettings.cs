@@ -16,6 +16,7 @@ internal sealed class LivePortablePluginSettings : UserControl
     private readonly TextBlock _status = Label("");
     private readonly PasswordBox _key = new() { PlaceholderText = "Enter an API key" };
     private readonly StackPanel _credentials = new() { Spacing = 8 };
+    private readonly StackPanel _connectionActions = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     private readonly LivePortableModelSettings _models;
     private readonly ContentControl _textSettings = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
     private readonly HandCursorButton _enable;
@@ -33,7 +34,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _connectionTitle = title;
         _keyLabel.Content = SettingsHelp.Label("API key",
             title is null ? "The key is stored through encrypted Windows user storage. Leave empty to keep the saved key."
-                : "Saved with this profile. Leave empty to keep the saved key. Local servers may not need a key.");
+                : "Saved together with these settings. Leave empty to keep the saved key.");
         _save.Visibility = title is null ? Visibility.Visible : Visibility.Collapsed;
         _check.Visibility = title is null ? Visibility.Visible : Visibility.Collapsed;
         if (_connectionIdentity == identity) return;
@@ -80,10 +81,9 @@ internal sealed class LivePortablePluginSettings : UserControl
         }, "API key saved. Check connection to verify it.");
         _remove = Button("Remove saved key", () => session.SaveRegistryKeyAsync(id, ""), "API key removed.");
         _check = Button("Check connection", () => session.ValidateRegistryKeyAsync(id), "Connection verified. No audio was uploaded.");
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        actions.Children.Add(_save); actions.Children.Add(_remove); actions.Children.Add(_check);
-        _credentials.SizeChanged += (_, e) => actions.Orientation = e.NewSize.Width < 460 ? Orientation.Vertical : Orientation.Horizontal;
-        _credentials.Children.Add(actions); content.Children.Add(_textSettings);
+        _connectionActions.Children.Add(_save); _connectionActions.Children.Add(_remove); _connectionActions.Children.Add(_check);
+        _credentials.SizeChanged += (_, e) => _connectionActions.Orientation = e.NewSize.Width < 460 ? Orientation.Vertical : Orientation.Horizontal;
+        _credentials.Children.Add(_connectionActions); content.Children.Add(_textSettings);
         Content = content;
         _key.PasswordChanged += (_, _) =>
         {
@@ -110,7 +110,7 @@ internal sealed class LivePortablePluginSettings : UserControl
             {
                 if (_textSettings.Content is StackPanel old) old.Children.Clear();
                 var editor = new LivePluginTextSettings(_session, _id, _credentials, _models, OnConnectionChanged, CanLeaveConnectionAsync,
-                    () => string.IsNullOrWhiteSpace(_key.Password) ? null : _key.Password, () => _key.Password = "");
+                    () => string.IsNullOrWhiteSpace(_key.Password) ? null : _key.Password, () => _key.Password = "", _connectionActions);
                 editor.ProfileLayoutChanged += profile => ProfileLayoutChanged?.Invoke(profile);
                 _textSettings.Content = editor;
             }

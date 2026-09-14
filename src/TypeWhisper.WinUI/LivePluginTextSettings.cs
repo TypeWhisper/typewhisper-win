@@ -15,6 +15,8 @@ internal sealed partial class LivePluginTextSettings : UserControl
     private readonly string _id;
     private readonly UIElement _credentials;
     private readonly UIElement _models;
+    private readonly Panel _connectionActions;
+    private readonly List<UIElement> _profileConnectionButtons = [];
     private readonly Action<string?, string?> _connectionChanged;
     private readonly Func<Task<bool>> _canLeaveConnection;
     private readonly Func<string?> _pendingApiKey;
@@ -24,11 +26,12 @@ internal sealed partial class LivePluginTextSettings : UserControl
 
     internal LivePluginTextSettings(LocalDictationSession session, string id, UIElement credentials, UIElement models,
         Action<string?, string?> connectionChanged, Func<Task<bool>> canLeaveConnection,
-        Func<string?> pendingApiKey, Action clearApiKey)
+        Func<string?> pendingApiKey, Action clearApiKey, Panel connectionActions)
     {
         _session = session; _id = id; _credentials = credentials; _models = models; _connectionChanged = connectionChanged;
         _canLeaveConnection = canLeaveConnection;
         _pendingApiKey = pendingApiKey; _clearApiKey = clearApiKey;
+        _connectionActions = connectionActions;
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _content.Children.Add(_status); Content = _content;
         Unloaded += (_, _) => { _generation++; _lifetime.Cancel(); _loaded = false; };
@@ -42,6 +45,8 @@ internal sealed partial class LivePluginTextSettings : UserControl
 
     internal void DetachHostControls()
     {
+        foreach (var button in _profileConnectionButtons) _connectionActions.Children.Remove(button);
+        _profileConnectionButtons.Clear();
         if (_credentials is FrameworkElement { Parent: Panel credentialsParent }) credentialsParent.Children.Remove(_credentials);
         if (_models is FrameworkElement { Parent: Panel modelsParent }) modelsParent.Children.Remove(_models);
     }
