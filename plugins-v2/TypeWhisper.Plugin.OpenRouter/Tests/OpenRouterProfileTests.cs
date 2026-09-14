@@ -143,4 +143,33 @@ public partial class OpenRouterPluginTests
         await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
         Assert.False(plugin.IsConfigured);
     }
+
+    [Fact]
+    public async Task RefreshRepairsRemovedSelectionsAtTheAtomicSavePoint()
+    {
+        using var plugin = new OpenRouterPlugin(new HttpClient(new CapturingHandler((request, _) =>
+            JsonResponse(request.RequestUri!.Query.Length == 0
+                ? """{"data":[{"id":"provider/new-text","name":"New text","architecture":{"modality":"text->text"}}]}"""
+                : """{"data":[{"id":"provider/new-speech","name":"New speech"}]}"""))));
+        var host = new TestPluginHostServices(); await plugin.ActivateAsync(host);
+        plugin.SetFetchedModels([new("provider/old-text", "Old text", "0", "0")]);
+        plugin.SetFetchedTranscriptionModels([new("provider/old-speech", "Old speech", "0", "0")]);
+        plugin.SelectLlmModel("provider/old-text"); plugin.SelectModel("provider/old-speech");
+        await plugin.ExecuteProfileActionAsync("openrouter", "refreshModels", new Dictionary<string, string>(), null, default);
+        var values = new Dictionary<string, string>
+        { ["selectedLlmModel"] = "provider/old-text", ["selectedTranscriptionModel"] = "provider/old-speech" };
+        host.FailSettings = true;
+        await Assert.ThrowsAsync<IOException>(() => plugin.SaveProfileSettingsAsync("openrouter", values, null, default));
+        Assert.Equal("provider/old-text", plugin.SelectedLlmModelId);
+        Assert.Equal("provider/old-speech", plugin.SelectedModelId);
+        host.FailSettings = false; var writes = host.SettingWrites;
+        await plugin.SaveProfileSettingsAsync("openrouter", values, null, default);
+        Assert.Equal(writes + 1, host.SettingWrites);
+        Assert.Equal(OpenRouterPlugin.DefaultLlmModelId, plugin.SelectedLlmModelId);
+        Assert.Equal("provider/new-speech", plugin.SelectedModelId);
+        Assert.DoesNotContain(plugin.SupportedModels, m => m.Id == "provider/old-text");
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal(writes + 1, host.SettingWrites);
+        Assert.Equal("provider/new-speech", plugin.SelectedModelId);
+    }
 }

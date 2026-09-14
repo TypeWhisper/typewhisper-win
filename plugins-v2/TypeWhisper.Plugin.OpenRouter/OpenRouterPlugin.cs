@@ -489,8 +489,10 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         if (excluded.Any(fragment => lowered.Contains(fragment, StringComparison.Ordinal)))
             return false;
 
-        return string.IsNullOrWhiteSpace(modality)
-            || modality.EndsWith("->text", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(modality)) return true;
+        var parts = modality.Split("->", StringSplitOptions.TrimEntries);
+        return parts.Length == 2 && parts[1].Equals("text", StringComparison.OrdinalIgnoreCase)
+            && parts[0].Split('+', StringSplitOptions.TrimEntries).Contains("text", StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task<string> SendChatCompletionAsync(

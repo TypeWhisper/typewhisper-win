@@ -16,7 +16,7 @@ dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Por
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.OpenRouter/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All 64 plugin tests and 259 portable SDK/host tests passed in Release. The shared settings change also passed all 96 OpenAI Compatible tests. The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK/WPF assemblies and minimum host version. Test API responses and keys are fixtures.
+All 69 plugin tests and 259 portable SDK/host tests passed in Release. The shared settings change also passed all 96 OpenAI Compatible tests. The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK/WPF assemblies and minimum host version. Test API responses and keys are fixtures.
 
 The standard package output is `bin/Release/portable-host/Plugins/com.typewhisper.openrouter/`: plugin DLL, dependency manifest and plugin manifest. Existing CI discovery includes the new project and its tests automatically.
 

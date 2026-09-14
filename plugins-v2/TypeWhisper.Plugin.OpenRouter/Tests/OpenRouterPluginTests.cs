@@ -144,6 +144,10 @@ public partial class OpenRouterPluginTests
     [InlineData("", "openai/text-embedding-3-small", false)]
     [InlineData("", "openai/whisper-1", false)]
     [InlineData("", "stability/stable-diffusion-xl", false)]
+    [InlineData("audio->text", "google/chirp-3", false)]
+    [InlineData("image->text", "provider/ocr", false)]
+    [InlineData("text+audio->text", "provider/multimodal", true)]
+    [InlineData("context->text", "provider/invalid", false)]
     public void IsTextLlm_FiltersByModalityAndModelId(string modality, string modelId, bool expected)
     {
         Assert.Equal(expected, OpenRouterPlugin.IsTextLlm(modality, modelId));

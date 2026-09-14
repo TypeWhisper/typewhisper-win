@@ -103,6 +103,10 @@ public sealed partial class OpenRouterPlugin
             };
         }
         next = next with { TextModels = _draftTextModels ?? next.TextModels, SpeechModels = _draftSpeechModels ?? next.SpeechModels };
+        if (_draftTextModels is { Count: > 0 } && !next.TextModels.Any(m => m.Id == next.TextModel))
+            next = next with { TextModel = next.TextModels[0].Id };
+        if (_draftSpeechModels is { Count: > 0 } && !next.SpeechModels.Any(m => m.Id == next.SpeechModel))
+            next = next with { SpeechModel = next.SpeechModels[0].Id };
         await CommitWithKeyAsync(next, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, cancellationToken);
         _draftTextModels = _draftSpeechModels = null;
     }
