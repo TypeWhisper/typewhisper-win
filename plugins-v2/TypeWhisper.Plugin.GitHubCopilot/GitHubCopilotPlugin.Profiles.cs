@@ -181,6 +181,7 @@ public sealed partial class GitHubCopilotPlugin
             var available = await LoadModelsAsync(accountToConnect, linked.Token);
             var selected = profileToConnect.Model ?? available[0].Id;
             if (!available.Any(m => m.Id == selected)) throw new ArgumentException(L("Choose a model from the current Copilot model list."));
+            linked.Token.ThrowIfCancellationRequested();
             ReplaceProfile(profileToConnect with { Account = accountToConnect, Model = selected, Connected = true });
             _catalogs[accountToConnect.Key] = available;
             Host.NotifyCapabilitiesChanged();

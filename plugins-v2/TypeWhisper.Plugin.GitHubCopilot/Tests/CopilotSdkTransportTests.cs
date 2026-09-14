@@ -10,6 +10,15 @@ namespace TypeWhisper.Plugin.GitHubCopilot.Tests;
 public sealed class CopilotSdkTransportTests
 {
     [Fact]
+    public async Task DisabledLiveModelProducesTypedFailureBeforeSessionCreation()
+    {
+        await using var server = new FakeCopilotServer();
+        await Assert.ThrowsAsync<CopilotModelUnavailableException>(() => server.CreateTransport().ProcessAsync(
+            server.Root, FakeTransport.Personal, "s", "private", "disabled", default));
+        Assert.DoesNotContain(server.Requests, r => r.Method is "session.create" or "session.send");
+    }
+
+    [Fact]
     public void ChildEnvironmentPreservesProxySettingsWithoutAmbientTokenOrRuntimeOverrides()
     {
         var source = new Dictionary<string, string>

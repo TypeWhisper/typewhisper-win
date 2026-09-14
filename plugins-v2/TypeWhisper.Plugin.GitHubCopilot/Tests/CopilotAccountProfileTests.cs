@@ -6,6 +6,47 @@ namespace TypeWhisper.Plugin.GitHubCopilot.Tests;
 public sealed class CopilotAccountProfileTests
 {
     [Fact]
+    public async Task RemovedModelInvalidatesAffectedReadinessAndDraftsButKeepsOtherModels()
+    {
+        var host = new TestHost();
+        var transport = new FakeTransport();
+        transport.Catalogs[FakeTransport.Personal.Key] = [new("model-a", "A"), new("model-b", "B")];
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(host);
+        await Configure(plugin, FakeTransport.Personal, "model-a", "Primary");
+        await plugin.ExecuteSettingsActionAsync("add", default);
+        await Configure(plugin, FakeTransport.Personal, "model-b", "Secondary");
+        var stale = Draft(plugin, FakeTransport.Personal, "model-a");
+        await plugin.ExecuteProfileActionAsync(plugin.ConnectionIdentity, plugin.ConnectionIdentity + "/refresh", stale, null, default);
+        var notifications = host.Notifications;
+        transport.Error = new CopilotModelUnavailableException();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ProcessAsync("s", "u", "", default));
+        Assert.False(plugin.IsAvailable);
+        Assert.True(Assert.Single(plugin.AdditionalLlmProviders).IsAvailable);
+        Assert.True(host.Notifications > notifications);
+        Assert.DoesNotContain(plugin.SupportedModels, m => m.Id == "model-a");
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveProfileSettingsAsync(plugin.ConnectionIdentity, stale, null, default));
+        transport.Error = null;
+        await Assert.Single(plugin.AdditionalLlmProviders).ProcessAsync("s", "u", "", default);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task LegacyRefreshCanceledAfterDiscoveryDoesNotPersistConnection()
+    {
+        var host = new TestHost();
+        using var cancel = new CancellationTokenSource();
+        var transport = new FakeTransport();
+        transport.LoadModels = _ => { cancel.Cancel(); return Task.FromResult(transport.Catalogs[FakeTransport.Personal.Key]); };
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(host);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.ExecuteSettingsActionAsync("refresh", cancel.Token));
+        Assert.Null(host.GetSetting<string>("accountProfilesV1"));
+        Assert.False(plugin.IsAvailable);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
     public async Task CancelingDraftRefreshPreservesBothProfilesUsingTheAccount()
     {
         var transport = new FakeTransport();

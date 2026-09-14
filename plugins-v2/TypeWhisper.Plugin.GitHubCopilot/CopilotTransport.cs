@@ -22,6 +22,7 @@ internal sealed record CopilotAccount(string Host, string Login)
 }
 
 internal sealed class CopilotSignInRequiredException : Exception;
+internal sealed class CopilotModelUnavailableException : Exception;
 
 internal sealed class CopilotTransport : ICopilotTransport
 {
@@ -138,7 +139,7 @@ internal sealed class CopilotTransport : ICopilotTransport
         {
             var selected = await ResolveAccountAsync(client, account, ct);
             if (!(await ListModelsAsync(client, selected.SelectionId!, ct)).Any(m => m.Id == model))
-                throw new InvalidOperationException("The model is unavailable for the selected account.");
+                throw new CopilotModelUnavailableException();
             // Bind authentication before choosing the request model or sending any text.
             config.Model = null;
             sessionCreationStarted = true;

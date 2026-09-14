@@ -121,6 +121,18 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
                 return result;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested || _lifetime.IsCancellationRequested) { throw; }
+            catch (CopilotModelUnavailableException)
+            {
+                var accountKey = profile.Account!.Key;
+                _catalogs[accountKey] = ModelsFor(id).Where(m => m.Id != selected).ToArray();
+                foreach (var draftId in _draftCatalogs.Keys.Where(key => _draftCatalogs[key].Account.Key == accountKey).ToArray())
+                {
+                    var draft = _draftCatalogs[draftId];
+                    _draftCatalogs[draftId] = draft with { Models = draft.Models.Where(m => m.Id != selected).ToArray() };
+                }
+                Host.NotifyCapabilitiesChanged();
+                throw new InvalidOperationException(L("Choose a model from the current Copilot model list."));
+            }
             catch (CopilotSignInRequiredException)
             {
                 _catalogs.Remove(profile.Account!.Key);
