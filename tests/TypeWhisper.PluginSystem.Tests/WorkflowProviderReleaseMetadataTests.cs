@@ -17,7 +17,7 @@ public sealed class WorkflowProviderReleaseMetadataTests
 {
     public static TheoryData<string, string> Providers => new()
     {
-        { "TypeWhisper.Plugin.Claude", "1.0.1" },
+        { "TypeWhisper.Plugin.Claude", "1.0.2" },
         { "TypeWhisper.Plugin.Gemini", "1.3.0" },
         { "TypeWhisper.Plugin.GemmaLocal", "1.0.1" },
         { "TypeWhisper.Plugin.Groq", "1.0.6" },

@@ -37,7 +37,7 @@ public sealed class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -93,9 +93,12 @@ public sealed class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     /// <summary>
     /// Gets the models exposed by this provider.
     /// </summary>
+    // The host falls back to the first entry when no model is selected, so keep it on an active model.
+    // Retirement dates: https://platform.claude.com/docs/en/about-claude/model-deprecations
     public IReadOnlyList<PluginModelInfo> SupportedModels { get; } =
     [
-        new PluginModelInfo("claude-sonnet-4-20250514", "Claude Sonnet 4"),
+        new PluginModelInfo("claude-sonnet-5", "Claude Sonnet 5"),
+        new PluginModelInfo("claude-sonnet-4-6", "Claude Sonnet 4.6"),
         new PluginModelInfo("claude-haiku-4-5-20251001", "Claude Haiku 4.5"),
     ];
 
