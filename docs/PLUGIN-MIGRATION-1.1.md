@@ -35,7 +35,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 
 | Plugin | Status |
 | --- | --- |
-| AssemblyAi | Separate v2 port pending |
+| AssemblyAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AssemblyAi`; 56 plugin tests and 259 portable SDK/host tests pass. Includes macOS model/dictionary/diarization features and native branding. Development install/start, authenticated REST/WebSocket requests for both models, Pro speaker labeling and app HTTP transcription passed; native UI, update acceptance and publication pending (see plugin README). |
 | AuthenticatedCli | Separate v2 port pending |
 | Cerebras | Separate v2 port pending |
 | Claude | Separate v2 port pending |
