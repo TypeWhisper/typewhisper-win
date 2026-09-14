@@ -149,3 +149,5 @@ A second review pass added cancellation and startup regressions: canceling a dra
 Further review regressions verify that a model rejected by live discovery is removed from saved and draft catalogs without disabling other models, and that cancellation immediately after legacy discovery prevents a settings commit. All 41 plugin tests passed on Windows.
 
 The final account-state regression pass verifies late account-discovery cancellation, sign-out invalidation of all matching drafts, and default-provider routing for legacy refresh/model/disconnect operations while a secondary editor is selected. All 44 plugin tests passed on Windows.
+
+The SDK loopback suite additionally covers deferred and mismatched model switches after successful discovery. Both invalidate the requested model and clean up the session without sending user text. All 46 plugin tests passed on Windows.

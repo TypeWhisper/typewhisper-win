@@ -152,7 +152,7 @@ internal sealed class CopilotTransport : ICopilotTransport
                 !account.Matches(new(auth.Host, auth.Login))) throw new CopilotSignInRequiredException();
             var switched = await session.Rpc.Model.SwitchToAsync(model, requireAvailable: true, cancellationToken: ct);
             if (switched.Deferred == true || switched.ModelId != model)
-                throw new InvalidOperationException("The requested model was not selected.");
+                throw new CopilotModelUnavailableException();
             var response = await session.SendAndWaitAsync(new MessageOptions { Prompt = userText },
                 timeout: TimeSpan.FromMinutes(2), cancellationToken: ct);
             return response?.Data.Content ?? throw new InvalidOperationException("Copilot returned no text.");

@@ -9,6 +9,19 @@ namespace TypeWhisper.Plugin.GitHubCopilot.Tests;
 
 public sealed class CopilotSdkTransportTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RejectedModelSwitchInvalidatesModelAndCleansSessionWithoutSendingText(bool deferred)
+    {
+        await using var server = new FakeCopilotServer { DeferredSwitch = deferred, MismatchedModel = !deferred };
+        await Assert.ThrowsAsync<CopilotModelUnavailableException>(() => server.CreateTransport().ProcessAsync(
+            server.Root, FakeTransport.Personal, "s", "private", "model-a", default));
+        Assert.DoesNotContain(server.Requests, r => r.Method == "session.send");
+        Assert.Contains(server.Requests, r => r.Method == "session.abort");
+        Assert.Contains(server.Requests, r => r.Method == "session.delete");
+    }
+
     [Fact]
     public async Task DisabledLiveModelProducesTypedFailureBeforeSessionCreation()
     {
@@ -190,6 +203,8 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
     internal string SelectedLogin = "personal";
     internal bool MismatchedSessionAccount;
     internal bool MissingPersonal;
+    internal bool DeferredSwitch;
+    internal bool MismatchedModel;
 
     internal FakeCopilotServer() { _listener.Start(); _run = RunAsync(); }
 
@@ -238,7 +253,7 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
                         (MissingPersonal ? new[] { "work" } : new[] { "personal", "work" }).Select(login => (object)new
                         { authInfo = new { type = AuthType, host = "https://github.com", login, token = "fixture-secret-never-forward", envVar = "GH_TOKEN" }, selectionId = "opaque-" + login, token = "fixture-secret-never-forward" }).ToArray(),
                     "session.gitHubAuth.getStatus" => new { isAuthenticated = true, authType = "user", host = "https://github.com", login = MismatchedSessionAccount ? "different-account" : SelectedLogin },
-                    "session.model.switchTo" => new { modelId = parameters.GetProperty("modelId").GetString(), deferred = false, status = "applied" },
+                    "session.model.switchTo" => new { modelId = MismatchedModel ? "different-model" : parameters.GetProperty("modelId").GetString(), deferred = DeferredSwitch, status = "applied" },
                     "models.list" => new { models = new object[] { new { id = "model-a", name = "Model A" }, new { id = "model-a", name = "Duplicate" }, new { id = "disabled", name = "Disabled", policy = new { state = "disabled" } } } },
                     "session.create" => new { sessionId = parameters.GetProperty("sessionId").GetString() },
                     "session.send" => new { messageId = "message-1" },
