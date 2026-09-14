@@ -45,7 +45,7 @@ Use the same physical audio path to test an LLM plugin after transcription. Crea
 ```powershell
 ./eng/Test-WinUILocalAudio.ps1 -Mode Run `
   -Engine assemblyai -Model universal-3-5-pro `
-  -WorkflowId '<workflow-guid>' `
+  -WorkflowId '<stored-workflow-id>' `
   -Text 'The yellow bicycle is parked beside the garden.' `
   -ExpectedText 'THE YELLOW BICYCLE IS PARKED BESIDE THE GARDEN.' `
   -OutputDeviceName 'Speakers (Creative Pebble Pro)'

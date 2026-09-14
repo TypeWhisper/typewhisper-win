@@ -6,6 +6,10 @@ using TypeWhisper.PluginSDK;
 
 public partial class CerebrasTests
 {
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+
+    public CerebrasTests(Xunit.Abstractions.ITestOutputHelper output) => _output = output;
+
     [Fact]
     public async Task PackageInstallsConfiguresRestartsAndReinstallsWithoutLosingSettings()
     {
@@ -66,8 +70,13 @@ public partial class CerebrasTests
         }
         finally
         {
+            // Collectible plugin load contexts release their Windows DLL handles after GC.
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-            try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            try { Directory.Delete(root, true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _output.WriteLine($"Package-test cleanup could not remove {root}: {ex.Message}");
+            }
         }
     }
 }

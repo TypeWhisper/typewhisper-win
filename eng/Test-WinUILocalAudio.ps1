@@ -41,7 +41,7 @@ $wave = Join-Path $OutputDirectory 'speech-en.wav'
 Invoke-AudioHelper @('synthesize', $wave, $Text)
 if ($Mode -eq 'Prepare') { Write-Host "Prepared $wave"; return }
 if (-not $Engine -or -not $Model -or -not $OutputDeviceName) { throw 'Run requires Engine, Model and the exact OutputDeviceName.' }
-if ($WorkflowId -and -not [guid]::TryParse($WorkflowId, [ref]([guid]::Empty))) { throw 'WorkflowId must be a workflow GUID.' }
+if ($PSBoundParameters.ContainsKey('WorkflowId') -and [string]::IsNullOrWhiteSpace($WorkflowId)) { throw 'WorkflowId must not be blank.' }
 $output = @($devices | Where-Object { $_.flow -eq 'Render' -and $_.name -eq $OutputDeviceName })
 if ($output.Count -ne 1) { throw 'The output must match exactly one active render endpoint. Use -Mode Devices.' }
 if ($output[0].name -eq 'Remote Audio' -or @($devices | Where-Object { $_.flow -eq 'Capture' -and $_.name -ne 'Remote Audio' }).Count -eq 0) {

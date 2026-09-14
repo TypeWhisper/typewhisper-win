@@ -33,7 +33,7 @@ function Invoke-RestMethod {
         if ($audioFixtureState.scenario -eq 'start-timeout') { throw 'fixture start timeout after acceptance' }
         $start = $Body | ConvertFrom-Json
         if ($audioFixtureState.scenario -in @('workflow', 'workflow-mismatch', 'output-mismatch')) {
-            if ($start.workflow_id -ne 'c96ec09c-d990-4cb0-b88e-7b3d6708c5bf') { throw 'Workflow was not sent.' }
+            if ($start.workflow_id -ne 'dev-workflow-cerebras') { throw 'Workflow was not sent.' }
             return @{id='fixture-session';workflow_id= $(if ($audioFixtureState.scenario -eq 'workflow-mismatch') { 'wrong' } else { $start.workflow_id })}
         }
         return @{id='fixture-session'}
@@ -60,7 +60,7 @@ try {
         $failure = $null
         $workflowArguments = @{}
         if ($scenario -in @('workflow', 'workflow-mismatch', 'output-mismatch')) {
-            $workflowArguments.WorkflowId = 'c96ec09c-d990-4cb0-b88e-7b3d6708c5bf'
+            $workflowArguments.WorkflowId = 'dev-workflow-cerebras'
             $workflowArguments.ExpectedText = if ($scenario -eq 'output-mismatch') { 'DIFFERENT.' } else { 'FIXTURE SENTENCE.' }
         }
         try {
