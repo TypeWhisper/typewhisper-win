@@ -496,6 +496,8 @@ public partial class OpenRouterPluginTests
 
         private readonly Dictionary<string, JsonElement> _settings = [];
         public bool FailWrites;
+        public bool FailSettings;
+        public int SettingWrites;
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
@@ -523,7 +525,8 @@ public partial class OpenRouterPluginTests
 
         public void SetSetting<T>(string key, T value)
         {
-            if (FailWrites) throw new IOException();
+            if (FailWrites || FailSettings) throw new IOException();
+            SettingWrites++;
             _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
         }
 

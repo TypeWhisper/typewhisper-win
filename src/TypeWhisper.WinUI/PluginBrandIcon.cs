@@ -41,6 +41,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.groq" => "groq",
             LocalTranscriptionPlugin.PluginId => "nvidia",
             "com.typewhisper.openai" => "openai",
+            "com.typewhisper.openrouter" => "openrouter",
             _ => null
         };
         if (brand is null) { ShowFallback(); return; }
@@ -48,6 +49,7 @@ public sealed class PluginBrandIcon : UserControl
         var file = brand switch
         {
             "openai" => light ? "openai-light" : "openai-dark",
+            "openrouter" => light ? "openrouter-light" : "openrouter-dark",
             "elevenlabs" when light => "elevenlabs-light",
             _ => brand
         };

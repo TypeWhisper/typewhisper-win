@@ -1,6 +1,6 @@
 # OpenRouter for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.openrouter`, version `1.1.1`, requiring host `1.1.2` or later. The protocol was ported from the Windows provider at `ce38c355` and compared with the macOS OpenRouter provider on September 14, 2026. The package has no WPF dependency and does not read or migrate legacy profiles.
+Independent .NET 10 implementation of `com.typewhisper.openrouter`, version `1.1.2`, requiring host `1.1.2` or later. The protocol was ported from the Windows provider at `ce38c355` and compared with the macOS OpenRouter provider on September 14, 2026. The package has no WPF dependency and does not read or migrate legacy profiles.
 
 The plugin provides text processing through `/api/v1/chat/completions` and recorded-audio transcription through `/api/v1/audio/transcriptions`. Audio is sent as base64 WAV in JSON. Translation, streaming and dictionary prompts are not advertised. Following the macOS provider, requests to OpenAI, Groq and Together models request verbose JSON with segment timestamps. Returned valid segments are preserved; unavailable timestamps are not synthesized.
 
@@ -16,7 +16,7 @@ dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Por
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.OpenRouter/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All 57 plugin tests and 259 portable SDK/host tests passed in Release. The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK/WPF assemblies and minimum host version. Test API responses and keys are fixtures.
+All 61 plugin tests and 259 portable SDK/host tests passed in Release. The shared settings change also passed all 96 OpenAI Compatible tests. The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK/WPF assemblies and minimum host version. Test API responses and keys are fixtures.
 
 The standard package output is `bin/Release/portable-host/Plugins/com.typewhisper.openrouter/`: plugin DLL, dependency manifest and plugin manifest. Existing CI discovery includes the new project and its tests automatically.
 
@@ -31,6 +31,10 @@ That host check initially rejected explicit English because the port lacked lang
 A real development package update from `1.1.0` to `1.1.1` was staged in the immutable package store while the host was running. The old version remained active with a pending receipt; the prescribed helper restarted the host, which promoted the new package without warnings. The encrypted key, selected transcription model, 430 text models and 21 transcription models survived. Live text processing and app-level transcription succeeded again after the update.
 
 ARM64 hardware execution, long recordings, the German native layout, other upstream model families and side-by-side installed-generation acceptance remain pending. No public plugin catalog or release was modified.
+
+Version `1.1.2` uses the same host-rendered editor as OpenAI Compatible, with a single full-width configuration and one fixed **Save settings** button. API-key edits, model choices, refreshed catalogs and temperature are committed together; connection and budget checks can use an entered key without saving it. A failed settings write leaves the active configuration and encrypted key intact. The native sidebar uses the existing OpenRouter brand asset in both themes.
+
+Computer Use verified the logo, unsaved-change indicator, disabled/enabled Save button, conditional custom-temperature field and successful page-level save. The original provider-default temperature mode and selected models were retained after the test. Automated regression checks cover the grouped commit, encrypted-key rollback, invalid input and draft catalog refresh.
 
 ## Provider references
 

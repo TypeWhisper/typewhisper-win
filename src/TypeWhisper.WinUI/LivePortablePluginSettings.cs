@@ -33,7 +33,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _connectionTitle = title;
         _keyLabel.Content = SettingsHelp.Label("API key",
             title is null ? "The key is stored through encrypted Windows user storage. Leave empty to keep the saved key."
-                : "Saved with this profile. Leave empty to keep the saved key. Local servers may not need a key.");
+                : "Saved together with these settings. Leave empty to keep the saved key.");
         _save.Visibility = title is null ? Visibility.Visible : Visibility.Collapsed;
         _check.Visibility = title is null ? Visibility.Visible : Visibility.Collapsed;
         if (_connectionIdentity == identity) return;

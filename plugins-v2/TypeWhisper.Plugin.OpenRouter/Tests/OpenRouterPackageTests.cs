@@ -28,7 +28,7 @@ public partial class OpenRouterPluginTests
             PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 2), http, _ => host);
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.openrouter", Name = "OpenAI", Version = "1.1.1", MinHostVersion = "1.1.2",
+                Id = "com.typewhisper.openrouter", Name = "OpenAI", Version = "1.1.2", MinHostVersion = "1.1.2",
                 DownloadUrl = "https://fixture.invalid/openrouter.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
                 SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <RootNamespace>TypeWhisper.Plugin.OpenRouter</RootNamespace><Version>1.1.1</Version>
+    <RootNamespace>TypeWhisper.Plugin.OpenRouter</RootNamespace><Version>1.1.2</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />

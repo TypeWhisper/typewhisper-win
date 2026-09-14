@@ -17,20 +17,28 @@ public sealed partial class OpenRouterPlugin
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
+        new(ProfileSelectorId, "OpenRouter", "", ProfileId)
+        { Choices = [new(ProfileId, "OpenRouter")], Section = PluginSettingsSection.Connection },
+        new(SelectedTranscriptionModelSettingName, L("Transcription model", "Transkriptionsmodell"),
+            L("Default model for OpenRouter transcription.", "Standardmodell für OpenRouter-Transkriptionen."), _selectedTranscriptionModelId ?? DefaultTranscriptionModelId)
+        {
+            Section = PluginSettingsSection.Transcription,
+            Choices = (_draftSpeechModels ?? _fetchedTranscriptionModels).Select(m => new PluginSettingChoice(m.Id, m.Name))
+                .Concat(TranscriptionModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName))).DistinctBy(m => m.Value).ToArray()
+        },
         new(SelectedLlmModelSettingName, L("Default text model", "Standard-Textmodell"),
             L("Used when a workflow does not specify a model. Prices are USD per million input/output tokens.",
               "Wird verwendet, wenn ein Workflow kein Modell vorgibt. Preise in USD pro Million Eingabe-/Ausgabetokens."),
             _selectedLlmModelId ?? DefaultLlmModelId)
         {
-            Section = PluginSettingsSection.TextProcessing, SaveChoiceOnChange = true,
-            Choices = SupportedModels.Select(model => new PluginSettingChoice(model.Id,
-                _fetchedModels.FirstOrDefault(f => f.Id == model.Id) is { } fetched
-                    ? $"{model.DisplayName} · {fetched.FormattedPricing(L("Free", "Kostenlos"))}" : model.DisplayName)).ToArray()
+            Section = PluginSettingsSection.TextProcessing,
+            Choices = (_draftTextModels ?? _fetchedModels).Select(m => new PluginSettingChoice(m.Id, $"{m.Name} · {m.FormattedPricing(L("Free", "Kostenlos"))}"))
+                .Concat(SupportedModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName))).DistinctBy(m => m.Value).ToArray()
         },
         new(TemperatureModeSettingName, L("Temperature mode", "Temperaturmodus"),
             L("Use the provider default or set a custom sampling temperature.", "Anbietervorgabe oder eigene Temperatur verwenden."), _temperatureMode)
         {
-            Section = PluginSettingsSection.TextProcessing, SaveChoiceOnChange = true,
+            Section = PluginSettingsSection.TextProcessing,
             Choices = [new(TemperatureModeProviderDefault, L("Provider default", "Anbietervorgabe")), new(TemperatureModeCustom, L("Custom", "Benutzerdefiniert"))]
         },
         new(TemperatureValueSettingName, L("Temperature", "Temperatur"),
@@ -65,14 +73,11 @@ public sealed partial class OpenRouterPlugin
     /// <inheritdoc />
     public IReadOnlyList<PluginSettingsAction> SettingsActions =>
     [
-        new("refreshTextModels", L("Refresh text models", "Textmodelle aktualisieren"),
-            L("Fetch available text models and their prices from OpenRouter.", "Verfügbare Textmodelle und ihre Preise von OpenRouter abrufen."))
-            { Section = PluginSettingsSection.TextProcessing },
-        new("refreshTranscriptionModels", L("Refresh transcription models", "Transkriptionsmodelle aktualisieren"),
-            L("Fetch available speech-to-text models from OpenRouter.", "Verfügbare Transkriptionsmodelle von OpenRouter abrufen."))
+        new("checkConnection", L("Check connection", "Verbindung prüfen"), L("Test the entered key before saving.", "Den eingegebenen Key vor dem Speichern prüfen."))
+            { Section = PluginSettingsSection.Connection },
+        new("refreshModels", L("Refresh models", "Modelle aktualisieren"), L("Load text and transcription models. Save to keep the catalog.", "Text- und Transkriptionsmodelle laden. Zum Übernehmen speichern."))
             { Section = PluginSettingsSection.Transcription },
-        new("checkBudget", L("Check key budget", "Key-Budget prüfen"),
-            L("Check the remaining spending limit of this API key.", "Verbleibendes Ausgabelimit dieses API-Keys prüfen."))
+        new("checkBudget", L("Check key budget", "Key-Budget prüfen"), L("Check this key's spending limit.", "Ausgabelimit dieses Keys prüfen."))
             { Section = PluginSettingsSection.Connection }
     ];
 

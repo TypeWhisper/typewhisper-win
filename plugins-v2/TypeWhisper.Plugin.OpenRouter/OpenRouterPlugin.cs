@@ -13,7 +13,7 @@ namespace TypeWhisper.Plugin.OpenRouter;
 /// <summary>
 /// Provides open router plugin behavior.
 /// </summary>
-public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, IApiKeyPlugin, IPluginTextSettings, IPluginSettingsActions
+public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, IApiKeyPlugin, IPluginProfileSettings, IPluginConnectionSettings, IPluginSettingsActions
 {
     private const string BaseUrl = "https://openrouter.ai/api";
     private const string ApiKeySecretName = "api-key";
@@ -98,7 +98,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.1.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -106,6 +106,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
+        _activeSecretName = ApiKeySecretName;
         _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
         _fetchedTranscriptionModels = NormalizeFetchedTranscriptionModels(
             host.GetSetting<List<OpenRouterFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? []);
@@ -117,6 +118,12 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         _temperatureValue = NormalizeTemperatureValue(host.GetSetting<double?>(TemperatureValueSettingName));
         NormalizeSelectedTranscriptionModel(persist: true);
         NormalizeSelectedLlmModel(persist: true);
+        if (host.GetSetting<Configuration>("configuration") is { } saved)
+        {
+            ApplyConfiguration(saved);
+            _apiKey = saved.SecretName is { } secret ? NormalizeApiKey(await host.LoadSecretAsync(secret)) : null;
+        }
+        _draftTextModels = _draftSpeechModels = null;
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsAvailable})");
     }
 
@@ -176,9 +183,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         if (TranscriptionModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
             throw new ArgumentException($"Unknown model: {modelId}");
 
-        _host?.SetSetting(SelectedTranscriptionModelSettingName, modelId);
-        _selectedTranscriptionModelId = modelId;
-        _host?.NotifyCapabilitiesChanged();
+        CommitConfiguration(CaptureConfiguration() with { SpeechModel = modelId });
     }
 
     /// <summary>
@@ -255,25 +260,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     internal double TemperatureValue => _temperatureValue;
 
     /// <inheritdoc />
-    public async Task SetApiKeyAsync(string apiKey)
-    {
-        if (_host is null) throw new InvalidOperationException("Activate the plugin first.");
-        var normalized = NormalizeApiKey(apiKey);
-        var wasAvailable = IsAvailable;
-        var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
-
-        if (_host is not null)
-        {
-            if (normalized is null)
-                await _host.DeleteSecretAsync(ApiKeySecretName);
-            else
-                await _host.StoreSecretAsync(ApiKeySecretName, normalized);
-
-        }
-        _apiKey = normalized;
-        if (changed && wasAvailable != IsAvailable)
-            _host?.NotifyCapabilitiesChanged();
-    }
+    public Task SetApiKeyAsync(string apiKey) => CommitWithKeyAsync(CaptureConfiguration(), apiKey, default);
 
     internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
     {
@@ -300,43 +287,30 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         if (SupportedModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
             modelId = SupportedModels.FirstOrDefault()?.Id ?? modelId;
 
-        _host?.SetSetting(SelectedLlmModelSettingName, modelId);
-        _selectedLlmModelId = modelId;
-        _hasUserSelectedLlmModel = true;
-        _host?.SetSetting(UserSelectedLlmModelSettingName, true);
+        CommitConfiguration(CaptureConfiguration() with { TextModel = modelId, UserSelectedTextModel = true });
     }
 
     internal void SetFetchedModels(List<OpenRouterFetchedModel> models)
     {
         var normalized = NormalizeFetchedModels(models);
-        _host?.SetSetting(FetchedModelsSettingName, normalized);
-        _fetchedModels = normalized;
-        NormalizeSelectedLlmModel(persist: true);
-        _host?.NotifyCapabilitiesChanged();
+        var selected = normalized.Count == 0 || normalized.Any(m => m.Id == _selectedLlmModelId)
+            ? _selectedLlmModelId : normalized[0].Id;
+        CommitConfiguration(CaptureConfiguration() with { TextModels = normalized, TextModel = selected });
     }
 
     internal void SetFetchedTranscriptionModels(List<OpenRouterFetchedModel> models)
     {
         var normalized = NormalizeFetchedTranscriptionModels(models);
-        _host?.SetSetting(FetchedTranscriptionModelsSettingName, normalized);
-        _fetchedTranscriptionModels = normalized;
-        NormalizeSelectedTranscriptionModel(persist: true);
-        _host?.NotifyCapabilitiesChanged();
+        var selected = normalized.Count == 0 || normalized.Any(m => m.Id == _selectedTranscriptionModelId)
+            ? _selectedTranscriptionModelId : normalized[0].Id;
+        CommitConfiguration(CaptureConfiguration() with { SpeechModels = normalized, SpeechModel = selected });
     }
 
-    internal void SetTemperatureMode(string mode)
-    {
-        var normalized = NormalizeTemperatureMode(mode);
-        _host?.SetSetting(TemperatureModeSettingName, normalized);
-        _temperatureMode = normalized;
-    }
+    internal void SetTemperatureMode(string mode) =>
+        CommitConfiguration(CaptureConfiguration() with { TemperatureMode = NormalizeTemperatureMode(mode) });
 
-    internal void SetTemperatureValue(double value)
-    {
-        var normalized = NormalizeTemperatureValue(value);
-        _host?.SetSetting(TemperatureValueSettingName, normalized);
-        _temperatureValue = normalized;
-    }
+    internal void SetTemperatureValue(double value) =>
+        CommitConfiguration(CaptureConfiguration() with { Temperature = NormalizeTemperatureValue(value) });
 
     internal async Task<List<OpenRouterFetchedModel>> FetchModelsAsync(CancellationToken ct = default)
     {
@@ -598,8 +572,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
             return;
 
         if (!_hasUserSelectedLlmModel
-            || string.IsNullOrWhiteSpace(_selectedLlmModelId)
-)
+            || string.IsNullOrWhiteSpace(_selectedLlmModelId))
         {
             _selectedLlmModelId = available.First().Id;
             if (persist)
