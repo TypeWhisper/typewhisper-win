@@ -204,7 +204,15 @@ internal sealed partial class LivePluginTextSettings
             var button = ProfileButton(action.Title, () => RunProfileActionAsync(action, name, profileId: selector.Value, values: values));
             AutomationProperties.SetName(button, action.Title + " for “" + name + "”");
             ToolTipService.SetToolTip(button, action.Description);
-            if (action.Section == PluginSettingsSection.Connection) connectionPanel.Children.Add(button);
+            if (action.Section == PluginSettingsSection.Connection)
+            {
+                if (showKey)
+                {
+                    _connectionActions.Children.Add(button);
+                    _profileConnectionButtons.Add(button);
+                }
+                else connectionPanel.Children.Add(button);
+            }
             else { Grid.SetColumn(button, 1); modelHeader.Children.Add(button); }
         }
         var footerContent = new Grid { ColumnSpacing = 12, RowSpacing = 4 };
