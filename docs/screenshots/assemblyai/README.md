@@ -14,6 +14,12 @@ The committed `Test-WinUILocalAudio.ps1` script was then run successfully agains
 
 ![Repeated acceptance using the reusable development script](script-run.jpg)
 
-This proves one physical-audio transcription and paste run. It does not establish physical-hotkey coverage, general recognition accuracy, or settings/logo layout acceptance. The shared host output had been replaced by a different checkout before this run; the installed AssemblyAI package remained unchanged. Only the reviewed document screenshot is committed; credentials, local discovery state and microphone audio are excluded.
+These runs establish physical-audio transcription and paste, but not physical-hotkey coverage or general recognition accuracy. The shared host output had been replaced by a different checkout before these runs; the installed AssemblyAI package remained unchanged.
+
+The development launcher subsequently rebuilt this PR's checkout. The published host DLL hash matched the local build, and the dark settings page and official AssemblyAI logomark were inspected in that host. The empty replacement field indicates a saved key without exposing it. Light-theme layout remains unverified.
+
+![AssemblyAI settings and official logomark in this checkout's host](settings-dark.jpg)
+
+Only reviewed UI screenshots are committed; credentials, local discovery state and microphone audio are excluded.
 
 Reproduce with [the local audio test workflow](../../WINUI-LOCAL-AUDIO-TEST.md) and `eng/Test-WinUILocalAudio.ps1`.
