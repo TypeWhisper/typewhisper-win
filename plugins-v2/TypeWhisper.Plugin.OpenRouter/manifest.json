@@ -1,0 +1,20 @@
+{
+  "id": "com.typewhisper.openrouter",
+  "name": "OpenRouter",
+  "version": "1.1.0",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Text processing and speech-to-text via OpenRouter, with model discovery, text model pricing and API key budget checks.",
+  "descriptions": {
+    "de": "Textverarbeitung und Transkription über OpenRouter, mit Modellabruf, Preisen für Textmodelle und Prüfung des API-Key-Budgets."
+  },
+  "category": "llm",
+  "categories": [
+    "llm",
+    "transcription"
+  ],
+  "requiresApiKey": true,
+  "iconSystemName": "globe",
+  "assemblyName": "TypeWhisper.Plugin.OpenRouter.dll",
+  "pluginClass": "TypeWhisper.Plugin.OpenRouter.OpenRouterPlugin"
+}
