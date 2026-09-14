@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <Version>1.1.0</Version>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <PackageReference Include="GitHub.Copilot.SDK" Version="1.0.13" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.GitHubCopilot.Portable.Tests" />
+    <Content Include="manifest.json;Localization/*.json;Licenses/*;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="StagePortablePackage" AfterTargets="Build" DependsOnTargets="_CopyCopilotCliToOutput">
+    <Error Condition="'$(CopilotSkipCliDownload)' == 'true'" Text="A distributable Copilot plugin requires the bundled SDK runtime. Do not set CopilotSkipCliDownload." />
+    <Error Condition="!Exists('$(TargetDir)runtimes/$(_CopilotRid)/native/$(_CopilotRuntimeWrapper)') Or !Exists('$(TargetDir)runtimes/$(_CopilotRid)/native/runtime.node')" Text="The Copilot runtime bundle is incomplete." />
+    <PropertyGroup>
+      <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.github-copilot/</PackageDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetDir)*.dll;$(TargetDir)$(TargetName).deps.json;$(TargetDir)manifest.json;$(TargetDir)THIRD-PARTY-NOTICES.md"
+                   Exclude="$(TargetDir)TypeWhisper.PluginSDK.dll" />
+    </ItemGroup>
+    <MakeDir Directories="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageFile)" DestinationFolder="$(PackageDirectory)" />
+    <ItemGroup>
+      <PackageLocalization Include="$(TargetDir)Localization/**/*" />
+      <PackageLicense Include="$(TargetDir)Licenses/**/*" />
+      <PackageRuntime Include="$(TargetDir)runtimes/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PackageLocalization)" DestinationFiles="@(PackageLocalization->'$(PackageDirectory)Localization/%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(PackageLicense)" DestinationFiles="@(PackageLicense->'$(PackageDirectory)Licenses/%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(PackageRuntime)" DestinationFiles="@(PackageRuntime->'$(PackageDirectory)runtimes/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+</Project>

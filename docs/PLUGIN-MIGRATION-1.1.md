@@ -29,6 +29,8 @@ Credentials need an explicit supported export/decrypt-and-reencrypt path under t
 
 ## Order
 
+New v2 providers: `plugins-v2/TypeWhisper.Plugin.GitHubCopilot` adds an independent Copilot LLM provider using the official SDK and the user's existing sign-in. Provider, real-SDK loopback, package lifecycle and isolated-runtime tests are included. Live requests through the packaged provider exercised the SDK's `auto` model; native WinUI launch, branding and the shared profile editor were checked. Full dictation/workflow UI execution and remaining release acceptance are pending. See the plugin README and [live acceptance report](copilot-live-acceptance.md). It does not change the legacy plugin count below.
+
 Start with one cloud provider as a pilot (OpenAI-compatible), then port cloud transcription/LLM providers individually. Follow with text processors and actions, then native model engines and capabilities requiring additional host consumers. Shared HTTP helpers are useful only where contracts are actually identical.
 
 The repository contains 39 top-level manifests: five existing portable builds, one CTC dependency bundled with NVIDIA, and 33 remaining standalone ports. This is a repository count, not a claim about the published catalog.

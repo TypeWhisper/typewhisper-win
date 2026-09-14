@@ -39,6 +39,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.groq" => "groq",
+            "com.typewhisper.github-copilot" => "github-copilot",
             LocalTranscriptionPlugin.PluginId => "nvidia",
             "com.typewhisper.openai" => "openai",
             _ => null
@@ -48,6 +49,7 @@ public sealed class PluginBrandIcon : UserControl
         var file = brand switch
         {
             "openai" => light ? "openai-light" : "openai-dark",
+            "github-copilot" => light ? "github-copilot-light" : "github-copilot-dark",
             "elevenlabs" when light => "elevenlabs-light",
             _ => brand
         };
