@@ -135,7 +135,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
             }
             catch (CopilotSignInRequiredException)
             {
-                _catalogs.Remove(profile.Account!.Key);
+                InvalidateAccountModels(profile.Account!.Key);
                 Host.NotifyCapabilitiesChanged();
                 throw new InvalidOperationException(L("The selected GitHub account is signed out or unavailable. Sign in to that account in Copilot CLI and refresh this profile."));
             }

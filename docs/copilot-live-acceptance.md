@@ -147,3 +147,5 @@ During PR validation, rebuilding and launching this checkout again confirmed the
 A second review pass added cancellation and startup regressions: canceling a draft refresh preserves every connected profile using that account, and all saved accounts share one 30-second activation discovery deadline. All 38 plugin tests passed on Windows; explicit caller cancellation still propagates.
 
 Further review regressions verify that a model rejected by live discovery is removed from saved and draft catalogs without disabling other models, and that cancellation immediately after legacy discovery prevents a settings commit. All 41 plugin tests passed on Windows.
+
+The final account-state regression pass verifies late account-discovery cancellation, sign-out invalidation of all matching drafts, and default-provider routing for legacy refresh/model/disconnect operations while a secondary editor is selected. All 44 plugin tests passed on Windows.

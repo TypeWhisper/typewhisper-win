@@ -67,7 +67,7 @@ public sealed partial class GitHubCopilotPlugin
             }
             // Compatibility for the previous single-account provider's configuration API.
             if (id != "selectedModel") throw new ArgumentException("Use the profile save action for account settings.");
-            var profile = Editor;
+            var profile = RequireProfile(DefaultProfileId);
             if (!ModelsFor(profile.Id).Any(m => m.Id == value)) throw new ArgumentException(L("Choose a model from the current Copilot model list."));
             ReplaceProfile(profile with { Model = value });
         }
@@ -161,8 +161,9 @@ public sealed partial class GitHubCopilotPlugin
             }
             if (id is "disconnect" || id == Editor.Id + "/disconnect")
             {
-                ReplaceProfile(Editor with { Connected = false });
-                _draftCatalogs.Remove(Editor.Id);
+                var profile = id == "disconnect" ? RequireProfile(DefaultProfileId) : Editor;
+                ReplaceProfile(profile with { Connected = false });
+                _draftCatalogs.Remove(profile.Id);
                 return L("Disconnected. Your GitHub sign-in is kept.");
             }
             if (id == "refreshAccounts")
@@ -174,7 +175,7 @@ public sealed partial class GitHubCopilotPlugin
             // Preserve the original explicit connect action for existing automation. It
             // may bind a sole account, but must never choose between multiple accounts.
             await RefreshAccountsAsync(linked.Token);
-            var profileToConnect = Editor;
+            var profileToConnect = RequireProfile(DefaultProfileId);
             var accountToConnect = profileToConnect.Account is { } savedAccount
                 ? _accounts.FirstOrDefault(a => a.Matches(savedAccount)) : _accounts.Count == 1 ? _accounts[0] : null;
             if (accountToConnect is null) throw new ArgumentException(L("Choose a signed-in GitHub account"));
@@ -198,7 +199,12 @@ public sealed partial class GitHubCopilotPlugin
     }
     private async Task RefreshAccountsAsync(CancellationToken ct)
     {
-        try { _accounts = (await _transport.GetAccountsAsync(Host.PluginDataDirectory, ct)).Where(ValidAccount).DistinctBy(a => a.Key).ToArray(); }
+        try
+        {
+            var accounts = (await _transport.GetAccountsAsync(Host.PluginDataDirectory, ct)).Where(ValidAccount).DistinctBy(a => a.Key).ToArray();
+            ct.ThrowIfCancellationRequested();
+            _accounts = accounts;
+        }
         catch (OperationCanceledException) { throw; }
         catch (Exception) { throw new InvalidOperationException(L("Could not load GitHub accounts. Sign in through Copilot CLI and try again.")); }
         // Missing accounts invalidate readiness without rebinding or deleting profiles.
@@ -219,10 +225,15 @@ public sealed partial class GitHubCopilotPlugin
         catch (OperationCanceledException) { throw; }
         catch (Exception)
         {
-            _catalogs.Remove(account.Key);
-            foreach (var id in _draftCatalogs.Keys.Where(id => _draftCatalogs[id].Account.Key == account.Key).ToArray()) _draftCatalogs.Remove(id);
+            InvalidateAccountModels(account.Key);
             Host.NotifyCapabilitiesChanged();
             throw new InvalidOperationException(L("Could not load Copilot models. Check your sign-in, Copilot access and connection, then retry."));
         }
+    }
+
+    private void InvalidateAccountModels(string accountKey)
+    {
+        _catalogs.Remove(accountKey);
+        foreach (var id in _draftCatalogs.Keys.Where(id => _draftCatalogs[id].Account.Key == accountKey).ToArray()) _draftCatalogs.Remove(id);
     }
 }

@@ -195,8 +195,9 @@ internal sealed class FakeTransport : ICopilotTransport
     internal (string, string, string)? Request;
     internal Func<CancellationToken, Task<string>>? Process;
     internal Func<CancellationToken, Task<IReadOnlyList<PluginModelInfo>>>? LoadModels;
+    internal Func<CancellationToken, Task<IReadOnlyList<CopilotAccount>>>? LoadAccounts;
     public Task<IReadOnlyList<CopilotAccount>> GetAccountsAsync(string dataDirectory, CancellationToken ct)
-    { ct.ThrowIfCancellationRequested(); return Task.FromResult<IReadOnlyList<CopilotAccount>>(Accounts.ToArray()); }
+    { ct.ThrowIfCancellationRequested(); return LoadAccounts?.Invoke(ct) ?? Task.FromResult<IReadOnlyList<CopilotAccount>>(Accounts.ToArray()); }
     public Task<IReadOnlyList<PluginModelInfo>> GetModelsAsync(string dataDirectory, CopilotAccount account, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();

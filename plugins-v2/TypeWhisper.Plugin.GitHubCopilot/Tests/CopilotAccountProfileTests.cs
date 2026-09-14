@@ -6,6 +6,68 @@ namespace TypeWhisper.Plugin.GitHubCopilot.Tests;
 public sealed class CopilotAccountProfileTests
 {
     [Fact]
+    public async Task AccountDiscoveryCanceledAtCompletionPreservesCatalogAndChoices()
+    {
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(new TestHost());
+        await Configure(plugin, FakeTransport.Personal, "model-a", "Primary");
+        using var cancel = new CancellationTokenSource();
+        transport.LoadAccounts = _ => { cancel.Cancel(); return Task.FromResult<IReadOnlyList<CopilotAccount>>([]); };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.ExecuteSettingsActionAsync("refreshAccounts", cancel.Token));
+        Assert.True(plugin.IsAvailable);
+        Assert.Contains(plugin.TextSettings.Single(f => f.Id.EndsWith("/account")).Choices, c => c.Value == FakeTransport.Personal.Key);
+        await plugin.ProcessAsync("s", "u", "", default);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task SignOutInvalidatesMatchingDraftsBeforeTheyCanRestoreReadiness()
+    {
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(new TestHost());
+        await Configure(plugin, FakeTransport.Personal, "model-a", "Primary");
+        await plugin.ExecuteSettingsActionAsync("add", default);
+        await Configure(plugin, FakeTransport.Personal, "model-a", "Secondary");
+        var stale = Draft(plugin, FakeTransport.Personal, "model-a");
+        await plugin.ExecuteProfileActionAsync(plugin.ConnectionIdentity, plugin.ConnectionIdentity + "/refresh", stale, null, default);
+        transport.Accounts.Clear();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ProcessAsync("s", "u", "", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveProfileSettingsAsync(plugin.ConnectionIdentity, stale, null, default));
+        Assert.False(plugin.IsAvailable);
+        Assert.False(Assert.Single(plugin.AdditionalLlmProviders).IsAvailable);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task LegacyConfigurationAlwaysTargetsDefaultProviderWhenSecondaryEditorIsSelected()
+    {
+        var transport = new FakeTransport { Accounts = [FakeTransport.Personal, FakeTransport.Work] };
+        transport.Catalogs[FakeTransport.Personal.Key] = [new("model-a", "A"), new("model-c", "C")];
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(new TestHost());
+        await Configure(plugin, FakeTransport.Personal, "model-a", "Primary");
+        await plugin.ExecuteSettingsActionAsync("add", default);
+        await Configure(plugin, FakeTransport.Work, "model-b", "Secondary");
+        var editor = plugin.ConnectionIdentity;
+        await plugin.ExecuteSettingsActionAsync("disconnect", default);
+        Assert.False(plugin.IsAvailable);
+        Assert.True(Assert.Single(plugin.AdditionalLlmProviders).IsAvailable);
+        await plugin.ExecuteSettingsActionAsync("refresh", default);
+        await plugin.SaveTextSettingAsync("selectedModel", "model-c", default);
+        Assert.True(plugin.IsAvailable);
+        await plugin.ProcessAsync("s", "u", "", default);
+        Assert.Equal(FakeTransport.Personal, transport.RequestedAccount);
+        Assert.Equal("model-c", transport.Request!.Value.Item3);
+        await Assert.Single(plugin.AdditionalLlmProviders).ProcessAsync("s", "u", "", default);
+        Assert.Equal(FakeTransport.Work, transport.RequestedAccount);
+        Assert.Equal("model-b", transport.Request!.Value.Item3);
+        Assert.Equal(editor, plugin.ConnectionIdentity);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
     public async Task RemovedModelInvalidatesAffectedReadinessAndDraftsButKeepsOtherModels()
     {
         var host = new TestHost();
