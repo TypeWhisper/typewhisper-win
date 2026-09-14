@@ -106,22 +106,29 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
-        _activeSecretName = ApiKeySecretName;
-        _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
-        _fetchedTranscriptionModels = NormalizeFetchedTranscriptionModels(
-            host.GetSetting<List<OpenRouterFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? []);
-        _selectedTranscriptionModelId = host.GetSetting<string>(SelectedTranscriptionModelSettingName);
-        _fetchedModels = NormalizeFetchedModels(host.GetSetting<List<OpenRouterFetchedModel>>(FetchedModelsSettingName) ?? []);
-        _selectedLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
-        _hasUserSelectedLlmModel = host.GetSetting<bool?>(UserSelectedLlmModelSettingName) == true;
-        _temperatureMode = NormalizeTemperatureMode(host.GetSetting<string>(TemperatureModeSettingName));
-        _temperatureValue = NormalizeTemperatureValue(host.GetSetting<double?>(TemperatureValueSettingName));
-        NormalizeSelectedTranscriptionModel(persist: true);
-        NormalizeSelectedLlmModel(persist: true);
         if (host.GetSetting<Configuration>("configuration") is { } saved)
         {
             ApplyConfiguration(saved);
             _apiKey = saved.SecretName is { } secret ? NormalizeApiKey(await host.LoadSecretAsync(secret)) : null;
+            NormalizeSelectedTranscriptionModel(persist: false);
+            NormalizeSelectedLlmModel(persist: false);
+            if (saved.SpeechModel != _selectedTranscriptionModelId || saved.TextModel != _selectedLlmModelId)
+                CommitConfiguration(CaptureConfiguration(), notify: false);
+        }
+        else
+        {
+            _activeSecretName = ApiKeySecretName;
+            _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
+            _fetchedTranscriptionModels = NormalizeFetchedTranscriptionModels(
+                host.GetSetting<List<OpenRouterFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? []);
+            _selectedTranscriptionModelId = host.GetSetting<string>(SelectedTranscriptionModelSettingName);
+            _fetchedModels = NormalizeFetchedModels(host.GetSetting<List<OpenRouterFetchedModel>>(FetchedModelsSettingName) ?? []);
+            _selectedLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
+            _hasUserSelectedLlmModel = host.GetSetting<bool?>(UserSelectedLlmModelSettingName) == true;
+            _temperatureMode = NormalizeTemperatureMode(host.GetSetting<string>(TemperatureModeSettingName));
+            _temperatureValue = NormalizeTemperatureValue(host.GetSetting<double?>(TemperatureValueSettingName));
+            NormalizeSelectedTranscriptionModel(persist: true);
+            NormalizeSelectedLlmModel(persist: true);
         }
         _draftTextModels = _draftSpeechModels = null;
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsAvailable})");

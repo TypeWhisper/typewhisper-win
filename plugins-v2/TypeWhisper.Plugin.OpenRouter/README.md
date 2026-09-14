@@ -16,7 +16,7 @@ dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Por
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.OpenRouter/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All 61 plugin tests and 259 portable SDK/host tests passed in Release. The shared settings change also passed all 96 OpenAI Compatible tests. The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK/WPF assemblies and minimum host version. Test API responses and keys are fixtures.
+All 64 plugin tests and 259 portable SDK/host tests passed in Release. The shared settings change also passed all 96 OpenAI Compatible tests. The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK/WPF assemblies and minimum host version. Test API responses and keys are fixtures.
 
 The standard package output is `bin/Release/portable-host/Plugins/com.typewhisper.openrouter/`: plugin DLL, dependency manifest and plugin manifest. Existing CI discovery includes the new project and its tests automatically.
 
@@ -34,7 +34,7 @@ ARM64 hardware execution, long recordings, the German native layout, other upstr
 
 Version `1.1.2` uses the same host-rendered editor as OpenAI Compatible, with a single full-width configuration and one fixed **Save settings** button. API-key edits, model choices, refreshed catalogs and temperature are committed together; connection and budget checks can use an entered key without saving it. A failed settings write leaves the active configuration and encrypted key intact. The native sidebar uses the existing OpenRouter brand asset in both themes.
 
-Computer Use verified the logo, unsaved-change indicator, disabled/enabled Save button, conditional custom-temperature field and successful page-level save. The original provider-default temperature mode and selected models were retained after the test. Automated regression checks cover the grouped commit, encrypted-key rollback, invalid input and draft catalog refresh.
+Computer Use verified the logo, unsaved-change indicator, disabled/enabled Save button, conditional custom-temperature field and successful page-level save. The original provider-default temperature mode and selected models were retained after the test. Automated regression checks cover the grouped commit, encrypted-key rollback, invalid input, draft catalog refresh, generic settings interfaces and persisted selection repair during activation.
 
 ## Provider references
 

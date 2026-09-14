@@ -57,8 +57,11 @@ public sealed partial class OpenRouterPlugin
         if (_host is null) throw new InvalidOperationException("Activate the plugin first.");
         switch (id)
         {
-            case SelectedLlmModelSettingName when SupportedModels.Any(m => m.Id == value):
-                SelectLlmModel(value); break;
+            case "configurationProfile" when value == ProfileId:
+                return Task.CompletedTask;
+            case SelectedLlmModelSettingName:
+            case SelectedTranscriptionModelSettingName:
+                return SaveProfileSettingsAsync(ProfileId, new Dictionary<string, string> { [id] = value }, null, cancellationToken);
             case TemperatureModeSettingName when value is TemperatureModeProviderDefault or TemperatureModeCustom:
                 SetTemperatureMode(value); break;
             case TemperatureValueSettingName when double.TryParse(value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
@@ -88,6 +91,9 @@ public sealed partial class OpenRouterPlugin
         if (_host is null) throw new InvalidOperationException("Activate the plugin first.");
         switch (id)
         {
+            case "checkConnection":
+            case "refreshModels":
+                return (await ExecuteProfileActionAsync(ProfileId, id, new Dictionary<string, string>(), null, cancellationToken)).Message;
             case "refreshTextModels":
                 var text = await FetchModelsAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
