@@ -36,6 +36,8 @@ Run selects the requested model, starts the app's normal microphone dictation th
 
 The script does not claim successful paste merely because the transcription API succeeded, and it does not test physical hotkeys. Verify the visible Notepad text against `result.json`'s final `text`, then capture the result. Unexpected speech, punctuation, a muted mic, headphones, or echo cancellation can fail the exact-match assertion: inspect the evidence rather than loosening it to claim success. If the script is forcibly killed, check recording status and restore settings manually.
 
+Run `./eng/Test-WinUILocalAudio.Tests.ps1` for headless lifecycle regression checks. Fake audio and HTTP boundaries exercise success, failed model selection, a lost response after the server accepts recording start, and a failed stop followed by cleanup retry. These checks also run in Windows/Linux CI and do not capture or upload audio.
+
 ## Screenshots with Computer Use
 
 Use the installed Computer Use skill and its `node_repl` / `@oai/sky` interface for native UI operations. Observe the returned window before clicking. Do not target a guessed window ID or type the expected transcript into the test document. Capture the blank target before the run, relevant settings when changed, and the actual pasted result afterward. Show these screenshots to the operator in the conversation.

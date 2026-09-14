@@ -30,6 +30,9 @@ jobs:
       - name: Run without desktop, microphone, models or provider credentials
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release
+      - name: Verify audio test orchestration with fake endpoints
+        shell: pwsh
+        run: ./eng/Test-WinUILocalAudio.Tests.ps1
       - uses: actions/upload-artifact@v7
         if: always()
         with:

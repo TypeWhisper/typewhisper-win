@@ -62,11 +62,13 @@ if ($state.state -ne 'idle' -or $state.is_recording) { throw 'Finish the current
 $original = Invoke-LocalApi GET '/v1/status'
 if (-not $original.engine -or -not $original.model) { throw 'Select a ready original model so the script can restore it.' }
 $started = $null
+$startAttempted = $false
 $stopped = $false
 try {
     Invoke-LocalApi POST '/v1/models/load' @{ engine = $Engine; model = $Model } | Out-Null
     Write-Host "Focus a blank Notepad document. Recording starts in $FocusDelaySeconds seconds."
     Start-Sleep -Seconds $FocusDelaySeconds
+    $startAttempted = $true
     $started = Invoke-LocalApi POST '/v1/dictation/start' @{}
     try {
         Start-Sleep -Milliseconds 700
@@ -89,7 +91,7 @@ try {
     if ($result.transcription.raw_text.Trim() -cne $Text.Trim()) { throw 'Raw transcription differs from the synthesized sentence; inspect result.json.' }
     Write-Host "Raw transcription matched. Verify the pasted text in Notepad and capture a screenshot. Evidence: $OutputDirectory"
 } finally {
-    if ($null -ne $started -and -not $stopped) {
+    if ($startAttempted -and -not $stopped) {
         try { Invoke-LocalApi POST '/v1/dictation/stop' | Out-Null } catch { Write-Warning 'Stop failed; check the recording status in the dev app.' }
     }
     # The server rejects a selection change while processing; retry for a bounded interval.

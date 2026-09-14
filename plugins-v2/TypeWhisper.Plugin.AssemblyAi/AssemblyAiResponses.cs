@@ -12,7 +12,7 @@ public sealed partial class AssemblyAiPlugin
         var text = textField.GetString() ?? ""; // A completed silent recording legitimately returns null.
         var segments = ReadSegments(root, diarization ? "utterances" : "words", diarization);
         if (diarization && segments.Count > 0) text = string.Join("\n", segments.Select(s => s.Text));
-        if (segments.Count == 0) segments = ReadSegments(root, "words", diarization);
+        if (diarization && segments.Count == 0) segments = ReadSegments(root, "words", labelSpeakers: false);
         var duration = Number(root, "audio_duration") ?? 0;
         if (segments.Count > 0) duration = Math.Max(duration, segments.Max(s => s.End));
         return new(text, OptionalString(root, "language_code") ?? fallbackLanguage, duration, NoSpeechProbability: null) { Segments = segments };
