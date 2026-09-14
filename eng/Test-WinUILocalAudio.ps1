@@ -11,6 +11,8 @@ param(
     [ValidateSet('Devices', 'Prepare', 'Run')][string]$Mode = 'Devices',
     [string]$Engine,
     [string]$Model,
+    [string]$WorkflowId,
+    [string]$ExpectedText,
     [string]$OutputDeviceName,
     [string]$ProfilePath = (Join-Path $env:LOCALAPPDATA 'TypeWhisper-WinUI-DevUserData'),
     [string]$OutputDirectory,
@@ -39,6 +41,7 @@ $wave = Join-Path $OutputDirectory 'speech-en.wav'
 Invoke-AudioHelper @('synthesize', $wave, $Text)
 if ($Mode -eq 'Prepare') { Write-Host "Prepared $wave"; return }
 if (-not $Engine -or -not $Model -or -not $OutputDeviceName) { throw 'Run requires Engine, Model and the exact OutputDeviceName.' }
+if ($WorkflowId -and -not [guid]::TryParse($WorkflowId, [ref]([guid]::Empty))) { throw 'WorkflowId must be a workflow GUID.' }
 $output = @($devices | Where-Object { $_.flow -eq 'Render' -and $_.name -eq $OutputDeviceName })
 if ($output.Count -ne 1) { throw 'The output must match exactly one active render endpoint. Use -Mode Devices.' }
 if ($output[0].name -eq 'Remote Audio' -or @($devices | Where-Object { $_.flow -eq 'Capture' -and $_.name -ne 'Remote Audio' }).Count -eq 0) {
@@ -69,8 +72,11 @@ try {
     Write-Host "Focus a blank Notepad document. Recording starts in $FocusDelaySeconds seconds."
     Start-Sleep -Seconds $FocusDelaySeconds
     $startAttempted = $true
-    $started = Invoke-LocalApi POST '/v1/dictation/start' @{}
+    $startBody = @{}
+    if ($WorkflowId) { $startBody.workflow_id = $WorkflowId }
+    $started = Invoke-LocalApi POST '/v1/dictation/start' $startBody
     try {
+        if ($WorkflowId -and $started.workflow_id -ne $WorkflowId) { throw 'The host did not select the requested workflow.' }
         Start-Sleep -Milliseconds 700
         Invoke-AudioHelper @('play', $output[0].id, $wave)
         Start-Sleep -Milliseconds 900
@@ -89,6 +95,7 @@ try {
     if ($result.transcription.engine -ne $Engine -or $result.transcription.model -ne $Model) { throw 'A workflow overrode the requested provider/model.' }
     if ($result.transcription.app_name -ne 'Notepad') { throw 'The captured target was not Notepad; inspect the target before continuing.' }
     if ($result.transcription.raw_text.Trim() -cne $Text.Trim()) { throw 'Raw transcription differs from the synthesized sentence; inspect result.json.' }
+    if ($ExpectedText -and $result.transcription.text.Trim() -cne $ExpectedText.Trim()) { throw 'Final workflow text differs from ExpectedText; inspect result.json.' }
     Write-Host "Raw transcription matched. Verify the pasted text in Notepad and capture a screenshot. Evidence: $OutputDirectory"
 } finally {
     if ($startAttempted -and -not $stopped) {

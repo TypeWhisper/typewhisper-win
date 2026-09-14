@@ -38,6 +38,21 @@ The script does not claim successful paste merely because the transcription API 
 
 Run `./eng/Test-WinUILocalAudio.Tests.ps1` for headless lifecycle regression checks. Fake audio and HTTP boundaries exercise success, failed model selection, a lost response after the server accepts recording start, and a failed stop followed by cleanup retry. These checks also run in Windows/Linux CI and do not capture or upload audio.
 
+## LLM workflow acceptance
+
+Use the same physical audio path to test an LLM plugin after transcription. Create a temporary manual workflow in the development profile, select the exact LLM provider/model, and give it a simple verifiable instruction such as uppercasing the input. Pass its ID explicitly:
+
+```powershell
+./eng/Test-WinUILocalAudio.ps1 -Mode Run `
+  -Engine assemblyai -Model universal-3-5-pro `
+  -WorkflowId '<workflow-guid>' `
+  -Text 'The yellow bicycle is parked beside the garden.' `
+  -ExpectedText 'THE YELLOW BICYCLE IS PARKED BESIDE THE GARDEN.' `
+  -OutputDeviceName 'Speakers (Creative Pebble Pro)'
+```
+
+The script verifies the start receipt's workflow ID, raw transcription and optional exact final text independently. `Engine` and `Model` identify the transcription provider; the workflow selects the LLM provider. The transcript is sent to that LLM and may incur charges. Inspect the actual pasted document as above. Remove only the temporary workflow after the test; do not change global workflow defaults. The headless suite also checks successful workflow forwarding, a mismatched workflow receipt, and a mismatched final answer, with recording cleanup and model restoration in each case.
+
 ## Screenshots with Computer Use
 
 Use the installed Computer Use skill and its `node_repl` / `@oai/sky` interface for native UI operations. Observe the returned window before clicking. Do not target a guessed window ID or type the expected transcript into the test document. Capture the blank target before the run, relevant settings when changed, and the actual pasted result afterward. Show these screenshots to the operator in the conversation.

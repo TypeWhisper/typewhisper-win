@@ -2,6 +2,8 @@
 
 These assets are bundled with the host; plugin packages do not need to provide new metadata.
 
+- Cerebras: orange concentric symbol extracted from the official [Cerebras homepage](https://www.cerebras.ai/) header SVG on September 14, 2026. Original path, stroke width and color are preserved; the view box contains the symbol without the wordmark.
+
 - AssemblyAI: official secondary marks for [light](https://www.assemblyai.com/media/logos/secondary-light.svg) and [dark](https://www.assemblyai.com/media/logos/secondary-dark.svg) backgrounds from the [AssemblyAI media kit](https://www.assemblyai.com/media), retrieved September 14, 2026. Original geometry and colors are preserved.
 - Groq, OpenAI and OpenRouter: copied from the TypeWhisper website's `public/brand-logos` directory.
 - GitHub Copilot: [GitHub Primer Octicons, copilot-24](https://github.com/primer/octicons/blob/main/icons/copilot-24.svg), SVG blob `201ecf408786f8e248ed4a223262c11c6eb726c0`. Licensed under [MIT](Octicons-LICENSE.txt); explicit light/dark fill colors added for native rendering.

@@ -37,6 +37,7 @@ public sealed class PluginBrandIcon : UserControl
         var brand = PluginId switch
         {
             "com.typewhisper.assemblyai" => "assemblyai",
+            "com.typewhisper.cerebras" => "cerebras",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.groq" => "groq",
