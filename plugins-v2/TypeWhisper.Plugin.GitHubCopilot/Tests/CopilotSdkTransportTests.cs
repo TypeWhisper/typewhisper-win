@@ -10,6 +10,22 @@ namespace TypeWhisper.Plugin.GitHubCopilot.Tests;
 public sealed class CopilotSdkTransportTests
 {
     [Fact]
+    public void ChildEnvironmentPreservesProxySettingsWithoutAmbientTokenOrRuntimeOverrides()
+    {
+        var source = new Dictionary<string, string>
+        {
+            ["HTTPS_PROXY"] = "http://proxy.invalid:8080", ["HTTP_PROXY"] = "http://proxy.invalid:8080",
+            ["NO_PROXY"] = "localhost,127.0.0.1", ["GH_TOKEN"] = "fixture-token", ["NODE_OPTIONS"] = "fixture-injection"
+        };
+        var environment = CopilotTransport.CreateClientOptions("fixture", key => source.GetValueOrDefault(key)).Environment!;
+        Assert.Equal(3, environment.Count);
+        Assert.Equal(source["HTTPS_PROXY"], environment["https_proxy"]);
+        Assert.Equal(source["HTTP_PROXY"], environment["HTTP_PROXY"]);
+        Assert.Equal(source["NO_PROXY"], environment["NO_PROXY"]);
+        Assert.Empty(CopilotTransport.CreateClientOptions("fixture", _ => null).Environment!);
+    }
+
+    [Fact]
     public async Task SdkBindsSelectedAccountWithoutCopyingTokensOrChangingGlobalLogin()
     {
         await using var server = new FakeCopilotServer();

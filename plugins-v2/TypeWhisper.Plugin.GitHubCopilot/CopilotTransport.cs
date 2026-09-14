@@ -30,13 +30,14 @@ internal sealed class CopilotTransport : ICopilotTransport
     internal CopilotTransport(Func<CopilotClientOptions, CopilotClient>? createClient = null) =>
         _createClient = createClient ?? (options => new CopilotClient(options));
 
-    internal static CopilotClientOptions CreateClientOptions(string dataDirectory)
+    internal static CopilotClientOptions CreateClientOptions(string dataDirectory, Func<string, string?>? readEnvironment = null)
     {
         // Preserve the user's normal credential-store identity, but do not inherit token,
         // endpoint, runtime-path, Node injection, telemetry or agent configuration overrides.
         var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in new[] { "PATH", "SystemRoot", "WINDIR", "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP" })
-            if (Environment.GetEnvironmentVariable(name) is { } value) environment[name] = value;
+        readEnvironment ??= Environment.GetEnvironmentVariable;
+        foreach (var name in new[] { "PATH", "SystemRoot", "WINDIR", "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY" })
+            if (readEnvironment(name) is { } value) environment[name] = value;
         var runtimeDirectory = Path.Combine(Path.GetDirectoryName(typeof(CopilotTransport).Assembly.Location)!,
             "runtimes", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, "native");
         var executable = Path.Combine(runtimeDirectory, OperatingSystem.IsWindows() ? "copilot-runtime.exe" : "copilot-runtime");

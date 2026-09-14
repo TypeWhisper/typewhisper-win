@@ -17,11 +17,15 @@
     <Error Condition="!Exists('$(TargetDir)runtimes/$(_CopilotRid)/native/$(_CopilotRuntimeWrapper)') Or !Exists('$(TargetDir)runtimes/$(_CopilotRid)/native/runtime.node')" Text="The Copilot runtime bundle is incomplete." />
     <PropertyGroup>
       <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.github-copilot/</PackageDirectory>
+      <PackageDirectory>$([System.IO.Path]::GetFullPath('$(PackageDirectory)'))</PackageDirectory>
+      <_CopilotPackageRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/bin/'))</_CopilotPackageRoot>
     </PropertyGroup>
     <ItemGroup>
       <PackageFile Include="$(TargetDir)*.dll;$(TargetDir)$(TargetName).deps.json;$(TargetDir)manifest.json;$(TargetDir)THIRD-PARTY-NOTICES.md"
                    Exclude="$(TargetDir)TypeWhisper.PluginSDK.dll" />
     </ItemGroup>
+    <Error Condition="!$([System.String]::Copy('$(PackageDirectory)').StartsWith('$(_CopilotPackageRoot)'))" Text="Copilot staging must remain inside this project's bin directory." />
+    <RemoveDir Directories="$(PackageDirectory)" />
     <MakeDir Directories="$(PackageDirectory)" />
     <Copy SourceFiles="@(PackageFile)" DestinationFolder="$(PackageDirectory)" />
     <ItemGroup>

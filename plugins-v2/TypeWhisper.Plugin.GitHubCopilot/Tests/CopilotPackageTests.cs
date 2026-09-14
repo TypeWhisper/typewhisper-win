@@ -63,7 +63,7 @@ public sealed class CopilotPackageTests
             }
             await Assert.ThrowsAsync<InvalidDataException>(() => PortablePluginPackage.LoadAsync(store.Resolve(Id), host, new(1, 1, 1)));
         }
-        finally { DeleteRoot(root); }
+        finally { await DeleteRootAsync(root); }
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class CopilotPackageTests
             await using var package = await PortablePluginPackage.LoadAsync(restart.Resolve(Id), new TestHost(), new(1, 1, 2));
             Assert.Equal("1.1.0", package.Plugin.PluginVersion);
         }
-        finally { DeleteRoot(root); }
+        finally { await DeleteRootAsync(root); }
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public sealed class CopilotPackageTests
             }
             finally { await client.ForceStopAsync(); }
         }
-        finally { DeleteRoot(root); }
+        finally { await DeleteRootAsync(root); }
     }
 
     private static PortableCatalogEntry Entry(byte[] payload, string version = "1.1.0") => new()
@@ -146,10 +146,16 @@ public sealed class CopilotPackageTests
         Sha256 = Convert.ToHexString(SHA256.HashData(payload)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
     };
 
-    private static void DeleteRoot(string root)
+    private static async Task DeleteRootAsync(string root)
     {
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-        try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        for (var attempt = 0; ; attempt++)
+        {
+            // Collectible load contexts release native file handles after finalization.
+            GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+            try { Directory.Delete(root, true); return; }
+            catch (Exception ex) when (attempt < 10 && ex is IOException or UnauthorizedAccessException)
+            { await Task.Delay(100); }
+        }
     }
 
     private sealed class PackageHandler(byte[] payload) : HttpMessageHandler
