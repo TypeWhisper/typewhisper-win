@@ -194,6 +194,7 @@ internal sealed class FakeTransport : ICopilotTransport
     internal string Response = "Translated text";
     internal (string, string, string)? Request;
     internal Func<CancellationToken, Task<string>>? Process;
+    internal Func<CancellationToken, Task<IReadOnlyList<PluginModelInfo>>>? LoadModels;
     public Task<IReadOnlyList<CopilotAccount>> GetAccountsAsync(string dataDirectory, CancellationToken ct)
     { ct.ThrowIfCancellationRequested(); return Task.FromResult<IReadOnlyList<CopilotAccount>>(Accounts.ToArray()); }
     public Task<IReadOnlyList<PluginModelInfo>> GetModelsAsync(string dataDirectory, CopilotAccount account, CancellationToken ct)
@@ -202,7 +203,7 @@ internal sealed class FakeTransport : ICopilotTransport
         Refreshes++;
         if (Error is not null) throw Error;
         if (!Accounts.Any(a => a.Matches(account))) throw new CopilotSignInRequiredException();
-        return Task.FromResult(Catalogs[account.Key]);
+        return LoadModels?.Invoke(ct) ?? Task.FromResult(Catalogs[account.Key]);
     }
     public Task<string> ProcessAsync(string dataDirectory, CopilotAccount account, string systemPrompt, string userText, string model, CancellationToken ct)
     {

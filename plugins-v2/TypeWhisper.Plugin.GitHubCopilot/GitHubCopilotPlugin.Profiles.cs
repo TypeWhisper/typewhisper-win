@@ -214,7 +214,8 @@ public sealed partial class GitHubCopilotPlugin
             if (models.Count == 0) throw new InvalidOperationException();
             return models;
         }
-        catch (OperationCanceledException) { _catalogs.Remove(account.Key); Host.NotifyCapabilitiesChanged(); throw; }
+        // Cancellation is not evidence that the saved account or its models became invalid.
+        catch (OperationCanceledException) { throw; }
         catch (Exception)
         {
             _catalogs.Remove(account.Key);

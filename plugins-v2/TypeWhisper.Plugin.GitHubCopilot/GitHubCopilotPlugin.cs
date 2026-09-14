@@ -12,6 +12,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
     private const string DefaultProfileId = "github-copilot";
     private const string ConfigurationKey = "accountProfilesV1";
     private readonly ICopilotTransport _transport;
+    private readonly TimeSpan _activationTimeout;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private CancellationTokenSource _lifetime = new();
     private IPluginHostServices? _host;
@@ -23,7 +24,8 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
 
     /// <summary>Creates a provider backed by the official GitHub Copilot SDK.</summary>
     public GitHubCopilotPlugin() : this(new CopilotTransport()) { }
-    internal GitHubCopilotPlugin(ICopilotTransport transport) => _transport = transport;
+    internal GitHubCopilotPlugin(ICopilotTransport transport, TimeSpan? activationTimeout = null)
+    { _transport = transport; _activationTimeout = activationTimeout ?? TimeSpan.FromSeconds(30); }
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.github-copilot";
     /// <inheritdoc />
@@ -63,13 +65,16 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
             catch (Exception) { host.Log(PluginLogLevel.Warning, "Select a GitHub account and refresh its models in Copilot settings."); }
             return;
         }
+        using var activation = Link(cancellationToken);
+        activation.CancelAfter(_activationTimeout);
         foreach (var account in _configuration.Profiles.Where(p => p.Connected && p.Account is not null)
             .Select(p => p.Account!).DistinctBy(a => a.Key))
         {
-            using var linked = Link(cancellationToken);
-            linked.CancelAfter(TimeSpan.FromSeconds(30));
-            try { _catalogs[account.Key] = await _transport.GetModelsAsync(host.PluginDataDirectory, account, linked.Token); }
+            cancellationToken.ThrowIfCancellationRequested();
+            if (activation.IsCancellationRequested) break;
+            try { _catalogs[account.Key] = await _transport.GetModelsAsync(host.PluginDataDirectory, account, activation.Token); }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (OperationCanceledException) when (activation.IsCancellationRequested) { break; }
             catch (Exception) { host.Log(PluginLogLevel.Warning, "A Copilot account is unavailable. Check its profile connection."); }
         }
     }

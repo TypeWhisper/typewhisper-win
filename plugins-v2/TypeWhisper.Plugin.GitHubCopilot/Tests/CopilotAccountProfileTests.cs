@@ -6,6 +6,58 @@ namespace TypeWhisper.Plugin.GitHubCopilot.Tests;
 public sealed class CopilotAccountProfileTests
 {
     [Fact]
+    public async Task CancelingDraftRefreshPreservesBothProfilesUsingTheAccount()
+    {
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(new TestHost());
+        await Configure(plugin, FakeTransport.Personal, "model-a", "Primary");
+        await plugin.ExecuteSettingsActionAsync("add", default);
+        await Configure(plugin, FakeTransport.Personal, "model-a", "Secondary");
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        transport.LoadModels = async ct => { started.SetResult(); await Task.Delay(Timeout.Infinite, ct); return []; };
+        using var cancel = new CancellationTokenSource();
+        var refresh = plugin.ExecuteProfileActionAsync(plugin.ConnectionIdentity, plugin.ConnectionIdentity + "/refresh",
+            Draft(plugin, FakeTransport.Personal, "model-a"), null, cancel.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
+        Assert.True(plugin.IsAvailable);
+        Assert.True(Assert.Single(plugin.AdditionalLlmProviders).IsAvailable);
+        await plugin.ProcessAsync("s", "u", "", default);
+        await Assert.Single(plugin.AdditionalLlmProviders).ProcessAsync("s", "u", "", default);
+        await plugin.DeactivateAsync();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartupUsesOneDeadlineForAllAccountsAndPropagatesCallerCancellation(bool cancelCaller)
+    {
+        var host = new TestHost();
+        host.SetSetting("accountProfilesV1", System.Text.Json.JsonSerializer.Serialize(new CopilotConfiguration(
+            [new("github-copilot", "Primary", FakeTransport.Personal, "model-a", true),
+             new("github-copilot-" + Guid.NewGuid().ToString("N"), "Secondary", FakeTransport.Work, "model-b", true)], "github-copilot")));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new FakeTransport { Accounts = [FakeTransport.Personal, FakeTransport.Work],
+            LoadModels = async ct => { started.TrySetResult(); await Task.Delay(Timeout.Infinite, ct); return []; } };
+        using var plugin = new GitHubCopilotPlugin(transport, cancelCaller ? TimeSpan.FromSeconds(30) : TimeSpan.FromMilliseconds(200));
+        using var cancel = new CancellationTokenSource();
+        var activation = plugin.ActivateAsync(host, cancel.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (cancelCaller)
+        {
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => activation);
+        }
+        else await activation.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, transport.Refreshes);
+        Assert.False(plugin.IsAvailable);
+        Assert.False(Assert.Single(plugin.AdditionalLlmProviders).IsAvailable);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
     public async Task SeparateAccountsKeepModelsAndWorkflowIdentityAcrossEditorSwitchAndRestart()
     {
         var host = new TestHost();
