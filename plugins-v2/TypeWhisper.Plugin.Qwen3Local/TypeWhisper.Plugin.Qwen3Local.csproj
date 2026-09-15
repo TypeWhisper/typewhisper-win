@@ -36,6 +36,6 @@
     </ItemGroup>
     <Copy SourceFiles="@(OnnxNative)" DestinationFiles="@(OnnxNative->'%(RootDir)%(Directory)qwenort.dll')" />
     <PatchQwenOnnxRuntimeImport SherpaNativeLibraries="@(QwenNative)" OriginalImportName="onnxruntime.dll" PatchedImportName="qwenort.dll" />
-    <Error Condition="!Exists('$(PackageDirectory)runtimes/win-x64/native/qwenort.dll') or !Exists('$(PackageDirectory)runtimes/win-arm64/native/qwenort.dll')" Text="Qwen native runtimes are missing." />
+    <Error Condition="!Exists('$(PackageDirectory)runtimes/win-x64/native/qwenort.dll') or !Exists('$(PackageDirectory)runtimes/win-arm64/native/qwenort.dll') or !Exists('$(PackageDirectory)runtimes/win-x64/native/sherpa-onnx-c-api.dll') or !Exists('$(PackageDirectory)runtimes/win-arm64/native/sherpa-onnx-c-api.dll')" Text="Qwen native runtimes are missing." />
   </Target>
 </Project>
