@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.Qwen3Local.Tests" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
+    <PackageReference Include="SharpCompress" Version="0.48.0" />
+    <Content Include="manifest.json;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Licenses/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Import Project="NativeRuntime.targets" />
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.qwen3-local/</PackageDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetDir)*.dll;$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(ProjectDir)THIRD-PARTY-NOTICES.md" Exclude="$(TargetDir)TypeWhisper.PluginSDK.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PackageFile)" DestinationFolder="$(PackageDirectory)" />
+    <ItemGroup><LicenseFile Include="$(ProjectDir)Licenses/*" /></ItemGroup>
+    <Copy SourceFiles="@(LicenseFile)" DestinationFolder="$(PackageDirectory)Licenses" />
+    <ItemGroup>
+      <RuntimeFile Include="$(TargetDir)runtimes/**/*" Exclude="$(TargetDir)runtimes/linux*/**/*;$(TargetDir)runtimes/osx*/**/*;$(TargetDir)runtimes/android*/**/*;$(TargetDir)runtimes/ios*/**/*;$(TargetDir)runtimes/win-x86/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(RuntimeFile)" DestinationFiles="@(RuntimeFile->'$(PackageDirectory)runtimes/%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ItemGroup>
+      <QwenNative Include="$(PackageDirectory)runtimes/win-*/native/sherpa-onnx-c-api.dll" />
+      <OnnxNative Include="$(PackageDirectory)runtimes/win-*/native/onnxruntime.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OnnxNative)" DestinationFiles="@(OnnxNative->'%(RootDir)%(Directory)qwenort.dll')" />
+    <PatchQwenOnnxRuntimeImport SherpaNativeLibraries="@(QwenNative)" OriginalImportName="onnxruntime.dll" PatchedImportName="qwenort.dll" />
+    <Error Condition="!Exists('$(PackageDirectory)runtimes/win-x64/native/qwenort.dll') or !Exists('$(PackageDirectory)runtimes/win-arm64/native/qwenort.dll')" Text="Qwen native runtimes are missing." />
+  </Target>
+</Project>

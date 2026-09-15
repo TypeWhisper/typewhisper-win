@@ -1,0 +1,93 @@
+<Project>
+  <UsingTask TaskName="PatchQwenOnnxRuntimeImport"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SherpaNativeLibraries ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OriginalImportName ParameterType="System.String" Required="true" />
+      <PatchedImportName ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+if (PatchedImportName.Length > OriginalImportName.Length)
+{
+    Log.LogError($"Patched import name '{PatchedImportName}' must not be longer than '{OriginalImportName}'.");
+    return false;
+}
+
+var original = Encoding.ASCII.GetBytes(OriginalImportName + '\0');
+var patchedBytes = Encoding.ASCII.GetBytes(PatchedImportName + '\0');
+var patched = new byte[original.Length];
+Array.Copy(patchedBytes, patched, patchedBytes.Length);
+
+foreach (var item in SherpaNativeLibraries)
+{
+    var path = item.ItemSpec;
+    if (!File.Exists(path))
+    {
+        Log.LogError($"Sherpa native library does not exist: {path}");
+        return false;
+    }
+
+    var bytes = File.ReadAllBytes(path);
+    var originalMatches = 0;
+    var originalOffset = -1;
+    for (var offset = 0; offset <= bytes.Length - original.Length; offset++)
+    {
+        var matches = true;
+        for (var index = 0; index < original.Length; index++)
+        {
+            if (bytes[offset + index] != original[index])
+            {
+                matches = false;
+                break;
+            }
+        }
+
+        if (matches)
+        {
+            originalMatches++;
+            originalOffset = offset;
+        }
+    }
+
+    var patchedMatches = 0;
+    for (var offset = 0; offset <= bytes.Length - patched.Length; offset++)
+    {
+        var matches = true;
+        for (var index = 0; index < patched.Length; index++)
+        {
+            if (bytes[offset + index] != patched[index])
+            {
+                matches = false;
+                break;
+            }
+        }
+
+        if (matches)
+            patchedMatches++;
+    }
+
+    if (originalMatches == 0 && patchedMatches > 0)
+    {
+        Log.LogMessage(MessageImportance.Low, $"Sherpa native import is already patched: {path}");
+        continue;
+    }
+
+    if (originalMatches != 1)
+    {
+        Log.LogError($"Expected one '{OriginalImportName}' import in {path}, found {originalMatches}.");
+        return false;
+    }
+
+    Array.Copy(patched, 0, bytes, originalOffset, patched.Length);
+    File.WriteAllBytes(path, bytes);
+    Log.LogMessage(MessageImportance.High, $"Patched Sherpa native import in {path}: {OriginalImportName} -> {PatchedImportName}");
+}
+]]></Code>
+    </Task>
+  </UsingTask>
+</Project>
