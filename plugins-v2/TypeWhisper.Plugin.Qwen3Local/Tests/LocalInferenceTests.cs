@@ -59,6 +59,32 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
             await restarted.InitializeAsync(); Assert.True(restarted.IsInstalled(entry.Id));
             await using (var package = await PortablePluginPackage.LoadAsync(restarted.Resolve(entry.Id), host, new(1, 1, 2)))
                 Assert.Equal(Qwen3LocalPlugin.ModelId, ((IPcmTranscriptionEnginePlugin)package.Plugin).SelectedModelId);
+            var modelDirectory = Path.Combine(host.PluginDataDirectory, "Models", Qwen3LocalPlugin.ModelId);
+            foreach (var name in QwenModelAssets.RequiredFiles)
+            {
+                var path = Path.Combine(modelDirectory, name);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                await File.WriteAllTextAsync(path, "fixture");
+            }
+            await File.WriteAllTextAsync(Path.Combine(modelDirectory, "ready.json"), JsonSerializer.Serialize(new
+            {
+                QwenModelAssets.Official.Sha256,
+                Files = QwenModelAssets.RequiredFiles.ToDictionary(name => name, _ => 7L)
+            }));
+            await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 2), _ => host))
+            {
+                await registry.InitializeAsync();
+                Assert.Null(await registry.SetEnabledAsync(entry.Id, true));
+                Assert.True(Assert.Single(registry.TranscriptionProviders).Ready);
+                Assert.NotNull(Assert.Single(await registry.GetModelStatesAsync(entry.Id)).RemovalBlockedReason);
+                // The explicit settings action remains reachable for the sole selected model.
+                await registry.UseConfigurationAsync(entry.Id, (plugin, ct) =>
+                    ((IPluginSettingsActions)plugin).ExecuteSettingsActionAsync("remove-model", ct));
+                await registry.RefreshCapabilitiesAsync();
+                Assert.False(Assert.Single(registry.TranscriptionProviders).Ready);
+                Assert.Null(Assert.Single(registry.TranscriptionProviders).SelectedModelId);
+                Assert.False(Directory.Exists(modelDirectory));
+            }
             await restarted.UninstallAsync(entry.Id); Assert.False(restarted.IsInstalled(entry.Id));
         }
         finally

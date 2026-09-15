@@ -12,6 +12,12 @@ provides download progress, cancellation and removal controls. No credentials,
 Python installation, server or GPU are required. Internet access is used only
 to download the model; recognition runs in the process on the CPU.
 
+To reclaim disk space after selecting the sole model, use **Unload and remove
+Qwen model** in the plugin settings. This explicit action drains processing,
+unloads the model, deletes its files and clears the saved selection. The generic
+host removal button blocks selected models. Qwen reports ready only while a
+supported model is selected and its downloaded files pass the readiness check.
+
 The 879 MB download expands to approximately 1 GB. Allow about 2 GB of temporary
 disk space during installation and around 2 GB of working memory for inference.
 The package contains Windows x64 and ARM64 CPU runtimes; real execution has been
@@ -75,7 +81,7 @@ English and 36 seconds of repeated speech, then checks silence, cancellation
 and unload/reload. It retains model files for repeat runs and writes measured
 results to `qwen-local-validation.json` under the chosen asset directory.
 
-On 2026-09-15, all 14 tests passed on Windows x64 / Ryzen 7 7800X3D, using four
+On 2026-09-15, all 15 tests passed on Windows x64 / Ryzen 7 7800X3D, using four
 CPU inference threads. One run measured:
 
 | Input | Audio | Recognition |

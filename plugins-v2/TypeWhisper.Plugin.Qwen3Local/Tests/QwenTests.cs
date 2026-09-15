@@ -90,6 +90,41 @@ public sealed class QwenTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadinessRequiresSelectedIntactAssetsAndSettingsActionRemovesSelectedModel()
+    {
+        var bytes = Archive();
+        var host = new TestHost(_root);
+        var decoder = new FakeRecognizer();
+        using var plugin = new Qwen3LocalPlugin(Http(() => new ByteArrayContent(bytes)), _ => decoder, Source(bytes));
+        Assert.False(plugin.IsConfigured);
+        await plugin.ActivateAsync(host);
+        plugin.SelectModel(Qwen3LocalPlugin.ModelId);
+        Assert.False(plugin.IsConfigured);
+        await plugin.DownloadModelAsync(Qwen3LocalPlugin.ModelId, null, default);
+        Assert.True(plugin.IsConfigured);
+        var directory = Path.Combine(host.PluginDataDirectory, "Models", Qwen3LocalPlugin.ModelId);
+        File.WriteAllText(Path.Combine(directory, "encoder.int8.onnx"), "");
+        Assert.False(plugin.IsConfigured);
+        await plugin.DownloadModelAsync(Qwen3LocalPlugin.ModelId, null, default);
+        await plugin.LoadModelAsync(Qwen3LocalPlugin.ModelId, default);
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.ExecuteSettingsActionAsync("remove-model", cancelled.Token));
+        Assert.True(plugin.IsConfigured);
+        Assert.False(decoder.Disposed);
+        await plugin.ExecuteSettingsActionAsync(Assert.Single(plugin.SettingsActions).Id, default);
+        Assert.True(decoder.Disposed);
+        Assert.False(Directory.Exists(directory));
+        Assert.False(plugin.IsConfigured);
+        Assert.Null(plugin.SelectedModelId);
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(host);
+        Assert.False(plugin.IsConfigured);
+        Assert.Null(plugin.SelectedModelId);
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.ExecuteSettingsActionAsync("unknown", default));
+    }
+
+    [Fact]
     public async Task SelectionSurvivesReactivationAndRestartButRemovalClearsIt()
     {
         var bytes = Archive();

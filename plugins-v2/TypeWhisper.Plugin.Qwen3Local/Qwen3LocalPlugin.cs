@@ -4,7 +4,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.Plugin.Qwen3Local;
 
 /// <summary>Downloads and runs Qwen3-ASR locally through the portable plugin contract.</summary>
-public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin
+public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSettingsActions
 {
     internal const string ModelId = "qwen3-asr-0.6b-int8";
     private static readonly IReadOnlyDictionary<string, string> Languages = new Dictionary<string, string>
@@ -41,7 +41,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin
     /// <inheritdoc />
     public string ProviderDisplayName => PluginName;
     /// <inheritdoc />
-    public bool IsConfigured => true;
+    public bool IsConfigured => _selected == ModelId && IsModelDownloaded(ModelId);
     /// <inheritdoc />
     public string? SelectedModelId => _selected;
     /// <inheritdoc />
@@ -58,6 +58,24 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin
         Publisher = "Qwen", SizeDescription = "~879 MB download · ~1 GB installed", EstimatedSizeMB = 879,
         LanguageCount = Languages.Count, LanguageCodes = Languages.Keys.ToArray()
     }];
+
+    /// <inheritdoc />
+    public IReadOnlyList<PluginSettingsAction> SettingsActions { get; } =
+    [
+        new("remove-model", "Unload and remove Qwen model",
+            "Delete the downloaded Qwen model (about 1 GB), including the current selection. You can download it again.")
+        { Section = PluginSettingsSection.Transcription }
+    ];
+
+    /// <inheritdoc />
+    public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
+    {
+        if (id != "remove-model") throw new ArgumentException("Unknown Qwen settings action.", nameof(id));
+        // The host runs settings actions under its configuration lease. The plugin's
+        // operation gate also drains native inference before deleting selected assets.
+        await RemoveModelAsync(ModelId, cancellationToken).ConfigureAwait(false);
+        return "Qwen model removed. Download it and choose Use model to transcribe again.";
+    }
 
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host)
