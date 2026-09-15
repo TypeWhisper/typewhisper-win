@@ -74,7 +74,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         // The host runs settings actions under its configuration lease. The plugin's
         // operation gate also drains native inference before deleting selected assets.
         await RemoveModelAsync(ModelId, cancellationToken).ConfigureAwait(false);
-        return "Qwen model removed. Download it and choose Use model to transcribe again.";
+        return "Qwen model removed. Reopen these settings to download it again, then choose Use model.";
     }
 
     /// <inheritdoc />

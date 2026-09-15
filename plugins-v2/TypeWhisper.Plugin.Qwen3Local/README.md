@@ -17,6 +17,8 @@ Qwen model** in the plugin settings. This explicit action drains processing,
 unloads the model, deletes its files and clears the saved selection. The generic
 host removal button blocks selected models. Qwen reports ready only while a
 supported model is selected and its downloaded files pass the readiness check.
+After this settings action, reopen the plugin page before downloading again;
+the current host needs a fresh model view after rebuilding its settings controls.
 
 The 879 MB download expands to approximately 1 GB. Allow about 2 GB of temporary
 disk space during installation and around 2 GB of working memory for inference.
