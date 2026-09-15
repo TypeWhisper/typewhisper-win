@@ -1,0 +1,16 @@
+{
+  "id": "com.typewhisper.claude",
+  "name": "Claude",
+  "version": "1.1.0",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Anthropic Claude text processing with model discovery and secure API-key settings.",
+  "descriptions": {
+    "de": "Textverarbeitung mit Anthropic Claude, Modellabfrage und sicher gespeicherten API-Keys."
+  },
+  "categories": ["llm"],
+  "requiresApiKey": true,
+  "iconSystemName": "cpu",
+  "assemblyName": "TypeWhisper.Plugin.Claude.dll",
+  "pluginClass": "TypeWhisper.Plugin.Claude.ClaudePlugin"
+}

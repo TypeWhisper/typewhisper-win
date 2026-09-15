@@ -2,6 +2,8 @@
 
 These assets are bundled with the host; plugin packages do not need to provide new metadata.
 
+- Claude: reuses the existing TypeWhisper Windows `Resources/PluginLogos/claude.png` asset through a linked build item; the source image is unchanged.
+
 - Cerebras: orange concentric symbol extracted from the official [Cerebras homepage](https://www.cerebras.ai/) header SVG on September 14, 2026. Original path, stroke width and color are preserved; the view box contains the symbol without the wordmark.
 
 - AssemblyAI: official secondary marks for [light](https://www.assemblyai.com/media/logos/secondary-light.svg) and [dark](https://www.assemblyai.com/media/logos/secondary-dark.svg) backgrounds from the [AssemblyAI media kit](https://www.assemblyai.com/media), retrieved September 14, 2026. Original geometry and colors are preserved.

@@ -38,6 +38,7 @@ public sealed class PluginBrandIcon : UserControl
         {
             "com.typewhisper.assemblyai" => "assemblyai",
             "com.typewhisper.cerebras" => "cerebras",
+            "com.typewhisper.claude" => "claude",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.groq" => "groq",
@@ -61,7 +62,8 @@ public sealed class PluginBrandIcon : UserControl
         var logo = new Image { Stretch = Stretch.Uniform };
         logo.ImageFailed += (_, _) => { if (ReferenceEquals(Content, logo)) ShowFallback(); };
         Content = logo;
-        logo.Source = new SvgImageSource(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + ".svg")));
+        var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (brand == "claude" ? ".png" : ".svg")));
+        logo.Source = brand == "claude" ? new BitmapImage(uri) : new SvgImageSource(uri);
     }
 
     private void ShowFallback() => Content = new TypeWhisperGlyph { Kind = "plugin" };

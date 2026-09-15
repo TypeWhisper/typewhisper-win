@@ -40,7 +40,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | AssemblyAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AssemblyAi`; 56 plugin tests and 259 portable SDK/host tests pass. Includes macOS model/dictionary/diarization features and native branding. Development install/start, authenticated REST/WebSocket requests for both models, Pro speaker labeling and app HTTP transcription passed; native UI, update acceptance and publication pending (see plugin README). |
 | AuthenticatedCli | Separate v2 port pending |
 | Cerebras | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Cerebras`; 43 provider/package tests and 259 portable SDK/host tests pass. Model discovery, grouped settings and native branding included. Development key validation/model discovery passed; real text requests returned HTTP 402 (account quota), so live inference and microphone workflow acceptance remain pending. See plugin README. |
-| Claude | Separate v2 port pending |
+| Claude | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Claude`; 57 provider/package tests and 259 portable SDK/host tests pass. Paginated model discovery, preserved model selection, portable settings and native branding included. Development package installation passed; authenticated requests, update acceptance and publication pending. See plugin README. |
 | CloudflareAsr | Separate v2 port pending |
 | Cohere | Separate v2 port pending |
 | CohereTranscribe | Separate v2 port pending |
