@@ -61,7 +61,12 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin
 
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host)
-    { ObjectDisposedException.ThrowIf(_disposed, this); _host = host; return Task.CompletedTask; }
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _host = host;
+        _selected = host.GetSetting<string>("selectedModel") == ModelId ? ModelId : null;
+        return Task.CompletedTask;
+    }
     /// <inheritdoc />
     public async Task DeactivateAsync()
     {
@@ -70,7 +75,12 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin
         finally { _gate.Release(); }
     }
     /// <inheritdoc />
-    public void SelectModel(string modelId) { ValidateModel(modelId); _selected = modelId; }
+    public void SelectModel(string modelId)
+    {
+        ValidateModel(modelId); EnsureActive();
+        _host!.SetSetting("selectedModel", modelId);
+        _selected = modelId;
+    }
     /// <inheritdoc />
     public bool IsModelDownloaded(string modelId) => modelId == ModelId && _host is not null && _assets.IsReady(ModelDirectory);
     /// <inheritdoc />
@@ -90,6 +100,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin
         {
             EnsureActive(); ct.ThrowIfCancellationRequested(); Release();
             if (Directory.Exists(ModelDirectory)) Directory.Delete(ModelDirectory, true);
+            _host!.SetSetting<string?>("selectedModel", null);
             _selected = null;
             _host!.NotifyCapabilitiesChanged();
         }

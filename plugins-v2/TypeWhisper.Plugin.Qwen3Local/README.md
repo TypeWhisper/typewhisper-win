@@ -75,7 +75,7 @@ English and 36 seconds of repeated speech, then checks silence, cancellation
 and unload/reload. It retains model files for repeat runs and writes measured
 results to `qwen-local-validation.json` under the chosen asset directory.
 
-On 2026-09-15, all 13 tests passed on Windows x64 / Ryzen 7 7800X3D, using four
+On 2026-09-15, all 14 tests passed on Windows x64 / Ryzen 7 7800X3D, using four
 CPU inference threads. One run measured:
 
 | Input | Audio | Recognition |
@@ -97,6 +97,13 @@ and `/v1/transcribe/local-file` returned the German transcript in 1.07 s. The
 model inventory reported `cloud: false`, `downloaded: true`, and `active: true`.
 The settings UI showed **Loaded · active for dictation**. This verifies the
 file-transcription path and native runtime coexistence with the existing
-Parakeet provider; physical microphone capture and paste were not part of this
-smoke check. Immediately after first enablement, the host required **Refresh
-models** before showing the downloaded model.
+Parakeet provider. Immediately after first enablement, the host required **Refresh
+models** before showing the downloaded model. Model selection is persisted through
+the host and restored after reactivation or restart; removing assets clears it.
+
+A separate [physical microphone and paste check](../../docs/screenshots/qwen3-local/README.md)
+completed the local speaker → microphone → Qwen → Notepad path. Its strict text
+assertion failed: the model recognized "transgression" instead of "transcription".
+The actual pasted text matched the host's final result, including an existing
+dictionary correction. This is evidence of the working integration and a recognition
+limitation, not a passing exact-transcript acceptance test.

@@ -90,6 +90,35 @@ public sealed class QwenTests : IDisposable
     }
 
     [Fact]
+    public async Task SelectionSurvivesReactivationAndRestartButRemovalClearsIt()
+    {
+        var bytes = Archive();
+        var host = new TestHost(_root);
+        using (var plugin = new Qwen3LocalPlugin(Http(() => new ByteArrayContent(bytes)), _ => new FakeRecognizer(), Source(bytes)))
+        {
+            await plugin.ActivateAsync(host);
+            await plugin.DownloadModelAsync(Qwen3LocalPlugin.ModelId, null, default);
+            Assert.Null(plugin.SelectedModelId);
+            plugin.SelectModel(Qwen3LocalPlugin.ModelId);
+            await plugin.DeactivateAsync();
+            await plugin.ActivateAsync(host);
+            Assert.Equal(Qwen3LocalPlugin.ModelId, plugin.SelectedModelId);
+        }
+        using var restarted = new Qwen3LocalPlugin(Http(() => new ByteArrayContent(bytes)), _ => new FakeRecognizer(), Source(bytes));
+        await restarted.ActivateAsync(host);
+        Assert.Equal(Qwen3LocalPlugin.ModelId, restarted.SelectedModelId);
+        Assert.True(restarted.IsModelDownloaded(Qwen3LocalPlugin.ModelId));
+        await restarted.RemoveModelAsync(Qwen3LocalPlugin.ModelId, default);
+        await restarted.DeactivateAsync();
+        await restarted.ActivateAsync(host);
+        Assert.Null(restarted.SelectedModelId);
+        host.SetSetting("selectedModel", "unknown-model");
+        await restarted.DeactivateAsync();
+        await restarted.ActivateAsync(host);
+        Assert.Null(restarted.SelectedModelId);
+    }
+
+    [Fact]
     public async Task UnloadWaitsForNativeDecodeToFinish()
     {
         var bytes = Archive();

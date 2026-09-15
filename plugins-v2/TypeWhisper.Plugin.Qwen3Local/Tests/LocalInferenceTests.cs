@@ -53,16 +53,20 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
                 Assert.False(engine.IsModelDownloaded(Qwen3LocalPlugin.ModelId));
                 Assert.DoesNotContain(engine.GetType().Assembly.GetReferencedAssemblies(), a => a.Name is "PresentationFramework" or "WindowsBase");
                 await Assert.ThrowsAsync<InvalidOperationException>(() => engine.LoadModelAsync(Qwen3LocalPlugin.ModelId, default));
+                engine.SelectModel(Qwen3LocalPlugin.ModelId);
             }
             var restarted = new PortablePluginStore(store.Root, new(1, 1, 2), http, _ => host);
             await restarted.InitializeAsync(); Assert.True(restarted.IsInstalled(entry.Id));
+            await using (var package = await PortablePluginPackage.LoadAsync(restarted.Resolve(entry.Id), host, new(1, 1, 2)))
+                Assert.Equal(Qwen3LocalPlugin.ModelId, ((IPcmTranscriptionEnginePlugin)package.Plugin).SelectedModelId);
             await restarted.UninstallAsync(entry.Id); Assert.False(restarted.IsInstalled(entry.Id));
         }
         finally
         {
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             try { Directory.Delete(root, true); }
-            catch (IOException ex) { output.WriteLine("Package cleanup: " + ex.Message); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { output.WriteLine("Package cleanup (assembly may remain mapped until process exit): " + ex.Message); }
         }
     }
 
