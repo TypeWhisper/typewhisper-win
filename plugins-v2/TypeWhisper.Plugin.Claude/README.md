@@ -29,11 +29,11 @@ The package lifecycle test uses the real immutable store and runtime to exercise
 
 The release package was installed into the existing WinUI development profile through `PortablePluginStore`; all unrelated installation receipts were preserved. Local package and installation evidence are in ignored `artifacts/claude/`.
 
-The prescribed development helper built and launched the WinUI checkout successfully. Existing setup-wizard comparison and license-source generator warnings were reported. The running app's accessibility tree exposes the Claude integration and image. Navigation input failed with `GetCursorPos failed: Access is denied (0x80070005)`, including one recovery attempt, so no visual layout or settings-interaction acceptance is claimed.
+The prescribed development helper built and launched the WinUI checkout successfully. Existing setup-wizard comparison and license-source generator warnings were reported. Native activation, the Claude navigation logo, English dark-theme settings, the four-model dropdown and conditional temperature field were verified. Selecting Custom activates the unsaved-changes state and Save button; provider-default mode was restored without saving a custom value. See [screenshots and acceptance notes](../../docs/screenshots/claude/README.md).
 
 Authenticated provider requests and microphone-to-Claude workflow execution are deferred because no Anthropic account is available for acceptance testing. Fake-transport tests do not establish live provider behavior.
 
-Native settings/layout checks, native update acceptance, ARM64 execution and installed legacy/v2 side-by-side acceptance remain pending. A later screenshot attempt also failed with `IGraphicsCaptureItemInterop.CreateForMonitor: Could not capture the given monitor (0x80070057)`, including one retry. No public package or catalog was published.
+Light-theme/German-layout checks, native update acceptance, ARM64 execution and installed legacy/v2 side-by-side acceptance remain pending. Initial desktop capture/input failures were resolved by reopening RDP and activating the settings window. No public package or catalog was published.
 
 ## References
 
