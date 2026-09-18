@@ -24,7 +24,7 @@ public sealed partial class CloudflareAsrPlugin
         using var request = Connection.Request(HttpMethod.Post,$"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/openai/whisper");
         request.Content = new ByteArrayContent(wavAudio); request.Content.Headers.ContentType = new("application/octet-stream");
         using var document = await Connection.ReadAsync(request,ct); var root=document.RootElement;
-        if(root.TryGetProperty("success",out var success) && success.ValueKind == JsonValueKind.False) throw ProviderConnection.InvalidResponse();
+        _ = ProviderConnection.Required(root, "success", JsonValueKind.True);
         var result=ProviderConnection.Required(root,"result",JsonValueKind.Object);
         return new(ProviderConnection.Text(result,"text")?.Trim() ?? throw ProviderConnection.InvalidResponse(),ProviderConnection.Text(result,"language"),ProviderConnection.Number(result,"duration"), NoSpeechProbability: null);
     }

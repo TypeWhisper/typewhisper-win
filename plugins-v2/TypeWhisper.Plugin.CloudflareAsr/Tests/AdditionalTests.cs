@@ -121,4 +121,17 @@ public sealed partial class ProviderTests
         Assert.Equal(PluginRequestFailureKind.OutputIncomplete, error.FailureKind);
     }
 
+    [Theory]
+    [InlineData("{\"result\":{\"text\":\"ignored\"}}")]
+    [InlineData("{\"success\":null,\"result\":{\"text\":\"ignored\"}}")]
+    [InlineData("{\"success\":\"true\",\"result\":{\"text\":\"ignored\"}}")]
+    public async Task TranscriptionRequiresAnExplicitSuccessFlag(string body)
+    {
+        using var http = new HttpClient(new Handler((_, _) => Json(body)));
+        using var plugin = new CloudflareAsrPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => Run(plugin));
+        Assert.Equal(PluginRequestFailureKind.OutputIncomplete, error.FailureKind);
+    }
+
 }
