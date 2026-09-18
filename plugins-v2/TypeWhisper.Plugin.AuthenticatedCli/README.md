@@ -2,7 +2,7 @@
 
 Authenticated CLI providers with process isolation, discovery, status refresh and portable provider/path settings.
 
-Version `1.2.2`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
+Version `1.3.0`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
 Independent branch: `seofood/authenticatedcli-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -43,3 +43,11 @@ Refresh CLIs and models queries availability and the current Codex catalog witho
 Live development verification found Codex and npm OpenCode automatically. Model discovery returned six Codex entries and seven free Zen entries. Claude and Antigravity were not installed in the test environment. Existing user credentials are consumed by their respective CLIs; the plugin does not copy them.
 
 A real synthetic text-processing request through the saved Codex model choice (`gpt-5.6-luna`) completed successfully with the expected German correction. Current Codex tool-disable configuration uses `features.view_image`; the obsolete `tools.view_image` override was removed.
+
+## CLI profiles
+
+The profile sidebar supports multiple entries of the same CLI with independent names, native executable paths, models and session directories. Existing provider selection IDs are preserved during migration. Each profile has a single Save profile action; model refresh uses the current draft without activating or persisting it.
+
+Environment overrides use one `NAME=VALUE` per line. Supported variables are `CODEX_HOME` for Codex, `CLAUDE_CONFIG_DIR` for Claude, and `XDG_DATA_HOME` for OpenCode. Values must be existing absolute local directories. These overrides apply consistently to status probes, model discovery and text processing; they do not modify the system environment. API keys and arbitrary process-control variables are not stored in the profile editor.
+
+A profile selects an existing signed-in CLI session; it does not sign in or create accounts. Removing a profile requires reassigning workflows that use its provider identity.

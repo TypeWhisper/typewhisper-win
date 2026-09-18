@@ -6,10 +6,10 @@ namespace TypeWhisper.Plugin.AuthenticatedCli;
 
 internal static class CodexModelCatalogLoader
 {
-    internal static Task<IReadOnlyList<PluginModelInfo>> LoadAsync(string executable, string directory, CancellationToken ct) =>
+    internal static Task<IReadOnlyList<PluginModelInfo>> LoadAsync(string executable, string directory, CancellationToken ct, IReadOnlyDictionary<string, string>? environment = null) =>
         CliProcessRunner.RunProtocolAsync(new CliProcessRequest(executable,
             ["app-server", "--stdio", "-c", "analytics.enabled=false", "-c", "check_for_update_on_startup=false"],
-            "", directory, ["CODEX_HOME"], TimeSpan.FromSeconds(20), 2 * 1024 * 1024, 64 * 1024), ExchangeAsync, ct);
+            "", directory, ["CODEX_HOME"], TimeSpan.FromSeconds(20), 2 * 1024 * 1024, 64 * 1024, environment), ExchangeAsync, ct);
 
     internal static async Task<IReadOnlyList<PluginModelInfo>> ExchangeAsync(Stream input, Stream output, CancellationToken ct)
     {
@@ -39,7 +39,7 @@ internal static class CodexModelCatalogLoader
                 return result.Clone();
             }
         }
-        await Send(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "typewhisper", version = "1.2.2" } } });
+        await Send(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "typewhisper", version = "1.3.0" } } });
         await Receive(1);
         await Send(new { method = "initialized" });
         var models = new List<PluginModelInfo>();

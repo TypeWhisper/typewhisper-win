@@ -107,6 +107,12 @@ internal sealed class CliProviderDescriptor
     internal IReadOnlyList<string> RequiredHelpTokens { get; }
     internal IReadOnlyList<string> ProviderEnvironmentVariables { get; }
     internal bool SafetyControlsAvailable { get; }
+    internal IReadOnlyDictionary<string, string> EnvironmentOverrides { get; private init; } = new Dictionary<string, string>();
+
+    internal CliProviderDescriptor ForProfile(string id, string name, IReadOnlyDictionary<string, string> environment) =>
+        new(Kind, id, ExecutableName, "authenticated-cli-" + id, name, DocumentationUrl,
+            VersionArguments, HelpArguments, AuthenticationArguments, RequiredHelpTokens,
+            ProviderEnvironmentVariables, SafetyControlsAvailable) { EnvironmentOverrides = environment };
 
     internal static IReadOnlyList<CliProviderDescriptor> All { get; } =
     [

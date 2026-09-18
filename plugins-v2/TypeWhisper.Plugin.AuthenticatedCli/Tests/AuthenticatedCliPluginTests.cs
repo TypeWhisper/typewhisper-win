@@ -20,7 +20,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.ActivateAsync(host.Object);
         var role = GetRole(plugin, "authenticated-cli-codex");
         const string instruction = "Transform the text and return only JSON.";
-        const string input = "\"; $(touch marker) & whoami | echo %TOKEN% `cmd`\r\n今天天气很好 --model evil";
+        const string input = "\"; $(touch marker) & whoami | echo %TOKEN% `cmd`\r\nä»Šå¤©å¤©æ°”å¾ˆå¥½ --model evil";
 
         var result = await role.ProcessAsync(instruction, input, "default", CancellationToken.None);
 
@@ -496,7 +496,7 @@ public sealed class AuthenticatedCliPluginTests
             },
             plugin.AdditionalLlmProviders
                 .Select(provider => ((ILlmProviderSelectionIdentity)provider).LlmSelectionId));
-        Assert.Equal("1.2.2", plugin.PluginVersion);
+        Assert.Equal("1.3.0", plugin.PluginVersion);
         Assert.Equal("opencode.exe", Descriptor(CliProviderKind.OpenCode).ExecutableName);
     }
 

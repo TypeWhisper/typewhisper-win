@@ -107,11 +107,11 @@ public sealed class CliDiscoveryAndModelsTests
         await plugin.ActivateAsync(host.Object);
         try
         {
-            await plugin.SaveTextSettingAsync("model.codex", "model-a", default);
-            Assert.Equal("model-a", plugin.TextSettings.Single(f => f.Id == "model.codex").Value);
-            host.Setup(h => h.SetSetting("selectedModel.codex", "model-b")).Throws<IOException>();
-            await Assert.ThrowsAsync<IOException>(() => plugin.SaveTextSettingAsync("model.codex", "model-b", default));
-            Assert.Equal("model-a", plugin.TextSettings.Single(f => f.Id == "model.codex").Value);
+            await plugin.SaveTextSettingAsync("codex/codex/model", "model-a", default);
+            Assert.Equal("model-a", plugin.TextSettings.Single(f => f.Id == "codex/codex/model").Value);
+            host.Setup(h => h.SetSetting(AuthenticatedCliPlugin.ProfilesSetting, It.IsAny<List<CliProfile>>())).Throws<IOException>();
+            await Assert.ThrowsAsync<IOException>(() => plugin.SaveTextSettingAsync("codex/codex/model", "model-b", default));
+            Assert.Equal("model-a", plugin.TextSettings.Single(f => f.Id == "codex/codex/model").Value);
         }
         finally { await plugin.DeactivateAsync(); }
     }
