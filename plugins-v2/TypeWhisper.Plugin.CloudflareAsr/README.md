@@ -1,6 +1,6 @@
 # Cloudflare Workers AI for the portable host
 
-Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.0`, requiring host `1.1.2`. Implemented on its own `seofood/cloudflareasr-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.1`, requiring host `1.1.2`. Implemented on its own `seofood/cloudflareasr-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -21,6 +21,8 @@ All **21 provider tests passed**. The provider test suite covers protocol reques
 
 On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
 
-Authenticated provider requests, microphone/workflow execution, native visual inspection, version-upgrade acceptance and ARM64 execution remain pending. Marco will enter credentials and perform live acceptance later. No public package or catalog was published.
+Authenticated provider requests and microphone transcription have not been tested because no Cloudflare account is available. On 2026-09-18, Marco authorized publication without that live account test. Package lifecycle and protocol fixtures provide automated coverage; this does not establish authenticated service acceptance. ARM64 execution remains untested.
+
+The host includes the Cloudflare logo. Shared draft editing and the single Save settings button are provided by host PR #479; provider-selection icons are provided by host PR #482. The portable package does not require either host UI change to load. Publish only to the separate V2 catalog with an immutable package URL; the legacy release workflow builds the WPF package and must not be used for this port.
 
 Reference: [provider documentation](https://developers.cloudflare.com/workers-ai/models/whisper/).
