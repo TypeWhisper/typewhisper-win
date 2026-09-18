@@ -24,6 +24,8 @@ F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run --w
 
 80 plugin tests and 259 shared portable SDK/host tests passed. Coverage includes protocol fixtures, new settings, persistence failures, cancellation, temporary-file cleanup, Mac response variants, a real local WebSocket exchange and ZIP installation/configuration/restart/uninstall/reinstall through the immutable package store. The package contains its DLL, dependency manifest and plugin manifest, without WPF dependencies. WinUI build and development launch succeeded with existing unrelated warnings.
 
+On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
+
 Authenticated API calls, physical microphone/workflow acceptance, native settings inspection, package-update acceptance and ARM64 execution remain pending. Marco will enter the API key and perform live acceptance later. No public release or catalog was changed.
 
 Provider references: [transcription](https://ai.google.dev/gemini-api/docs/transcribe), [OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai).
