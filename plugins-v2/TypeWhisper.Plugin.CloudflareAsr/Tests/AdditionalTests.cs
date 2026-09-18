@@ -160,4 +160,29 @@ public sealed partial class ProviderTests
         Assert.Equal("Hallo Welt", (await plugin.TranscribeAsync(Audio(), language, false, null, default)).Text);
     }
 
+    [Fact]
+    public async Task OversizedAudioIsRejectedBeforeAnyRequest()
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler((_, _) => { calls++; return Json("{}"); }));
+        using var plugin = new CloudflareAsrPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        ITranscriptionEnginePlugin engine = plugin;
+        Assert.Equal(100_000_000, engine.MaximumAudioUploadBytes);
+        var audio = new byte[engine.MaximumAudioUploadBytes + 1];
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => engine.TranscribeAsync(audio, null, false, null, default));
+        Assert.Equal(PluginRequestFailureKind.RequestTooLarge, error.FailureKind);
+        Assert.False(error.IsTransient);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public void HostEncoderUsesTheProviderLimitIncludingWaveHeaders()
+    {
+        using ITranscriptionEnginePlugin engine = new CloudflareAsrPlugin();
+        var samples = new float[(engine.MaximumAudioUploadBytes - 44) / 2 + 1];
+        var error = Assert.Throws<PluginRequestException>(() => TypeWhisper.PluginHost.PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes));
+        Assert.Equal(PluginRequestFailureKind.RequestTooLarge, error.FailureKind);
+    }
+
 }

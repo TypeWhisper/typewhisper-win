@@ -14,11 +14,16 @@ public sealed partial class CloudflareAsrPlugin
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
+    // Conservative baseline from Cloudflare's Free/Pro request-body ceiling.
+    public int MaximumAudioUploadBytes => 100_000_000;
+    /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [Field("accountId","Cloudflare account ID","Cloudflare-Konto-ID","",PluginSettingsSection.Connection)];
     /// <inheritdoc />
     public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio,string? language,bool translate,string? prompt,CancellationToken ct)
     {
         ProviderConnection.Audio(wavAudio,translate,false,ct);
+        if (wavAudio.Length > MaximumAudioUploadBytes)
+            throw new PluginRequestException("Recording exceeds the 100 MB upload limit. Use a shorter recording.", PluginRequestFailureKind.RequestTooLarge);
         if (ProviderConnection.Language(language) is not null)
             throw new NotSupportedException("This Cloudflare model supports automatic language detection only.");
         if(!IsConfigured) throw new PluginRequestException("Account ID and API token required.",PluginRequestFailureKind.Configuration);
