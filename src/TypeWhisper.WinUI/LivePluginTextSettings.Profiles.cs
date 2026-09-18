@@ -109,7 +109,12 @@ internal sealed partial class LivePluginTextSettings
         {
             modelHeader.Visibility = Visibility.Collapsed;
             if (_models is LivePortableModelSettings modelSettings)
+            {
                 modelSettings.ShowLlmSummary = !editable.Any(f => f.Section == PluginSettingsSection.TextProcessing);
+                modelSettings.TranscriptionModelSettingChoices = editable
+                    .Where(f => f.Section == PluginSettingsSection.Transcription && f.Choices.Count > 0)
+                    .Select(f => f.Choices.Select(c => c.Value).ToHashSet(StringComparer.Ordinal)).ToArray();
+            }
             modelsPanel.Children.Add(_models);
         }
 
