@@ -28,6 +28,9 @@ public sealed partial class AuthenticatedCliPlugin :
     private const int OpenCodeCatalogCacheVersion = 1;
 
     private readonly object _stateLock = new();
+    private IReadOnlyList<PluginModelInfo> _codexModels = [];
+    private readonly Dictionary<string, string> _selectedModels = new(StringComparer.Ordinal);
+
     private readonly Dictionary<string, CliAvailabilitySnapshot> _snapshots;
     private readonly Dictionary<string, string?> _selectedExecutables = new(StringComparer.OrdinalIgnoreCase);
     private readonly IReadOnlyList<ILlmProviderPlugin> _roles;
@@ -74,7 +77,7 @@ public sealed partial class AuthenticatedCliPlugin :
     public string PluginName => "Authenticated Provider CLIs";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.1";
 
     /// <inheritdoc />
     public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders => _roles;
@@ -95,7 +98,12 @@ public sealed partial class AuthenticatedCliPlugin :
         ObjectDisposedException.ThrowIf(_disposed, this);
         _host = host;
         foreach (var descriptor in CliProviderDescriptor.All)
+        {
             _selectedExecutables[descriptor.Key] = host.GetSetting<string>(SelectedExecutableSetting(descriptor));
+            _selectedModels[descriptor.Key] = host.GetSetting<string>("selectedModel." + descriptor.Key) ?? "default";
+        }
+        _codexModels = (host.GetSetting<List<PluginModelInfo>>("codexModels.v1") ?? [])
+            .Where(m => m is not null && CodexModelCatalogLoader.IsModelId(m.Id)).DistinctBy(m => m.Id).ToArray();
         RestoreOpenCodeCatalog(host.GetSetting<OpenCodeModelCatalogCache>(OpenCodeCatalogSettingName));
 
         var cancellation = new CancellationTokenSource();
@@ -194,9 +202,9 @@ public sealed partial class AuthenticatedCliPlugin :
         var candidates = _discovery.FindCandidates(descriptor.ExecutableName);
         var selected = candidates.FirstOrDefault(candidate =>
             string.Equals(candidate, executablePath, StringComparison.OrdinalIgnoreCase));
+        _host?.SetSetting(SelectedExecutableSetting(descriptor), selected);
         lock (_stateLock)
             _selectedExecutables[descriptor.Key] = selected;
-        _host?.SetSetting(SelectedExecutableSetting(descriptor), selected);
         await RefreshOneAsync(descriptor, notifyHost: true, cancellationToken).ConfigureAwait(false);
     }
 
@@ -207,14 +215,13 @@ public sealed partial class AuthenticatedCliPlugin :
         string model,
         CancellationToken cancellationToken)
     {
-        if (descriptor.Kind != CliProviderKind.OpenCode
-            && !string.Equals(model, "default", StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(model) || model == "default")
         {
-            throw new PluginRequestException(
-                "The selected model is not supported by the provider CLI.",
-                PluginRequestFailureKind.InvalidRequest,
-                isTransient: false);
+            lock (_stateLock) model = _selectedModels.GetValueOrDefault(descriptor.Key, "default");
         }
+        if (descriptor.Kind != CliProviderKind.OpenCode && !GetModels(descriptor).Any(m => m.Id == model))
+            throw new PluginRequestException("The selected model is not supported by the provider CLI.",
+                PluginRequestFailureKind.InvalidRequest, isTransient: false);
 
         var snapshot = GetSnapshot(descriptor);
         if (DateTimeOffset.UtcNow - snapshot.CheckedAt > RequestRefreshAge)
@@ -426,8 +433,9 @@ public sealed partial class AuthenticatedCliPlugin :
         string? configured;
         lock (_stateLock)
             configured = _selectedExecutables.GetValueOrDefault(descriptor.Key);
+        var resolvedConfigured = configured is null ? null : CliExecutableDiscovery.ResolveNativeExecutable(configured, descriptor.ExecutableName);
         var selected = candidates.FirstOrDefault(candidate =>
-            string.Equals(candidate, configured, StringComparison.OrdinalIgnoreCase));
+            string.Equals(candidate, resolvedConfigured ?? configured, StringComparison.OrdinalIgnoreCase));
         if (configured is not null && selected is null)
         {
             return new CliAvailabilitySnapshot(
@@ -449,12 +457,6 @@ public sealed partial class AuthenticatedCliPlugin :
         }
 
         selected ??= candidates[0];
-        if (configured is null)
-        {
-            lock (_stateLock)
-                _selectedExecutables[descriptor.Key] = selected;
-            _host?.SetSetting(SelectedExecutableSetting(descriptor), selected);
-        }
 
         if (!CliExecutableDiscovery.IsSafeNativeExecutable(selected, descriptor.ExecutableName))
         {
@@ -1080,15 +1082,7 @@ public sealed partial class AuthenticatedCliPlugin :
         public bool IsAvailable => _owner.GetSnapshot(_descriptor).State == CliAvailabilityState.Ready
                                    && (_descriptor.Kind != CliProviderKind.OpenCode
                                        || _owner.GetOpenCodeFreeModels().Count > 0);
-        public IReadOnlyList<PluginModelInfo> SupportedModels =>
-            _descriptor.Kind == CliProviderKind.OpenCode
-                ? _owner.GetOpenCodeFreeModels()
-                    .Select((model, index) => new PluginModelInfo(model.Id, model.DisplayName)
-                    {
-                        IsRecommended = index == 0
-                    })
-                    .ToList()
-                : [new PluginModelInfo("default", _owner.GetString("Model.Default"))];
+        public IReadOnlyList<PluginModelInfo> SupportedModels => _owner.GetModels(_descriptor);
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;

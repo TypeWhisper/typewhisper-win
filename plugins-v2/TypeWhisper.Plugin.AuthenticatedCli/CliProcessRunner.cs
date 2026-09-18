@@ -154,6 +154,30 @@ internal sealed class CliProcessRunner : ICliProcessRunner
         }
     }
 
+    internal static async Task<T> RunProtocolAsync<T>(CliProcessRequest request,
+        Func<Stream, Stream, CancellationToken, Task<T>> exchange, CancellationToken ct)
+    {
+        using var job = WindowsJobObject.CreateKillOnClose();
+        using var launched = StartSuspended(CreateStartInfo(request), job);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(request.Timeout);
+        var errors = ReadLimitedAsync(launched.StandardError, request.MaximumStandardErrorBytes, "stderr", timeout.Token);
+        var conversation = exchange(launched.StandardInput, launched.StandardOutput, timeout.Token);
+        try
+        {
+            var first = await Task.WhenAny(conversation, errors).WaitAsync(timeout.Token).ConfigureAwait(false);
+            if (first == errors) await errors.ConfigureAwait(false);
+            return await conversation.WaitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            timeout.Cancel();
+            await StopProcessAsync(launched.Process, job).ConfigureAwait(false);
+            try { await errors.ConfigureAwait(false); } catch (Exception ex) when (ex is IOException or OperationCanceledException or PluginRequestException) { }
+            try { await conversation.ConfigureAwait(false); } catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        }
+    }
+
     internal static ProcessStartInfo CreateStartInfo(CliProcessRequest request)
     {
         var startInfo = new ProcessStartInfo

@@ -179,6 +179,7 @@ internal sealed class CliProviderDescriptor
             CliProviderKind.Codex =>
             [
                 "exec",
+                .. (model == "default" ? Array.Empty<string>() : new[] { "--model", model }),
                 "--cd", workingDirectory,
                 "--skip-git-repo-check",
                 "--sandbox", "read-only",
@@ -207,8 +208,7 @@ internal sealed class CliProviderDescriptor
                 "-c", "memories.use_memories=false",
                 "-c", "memories.generate_memories=false",
                 "-c", "web_search=\"disabled\"",
-                "-c", "tools.web_search=false",
-                "-c", "tools.view_image=false",
+                "-c", "features.view_image=false",
                 "-c", "project_doc_max_bytes=0",
                 "-c", "history.persistence=\"none\"",
                 "-c", "otel.exporter=\"none\"",
@@ -220,6 +220,7 @@ internal sealed class CliProviderDescriptor
             CliProviderKind.Claude =>
             [
                 "-p",
+                .. (model == "default" ? Array.Empty<string>() : new[] { "--model", model }),
                 "--input-format", "text",
                 "--output-format", "json",
                 "--json-schema", ResultSchema,

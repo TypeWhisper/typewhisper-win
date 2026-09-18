@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.authenticated-cli",
   "name": "Authenticated Provider CLIs",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "TypeWhisper",
   "description": "Use authenticated Codex, Claude, Antigravity, and OpenCode Zen CLI sessions for prompt processing",
   "category": "llm",
