@@ -46,7 +46,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | CohereTranscribe | Separate v2 port pending |
 | Deepgram | Existing portable build |
 | ElevenLabs | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.ElevenLabs`; 34 plugin tests and live batch/WebSocket acceptance passed; public release pending |
-| FileMemory | Separate v2 port pending |
+| FileMemory | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.FileMemory`; 6 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | FillerWords | Existing portable build |
 | Fireworks | Separate v2 port pending |
 | Gemini | Separate v2 port pending |
