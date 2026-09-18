@@ -77,13 +77,17 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
         {
             var previous = _profiles.SingleOrDefault(p => p.Id == profile.Id);
             if (previous is null || !SameConnection(previous, profile))
+            {
                 _snapshots[profile.Id] = CliAvailabilitySnapshot.Initial;
+                _openCodeCatalogs.Remove(profile.Id);
+            }
             _selectedExecutables[profile.Id] = string.IsNullOrEmpty(profile.Executable) ? null : profile.Executable;
             _selectedModels[profile.Id] = profile.Model;
         }
         foreach (var id in _snapshots.Keys.Except(profiles.Select(p => p.Id)).ToArray())
         {
             _snapshots.Remove(id);
+            _openCodeCatalogs.Remove(id);
             _selectedExecutables.Remove(id);
             _selectedModels.Remove(id);
         }
@@ -102,7 +106,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
         {
             var profile = _profiles.SingleOrDefault(p => p.Id == descriptor.Key);
             if (descriptor.Kind == CliProviderKind.OpenCode)
-                return GetOpenCodeFreeModels().OrderByDescending(m => m.Id == profile?.Model)
+                return GetOpenCodeFreeModels(descriptor.Key).OrderByDescending(m => m.Id == profile?.Model)
                     .Select((m, i) => new PluginModelInfo(m.Id, m.DisplayName) { IsRecommended = i == 0 }).ToArray();
             return ModelsFor(profile ?? new CliProfile { Provider = descriptor.Key });
         }
@@ -112,7 +116,8 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
     {
         "codex" => [new("default", GetString("Model.Default")), .. profile.Models],
         "claude" => [new("default", GetString("Model.Default")), new("sonnet", "Sonnet (CLI alias)"), new("opus", "Opus (CLI alias)"), new("haiku", "Haiku (CLI alias)")],
-        "opencode" => (profile.Models.Count > 0 ? profile.Models : GetOpenCodeFreeModels().Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList()),
+        "opencode" => (profile.Models.Count > 0 ? profile.Models : _profiles.Any(p => p.Id == profile.Id && SameConnection(p, profile))
+            ? GetOpenCodeFreeModels(profile.Id).Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList() : []),
         _ => [new("default", GetString("Model.Default"))]
     };
 

@@ -9,7 +9,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class CliDiscoveryAndModelsTests
 {
-    [Fact]
+    [WindowsFact]
     public void Discovery_ResolvesInstallerDirectoryLinksAndDeduplicatesTargets()
     {
         var root = Path.Combine(Path.GetTempPath(), "TypeWhisper-cli-links-" + Guid.NewGuid().ToString("N"));

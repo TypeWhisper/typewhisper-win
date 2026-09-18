@@ -24,6 +24,18 @@ internal sealed record OpenCodeModelCatalogCache(
     DateTimeOffset RefreshedAt,
     List<OpenCodeCachedModel> Models);
 
+internal sealed record OpenCodeProfileCatalogCache(string ConnectionKey, OpenCodeModelCatalogCache Catalog);
+
+internal sealed class OpenCodeProfileCatalogState
+{
+    internal string ConnectionKey { get; init; } = "";
+    internal IReadOnlyList<OpenCodeCatalogModel> Models { get; set; } = [];
+    internal DateTimeOffset? RefreshedAt { get; set; }
+    internal string? LastRefreshError { get; set; }
+    internal bool IsLastKnownGood { get; set; }
+    internal int Revision { get; set; }
+}
+
 internal sealed record OpenCodeCatalogStatus(
     int FreeModelCount,
     DateTimeOffset? RefreshedAt,

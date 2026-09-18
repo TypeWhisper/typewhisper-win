@@ -2,7 +2,7 @@
 
 Authenticated CLI providers with process isolation, discovery, status refresh and portable provider/path settings.
 
-Version `1.3.1`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
+Version `1.3.2`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
 Independent branch: `seofood/authenticatedcli-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -28,7 +28,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.AuthenticatedCli/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.authenticated-cli` inside the plugin project. Package that directory as the ZIP root.
 
-Plugin regression tests cover installer junctions, npm native binary discovery, model pagination and explicit model arguments. Fake CLI protocol, executable discovery, process cancellation and package lifecycle. One real OpenCode test is intentionally opt-in via TYPEWHISPER_LIVE_OPENCODE_TEST=1. Activation can inspect installed CLI availability/authentication status; it does not submit inference requests. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+Plugin regression tests cover installer junctions, npm native binary discovery, model pagination and explicit model arguments. Fake CLI protocol, executable discovery, process cancellation and package lifecycle. Native process/job-object and directory-junction fixtures run on Windows; platform-independent profile, catalog and package tests also run on Linux. One real OpenCode test is intentionally opt-in via TYPEWHISPER_LIVE_OPENCODE_TEST=1. Activation can inspect installed CLI availability/authentication status; it does not submit inference requests. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
@@ -51,3 +51,5 @@ The profile sidebar supports multiple entries of the same CLI with independent n
 Environment overrides use one `NAME=VALUE` per line. Supported variables are `CODEX_HOME` for Codex, `CLAUDE_CONFIG_DIR` for Claude, and `XDG_DATA_HOME` for OpenCode. Values must be existing absolute local directories. These overrides apply consistently to status probes, model discovery and text processing; they do not modify the system environment. API keys and arbitrary process-control variables are not stored in the profile editor.
 
 A profile selects an existing signed-in CLI session; it does not sign in or create accounts. Removing a profile requires reassigning workflows that use its provider identity.
+
+OpenCode free-model caches, refresh errors and availability are isolated per profile and bound to its actual executable and session environment. Changing the connection invalidates its cached catalog; a failed refresh cannot borrow another profile’s models.

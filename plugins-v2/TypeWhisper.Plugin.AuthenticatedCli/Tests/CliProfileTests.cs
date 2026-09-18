@@ -159,6 +159,87 @@ public sealed class CliProfileTests
         finally { await plugin.DeactivateAsync(); }
     }
 
+    [Theory]
+    [InlineData("environment")]
+    [InlineData("executable")]
+    public async Task OpenCodeCatalogsRemainBoundToTheirProfileAndConnectionAcrossRestart(string changedConnection)
+    {
+        using var fixture = new PortableFixture();
+        var executable = Path.Combine(fixture.Root, "opencode.exe");
+        File.WriteAllText(executable, "fixture");
+        var profiles = new List<CliProfile>();
+        foreach (var id in new[] { "first", "second" })
+        {
+            var directory = Path.Combine(fixture.Root, id); Directory.CreateDirectory(directory);
+            profiles.Add(new CliProfile { Id = id, Name = id, Provider = "opencode", Executable = executable,
+                Environment = new() { ["XDG_DATA_HOME"] = directory } });
+        }
+        fixture.Host.SetSetting(AuthenticatedCliPlugin.ProfilesSetting, profiles);
+        var runner = new ProfileOpenCodeRunner();
+        using (var plugin = new AuthenticatedCliPlugin(new CliExecutableDiscovery(_ => null), runner))
+        {
+            await plugin.ActivateAsync(fixture.Host);
+            try
+            {
+                await plugin.RefreshFromSettingsAsync();
+                Assert.True(plugin.AdditionalLlmProviders[0].IsAvailable);
+                Assert.Equal("opencode/first-free", Assert.Single(plugin.AdditionalLlmProviders[0].SupportedModels).Id);
+                Assert.False(plugin.AdditionalLlmProviders[1].IsAvailable);
+                Assert.Empty(plugin.AdditionalLlmProviders[1].SupportedModels);
+                await Assert.ThrowsAsync<PluginRequestException>(() => plugin.AdditionalLlmProviders[1]
+                    .ProcessAsync("", "fixture", "opencode/first-free", default));
+                runner.SecondAvailable = true;
+                await plugin.RefreshFromSettingsAsync();
+                Assert.Equal("opencode/second-free", Assert.Single(plugin.AdditionalLlmProviders[1].SupportedModels).Id);
+                Assert.Equal("opencode/first-free", Assert.Single(plugin.AdditionalLlmProviders[0].SupportedModels).Id);
+            }
+            finally { await plugin.DeactivateAsync(); }
+        }
+        runner.FailAllCatalogs = true;
+        using var restarted = new AuthenticatedCliPlugin(new CliExecutableDiscovery(_ => null), runner);
+        await restarted.ActivateAsync(fixture.Host);
+        try
+        {
+            await restarted.RefreshFromSettingsAsync();
+            Assert.All(restarted.AdditionalLlmProviders, p => Assert.True(p.IsAvailable));
+            Assert.Equal("opencode/first-free", Assert.Single(restarted.AdditionalLlmProviders[0].SupportedModels).Id);
+            Assert.Equal("opencode/second-free", Assert.Single(restarted.AdditionalLlmProviders[1].SupportedModels).Id);
+            var changedDirectory = Path.Combine(fixture.Root, "changed"); Directory.CreateDirectory(changedDirectory);
+            var changedExecutable = Path.Combine(changedDirectory, "opencode.exe"); File.WriteAllText(changedExecutable, "fixture");
+            var changes = changedConnection == "environment"
+                ? new Dictionary<string, string> { ["first/environment"] = "XDG_DATA_HOME=" + changedDirectory }
+                : new Dictionary<string, string> { ["first/opencode/executable"] = changedExecutable };
+            await restarted.SaveProfileSettingsAsync("first", changes, null, default);
+            Assert.False(restarted.AdditionalLlmProviders[0].IsAvailable);
+            Assert.Empty(restarted.AdditionalLlmProviders[0].SupportedModels);
+            Assert.True(restarted.AdditionalLlmProviders[1].IsAvailable);
+            Assert.Equal("opencode/second-free", Assert.Single(restarted.AdditionalLlmProviders[1].SupportedModels).Id);
+        }
+        finally { await restarted.DeactivateAsync(); }
+    }
+
+    private sealed class ProfileOpenCodeRunner : ICliProcessRunner
+    {
+        internal bool SecondAvailable { get; set; }
+        internal bool FailAllCatalogs { get; set; }
+        public Task<CliProcessResult> RunAsync(CliProcessRequest request, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            var id = Path.GetFileName(request.EnvironmentOverrides!["XDG_DATA_HOME"]);
+            var catalog = request.Arguments[0] == "models";
+            if (catalog && (FailAllCatalogs || id == "second" && !SecondAvailable))
+                return Task.FromResult(new CliProcessResult(1, "", "fixture failure", TimeSpan.Zero, 0, 15));
+            var output = request.Arguments.Contains("--version") ? "opencode 1.3.0"
+                : request.Arguments.Contains("--help") ? string.Join(" ", CliProviderDescriptor.All.Single(d => d.Kind == CliProviderKind.OpenCode).RequiredHelpTokens)
+                : request.Arguments[0] == "auth" ? "OpenCode Zen"
+                : "opencode/" + id + "-free\n" + JsonSerializer.Serialize(new {
+                    id = id + "-free", providerID = "opencode", name = id,
+                    status = "active", modalities = new { input = new[] { "text" }, output = new[] { "text" } },
+                    cost = new { input = 0, output = 0 }, variants = new { } });
+            return Task.FromResult(new CliProcessResult(0, output, "", TimeSpan.Zero, output.Length, 0));
+        }
+    }
+
     private static AuthenticatedCliPlugin CreatePlugin() => new(new CliExecutableDiscovery(_ => null), new CaptureRunner());
     private static string[] Ids(AuthenticatedCliPlugin plugin) => plugin.AdditionalLlmProviders
         .Select(p => ((ILlmProviderSelectionIdentity)p).LlmSelectionId).ToArray();

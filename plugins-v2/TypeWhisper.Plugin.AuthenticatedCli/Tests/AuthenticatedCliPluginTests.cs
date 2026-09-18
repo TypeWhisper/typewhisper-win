@@ -11,7 +11,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class AuthenticatedCliPluginTests
 {
-    [Fact]
+    [WindowsFact]
     public async Task CodexProvider_UsesStructuredStdinAndFixedArguments()
     {
         using var fake = FakeCliInstallation.Create("success", "codex.exe");
@@ -47,7 +47,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task ClaudeProvider_UsesSafeModeAndStructuredOutput()
     {
         using var fake = FakeCliInstallation.Create("success", "claude.exe");
@@ -68,7 +68,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task AntigravityProvider_RemainsUnavailableWhenBinarySupportsStructuredOutput()
     {
         using var fake = FakeCliInstallation.Create("success", "agy.exe");
@@ -82,7 +82,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task SignedOutProvider_IsNotAdvertisedAsAvailable()
     {
         using var fake = FakeCliInstallation.Create("signed-out", "codex.exe");
@@ -97,7 +97,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task ClaudeAuthenticationProbe_RequiresPositiveLoggedInField()
     {
         using var fake = FakeCliInstallation.Create("auth-unknown", "claude.exe");
@@ -112,7 +112,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task RuntimeAuthenticationFailure_DisablesProviderAndIsActionable()
     {
         using var fake = FakeCliInstallation.Create("auth-error", "codex.exe");
@@ -135,7 +135,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task RuntimeRateLimit_RemainsTransientWithoutDisablingProvider()
     {
         using var fake = FakeCliInstallation.Create("rate-limit", "codex.exe");
@@ -155,7 +155,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task NetworkFailureMentioningAuthenticationAndModel_RemainsTransient()
     {
         using var fake = FakeCliInstallation.Create("network-auth-model", "codex.exe");
@@ -175,7 +175,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task UnsupportedModel_FailsBeforeLaunchingProviderCli()
     {
         using var fake = FakeCliInstallation.Create("success", "codex.exe");
@@ -195,7 +195,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task PreviouslySelectedExecutable_DoesNotSilentlySwitchAfterPathChange()
     {
         using var fake = FakeCliInstallation.Create("success", "codex.exe");
@@ -214,7 +214,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task MissingCli_BecomesReadyAfterRefreshWithoutRestart()
     {
         using var fake = FakeCliInstallation.CreateEmpty("refresh");
@@ -234,7 +234,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public void Discovery_RefreshesPathSourcesAndRejectsScripts()
     {
         using var fake = FakeCliInstallation.CreateEmpty("discovery");
@@ -265,7 +265,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.False(codex.HasRequiredCapabilities(substringOnly));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task ThrowingSettingsActivitySubscriber_DoesNotLeakRefreshGate()
     {
         using var fake = FakeCliInstallation.Create("success", "codex.exe");
@@ -280,7 +280,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task MultipleInstallations_RequireExplicitSelection()
     {
         using var first = FakeCliInstallation.Create("success", "codex.exe");
@@ -296,7 +296,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public void ProcessStartInfo_UsesNoShellAndDropsUnrelatedSecrets()
     {
         using var fake = FakeCliInstallation.Create("success", "codex.exe");
@@ -326,7 +326,7 @@ public sealed class AuthenticatedCliPluginTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_DrainsLargeStderrWithoutDeadlock()
     {
         using var fake = FakeCliInstallation.Create("stderr", "codex.exe");
@@ -339,7 +339,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Equal("processed", Descriptor(CliProviderKind.Codex).ParseSuccessfulOutput(result.StandardOutput));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_RejectsInvalidJsonAfterSuccessfulExit()
     {
         using var fake = FakeCliInstallation.Create("invalid-json", "codex.exe");
@@ -352,7 +352,7 @@ public sealed class AuthenticatedCliPluginTests
             Descriptor(CliProviderKind.Codex).ParseSuccessfulOutput(result.StandardOutput));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_RejectsInvalidUtf8AsMalformedOutput()
     {
         using var fake = FakeCliInstallation.Create("invalid-utf8", "codex.exe");
@@ -365,7 +365,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.False(error.IsTransient);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_ReportsCrashWithoutTreatingOutputAsSuccess()
     {
         using var fake = FakeCliInstallation.Create("crash", "codex.exe");
@@ -377,7 +377,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Equal("", result.StandardOutput);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_KillsTimedOutProcess()
     {
         using var fake = FakeCliInstallation.Create("timeout", "codex.exe");
@@ -390,7 +390,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.False(error.IsTransient);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_PreservesUserCancellation()
     {
         using var fake = FakeCliInstallation.Create("timeout", "codex.exe");
@@ -401,7 +401,7 @@ public sealed class AuthenticatedCliPluginTests
             cancellation.Token));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_RejectsOversizedOutputAndCleansUp()
     {
         using var fake = FakeCliInstallation.Create("huge-output", "codex.exe");
@@ -414,7 +414,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.False(error.IsTransient);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_KillsChildProcessOnTimeout()
     {
         using var fake = FakeCliInstallation.Create("child", "codex.exe");
@@ -427,7 +427,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.True(await WaitForProcessExitAsync(childPid, TimeSpan.FromSeconds(2)));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_ContainsChildSpawnedBeforeParentExits()
     {
         using var fake = FakeCliInstallation.Create("instant-child", "codex.exe");
@@ -441,7 +441,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.True(await WaitForProcessExitAsync(childPid, TimeSpan.FromSeconds(2)));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Runner_NeverInterpretsInjectionStringsAsArguments()
     {
         using var fake = FakeCliInstallation.Create("success", "codex.exe");
@@ -496,11 +496,12 @@ public sealed class AuthenticatedCliPluginTests
             },
             plugin.AdditionalLlmProviders
                 .Select(provider => ((ILlmProviderSelectionIdentity)provider).LlmSelectionId));
-        Assert.Equal("1.3.1", plugin.PluginVersion);
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "manifest.json")));
+        Assert.Equal(manifest.RootElement.GetProperty("version").GetString(), plugin.PluginVersion);
         Assert.Equal("opencode.exe", Descriptor(CliProviderKind.OpenCode).ExecutableName);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task OpenCodeProvider_UsesOnlyFreeCatalogModelsAndExactIsolatedInvocation()
     {
         using var fake = FakeCliInstallation.Create("opencode-success", "opencode.exe");
@@ -516,11 +517,11 @@ public sealed class AuthenticatedCliPluginTests
         Assert.True(model.IsRecommended);
         Assert.True(role.IsAvailable);
         host.Verify(service => service.SetSetting(
-            AuthenticatedCliPlugin.OpenCodeCatalogSettingName,
-            It.Is<OpenCodeModelCatalogCache>(cache =>
-                cache.Version == 1
-                && cache.Models.Count == 1
-                && cache.Models[0].Id == model.Id)), Times.AtLeastOnce);
+            AuthenticatedCliPlugin.ProfileCatalogSetting("opencode"),
+            It.Is<OpenCodeProfileCatalogCache>(cache =>
+                cache.Catalog.Version == 1
+                && cache.Catalog.Models.Count == 1
+                && cache.Catalog.Models[0].Id == model.Id)), Times.AtLeastOnce);
 
         var result = await role.ProcessAsync("Instruction", "Synthetic input", model.Id, CancellationToken.None);
 
@@ -571,7 +572,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Theory]
+    [WindowsTheory]
     [InlineData("opencode-auth-ansi", (int)CliAvailabilityState.Ready)]
     [InlineData("opencode-auth-stderr", (int)CliAvailabilityState.Ready)]
     [InlineData("opencode-auth-missing", (int)CliAvailabilityState.AuthenticationUnknown)]
@@ -662,7 +663,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Equal("opencode/valid", Assert.Single(catalog.Models).Id);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task OpenCodeWithNoFreeModels_IsUnavailableAndNeverFallsBackToDefault()
     {
         using var fake = FakeCliInstallation.Create("opencode-catalog-none", "opencode.exe");
@@ -677,7 +678,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task OpenCodeCatalogFailure_KeepsValidatedCachedFreeListVisible()
     {
         using var fake = FakeCliInstallation.Create("opencode-catalog-fail", "opencode.exe");
@@ -700,7 +701,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task OpenCodeCatalogFailureWithoutCache_IsUnavailableAndActionable()
     {
         using var fake = FakeCliInstallation.Create("opencode-catalog-fail-no-cache", "opencode.exe");
@@ -718,7 +719,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Theory]
+    [WindowsTheory]
     [InlineData("default")]
     [InlineData("anthropic/claude")]
     [InlineData("opencode/paid-model")]
@@ -782,7 +783,7 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Equal("", descriptor.ExtractFailureText("untrusted prompt text", "plain error"));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task OpenCodeNeverWritesPromptOrResultContentToHostLogs()
     {
         using var fake = FakeCliInstallation.Create("opencode-invalid-json", "opencode.exe");
@@ -808,7 +809,7 @@ public sealed class AuthenticatedCliPluginTests
         await plugin.DeactivateAsync();
     }
 
-    [Fact]
+    [WindowsFact]
     public void OpenCodeEnvironment_PreservesOnlySafeExplicitAuthenticationDataPath()
     {
         using var fake = FakeCliInstallation.Create("opencode-environment", "opencode.exe");
@@ -846,7 +847,7 @@ public sealed class AuthenticatedCliPluginTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task CatalogCapabilityNotification_IsPublishedAfterReleasingRefreshGate()
     {
         using var fake = FakeCliInstallation.Create("opencode-notification", "opencode.exe");
@@ -908,6 +909,11 @@ public sealed class AuthenticatedCliPluginTests
     {
         public LiveOpenCodeFactAttribute()
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                Skip = "CLI process isolation requires Windows.";
+                return;
+            }
             if (!string.Equals(
                     Environment.GetEnvironmentVariable("TYPEWHISPER_LIVE_OPENCODE_TEST"),
                     "1",

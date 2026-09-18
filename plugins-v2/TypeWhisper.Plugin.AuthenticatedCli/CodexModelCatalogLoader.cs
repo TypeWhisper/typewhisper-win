@@ -39,7 +39,7 @@ internal static class CodexModelCatalogLoader
                 return result.Clone();
             }
         }
-        await Send(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "typewhisper", version = "1.3.1" } } });
+        await Send(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "typewhisper", version = "1.3.2" } } });
         await Receive(1);
         await Send(new { method = "initialized" });
         var models = new List<PluginModelInfo>();
