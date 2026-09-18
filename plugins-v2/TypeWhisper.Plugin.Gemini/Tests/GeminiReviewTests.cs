@@ -122,7 +122,14 @@ public sealed partial class GeminiPluginTests
     [InlineData("[]")]
     [InlineData("null")]
     [InlineData("123")]
-    public async Task NonObjectChatResponsesAreTypedFailures(string body)
+    [InlineData("{\"choices\":null}")]
+    [InlineData("{\"choices\":[null]}")]
+    [InlineData("{\"choices\":[7]}")]
+    [InlineData("{\"choices\":[\"text\"]}")]
+    [InlineData("{\"choices\":[{\"message\":null}]}")]
+    [InlineData("{\"choices\":[{\"message\":[]}]}")]
+    [InlineData("{\"choices\":[{\"message\":7}]}")]
+    public async Task MalformedChatResponsesAreTypedFailures(string body)
     {
         using var http = new HttpClient(new CapturingHandler((_, _) => JsonResponse(body)));
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";

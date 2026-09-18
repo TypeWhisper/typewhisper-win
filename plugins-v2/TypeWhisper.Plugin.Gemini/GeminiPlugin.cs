@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.7";
+    private const string PluginVersionValue = "1.3.8";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -876,7 +876,9 @@ public sealed partial class GeminiPlugin :
                     && root.TryGetProperty("choices", out var choices)
                     && choices.ValueKind == JsonValueKind.Array
                     && choices.GetArrayLength() > 0
+                    && choices[0].ValueKind == JsonValueKind.Object
                     && choices[0].TryGetProperty("message", out var message)
+                    && message.ValueKind == JsonValueKind.Object
                     && message.TryGetProperty("content", out var content)
                     && content.ValueKind == JsonValueKind.String)
                 {

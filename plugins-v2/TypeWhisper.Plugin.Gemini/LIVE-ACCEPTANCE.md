@@ -59,3 +59,7 @@ A live protocol inspection with two synthetic utterances separated by eight seco
 The host receives 78 ISO language choices mapped to documented BCP-47 defaults, including the previously omitted languages from the [supported language table](https://ai.google.dev/gemini-api/docs/transcribe#supported-languages). Multiple regional/script variants are represented by the ISO choice and its supported default; Norwegian aliases remain accepted. The model language count reflects those choices.
 
 The staged 1.3.7 package passed authenticated credential validation, model discovery, text completion, recorded synthetic WAV transcription using the preallocated upload identity, and host-pipeline live transcription with 11 preview updates and the complete expected final sentence.
+
+## Nested chat response validation (1.3.8)
+
+124 tests pass. Non-object choices and messages now produce a structured EmptyResponse failure, preserving host error handling instead of leaking JsonElement type errors. The successful provider flow is unchanged.
