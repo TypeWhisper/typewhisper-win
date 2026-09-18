@@ -47,4 +47,42 @@ public sealed partial class ProviderTests
         using var http=new HttpClient(new Handler((_,_)=>Json("""{"success":false,"errors":[{"message":"denied"}]}""")));using var plugin=new CloudflareAsrPlugin(http);await plugin.ActivateAsync(new Host());await Configure(plugin);await Assert.ThrowsAsync<PluginRequestException>(()=>Run(plugin));
     }
 
+    [Fact]
+    public async Task ConnectionCheckRequiresAccountIdBeforeAnyRequest()
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler((_, _) => { calls++; return Json("{} "); }));
+        using var plugin = new CloudflareAsrPlugin(http);
+        await plugin.ActivateAsync(new Host());
+        await plugin.SetApiKeyAsync("fixture-key");
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ValidateConfigurationAsync(default));
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task ConnectionCheckRejectsMalformedPersistedAccountId()
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler((_, _) => { calls++; return Json("{}"); }));
+        using var plugin = new CloudflareAsrPlugin(http);
+        var host = new Host();
+        host.Secrets["fixture-secret"] = "fixture-key";
+        host.SetSetting("configuration", new { SecretName = "fixture-secret", Values = new Dictionary<string,string> { ["accountId"] = "invalid" } });
+        await plugin.ActivateAsync(host);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ValidateConfigurationAsync(default));
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task TranscriptionTrimsProviderWhitespace()
+    {
+        using var http = new HttpClient(new Handler((_, _) => Json(JsonSerializer.Serialize(new { success = true, result = new { text = "  Hallo Welt \r\n" } }))));
+        using var plugin = new CloudflareAsrPlugin(http);
+        await plugin.ActivateAsync(new Host());
+        await Configure(plugin);
+        Assert.Equal("Hallo Welt", await Run(plugin));
+    }
+
 }
