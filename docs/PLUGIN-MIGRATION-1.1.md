@@ -49,7 +49,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | FileMemory | Separate v2 port pending |
 | FillerWords | Existing portable build |
 | Fireworks | Separate v2 port pending |
-| Gemini | Separate v2 port pending |
+| Gemini | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gemini`; 80 provider/package/loopback tests and 259 portable SDK/host tests pass. Includes macOS language mapping, live dictionary terms, LLM selection/temperature and response variants. WinUI development build/launch passed; authenticated acceptance and publication pending. |
 | GemmaLocal | Separate v2 port pending |
 | Gladia | Separate v2 port pending |
 | GoogleCloudStt | Separate v2 port pending |
