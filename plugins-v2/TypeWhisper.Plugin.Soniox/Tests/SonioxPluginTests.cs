@@ -32,7 +32,7 @@ public class SonioxPluginTests
         Assert.Equal("1.3.0", sut.PluginVersion);
     }
 
-    [Fact]
+    [WindowsMediaFoundationFact]
     public void CreateCompressedUpload_ProducesM4aMetadataAndContainer()
     {
         var samples = Enumerable.Range(0, 32_000)
