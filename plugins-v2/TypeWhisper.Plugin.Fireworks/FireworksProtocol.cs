@@ -44,7 +44,7 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
     {
         ProviderConnection.Audio(wavAudio, translate, SupportsTranslation, ct);
         var server = SelectedModelId == "whisper-v3-turbo" ? "audio-turbo" : "audio-prod";
-        return Connection.MultipartAsync($"https://{server}.api.fireworks.ai/v1/audio/{(translate ? "translations" : "transcriptions")}", SelectedModelId!, wavAudio, language, string.Join(", ", ProviderConnection.Terms(prompt)), ct, responseFormat: "json");
+        return Connection.MultipartAsync($"https://{server}.api.fireworks.ai/v1/audio/{(translate ? "translations" : "transcriptions")}", SelectedModelId!, wavAudio, language, string.Join(", ", ProviderConnection.Terms(prompt)), ct, responseFormat: "verbose_json");
     }
     /// <inheritdoc />
     public Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct) =>

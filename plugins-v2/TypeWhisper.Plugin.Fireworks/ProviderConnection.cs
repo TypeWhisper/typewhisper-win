@@ -154,7 +154,9 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         var body = new Dictionary<string, object>
         {
             ["model"] = model, ["messages"] = new[] { new { role = "system", content = system }, new { role = "user", content = input } },
-            ["max_tokens"] = LlmOutputTokenBudget.CalculateWithReasoningReserve(system, input)
+            ["max_tokens"] = model is "accounts/fireworks/models/gpt-oss-120b" or "accounts/fireworks/models/gpt-oss-20b"
+                ? LlmOutputTokenBudget.CalculateWithReasoningReserve(system, input)
+                : LlmOutputTokenBudget.Calculate(system, input)
         };
         if (Get("temperatureMode", "providerDefault") == "custom") body["temperature"] = double.Parse(Get("temperature", "0.3"), CultureInfo.InvariantCulture);
         using var request = Request(HttpMethod.Post, url); request.Content = Json(body);
