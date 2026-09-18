@@ -52,7 +52,8 @@ internal sealed partial class LocalDictationSession
         var error = await ChangeRegistryPluginAsync(id, async () =>
         {
             result = await PluginRuntime.UseConfigurationAsync(id,
-                (plugin, ct) => PortablePluginSettingsWriter.SaveAsync(plugin, changes, apiKey, ct));
+                (plugin, ct) => PortablePluginSettingsWriter.SaveAsync(plugin, changes, apiKey, ct),
+                preserveCompletedResult: true);
         });
         return result is null ? new([], false, error ?? "The settings could not be saved.")
             : result with { Error = error ?? result.Error };
