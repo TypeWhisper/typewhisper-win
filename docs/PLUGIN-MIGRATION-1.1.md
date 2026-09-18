@@ -57,7 +57,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Groq | Existing portable build |
 | Linear | Separate v2 port pending |
 | LiveTranscript | Separate v2 port pending |
-| Meta | Separate v2 port pending |
+| Meta | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Meta`; 35 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Obsidian | Existing portable build |
 | OpenAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenAi`; 73 provider tests, native settings inspection, real API/ChatGPT and microphone tests passed; update acceptance and publication pending (see plugin README and live-test notes) |
 | OpenAiCompatible | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenAiCompatible`; portable protocol, settings and package lifecycle tests added. Native UI, live-server/update acceptance and publication pending; see plugin README. |
