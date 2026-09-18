@@ -20,6 +20,7 @@
         <Grid ColumnSpacing="10">
             <Grid.ColumnDefinitions><ColumnDefinition Width="20" /><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /></Grid.ColumnDefinitions>
             <local:TypeWhisperGlyph x:Name="ChoiceIcon" Width="18" Height="18" />
+            <local:PluginBrandIcon x:Name="ChoiceBrandIcon" Width="18" Height="18" Visibility="Collapsed" />
             <TextBlock x:Name="ChoiceLabel" Grid.Column="1" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <local:TypeWhisperGlyph Grid.Column="2" Kind="chevron-down" Width="12" Height="12" />
         </Grid>
