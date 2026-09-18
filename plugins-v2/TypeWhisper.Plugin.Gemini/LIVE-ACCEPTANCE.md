@@ -26,10 +26,10 @@ Protocol reference: [Google Live Transcription manual VAD](https://ai.google.dev
 
 ## Scope and remaining acceptance
 
-These checks establish live behavior of the installed provider through its portable SDK interfaces. They do not establish native UI interaction, German audio recognition, physical microphone capture, workflow post-processing or insertion into another app.
+These checks establish live behavior of the installed provider through its portable SDK interfaces. The user subsequently confirmed live transcription in the development app. The independent custom-editor insertion fix was also manually confirmed. Full workflow and ARM64 acceptance remain outside this provider smoke test.
 
 The original 1.3.0 direct WebSocket check explicitly waited for events after sending end-of-audio and did not establish host streaming support. That limitation is addressed and separately tested in 1.3.1 as described above.
 
-ARM64 acceptance remains pending. Push, PR creation and review monitoring require Marco's per-plugin approval. No publication has occurred.
+ARM64 acceptance remains pending. The user approved the tested provider for PR review; public package publication remains separate.
 
 The local machine's untracked evidence is in `artifacts/plugin-batch/gemini-live/`: `results.json`, the harness source, the synthetic WAV and its source sentence. These artifacts contain no credential values.

@@ -1,4 +1,4 @@
-// Independent port of Windows Gemini at 4db8f6ac; compared with macOS Gemini at ac00e39e.
+// Independent port of Windows Gemini at 4db8f6ac.
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;

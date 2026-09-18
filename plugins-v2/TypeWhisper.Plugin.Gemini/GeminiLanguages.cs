@@ -2,7 +2,7 @@ namespace TypeWhisper.Plugin.Gemini;
 
 public sealed partial class GeminiPlugin
 {
-    // Same ISO-to-BCP-47 defaults as the macOS provider at ac00e39e.
+    // ISO-to-BCP-47 defaults shared by the cross-platform provider.
     private static readonly Dictionary<string, string> LanguageCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["ar"] = "ar-EG",
