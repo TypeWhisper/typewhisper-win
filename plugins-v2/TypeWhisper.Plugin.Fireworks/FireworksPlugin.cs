@@ -8,7 +8,7 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Fireworks;
 
-/// <summary>Independent portable Fireworks AI provider, compared with Windows 4db8f6ac and macOS ac00e39e.</summary>
+/// <summary>Independent portable Fireworks AI provider.</summary>
 public sealed partial class FireworksPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, IApiKeyPlugin, IPluginTextSettings
 {
     private readonly ProviderConnection Connection;
@@ -20,7 +20,7 @@ public sealed partial class FireworksPlugin : ITranscriptionEnginePlugin, ILlmPr
     /// <inheritdoc />
     public string PluginName => "Fireworks AI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.2";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
@@ -68,7 +68,7 @@ public sealed partial class FireworksPlugin : ITranscriptionEnginePlugin, ILlmPr
     /// <inheritdoc />
     public string ProviderDisplayName => PluginName;
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("whisper-v3", "Whisper V3"), new("whisper-v3-turbo", "Whisper V3 Turbo")];
+    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("whisper-v3-turbo", "Whisper V3 Turbo"), new("whisper-v3", "Whisper V3")];
     /// <inheritdoc />
     public string? SelectedModelId => TranscriptionModels.Any(m => m.Id == Connection.Get("model")) ? Connection.Get("model") : TranscriptionModels[0].Id;
     /// <inheritdoc />

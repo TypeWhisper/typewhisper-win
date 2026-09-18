@@ -23,13 +23,18 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
     public bool IsAvailable => IsConfigured;
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
-    private static readonly string[] Defaults = ["accounts/fireworks/models/deepseek-v3p1", "accounts/fireworks/models/llama-v3p3-70b-instruct", "accounts/fireworks/models/gpt-oss-120b", "accounts/fireworks/models/kimi-k2p5"];
+    private static readonly string[] Defaults = ["accounts/fireworks/models/gpt-oss-120b"];
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> SupportedModels => (Connection.Get("catalog").Split('\n', StringSplitOptions.RemoveEmptyEntries)
-        .Concat(Defaults).Append(Connection.Get("llmModel", Defaults[0]))).Distinct().Select(m => new PluginModelInfo(m,m)).ToArray();
+        .Concat(string.IsNullOrWhiteSpace(Connection.Get("catalog")) ? Defaults : [])
+        .Append(Connection.Get("llmModel", Defaults[0]))).Distinct().Select(m => new PluginModelInfo(m,m)).ToArray();
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [
-        Field("model", "Transcription model", "Transkriptionsmodell", "whisper-v3", PluginSettingsSection.Transcription, TranscriptionModels.Select(m => new PluginSettingChoice(m.Id,m.DisplayName)).ToArray()),
+        Field("model", "Transcription model", "Transkriptionsmodell", SelectedModelId!, PluginSettingsSection.Transcription, TranscriptionModels.Select(m => new PluginSettingChoice(m.Id,m.DisplayName)).ToArray()) with
+        {
+            Description = Connection.L("Fireworks deprecated its audio API. Turbo currently works; Whisper V3 may reject valid keys. Live transcription is unavailable.",
+                "Fireworks hat seine Audio-API abgekündigt. Turbo funktioniert derzeit; Whisper V3 kann gültige Schlüssel ablehnen. Live-Transkription ist nicht verfügbar.")
+        },
         Field("llmModel", "Text model ID", "Textmodell-ID", Defaults[0], PluginSettingsSection.TextProcessing) with { Suggestions = SupportedModels.Select(m => m.Id).ToArray() },
         Field("temperatureMode", "Temperature", "Temperatur", "providerDefault", PluginSettingsSection.TextProcessing, new("providerDefault", "Provider default"), new("custom", "Custom")),
         Field("temperature", "Custom temperature (0â€“2)", "Eigene Temperatur (0â€“2)", "0.3", PluginSettingsSection.TextProcessing) with { VisibleWhen = new("temperatureMode", ["custom"]) }
