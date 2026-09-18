@@ -26,7 +26,7 @@ public sealed partial class GeminiPluginTests
             PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 2), http, _ => host);
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.gemini", Name = "Google Gemini", Version = "1.3.1", MinHostVersion = "1.1.2",
+                Id = "com.typewhisper.gemini", Name = "Google Gemini", Version = "1.3.2", MinHostVersion = "1.1.2",
                 DownloadUrl = "https://fixture.invalid/gemini.zip", Size = bytes.Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(bytes)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.Plugin.Gemini;
@@ -79,11 +80,25 @@ public sealed partial class GeminiPlugin
     {
         ct.ThrowIfCancellationRequested();
         if (!IsConfigured) throw new PluginRequestException("API key not configured", PluginRequestFailureKind.Configuration);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
         using var request = CreateNativeRequest(HttpMethod.Get, $"{NativeBaseUrl}/models?pageSize=1", _apiKey!);
-        using var response = await TypeWhisper.PluginSDK.Helpers.OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
-        using var document = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        if (!document.RootElement.TryGetProperty("models", out var models) || models.ValueKind != System.Text.Json.JsonValueKind.Array)
-            throw new PluginRequestException("Gemini returned an invalid model catalog.", PluginRequestFailureKind.OutputIncomplete);
+        try
+        {
+            using var response = await TypeWhisper.PluginSDK.Helpers.OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, deadline.Token);
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(deadline.Token));
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("models", out var models) || models.ValueKind != JsonValueKind.Array)
+                throw new PluginRequestException("Gemini returned an invalid model catalog.", PluginRequestFailureKind.OutputIncomplete);
+        }
+        catch (JsonException ex)
+        {
+            throw new PluginRequestException("Gemini returned an invalid model catalog.", PluginRequestFailureKind.OutputIncomplete, innerException: ex);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && deadline.IsCancellationRequested)
+        {
+            throw new PluginRequestException("Gemini connection check timed out.", PluginRequestFailureKind.Timeout, innerException: ex);
+        }
     }
 
     /// <inheritdoc />

@@ -33,3 +33,7 @@ The original 1.3.0 direct WebSocket check explicitly waited for events after sen
 ARM64 acceptance remains pending. The user approved the tested provider for PR review; public package publication remains separate.
 
 The local machine's untracked evidence is in `artifacts/plugin-batch/gemini-live/`: `results.json`, the harness source, the synthetic WAV and its source sentence. These artifacts contain no credential values.
+
+## Review hardening (1.3.2)
+
+95 tests pass after correcting unverified detected-language metadata, preserving successfully fetched empty transcription catalogs, tolerating malformed persisted/provider model IDs, and bounding and classifying connection-check failures. An additional loopback case verifies that an early finalized transcript segment does not prematurely complete the recording.

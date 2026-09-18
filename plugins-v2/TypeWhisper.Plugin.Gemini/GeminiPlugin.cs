@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.1";
+    private const string PluginVersionValue = "1.3.2";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -193,7 +193,7 @@ public sealed partial class GeminiPlugin :
     }
 
     /// <inheritdoc />
-    public string? SelectedModelId => _selectedTranscriptionModelId;
+    public string? SelectedModelId => SelectedTranscriptionModel?.Id;
 
     /// <inheritdoc />
     public bool SupportsTranslation => false;
@@ -386,9 +386,7 @@ public sealed partial class GeminiPlugin :
     internal bool ShouldRefreshModelCatalog(DateTimeOffset now) =>
         IsAvailable
         && (_modelCatalogFetchedAt is not { } fetchedAt
-            || now - fetchedAt >= ModelCatalogRefreshInterval
-            || _fetchedLlmModels.Count == 0
-            || _fetchedTranscriptionModels.Count == 0);
+            || now - fetchedAt >= ModelCatalogRefreshInterval);
 
     /// <inheritdoc />
     public async Task SetApiKeyAsync(string apiKey)
@@ -630,12 +628,9 @@ public sealed partial class GeminiPlugin :
         var normalizedTranscriptionModels = NormalizeFetchedTranscriptionModels(
             catalog.TranscriptionModels);
         var normalizedFetchedAt = catalog.FetchedAtUtc.ToUniversalTime();
-        var availableTranscriptionModels = normalizedTranscriptionModels.Count > 0
-            ? normalizedTranscriptionModels
-            : FallbackTranscriptionModels;
         var nextSelectedModelId = NormalizeSelectedTranscriptionModelId(
             _selectedTranscriptionModelId,
-            availableTranscriptionModels);
+            normalizedTranscriptionModels);
         var selectionChanged = !string.Equals(
             _selectedTranscriptionModelId,
             nextSelectedModelId,
@@ -874,7 +869,7 @@ public sealed partial class GeminiPlugin :
     }
 
     private IReadOnlyList<GeminiFetchedTranscriptionModel> AvailableTranscriptionModels =>
-        _fetchedTranscriptionModels.Count > 0
+        _modelCatalogFetchedAt is not null || _fetchedTranscriptionModels.Count > 0
             ? _fetchedTranscriptionModels
             : FallbackTranscriptionModels;
 
@@ -891,9 +886,7 @@ public sealed partial class GeminiPlugin :
         string? modelId,
         IReadOnlyList<GeminiFetchedTranscriptionModel> available)
     {
-        var normalized = string.IsNullOrWhiteSpace(modelId)
-            ? null
-            : NormalizeModelId(modelId);
+        var normalized = TryNormalizeModelId(modelId, out var persisted) ? persisted : null;
         return available.FirstOrDefault(model => string.Equals(
                 model.Id,
                 normalized,
@@ -947,7 +940,7 @@ public sealed partial class GeminiPlugin :
     private static List<GeminiFetchedModel> NormalizeFetchedLlmModels(
         IEnumerable<GeminiFetchedModel> models) =>
         models
-            .Where(model => model is not null && !string.IsNullOrWhiteSpace(model.Id))
+            .Where(model => model is not null && TryNormalizeModelId(model.Id, out _))
             .Select(model => new GeminiFetchedModel(
                 NormalizeModelId(model.Id),
                 string.IsNullOrWhiteSpace(model.DisplayName) ? null : model.DisplayName.Trim()))
@@ -964,6 +957,7 @@ public sealed partial class GeminiPlugin :
         IEnumerable<GeminiNativeModel> models)
     {
         var available = models
+            .Where(model => model is not null && TryNormalizeModelId(ResolveNativeModelId(model), out _))
             .Select(model => new GeminiFetchedModel(
                 NormalizeModelId(ResolveNativeModelId(model)),
                 model.DisplayName))
@@ -987,13 +981,11 @@ public sealed partial class GeminiPlugin :
     private static List<GeminiFetchedTranscriptionModel> NormalizeFetchedTranscriptionModels(
         IEnumerable<GeminiFetchedTranscriptionModel> models) =>
         models
-            .Where(model => model is not null && !string.IsNullOrWhiteSpace(model.Id))
+            .Where(model => model is not null && TryNormalizeModelId(model.Id, out _))
             .Select(model => new GeminiFetchedTranscriptionModel(
                 NormalizeModelId(model.Id),
                 string.IsNullOrWhiteSpace(model.DisplayName) ? null : model.DisplayName.Trim(),
-                string.IsNullOrWhiteSpace(model.LiveModelId)
-                    ? null
-                    : NormalizeModelId(model.LiveModelId)))
+                TryNormalizeModelId(model.LiveModelId, out var liveModel) ? liveModel : null))
             .Where(model => IsCompatibleTranscriptionModelId(model.Id))
             .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
             .OrderBy(model => model.Id.Contains("preview", StringComparison.OrdinalIgnoreCase))
@@ -1037,7 +1029,7 @@ public sealed partial class GeminiPlugin :
             .ThenByDescending(model => GetModelVersion(model.Id))
             .ThenByDescending(model => model.Id, StringComparer.OrdinalIgnoreCase)
             .Select(model => model.Id)
-            .First();
+            .FirstOrDefault() ?? string.Empty;
 
     private static Version GetModelVersion(string id)
     {
@@ -1089,6 +1081,14 @@ public sealed partial class GeminiPlugin :
         return normalized.StartsWith("models/", StringComparison.OrdinalIgnoreCase)
             ? normalized["models/".Length..]
             : normalized;
+    }
+
+    private static bool TryNormalizeModelId(string? id, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(id)) return false;
+        try { normalized = NormalizeModelId(id); return normalized.Length > 0; }
+        catch (ArgumentException) { return false; }
     }
 
     private static bool IsLiveTranscriptionModelId(string id)

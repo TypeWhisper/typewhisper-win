@@ -49,7 +49,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | FileMemory | Separate v2 port pending |
 | FillerWords | Existing portable build |
 | Fireworks | Separate v2 port pending |
-| Gemini | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gemini`; 86 provider/package/loopback tests pass. Includes language mapping, dictionary terms, LLM selection/temperature and confirmed streaming completion. Authenticated text/audio/streaming, package upgrade and manual live-preview acceptance passed; public package publication pending. |
+| Gemini | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gemini`; 95 provider/package/loopback tests pass. Includes language mapping, dictionary terms, LLM selection/temperature and confirmed streaming completion. Authenticated text/audio/streaming, package upgrade and manual live-preview acceptance passed; public package publication pending. |
 | GemmaLocal | Separate v2 port pending |
 | Gladia | Separate v2 port pending |
 | GoogleCloudStt | Separate v2 port pending |

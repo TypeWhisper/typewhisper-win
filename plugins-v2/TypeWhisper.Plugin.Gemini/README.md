@@ -1,6 +1,6 @@
 # Gemini for the portable host
 
-Independent .NET 10 package `com.typewhisper.gemini` version `1.3.1`, requiring host `1.1.2`. Source and protocol fixtures were ported from Windows `4db8f6ac` with cross-platform behavior checked. Legacy sources, profiles and catalogs are unchanged.
+Independent .NET 10 package `com.typewhisper.gemini` version `1.3.2`, requiring host `1.1.2`. Source and protocol fixtures were ported from Windows `4db8f6ac` with cross-platform behavior checked. Legacy sources, profiles and catalogs are unchanged.
 
 ## Features and macOS comparison
 
@@ -22,7 +22,7 @@ dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Por
 & "$DevTools/build-typewhisper-windows-dev.ps1" --run --winui $Checkout
 ```
 
-86 plugin tests passed, including six streaming completion/error/cancellation cases. The shared portable SDK/host suite also passed (264 tests with the companion common-save change). Coverage includes protocol fixtures, new settings, persistence failures, cancellation, temporary-file cleanup, Mac response variants, real local WebSocket exchanges and ZIP installation/configuration/restart/uninstall/reinstall through the immutable package store. The package contains its DLL, dependency manifest and plugin manifest, without WPF dependencies. WinUI build and development launch succeeded with existing unrelated warnings.
+95 plugin tests passed, including six streaming completion/error/cancellation cases. The shared portable SDK/host suite also passed (264 tests with the companion common-save change). Coverage includes protocol fixtures, new settings, persistence failures, cancellation, temporary-file cleanup, Mac response variants, real local WebSocket exchanges and ZIP installation/configuration/restart/uninstall/reinstall through the immutable package store. The package contains its DLL, dependency manifest and plugin manifest, without WPF dependencies. WinUI build and development launch succeeded with existing unrelated warnings.
 
 On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
 

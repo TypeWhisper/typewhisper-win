@@ -58,7 +58,7 @@ internal static class GeminiTranscriptionClient
             var text = ParseInteractionText(json);
             return new PluginTranscriptionResult(
                 text,
-                languageHints.FirstOrDefault(),
+                DetectedLanguage: null,
                 CalculateWavDurationSeconds(wavAudio),
                 NoSpeechProbability: null);
         }

@@ -12,6 +12,7 @@ public sealed partial class GeminiPluginTests
 {
     [Theory]
     [InlineData("final")]
+    [InlineData("early-final")]
     [InlineData("empty")]
     [InlineData("close")]
     [InlineData("error")]
@@ -27,14 +28,19 @@ public sealed partial class GeminiPluginTests
         var endReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var earlyFinalReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = Task.Run(async () =>
         {
+            try
+            {
             var context = await listener.GetContextAsync().WaitAsync(ct);
             using var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
             await Receive(socket,ct);
             await socket.SendAsync(Encoding.UTF8.GetBytes("""{"setupComplete":{}}"""),WebSocketMessageType.Text,true,ct);
             Assert.Contains("activityStart",await Receive(socket,ct));
             Assert.Contains("audio",await Receive(socket,ct));
+            if (outcome == "early-final")
+                await socket.SendAsync(Encoding.UTF8.GetBytes("""{"serverContent":{"inputTranscription":{"text":"Earlier segment"}}}"""), WebSocketMessageType.Text, true, ct);
             Assert.Contains("activityEnd",await Receive(socket,ct));
             endReceived.SetResult(); await release.Task.WaitAsync(ct);
             if(outcome == "close") await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
@@ -42,7 +48,7 @@ public sealed partial class GeminiPluginTests
             {
                 var response = outcome switch
                 {
-                    "final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
+                    "final" or "early-final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
                     "empty" => """{"serverContent":{"inputTranscription":{"text":""}}}""",
                     "error" => """{"error":{"message":"Fixture provider error"}}""",
                     _ => "not json"
@@ -50,12 +56,20 @@ public sealed partial class GeminiPluginTests
                 await socket.SendAsync(Encoding.UTF8.GetBytes(response),WebSocketMessageType.Text,true,ct);
             }
             await finished.Task.WaitAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                endReceived.TrySetException(ex);
+                earlyFinalReceived.TrySetException(ex);
+                throw;
+            }
         },ct);
         await using var stream = await GeminiStreamingSession.ConnectAsync("fixture",GeminiPlugin.DefaultLiveTranscriptionModel,
             ["de-DE"],[],GeminiTranscriptionMode.Smart,ct,new Uri($"ws://127.0.0.1:{port}/"));
         var updates = new System.Collections.Concurrent.ConcurrentQueue<StreamingTranscriptEvent>();
-        stream.TranscriptReceived += updates.Enqueue;
+        stream.TranscriptReceived += update => { updates.Enqueue(update); if (update.Text == "Earlier segment") earlyFinalReceived.TrySetResult(); };
         await stream.SendAudioAsync(new byte[] { 1,2,3,4 },ct);
+        if (outcome == "early-final") await earlyFinalReceived.Task.WaitAsync(ct);
         using var finishCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var completion = stream.FinalizeAsync(finishCancellation.Token);
         await endReceived.Task.WaitAsync(ct); Assert.False(completion.IsCompleted);
@@ -69,7 +83,7 @@ public sealed partial class GeminiPluginTests
             else
             {
                 await completion;
-                Assert.Equal(outcome == "final" ? "Hallo Welt" : "",string.Join(" ",updates.Where(e=>e.IsFinal).Select(e=>e.Text)));
+                Assert.Equal(outcome == "early-final" ? "Earlier segment Hallo Welt" : outcome == "final" ? "Hallo Welt" : "",string.Join(" ",updates.Where(e=>e.IsFinal).Select(e=>e.Text)));
                 await Assert.ThrowsAsync<InvalidOperationException>(()=>stream.SendAudioAsync(new byte[] { 0,0 },ct));
             }
         }

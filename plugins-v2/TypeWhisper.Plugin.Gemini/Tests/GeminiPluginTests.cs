@@ -245,7 +245,7 @@ public sealed partial class GeminiPluginTests
     }
 
     [Fact]
-    public async Task ShouldRefreshModelCatalog_UsesTwentyFourHourTtlAndRequiresBothCapabilities()
+    public async Task ShouldRefreshModelCatalog_UsesTwentyFourHourTtlIncludingEmptyCapabilities()
     {
         var fetchedAt = new DateTimeOffset(2026, 8, 28, 10, 0, 0, TimeSpan.Zero);
         var host = new TestPluginHostServices();
@@ -268,7 +268,10 @@ public sealed partial class GeminiPluginTests
         host.SetSetting("fetchedTranscriptionModels.v1", new List<GeminiFetchedTranscriptionModel>());
         using var incompleteCatalog = new GeminiPlugin();
         await incompleteCatalog.ActivateAsync(host);
-        Assert.True(incompleteCatalog.ShouldRefreshModelCatalog(fetchedAt.AddMinutes(1)));
+        Assert.False(incompleteCatalog.ShouldRefreshModelCatalog(fetchedAt.AddMinutes(1)));
+        Assert.Empty(incompleteCatalog.TranscriptionModels);
+        Assert.Null(incompleteCatalog.SelectedModelId);
+        Assert.False(incompleteCatalog.SupportsStreaming);
     }
 
     [Theory]
@@ -515,7 +518,7 @@ public sealed partial class GeminiPluginTests
             CancellationToken.None);
 
         Assert.Equal("Hallo Welt", result.Text);
-        Assert.Equal("de-DE", result.DetectedLanguage);
+        Assert.Null(result.DetectedLanguage);
         Assert.Equal(1, result.DurationSeconds, precision: 3);
         Assert.Equal(4, requests.Count);
         Assert.Equal(HttpMethod.Delete, requests[^1].Method);

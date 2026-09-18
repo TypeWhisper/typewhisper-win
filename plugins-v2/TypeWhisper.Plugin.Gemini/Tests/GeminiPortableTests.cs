@@ -8,6 +8,32 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed partial class GeminiPluginTests
 {
     [Fact]
+    public async Task SuccessfulTextOnlyCatalogDisablesTranscriptionUntilTheCatalogChanges()
+    {
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        using var plugin = new GeminiPlugin();
+        await plugin.ActivateAsync(host);
+        Assert.NotEmpty(plugin.TranscriptionModels);
+        var fetched = DateTimeOffset.UtcNow;
+        Assert.True(await plugin.SetFetchedModelCatalogAsync(new(
+            [new("gemini-3.7-flash", "Gemini 3.7 Flash")], [], fetched)));
+        Assert.Empty(plugin.TranscriptionModels);
+        Assert.Null(plugin.SelectedModelId);
+        Assert.False(plugin.SupportsStreaming);
+        Assert.False(plugin.ShouldRefreshModelCatalog(fetched.AddMinutes(1)));
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            plugin.TranscribeAsync([1], "en", false, null, default));
+        Assert.Equal(PluginRequestFailureKind.Configuration, failure.FailureKind);
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(host);
+        Assert.Empty(plugin.TranscriptionModels);
+        Assert.Null(plugin.SelectedModelId);
+        Assert.NotEmpty(plugin.TextSettings);
+        await plugin.SetApiKeyAsync("replacement");
+        Assert.NotEmpty(plugin.TranscriptionModels);
+    }
+
+    [Fact]
     public async Task PortableSettings_PersistModelModeAndTemperatureWithoutExposingKey()
     {
         string? sent = null;
