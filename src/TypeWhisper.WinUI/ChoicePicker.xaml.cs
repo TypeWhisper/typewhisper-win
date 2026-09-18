@@ -41,7 +41,7 @@ public sealed partial class ChoicePicker : UserControl
         ChoiceLabel.Text = options.FirstOrDefault(option => option.Id == selectedId)?.Label ?? placeholder;
         UpdateSelectedIcon();
         UpdateComparisonContent();
-        if (IsPopupOpen) RebuildChoices();
+        if (IsPopupOpen) RebuildChoices(restoreFocus: true);
     }
 
     private void UpdateSelectedIcon()
@@ -106,7 +106,7 @@ public sealed partial class ChoicePicker : UserControl
     private void UpdateComparisonContent()
     {
         var selected = _options.FirstOrDefault(o => o.Id == SelectedId);
-        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? "ChooseÃ¢â‚¬Â¦";
+        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? "Choose\u2026";
         if (_comparisonDescription is not null) _comparisonDescription.Text = selected?.Description ?? "";
     }
 
@@ -117,11 +117,11 @@ public sealed partial class ChoicePicker : UserControl
         RebuildChoices();
     }
 
-    private void RebuildChoices()
+    private void RebuildChoices(bool restoreFocus = false)
     {
         var focused = FocusManager.GetFocusedElement(XamlRoot) as HandCursorButton;
         var focusedId = focused is not null && Choices.Children.Contains(focused) ? focused.Tag as string : null;
-        var focusState = focused?.FocusState ?? FocusState.Programmatic;
+        var focusState = focusedId is not null ? focused!.FocusState : _keyboard ? FocusState.Keyboard : FocusState.Programmatic;
         _selectedButton = null;
         Choices.Children.Clear();
         var compact = _comparisonVariant is 2 or 3;
@@ -172,7 +172,7 @@ public sealed partial class ChoicePicker : UserControl
             };
             Choices.Children.Add(button);
         }
-        if (focusedId is not null)
+        if (restoreFocus)
             (Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled && button.Tag as string == focusedId)
                 ?? _selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled))?.Focus(focusState);
     }
