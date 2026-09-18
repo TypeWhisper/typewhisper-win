@@ -43,8 +43,8 @@ public sealed partial class ProviderTests
         string? body=null;using var http=new HttpClient(new Handler((r,b)=>{Assert.Equal("/inference/v1/chat/completions",r.RequestUri!.AbsolutePath);body=b;return Json("""{"choices":[{"finish_reason":"stop","message":{"content":"Ergebnis"}}]}""");}));
         var host=new Host();using var plugin=new FireworksPlugin(http);await plugin.ActivateAsync(host);await Configure(plugin);
         await plugin.SaveTextSettingAsync("llmModel","custom-model",default);await plugin.SaveTextSettingAsync("temperature","0.6",default);await plugin.SaveTextSettingAsync("temperatureMode","custom",default);
-        await plugin.DeactivateAsync();await plugin.ActivateAsync(host);Assert.Equal("Ergebnis",await plugin.ProcessAsync("Rewrite","GrÃ¼ÃŸe","",default));
-        using(var doc=JsonDocument.Parse(body!)){Assert.Equal("custom-model",doc.RootElement.GetProperty("model").GetString());Assert.Equal(0.6,doc.RootElement.GetProperty("temperature").GetDouble());Assert.Equal("GrÃ¼ÃŸe",doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());}
+        await plugin.DeactivateAsync();await plugin.ActivateAsync(host);Assert.Equal("Ergebnis",await plugin.ProcessAsync("Rewrite","Grüße","",default));
+        using(var doc=JsonDocument.Parse(body!)){Assert.Equal("custom-model",doc.RootElement.GetProperty("model").GetString());Assert.Equal(0.6,doc.RootElement.GetProperty("temperature").GetDouble());Assert.Equal("Grüße",doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());}
         await plugin.SaveTextSettingAsync("temperatureMode","providerDefault",default);await plugin.ProcessAsync("","text","workflow-model",default);
         using var final=JsonDocument.Parse(body!);Assert.Equal("workflow-model",final.RootElement.GetProperty("model").GetString());Assert.False(final.RootElement.TryGetProperty("temperature",out _));
     }
@@ -68,7 +68,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task TurboTranslationUsesDedicatedAudioEndpointAndPrompt()
     {
-        using var http=new HttpClient(new Handler((r,b)=>{Assert.Equal("audio-turbo.api.fireworks.ai",r.RequestUri!.Host);Assert.Equal("/v1/audio/translations",r.RequestUri.AbsolutePath);Assert.Contains("whisper-v3-turbo",b);Assert.Contains("TypeWhisper",b);return Json("""{"text":"Hello"}""");}));
+        using var http=new HttpClient(new Handler((r,b)=>{Assert.Equal("audio-turbo.api.fireworks.ai",r.RequestUri!.Host);Assert.Equal("/v1/audio/translations",r.RequestUri.AbsolutePath);Assert.DoesNotContain((MultipartFormDataContent)r.Content!, part => part.Headers.ContentDisposition?.Name?.Trim('"') == "language");Assert.Contains("whisper-v3-turbo",b);Assert.Contains("TypeWhisper",b);return Json("""{"text":"Hello"}""");}));
         using var plugin=new FireworksPlugin(http);await plugin.ActivateAsync(new Host());await Configure(plugin);plugin.SelectModel("whisper-v3-turbo");
         Assert.Equal("Hello",(await plugin.TranscribeAsync(Audio(),"de",true,"TypeWhisper",default)).Text);
     }
