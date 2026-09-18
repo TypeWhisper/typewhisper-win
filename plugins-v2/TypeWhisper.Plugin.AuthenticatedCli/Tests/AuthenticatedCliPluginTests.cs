@@ -663,6 +663,29 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Equal("opencode/valid", Assert.Single(catalog.Models).Id);
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("{\"id\":\"broken\",\"providerID\":\"opencode\",\"name\":\"Broken\"}")]
+    public void OpenCodeCatalogParser_RejectsValidJsonWithUnrecognizedSchema(string metadata)
+    {
+        Assert.Throws<CliProtocolException>(() => OpenCodeModelCatalogLoader.Parse(
+            "opencode/broken\n" + metadata, DateTimeOffset.UnixEpoch));
+    }
+
+    [Fact]
+    public void OpenCodeCatalogParser_AcceptsRecognizedCatalogWithoutEligibleModels()
+    {
+        var catalog = OpenCodeModelCatalogLoader.Parse(string.Join('\n', new[]
+        {
+            VerboseModel("paid", "Paid", cost: "{\"input\":1,\"output\":2}"),
+            VerboseModel("deprecated", "Deprecated", cost: "{\"input\":0,\"output\":0}", status: "deprecated"),
+            VerboseModel("image", "Image", cost: "{\"input\":0,\"output\":0}", outputModalities: "[\"image\"]")
+        }), DateTimeOffset.UnixEpoch);
+        Assert.DoesNotContain(catalog.Models, model => model.IsFree);
+    }
+
     [WindowsFact]
     public async Task OpenCodeWithNoFreeModels_IsUnavailableAndNeverFallsBackToDefault()
     {

@@ -17,6 +17,11 @@ internal static class CodexModelCatalogLoader
         using var reader = new StreamReader(output, new UTF8Encoding(false, true), leaveOpen: true);
         var remainingCharacters = 2 * 1024 * 1024;
         async Task Send(object message) => await writer.WriteLineAsync(JsonSerializer.Serialize(message).AsMemory(), ct);
+        static JsonDocument ParseDocument(string payload)
+        {
+            try { return JsonDocument.Parse(payload); }
+            catch (JsonException ex) { throw new IOException("Codex returned invalid JSON.", ex); }
+        }
         async Task<JsonElement> Receive(int id)
         {
             while (true)
@@ -30,16 +35,16 @@ internal static class CodexModelCatalogLoader
                     if (character[0] == '\n') break;
                     line.Append(character[0]);
                 }
-                using var document = JsonDocument.Parse(line.ToString());
+                using var document = ParseDocument(line.ToString());
                 var root = document.RootElement;
                 if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("id", out var responseId)
-                    || !responseId.TryGetInt32(out var value) || value != id) continue;
+                    || responseId.ValueKind != JsonValueKind.Number || !responseId.TryGetInt32(out var value) || value != id) continue;
                 if (root.TryGetProperty("error", out _) || !root.TryGetProperty("result", out var result))
                     throw new IOException("Codex model discovery failed.");
                 return result.Clone();
             }
         }
-        await Send(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "typewhisper", version = "1.3.2" } } });
+        await Send(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "typewhisper", version = "1.3.3" } } });
         await Receive(1);
         await Send(new { method = "initialized" });
         var models = new List<PluginModelInfo>();

@@ -77,7 +77,7 @@ public sealed partial class AuthenticatedCliPlugin :
     public string PluginName => "Authenticated Provider CLIs";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.3.2";
+    public string PluginVersion => "1.3.3";
 
     /// <inheritdoc />
     public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders { get { lock (_stateLock) return _roles; } }
@@ -228,7 +228,12 @@ public sealed partial class AuthenticatedCliPlugin :
         string model,
         CancellationToken cancellationToken)
     {
-        descriptor = CurrentDescriptor(descriptor.Key);
+        try { descriptor = CurrentDescriptor(descriptor.Key); }
+        catch (ArgumentException ex)
+        {
+            throw new PluginRequestException("The CLI profile no longer exists.",
+                PluginRequestFailureKind.Configuration, isTransient: false, innerException: ex);
+        }
         if (string.IsNullOrWhiteSpace(model) || model == "default")
         {
             lock (_stateLock) model = _selectedModels.GetValueOrDefault(descriptor.Key, "default");
@@ -348,7 +353,6 @@ public sealed partial class AuthenticatedCliPlugin :
 
     private async Task PollAvailabilityAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(AvailabilityRefreshInterval);
         while (true)
         {
             try
@@ -366,42 +370,33 @@ public sealed partial class AuthenticatedCliPlugin :
                     $"event=availability-monitor-error type={ex.GetType().Name}");
             }
 
-            if (!await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-                return;
+            await Task.Delay(AvailabilityRefreshInterval, cancellationToken).ConfigureAwait(false);
         }
     }
 
     private async Task RefreshAllAsync(bool notifyHost, CancellationToken cancellationToken)
     {
-        var pendingNotifications = new List<(
-            CliProviderDescriptor Descriptor,
-            CliAvailabilitySnapshot Snapshot,
-            bool Changed)>();
-        await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        NotifySettingsActivity(GetString("Settings.Refreshing"));
         try
         {
-            NotifySettingsActivity(GetString("Settings.Refreshing"));
-            foreach (var descriptor in ProfileDescriptors)
+            foreach (var id in ProfileDescriptors.Select(d => d.Key))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var snapshot = await CheckAvailabilityAsync(descriptor, cancellationToken).ConfigureAwait(false);
-                pendingNotifications.Add((descriptor, snapshot, StoreSnapshot(descriptor, snapshot)));
+                CliProviderDescriptor? descriptor;
+                CliAvailabilitySnapshot snapshot;
+                bool changed;
+                await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    lock (_stateLock) descriptor = _profiles.SingleOrDefault(p => p.Id == id)?.Descriptor;
+                    if (descriptor is null) continue;
+                    snapshot = await CheckAvailabilityAsync(descriptor, cancellationToken).ConfigureAwait(false);
+                    changed = StoreSnapshot(descriptor, snapshot);
+                }
+                finally { _refreshGate.Release(); }
+                PublishSnapshotChange(descriptor, snapshot, changed, notifyHost);
             }
         }
-        finally
-        {
-            _refreshGate.Release();
-            NotifySettingsActivity(null);
-        }
-
-        foreach (var notification in pendingNotifications)
-        {
-            PublishSnapshotChange(
-                notification.Descriptor,
-                notification.Snapshot,
-                notification.Changed,
-                notifyHost);
-        }
+        finally { NotifySettingsActivity(null); }
     }
 
     private async Task<CliAvailabilitySnapshot> RefreshOneAsync(
@@ -746,20 +741,30 @@ public sealed partial class AuthenticatedCliPlugin :
         lock (_stateLock) return _openCodeCatalogs.GetValueOrDefault(profileId)?.Revision ?? 0;
     }
 
-    private void PrepareOpenCodeCatalog(CliProviderDescriptor descriptor, string executable)
-    {
-        // Bind caches to both the profile identity and the actual executable/session.
-        var connectionKey = JsonSerializer.Serialize(new
+    private static string OpenCodeConnectionKey(CliProviderDescriptor descriptor, string executable) =>
+        JsonSerializer.Serialize(new
         {
             Executable = executable,
             Environment = descriptor.EnvironmentOverrides.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(p => new { Name = p.Key.ToUpperInvariant(), p.Value }).ToArray()
         });
+
+    private static OpenCodeModelCatalogCache CacheOpenCodeCatalog(OpenCodeModelCatalog catalog) =>
+        new(OpenCodeCatalogCacheVersion, catalog.RefreshedAt,
+            catalog.Models.Where(m => m.IsFree).Select(m => new OpenCodeCachedModel(m.Id, m.DisplayName, m.Variants.ToList())).ToList());
+
+    private void PrepareOpenCodeCatalog(CliProviderDescriptor descriptor, string executable, OpenCodeProfileCatalogCache? verifiedCache = null)
+    {
+        // Bind caches to both the profile identity and the actual executable/session.
+        var connectionKey = OpenCodeConnectionKey(descriptor, executable);
         lock (_stateLock)
         {
             if (_openCodeCatalogs.TryGetValue(descriptor.Key, out var current) && current.ConnectionKey == connectionKey) return;
-            var saved = _host?.GetSetting<OpenCodeProfileCatalogCache>(ProfileCatalogSetting(descriptor.Key));
+            var saved = verifiedCache ?? _host?.GetSetting<OpenCodeProfileCatalogCache>(ProfileCatalogSetting(descriptor.Key));
             var cache = saved?.ConnectionKey == connectionKey ? saved.Catalog : null;
+            var committed = _profiles.Single(p => p.Id == descriptor.Key).OpenCodeCatalog;
+            if (committed?.ConnectionKey == connectionKey && (cache is null || committed.Catalog.RefreshedAt >= cache.RefreshedAt))
+                cache = committed.Catalog;
             if (descriptor.Key == "opencode" && descriptor.EnvironmentOverrides.Count == 0 && _legacyOpenCodeCatalog is not null)
             {
                 cache ??= _legacyOpenCodeCatalog;
@@ -773,8 +778,8 @@ public sealed partial class AuthenticatedCliPlugin :
                     .Select(m => new OpenCodeCatalogModel(m.Id, m.DisplayName.Trim(),
                         (m.Variants ?? []).Where(IsSafeOpenCodeVariant).Distinct(StringComparer.Ordinal).ToArray(), true)).ToArray();
                 state.RefreshedAt = cache.RefreshedAt;
-                state.IsLastKnownGood = state.Models.Count > 0;
-                state.Revision = state.IsLastKnownGood ? 1 : 0;
+                state.IsLastKnownGood = verifiedCache is null && state.Models.Count > 0;
+                state.Revision = state.Models.Count > 0 ? 1 : 0;
             }
             _openCodeCatalogs[descriptor.Key] = state;
             _profiles = _profiles.Select(p => p.Id == descriptor.Key
@@ -794,7 +799,8 @@ public sealed partial class AuthenticatedCliPlugin :
             state.LastRefreshError = null;
             state.IsLastKnownGood = false;
             _profiles = _profiles.Select(p => p.Id == profileId
-                ? p with { Models = freeModels.Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList() } : p).ToList();
+                ? p with { Models = freeModels.Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList(),
+                    OpenCodeCatalog = new(state.ConnectionKey, CacheOpenCodeCatalog(catalog)) } : p).ToList();
         }
     }
 
@@ -823,8 +829,7 @@ public sealed partial class AuthenticatedCliPlugin :
             string connectionKey;
             lock (_stateLock) connectionKey = _openCodeCatalogs[profileId].ConnectionKey;
             host.SetSetting(ProfileCatalogSetting(profileId), new OpenCodeProfileCatalogCache(connectionKey,
-                new OpenCodeModelCatalogCache(OpenCodeCatalogCacheVersion, catalog.RefreshedAt,
-                    catalog.Models.Where(m => m.IsFree).Select(m => new OpenCodeCachedModel(m.Id, m.DisplayName, m.Variants.ToList())).ToList())));
+                CacheOpenCodeCatalog(catalog)));
         }
         catch (Exception ex)
         {
@@ -1080,9 +1085,8 @@ public sealed partial class AuthenticatedCliPlugin :
         public string LlmSelectionId => _descriptor.SelectionId;
         public string ProviderName => _owner.GetProfileName(_descriptor.Key, _descriptor.DisplayKey);
         public bool IsAvailable => _owner.GetSnapshot(_descriptor).State == CliAvailabilityState.Ready
-                                   && (_descriptor.Kind != CliProviderKind.OpenCode
-                                       || _owner.GetOpenCodeFreeModels(_descriptor.Key).Count > 0);
-        public IReadOnlyList<PluginModelInfo> SupportedModels => _owner.GetModels(_owner.CurrentDescriptor(_descriptor.Key));
+                                   && SupportedModels.Count > 0;
+        public IReadOnlyList<PluginModelInfo> SupportedModels => _owner.GetModels(_descriptor);
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;

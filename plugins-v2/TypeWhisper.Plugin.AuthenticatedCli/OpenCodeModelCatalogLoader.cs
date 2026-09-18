@@ -97,7 +97,7 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var duplicates = new HashSet<string>(StringComparer.Ordinal);
         var headerCount = 0;
-        var parsedMetadataCount = 0;
+        var recognizedMetadataCount = 0;
 
         for (var index = 0; index < lines.Length; index++)
         {
@@ -125,9 +125,9 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
             try
             {
                 using var document = JsonDocument.Parse(metadata);
-                parsedMetadataCount++;
-                if (duplicates.Contains(fullId)
-                    || !TryCreateModel(fullId, modelId, document.RootElement, out var model))
+                var accepted = TryCreateModel(fullId, modelId, document.RootElement, out var model, out var recognized);
+                if (recognized) recognizedMetadataCount++;
+                if (duplicates.Contains(fullId) || !accepted)
                 {
                     continue;
                 }
@@ -140,7 +140,7 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
             }
         }
 
-        if (headerCount == 0 || parsedMetadataCount == 0)
+        if (headerCount == 0 || recognizedMetadataCount == 0)
             throw new CliProtocolException("The OpenCode model catalog did not contain parseable verbose metadata.");
 
         return new OpenCodeModelCatalog(models, refreshedAt);
@@ -174,9 +174,10 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
         string fullId,
         string modelId,
         JsonElement metadata,
-        out OpenCodeCatalogModel model)
+        out OpenCodeCatalogModel model, out bool recognized)
     {
         model = null!;
+        recognized = false;
         if (metadata.ValueKind != JsonValueKind.Object
             || !TryGetString(metadata, "id", out var metadataId)
             || !(string.Equals(metadataId, modelId, StringComparison.Ordinal)
@@ -185,8 +186,7 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
             || !string.Equals(providerId, "opencode", StringComparison.Ordinal)
             || !TryGetString(metadata, "name", out var name)
             || string.IsNullOrWhiteSpace(name)
-            || IsDeprecated(metadata)
-            || !SupportsTextInputAndOutput(metadata)
+            || !HasRecognizedCapabilities(metadata)
             || !metadata.TryGetProperty("cost", out var cost)
             || cost.ValueKind != JsonValueKind.Object
             || !TryGetNumber(cost, "input")
@@ -195,6 +195,8 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
             return false;
         }
 
+        recognized = true;
+        if (IsDeprecated(metadata) || !SupportsTextInputAndOutput(metadata)) return false;
         model = new OpenCodeCatalogModel(
             fullId,
             name.Trim(),
@@ -210,6 +212,16 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
 
         return status.ValueKind != JsonValueKind.String
                || string.Equals(status.GetString(), "deprecated", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasRecognizedCapabilities(JsonElement metadata)
+    {
+        if (!metadata.TryGetProperty("modalities", out var value) && !metadata.TryGetProperty("capabilities", out value)) return false;
+        if (value.ValueKind != JsonValueKind.Object) return false;
+        return Valid("input") && Valid("output");
+        bool Valid(string name) => value.TryGetProperty(name, out var item) &&
+            (item.ValueKind == JsonValueKind.Array && item.EnumerateArray().All(v => v.ValueKind == JsonValueKind.String) ||
+             item.ValueKind == JsonValueKind.Object && item.EnumerateObject().All(p => p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False));
     }
 
     private static bool SupportsTextInputAndOutput(JsonElement metadata)

@@ -80,6 +80,9 @@ public sealed class CliDiscoveryAndModelsTests
     [Theory]
     [InlineData("{\"id\":2,\"error\":{\"code\":-1}}")]
     [InlineData("{\"id\":2,\"result\":{\"data\":null}}")]
+    [InlineData("")]
+    [InlineData("not-json")]
+    [InlineData("{\"id\":\"unexpected\",\"result\":{}}")]
     public async Task CodexCatalog_RejectsFailedOrInvalidResponses(string response)
     {
         using var input = new MemoryStream();

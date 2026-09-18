@@ -9,6 +9,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
     private List<CliProfile> _profiles = [];
     private string _settingsProfileId = "codex";
     private readonly Dictionary<string, CliProfile> _draftProfiles = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CliAvailabilitySnapshot> _draftSnapshots = new(StringComparer.Ordinal);
 
     private string L(string english, string german) =>
         Localization?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? german : english;
@@ -76,7 +77,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
         foreach (var profile in profiles)
         {
             var previous = _profiles.SingleOrDefault(p => p.Id == profile.Id);
-            if (previous is null || !SameConnection(previous, profile))
+            if (previous is null || !SameConnection(previous, profile) || previous.OpenCodeCatalog != profile.OpenCodeCatalog)
             {
                 _snapshots[profile.Id] = CliAvailabilitySnapshot.Initial;
                 _openCodeCatalogs.Remove(profile.Id);
@@ -105,10 +106,11 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
         lock (_stateLock)
         {
             var profile = _profiles.SingleOrDefault(p => p.Id == descriptor.Key);
-            if (descriptor.Kind == CliProviderKind.OpenCode)
+            if (profile is null) return [];
+            if (profile.Provider == "opencode")
                 return GetOpenCodeFreeModels(descriptor.Key).OrderByDescending(m => m.Id == profile?.Model)
                     .Select((m, i) => new PluginModelInfo(m.Id, m.DisplayName) { IsRecommended = i == 0 }).ToArray();
-            return ModelsFor(profile ?? new CliProfile { Provider = descriptor.Key });
+            return ModelsFor(profile);
         }
     }
 
@@ -231,8 +233,8 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
         ValidateEnvironment(descriptor, environment);
         var result = current with { Name = name, Provider = provider, Executable = executable, Environment = environment,
             Model = Value(provider + "/model", provider == current.Provider ? current.Model : "default") };
-        if (!SameConnection(current, result)) result = result with { Models = [] };
-        if (_draftProfiles.TryGetValue(profileId, out var draft) && SameConnection(draft, result)) result = result with { Models = draft.Models };
+        if (!SameConnection(current, result)) result = result with { Models = [], OpenCodeCatalog = null };
+        if (_draftProfiles.TryGetValue(profileId, out var draft) && SameConnection(draft, result)) result = result with { Models = draft.Models, OpenCodeCatalog = draft.OpenCodeCatalog };
         return result;
     }
 
@@ -259,6 +261,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
     public async Task SaveProfileSettingsAsync(string profileId, IReadOnlyDictionary<string, string> values, string? apiKey, CancellationToken ct)
     {
         await _refreshGate.WaitAsync(ct);
+        var promotedDraft = false;
         try
         {
             lock (_stateLock)
@@ -267,12 +270,27 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
                 if (profile.Model != "default" && !ModelsFor(profile).Any(m => m.Id == profile.Model))
                     throw new ArgumentException("Refresh the models for this CLI session and select an available model.");
                 ct.ThrowIfCancellationRequested();
+                var verified = _draftProfiles.TryGetValue(profileId, out var draft) && SameConnection(draft, profile)
+                    && _draftSnapshots.TryGetValue(profileId, out var draftSnapshot) ? draftSnapshot : null;
                 CommitProfiles(_profiles.Select(p => p.Id == profileId ? profile : p).ToList());
+                if (verified is not null)
+                {
+                    if (profile.OpenCodeCatalog is not null)
+                    {
+                        PrepareOpenCodeCatalog(profile.Descriptor, verified.ExecutablePath!, profile.OpenCodeCatalog);
+                        verified = verified with { CatalogRevision = GetOpenCodeCatalogRevision(profileId) };
+                    }
+                    StoreSnapshot(profile.Descriptor, verified);
+                    promotedDraft = true;
+                }
                 _draftProfiles.Remove(profileId);
+                _draftSnapshots.Remove(profileId);
             }
         }
         finally { _refreshGate.Release(); }
         _host?.NotifyCapabilitiesChanged();
+        // The draft already verified this exact connection; do not require another catalog fetch to save it.
+        if (promotedDraft) return;
         // Persistence has succeeded. A failed or cancelled probe must not report a failed save.
         try { await RefreshOneAsync(CurrentDescriptor(profileId), true, ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
@@ -315,6 +333,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
                     CommitProfiles(profiles);
                     _settingsProfileId = profiles[0].Id;
                     _draftProfiles.Remove(removed);
+                    _draftSnapshots.Remove(removed);
                 }
                 else throw new ArgumentException("Unknown action.");
             }
@@ -353,18 +372,25 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
             var auth = await RunProbeAsync(descriptor, executable, descriptor.AuthenticationArguments, directory, ct);
             if (!descriptor.IsAuthenticated(auth.ExitCode, auth.StandardOutput + auth.StandardError))
                 throw new ArgumentException("Sign in to this CLI session first.");
-            var models = descriptor.Kind switch
+            OpenCodeProfileCatalogCache? openCodeCatalog = null;
+            IReadOnlyList<PluginModelInfo> models;
+            if (descriptor.Kind == CliProviderKind.OpenCode)
             {
-                CliProviderKind.Codex => await _codexCatalogLoader(executable, directory, ct, descriptor.EnvironmentOverrides),
-                CliProviderKind.OpenCode => (await _openCodeCatalogLoader.LoadAsync(executable, directory, CreateProfileEnvironment(descriptor, directory), ct))
-                    .Models.Where(m => m.IsFree).Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToArray(),
-                _ => ModelsFor(profile)
-            };
+                var catalog = await _openCodeCatalogLoader.LoadAsync(executable, directory, CreateProfileEnvironment(descriptor, directory), ct);
+                openCodeCatalog = new(OpenCodeConnectionKey(descriptor, executable), CacheOpenCodeCatalog(catalog));
+                models = catalog.Models.Where(m => m.IsFree).Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToArray();
+            }
+            else models = descriptor.Kind == CliProviderKind.Codex
+                ? await _codexCatalogLoader(executable, directory, ct, descriptor.EnvironmentOverrides)
+                : ModelsFor(profile);
             ct.ThrowIfCancellationRequested();
             lock (_stateLock)
             {
                 if (profileId != _settingsProfileId) throw new ArgumentException("Select the profile again before refreshing.");
-                _draftProfiles[profileId] = profile with { Models = models.ToList() };
+                _draftProfiles[profileId] = profile with { Models = models.ToList(), OpenCodeCatalog = openCodeCatalog };
+                _draftSnapshots[profileId] = new CliAvailabilitySnapshot(
+                    descriptor.Kind == CliProviderKind.OpenCode && models.Count == 0 ? CliAvailabilityState.NoFreeModels : CliAvailabilityState.Ready,
+                    executable, descriptor.ParseVersion(version.StandardOutput + version.StandardError), candidates, DateTimeOffset.UtcNow);
             }
             refreshed = true;
             return new(L("CLI session verified. Save profile to keep the model list.", "CLI-Sitzung bestätigt. Profil speichern übernimmt die Modellliste."), true);

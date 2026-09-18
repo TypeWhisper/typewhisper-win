@@ -11,6 +11,7 @@ internal sealed record CliProfile
     public string Model { get; init; } = "default";
     public Dictionary<string, string> Environment { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public List<PluginModelInfo> Models { get; init; } = [];
+    public OpenCodeProfileCatalogCache? OpenCodeCatalog { get; init; }
 
     internal CliProviderDescriptor Descriptor => CliProviderDescriptor.All.Single(d => d.Key == Provider)
         .ForProfile(Id, Name, Environment);

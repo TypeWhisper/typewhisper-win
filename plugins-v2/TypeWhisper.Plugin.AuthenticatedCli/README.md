@@ -2,7 +2,7 @@
 
 Authenticated CLI providers with process isolation, discovery, status refresh and portable provider/path settings.
 
-Version `1.3.2`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
+Version `1.3.3`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
 Independent branch: `seofood/authenticatedcli-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -53,3 +53,5 @@ Environment overrides use one `NAME=VALUE` per line. Supported variables are `CO
 A profile selects an existing signed-in CLI session; it does not sign in or create accounts. Removing a profile requires reassigning workflows that use its provider identity.
 
 OpenCode free-model caches, refresh errors and availability are isolated per profile and bound to its actual executable and session environment. Changing the connection invalidates its cached catalog; a failed refresh cannot borrow another profile’s models.
+
+Verified draft catalogs are committed with their profile and reused immediately after saving. A later catalog failure keeps the matching last-known-good list, including after restart. Availability updates are published after each profile, and background sweeps wait between completed passes.
