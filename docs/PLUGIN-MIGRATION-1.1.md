@@ -51,7 +51,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Fireworks | Separate v2 port pending |
 | Gemini | Separate v2 port pending |
 | GemmaLocal | Separate v2 port pending |
-| Gladia | Separate v2 port pending |
+| Gladia | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gladia`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
 | GoogleCloudStt | Separate v2 port pending |
 | GraniteSpeech | Separate v2 port pending |
 | Groq | Existing portable build |

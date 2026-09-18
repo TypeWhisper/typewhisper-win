@@ -1,0 +1,17 @@
+{
+  "id": "com.typewhisper.gladia",
+  "name": "Gladia",
+  "version": "1.1.0",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Corrects the legacy single-request assumption: upload audio, submit an asynchronous transcription job and poll its result.",
+  "categories": [
+    "transcription"
+  ],
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Gladia.dll",
+  "pluginClass": "TypeWhisper.Plugin.Gladia.GladiaPlugin",
+  "descriptions": {
+    "de": "Gladia-Integration mit portablen Einstellungen."
+  }
+}
