@@ -20,13 +20,13 @@ public sealed partial class CloudflareAsrPlugin : ITranscriptionEnginePlugin, IA
     /// <inheritdoc />
     public string PluginName => "Cloudflare Workers AI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.1.3";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
     public Task DeactivateAsync() { Connection.Deactivate(); return Task.CompletedTask; }
     /// <inheritdoc />
-    public bool IsConfigured => Connection.Configured && !string.IsNullOrWhiteSpace(Connection.Get("accountId"));
+    public bool IsConfigured => Connection.Configured && IsValidAccountId(Connection.Get("accountId"));
     /// <inheritdoc />
     public Task SetApiKeyAsync(string apiKey) => Connection.SetKeyAsync(apiKey);
     /// <inheritdoc />
@@ -45,11 +45,13 @@ public sealed partial class CloudflareAsrPlugin : ITranscriptionEnginePlugin, IA
         ValidateValue(id, value);
         return Connection.SaveAsync(id, value, cancellationToken);
     }
+    private static bool IsValidAccountId(string value) => value.Length == 32 && value.All(char.IsAsciiHexDigit);
+
     private static void ValidateValue(string id, string value)
     {
         if (id == "temperature" && (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) || !double.IsFinite(number) || number < 0 || number > 2))
             throw new ArgumentException("Temperature must be a number from 0 to 2.");
-        if (id == "accountId" && value.Length != 0 && (value.Length != 32 || !value.All(char.IsAsciiHexDigit)))
+        if (id == "accountId" && value.Length != 0 && !IsValidAccountId(value))
             throw new ArgumentException("Account ID must contain 32 hexadecimal characters.");
         if (id is "teamId" or "projectId" && value.Length != 0 && !Guid.TryParse(value, out _))
             throw new ArgumentException("Enter a valid UUID.");

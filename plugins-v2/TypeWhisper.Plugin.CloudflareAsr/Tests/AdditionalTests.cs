@@ -60,16 +60,23 @@ public sealed partial class ProviderTests
         Assert.Equal(0, calls);
     }
 
-    [Fact]
-    public async Task ConnectionCheckRejectsMalformedPersistedAccountId()
+    [Theory]
+    [InlineData("invalid")]
+    [InlineData(" ")]
+    [InlineData("")]
+    [InlineData("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")]
+    public async Task ConnectionCheckRejectsMalformedPersistedAccountId(string accountId)
     {
         var calls = 0;
         using var http = new HttpClient(new Handler((_, _) => { calls++; return Json("{}"); }));
         using var plugin = new CloudflareAsrPlugin(http);
         var host = new Host();
         host.Secrets["fixture-secret"] = "fixture-key";
-        host.SetSetting("configuration", new { SecretName = "fixture-secret", Values = new Dictionary<string,string> { ["accountId"] = "invalid" } });
+        host.SetSetting("configuration", new { SecretName = "fixture-secret", Values = new Dictionary<string,string> { ["accountId"] = accountId } });
         await plugin.ActivateAsync(host);
+        Assert.False(plugin.IsConfigured);
+        var transcriptionError = await Assert.ThrowsAsync<PluginRequestException>(() => Run(plugin));
+        Assert.Equal(PluginRequestFailureKind.Configuration, transcriptionError.FailureKind);
         var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ValidateConfigurationAsync(default));
         Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
         Assert.Equal(0, calls);

@@ -1,6 +1,6 @@
 # Cloudflare Workers AI for the portable host
 
-Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.2`, requiring host `1.1.2`. Implemented on its own `seofood/cloudflareasr-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.3`, requiring host `1.1.2`. Implemented on its own `seofood/cloudflareasr-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -17,9 +17,9 @@ dotnet test plugins-v2/TypeWhisper.Plugin.CloudflareAsr/Tests/TypeWhisper.Plugin
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.CloudflareAsr/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **24 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+All **27 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
 
-On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
+On 2026-09-18, the initial 1.1.0 ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
 
 Authenticated provider requests and microphone transcription have not been tested because no Cloudflare account is available. On 2026-09-18, Marco authorized publication without that live account test. Package lifecycle and protocol fixtures provide automated coverage; this does not establish authenticated service acceptance. ARM64 execution remains untested.
 
