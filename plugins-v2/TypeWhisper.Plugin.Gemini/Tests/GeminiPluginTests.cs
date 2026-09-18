@@ -29,6 +29,7 @@ public sealed partial class GeminiPluginTests
 
         Assert.NotNull(manifest);
         Assert.Equal(manifest.Version, sut.PluginVersion);
+        Assert.Equal(new Version(sut.PluginVersion + ".0"), typeof(GeminiPlugin).Assembly.GetName().Version);
     }
 
     [Fact]
