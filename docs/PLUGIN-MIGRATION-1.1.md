@@ -72,7 +72,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Soniox | Separate v2 port pending |
 | Speechmatics | Separate v2 port pending |
 | SupertonicTts | Separate v2 port pending |
-| Voxtral | Separate v2 port pending |
+| Voxtral | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Voxtral`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
 | Webhook | Separate v2 port pending |
 | WhisperCpp | Separate v2 port pending |
 | Xai | Separate v2 port pending |
