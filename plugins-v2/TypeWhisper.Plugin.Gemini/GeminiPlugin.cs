@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.2";
+    private const string PluginVersionValue = "1.3.3";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -139,7 +139,7 @@ public sealed partial class GeminiPlugin :
 
         host.Log(
             PluginLogLevel.Info,
-            $"Activated (configured={IsAvailable}, llmModels={_fetchedLlmModels.Count}, " +
+            $"Activated (configured={HasApiKey}, llmModels={_fetchedLlmModels.Count}, " +
             $"transcriptionModels={_fetchedTranscriptionModels.Count})");
     }
 
@@ -163,7 +163,9 @@ public sealed partial class GeminiPlugin :
     public string ProviderDisplayName => "Google Gemini";
 
     /// <inheritdoc />
-    public bool IsConfigured => IsAvailable;
+    public bool IsConfigured => HasApiKey && SelectedTranscriptionModel is not null;
+
+    bool IApiKeyPlugin.IsConfigured => HasApiKey;
 
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> TranscriptionModels
@@ -216,6 +218,13 @@ public sealed partial class GeminiPlugin :
 
     /// <inheritdoc />
     public void SelectModel(string modelId)
+    {
+        _configurationGate.Wait();
+        try { SelectModelCore(modelId); }
+        finally { _configurationGate.Release(); }
+    }
+
+    private void SelectModelCore(string modelId)
     {
         var normalized = NormalizeModelId(modelId);
         if (AvailableTranscriptionModels.All(model =>
@@ -324,7 +333,9 @@ public sealed partial class GeminiPlugin :
     public string ProviderName => "Google Gemini";
 
     /// <inheritdoc />
-    public bool IsAvailable => !string.IsNullOrEmpty(_apiKey);
+    public bool IsAvailable => HasApiKey && SupportedModels.Count > 0;
+
+    private bool HasApiKey => !string.IsNullOrEmpty(_apiKey);
 
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> SupportedModels
@@ -332,7 +343,7 @@ public sealed partial class GeminiPlugin :
         get
         {
             if (_fetchedLlmModels.Count == 0)
-                return FallbackLlmModels;
+                return _modelCatalogFetchedAt is null ? FallbackLlmModels : [];
 
             var defaultModelId = ResolveDefaultLlmModelId(_fetchedLlmModels);
             return _fetchedLlmModels
@@ -384,7 +395,7 @@ public sealed partial class GeminiPlugin :
     internal GeminiTranscriptionMode TranscriptionMode => _transcriptionMode;
 
     internal bool ShouldRefreshModelCatalog(DateTimeOffset now) =>
-        IsAvailable
+        HasApiKey
         && (_modelCatalogFetchedAt is not { } fetchedAt
             || now - fetchedAt >= ModelCatalogRefreshInterval);
 
@@ -628,13 +639,6 @@ public sealed partial class GeminiPlugin :
         var normalizedTranscriptionModels = NormalizeFetchedTranscriptionModels(
             catalog.TranscriptionModels);
         var normalizedFetchedAt = catalog.FetchedAtUtc.ToUniversalTime();
-        var nextSelectedModelId = NormalizeSelectedTranscriptionModelId(
-            _selectedTranscriptionModelId,
-            normalizedTranscriptionModels);
-        var selectionChanged = !string.Equals(
-            _selectedTranscriptionModelId,
-            nextSelectedModelId,
-            StringComparison.OrdinalIgnoreCase);
 
         await _configurationGate.WaitAsync();
         try
@@ -648,7 +652,16 @@ public sealed partial class GeminiPlugin :
                 return false;
             }
 
-            var catalogsChanged = !ModelCatalogsEqual(_fetchedLlmModels, normalizedLlmModels)
+            var nextSelectedModelId = NormalizeSelectedTranscriptionModelId(
+                _selectedTranscriptionModelId,
+                normalizedTranscriptionModels);
+            var selectionChanged = !string.Equals(
+                _selectedTranscriptionModelId,
+                nextSelectedModelId,
+                StringComparison.OrdinalIgnoreCase);
+
+            var catalogsChanged = _modelCatalogFetchedAt is null
+                || !ModelCatalogsEqual(_fetchedLlmModels, normalizedLlmModels)
                 || !TranscriptionModelCatalogsEqual(
                     _fetchedTranscriptionModels,
                     normalizedTranscriptionModels);
@@ -847,6 +860,8 @@ public sealed partial class GeminiPlugin :
             using (doc)
             {
                 var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object)
+                    throw new PluginRequestException("The provider returned a malformed response.", PluginRequestFailureKind.EmptyResponse);
                 LlmResponseTruncationGuard.ThrowIfOpenAiChatCompletionTruncated(root, "Gemini");
                 if (root.ValueKind == JsonValueKind.Object
                     && root.TryGetProperty("choices", out var choices)

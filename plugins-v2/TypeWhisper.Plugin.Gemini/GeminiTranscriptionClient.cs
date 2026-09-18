@@ -39,6 +39,7 @@ internal static class GeminiTranscriptionClient
         try
         {
             uploadedFile = await UploadAudioAsync(httpClient, baseUrl, apiKey, wavAudio, ct);
+            ct.ThrowIfCancellationRequested();
             using var request = GeminiPlugin.CreateNativeRequest(
                 HttpMethod.Post,
                 $"{baseUrl}/interactions",
@@ -257,8 +258,10 @@ internal static class GeminiTranscriptionClient
         uploadRequest.Content = new ByteArrayContent(wavAudio);
         uploadRequest.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(AudioMimeType);
 
-        using var uploadResponse = await SendAsync(httpClient, uploadRequest, ct);
-        var json = await uploadResponse.Content.ReadAsStringAsync(ct);
+        using var uploadResponse = await SendAsync(httpClient, uploadRequest, ct, HttpCompletionOption.ResponseHeadersRead);
+        // Once the upload succeeds, obtain its cleanup identity even if the caller cancels.
+        using var metadataDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var json = await uploadResponse.Content.ReadAsStringAsync(metadataDeadline.Token);
         return ParseUploadedFile(json);
     }
 
@@ -327,12 +330,13 @@ internal static class GeminiTranscriptionClient
     private static async Task<HttpResponseMessage> SendAsync(
         HttpClient httpClient,
         HttpRequestMessage request,
-        CancellationToken ct)
+        CancellationToken ct,
+        HttpCompletionOption completionOption = HttpCompletionOption.ResponseContentRead)
     {
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.SendAsync(request, ct);
+            response = await httpClient.SendAsync(request, completionOption, ct);
         }
         catch (HttpRequestException ex)
         {

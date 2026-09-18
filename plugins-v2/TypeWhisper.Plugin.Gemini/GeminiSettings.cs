@@ -16,7 +16,7 @@ public sealed partial class GeminiPlugin
     }
 
     private string SelectedLlmModel => SupportedModels.Any(m => m.Id == _llmOptions.Model)
-        ? _llmOptions.Model! : SupportedModels[0].Id;
+        ? _llmOptions.Model! : SupportedModels.FirstOrDefault()?.Id ?? "";
 
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>
@@ -56,7 +56,7 @@ public sealed partial class GeminiPlugin
             cancellationToken.ThrowIfCancellationRequested();
             switch (id)
             {
-                case "selectedTranscriptionModel": SelectModel(value); return;
+                case "selectedTranscriptionModel": SelectModelCore(value); return;
                 case "transcriptionMode" when value is "smart" or "verbatim":
                     SetTranscriptionMode(ParseTranscriptionMode(value)); host.NotifyCapabilitiesChanged(); return;
             }
@@ -79,7 +79,7 @@ public sealed partial class GeminiPlugin
     public async Task ValidateConfigurationAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (!IsConfigured) throw new PluginRequestException("API key not configured", PluginRequestFailureKind.Configuration);
+        if (!HasApiKey) throw new PluginRequestException("API key not configured", PluginRequestFailureKind.Configuration);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(30));
         using var request = CreateNativeRequest(HttpMethod.Get, $"{NativeBaseUrl}/models?pageSize=1", _apiKey!);

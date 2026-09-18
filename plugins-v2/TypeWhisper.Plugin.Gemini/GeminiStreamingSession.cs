@@ -23,6 +23,8 @@ internal sealed class GeminiStreamingSession : IStreamingSession
     private Task? _receiveTask;
     private int _disposeStarted;
     private int _finalizeStarted;
+    private long _sentAudioBytes;
+    private bool _receivedFinalTranscript;
 
     private GeminiStreamingSession(
         ClientWebSocket webSocket,
@@ -136,6 +138,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
             if (_completed.Task.IsFaulted) await _completed.Task;
             if (_webSocket.State != WebSocketState.Open) throw new IOException("Gemini live connection is closed.");
             await SendTextAsync(CreateAudioPayload(pcm16Audio.Span), ct);
+            Interlocked.Add(ref _sentAudioBytes, pcm16Audio.Length);
         }
         finally
         {
@@ -214,7 +217,12 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                 }
                 if (update.Transcript is not null)
                     NotifyTranscriptHandlers(TranscriptReceived, update.Transcript);
-                if (update.TranscriptFinalized && Volatile.Read(ref _finalizeStarted) != 0)
+                if (update.TranscriptFinalized) _receivedFinalTranscript = true;
+                // A final transcript may belong to an earlier speech segment. Complete only
+                // when the server acknowledges the end at the full submitted PCM offset.
+                if (Volatile.Read(ref _finalizeStarted) != 0 && _receivedFinalTranscript &&
+                    update.ActivityEndedAtSeconds is { } endOffset &&
+                    endOffset >= Interlocked.Read(ref _sentAudioBytes) / 32000m)
                     _completed.TrySetResult(true);
             }
         }
@@ -315,8 +323,16 @@ internal sealed class GeminiStreamingTranscriptCollector
             return new GeminiStreamingUpdate(false, null, message);
         }
 
+        decimal? activityEnd = null;
+        if (TryGetProperty(root, "voiceActivity", "voice_activity", out var activity) &&
+            TryGetString(activity, "type") == "ACTIVITY_END" &&
+            (TryGetString(activity, "audioOffset") ?? TryGetString(activity, "audio_offset")) is { } offset &&
+            offset.EndsWith('s') && decimal.TryParse(offset.AsSpan(0, offset.Length - 1),
+                System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds >= 0)
+            activityEnd = seconds;
+        var update = GeminiStreamingUpdate.Empty with { ActivityEndedAtSeconds = activityEnd };
         if (!TryGetProperty(root, "serverContent", "server_content", out var serverContent))
-            return GeminiStreamingUpdate.Empty;
+            return update;
 
         if (TryGetProperty(
                 serverContent,
@@ -328,7 +344,7 @@ internal sealed class GeminiStreamingTranscriptCollector
             return new GeminiStreamingUpdate(
                 false,
                 string.IsNullOrWhiteSpace(finalText) ? null : new StreamingTranscriptEvent(finalText.Trim(), IsFinal: true),
-                null, TranscriptFinalized: true);
+                null, TranscriptFinalized: true, ActivityEndedAtSeconds: activityEnd);
         }
 
         if (TryGetProperty(
@@ -342,10 +358,10 @@ internal sealed class GeminiStreamingTranscriptCollector
             return new GeminiStreamingUpdate(
                 false,
                 new StreamingTranscriptEvent(interimText.Trim(), IsFinal: false),
-                null);
+                null, ActivityEndedAtSeconds: activityEnd);
         }
 
-        return GeminiStreamingUpdate.Empty;
+        return update;
     }
 
     private static bool TryGetProperty(
@@ -367,7 +383,8 @@ internal sealed record GeminiStreamingUpdate(
     bool SetupCompleted,
     StreamingTranscriptEvent? Transcript,
     string? ErrorMessage,
-    bool TranscriptFinalized = false)
+    bool TranscriptFinalized = false,
+    decimal? ActivityEndedAtSeconds = null)
 {
     public static GeminiStreamingUpdate Empty { get; } = new(false, null, null);
 }

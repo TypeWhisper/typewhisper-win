@@ -1114,8 +1114,10 @@ public sealed partial class GeminiPluginTests
                 ? value.Deserialize<T>(JsonOptions)
                 : default;
 
+        public Action<string>? BeforeSetSetting { get; set; }
         public void SetSetting<T>(string key, T value)
         {
+            BeforeSetSetting?.Invoke(key);
             if (Interlocked.Exchange(ref _setSettingException, null) is { } exception)
             {
                 throw exception;

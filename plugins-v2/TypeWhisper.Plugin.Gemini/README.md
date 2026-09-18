@@ -1,6 +1,6 @@
 # Gemini for the portable host
 
-Independent .NET 10 package `com.typewhisper.gemini` version `1.3.2`, requiring host `1.1.2`. Source and protocol fixtures were ported from Windows `4db8f6ac` with cross-platform behavior checked. Legacy sources, profiles and catalogs are unchanged.
+Independent .NET 10 package `com.typewhisper.gemini` version `1.3.3`, requiring host `1.1.2`. Source and protocol fixtures were ported from Windows `4db8f6ac` with cross-platform behavior checked. Legacy sources, profiles and catalogs are unchanged.
 
 ## Features and macOS comparison
 

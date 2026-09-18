@@ -65,6 +65,98 @@ public sealed partial class GeminiPluginTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => check);
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("123")]
+    public async Task NonObjectChatResponsesAreTypedFailures(string body)
+    {
+        using var http = new HttpClient(new CapturingHandler((_, _) => JsonResponse(body)));
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        using var plugin = new GeminiPlugin(http); await plugin.ActivateAsync(host);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ProcessAsync("", "fixture", "gemini-flash-latest", default));
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+    }
+
+    [Fact]
+    public async Task CatalogCapabilitiesRemainIndependentAndEmptyCatalogSurvivesRestart()
+    {
+        using var http = new HttpClient(new CapturingHandler((_, _) => JsonResponse("""{"models":[]}""")));
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        using var plugin = new GeminiPlugin(http); await plugin.ActivateAsync(host);
+        await plugin.SetFetchedModelCatalogAsync(new([], [new("gemini-3.5-transcribe", null, null)], DateTimeOffset.UtcNow));
+        Assert.True(plugin.IsConfigured);
+        Assert.False(plugin.IsAvailable);
+        Assert.Empty(plugin.SupportedModels);
+        Assert.NotNull(plugin.TextSettings);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Empty(plugin.SupportedModels);
+        await plugin.SetFetchedModelCatalogAsync(new([new("gemini-flash-latest", null)], [], DateTimeOffset.UtcNow));
+        Assert.True(plugin.IsAvailable);
+        Assert.False(plugin.IsConfigured);
+        Assert.True(((IApiKeyPlugin)plugin).IsConfigured);
+        Assert.True(plugin.ShouldRefreshModelCatalog(DateTimeOffset.UtcNow.AddDays(7)));
+        await plugin.ValidateConfigurationAsync(default);
+    }
+
+    [Fact]
+    public async Task QueuedCatalogRefreshKeepsSelectionCommittedWhileItWaited()
+    {
+        var host = new TestPluginHostServices();
+        using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        var catalog = new GeminiModelCatalog([], [new("gemini-3.5-transcribe", null, null), new("gemini-3.6-transcribe", null, null)], DateTimeOffset.UtcNow);
+        await plugin.SetFetchedModelCatalogAsync(catalog);
+        plugin.SelectModel("gemini-3.5-transcribe");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        host.BeforeSetSetting = key =>
+        {
+            if (key != "selectedTranscriptionModel") return;
+            entered.TrySetResult();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
+        };
+        var select = Task.Run(() => plugin.SelectModel("gemini-3.6-transcribe"));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var refresh = plugin.SetFetchedModelCatalogAsync(catalog);
+        Assert.False(refresh.IsCompleted);
+        release.Set();
+        await select; await refresh;
+        Assert.Equal("gemini-3.6-transcribe", plugin.SelectedModelId);
+    }
+
+    [Fact]
+    public async Task CancellationDuringUploadMetadataStillDeletesCompletedUpload()
+    {
+        using var cancel = new CancellationTokenSource();
+        var deleted = false;
+        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            if (request.Method == HttpMethod.Delete) { deleted = true; return new(HttpStatusCode.OK); }
+            if (request.RequestUri!.AbsolutePath.EndsWith("/files", StringComparison.Ordinal))
+            {
+                var started = new HttpResponseMessage(HttpStatusCode.OK);
+                started.Headers.TryAddWithoutValidation("X-Goog-Upload-URL", "https://generativelanguage.googleapis.com/upload/fixture");
+                return started;
+            }
+            Assert.Equal("/upload/fixture", request.RequestUri.AbsolutePath);
+            return new(HttpStatusCode.OK) { Content = new CancelDuringMetadataContent(cancel) };
+        }));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GeminiTranscriptionClient.TranscribeAsync(http,
+            "https://generativelanguage.googleapis.com/v1beta", "fixture", "gemini-3.5-transcribe", [1,2], [], [], GeminiTranscriptionMode.Smart, null, cancel.Token));
+        Assert.True(deleted);
+    }
+
+    private sealed class CancelDuringMetadataContent(CancellationTokenSource cancel) : HttpContent
+    {
+        private readonly byte[] _body = System.Text.Encoding.UTF8.GetBytes("""{"file":{"name":"files/fixture","uri":"https://generativelanguage.googleapis.com/v1beta/files/fixture"}}""");
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            cancel.Cancel();
+            await stream.WriteAsync(_body);
+        }
+        protected override bool TryComputeLength(out long length) { length = _body.Length; return true; }
+    }
+
     private sealed class WaitingValidationHandler(TaskCompletionSource entered) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

@@ -13,6 +13,7 @@ public sealed partial class GeminiPluginTests
     [Theory]
     [InlineData("final")]
     [InlineData("early-final")]
+    [InlineData("late-final")]
     [InlineData("empty")]
     [InlineData("close")]
     [InlineData("error")]
@@ -42,18 +43,24 @@ public sealed partial class GeminiPluginTests
             if (outcome == "early-final")
                 await socket.SendAsync(Encoding.UTF8.GetBytes("""{"serverContent":{"inputTranscription":{"text":"Earlier segment"}}}"""), WebSocketMessageType.Text, true, ct);
             Assert.Contains("activityEnd",await Receive(socket,ct));
+            if (outcome == "late-final")
+            {
+                await socket.SendAsync(Encoding.UTF8.GetBytes("""{"serverContent":{"inputTranscription":{"text":"Earlier segment"}},"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0s"}}"""), WebSocketMessageType.Text, true, ct);
+            }
             endReceived.SetResult(); await release.Task.WaitAsync(ct);
             if(outcome == "close") await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
             else if(outcome != "cancel")
             {
                 var response = outcome switch
                 {
-                    "final" or "early-final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
+                    "final" or "early-final" or "late-final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
                     "empty" => """{"serverContent":{"inputTranscription":{"text":""}}}""",
                     "error" => """{"error":{"message":"Fixture provider error"}}""",
                     _ => "not json"
                 };
                 await socket.SendAsync(Encoding.UTF8.GetBytes(response),WebSocketMessageType.Text,true,ct);
+                if (outcome is "final" or "early-final" or "late-final" or "empty")
+                    await socket.SendAsync(Encoding.UTF8.GetBytes("""{"serverContent":{},"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0.000125s"}}"""), WebSocketMessageType.Text, true, ct);
             }
             await finished.Task.WaitAsync(ct);
             }
@@ -72,7 +79,9 @@ public sealed partial class GeminiPluginTests
         if (outcome == "early-final") await earlyFinalReceived.Task.WaitAsync(ct);
         using var finishCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var completion = stream.FinalizeAsync(finishCancellation.Token);
-        await endReceived.Task.WaitAsync(ct); Assert.False(completion.IsCompleted);
+        await endReceived.Task.WaitAsync(ct);
+        if (outcome == "late-final") await earlyFinalReceived.Task.WaitAsync(ct);
+        Assert.False(completion.IsCompleted);
         release.SetResult();
         try
         {
@@ -83,7 +92,7 @@ public sealed partial class GeminiPluginTests
             else
             {
                 await completion;
-                Assert.Equal(outcome == "early-final" ? "Earlier segment Hallo Welt" : outcome == "final" ? "Hallo Welt" : "",string.Join(" ",updates.Where(e=>e.IsFinal).Select(e=>e.Text)));
+                Assert.Equal(outcome is "early-final" or "late-final" ? "Earlier segment Hallo Welt" : outcome == "final" ? "Hallo Welt" : "",string.Join(" ",updates.Where(e=>e.IsFinal).Select(e=>e.Text)));
                 await Assert.ThrowsAsync<InvalidOperationException>(()=>stream.SendAudioAsync(new byte[] { 0,0 },ct));
             }
         }
@@ -114,6 +123,7 @@ public sealed partial class GeminiPluginTests
             var transcript = Encoding.UTF8.GetBytes("{\"serverContent\":{\"inputTranscription\":{\"text\":\"Hallo Welt\"}}}");
             await socket.SendAsync(transcript.AsMemory(0, 12), WebSocketMessageType.Binary, false, ct);
             await socket.SendAsync(transcript.AsMemory(12), WebSocketMessageType.Binary, true, ct);
+            await socket.SendAsync(Encoding.UTF8.GetBytes("""{"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0.000125s"}}"""), WebSocketMessageType.Text, true, ct);
             await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, ct);
         }, ct);
         await using var stream = await GeminiStreamingSession.ConnectAsync("fixture", GeminiPlugin.DefaultLiveTranscriptionModel,
