@@ -28,16 +28,21 @@ internal sealed partial class LivePluginTextSettings
     }
 
     private void RenderProfileEditor(PluginTextSetting selector, PluginTextSetting[] fields,
-        PluginSettingsAction[] actions, string? addId, string? removeId, bool showKey)
+        PluginSettingsAction[] actions, string? addId, string? removeId, bool showKey, bool generic = false)
     {
         var name = selector.Choices.FirstOrDefault(c => c.Value == selector.Value)?.Title ?? selector.Value;
         _profileName = name;
         var singleConfiguration = selector.Choices.Count == 1 && addId is null && removeId is null;
         _singleConfiguration = singleConfiguration;
-        var editable = fields.Where(f => f.Id != selector.Id).ToArray();
+        var editable = fields.Where(f => generic || f.Id != selector.Id).ToArray();
         var values = editable.ToDictionary(f => f.Id,
             f => _drafts.TryGetValue(f.Id, out var draft) ? draft : f.Value);
         _dirtyProfiles[selector.Value] = _profileActionDrafts.Contains(selector.Value) || _pendingApiKey() is not null || editable.Any(f => values[f.Id] != f.Value);
+        if (generic)
+        {
+            foreach (var stale in _drafts.Keys.Where(id => !editable.Any(f => f.Id == id)).ToArray()) _drafts.Remove(stale);
+            _dirtyProfiles.Clear();
+        }
         var generation = _generation;
         var layout = new Grid { ColumnSpacing = 22, RowSpacing = 12 };
         layout.ColumnDefinitions.Add(new() { Width = new GridLength(185) });
@@ -100,6 +105,13 @@ internal sealed partial class LivePluginTextSettings
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         content.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });
         content.Children.Add(modelHeader); content.Children.Add(modelsPanel);
+        if (generic)
+        {
+            modelHeader.Visibility = Visibility.Collapsed;
+            if (_models is LivePortableModelSettings modelSettings)
+                modelSettings.ShowLlmSummary = !editable.Any(f => f.Section == PluginSettingsSection.TextProcessing);
+            modelsPanel.Children.Add(_models);
+        }
 
         var saveState = ProfileNote("");
         var fieldGroups = new Dictionary<string, FrameworkElement>();
@@ -111,7 +123,20 @@ internal sealed partial class LivePluginTextSettings
             SetStatus("");
             try
             {
-                var error = await _session.SavePluginProfileSettingsAsync(_id, selector.Value, values, _pendingApiKey());
+                string? error;
+                if (generic)
+                {
+                    var changes = editable.Where(f => values[f.Id] != f.Value).ToDictionary(f => f.Id, f => values[f.Id]);
+                    var result = await _session.SavePluginSettingsAsync(_id, changes, _pendingApiKey());
+                    error = result.Error;
+                    if (IsLoaded && generation == _generation)
+                    {
+                        foreach (var id in result.SavedFields) _drafts.Remove(id);
+                        if (result.ApiKeySaved) _clearApiKey();
+                        if (error is not null) { await ReloadAsync(); SetStatus(error); return; }
+                    }
+                }
+                else error = await _session.SavePluginProfileSettingsAsync(_id, selector.Value, values, _pendingApiKey());
                 if (!IsLoaded || generation != _generation) return;
                 if (error is not null) { SetStatus("“" + name + "”: " + error); return; }
                 foreach (var field in editable) _drafts.Remove(field.Id);
@@ -149,7 +174,7 @@ internal sealed partial class LivePluginTextSettings
         {
             var panel = field.Section == PluginSettingsSection.Connection ? connectionPanel : modelsPanel;
             if (field.Section != previousSection && field.Section != PluginSettingsSection.Connection)
-                panel.Children.Add(new TextBlock { Text = field.Section == PluginSettingsSection.Transcription ? "Transcription" : "Text processing",
+                panel.Children.Add(new TextBlock { Text = field.Section switch { PluginSettingsSection.Transcription => "Transcription", PluginSettingsSection.Speech => "Speech", PluginSettingsSection.TextProcessing => "Text processing", _ => "Settings" },
                     FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new(0, 8, 0, 0) });
             previousSection = field.Section;
             var group = new StackPanel { Spacing = 5 };
@@ -201,7 +226,12 @@ internal sealed partial class LivePluginTextSettings
         if (showKey) connectionPanel.Children.Add(_credentials);
         foreach (var action in actions.Where(a => a.Id != addId && a.Id != removeId))
         {
-            var button = ProfileButton(action.Title, () => RunProfileActionAsync(action, name, profileId: selector.Value, values: values));
+            var button = ProfileButton(action.Title, async () =>
+            {
+                if (generic && (_dirtyProfiles.GetValueOrDefault(selector.Value) || _pendingApiKey() is not null))
+                { SetStatus("Save your changes before running this action."); return; }
+                await RunProfileActionAsync(action, name, profileId: generic ? null : selector.Value, values: values);
+            });
             AutomationProperties.SetName(button, action.Title + " for “" + name + "”");
             ToolTipService.SetToolTip(button, action.Description);
             if (action.Section == PluginSettingsSection.Connection)
@@ -212,6 +242,10 @@ internal sealed partial class LivePluginTextSettings
                     _profileConnectionButtons.Add(button);
                 }
                 else connectionPanel.Children.Add(button);
+            }
+            else if (generic)
+            {
+                modelsPanel.Children.Add(button);
             }
             else { Grid.SetColumn(button, 1); modelHeader.Children.Add(button); }
         }
