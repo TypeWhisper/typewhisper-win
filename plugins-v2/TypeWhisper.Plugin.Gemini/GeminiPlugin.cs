@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.0";
+    private const string PluginVersionValue = "1.3.1";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -200,6 +200,9 @@ public sealed partial class GeminiPlugin :
 
     /// <inheritdoc />
     public bool SupportsStreaming => SelectedTranscriptionModel?.LiveModelId is not null;
+
+    /// <inheritdoc />
+    public bool SupportsStreamingCompletion => SupportsStreaming;
 
     /// <inheritdoc />
     public bool SupportsDictionaryTerms => true;

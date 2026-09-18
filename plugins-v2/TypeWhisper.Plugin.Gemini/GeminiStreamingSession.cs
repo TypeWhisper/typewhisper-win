@@ -19,8 +19,10 @@ internal sealed class GeminiStreamingSession : IStreamingSession
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly TaskCompletionSource<bool> _setupCompleted = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<bool> _completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _receiveTask;
     private int _disposeStarted;
+    private int _finalizeStarted;
 
     private GeminiStreamingSession(
         ClientWebSocket webSocket,
@@ -59,6 +61,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                 CreateSetupPayload(modelId, languageHints, customVocabulary, mode),
                 ct);
             await session._setupCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+            await session.SendTextAsync("""{"realtimeInput":{"activityStart":{}}}""", ct);
             return session;
         }
         catch
@@ -98,6 +101,10 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                     ["responseModalities"] = new[] { "TEXT" },
                 },
                 ["inputAudioTranscription"] = transcription,
+                ["realtimeInputConfig"] = new
+                {
+                    automaticActivityDetection = new { disabled = true }
+                },
             }
         });
     }
@@ -124,11 +131,11 @@ internal sealed class GeminiStreamingSession : IStreamingSession
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (Volatile.Read(ref _disposeStarted) == 0
-                && _webSocket.State == WebSocketState.Open)
-            {
-                await SendTextAsync(CreateAudioPayload(pcm16Audio.Span), ct);
-            }
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeStarted) != 0, this);
+            if (Volatile.Read(ref _finalizeStarted) != 0) throw new InvalidOperationException("Gemini audio input has ended.");
+            if (_completed.Task.IsFaulted) await _completed.Task;
+            if (_webSocket.State != WebSocketState.Open) throw new IOException("Gemini live connection is closed.");
+            await SendTextAsync(CreateAudioPayload(pcm16Audio.Span), ct);
         }
         finally
         {
@@ -142,11 +149,13 @@ internal sealed class GeminiStreamingSession : IStreamingSession
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (Volatile.Read(ref _disposeStarted) == 0
-                && _webSocket.State == WebSocketState.Open)
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeStarted) != 0, this);
+            if (_completed.Task.IsFaulted) await _completed.Task;
+            if (Interlocked.Exchange(ref _finalizeStarted, 1) == 0)
             {
+                if (_webSocket.State != WebSocketState.Open) throw new IOException("Gemini live connection is closed.");
                 await SendTextAsync(
-                    """{"realtimeInput":{"audioStreamEnd":true}}""",
+                    """{"realtimeInput":{"activityEnd":{}}}""",
                     ct);
             }
         }
@@ -154,6 +163,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
         {
             _sendLock.Release();
         }
+        await _completed.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
     }
 
     private async Task SendTextAsync(string json, CancellationToken ct)
@@ -179,6 +189,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         _setupCompleted.TrySetException(new IOException("Gemini closed the live connection before setup completed."));
+                        _completed.TrySetException(new IOException("Gemini closed the live connection before transcription completed."));
                         return;
                     }
                     messageBuffer.Write(buffer, 0, result.Count);
@@ -193,18 +204,18 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                     messageBuffer.GetBuffer(),
                     0,
                     (int)messageBuffer.Length);
-                if (!TryApplyEvent(_collector, json, out var update))
-                    continue;
+                var update = _collector.ApplyEvent(json);
 
                 if (update.SetupCompleted)
                     _setupCompleted.TrySetResult(true);
                 if (update.ErrorMessage is { } errorMessage)
                 {
-                    _setupCompleted.TrySetException(new InvalidOperationException(errorMessage));
-                    Debug.WriteLine($"Gemini Live transcription error: {errorMessage}");
+                    throw new InvalidOperationException(errorMessage);
                 }
                 if (update.Transcript is not null)
                     NotifyTranscriptHandlers(TranscriptReceived, update.Transcript);
+                if (update.TranscriptFinalized && Volatile.Read(ref _finalizeStarted) != 0)
+                    _completed.TrySetResult(true);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -214,6 +225,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
         catch (Exception ex)
         {
             _setupCompleted.TrySetException(ex);
+            _completed.TrySetException(ex);
             Debug.WriteLine($"Gemini Live receive error: {ex.Message}");
         }
     }
@@ -272,29 +284,8 @@ internal sealed class GeminiStreamingSession : IStreamingSession
 
         _receiveCts.Cancel();
 
-        await _sendLock.WaitAsync(CancellationToken.None);
-        try
-        {
-            if (_webSocket.State == WebSocketState.Open)
-            {
-                try
-                {
-                    using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                    await _webSocket.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure,
-                        null,
-                        closeCts.Token);
-                }
-                catch (Exception ex) when (ex is WebSocketException or InvalidOperationException or OperationCanceledException)
-                {
-                    Debug.WriteLine($"Gemini Live close error: {ex.Message}");
-                }
-            }
-        }
-        finally
-        {
-            _sendLock.Release();
-        }
+        _completed.TrySetCanceled();
+        _webSocket.Abort();
 
         if (_receiveTask is not null)
             await _receiveTask;
@@ -332,13 +323,12 @@ internal sealed class GeminiStreamingTranscriptCollector
                 "inputTranscription",
                 "input_transcription",
                 out var final)
-            && TryGetString(final, "text") is { } finalText
-            && !string.IsNullOrWhiteSpace(finalText))
+            && TryGetString(final, "text") is { } finalText)
         {
             return new GeminiStreamingUpdate(
                 false,
-                new StreamingTranscriptEvent(finalText.Trim(), IsFinal: true),
-                null);
+                string.IsNullOrWhiteSpace(finalText) ? null : new StreamingTranscriptEvent(finalText.Trim(), IsFinal: true),
+                null, TranscriptFinalized: true);
         }
 
         if (TryGetProperty(
@@ -376,7 +366,8 @@ internal sealed class GeminiStreamingTranscriptCollector
 internal sealed record GeminiStreamingUpdate(
     bool SetupCompleted,
     StreamingTranscriptEvent? Transcript,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    bool TranscriptFinalized = false)
 {
     public static GeminiStreamingUpdate Empty { get; } = new(false, null, null);
 }
