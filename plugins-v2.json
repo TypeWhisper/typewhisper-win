@@ -89,7 +89,7 @@
       "version": "1.1.5",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
-      "description": "Preserves direct Cloudflare Workers AI Whisper requests and adds portable account/token configuration, token validation, response failure checks and validated account IDs.",
+      "description": "Transcribe recorded audio with Whisper on Cloudflare Workers AI. Requires a Cloudflare account and API token.",
       "categories": [
         "transcription"
       ],
