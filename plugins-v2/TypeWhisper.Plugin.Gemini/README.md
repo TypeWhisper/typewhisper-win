@@ -26,6 +26,6 @@ F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run --w
 
 On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
 
-Authenticated API calls, physical microphone/workflow acceptance, native settings inspection, package-update acceptance and ARM64 execution remain pending. Marco will enter the API key and perform live acceptance later. No public release or catalog was changed.
+Authenticated model discovery, text completion, recorded-audio transcription and direct WebSocket transcription passed on 2026-09-18 using synthetic English audio and the key entered by Marco. See [live acceptance](LIVE-ACCEPTANCE.md) for evidence and scope. The host still uses recorded-audio transcription because streaming completion is not advertised. Physical microphone/workflow acceptance, native settings inspection, German audio, package-update acceptance and ARM64 execution remain pending. No public release or catalog was changed.
 
 Provider references: [transcription](https://ai.google.dev/gemini-api/docs/transcribe), [OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai).
