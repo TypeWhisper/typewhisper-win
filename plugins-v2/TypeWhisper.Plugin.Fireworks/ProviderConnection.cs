@@ -158,7 +158,13 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
                 ? LlmOutputTokenBudget.CalculateWithReasoningReserve(system, input)
                 : LlmOutputTokenBudget.Calculate(system, input)
         };
-        if (Get("temperatureMode", "providerDefault") == "custom") body["temperature"] = double.Parse(Get("temperature", "0.3"), CultureInfo.InvariantCulture);
+        if (Get("temperatureMode", "providerDefault") == "custom")
+        {
+            if (!double.TryParse(Get("temperature", "0.3"), NumberStyles.Float, CultureInfo.InvariantCulture, out var temperature)
+                || !double.IsFinite(temperature) || temperature is < 0 or > 2)
+                throw new PluginRequestException("Invalid custom temperature.", PluginRequestFailureKind.Configuration);
+            body["temperature"] = temperature;
+        }
         using var request = Request(HttpMethod.Post, url); request.Content = Json(body);
         using var document = await ReadAsync(request, ct); var root = document.RootElement;
         LlmResponseTruncationGuard.ThrowIfOpenAiChatCompletionTruncated(root, "Provider");

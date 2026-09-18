@@ -71,4 +71,21 @@ public sealed partial class ProviderTests
         Assert.Single(result.Segments);
         Assert.Equal("Hello", result.Text);
     }
+    [Theory]
+    [InlineData("invalid")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-1")]
+    [InlineData("3")]
+    public async Task InvalidPersistedTemperatureIsATypedConfigurationFailure(string temperature)
+    {
+        var host = new Host();
+        host.Secrets["fixture"] = "fixture-key";
+        host.SetSetting("configuration", new { SecretName = "fixture", Values = new Dictionary<string, string>
+        { ["temperatureMode"] = "custom", ["temperature"] = temperature } });
+        using var plugin = new FireworksPlugin(new HttpClient(new Handler((_, _) => throw new InvalidOperationException("No request should be sent."))));
+        await plugin.ActivateAsync(host);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ProcessAsync("Fix", "Text", "custom", default));
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+    }
 }

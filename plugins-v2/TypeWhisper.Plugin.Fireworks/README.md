@@ -1,6 +1,6 @@
 # Fireworks AI for the portable host
 
-Independent .NET 10 package `com.typewhisper.fireworks`, version `1.1.4`, requiring host `1.1.2`. Implemented on its own `seofood/fireworks-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.fireworks`, version `1.1.5`, requiring host `1.1.2`. Implemented on its own `seofood/fireworks-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
