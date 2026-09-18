@@ -19,6 +19,8 @@ public sealed partial class CloudflareAsrPlugin
     public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio,string? language,bool translate,string? prompt,CancellationToken ct)
     {
         ProviderConnection.Audio(wavAudio,translate,false,ct);
+        if (ProviderConnection.Language(language) is not null)
+            throw new NotSupportedException("This Cloudflare model supports automatic language detection only.");
         if(!IsConfigured) throw new PluginRequestException("Account ID and API token required.",PluginRequestFailureKind.Configuration);
         var account = Connection.Get("accountId"); ValidateValue("accountId",account);
         using var request = Connection.Request(HttpMethod.Post,$"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/openai/whisper");

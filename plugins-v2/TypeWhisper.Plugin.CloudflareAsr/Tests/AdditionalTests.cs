@@ -134,4 +134,30 @@ public sealed partial class ProviderTests
         Assert.Equal(PluginRequestFailureKind.OutputIncomplete, error.FailureKind);
     }
 
+    [Theory]
+    [InlineData("de")]
+    [InlineData("en")]
+    public async Task ExplicitLanguageIsRejectedBeforeUploadingAudio(string language)
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler((_, _) => { calls++; return Json("{}"); }));
+        using var plugin = new CloudflareAsrPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        await Assert.ThrowsAsync<NotSupportedException>(() => plugin.TranscribeAsync(Audio(), language, false, null, default));
+        Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("auto")]
+    [InlineData(" AUTO ")]
+    public async Task AutomaticLanguageDetectionPreservesTheBinaryRequest(string? language)
+    {
+        using var http = new HttpClient(new Handler(Success));
+        using var plugin = new CloudflareAsrPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        Assert.Equal("Hallo Welt", (await plugin.TranscribeAsync(Audio(), language, false, null, default)).Text);
+    }
+
 }

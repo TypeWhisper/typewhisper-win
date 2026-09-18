@@ -1,6 +1,6 @@
 # Cloudflare Workers AI for the portable host
 
-Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.5`, requiring host `1.1.2`. Implemented on its own `seofood/cloudflareasr-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.6`, requiring host `1.1.2`. Implemented on its own `seofood/cloudflareasr-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -17,7 +17,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.CloudflareAsr/Tests/TypeWhisper.Plugin
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.CloudflareAsr/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **35 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+All **41 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
 
 On 2026-09-18, the initial 1.1.0 ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
 
@@ -28,3 +28,5 @@ The host includes the Cloudflare logo. Shared draft editing and the single Save 
 Reference: [provider documentation](https://developers.cloudflare.com/workers-ai/models/whisper/).
 
 Connection validation uses the account-scoped [Workers AI model search endpoint](https://developers.cloudflare.com/api/resources/ai/subresources/models/methods/list/) with no audio payload. The token must have Workers AI Read or Write access to the configured account. A general active-token check is not sufficient.
+
+Whisper uses automatic language detection. Explicit language requests are rejected before audio is uploaded; the host exposes no fixed-language choices for this provider. Protocol fixtures assert the complete model URL, POST method, bearer authentication, content type and unchanged WAV bytes.
