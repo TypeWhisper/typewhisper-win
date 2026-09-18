@@ -31,6 +31,7 @@ public sealed partial class ProviderTests
     public async Task ConfiguresRestartsRemovesKeyAndNeverExposesSecrets()
     {
         var host=new Host(); using var plugin=new FireworksPlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
+        Assert.Equal(new Version(plugin.PluginVersion + ".0"), typeof(FireworksPlugin).Assembly.GetName().Version);
         Assert.True(plugin.IsConfigured); Assert.DoesNotContain("fixture-key",JsonSerializer.Serialize(plugin.TextSettings));
         Assert.DoesNotContain("fixture-key",JsonSerializer.Serialize(host.Settings));
         await plugin.DeactivateAsync(); Assert.False(plugin.IsConfigured); await plugin.ActivateAsync(host); Assert.True(plugin.IsConfigured);
