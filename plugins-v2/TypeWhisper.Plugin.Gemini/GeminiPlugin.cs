@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.3";
+    private const string PluginVersionValue = "1.3.4";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -835,9 +835,18 @@ public sealed partial class GeminiPlugin :
             Encoding.UTF8,
             "application/json");
 
-        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
-        var json = await response.Content.ReadAsStringAsync(ct);
-        return ParseChatCompletionResponse(json);
+        try
+        {
+            using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
+            var json = await response.Content.ReadAsStringAsync(ct);
+            return ParseChatCompletionResponse(json);
+        }
+        catch (PluginRequestException ex) when (ex.HttpStatusCode == 413)
+        {
+            throw new PluginRequestException(
+                "The text request is too large. Shorten the workflow input or instructions.",
+                PluginRequestFailureKind.RequestTooLarge, 413, innerException: ex);
+        }
     }
 
     private static string ParseChatCompletionResponse(string json)
@@ -948,6 +957,8 @@ public sealed partial class GeminiPlugin :
     private static List<GeminiFetchedModel> NormalizeFetchedLlmModels(
         IEnumerable<GeminiNativeModel> models) =>
         NormalizeFetchedLlmModels(models
+            .Where(model => model.SupportedGenerationMethods is null ||
+                model.SupportedGenerationMethods.Contains("generateContent", StringComparer.Ordinal))
             .Select(model => new GeminiFetchedModel(
                 ResolveNativeModelId(model),
                 model.DisplayName)));

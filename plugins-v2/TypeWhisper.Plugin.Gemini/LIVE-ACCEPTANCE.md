@@ -37,3 +37,9 @@ The local machine's untracked evidence is in `artifacts/plugin-batch/gemini-live
 ## Review hardening (1.3.2)
 
 95 tests pass after correcting unverified detected-language metadata, preserving successfully fetched empty transcription catalogs, tolerating malformed persisted/provider model IDs, and bounding and classifying connection-check failures. An additional loopback case verifies that an early finalized transcript segment does not prematurely complete the recording.
+
+## Review hardening (1.3.4)
+
+105 tests cover capability-filtered model discovery, text-specific HTTP 413 failures, independent transcription/text availability, upload cleanup after cancellation, and streaming completion in either acknowledgement/transcript order. A premature segment final or earlier audio boundary now invalidates the stream instead of being reused as the last recording segment. The host falls back to the complete recording for these unexpected events.
+
+A live protocol inspection with two synthetic utterances separated by eight seconds of silence produced one final transcription only after the manual activity end, followed by the full submitted audio offset. This confirms the observed single-activity behavior for the tested model; it is not a general ordering guarantee for all Live API event types.

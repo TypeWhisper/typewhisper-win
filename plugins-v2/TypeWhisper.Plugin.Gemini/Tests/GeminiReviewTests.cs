@@ -7,6 +7,41 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed partial class GeminiPluginTests
 {
     [Fact]
+    public async Task NativeModelDiscoveryUsesAdvertisedGenerationMethods()
+    {
+        using var http = new HttpClient(new CapturingHandler((_, _) => JsonResponse("""
+            {"models":[
+                {"name":"models/gemini-chat","supportedGenerationMethods":["generateContent"]},
+                {"name":"models/gemma-chat","supportedGenerationMethods":["countTokens","generateContent"]},
+                {"name":"models/gemini-unsupported","supportedGenerationMethods":["countTokens"]},
+                {"name":"models/gemini-empty","supportedGenerationMethods":[]},
+                {"name":"models/gemini-legacy"}
+            ]}
+            """)));
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        using var plugin = new GeminiPlugin(http); await plugin.ActivateAsync(host);
+        var catalog = await plugin.FetchModelCatalogAsync();
+        Assert.NotNull(catalog);
+        Assert.Equal(new[] { "gemini-chat", "gemini-legacy", "gemma-chat" }, catalog.LlmModels.Select(m => m.Id));
+    }
+
+    [Fact]
+    public async Task OversizedTextRequestReportsTextLimitWithoutAudioAdvice()
+    {
+        using var http = new HttpClient(new CapturingHandler((_, _) => new(HttpStatusCode.RequestEntityTooLarge)
+        { Content = new StringContent("{}") }));
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        using var plugin = new GeminiPlugin(http); await plugin.ActivateAsync(host);
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            plugin.ProcessAsync("", "fixture", "gemini-flash-latest", default));
+        Assert.Equal(PluginRequestFailureKind.RequestTooLarge, failure.FailureKind);
+        Assert.Equal(413, failure.HttpStatusCode);
+        Assert.Contains("text request", failure.Message);
+        Assert.DoesNotContain("Audio", failure.Message);
+        Assert.DoesNotContain("25 MB", failure.Message);
+    }
+
+    [Fact]
     public async Task ActivationSkipsMalformedPersistedIdsAndKeepsStrictCallerValidation()
     {
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";

@@ -12,6 +12,7 @@ public sealed partial class GeminiPluginTests
 {
     [Theory]
     [InlineData("final")]
+    [InlineData("ack-first")]
     [InlineData("early-final")]
     [InlineData("late-final")]
     [InlineData("empty")]
@@ -41,8 +42,16 @@ public sealed partial class GeminiPluginTests
             Assert.Contains("activityStart",await Receive(socket,ct));
             Assert.Contains("audio",await Receive(socket,ct));
             if (outcome == "early-final")
+            {
                 await socket.SendAsync(Encoding.UTF8.GetBytes("""{"serverContent":{"inputTranscription":{"text":"Earlier segment"}}}"""), WebSocketMessageType.Text, true, ct);
+                endReceived.SetResult();
+                await release.Task.WaitAsync(ct);
+                await finished.Task.WaitAsync(ct);
+                return;
+            }
             Assert.Contains("activityEnd",await Receive(socket,ct));
+            if (outcome == "ack-first")
+                await socket.SendAsync(Encoding.UTF8.GetBytes("""{"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0.000125s"}}"""), WebSocketMessageType.Text, true, ct);
             if (outcome == "late-final")
             {
                 await socket.SendAsync(Encoding.UTF8.GetBytes("""{"serverContent":{"inputTranscription":{"text":"Earlier segment"}},"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0s"}}"""), WebSocketMessageType.Text, true, ct);
@@ -53,7 +62,7 @@ public sealed partial class GeminiPluginTests
             {
                 var response = outcome switch
                 {
-                    "final" or "early-final" or "late-final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
+                    "final" or "ack-first" or "early-final" or "late-final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
                     "empty" => """{"serverContent":{"inputTranscription":{"text":""}}}""",
                     "error" => """{"error":{"message":"Fixture provider error"}}""",
                     _ => "not json"
@@ -81,18 +90,18 @@ public sealed partial class GeminiPluginTests
         var completion = stream.FinalizeAsync(finishCancellation.Token);
         await endReceived.Task.WaitAsync(ct);
         if (outcome == "late-final") await earlyFinalReceived.Task.WaitAsync(ct);
-        Assert.False(completion.IsCompleted);
+        if (outcome is not ("early-final" or "late-final")) Assert.False(completion.IsCompleted);
         release.SetResult();
         try
         {
             if(outcome == "cancel") { finishCancellation.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>completion); }
-            else if(outcome == "close") await Assert.ThrowsAsync<IOException>(()=>completion);
+            else if(outcome is "close" or "early-final" or "late-final") await Assert.ThrowsAsync<IOException>(()=>completion);
             else if(outcome == "error") await Assert.ThrowsAsync<InvalidOperationException>(()=>completion);
             else if(outcome == "malformed") await Assert.ThrowsAnyAsync<JsonException>(()=>completion);
             else
             {
                 await completion;
-                Assert.Equal(outcome is "early-final" or "late-final" ? "Earlier segment Hallo Welt" : outcome == "final" ? "Hallo Welt" : "",string.Join(" ",updates.Where(e=>e.IsFinal).Select(e=>e.Text)));
+                Assert.Equal(outcome is "final" or "ack-first" ? "Hallo Welt" : "",string.Join(" ",updates.Where(e=>e.IsFinal).Select(e=>e.Text)));
                 await Assert.ThrowsAsync<InvalidOperationException>(()=>stream.SendAudioAsync(new byte[] { 0,0 },ct));
             }
         }

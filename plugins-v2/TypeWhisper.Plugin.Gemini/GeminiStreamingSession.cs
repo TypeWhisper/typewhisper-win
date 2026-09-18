@@ -25,6 +25,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
     private int _finalizeStarted;
     private long _sentAudioBytes;
     private bool _receivedFinalTranscript;
+    private bool _receivedActivityEnd;
 
     private GeminiStreamingSession(
         ClientWebSocket webSocket,
@@ -217,12 +218,25 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                 }
                 if (update.Transcript is not null)
                     NotifyTranscriptHandlers(TranscriptReceived, update.Transcript);
-                if (update.TranscriptFinalized) _receivedFinalTranscript = true;
-                // A final transcript may belong to an earlier speech segment. Complete only
-                // when the server acknowledges the end at the full submitted PCM offset.
-                if (Volatile.Read(ref _finalizeStarted) != 0 && _receivedFinalTranscript &&
-                    update.ActivityEndedAtSeconds is { } endOffset &&
-                    endOffset >= Interlocked.Read(ref _sentAudioBytes) / 32000m)
+                // Manual VAD submits exactly one activity per connection. Never reuse an
+                // earlier segment: an unsolicited final or boundary invalidates this stream
+                // and the host must transcribe the complete recording instead.
+                if (update.TranscriptFinalized)
+                {
+                    if (Volatile.Read(ref _finalizeStarted) == 0 || _receivedFinalTranscript)
+                        throw new IOException("Gemini finalized an unexpected transcription segment.");
+                    _receivedFinalTranscript = true;
+                }
+                if (update.ActivityEndedAtSeconds is { } endOffset)
+                {
+                    if (Volatile.Read(ref _finalizeStarted) == 0 ||
+                        endOffset < Interlocked.Read(ref _sentAudioBytes) / 32000m)
+                        throw new IOException("Gemini acknowledged an unexpected audio boundary.");
+                    _receivedActivityEnd = true;
+                }
+                // The final transcript and its sole activity acknowledgement can arrive in
+                // either order. Retain both until this manually submitted activity is done.
+                if (_receivedFinalTranscript && _receivedActivityEnd)
                     _completed.TrySetResult(true);
             }
         }
