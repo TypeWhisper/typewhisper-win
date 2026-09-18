@@ -53,7 +53,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | GemmaLocal | Separate v2 port pending |
 | Gladia | Separate v2 port pending |
 | GoogleCloudStt | Separate v2 port pending |
-| GraniteSpeech | Separate v2 port pending |
+| GraniteSpeech | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.GraniteSpeech`; 6 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Groq | Existing portable build |
 | Linear | Separate v2 port pending |
 | LiveTranscript | Separate v2 port pending |
