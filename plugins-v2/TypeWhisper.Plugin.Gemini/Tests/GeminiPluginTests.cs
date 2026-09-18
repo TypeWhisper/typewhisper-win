@@ -452,6 +452,7 @@ public sealed partial class GeminiPluginTests
     public async Task TranscribeWithLanguageHintsAsync_UploadsInteractionAndDeletesTemporaryAudio()
     {
         string? interactionBody = null;
+        string? uploadedName = null;
         var requests = new List<(HttpMethod Method, string Uri)>();
         var handler = new CapturingHandler((request, body) =>
         {
@@ -460,6 +461,9 @@ public sealed partial class GeminiPluginTests
             if (uri.EndsWith("/upload/v1beta/files", StringComparison.Ordinal))
             {
                 Assert.Equal("gemini-key", Assert.Single(request.Headers.GetValues("x-goog-api-key")));
+                using var start = JsonDocument.Parse(body!);
+                uploadedName = start.RootElement.GetProperty("file").GetProperty("name").GetString();
+                Assert.Matches("^files/tw-[a-f0-9]{32}$", uploadedName!);
                 var response = new HttpResponseMessage(HttpStatusCode.OK);
                 response.Headers.TryAddWithoutValidation(
                     "X-Goog-Upload-URL",
@@ -470,14 +474,8 @@ public sealed partial class GeminiPluginTests
             if (uri == "https://generativelanguage.googleapis.com/upload/session-1")
             {
                 Assert.Equal("upload, finalize", Assert.Single(request.Headers.GetValues("X-Goog-Upload-Command")));
-                return JsonResponse("""
-                    {
-                      "file": {
-                        "name": "files/audio-123",
-                        "uri": "https://generativelanguage.googleapis.com/v1beta/files/audio-123"
-                      }
-                    }
-                    """);
+                return JsonResponse(JsonSerializer.Serialize(new { file = new { name = uploadedName,
+                    uri = "https://generativelanguage.googleapis.com/v1beta/" + uploadedName } }));
             }
 
             if (uri.EndsWith("/v1beta/interactions", StringComparison.Ordinal))
@@ -498,7 +496,7 @@ public sealed partial class GeminiPluginTests
             }
 
             if (request.Method == HttpMethod.Delete
-                && uri.EndsWith("/v1beta/files/audio-123", StringComparison.Ordinal))
+                && uri.EndsWith("/v1beta/" + uploadedName, StringComparison.Ordinal))
             {
                 return new HttpResponseMessage(HttpStatusCode.NoContent);
             }
@@ -529,7 +527,7 @@ public sealed partial class GeminiPluginTests
         Assert.Equal("gemini-3.5-transcribe", root.GetProperty("model").GetString());
         Assert.False(root.GetProperty("store").GetBoolean());
         Assert.Equal(
-            "https://generativelanguage.googleapis.com/v1beta/files/audio-123",
+            "https://generativelanguage.googleapis.com/v1beta/" + uploadedName,
             root.GetProperty("input")[0].GetProperty("uri").GetString());
         var transcriptionConfig = root
             .GetProperty("generation_config")

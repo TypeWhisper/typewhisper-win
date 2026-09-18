@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.6";
+    private const string PluginVersionValue = "1.3.7";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -188,7 +188,7 @@ public sealed partial class GeminiPlugin :
                         model.Id,
                         defaultId,
                         StringComparison.OrdinalIgnoreCase),
-                    LanguageCount = 85,
+                    LanguageCount = SupportedLanguages.Count,
                 })
                 .ToList();
         }

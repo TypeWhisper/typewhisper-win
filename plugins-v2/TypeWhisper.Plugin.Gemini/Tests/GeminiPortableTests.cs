@@ -162,15 +162,18 @@ public sealed partial class GeminiPluginTests
     public async Task TranscriptionError_StillDeletesUploadedAudio()
     {
         var deleted = false;
-        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        string? name = null;
+        using var http = new HttpClient(new CapturingHandler((request, body) =>
         {
             if (request.Method == HttpMethod.Delete) { deleted = true; return new(HttpStatusCode.NoContent); }
             if (request.RequestUri!.AbsolutePath == "/upload/v1beta/files")
             {
+                using var metadata = System.Text.Json.JsonDocument.Parse(body!);
+                name = metadata.RootElement.GetProperty("file").GetProperty("name").GetString();
                 var response = JsonResponse("{}"); response.Headers.Add("X-Goog-Upload-URL", "https://generativelanguage.googleapis.com/upload/session"); return response;
             }
             if (request.RequestUri.AbsolutePath == "/upload/session")
-                return JsonResponse("""{"file":{"name":"files/test","uri":"https://generativelanguage.googleapis.com/v1beta/files/test"}}""");
+                return JsonResponse(System.Text.Json.JsonSerializer.Serialize(new { file = new { name, uri = "https://generativelanguage.googleapis.com/v1beta/" + name } }));
             return new(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") };
         }));
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";

@@ -51,3 +51,11 @@ A live protocol inspection with two synthetic utterances separated by eight seco
 ## Persisted streaming model validation (1.3.6)
 
 113 tests pass. Persisted live-model IDs must identify the selected batch model’s exact live-transcription sibling before the provider advertises streaming. Coverage rejects chat models, batch models, other versions and suffix mismatches while retaining normalized valid siblings.
+
+## Upload cleanup and language selection (1.3.7)
+
+117 tests pass. Uploads use a unique caller-provided Files API resource name so cleanup can still target the uploaded audio if finalized metadata is malformed, missing or times out. Tests verify cancellation cleanup and reject mismatched returned identities without deleting unrelated resources. See the [Files API resource contract](https://ai.google.dev/api/files#File).
+
+The host receives 78 ISO language choices mapped to documented BCP-47 defaults, including the previously omitted languages from the [supported language table](https://ai.google.dev/gemini-api/docs/transcribe#supported-languages). Multiple regional/script variants are represented by the ISO choice and its supported default; Norwegian aliases remain accepted. The model language count reflects those choices.
+
+The staged 1.3.7 package passed authenticated credential validation, model discovery, text completion, recorded synthetic WAV transcription using the preallocated upload identity, and host-pipeline live transcription with 11 preview updates and the complete expected final sentence.

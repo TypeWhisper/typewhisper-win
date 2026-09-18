@@ -182,17 +182,20 @@ public sealed partial class GeminiPluginTests
     {
         using var cancel = new CancellationTokenSource();
         var deleted = false;
-        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        string? uploadedName = null;
+        using var http = new HttpClient(new CapturingHandler((request, body) =>
         {
-            if (request.Method == HttpMethod.Delete) { deleted = true; return new(HttpStatusCode.OK); }
+            if (request.Method == HttpMethod.Delete) { Assert.EndsWith(uploadedName!, request.RequestUri!.AbsolutePath); deleted = true; return new(HttpStatusCode.OK); }
             if (request.RequestUri!.AbsolutePath.EndsWith("/files", StringComparison.Ordinal))
             {
+                using var metadata = System.Text.Json.JsonDocument.Parse(body!);
+                uploadedName = metadata.RootElement.GetProperty("file").GetProperty("name").GetString();
                 var started = new HttpResponseMessage(HttpStatusCode.OK);
                 started.Headers.TryAddWithoutValidation("X-Goog-Upload-URL", "https://generativelanguage.googleapis.com/upload/fixture");
                 return started;
             }
             Assert.Equal("/upload/fixture", request.RequestUri.AbsolutePath);
-            return new(HttpStatusCode.OK) { Content = new CancelDuringMetadataContent(cancel) };
+            return new(HttpStatusCode.OK) { Content = new CancelDuringMetadataContent(cancel, uploadedName!) };
         }));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GeminiTranscriptionClient.TranscribeAsync(http,
             "https://generativelanguage.googleapis.com/v1beta", "fixture", "gemini-3.5-transcribe", [1,2], [], [], GeminiTranscriptionMode.Smart, null, cancel.Token));
@@ -203,10 +206,15 @@ public sealed partial class GeminiPluginTests
     public async Task UploadMetadataDeadlineIsReportedAsTimeoutWithoutCallerCancellation()
     {
         using var caller = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        string? uploadedName = null;
+        var deleted = false;
+        using var http = new HttpClient(new CapturingHandler((request, body) =>
         {
+            if (request.Method == HttpMethod.Delete) { Assert.EndsWith(uploadedName!, request.RequestUri!.AbsolutePath); deleted = true; return new(HttpStatusCode.OK); }
             if (request.RequestUri!.AbsolutePath.EndsWith("/files", StringComparison.Ordinal))
             {
+                using var metadata = System.Text.Json.JsonDocument.Parse(body!);
+                uploadedName = metadata.RootElement.GetProperty("file").GetProperty("name").GetString();
                 var started = new HttpResponseMessage(HttpStatusCode.OK);
                 started.Headers.TryAddWithoutValidation("X-Goog-Upload-URL", "https://generativelanguage.googleapis.com/upload/fixture");
                 return started;
@@ -218,7 +226,57 @@ public sealed partial class GeminiPluginTests
             "https://generativelanguage.googleapis.com/v1beta", "fixture", "gemini-3.5-transcribe", [1,2], [], [], GeminiTranscriptionMode.Smart, null, caller.Token));
         Assert.Equal(PluginRequestFailureKind.Timeout, error.FailureKind);
         Assert.False(caller.IsCancellationRequested);
+        Assert.True(deleted);
         Assert.IsAssignableFrom<OperationCanceledException>(error.InnerException);
+    }
+
+    [Theory]
+    [InlineData("not-json")]
+    [InlineData("{\"file\":{\"name\":\"files/unrelated\"}}")]
+    [InlineData("{\"file\":{\"name\":\"files/unrelated\",\"uri\":\"https://generativelanguage.googleapis.com/v1beta/files/unrelated\"}}")]
+    public async Task InvalidUploadMetadataDeletesOnlyThePreallocatedResource(string response)
+    {
+        string? allocated = null;
+        var deleted = new List<string>();
+        using var http = new HttpClient(new CapturingHandler((request, body) =>
+        {
+            if (request.Method == HttpMethod.Delete) { deleted.Add(request.RequestUri!.AbsolutePath); return new(HttpStatusCode.NoContent); }
+            if (request.RequestUri!.AbsolutePath == "/upload/v1beta/files")
+            {
+                using var metadata = System.Text.Json.JsonDocument.Parse(body!);
+                allocated = metadata.RootElement.GetProperty("file").GetProperty("name").GetString();
+                Assert.Matches("^files/tw-[a-f0-9]{32}$", allocated!);
+                var started = new HttpResponseMessage(HttpStatusCode.OK);
+                started.Headers.Add("X-Goog-Upload-URL", "https://generativelanguage.googleapis.com/upload/fixture");
+                return started;
+            }
+            Assert.Equal("/upload/fixture", request.RequestUri.AbsolutePath);
+            return JsonResponse(response);
+        }));
+        await Assert.ThrowsAsync<PluginRequestException>(() => GeminiTranscriptionClient.TranscribeAsync(http,
+            "https://generativelanguage.googleapis.com/v1beta", "fixture", "gemini-3.5-transcribe", [1,2], [], [], GeminiTranscriptionMode.Smart, null, default));
+        Assert.Equal("/v1beta/" + allocated, Assert.Single(deleted));
+        Assert.DoesNotContain("/v1beta/files/unrelated", deleted);
+    }
+
+    [Fact]
+    public async Task SupportedIsoLanguagesAreAvailableToTheHostAndMapToDocumentedLocaleHints()
+    {
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        using var http = new HttpClient();
+        using var plugin = new GeminiPlugin(http, (_, _, languages, _, _, _) =>
+        {
+            Assert.Equal(new[] { "de-DE", "kea-CV", "yue-Hant-HK", "hy-AM" }, languages);
+            return Task.FromResult<IStreamingSession>(new StubStream());
+        });
+        await plugin.ActivateAsync(host);
+        ITranscriptionEnginePlugin engine = plugin;
+        Assert.Contains("en", engine.SupportedLanguages);
+        Assert.Contains("de", engine.SupportedLanguages);
+        Assert.Contains("kea", engine.SupportedLanguages);
+        Assert.DoesNotContain("eo", engine.SupportedLanguages);
+        Assert.Equal(engine.SupportedLanguages.Count, engine.TranscriptionModels[0].LanguageCount);
+        await using var stream = await engine.StartStreamingWithLanguageHintsAsync(["de", "kea", "yue", "hy"], default);
     }
 
     private sealed class StalledMetadataContent : HttpContent
@@ -228,9 +286,9 @@ public sealed partial class GeminiPluginTests
         protected override bool TryComputeLength(out long length) { length = 0; return false; }
     }
 
-    private sealed class CancelDuringMetadataContent(CancellationTokenSource cancel) : HttpContent
+    private sealed class CancelDuringMetadataContent(CancellationTokenSource cancel, string name) : HttpContent
     {
-        private readonly byte[] _body = System.Text.Encoding.UTF8.GetBytes("""{"file":{"name":"files/fixture","uri":"https://generativelanguage.googleapis.com/v1beta/files/fixture"}}""");
+        private readonly byte[] _body = System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(new { file = new { name, uri = "https://generativelanguage.googleapis.com/v1beta/" + name } }));
         protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
         {
             cancel.Cancel();

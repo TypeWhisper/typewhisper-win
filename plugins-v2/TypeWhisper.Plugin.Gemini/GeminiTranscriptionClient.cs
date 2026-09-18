@@ -35,10 +35,14 @@ internal static class GeminiTranscriptionClient
                 PluginRequestFailureKind.InvalidRequest);
         }
 
-        GeminiUploadedFile? uploadedFile = null;
+        // The Files API accepts a caller-provided immutable resource name. Keep it even
+        // if finalize succeeds but its metadata is missing, malformed, or times out.
+        var fileName = "files/tw-" + Guid.NewGuid().ToString("N");
+        string? cleanupName = null;
         try
         {
-            uploadedFile = await UploadAudioAsync(httpClient, baseUrl, apiKey, wavAudio, ct);
+            var uploadedFile = await UploadAudioAsync(httpClient, baseUrl, apiKey, wavAudio,
+                fileName, () => cleanupName = fileName, ct);
             ct.ThrowIfCancellationRequested();
             using var request = GeminiPlugin.CreateNativeRequest(
                 HttpMethod.Post,
@@ -65,8 +69,8 @@ internal static class GeminiTranscriptionClient
         }
         finally
         {
-            if (uploadedFile is not null)
-                await DeleteUploadBestEffortAsync(httpClient, baseUrl, apiKey, uploadedFile.Name, log);
+            if (cleanupName is not null)
+                await DeleteUploadBestEffortAsync(httpClient, baseUrl, apiKey, cleanupName, log);
         }
     }
 
@@ -216,6 +220,8 @@ internal static class GeminiTranscriptionClient
         string baseUrl,
         string apiKey,
         byte[] wavAudio,
+        string fileName,
+        Action uploadStarted,
         CancellationToken ct)
     {
         var uploadBaseUrl = baseUrl.Replace(
@@ -235,11 +241,12 @@ internal static class GeminiTranscriptionClient
             "X-Goog-Upload-Header-Content-Type",
             AudioMimeType);
         startRequest.Content = new StringContent(
-            """{"file":{"display_name":"typewhisper-audio.wav"}}""",
+            JsonSerializer.Serialize(new { file = new { name = fileName, display_name = "typewhisper-audio.wav" } }),
             Encoding.UTF8,
             "application/json");
 
         using var startResponse = await SendAsync(httpClient, startRequest, ct);
+        uploadStarted();
         if (!startResponse.Headers.TryGetValues("X-Goog-Upload-URL", out var uploadUrls)
             || uploadUrls.FirstOrDefault() is not { } uploadUrl
             || string.IsNullOrWhiteSpace(uploadUrl))
@@ -268,7 +275,10 @@ internal static class GeminiTranscriptionClient
             throw new PluginRequestException("Gemini upload metadata request timed out.",
                 PluginRequestFailureKind.Timeout, innerException: ex);
         }
-        return ParseUploadedFile(json);
+        var file = ParseUploadedFile(json);
+        if (!string.Equals(file.Name, fileName, StringComparison.Ordinal))
+            throw new PluginRequestException("Gemini returned an unexpected upload identity.", PluginRequestFailureKind.OutputIncomplete);
+        return file;
     }
 
     private static GeminiUploadedFile ParseUploadedFile(string json)
