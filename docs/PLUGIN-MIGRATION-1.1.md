@@ -43,7 +43,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Claude | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Claude`; 57 provider/package tests and 259 portable SDK/host tests pass. Paginated model discovery, preserved model selection, portable settings and native branding included. Development package installation passed; authenticated requests, update acceptance and publication pending. See plugin README. |
 | CloudflareAsr | Separate v2 port pending |
 | Cohere | Separate v2 port pending |
-| CohereTranscribe | Separate v2 port pending |
+| CohereTranscribe | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.CohereTranscribe`; 51 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Deepgram | Existing portable build |
 | ElevenLabs | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.ElevenLabs`; 34 plugin tests and live batch/WebSocket acceptance passed; public release pending |
 | FileMemory | Separate v2 port pending |
