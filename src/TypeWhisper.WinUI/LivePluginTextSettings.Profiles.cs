@@ -362,7 +362,7 @@ internal sealed partial class LivePluginTextSettings
                     }
                     if (plugin is not IPluginSettingsActions settings) throw new NotSupportedException();
                     return await settings.ExecuteSettingsActionAsync(action.Id, ct);
-                }, timeout.Token);
+                }, timeout.Token, preserveCompletedResult: true);
             }
             finally { _session.RecordingStarting -= CancelForRecording; }
             if (!IsLoaded || generation != _generation) return;
