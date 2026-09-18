@@ -68,7 +68,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Reson8 | Separate v2 port pending |
 | Script | Separate v2 port pending |
 | SherpaOnnx | Existing portable build |
-| SmallestAi | Separate v2 port pending |
+| SmallestAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.SmallestAi`; 18 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Soniox | Separate v2 port pending |
 | Speechmatics | Separate v2 port pending |
 | SupertonicTts | Separate v2 port pending |
