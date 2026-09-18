@@ -41,6 +41,7 @@ public sealed partial class ChoicePicker : UserControl
         ChoiceLabel.Text = options.FirstOrDefault(option => option.Id == selectedId)?.Label ?? placeholder;
         UpdateSelectedIcon();
         UpdateComparisonContent();
+        if (IsPopupOpen) RebuildChoices();
     }
 
     private void UpdateSelectedIcon()
@@ -105,7 +106,7 @@ public sealed partial class ChoicePicker : UserControl
     private void UpdateComparisonContent()
     {
         var selected = _options.FirstOrDefault(o => o.Id == SelectedId);
-        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? "Choose…";
+        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? "ChooseÃ¢â‚¬Â¦";
         if (_comparisonDescription is not null) _comparisonDescription.Text = selected?.Description ?? "";
     }
 
@@ -113,6 +114,14 @@ public sealed partial class ChoicePicker : UserControl
     {
         IsPopupOpen = true;
         _keyboard = ChoiceButton.FocusState == FocusState.Keyboard;
+        RebuildChoices();
+    }
+
+    private void RebuildChoices()
+    {
+        var focused = FocusManager.GetFocusedElement(XamlRoot) as HandCursorButton;
+        var focusedId = focused is not null && Choices.Children.Contains(focused) ? focused.Tag as string : null;
+        var focusState = focused?.FocusState ?? FocusState.Programmatic;
         _selectedButton = null;
         Choices.Children.Clear();
         var compact = _comparisonVariant is 2 or 3;
@@ -141,6 +150,7 @@ public sealed partial class ChoicePicker : UserControl
             grid.Children.Add(check);
             var button = new HandCursorButton { Content = grid, MinHeight = compact ? 36 : 56, Padding = new Thickness(12, compact ? 6 : 9, 12, compact ? 6 : 9),
                 HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
+            button.Tag = option.Id;
             button.IsEnabled = option.Enabled;
             if (selected)
             {
@@ -162,6 +172,9 @@ public sealed partial class ChoicePicker : UserControl
             };
             Choices.Children.Add(button);
         }
+        if (focusedId is not null)
+            (Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled && button.Tag as string == focusedId)
+                ?? _selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled))?.Focus(focusState);
     }
 
     private void Choice_Opened(object sender, object e) =>
