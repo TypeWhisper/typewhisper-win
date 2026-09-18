@@ -66,7 +66,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | ParakeetCtc | Bundled dependency |
 | Qwen3Stt | Separate v2 port pending |
 | Reson8 | Separate v2 port pending |
-| Script | Separate v2 port pending |
+| Script | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Script`; 7 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | SherpaOnnx | Existing portable build |
 | SmallestAi | Separate v2 port pending |
 | Soniox | Separate v2 port pending |
