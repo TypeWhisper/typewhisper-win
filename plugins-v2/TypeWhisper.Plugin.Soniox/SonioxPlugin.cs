@@ -74,7 +74,9 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
     private string _region = DefaultRegionId;
-    private Task _lastCleanupTask = Task.CompletedTask;
+    private readonly object _cleanupLock = new();
+    private readonly List<Task> _cleanupTasks = [];
+    private int _disposed;
 
     /// <summary>
     /// Initializes a new instance of the SonioxPlugin class.
@@ -117,7 +119,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.0";
+    public string PluginVersion => "1.3.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -134,10 +136,10 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Deactivates the plugin and releases provider resources.
     /// </summary>
-    public Task DeactivateAsync()
+    public async Task DeactivateAsync()
     {
+        await LastCleanupTask.ConfigureAwait(false);
         _host = null;
-        return Task.CompletedTask;
     }
 
 
@@ -271,7 +273,12 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
             // Deleting the uploaded file and the transcription is best-effort housekeeping the
             // caller does not need to wait for. Run it off the critical path so the two extra
             // round-trips do not add to perceived dictation latency.
-            _lastCleanupTask = CleanupInBackgroundAsync(transcriptionId, fileId, context);
+            lock (_cleanupLock)
+            {
+                _cleanupTasks.RemoveAll(task => task.IsCompleted);
+                // Use the thread pool so synchronous disposal cannot deadlock a captured UI context.
+                _cleanupTasks.Add(Task.Run(() => CleanupInBackgroundAsync(transcriptionId, fileId, context)));
+            }
             return result;
         }
         catch
@@ -336,10 +343,13 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     }
 
     /// <summary>
-    /// Best-effort cleanup task from the most recent successful transcription.
+    /// All outstanding best-effort cleanup tasks from successful transcriptions.
     /// Exposed so tests can await background cleanup deterministically.
     /// </summary>
-    internal Task LastCleanupTask => _lastCleanupTask;
+    internal Task LastCleanupTask
+    {
+        get { lock (_cleanupLock) return Task.WhenAll(_cleanupTasks); }
+    }
 
     internal async Task SetApiKeyAsync(string apiKey)
     {
@@ -649,9 +659,6 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         string? fileId,
         SonioxTranscriptionContext context)
     {
-        // Yield so the transcript is returned to the caller before cleanup round-trips run.
-        await Task.Yield();
-
         try
         {
             await CleanupAsync(transcriptionId, fileId, context);
@@ -715,6 +722,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
                     continue;
 
                 detectedLanguage ??= GetString(token, "language");
+                var displayText = ResolveDisplayText(text, tokenText, ref transcriptCursor);
 
                 if (!TryGetDouble(token, "start_ms", out var startMs)
                     || !TryGetDouble(token, "end_ms", out var endMs))
@@ -724,7 +732,6 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
 
                 var start = startMs / 1000.0;
                 var end = endMs / 1000.0;
-                var displayText = ResolveDisplayText(text, tokenText, ref transcriptCursor);
                 if (end <= start)
                     continue;
 
@@ -997,8 +1004,9 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// </summary>
     public void Dispose()
     {
-        _httpClient.Dispose();
-        _apiKeyWriteLock.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        try { LastCleanupTask.GetAwaiter().GetResult(); }
+        finally { _httpClient.Dispose(); _apiKeyWriteLock.Dispose(); }
     }
 }
 

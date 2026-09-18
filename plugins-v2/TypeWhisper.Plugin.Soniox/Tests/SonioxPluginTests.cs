@@ -28,8 +28,8 @@ public class SonioxPluginTests
         var manifest = LoadManifest();
         var sut = new SonioxPlugin();
 
-        Assert.Equal("1.3.0", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.3.0", sut.PluginVersion);
+        Assert.Equal("1.3.1", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.3.1", sut.PluginVersion);
     }
 
     [WindowsMediaFoundationFact]
@@ -880,6 +880,63 @@ public class SonioxPluginTests
         Assert.Equal("good", segment.Text);
         Assert.Equal(1.2, segment.Start);
         Assert.Equal(1.5, segment.End);
+    }
+
+    [Fact]
+    public void ParseTranscript_AdvancesPastUntimedTokens()
+    {
+        using var details = JsonDocument.Parse("{}");
+        var result = SonioxPlugin.ParseTranscript("""
+            {"text":"Bad good","tokens":[{"text":"Bad"},{"text":"good","start_ms":1200,"end_ms":1500}]}
+            """, details.RootElement, null);
+        var segment = Assert.Single(result.Segments);
+        Assert.Equal("good", segment.Text);
+        Assert.Equal(1.2, segment.Start); Assert.Equal(1.5, segment.End);
+        Assert.Equal("Bad good", result.Text);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task ShutdownDrainsEveryBackgroundCleanup(bool synchronousDispose)
+    {
+        var firstDeleteStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstDelete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondCleanupFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deletes = 0;
+        var handler = new AsyncCapturingHandler(async (request, _, ct) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Delete)
+            {
+                var count = Interlocked.Increment(ref deletes);
+                if (count == 1) { firstDeleteStarted.TrySetResult(); await releaseFirstDelete.Task.WaitAsync(ct); }
+                if (count == 3) secondCleanupFinished.TrySetResult();
+                return JsonResponse("{}");
+            }
+            if (request.Method == HttpMethod.Post)
+                return JsonResponse("""{"id":"84c32fc6-4fb5-4e7a-b656-b5ec70493753"}""");
+            return path.EndsWith("/transcript", StringComparison.Ordinal)
+                ? JsonResponse("""{"text":"Hello","tokens":[]}""")
+                : JsonResponse("""{"status":"completed","audio_duration_ms":1000}""");
+        });
+        using var http = new HttpClient(handler);
+        var sut = new SonioxPlugin(http, pollDelay: TimeSpan.Zero, maxPollAttempts: 2,
+            compressedUploadFactory: _ => new([1,2], "audio.wav", "audio/wav", SonioxUploadFormat.Wav));
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        await sut.ActivateAsync(host);
+        try
+        {
+            await sut.TranscribeAsync([1,2], null, false, null, default);
+            await firstDeleteStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await sut.TranscribeAsync([1,2], null, false, null, default);
+            await secondCleanupFinished.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Task shutdown = synchronousDispose ? Task.Run(sut.Dispose) : sut.DeactivateAsync();
+            Assert.False(shutdown.IsCompleted);
+            releaseFirstDelete.TrySetResult();
+            await shutdown.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(4, deletes);
+        }
+        finally { releaseFirstDelete.TrySetResult(); await sut.DeactivateAsync(); sut.Dispose(); }
     }
 
     [Fact]

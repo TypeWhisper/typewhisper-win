@@ -2,7 +2,7 @@
 
 Soniox live transcription over WebSocket, plus recorded-audio transcription with upload, Windows audio compression, polling, cleanup and region selection.
 
-Version `1.3.0`; plugin ID `com.typewhisper.soniox`; minimum host `1.1.2`.
+Version `1.3.1`; plugin ID `com.typewhisper.soniox`; minimum host `1.1.2`.
 Independent branch: `seofood/soniox-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -28,7 +28,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Soniox/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.soniox` inside the plugin project. Package that directory as the ZIP root.
 
-62 plugin tests pass, including streaming protocol, host preview/final assembly, fragmented responses, region configuration, interim replacement, cancellation, timeout, and typed failures. The original batch tests cover upload/poll/delete, metadata/language/region contracts, audio encoding, cancellation and package lifecycle. On 2026-09-18 the installed 1.2.0 package passed API-key validation and authenticated transcription of the synthetic English acceptance WAV using the existing development-profile credentials. It returned the complete test sentence and two segments. The harness used an isolated settings copy; no microphone audio was uploaded. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+65 plugin tests pass, including streaming protocol, host preview/final assembly, fragmented responses, region configuration, interim replacement, cancellation, timeout, and typed failures. The original batch tests cover upload/poll/delete, metadata/language/region contracts, audio encoding, cancellation and package lifecycle. On 2026-09-18 the installed 1.2.0 package passed API-key validation and authenticated transcription of the synthetic English acceptance WAV using the existing development-profile credentials. It returned the complete test sentence and two segments. The harness used an isolated settings copy; no microphone audio was uploaded. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
@@ -47,3 +47,5 @@ Confirmed subword tokens are concatenated until an endpoint or completed session
 References: [WebSocket API](https://soniox.com/docs/api-reference/stt/websocket-api), [real-time transcription](https://soniox.com/docs/stt/rt/real-time-transcription), [models](https://soniox.com/docs/stt/models), [regional endpoints](https://soniox.com/docs/data-residency).
 
 On 2026-09-19 (Europe/Berlin), Marco also confirmed successful live dictation with the installed 1.3.0 package. The development UI showed Soniox selected and Live transcription enabled. The installed-package synthetic streaming check returned 22 live updates and the complete sentence without fallback.
+
+Version 1.3.1 drains all outstanding batch cleanup tasks before deactivation/disposal, skips untimed tokens correctly in subtitle timing, and includes the Soniox PNG in published host output. The native Media Foundation encoding test runs only on Windows; the remaining tests run on both CI platforms.
