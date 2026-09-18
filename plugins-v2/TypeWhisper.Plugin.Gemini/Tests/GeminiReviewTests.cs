@@ -181,6 +181,35 @@ public sealed partial class GeminiPluginTests
         Assert.True(deleted);
     }
 
+    [Fact]
+    public async Task UploadMetadataDeadlineIsReportedAsTimeoutWithoutCallerCancellation()
+    {
+        using var caller = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/files", StringComparison.Ordinal))
+            {
+                var started = new HttpResponseMessage(HttpStatusCode.OK);
+                started.Headers.TryAddWithoutValidation("X-Goog-Upload-URL", "https://generativelanguage.googleapis.com/upload/fixture");
+                return started;
+            }
+            Assert.Equal("/upload/fixture", request.RequestUri.AbsolutePath);
+            return new(HttpStatusCode.OK) { Content = new StalledMetadataContent() };
+        }));
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => GeminiTranscriptionClient.TranscribeAsync(http,
+            "https://generativelanguage.googleapis.com/v1beta", "fixture", "gemini-3.5-transcribe", [1,2], [], [], GeminiTranscriptionMode.Smart, null, caller.Token));
+        Assert.Equal(PluginRequestFailureKind.Timeout, error.FailureKind);
+        Assert.False(caller.IsCancellationRequested);
+        Assert.IsAssignableFrom<OperationCanceledException>(error.InnerException);
+    }
+
+    private sealed class StalledMetadataContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) => throw new NotSupportedException();
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken ct) => Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        protected override bool TryComputeLength(out long length) { length = 0; return false; }
+    }
+
     private sealed class CancelDuringMetadataContent(CancellationTokenSource cancel) : HttpContent
     {
         private readonly byte[] _body = System.Text.Encoding.UTF8.GetBytes("""{"file":{"name":"files/fixture","uri":"https://generativelanguage.googleapis.com/v1beta/files/fixture"}}""");

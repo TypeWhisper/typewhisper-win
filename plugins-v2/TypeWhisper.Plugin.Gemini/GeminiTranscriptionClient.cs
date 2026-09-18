@@ -261,7 +261,13 @@ internal static class GeminiTranscriptionClient
         using var uploadResponse = await SendAsync(httpClient, uploadRequest, ct, HttpCompletionOption.ResponseHeadersRead);
         // Once the upload succeeds, obtain its cleanup identity even if the caller cancels.
         using var metadataDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var json = await uploadResponse.Content.ReadAsStringAsync(metadataDeadline.Token);
+        string json;
+        try { json = await uploadResponse.Content.ReadAsStringAsync(metadataDeadline.Token); }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && metadataDeadline.IsCancellationRequested)
+        {
+            throw new PluginRequestException("Gemini upload metadata request timed out.",
+                PluginRequestFailureKind.Timeout, innerException: ex);
+        }
         return ParseUploadedFile(json);
     }
 

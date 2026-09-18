@@ -43,3 +43,7 @@ The local machine's untracked evidence is in `artifacts/plugin-batch/gemini-live
 105 tests cover capability-filtered model discovery, text-specific HTTP 413 failures, independent transcription/text availability, upload cleanup after cancellation, and streaming completion in either acknowledgement/transcript order. A premature segment final or earlier audio boundary now invalidates the stream instead of being reused as the last recording segment. The host falls back to the complete recording for these unexpected events.
 
 A live protocol inspection with two synthetic utterances separated by eight seconds of silence produced one final transcription only after the manual activity end, followed by the full submitted audio offset. This confirms the observed single-activity behavior for the tested model; it is not a general ordering guarantee for all Live API event types.
+
+## Protocol error handling (1.3.5)
+
+107 tests pass. A duplicate activity-end acknowledgement now invalidates the stream. A stalled upload metadata response is reported as a timeout when the caller has not canceled; the existing cancellation and cleanup behavior is preserved. These error paths were verified with controlled WebSocket and HTTP fixtures.

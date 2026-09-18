@@ -229,7 +229,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                 }
                 if (update.ActivityEndedAtSeconds is { } endOffset)
                 {
-                    if (Volatile.Read(ref _finalizeStarted) == 0 ||
+                    if (Volatile.Read(ref _finalizeStarted) == 0 || _receivedActivityEnd ||
                         endOffset < Interlocked.Read(ref _sentAudioBytes) / 32000m)
                         throw new IOException("Gemini acknowledged an unexpected audio boundary.");
                     _receivedActivityEnd = true;

@@ -13,6 +13,7 @@ public sealed partial class GeminiPluginTests
     [Theory]
     [InlineData("final")]
     [InlineData("ack-first")]
+    [InlineData("duplicate-ack")]
     [InlineData("early-final")]
     [InlineData("late-final")]
     [InlineData("empty")]
@@ -50,7 +51,7 @@ public sealed partial class GeminiPluginTests
                 return;
             }
             Assert.Contains("activityEnd",await Receive(socket,ct));
-            if (outcome == "ack-first")
+            if (outcome is "ack-first" or "duplicate-ack")
                 await socket.SendAsync(Encoding.UTF8.GetBytes("""{"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0.000125s"}}"""), WebSocketMessageType.Text, true, ct);
             if (outcome == "late-final")
             {
@@ -60,9 +61,11 @@ public sealed partial class GeminiPluginTests
             if(outcome == "close") await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
             else if(outcome != "cancel")
             {
+                if (outcome == "duplicate-ack")
+                    await socket.SendAsync(Encoding.UTF8.GetBytes("""{"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0.000125s"}}"""), WebSocketMessageType.Text, true, ct);
                 var response = outcome switch
                 {
-                    "final" or "ack-first" or "early-final" or "late-final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
+                    "final" or "ack-first" or "duplicate-ack" or "early-final" or "late-final" => """{"serverContent":{"inputTranscription":{"text":"Hallo Welt"}}}""",
                     "empty" => """{"serverContent":{"inputTranscription":{"text":""}}}""",
                     "error" => """{"error":{"message":"Fixture provider error"}}""",
                     _ => "not json"
@@ -95,7 +98,7 @@ public sealed partial class GeminiPluginTests
         try
         {
             if(outcome == "cancel") { finishCancellation.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>completion); }
-            else if(outcome is "close" or "early-final" or "late-final") await Assert.ThrowsAsync<IOException>(()=>completion);
+            else if(outcome is "close" or "early-final" or "late-final" or "duplicate-ack") await Assert.ThrowsAsync<IOException>(()=>completion);
             else if(outcome == "error") await Assert.ThrowsAsync<InvalidOperationException>(()=>completion);
             else if(outcome == "malformed") await Assert.ThrowsAnyAsync<JsonException>(()=>completion);
             else
