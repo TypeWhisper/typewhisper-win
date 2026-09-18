@@ -98,13 +98,14 @@ public sealed class CliProfileTests
                 Directory.CreateDirectory(directory);
                 await plugin.ExecuteSettingsActionAsync("add", default);
                 var id = plugin.ConnectionIdentity;
+                var count = runner.Requests.Count;
                 await plugin.SaveProfileSettingsAsync(id, new Dictionary<string, string>
                 {
                     [id + "/name"] = name, [id + "/codex/executable"] = executable,
                     [id + "/environment"] = "CODEX_HOME=" + directory
                 }, null, default);
                 var role = plugin.AdditionalLlmProviders.Last();
-                var count = runner.Requests.Count;
+                Assert.True(role.IsAvailable);
                 Assert.Equal("processed", await role.ProcessAsync("Fix spelling", "fixture", "default", default));
                 var requests = runner.Requests.Skip(count).ToArray();
                 Assert.True(requests.Length >= 4);

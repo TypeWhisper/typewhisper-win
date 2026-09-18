@@ -268,7 +268,11 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
         }
         finally { _refreshGate.Release(); }
         _host?.NotifyCapabilitiesChanged();
-
+        // Persistence has succeeded. A failed or cancelled probe must not report a failed save.
+        try { await RefreshOneAsync(CurrentDescriptor(profileId), true, ct); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { _host?.Log(PluginLogLevel.Warning, "event=saved-cli-profile-probe-failed type=" + ex.GetType().Name); }
     }
 
     /// <inheritdoc />
