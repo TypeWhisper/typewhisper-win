@@ -35,3 +35,5 @@ The ZIP was installed and loaded in the WinUI development profile, preserving ex
 The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
 
 The host includes the Soniox logo. Shared draft editing and a single Save settings button are provided by host PR #479; provider-selection icons are provided by host PR #482. Live transcription remains outside this package version.
+
+On 2026-09-19 (Europe/Berlin), Marco confirmed that dictation with Soniox works in the running development app. This confirms manual recorded-audio dictation acceptance; live transcription is not implemented in this package.
