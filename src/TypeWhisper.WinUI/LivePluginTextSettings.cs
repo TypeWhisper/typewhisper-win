@@ -72,7 +72,7 @@ internal sealed partial class LivePluginTextSettings : UserControl
             var snapshot = await _session.PluginRuntime.UseConfigurationAsync(_id, (plugin, _) =>
                 Task.FromResult((Fields: plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : [],
                     Actions: plugin is IPluginSettingsActions actions ? actions.SettingsActions.ToArray() : [],
-                    ShowKey: plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings,
+                    ShowKey: plugin is IApiKeyPlugin && (plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings),
                     ConnectionId: (plugin as IPluginConnectionSettings)?.ConnectionIdentity,
                     ProfileSelector: (plugin as IPluginProfileSettings)?.ProfileSelectorId,
                     AddProfile: (plugin as IPluginProfileSettings)?.AddProfileActionId,
