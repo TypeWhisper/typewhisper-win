@@ -1,0 +1,14 @@
+{
+  "id": "com.typewhisper.gemma-local",
+  "name": "Gemma 3 (Local)",
+  "version": "1.2.0",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Run Gemma 3 GGUF models locally with the bundled llama.cpp CPU runtime.",
+  "assemblyName": "TypeWhisper.Plugin.GemmaLocal.dll",
+  "pluginClass": "TypeWhisper.Plugin.GemmaLocal.GemmaLocalPlugin",
+  "categories": [
+    "llm"
+  ],
+  "isLocal": true
+}

@@ -1,0 +1,16 @@
+{
+  "Settings.SelectModel": "Select Gemma Model",
+  "Settings.Download": "Download",
+  "Settings.Load": "Load",
+  "Settings.Unload": "Unload",
+  "Settings.Cancel": "Cancel",
+  "Settings.NotDownloaded": "Not downloaded",
+  "Settings.Downloaded": "Downloaded, ready to load",
+  "Settings.Loaded": "Loaded and ready",
+  "Settings.Loading": "Loading model...",
+  "Settings.Downloading": "Downloading...",
+  "Settings.DownloadComplete": "Download complete! Click Load to start using the model.",
+  "Settings.DownloadCancelled": "Download cancelled",
+  "Settings.ModelReady": "Model loaded and ready to use!",
+  "Settings.Error": "Error: {0}"
+}
