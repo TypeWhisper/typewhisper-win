@@ -86,16 +86,16 @@
     {
       "id": "com.typewhisper.cloudflare-asr",
       "name": "Cloudflare Workers AI",
-      "version": "1.1.3",
+      "version": "1.1.4",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Preserves direct Cloudflare Workers AI Whisper requests and adds portable account/token configuration, token validation, response failure checks and validated account IDs.",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-cloudflare-asr-1.1.3-20260918/com.typewhisper.cloudflare-asr-1.1.3-win-x64.zip",
-      "sha256": "ea4533e751e8e6a7ea25cba1036bbcb718cbf6ae898deb151db2b821b1124829",
-      "size": 15110,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-cloudflare-asr-1.1.4-20260918/com.typewhisper.cloudflare-asr-1.1.4-win-x64.zip",
+      "sha256": "881e25d3b8d33582fd8cb0b223e048173d2ef939454703a4f296712bc0e6d65f",
+      "size": 15106,
       "platforms": [
         "windows"
       ],
