@@ -86,16 +86,16 @@
     {
       "id": "com.typewhisper.cloudflare-asr",
       "name": "Cloudflare Workers AI",
-      "version": "1.1.6",
+      "version": "1.1.7",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Transcribe recorded audio with Whisper on Cloudflare Workers AI. Requires a Cloudflare account and API token.",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-cloudflare-asr-1.1.6-20260918/com.typewhisper.cloudflare-asr-1.1.6-win-x64.zip",
-      "sha256": "9807bb32c92f5e060fe7d480c217cbbc38dd3cedc839044d68306c81b840be58",
-      "size": 15147,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-cloudflare-asr-1.1.7-20260918/com.typewhisper.cloudflare-asr-1.1.7-win-x64.zip",
+      "sha256": "8c6beaf18c7faa2311fff29f29e018c59eafd13c811734743510170034f0b686",
+      "size": 15276,
       "platforms": [
         "windows"
       ],
