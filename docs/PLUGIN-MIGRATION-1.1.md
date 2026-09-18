@@ -48,7 +48,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | ElevenLabs | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.ElevenLabs`; 34 plugin tests and live batch/WebSocket acceptance passed; public release pending |
 | FileMemory | Separate v2 port pending |
 | FillerWords | Existing portable build |
-| Fireworks | Separate v2 port pending |
+| Fireworks | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Fireworks`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
 | Gemini | Separate v2 port pending |
 | GemmaLocal | Separate v2 port pending |
 | Gladia | Separate v2 port pending |
