@@ -1,10 +1,10 @@
 # Fireworks AI for the portable host
 
-Independent .NET 10 package `com.typewhisper.fireworks`, version `1.1.2`, requiring host `1.1.2`. Implemented on its own `seofood/fireworks-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.fireworks`, version `1.1.3`, requiring host `1.1.2`. Implemented on its own `seofood/fireworks-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
-Adds macOS Whisper V3/V3 Turbo transcription with the model-specific audio endpoints, translation and dictionary prompts. Text processing uses the correct `/inference/v1/chat/completions` path, selected/custom model IDs, temperature and native/OpenAI model catalog discovery.
+Adds Whisper V3/V3 Turbo transcription with the model-specific audio endpoints, translation and dictionary prompts. Text processing uses the correct `/inference/v1/chat/completions` path, selected/custom model IDs, temperature and native/OpenAI model catalog discovery.
 
 The corresponding macOS provider behavior was compared. Mac streaming is REST preview polling rather than the Windows WebSocket session contract; this package advertises recorded-audio transcription only. No live streaming is claimed.
 

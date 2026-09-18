@@ -27,7 +27,7 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> SupportedModels => (Connection.Get("catalog").Split('\n', StringSplitOptions.RemoveEmptyEntries)
         .Concat(string.IsNullOrWhiteSpace(Connection.Get("catalog")) ? Defaults : [])
-        .Append(Connection.Get("llmModel", Defaults[0]))).Distinct().Select(m => new PluginModelInfo(m,m)).ToArray();
+        .Prepend(Connection.Get("llmModel", Defaults[0]))).Distinct().Select((m, index) => new PluginModelInfo(m,m) { IsRecommended = index == 0 }).ToArray();
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [
         Field("model", "Transcription model", "Transkriptionsmodell", SelectedModelId!, PluginSettingsSection.Transcription, TranscriptionModels.Select(m => new PluginSettingChoice(m.Id,m.DisplayName)).ToArray()) with
@@ -37,7 +37,7 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
         },
         Field("llmModel", "Text model ID", "Textmodell-ID", Defaults[0], PluginSettingsSection.TextProcessing) with { Suggestions = SupportedModels.Select(m => m.Id).ToArray() },
         Field("temperatureMode", "Temperature", "Temperatur", "providerDefault", PluginSettingsSection.TextProcessing, new("providerDefault", "Provider default"), new("custom", "Custom")),
-        Field("temperature", "Custom temperature (0â€“2)", "Eigene Temperatur (0â€“2)", "0.3", PluginSettingsSection.TextProcessing) with { VisibleWhen = new("temperatureMode", ["custom"]) }
+        Field("temperature", "Custom temperature (0–2)", "Eigene Temperatur (0–2)", "0.3", PluginSettingsSection.TextProcessing) with { VisibleWhen = new("temperatureMode", ["custom"]) }
     ];
     /// <inheritdoc />
     public Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
@@ -54,7 +54,9 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
     {
         using var request = Connection.Request(HttpMethod.Get, "https://api.fireworks.ai/inference/v1/models?page_size=1");
         using var result = await Connection.ReadAsync(request, ct);
-        if (!result.RootElement.TryGetProperty("models", out _) && !result.RootElement.TryGetProperty("data", out _)) throw ProviderConnection.InvalidResponse();
+        var root = result.RootElement;
+        var entries = root.TryGetProperty("models", out var models) ? models : ProviderConnection.Required(root, "data", JsonValueKind.Array);
+        if (entries.ValueKind != JsonValueKind.Array) throw ProviderConnection.InvalidResponse();
     }
     /// <inheritdoc />
     public IReadOnlyList<PluginSettingsAction> SettingsActions => [new("refreshModels", Connection.L("Refresh models", "Modelle aktualisieren"), Connection.L("Save the model catalog using the stored key.", "Modellkatalog mit dem gespeicherten Key abrufen."))];
@@ -73,7 +75,9 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
             foreach(var entry in entries.EnumerateArray())
             {
                 var model = ProviderConnection.RequiredText(entry,native ? "name" : "id");
-                if (model.Length <= 256 && !model.Any(char.IsWhiteSpace) && !new[]{"whisper","embedding","image","stable-diffusion"}.Any(x => model.Contains(x,StringComparison.OrdinalIgnoreCase))) models.Add(model);
+                if (string.Equals(ProviderConnection.Text(entry, "kind"), "EMBEDDING_MODEL", StringComparison.OrdinalIgnoreCase)
+                    || (entry.TryGetProperty("supports_chat", out var chat) && chat.ValueKind == JsonValueKind.False)) continue;
+                if (model.Length <= 256 && !model.Any(char.IsWhiteSpace) && !new[]{"whisper","embedding","reranker","image","stable-diffusion"}.Any(x => model.Contains(x,StringComparison.OrdinalIgnoreCase))) models.Add(model);
             }
             token = ProviderConnection.Text(root,"nextPageToken") ?? ProviderConnection.Text(root,"next_page_token");
             if(string.IsNullOrWhiteSpace(token)) break;

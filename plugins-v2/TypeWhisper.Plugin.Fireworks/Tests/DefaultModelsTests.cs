@@ -29,6 +29,6 @@ public sealed partial class ProviderTests
         await Configure(plugin);
         await plugin.SaveTextSettingAsync("llmModel", "my-deployment", default);
         await plugin.ExecuteSettingsActionAsync("refreshModels", default);
-        Assert.Equal(new[] { "accounts/fireworks/models/current-chat", "my-deployment" }, plugin.SupportedModels.Select(m => m.Id));
+        Assert.Equal(new[] { "my-deployment", "accounts/fireworks/models/current-chat" }, plugin.SupportedModels.Select(m => m.Id));
     }
 }

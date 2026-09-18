@@ -1,10 +1,10 @@
 {
   "id": "com.typewhisper.fireworks",
   "name": "Fireworks AI",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
-  "description": "Adds macOS Whisper V3/V3 Turbo transcription with the model-specific audio endpoints, translation and dictionary prompts.",
+  "description": "Portable Fireworks AI transcription and text processing. Whisper V3 Turbo currently works; live transcription is unavailable.",
   "categories": [
     "transcription",
     "llm"
