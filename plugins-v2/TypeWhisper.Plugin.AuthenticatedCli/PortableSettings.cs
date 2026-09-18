@@ -133,14 +133,14 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
                         Choices = _profiles.Select(p => new PluginSettingChoice(p.Id, p.Name)).ToArray()
                     },
                     new(Id("name"), L("Profile name", "Profilname"), L("Shown in workflow provider selections.", "Wird in der Provider-Auswahl der Workflows angezeigt."), profile.Name, 100) { Section = PluginSettingsSection.Connection },
-                    new(Id("provider"), L("CLI", "CLI"), L("You can add several profiles for the same CLI.", "Du kannst mehrere Profile fÃƒÆ’Ã‚Â¼r dieselbe CLI hinzufÃƒÆ’Ã‚Â¼gen."), profile.Provider)
+                    new(Id("provider"), L("CLI", "CLI"), L("You can add several profiles for the same CLI.", "Du kannst mehrere Profile für dieselbe CLI hinzufügen."), profile.Provider)
                     {
                         Section = PluginSettingsSection.Connection,
                         Choices = CliProviderDescriptor.All.Select(d => new PluginSettingChoice(d.Key, GetString(d.DisplayKey))).ToArray()
                     },
                     new(Id("environment"), L("Environment variables", "Umgebungsvariablen"),
                         L("One NAME=VALUE per line. Supported session directories: CODEX_HOME (Codex), CLAUDE_CONFIG_DIR (Claude), XDG_DATA_HOME (OpenCode). Leave empty to inherit the CLI session.",
-                          "Eine Zeile pro NAME=WERT. UnterstÃƒÆ’Ã‚Â¼tzte Sitzungsverzeichnisse: CODEX_HOME (Codex), CLAUDE_CONFIG_DIR (Claude), XDG_DATA_HOME (OpenCode). Leer lassen, um die CLI-Sitzung zu ÃƒÆ’Ã‚Â¼bernehmen."),
+                          "Eine Zeile pro NAME=WERT. Unterstützte Sitzungsverzeichnisse: CODEX_HOME (Codex), CLAUDE_CONFIG_DIR (Claude), XDG_DATA_HOME (OpenCode). Leer lassen, um die CLI-Sitzung zu übernehmen."),
                         string.Join("\n", profile.Environment.Select(p => p.Key + "=" + p.Value)), 8192)
                     { Section = PluginSettingsSection.Connection, IsMultiline = true }
                 };
@@ -151,10 +151,10 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
                     if (_draftProfiles.TryGetValue(profile.Id, out var draft) && draft.Provider == provider.Key) view = draft;
                     var paths = _discovery.FindCandidates(provider.ExecutableName);
                     var snapshot = GetSnapshot(profile.Descriptor);
-                    var status = sameProvider ? " Ãƒâ€šÃ‚Â· " + GetString("State." + snapshot.State) : "";
-                    if (sameProvider && profile.Executable.Length == 0 && snapshot.ExecutablePath is { } detected) status += " Ãƒâ€šÃ‚Â· " + detected;
-                    fields.Add(new(Id(provider.Key + "/executable"), L("Executable path", "Programmpfad"),
-                        L("Leave empty for automatic detection", "FÃƒÆ’Ã‚Â¼r automatische Erkennung leer lassen") + status,
+                    var status = sameProvider ? " · " + GetString("State." + snapshot.State) : "";
+                    if (sameProvider && profile.Executable.Length == 0 && snapshot.ExecutablePath is { } detected) status += " · " + detected;
+                    fields.Add(new(Id(provider.Key + "/executable"), L("Executable path", "Programmpfad") + (sameProvider && profile.Executable.Length == 0 ? L(" (automatic)", " (automatisch)") : ""),
+                        L("Leave empty for automatic detection", "Für automatische Erkennung leer lassen") + status,
                         sameProvider ? profile.Executable : "", 2048)
                     {
                         Section = PluginSettingsSection.Connection, Suggestions = paths,
@@ -165,10 +165,10 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
                     var choices = models.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToList();
                     var model = sameProvider ? profile.Model : "default";
                     if (model == "default" && provider.Kind == CliProviderKind.OpenCode && choices.Count > 0) model = choices[0].Value;
-                    if (!choices.Any(c => c.Value == model)) choices.Add(new(model, model == "default" ? GetString("Model.Default") : L("Unavailable: ", "Nicht verfÃƒÆ’Ã‚Â¼gbar: ") + model));
+                    if (!choices.Any(c => c.Value == model)) choices.Add(new(model, model == "default" ? GetString("Model.Default") : L("Unavailable: ", "Nicht verfügbar: ") + model));
                     fields.Add(new(Id(provider.Key + "/model"), L("Model", "Modell"),
                         provider.Kind == CliProviderKind.Claude
-                            ? L("CLI aliases; availability depends on the selected session.", "CLI-Aliase; die VerfÃƒÆ’Ã‚Â¼gbarkeit hÃƒÆ’Ã‚Â¤ngt von der gewÃƒÆ’Ã‚Â¤hlten Sitzung ab.")
+                            ? L("CLI aliases; availability depends on the selected session.", "CLI-Aliase; die Verfügbarkeit hängt von der gewählten Sitzung ab.")
                             : L("Refresh models with the entered path and environment, then save the profile.", "Modelle mit dem eingegebenen Pfad und den Umgebungsvariablen aktualisieren, danach das Profil speichern."), model)
                     {
                         Section = PluginSettingsSection.TextProcessing, Choices = choices,
@@ -274,9 +274,9 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
     /// <inheritdoc />
     public IReadOnlyList<PluginSettingsAction> SettingsActions =>
     [
-        new("add", L("Add CLI profile", "CLI-Profil hinzufÃƒÆ’Ã‚Â¼gen"), L("Create another CLI configuration.", "Eine weitere CLI-Konfiguration anlegen.")) { Section = PluginSettingsSection.Connection },
-        new(ConnectionIdentity + "/refresh", L("Refresh models", "Modelle aktualisieren"), L("Check the entered CLI session and fetch models before saving.", "Eingegebene CLI-Sitzung prÃƒÆ’Ã‚Â¼fen und Modelle vor dem Speichern laden.")) { Section = PluginSettingsSection.TextProcessing },
-        .. (RemoveProfileActionId is { } remove ? new[] { new PluginSettingsAction(remove, L("Remove this profile", "Dieses Profil entfernen"), L("Workflows using this profile will need another provider.", "ZugehÃƒÆ’Ã‚Â¶rige Workflows benÃƒÆ’Ã‚Â¶tigen danach einen anderen Provider.")) { Section = PluginSettingsSection.Connection } } : [])
+        new("add", L("Add CLI profile", "CLI-Profil hinzufügen"), L("Create another CLI configuration.", "Eine weitere CLI-Konfiguration anlegen.")) { Section = PluginSettingsSection.Connection },
+        new(ConnectionIdentity + "/refresh", L("Refresh models", "Modelle aktualisieren"), L("Check the entered CLI session and fetch models before saving.", "Eingegebene CLI-Sitzung prüfen und Modelle vor dem Speichern laden.")) { Section = PluginSettingsSection.TextProcessing },
+        .. (RemoveProfileActionId is { } remove ? new[] { new PluginSettingsAction(remove, L("Remove this profile", "Dieses Profil entfernen"), L("Workflows using this profile will need another provider.", "Zugehörige Workflows benötigen danach einen anderen Provider.")) { Section = PluginSettingsSection.Connection } } : [])
     ];
 
     /// <inheritdoc />
@@ -312,7 +312,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
         }
         finally { _refreshGate.Release(); }
         _host?.NotifyCapabilitiesChanged();
-        return id == "add" ? L("Profile added.", "Profil hinzugefÃƒÆ’Ã‚Â¼gt.") : L("Profile removed.", "Profil entfernt.");
+        return id == "add" ? L("Profile added.", "Profil hinzugefügt.") : L("Profile removed.", "Profil entfernt.");
     }
 
     /// <inheritdoc />
@@ -358,7 +358,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
                 _draftProfiles[profileId] = profile with { Models = models.ToList() };
             }
             refreshed = true;
-            return new(L("CLI session verified. Save profile to keep the model list.", "CLI-Sitzung bestÃƒÆ’Ã‚Â¤tigt. Profil speichern ÃƒÆ’Ã‚Â¼bernimmt die Modellliste."), true);
+            return new(L("CLI session verified. Save profile to keep the model list.", "CLI-Sitzung bestätigt. Profil speichern übernimmt die Modellliste."), true);
         }
         finally
         {

@@ -2,7 +2,7 @@
 
 Authenticated CLI providers with process isolation, discovery, status refresh and portable provider/path settings.
 
-Version `1.3.0`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
+Version `1.3.1`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
 Independent branch: `seofood/authenticatedcli-portable`, based on `4db8f6ac`.
 
 ## Setup

@@ -496,7 +496,7 @@ public sealed class AuthenticatedCliPluginTests
             },
             plugin.AdditionalLlmProviders
                 .Select(provider => ((ILlmProviderSelectionIdentity)provider).LlmSelectionId));
-        Assert.Equal("1.3.0", plugin.PluginVersion);
+        Assert.Equal("1.3.1", plugin.PluginVersion);
         Assert.Equal("opencode.exe", Descriptor(CliProviderKind.OpenCode).ExecutableName);
     }
 
