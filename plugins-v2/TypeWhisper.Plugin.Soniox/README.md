@@ -28,8 +28,10 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Soniox/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.soniox` inside the plugin project. Package that directory as the ZIP root.
 
-39 plugin tests pass. Fake upload/poll/delete, metadata/language/region contracts, audio encoding, cancellation and package lifecycle. No authenticated transcription was sent. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+39 plugin tests pass. Fake upload/poll/delete, metadata/language/region contracts, audio encoding, cancellation and package lifecycle. On 2026-09-18 the installed 1.2.0 package passed API-key validation and authenticated transcription of the synthetic English acceptance WAV using the existing development-profile credentials. It returned the complete test sentence and two segments. The harness used an isolated settings copy; no microphone audio was uploaded. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
 The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+
+The host includes the Soniox logo. Shared draft editing and a single Save settings button are provided by host PR #479; provider-selection icons are provided by host PR #482. Live transcription remains outside this package version.

@@ -46,6 +46,7 @@ public sealed class PluginBrandIcon : UserControl
             LocalTranscriptionPlugin.PluginId => "nvidia",
             "com.typewhisper.openai" => "openai",
             "com.typewhisper.openrouter" => "openrouter",
+            "com.typewhisper.soniox" => "soniox",
             _ => null
         };
         if (brand is null) { ShowFallback(); return; }
@@ -62,8 +63,9 @@ public sealed class PluginBrandIcon : UserControl
         var logo = new Image { Stretch = Stretch.Uniform };
         logo.ImageFailed += (_, _) => { if (ReferenceEquals(Content, logo)) ShowFallback(); };
         Content = logo;
-        var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (brand == "claude" ? ".png" : ".svg")));
-        logo.Source = brand == "claude" ? new BitmapImage(uri) : new SvgImageSource(uri);
+        var raster = brand is "claude" or "soniox";
+        var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (raster ? ".png" : ".svg")));
+        logo.Source = raster ? new BitmapImage(uri) : new SvgImageSource(uri);
     }
 
     private void ShowFallback() => Content = new TypeWhisperGlyph { Kind = "plugin" };
