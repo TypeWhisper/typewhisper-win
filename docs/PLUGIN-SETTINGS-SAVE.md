@@ -10,5 +10,5 @@ The implementation is on the independent branch `seofood/plugin-settings-save-al
 
 ```powershell
 dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests -c Release
-& F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run --winui F:/typewhisper/worktrees/plugin-settings-save-all
+& "$DevTools/build-typewhisper-windows-dev.ps1" --run --winui $Checkout
 ```
