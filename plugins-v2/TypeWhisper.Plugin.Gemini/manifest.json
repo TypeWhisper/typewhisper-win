@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.gemini",
   "name": "Google Gemini",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
   "description": "Gemini transcription, live text and LLM processing with model discovery and dictionary support.",

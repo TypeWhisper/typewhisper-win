@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.5";
+    private const string PluginVersionValue = "1.3.6";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -1011,7 +1011,10 @@ public sealed partial class GeminiPlugin :
             .Select(model => new GeminiFetchedTranscriptionModel(
                 NormalizeModelId(model.Id),
                 string.IsNullOrWhiteSpace(model.DisplayName) ? null : model.DisplayName.Trim(),
-                TryNormalizeModelId(model.LiveModelId, out var liveModel) ? liveModel : null))
+                TryNormalizeModelId(model.LiveModelId, out var liveModel)
+                    && IsLiveTranscriptionModelId(liveModel)
+                    && string.Equals(liveModel, NormalizeModelId(model.Id) + "-live", StringComparison.OrdinalIgnoreCase)
+                        ? liveModel : null))
             .Where(model => IsCompatibleTranscriptionModelId(model.Id))
             .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
             .OrderBy(model => model.Id.Contains("preview", StringComparison.OrdinalIgnoreCase))

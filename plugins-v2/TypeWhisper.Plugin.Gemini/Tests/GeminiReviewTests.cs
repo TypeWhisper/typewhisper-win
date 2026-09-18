@@ -60,6 +60,24 @@ public sealed partial class GeminiPluginTests
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.ProcessAsync("", "test", "bad id", default));
     }
 
+    [Theory]
+    [InlineData("gemini-flash-latest", false)]
+    [InlineData("gemini-3.5-transcribe", false)]
+    [InlineData("gemini-3.6-transcribe-live", false)]
+    [InlineData("gemini-3.5-transcribe-live-extra", false)]
+    [InlineData("gemini-3.5-transcribe-live", true)]
+    [InlineData("models/GEMINI-3.5-TRANSCRIBE-LIVE", true)]
+    public async Task PersistedStreamingModelMustBeTheSelectedBatchModelsLiveSibling(string liveModel, bool supported)
+    {
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
+        host.SetSetting("fetchedTranscriptionModels.v1", new List<GeminiFetchedTranscriptionModel>
+        { new("gemini-3.5-transcribe", null, liveModel) });
+        using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        Assert.Equal("gemini-3.5-transcribe", plugin.SelectedModelId);
+        Assert.Equal(supported, plugin.SupportsStreaming);
+        Assert.Equal(supported, plugin.SupportsStreamingCompletion);
+    }
+
     [Fact]
     public async Task ModelDiscoverySkipsMalformedNativeIds()
     {

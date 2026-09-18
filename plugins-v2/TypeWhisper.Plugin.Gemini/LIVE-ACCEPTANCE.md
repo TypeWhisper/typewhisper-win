@@ -47,3 +47,7 @@ A live protocol inspection with two synthetic utterances separated by eight seco
 ## Protocol error handling (1.3.5)
 
 107 tests pass. A duplicate activity-end acknowledgement now invalidates the stream. A stalled upload metadata response is reported as a timeout when the caller has not canceled; the existing cancellation and cleanup behavior is preserved. These error paths were verified with controlled WebSocket and HTTP fixtures.
+
+## Persisted streaming model validation (1.3.6)
+
+113 tests pass. Persisted live-model IDs must identify the selected batch model’s exact live-transcription sibling before the provider advertises streaming. Coverage rejects chat models, batch models, other versions and suffix mismatches while retaining normalized valid siblings.
