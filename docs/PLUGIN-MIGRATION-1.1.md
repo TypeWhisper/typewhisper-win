@@ -75,4 +75,4 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Voxtral | Separate v2 port pending |
 | Webhook | Separate v2 port pending |
 | WhisperCpp | Separate v2 port pending |
-| Xai | Separate v2 port pending |
+| Xai | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Xai`; 17 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
