@@ -44,7 +44,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
 
     private static readonly IReadOnlyList<PluginModelInfo> Models =
     [
-        new(DefaultModelId, "Soniox Async")
+        new(DefaultModelId, "Soniox")
         {
             IsRecommended = true
         },
@@ -117,7 +117,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.3.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.

@@ -28,8 +28,8 @@ public class SonioxPluginTests
         var manifest = LoadManifest();
         var sut = new SonioxPlugin();
 
-        Assert.Equal("1.2.0", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.2.0", sut.PluginVersion);
+        Assert.Equal("1.3.0", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.3.0", sut.PluginVersion);
     }
 
     [Fact]
