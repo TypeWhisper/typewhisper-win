@@ -36,9 +36,10 @@ public sealed partial class CloudflareAsrPlugin
             throw new PluginRequestException("Account ID and API token required.", PluginRequestFailureKind.Configuration);
         try { ValidateValue("accountId", Connection.Get("accountId")); }
         catch (ArgumentException) { throw new PluginRequestException("A valid Cloudflare account ID is required.", PluginRequestFailureKind.Configuration); }
-        using var request = Connection.Request(HttpMethod.Get,"https://api.cloudflare.com/client/v4/user/tokens/verify");
+        using var request = Connection.Request(HttpMethod.Get,$"https://api.cloudflare.com/client/v4/accounts/{Connection.Get("accountId")}/ai/models/search?per_page=1");
         using var result = await Connection.ReadAsync(request,ct);
-        if(ProviderConnection.Text(ProviderConnection.Required(result.RootElement,"result",JsonValueKind.Object),"status") != "active") throw ProviderConnection.InvalidResponse();
+        _ = ProviderConnection.Required(result.RootElement, "success", JsonValueKind.True);
+        _ = ProviderConnection.Required(result.RootElement, "result", JsonValueKind.Array);
     }
 
 }
