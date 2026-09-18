@@ -2,7 +2,7 @@
 
 Authenticated CLI providers with process isolation, discovery, status refresh and portable provider/path settings.
 
-Version `1.2.1`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
+Version `1.2.2`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
 Independent branch: `seofood/authenticatedcli-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -15,7 +15,7 @@ This package uses host-rendered portable settings and an independent WinUI data 
 
 Protocol/runtime sources and applicable fixtures were snapshotted from `plugins/TypeWhisper.Plugin.AuthenticatedCli` at `4db8f6ac`, then adapted under `plugins-v2`. The package does not reference the legacy provider DLL or compile WPF settings views. Legacy sources, catalogs and published packages remain unchanged.
 
-The macOS repository was compared at `ac00e39ea63e4789de8427d034d2085b3d898159`; it was not modified. The Windows provider discovers Codex models through the installed CLI app-server model/list protocol, offers documented Claude model aliases, and retains the verified free OpenCode Zen model list. Per-provider model settings are passed explicitly to the CLI, with workflow model overrides taking precedence. Antigravity is unavailable without a supported structured-output contract.
+The macOS repository was compared during migration; it was not modified. The Windows provider discovers Codex models through the installed CLI app-server model/list protocol, offers documented Claude model aliases, and retains the verified free OpenCode Zen model list. Per-provider model settings are passed explicitly to the CLI, with workflow model overrides taking precedence. Antigravity is unavailable without a supported structured-output contract.
 
 ## Build and verification
 

@@ -77,7 +77,7 @@ public sealed partial class AuthenticatedCliPlugin :
     public string PluginName => "Authenticated Provider CLIs";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.1";
+    public string PluginVersion => "1.2.2";
 
     /// <inheritdoc />
     public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders => _roles;
@@ -163,6 +163,19 @@ public sealed partial class AuthenticatedCliPlugin :
             "Provider.Antigravity" => "Antigravity CLI",
             "Provider.OpenCode" => "OpenCode Zen",
             "Model.Default" => "Provider default",
+            "State.Checking" => "Checking…",
+            "State.MissingExecutable" => "Not installed",
+            "State.SelectedExecutableMissing" => "Selected installation unavailable",
+            "State.AmbiguousExecutable" => "Multiple installations found; select one",
+            "State.UnsupportedExecutableType" => "Native executable required",
+            "State.UnsupportedVersion" => "Unsupported CLI version",
+            "State.SignedOut" => "Installed, but not signed in",
+            "State.AuthenticationUnknown" => "Login status unknown",
+            "State.SafetyControlsUnavailable" => "Required isolation unavailable",
+            "State.ModelCatalogUnavailable" => "Model catalog unavailable",
+            "State.NoFreeModels" => "No free Zen models available",
+            "State.Ready" => "Ready",
+            "State.Error" => "Status check failed",
             _ => key
         };
     }
