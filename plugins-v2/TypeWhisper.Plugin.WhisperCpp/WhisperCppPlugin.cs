@@ -35,22 +35,24 @@ public sealed partial class WhisperCppPlugin :
     private const string RocmHookMissingDetail =
         "Set TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH to a custom ROCm whisper.dll path and restart TypeWhisper.";
 
+    // Exact artifact sizes from whisper.net v3, revision a28c1f379c0359332f8d101184249cba28b1ff53.
+    // https://huggingface.co/sandrohanea/whisper.net/tree/a28c1f379c0359332f8d101184249cba28b1ff53
     private static readonly IReadOnlyList<ModelDefinition> Models =
     [
-        new("tiny", "Tiny", GgmlType.Tiny, QuantizationType.NoQuantization, "ggml-tiny.bin", "~75 MB", 75, 99, false),
-        new("tiny.en", "Tiny (English)", GgmlType.TinyEn, QuantizationType.NoQuantization, "ggml-tiny.en.bin", "~75 MB", 75, 1, false),
-        new("tiny-q5_0", "Tiny (Q5_0)", GgmlType.Tiny, QuantizationType.Q5_0, "ggml-tiny-q5_0.bin", "~31 MB", 31, 99, false),
-        new("base", "Base", GgmlType.Base, QuantizationType.NoQuantization, "ggml-base.bin", "~142 MB", 142, 99, true),
-        new("base.en", "Base (English)", GgmlType.BaseEn, QuantizationType.NoQuantization, "ggml-base.en.bin", "~142 MB", 142, 1, false),
-        new("base-q5_0", "Base (Q5_0)", GgmlType.Base, QuantizationType.Q5_0, "ggml-base-q5_0.bin", "~57 MB", 57, 99, true),
-        new("small", "Small", GgmlType.Small, QuantizationType.NoQuantization, "ggml-small.bin", "~466 MB", 466, 99, false),
-        new("small.en", "Small (English)", GgmlType.SmallEn, QuantizationType.NoQuantization, "ggml-small.en.bin", "~466 MB", 466, 1, false),
-        new("small-q5_0", "Small (Q5_0)", GgmlType.Small, QuantizationType.Q5_0, "ggml-small-q5_0.bin", "~182 MB", 182, 99, false),
-        new("medium", "Medium", GgmlType.Medium, QuantizationType.NoQuantization, "ggml-medium.bin", "~1.5 GB", 1530, 99, false),
-        new("medium.en", "Medium (English)", GgmlType.MediumEn, QuantizationType.NoQuantization, "ggml-medium.en.bin", "~1.5 GB", 1530, 1, false),
-        new("medium-q5_0", "Medium (Q5_0)", GgmlType.Medium, QuantizationType.Q5_0, "ggml-medium-q5_0.bin", "~601 MB", 601, 99, false),
-        new("large-v3-turbo", "Large V3 Turbo", GgmlType.LargeV3Turbo, QuantizationType.NoQuantization, "ggml-large-v3-turbo.bin", "~1.6 GB", 1620, 99, false),
-        new("large-v3-turbo-q5_0", "Large V3 Turbo (Q5_0)", GgmlType.LargeV3Turbo, QuantizationType.Q5_0, "ggml-large-v3-turbo-q5_0.bin", "~684 MB", 684, 99, false),
+        new("tiny", "Tiny", GgmlType.Tiny, QuantizationType.NoQuantization, "ggml-tiny.bin", "~75 MB", 75, 99, false, 77691713),
+        new("tiny.en", "Tiny (English)", GgmlType.TinyEn, QuantizationType.NoQuantization, "ggml-tiny.en.bin", "~75 MB", 75, 1, false, 77704715),
+        new("tiny-q5_0", "Tiny (Q5_0)", GgmlType.Tiny, QuantizationType.Q5_0, "ggml-tiny-q5_0.bin", "~31 MB", 31, 99, false, 29875721),
+        new("base", "Base", GgmlType.Base, QuantizationType.NoQuantization, "ggml-base.bin", "~142 MB", 142, 99, true, 147951465),
+        new("base.en", "Base (English)", GgmlType.BaseEn, QuantizationType.NoQuantization, "ggml-base.en.bin", "~142 MB", 142, 1, false, 147964211),
+        new("base-q5_0", "Base (Q5_0)", GgmlType.Base, QuantizationType.Q5_0, "ggml-base-q5_0.bin", "~57 MB", 57, 99, true, 55295433),
+        new("small", "Small", GgmlType.Small, QuantizationType.NoQuantization, "ggml-small.bin", "~466 MB", 466, 99, false, 487601967),
+        new("small.en", "Small (English)", GgmlType.SmallEn, QuantizationType.NoQuantization, "ggml-small.en.bin", "~466 MB", 466, 1, false, 487614201),
+        new("small-q5_0", "Small (Q5_0)", GgmlType.Small, QuantizationType.Q5_0, "ggml-small-q5_0.bin", "~182 MB", 182, 99, false, 175209663),
+        new("medium", "Medium", GgmlType.Medium, QuantizationType.NoQuantization, "ggml-medium.bin", "~1.5 GB", 1530, 99, false, 1533763059),
+        new("medium.en", "Medium (English)", GgmlType.MediumEn, QuantizationType.NoQuantization, "ggml-medium.en.bin", "~1.5 GB", 1530, 1, false, 1533774781),
+        new("medium-q5_0", "Medium (Q5_0)", GgmlType.Medium, QuantizationType.Q5_0, "ggml-medium-q5_0.bin", "~601 MB", 601, 99, false, 539212467),
+        new("large-v3-turbo", "Large V3 Turbo", GgmlType.LargeV3Turbo, QuantizationType.NoQuantization, "ggml-large-v3-turbo.bin", "~1.6 GB", 1620, 99, false, 1624555275),
+        new("large-v3-turbo-q5_0", "Large V3 Turbo (Q5_0)", GgmlType.LargeV3Turbo, QuantizationType.Q5_0, "ggml-large-v3-turbo-q5_0.bin", "~684 MB", 684, 99, false, 574041195),
     ];
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -98,7 +100,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.11";
+    public string PluginVersion => "1.2.12";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -222,6 +224,12 @@ public sealed partial class WhisperCppPlugin :
             return;
         }
 
+        if (_factory is not null && !_runtimeRestartRequired)
+        {
+            _accelerationStatus = CreateLoadedAccelerationStatus(RuntimeOptions.LoadedLibrary, preference);
+            return;
+        }
+
         _accelerationStatus = _runtimeRestartRequired
             ? CreateRuntimeRestartStatus(preference)
             : CreatePendingAccelerationStatus(
@@ -243,7 +251,16 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets whether the requested model is available locally.
     /// </summary>
-    public bool IsModelDownloaded(string modelId) => File.Exists(GetModelPath(modelId));
+    public bool IsModelDownloaded(string modelId)
+    {
+        var model = GetModel(modelId);
+        try
+        {
+            var file = new FileInfo(GetModelPath(modelId));
+            return file.Exists && file.Length == model.ExpectedSizeBytes;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
 
     /// <summary>
     /// Downloads the requested model and reports progress when available.
@@ -259,7 +276,7 @@ public sealed partial class WhisperCppPlugin :
             Directory.CreateDirectory(modelDirectory);
             RemoveOrphanedModelDownloads(modelPath);
 
-            if (File.Exists(modelPath))
+            if (IsModelDownloaded(modelId))
             {
                 progress?.Report(1.0);
                 return;
@@ -273,7 +290,7 @@ public sealed partial class WhisperCppPlugin :
 
                 var buffer = new byte[81920];
                 long bytesCopied = 0;
-                var totalBytes = modelStream.CanSeek ? modelStream.Length : model.EstimatedSizeMB * 1_000_000;
+                var totalBytes = model.ExpectedSizeBytes;
 
                 await using (var fileStream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
                 {
@@ -294,11 +311,8 @@ public sealed partial class WhisperCppPlugin :
                 }
 
                 ct.ThrowIfCancellationRequested();
-                ValidateModelDownload(bytesCopied, model.EstimatedSizeMB, modelStream.CanSeek ? modelStream.Length : null);
-                if (File.Exists(modelPath))
-                    File.Delete(modelPath);
-
-                File.Move(tempPath, modelPath);
+                ValidateModelDownload(bytesCopied, model.ExpectedSizeBytes);
+                File.Move(tempPath, modelPath, overwrite: true);
                 progress?.Report(1.0);
             }
             catch
@@ -313,13 +327,10 @@ public sealed partial class WhisperCppPlugin :
         }
     }
 
-    internal static void ValidateModelDownload(long bytesCopied, double estimatedSizeMB, long? expectedLength)
+    internal static void ValidateModelDownload(long bytesCopied, long expectedSizeBytes)
     {
-        // Catalog sizes are rounded estimates; reject clearly truncated responses
-        // without treating those estimates as exact artifact lengths.
-        if (bytesCopied < estimatedSizeMB * 1_000_000 * 0.8
-            || (expectedLength is { } length && bytesCopied != length))
-            throw new InvalidDataException("The model download is incomplete. Please retry the download.");
+        if (bytesCopied != expectedSizeBytes)
+            throw new InvalidDataException("The model download does not match the expected artifact size. Please retry the download.");
     }
 
     /// <summary>
@@ -370,6 +381,8 @@ public sealed partial class WhisperCppPlugin :
         var modelPath = GetModelPath(modelId);
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"Model files not found for: {modelId}", modelPath);
+        if (!IsModelDownloaded(modelId))
+            throw new InvalidDataException("The model file is incomplete. Please download the model again.");
         if (_accelerationStatus.RequiresRestart)
             throw new InvalidOperationException(_accelerationStatus.Detail);
 
@@ -1107,5 +1120,6 @@ public sealed partial class WhisperCppPlugin :
         string SizeDescription,
         long EstimatedSizeMB,
         int LanguageCount,
-        bool IsRecommended);
+        bool IsRecommended,
+        long ExpectedSizeBytes);
 }

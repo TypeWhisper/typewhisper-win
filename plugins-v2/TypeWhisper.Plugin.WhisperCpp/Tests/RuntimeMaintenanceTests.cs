@@ -1,3 +1,4 @@
+using Whisper.net.LibraryLoader;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using TypeWhisper.Plugin.WhisperCpp;
@@ -8,6 +9,29 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public partial class WhisperCppPluginTests
 {
+    [Theory]
+    [InlineData(RuntimeLibrary.Cuda, TranscriptionAccelerationBackend.NvidiaCuda)]
+    [InlineData(RuntimeLibrary.Vulkan, TranscriptionAccelerationBackend.AmdVulkan)]
+    public void CompatiblePreferenceChangeKeepsLoadedBackendStatus(RuntimeLibrary library, TranscriptionAccelerationBackend backend)
+    {
+        var previous = RuntimeOptions.LoadedLibrary;
+        try
+        {
+            RuntimeOptions.LoadedLibrary = library;
+            using var plugin = new WhisperCppPlugin { ReleaseFactory = _ => { } };
+            SetPrivateField(plugin, "_factory", (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory)));
+            plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+            Assert.Equal(backend, plugin.AccelerationStatus.ActiveBackend);
+            Assert.Equal(backend, plugin.AccelerationDiagnostics.ActiveBackend);
+            Assert.False(plugin.AccelerationStatus.RequiresRestart);
+            plugin.SetAccelerationPreference(library == RuntimeLibrary.Cuda
+                ? TranscriptionAccelerationPreference.NvidiaCuda : TranscriptionAccelerationPreference.AmdVulkan);
+            Assert.Equal(backend, plugin.AccelerationStatus.ActiveBackend);
+            Assert.False(plugin.AccelerationStatus.RequiresRestart);
+        }
+        finally { RuntimeOptions.LoadedLibrary = previous; }
+    }
+
     [Fact]
     public async Task ApplyingCudaPreferenceDoesNotHashRuntimeFiles()
     {
@@ -30,18 +54,18 @@ public partial class WhisperCppPluginTests
     }
 
     [Theory]
-    [InlineData(0, 75, null)]
-    [InlineData(500000, 75, null)]
-    [InlineData(74000000L, 75, 75000000L)]
-    public void ImplausibleOrIncompleteModelDownloadIsRejected(long bytes, double estimate, long? expected)
+    [InlineData(0, 77691713)]
+    [InlineData(60000000, 77691713)]
+    [InlineData(77691712, 77691713)]
+    public void IncompleteModelDownloadIsRejected(long bytes, long expected)
     {
-        Assert.Throws<InvalidDataException>(() => WhisperCppPlugin.ValidateModelDownload(bytes, estimate, expected));
+        Assert.Throws<InvalidDataException>(() => WhisperCppPlugin.ValidateModelDownload(bytes, expected));
     }
 
     [Fact]
-    public void RoundedModelSizeEstimatesDoNotRequireExactLengths()
+    public void TrustedModelSizeMustMatchExactly()
     {
-        WhisperCppPlugin.ValidateModelDownload(74000000, 75, null);
+        WhisperCppPlugin.ValidateModelDownload(77691713, 77691713);
     }
 
     [Fact]
@@ -137,7 +161,7 @@ public partial class WhisperCppPluginTests
         };
         await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
         plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
-        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); File.WriteAllText(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "weights");
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
         var before = installer.IntegrityReadCount;
         await plugin.LoadModelAsync("tiny", default);
         Assert.Equal(before + 1, installer.IntegrityReadCount);

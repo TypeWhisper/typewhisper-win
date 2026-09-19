@@ -36,7 +36,7 @@ public partial class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.11", manifest.Version);
+        Assert.Equal("1.2.12", manifest.Version);
         Assert.Equal("1.1.2", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
@@ -204,7 +204,7 @@ public partial class WhisperCppPluginTests
             await sut.ActivateAsync(host);
 
             Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
-            await File.WriteAllTextAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "not a real model");
+            CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
 
             var factory = (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory));
             SetPrivateField(sut, "_factory", factory);
@@ -434,7 +434,7 @@ public partial class WhisperCppPluginTests
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
 
         Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
-        await File.WriteAllTextAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "not a real model");
+        CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
 
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
         {
@@ -490,7 +490,7 @@ public partial class WhisperCppPluginTests
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
 
         Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
-        await File.WriteAllTextAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "not a real model");
+        CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => sut.LoadModelAsync("tiny", CancellationToken.None));

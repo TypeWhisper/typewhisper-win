@@ -21,7 +21,7 @@ public partial class WhisperCppPluginTests
         Assert.False(plugin.IsConfigured);
         Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
         var modelPath = Path.Join(temp.Path, "Models", "ggml-tiny.bin");
-        await File.WriteAllBytesAsync(modelPath, [1]);
+        CreateModelFixture(modelPath);
         Assert.True(plugin.IsConfigured);
         File.Delete(modelPath);
         Assert.False(plugin.IsConfigured);
@@ -60,7 +60,7 @@ public partial class WhisperCppPluginTests
         await plugin.ActivateAsync(host);
         plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
         Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
-        await File.WriteAllBytesAsync(Path.Join(temp.Path, "Models", "ggml-base.bin"), [1]);
+        CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-base.bin"));
         // A load must never persist the new selection; the host commits it after cancellation checks.
         host.FailSetting = true;
         if (cancel)
@@ -116,7 +116,7 @@ public partial class WhisperCppPluginTests
         using var plugin = new WhisperCppPlugin();
         await plugin.ActivateAsync(host);
         Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
-        await File.WriteAllBytesAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), [1]);
+        CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
         plugin.SelectModel("tiny");
         await plugin.UnloadModelAsync();
         Assert.Equal("tiny", plugin.SelectedModelId);

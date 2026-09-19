@@ -4,13 +4,37 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public partial class WhisperCppPluginTests
 {
+    private static void CreateModelFixture(string path)
+    {
+        using var file = File.Create(path);
+        file.SetLength(Path.GetFileName(path).StartsWith("ggml-base", StringComparison.Ordinal) ? 147_951_465 : 77_691_713);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1000)]
+    public async Task InvalidExistingModelCanBeDownloadedAgain(int invalidSize)
+    {
+        using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        var directory = Path.Join(temp.Path, "Models"); Directory.CreateDirectory(directory);
+        var path = Path.Join(directory, "ggml-tiny-q5_0.bin"); File.WriteAllBytes(path, new byte[invalidSize]);
+        plugin.SelectModel("tiny-q5_0");
+        Assert.False(plugin.IsModelDownloaded("tiny-q5_0")); Assert.False(plugin.IsConfigured);
+        await Assert.ThrowsAsync<InvalidDataException>(() => plugin.LoadModelAsync("tiny-q5_0", default));
+        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[29_875_721]));
+        await plugin.DownloadModelAsync("tiny-q5_0", null, default);
+        Assert.True(plugin.IsModelDownloaded("tiny-q5_0")); Assert.True(plugin.IsConfigured);
+        Assert.Equal(29_875_721, new FileInfo(path).Length);
+    }
+
     [Fact]
     public async Task FailedDeselectionKeepsSelectedWeights()
     {
         using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
         var host = new FakePluginHostServices(temp.Path); await plugin.ActivateAsync(host);
         var directory = Path.Join(temp.Path, "Models"); Directory.CreateDirectory(directory);
-        var model = Path.Join(directory, "ggml-tiny.bin"); File.WriteAllText(model, "weights");
+        var model = Path.Join(directory, "ggml-tiny.bin"); CreateModelFixture(model);
         plugin.SelectModel("tiny"); host.FailSetting = true;
         await Assert.ThrowsAsync<IOException>(() => plugin.RemoveModelAsync("tiny", default));
         Assert.True(File.Exists(model)); Assert.Equal("tiny", plugin.SelectedModelId);
@@ -23,7 +47,7 @@ public partial class WhisperCppPluginTests
     {
         using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
         await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
-        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[31_000_000]));
+        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[29_875_721]));
         var progress = new CapturedProgress();
         await plugin.DownloadModelAsync("tiny-q5_0", progress, default);
         Assert.Contains(progress.Values, p => p > 0 && p < 1);
