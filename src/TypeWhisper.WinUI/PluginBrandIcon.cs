@@ -50,6 +50,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.openai" => "openai",
             "com.typewhisper.openrouter" => "openrouter",
             "com.typewhisper.soniox" => "soniox",
+            "com.typewhisper.speechmatics" => "speechmatics",
             _ => null
         };
         if (brand is null) { ShowFallback(); return; }
@@ -60,6 +61,7 @@ public sealed class PluginBrandIcon : UserControl
             "openai" => light ? "openai-light" : "openai-dark",
             "github-copilot" => light ? "github-copilot-light" : "github-copilot-dark",
             "openrouter" => light ? "openrouter-light" : "openrouter-dark",
+            "speechmatics" => light ? "speechmatics-light" : "speechmatics-dark",
             "elevenlabs" when light => "elevenlabs-light",
             _ => brand
         };

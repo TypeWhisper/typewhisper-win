@@ -12,7 +12,7 @@ public sealed partial class SpeechmaticsPlugin
 {
 
     internal Func<TimeSpan,CancellationToken,Task> Delay { get; set; } = Task.Delay;
-    private string Server => Connection.Get("region","eu")=="us" ? "https://us1.asr.api.speechmatics.com/v2" : "https://asr.api.speechmatics.com/v2";
+    private string Server => Connection.Get("region","eu")=="us" ? "https://us1.asr.api.speechmatics.com/v2" : "https://eu1.asr.api.speechmatics.com/v2";
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
@@ -22,13 +22,14 @@ public sealed partial class SpeechmaticsPlugin
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [
         Field("model","Accuracy","Genauigkeit","enhanced",PluginSettingsSection.Transcription,new("enhanced","Enhanced"),new("standard","Standard")),
-        Field("region","Region","Region","eu",PluginSettingsSection.Connection,new("eu","Europe"),new("us","United States"))
+        Field("region","Region","Region","eu",PluginSettingsSection.Connection,new("eu",Connection.L("Europe", "Europa")),new("us",Connection.L("United States", "USA"))),
+        Field("liveLanguage","Live transcription language","Sprache für Live-Transkription","en",PluginSettingsSection.Transcription,LanguageChoices()) with { Description = Connection.L("Used when Spoken language is Automatic. Live transcription requires a fixed language.", "Wird bei automatischer Sprachauswahl verwendet. Live-Transkription benötigt eine feste Sprache.") }
     ];
     /// <inheritdoc />
     public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio,string? language,bool translate,string? prompt,CancellationToken ct)
     {
         ProviderConnection.Audio(wavAudio,translate,false,ct); var key=Connection.RequireKey(); var server=Server;
-        var config=new Dictionary<string,object>{["language"]=ProviderConnection.Language(language) ?? "auto",["operating_point"]=SelectedModelId!};
+        var config=new Dictionary<string,object>{["language"]=ProviderConnection.Language(language) ?? "auto",["model"]=SelectedModelId!};
         var terms=ProviderConnection.Terms(prompt); if(terms.Length>0) config["additional_vocab"]=terms.Select(content=>new { content }).ToArray();
         using var submit=Connection.Request(HttpMethod.Post,server+"/jobs",key);
         using var form=new MultipartFormDataContent(); var audio=new ByteArrayContent(wavAudio); audio.Headers.ContentType=new("audio/wav"); form.Add(audio,"data_file","audio.wav");

@@ -1,10 +1,10 @@
 {
   "id": "com.typewhisper.speechmatics",
   "name": "Speechmatics",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
-  "description": "Ports standard/enhanced accuracy, regional batch endpoints and dictionary vocabulary from Mac.",
+  "description": "Speechmatics batch and live transcription with regional processing, spoken languages and custom vocabulary.",
   "categories": [
     "transcription"
   ],
@@ -12,6 +12,6 @@
   "assemblyName": "TypeWhisper.Plugin.Speechmatics.dll",
   "pluginClass": "TypeWhisper.Plugin.Speechmatics.SpeechmaticsPlugin",
   "descriptions": {
-    "de": "Speechmatics-Integration mit portablen Einstellungen."
+    "de": "Speechmatics für normale und Live-Transkription mit regionaler Verarbeitung, Sprachauswahl und Wörterbuch."
   }
 }

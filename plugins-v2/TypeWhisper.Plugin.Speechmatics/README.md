@@ -1,14 +1,20 @@
 # Speechmatics for the portable host
 
-Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.1.0`, requiring host `1.1.2`. Implemented on its own `seofood/speechmatics-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.0`, requiring host `1.1.2`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
 
-## Behavior and macOS comparison
+## Behavior
 
-Ports standard/enhanced accuracy, regional batch endpoints and dictionary vocabulary from Mac. Uses asynchronous jobs with bounded status polling, cancellation, transcript parsing and punctuation handling.
+Enhanced and Standard support uploaded recordings and live PCM16 mono 16 kHz transcription. Batch jobs use bounded polling and cancellation. Live WebSocket sessions replace provisional text, accumulate confirmed fragments, and wait for `EndOfTranscript` after sending the exact audio sequence count. Disconnects, malformed responses and unfinished previews fail instead of reporting partial success. Dictionary terms are sent in both modes.
 
-The corresponding Mac sources were inspected at `ac00e39e` in `TypeWhisperPluginSDK/Plugins/`. Mac realtime WebSocket streaming is not included. The package advertises batch transcription only; recordings/jobs follow provider retention.
+Europe is the default: batch uses `eu1.asr.api.speechmatics.com`, live uses `eu.rt.speechmatics.com`. The explicit US option selects `us1.asr.api.speechmatics.com` and `us.rt.speechmatics.com`. Requests stay in the selected region; there is no automatic regional failover. Redirects are disabled.
 
-Setup: **Speechmatics API key; EU or US region**. Settings are rendered by the host in English/German. API keys use the host secret store, with a staged encrypted-key reference and one configuration commit. Failed writes keep the active configuration. Removing a key retains nonsecret preferences. No legacy credentials or settings are imported. Redirects are disabled and provider HTTP failures retain status/retry metadata. Opening the settings page sends no network request.
+Spoken languages are exposed to the host. Automatic language identification is available for batch recordings. Live transcription requires a fixed language: an explicit host language takes precedence; otherwise the saved **Live transcription language** is used (English initially). This fallback is explained in the settings. Unsupported live languages fail before connecting.
+
+The shared host Save button persists the API key and edited fields. Keys use the Windows encrypted secret store through a staged reference; failed saves preserve the active configuration. Settings pages make no network request merely by opening. Credentials and preferences are retained across package upgrades. Light/dark provider logos appear in navigation and provider selection.
+
+## macOS comparison
+
+Compared with `TypeWhisperPluginSDK/Plugins/SpeechmaticsPlugin`: regional processing, Standard/Enhanced selection and custom vocabulary are preserved. Windows uses the host's live-capture session contract and an explicit fallback-language setting; the macOS implementation falls back to batch for automatic language identification. The Windows dictionary budget remains 100 terms / 4,000 characters. macOS sources are not modified.
 
 ## Verification
 
@@ -17,10 +23,10 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Speechmatics/Tests/TypeWhisper.Plugin.
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.Speechmatics/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **20 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+All **39 tests passed**, covering HTTP protocols/errors, cancellation, encrypted-key persistence and failed saves, standalone immutable package lifecycle, regional WebSockets, explicit/fallback languages, vocabulary, fragmented/revised transcripts, punctuation boundaries, binary audio ordering, exact stop sequence counts, completion timeouts and real host accumulation.
 
-On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
+Authenticated tests on September 19, 2026 passed against Europe: connection validation, Enhanced batch transcription and paced live audio through the actual portable host. Live previews appeared during capture (first preview about 0.7 seconds), and the complete final sentence arrived after stopping without batch fallback. The 1.2.0 immutable ZIP was installed in the development profile with credentials and unrelated package receipts preserved. The development WinUI build and launch succeeded.
 
-Authenticated provider requests, microphone/workflow execution, native visual inspection, version-upgrade acceptance and ARM64 execution remain pending. Marco will enter credentials and perform live acceptance later. No public package or catalog was published.
+Native UI verification passed: provider logos, Europe, Enhanced, German, live text enabled and the shared Save button. The installed immutable package also passed paced live transcription through the real host. Screenshots are in `docs/screenshots/speechmatics/`. Marco confirmed successful live microphone transcription in the development app on September 19, 2026, with Europe and German selected. US endpoint access and ARM64 execution are not live-tested. No public package/catalog release or PR push has been performed.
 
-Reference: [provider documentation](https://docs.speechmatics.com/).
+References: [regions and authentication](https://docs.speechmatics.com/get-started/authentication), [realtime protocol](https://docs.speechmatics.com/api-ref/realtime-transcription-websocket), [supported languages](https://docs.speechmatics.com/speech-to-text/languages).
