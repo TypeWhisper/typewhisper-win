@@ -104,7 +104,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.16";
+    public string PluginVersion => "1.2.17";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -688,6 +688,13 @@ public sealed partial class WhisperCppPlugin :
         try
         {
             await installer.EnsureInstalledAsync(cancellationToken);
+            _cudaRuntimeRestartRequired = true;
+            // AppDomain data survives collectible plugin instances but ends with the app process.
+            // Store only a BCL value so the gate cannot retain a plugin load context.
+            AppDomain.CurrentDomain.SetData(CudaRestartGateKey(installer.RuntimeDirectory), true);
+            _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+            _host?.NotifyCapabilitiesChanged();
+
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -707,12 +714,6 @@ public sealed partial class WhisperCppPlugin :
             PluginLogLevel.Info,
             $"Installed NVIDIA CUDA runtime for whisper.cpp at {installer.RuntimeDirectory}.");
 
-        _cudaRuntimeRestartRequired = true;
-        // AppDomain data survives collectible plugin instances but ends with the app process.
-        // Store only a BCL value so the gate cannot retain a plugin load context.
-        AppDomain.CurrentDomain.SetData(CudaRestartGateKey(installer.RuntimeDirectory), true);
-        _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
-        _host?.NotifyCapabilitiesChanged();
         throw new InvalidOperationException(_accelerationStatus.Detail);
     }
 

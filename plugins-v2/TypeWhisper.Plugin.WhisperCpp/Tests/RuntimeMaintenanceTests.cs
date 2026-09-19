@@ -10,6 +10,23 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class WhisperCppPluginTests
 {
     [Fact]
+    public async Task CancellationAfterCudaInstallationDoesNotLoseTheProcessRestartGate()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); using var cancellation = new CancellationTokenSource();
+        var host = new FakePluginHostServices(temp.Path); host.SetSetting("acceleration", "NvidiaCuda");
+        var installer = new FakeCudaRuntimeInstaller(temp.Path) { OnInstalled = cancellation.Cancel };
+        using var plugin = new WhisperCppPlugin(installer); await plugin.ActivateAsync(host);
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.LoadModelAsync("tiny", cancellation.Token));
+        Assert.True(plugin.AccelerationStatus.RequiresRestart);
+        using var reloaded = new WhisperCppPlugin(new FakeCudaRuntimeInstaller(temp.Path) { IsInstalledOverride = true });
+        await reloaded.ActivateAsync(host);
+        Assert.True(reloaded.AccelerationStatus.RequiresRestart);
+        Assert.Contains("Restart TypeWhisper", Assert.Single(reloaded.TextSettings).Description);
+    }
+
+    [Fact]
     public async Task CudaRestartGateSurvivesFreshPluginInstancesInTheSameProcess()
     {
         if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
