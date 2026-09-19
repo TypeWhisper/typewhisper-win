@@ -16,7 +16,8 @@ namespace TypeWhisper.Plugin.WhisperCpp;
 /// </summary>
 public sealed partial class WhisperCppPlugin :
     ITypeWhisperPlugin,
-    ITranscriptionEnginePlugin,
+    IPcmTranscriptionEnginePlugin,
+    IPluginTextSettings,
     ITranscriptionAccelerationDiagnosticsProvider
 {
     private const string CudaRuntimeDependencyHint =
@@ -88,11 +89,11 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin name.
     /// </summary>
-    public string PluginName => "whisper.cpp (Local)";
+    public string PluginName => L("Whisper (Local)", "Whisper (Lokal)");
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.4";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -101,7 +102,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the provider display name.
     /// </summary>
-    public string ProviderDisplayName => "Local (whisper.cpp)";
+    public string ProviderDisplayName => PluginName;
     /// <summary>
     /// Gets whether the provider has the configuration required to run.
     /// </summary>
@@ -126,7 +127,9 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the language codes accepted by the provider.
     /// </summary>
-    public IReadOnlyList<string> SupportedLanguages => [];
+    public IReadOnlyList<string> SupportedLanguages => _selectedModelId?.EndsWith(".en", StringComparison.Ordinal) == true ? ["en"] : WhisperLanguages;
+    /// <inheritdoc />
+    public bool SupportsLocalLivePreview => true;
     /// <summary>
     /// Gets the supported acceleration backends.
     /// </summary>
@@ -178,6 +181,7 @@ public sealed partial class WhisperCppPlugin :
         if (_pluginDirectory is not null)
             _cudaRuntimeInstaller ??= new WhisperCppCudaRuntimeInstaller(_pluginDirectory, _httpClient);
         _selectedModelId = host.GetSetting<string>("selectedModel");
+        if (Enum.TryParse<TranscriptionAccelerationPreference>(host.GetSetting<string>("acceleration"), out var preference) && Enum.IsDefined(preference)) SetAccelerationPreference(preference);
         host.Log(PluginLogLevel.Info, "Activated");
         return Task.CompletedTask;
     }
@@ -239,7 +243,7 @@ public sealed partial class WhisperCppPlugin :
     /// </summary>
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
-        await _gate.WaitAsync(ct);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var model = GetModel(modelId);
@@ -306,7 +310,7 @@ public sealed partial class WhisperCppPlugin :
     public async Task RemoveModelAsync(string modelId, CancellationToken ct)
     {
         var modelPath = GetModelPath(modelId);
-        await _gate.WaitAsync(ct);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (string.Equals(_loadedModelId, modelId, StringComparison.Ordinal))
@@ -336,64 +340,65 @@ public sealed partial class WhisperCppPlugin :
     /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken ct)
     {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try { await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false); }
+        finally { _gate.Release(); }
+    }
+
+    // Caller holds _gate, so preview and final decoding share one loaded model.
+    private async Task LoadModelCoreAsync(string modelId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (_factory is not null && _loadedModelId == modelId && !_accelerationStatus.RequiresRestart) return;
         var modelPath = GetModelPath(modelId);
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"Model files not found for: {modelId}", modelPath);
+        if (_accelerationStatus.RequiresRestart)
+            throw new InvalidOperationException(_accelerationStatus.Detail);
 
-        await _gate.WaitAsync(ct);
+        ApplyRuntimeConfiguration(_accelerationPreference);
+        await EnsureCudaRuntimeAvailableForLoadAsync(ct).ConfigureAwait(false);
+        EnsureRocmRuntimeAvailableForLoad();
+        DisposeFactoryUnsafe();
         try
         {
-            if (_accelerationStatus.RequiresRestart)
-                throw new InvalidOperationException(_accelerationStatus.Detail);
-
-            ApplyRuntimeConfiguration(_accelerationPreference);
-            await EnsureCudaRuntimeAvailableForLoadAsync(ct);
-            EnsureRocmRuntimeAvailableForLoad();
-            DisposeFactoryUnsafe();
-            try
-            {
-                _factory = WhisperFactory.FromPath(modelPath);
-            }
-            catch (Exception ex) when (IsNativeLoadFailure(ex))
-            {
-                _runtimePath = ResolveRuntimePathForDiagnostics(
-                    RuntimeOptions.LoadedLibrary,
-                    _accelerationPreference,
-                    useRequestedBackend: true);
-                _lastNativeError = GetRootCauseMessage(ex);
-                var loadException = CreateNativeLoadFailureException(ex);
-                _accelerationStatus = CreateNativeLoadFailureStatus(
-                    loadException,
-                    _accelerationPreference);
-                _host?.Log(
-                    PluginLogLevel.Error,
-                    BuildAccelerationDiagnosticMessage(AccelerationDiagnostics));
-                throw _accelerationPreference == TranscriptionAccelerationPreference.NvidiaCuda
-                    ? new InvalidOperationException(_accelerationStatus.Detail, loadException)
-                    : loadException;
-            }
-
-            var loadedLibrary = RuntimeOptions.LoadedLibrary;
-            _accelerationStatus = CreateLoadedAccelerationStatus(
-                loadedLibrary,
-                _accelerationPreference);
-            _customRocmRuntimeLoaded = _accelerationPreference == TranscriptionAccelerationPreference.AmdRocm;
-            _runtimePath = ResolveRuntimePathForDiagnostics(
-                loadedLibrary,
-                _accelerationPreference,
-                useRequestedBackend: false);
-            _lastNativeError = null;
-            _loadedModelId = modelId;
-            _selectedModelId = modelId;
-            _host?.SetSetting("selectedModel", modelId);
-            _host?.Log(
-                PluginLogLevel.Info,
-                $"Loaded model {modelId}. {BuildAccelerationDiagnosticMessage(AccelerationDiagnostics)}");
+            _factory = WhisperFactory.FromPath(modelPath);
         }
-        finally
+        catch (Exception ex) when (IsNativeLoadFailure(ex))
         {
-            _gate.Release();
+            _runtimePath = ResolveRuntimePathForDiagnostics(
+                RuntimeOptions.LoadedLibrary,
+                _accelerationPreference,
+                useRequestedBackend: true);
+            _lastNativeError = GetRootCauseMessage(ex);
+            var loadException = CreateNativeLoadFailureException(ex);
+            _accelerationStatus = CreateNativeLoadFailureStatus(
+                loadException,
+                _accelerationPreference);
+            _host?.Log(
+                PluginLogLevel.Error,
+                BuildAccelerationDiagnosticMessage(AccelerationDiagnostics));
+            throw _accelerationPreference == TranscriptionAccelerationPreference.NvidiaCuda
+                ? new InvalidOperationException(_accelerationStatus.Detail, loadException)
+                : loadException;
         }
+
+        var loadedLibrary = RuntimeOptions.LoadedLibrary;
+        _accelerationStatus = CreateLoadedAccelerationStatus(
+            loadedLibrary,
+            _accelerationPreference);
+        _customRocmRuntimeLoaded = _accelerationPreference == TranscriptionAccelerationPreference.AmdRocm;
+        _runtimePath = ResolveRuntimePathForDiagnostics(
+            loadedLibrary,
+            _accelerationPreference,
+            useRequestedBackend: false);
+        _lastNativeError = null;
+        _loadedModelId = modelId;
+        _selectedModelId = modelId;
+        _host?.SetSetting("selectedModel", modelId);
+        _host?.Log(
+            PluginLogLevel.Info,
+            $"Loaded model {modelId}. {BuildAccelerationDiagnosticMessage(AccelerationDiagnostics)}");
     }
 
     /// <summary>
@@ -406,13 +411,30 @@ public sealed partial class WhisperCppPlugin :
         string? prompt,
         CancellationToken ct)
     {
-        await _gate.WaitAsync(ct);
+        await using var audioStream = new MemoryStream(wavAudio, writable: false);
+        return await TranscribeCoreAsync(processor => processor.ProcessAsync(audioStream, ct), language, translate, prompt, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task<PluginTranscriptionResult> TranscribePcmAsync(ReadOnlyMemory<float> samples, string? language, bool translate, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var sample in samples.Span)
+            if (!float.IsFinite(sample)) throw new ArgumentException("Audio samples must be finite.", nameof(samples));
+        if (samples.IsEmpty) return Task.FromResult(new PluginTranscriptionResult("", language, 0, null));
+        return TranscribeCoreAsync(processor => processor.ProcessAsync(samples, cancellationToken), language, translate, null, cancellationToken);
+    }
+
+    private async Task<PluginTranscriptionResult> TranscribeCoreAsync(
+        Func<WhisperProcessor, IAsyncEnumerable<SegmentData>> process, string? language, bool translate, string? prompt, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (_factory is null || _loadedModelId is null)
-                throw new InvalidOperationException("No model loaded. Call LoadModelAsync first.");
+            var modelId = _selectedModelId ?? throw new InvalidOperationException("Select a downloaded model before transcribing.");
+            await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false);
 
-            var builder = _factory.CreateBuilder()
+            var builder = _factory!.CreateBuilder()
                 .WithLanguage(string.IsNullOrWhiteSpace(language) ? "auto" : language);
 
             if (!string.IsNullOrWhiteSpace(prompt))
@@ -422,14 +444,13 @@ public sealed partial class WhisperCppPlugin :
                 builder.WithTranslate();
 
             using var processor = builder.Build();
-            await using var audioStream = new MemoryStream(wavAudio, writable: false);
 
             var text = new StringBuilder();
             string? detectedLanguage = null;
             double durationSeconds = 0;
             float? noSpeechProbability = null;
 
-            await foreach (var segment in processor.ProcessAsync(audioStream, ct))
+            await foreach (var segment in process(processor).ConfigureAwait(false))
             {
                 var segmentText = segment.Text.Trim();
                 if (segmentText.Length > 0)

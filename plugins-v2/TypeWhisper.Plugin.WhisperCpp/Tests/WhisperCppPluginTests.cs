@@ -16,7 +16,7 @@ using Whisper.net.LibraryLoader;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
-public class WhisperCppPluginTests
+public partial class WhisperCppPluginTests
 {
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
@@ -36,7 +36,7 @@ public class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.0", manifest.Version);
+        Assert.Equal("1.2.4", manifest.Version);
         Assert.Equal("1.1.2", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
@@ -359,7 +359,7 @@ public class WhisperCppPluginTests
     {
         var diagnostics = new TranscriptionAccelerationDiagnostics(
             "whisper-cpp",
-            "Local (whisper.cpp)",
+            "Whisper (Local)",
             TranscriptionAccelerationPreference.AmdVulkan,
             TranscriptionAccelerationBackend.Cpu,
             @"C:\TypeWhisper\runtimes\vulkan\win-x64\whisper.dll",
@@ -379,7 +379,7 @@ public class WhisperCppPluginTests
     {
         var diagnostics = new TranscriptionAccelerationDiagnostics(
             "whisper-cpp",
-            "Local (whisper.cpp)",
+            "Whisper (Local)",
             TranscriptionAccelerationPreference.NvidiaCuda,
             TranscriptionAccelerationBackend.NvidiaCuda);
 
@@ -634,8 +634,8 @@ public class WhisperCppPluginTests
         public Task DeleteSecretAsync(string key) => Task.CompletedTask;
         public T? GetSetting<T>(string key) =>
             _settings.TryGetValue(key, out var value) ? value.Deserialize<T>() : default;
-        public void SetSetting<T>(string key, T value) =>
-            _settings[key] = JsonSerializer.SerializeToElement(value);
+        public bool FailSetting { get; set; }
+        public void SetSetting<T>(string key, T value) { if(FailSetting) throw new IOException("setting failure"); _settings[key] = JsonSerializer.SerializeToElement(value); }
         public void Log(PluginLogLevel level, string message) { }
         public void NotifyCapabilitiesChanged() { }
     }

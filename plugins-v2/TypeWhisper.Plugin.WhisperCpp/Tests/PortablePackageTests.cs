@@ -29,6 +29,7 @@ public sealed class PortablePackageTests
         using var fixture = new PortableFixture();
         var project = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..",".."));
         var manifest = PortablePluginPackage.ReadManifest(project);
+        Assert.True(manifest.IsLocal);
         var source = Path.Combine(project,"bin",new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,"portable-host","Plugins",manifest.Id);
         var archive = Path.Combine(fixture.Root,"package.zip");
         ZipFile.CreateFromDirectory(source,archive,CompressionLevel.Fastest,false);
@@ -44,6 +45,9 @@ public sealed class PortablePackageTests
             await runtime.InitializeAsync();
             Assert.Null(await runtime.SetEnabledAsync(entry.Id,true));
             Assert.True(Assert.Single(runtime.Snapshot()).Enabled);
+            var provider = Assert.Single(runtime.TranscriptionProviders);
+            Assert.True(provider.SupportsPcm);
+            Assert.True(provider.SupportsLocalLivePreview);
             await runtime.UseConfigurationAsync(entry.Id,async (plugin,ct) =>
             {
                 Assert.Equal(manifest.Version,plugin.PluginVersion);

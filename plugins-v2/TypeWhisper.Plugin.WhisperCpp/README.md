@@ -1,13 +1,13 @@
-# whisper.cpp (Local) portable plugin
+# Whisper (Local) portable plugin
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.0`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
+Version `1.2.4`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
 Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup
 
-Download a model explicitly, load it, and select the available acceleration backend. GPU capability and driver requirements must be checked on the target machine.
+Download a model explicitly, select the processing device and save the settings, then load the model. The shared Save button persists the processing-device choice. Model download, use and removal remain explicit actions. GPU capability and driver requirements must be checked on the target machine.
 
 This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
 
@@ -28,8 +28,8 @@ dotnet test plugins-v2/TypeWhisper.Plugin.WhisperCpp/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.whisper-cpp` inside the plugin project. Package that directory as the ZIP root.
 
-31 plugin tests pass. Model/runtime contracts, fake runtime download integrity and native package contents plus package lifecycle. No real model download, GPU execution or transcription was performed. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+39 plugin tests pass, covering model/runtime contracts, download integrity, native package contents, package lifecycle, processing-device persistence, language choices and PCM validation. Large V3 Turbo was downloaded and verified on an NVIDIA RTX 4060 Ti using CUDA. A synthetic English WAV and both partial and complete PCM buffers transcribed successfully. The saved model is loaded on the first WAV or PCM decode after activation, including after an app restart. Cold-start inference was verified without calling LoadModelAsync first. Local live preview uses repeated decoding of recording buffers; this is not a native streaming model. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
-The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+Marco confirmed German microphone dictation and local live preview on Large V3 Turbo after the restart-loading fix. The installed package and UI screenshots are version 1.2.4, with the Whisper (Local) name and chip icon. CPU, Vulkan, custom ROCm and ARM64 inference remain unverified. Public catalog publication and production-profile migration are pending.
