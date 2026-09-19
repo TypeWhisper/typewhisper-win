@@ -10,16 +10,19 @@ public sealed partial class VoxtralPlugin
     public bool SupportsStreaming => IsRealtime;
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => IsRealtime;
-    internal Func<string, string, CancellationToken, Task<IStreamingSession>> ConnectStreaming { get; set; } = MistralStreamingSession.ConnectAsync;
+    internal Func<string, string, TimeSpan, CancellationToken, Task<IStreamingSession>> ConnectStreaming { get; set; } = MistralStreamingSession.ConnectAsync;
 
     /// <inheritdoc />
-    public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
+    public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
+        StartStreamingCoreAsync(TimeSpan.FromSeconds(15), ct);
+
+    private async Task<IStreamingSession> StartStreamingCoreAsync(TimeSpan completionTimeout, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         if (!IsRealtime) throw new NotSupportedException("Select a Voxtral Realtime model for live transcription.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        try { return await ConnectStreaming(Connection.RequireKey(), SelectedModelId!, timeout.Token).ConfigureAwait(false); }
+        try { return await ConnectStreaming(Connection.RequireKey(), SelectedModelId!, completionTimeout, timeout.Token).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new PluginRequestException("Mistral live connection timed out.", PluginRequestFailureKind.Timeout); }
     }
@@ -27,12 +30,15 @@ public sealed partial class VoxtralPlugin
     private async Task<PluginTranscriptionResult> TranscribeRealtimeAsync(byte[] wavAudio, CancellationToken ct)
     {
         var pcm = ExtractPcm(wavAudio);
-        await using var session = await StartStreamingAsync(null, ct).ConfigureAwait(false);
+        // A complete recording is uploaded faster than realtime. Allow its duration plus
+        // the usual live tail budget; the host's live deadline does not wrap this fallback.
+        var duration = pcm.Length / 32000d;
+        await using var session = await StartStreamingCoreAsync(TimeSpan.FromSeconds(duration + 15), ct).ConfigureAwait(false);
         string? text = null, language = null;
         session.TranscriptReceived += update => { if (update.IsFinal) { text = update.Text; language = update.DetectedLanguage; } };
         await session.SendAudioAsync(pcm, ct).ConfigureAwait(false);
         await session.FinalizeAsync(ct).ConfigureAwait(false);
-        return new(text ?? throw ProviderConnection.InvalidResponse(), language, pcm.Length / 32000d, null);
+        return new(text ?? throw ProviderConnection.InvalidResponse(), language, duration, null);
     }
 
     internal static ReadOnlyMemory<byte> ExtractPcm(byte[] wav)

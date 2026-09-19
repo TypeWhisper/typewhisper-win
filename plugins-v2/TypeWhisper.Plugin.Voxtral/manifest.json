@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.voxtral",
   "name": "Mistral",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
   "description": "Mistral cloud transcription, Voxtral Realtime and text processing with account model discovery.",

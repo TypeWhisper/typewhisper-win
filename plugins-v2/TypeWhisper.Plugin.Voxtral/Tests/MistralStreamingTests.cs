@@ -19,9 +19,10 @@ public sealed partial class ProviderTests
         Assert.Empty(plugin.SupportedLanguages);
         Assert.Contains("automatisch", plugin.TextSettings.Single(s => s.Id == "model").Description);
         var socket = new MistralSocket();
-        plugin.ConnectStreaming = async (key, model, ct) =>
+        plugin.ConnectStreaming = async (key, model, budget, ct) =>
         {
             Assert.Equal("fixture-key", key); Assert.Equal(VoxtralPlugin.RealtimeModel, model);
+            Assert.Equal(TimeSpan.FromSeconds(15), budget);
             return await ReadySession(socket, ct: ct);
         };
         await using var session = await plugin.StartStreamingAsync("de", default);
@@ -165,7 +166,7 @@ public sealed partial class ProviderTests
         using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         plugin.SelectModel(VoxtralPlugin.RealtimeModel);
         var socket = new MistralSocket { CompleteAutomatically = true };
-        plugin.ConnectStreaming = (_, _, ct) => ReadySessionAsInterface(socket, ct);
+        plugin.ConnectStreaming = (_, _, _, ct) => ReadySessionAsInterface(socket, ct);
         var failed = false;
         await using var stream = new StreamingDictation((run, ct) => run(plugin, ct), [], _ => { }, () => failed = true, default);
         stream.Append(new float[4000]);
@@ -178,10 +179,33 @@ public sealed partial class ProviderTests
         using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         plugin.SelectModel(VoxtralPlugin.RealtimeModel);
         var socket = new MistralSocket { CompleteAutomatically = true };
-        plugin.ConnectStreaming = (_, model, ct) => { Assert.Equal(VoxtralPlugin.RealtimeModel, model); return ReadySessionAsInterface(socket, ct); };
+        plugin.ConnectStreaming = (_, model, budget, ct) =>
+        {
+            Assert.Equal(VoxtralPlugin.RealtimeModel, model);
+            Assert.Equal(TimeSpan.FromSeconds(15 + 4 / 32000d), budget);
+            return ReadySessionAsInterface(socket, ct);
+        };
         var result = await plugin.TranscribeAsync(Audio(), "de", false, null, default);
         Assert.Equal("Hello, world!", result.Text); Assert.Equal("en", result.DetectedLanguage);
         Assert.Equal(4 / 32000d, result.DurationSeconds); Assert.Equal(4, Assert.Single(socket.Audio).Length);
+    }
+
+    [Fact]
+    public async Task CompletedRecordingReceivesDurationAwareFinalizationBudget()
+    {
+        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        plugin.SelectModel(VoxtralPlugin.RealtimeModel);
+        var wav = new byte[44 + 32000 * 60]; Audio().AsSpan(0, 44).CopyTo(wav);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(wav.AsSpan(4), wav.Length - 8);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(wav.AsSpan(40), wav.Length - 44);
+        var socket = new MistralSocket { CompleteAutomatically = true };
+        plugin.ConnectStreaming = async (_, _, budget, ct) =>
+        {
+            Assert.Equal(TimeSpan.FromSeconds(75), budget);
+            return await ReadySession(socket, budget, ct);
+        };
+        var result = await plugin.TranscribeAsync(wav, null, false, null, default);
+        Assert.Equal(60, result.DurationSeconds); Assert.Equal("Hello, world!", result.Text);
     }
 
     [Theory]

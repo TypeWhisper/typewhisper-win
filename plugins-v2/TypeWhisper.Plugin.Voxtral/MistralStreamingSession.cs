@@ -31,7 +31,7 @@ internal sealed class MistralStreamingSession : IStreamingSession
         _receiver = ReceiveAsync(_lifetime.Token);
     }
 
-    internal static async Task<IStreamingSession> ConnectAsync(string key, string model, CancellationToken ct)
+    internal static async Task<IStreamingSession> ConnectAsync(string key, string model, TimeSpan completionTimeout, CancellationToken ct)
     {
         var socket = new ClientWebSocket();
         socket.Options.SetRequestHeader("Authorization", "Bearer " + key);
@@ -41,7 +41,7 @@ internal sealed class MistralStreamingSession : IStreamingSession
         try
         {
             await socket.ConnectAsync(new Uri("wss://api.mistral.ai/v1/audio/transcriptions/realtime?model=" + Uri.EscapeDataString(model)), http, ct).ConfigureAwait(false);
-            session = new(socket);
+            session = new(socket, completionTimeout);
             await session.InitializeAsync(ct).ConfigureAwait(false);
             return session;
         }

@@ -115,7 +115,7 @@ public sealed partial class ProviderTests
             Assert.Equal(3,Directory.GetFiles(source).Length);
             using var http=new HttpClient(new Handler((r,_)=>new(HttpStatusCode.OK){RequestMessage=r,Content=new ByteArrayContent(bytes)}));var host=new Host();
             PortablePluginStore Store()=>new(Path.Combine(root,"store"),new(1,1,2),http,_=>host);
-            var entry=new PortableCatalogEntry{Id=Id,Name="Voxtral",Version="1.3.0",MinHostVersion="1.1.2",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
+            var entry=new PortableCatalogEntry{Id=Id,Name="Voxtral",Version="1.3.1",MinHostVersion="1.1.2",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
             var store=Store();await store.InitializeAsync();await store.InstallAsync(entry);
             await using(var runtime=new PortablePluginRuntimeRegistry(store,new(1,1,2),_=>host))
             {
@@ -146,7 +146,8 @@ public sealed partial class ProviderTests
     {
         public Dictionary<string,JsonElement> Settings {get;}=[];public Dictionary<string,string> Secrets {get;}=[];
         public bool FailSecret {get;set;} public bool FailSetting {get;set;}
-        public Task StoreSecretAsync(string key,string value){if(FailSecret){FailSecret=false;throw new IOException("secret store failed");}Secrets[key]=value;return Task.CompletedTask;}
+        public Task? StoreSecretDelay { get; set; }
+        public async Task StoreSecretAsync(string key,string value){if(FailSecret){FailSecret=false;throw new IOException("secret store failed");}if(StoreSecretDelay is not null)await StoreSecretDelay.ConfigureAwait(false);Secrets[key]=value;}
         public Task<string?> LoadSecretAsync(string key)=>Task.FromResult(Secrets.GetValueOrDefault(key));
         public Task DeleteSecretAsync(string key){Secrets.Remove(key);return Task.CompletedTask;}
         public T? GetSetting<T>(string key)=>Settings.TryGetValue(key,out var value)?value.Deserialize<T>():default;
