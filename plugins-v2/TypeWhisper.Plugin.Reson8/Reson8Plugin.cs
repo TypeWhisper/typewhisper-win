@@ -69,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.6";
+    public string PluginVersion => "1.2.7";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -365,15 +365,24 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
     internal void SetFetchedCustomModels(IReadOnlyList<Reson8CustomModel> models)
     {
-        _host?.SetSetting(FetchedCustomModelsSettingName, models.ToArray());
-        _fetchedCustomModels = models.ToArray();
-
-        if (_selectedModelId != DefaultModelId && _fetchedCustomModels.All(m => m.Id != _selectedModelId))
+        var nextModels = models.ToArray();
+        var nextSelection = _selectedModelId != DefaultModelId && nextModels.All(m => m.Id != _selectedModelId)
+            ? DefaultModelId : _selectedModelId;
+        if (_host is { } host)
         {
-            _selectedModelId = DefaultModelId;
-            _host?.SetSetting(SelectedModelSettingName, _selectedModelId);
+            var previousSelection = host.GetSetting<string>(SelectedModelSettingName);
+            host.SetSetting(SelectedModelSettingName, nextSelection);
+            try { host.SetSetting(FetchedCustomModelsSettingName, nextModels); }
+            catch (Exception failure) when (failure is not OutOfMemoryException)
+            {
+                try { host.SetSetting(SelectedModelSettingName, previousSelection); }
+                catch (Exception rollback) when (rollback is not OutOfMemoryException)
+                { throw new AggregateException("Model refresh failed and its selection could not be restored.", failure, rollback); }
+                throw;
+            }
         }
-
+        _selectedModelId = nextSelection;
+        _fetchedCustomModels = nextModels;
         _host?.NotifyCapabilitiesChanged();
     }
 
@@ -385,9 +394,36 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment) || !string.IsNullOrEmpty(endpoint.UserInfo))
             throw new ArgumentException("Enter an absolute HTTP(S) server URL without credentials, query or fragment.", nameof(url));
         if (string.Equals(normalized, _customBaseUrl, StringComparison.Ordinal)) return;
-        _host?.SetSetting(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized);
+        if (_host is { } host)
+        {
+            var oldSelection = host.GetSetting<string>(SelectedModelSettingName);
+            var oldModels = host.GetSetting<List<Reson8CustomModel>>(FetchedCustomModelsSettingName);
+            var selectionWritten = false;
+            var modelsWritten = false;
+            try
+            {
+                host.SetSetting(SelectedModelSettingName, DefaultModelId);
+                selectionWritten = true;
+                host.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
+                modelsWritten = true;
+                // Commit the endpoint only after all dependent settings succeed.
+                host.SetSetting(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized);
+            }
+            catch (Exception failure) when (failure is not OutOfMemoryException)
+            {
+                var errors = new List<Exception> { failure };
+                try { if (modelsWritten) host.SetSetting(FetchedCustomModelsSettingName, oldModels); }
+                catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
+                try { if (selectionWritten) host.SetSetting(SelectedModelSettingName, oldSelection); }
+                catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
+                if (errors.Count > 1) throw new AggregateException("Server update failed and model settings could not be fully restored.", errors);
+                throw;
+            }
+        }
         _customBaseUrl = normalized;
-        SetFetchedCustomModels([]);
+        _selectedModelId = DefaultModelId;
+        _fetchedCustomModels = [];
+        _host?.NotifyCapabilitiesChanged();
     }
 
     internal void SetCustomAuthHeader(string? header)

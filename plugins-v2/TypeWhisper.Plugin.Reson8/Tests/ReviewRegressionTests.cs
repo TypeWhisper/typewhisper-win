@@ -7,6 +7,38 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class Reson8PluginTests
 {
     [Theory]
+    [InlineData("selectedModel")]
+    [InlineData("fetchedCustomModels")]
+    public async Task FailedModelPersistencePreservesCatalogAndSelection(string failingSetting)
+    {
+        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        host.FailSettingName = failingSetting;
+        Assert.Throws<IOException>(() => plugin.SetFetchedCustomModels([]));
+        Assert.Equal("custom", plugin.SelectedModelId); Assert.Single(plugin.FetchedCustomModels);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal("custom", plugin.SelectedModelId); Assert.Single(plugin.FetchedCustomModels);
+    }
+
+    [Theory]
+    [InlineData("selectedModel")]
+    [InlineData("fetchedCustomModels")]
+    [InlineData("customBaseURL")]
+    public async Task FailedServerChangePreservesEndpointAndModels(string failingSetting)
+    {
+        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "fixture"; await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        host.FailSettingName = failingSetting;
+        await Assert.ThrowsAsync<IOException>(() => plugin.SaveTextSettingAsync("baseUrl", "https://new.example.test", default));
+        Assert.Equal(Reson8Plugin.DefaultBaseUrl, plugin.CustomBaseUrl); Assert.Equal("custom", plugin.SelectedModelId);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal(Reson8Plugin.DefaultBaseUrl, plugin.CustomBaseUrl);
+        Assert.Equal("custom", plugin.SelectedModelId); Assert.Equal("custom", Assert.Single(plugin.FetchedCustomModels).Id);
+    }
+
+    [Theory]
     [InlineData("replacement")]
     [InlineData("")]
     public async Task FailedSecretWriteRestoresModelStateAcrossRestart(string replacement)
