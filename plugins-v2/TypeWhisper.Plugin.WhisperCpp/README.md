@@ -2,7 +2,7 @@
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.9`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
+Version `1.2.10`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
 Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -30,7 +30,7 @@ The complete package is staged under `bin/Release/portable-host/Plugins/com.type
 
 Create distributable packages on Windows, where the required Visual C++ runtime DLLs are staged. Non-Windows builds skip that Windows-only step for headless tests; their staging directories are not complete distribution packages, and `CopyPackage` rejects non-Windows hosts.
 
-68 plugin tests pass, covering model/runtime contracts, download integrity, native package contents, package lifecycle, processing-device persistence, language choices and PCM validation. Large V3 Turbo was downloaded and verified on an NVIDIA RTX 4060 Ti using CUDA. A synthetic English WAV and both partial and complete PCM buffers transcribed successfully. The saved model is loaded on the first WAV or PCM decode after activation, including after an app restart. Cold-start inference was verified without calling LoadModelAsync first. Local live preview uses repeated decoding of recording buffers; this is not a native streaming model. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+73 plugin tests pass, covering model/runtime contracts, download integrity, native package contents, package lifecycle, processing-device persistence, language choices and PCM validation. Large V3 Turbo was downloaded and verified on an NVIDIA RTX 4060 Ti using CUDA. A synthetic English WAV and both partial and complete PCM buffers transcribed successfully. The saved model is loaded on the first WAV or PCM decode after activation, including after an app restart. Cold-start inference was verified without calling LoadModelAsync first. Local live preview uses repeated decoding of recording buffers; this is not a native streaming model. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 CUDA downloads are stored in the persistent plugin asset directory. A version-specific native runtime cache combines those downloads with packaged Whisper libraries, keeping installed packages immutable and reusing cuBLAS across upgrades. Source 1.2.6 passed cold PCM-first and WAV CUDA inference from this cache, with loaded module paths verified.
 
@@ -40,6 +40,8 @@ The ZIP was installed and loaded in the WinUI development profile, preserving ex
 
 Marco confirmed German microphone dictation and local live preview on Large V3 Turbo after the restart-loading fix. The installed package and UI screenshots are version 1.2.4, with the Whisper (Local) name and chip icon. CPU, Vulkan, custom ROCm and ARM64 inference remain unverified. Public catalog publication and production-profile migration are pending.
 
-Source 1.2.9 verifies the persisted CUDA package identity and freshly computed DLL hashes on every check, stages complete files before atomic replacement and publishes its installation receipt last. Regression tests cover corruption, interrupted installation and package changes.
+Source 1.2.10 verifies the persisted CUDA package identity and freshly computed DLL hashes on every check, stages complete files before atomic replacement and publishes its installation receipt last. Regression tests cover corruption, interrupted installation and package changes.
 
 Model removal persists deselection before deleting weights. Download progress uses the known model size when the response stream cannot seek; abandoned GUID temporary files are cleaned without touching active or unrelated downloads. Staged native-cache DLLs are compared with their sources and repaired when damaged.
+
+CUDA extraction honors cancellation before publication. Abandoned runtime downloads and unused older native-cache versions are removed while active files remain intact. Explicit CUDA loads reuse their integrity result within that load, and staged packages exclude non-Windows native runtimes.

@@ -98,7 +98,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.9";
+    public string PluginVersion => "1.2.10";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -363,9 +363,9 @@ public sealed partial class WhisperCppPlugin :
             throw new InvalidOperationException(_accelerationStatus.Detail);
 
         ApplyRuntimeConfiguration(_accelerationPreference);
-        await EnsureCudaRuntimeAvailableForLoadAsync(ct).ConfigureAwait(false);
+        var cudaVerified = await EnsureCudaRuntimeAvailableForLoadAsync(ct).ConfigureAwait(false);
         EnsureRocmRuntimeAvailableForLoad();
-        PrepareCudaRuntimeSearchPath();
+        PrepareCudaRuntimeSearchPath(cudaVerified);
         DisposeFactoryUnsafe();
         try
         {
@@ -618,10 +618,10 @@ public sealed partial class WhisperCppPlugin :
             GetUnavailableDisplayText(preference),
             GetNativeLoadFailureDetail(error, preference));
 
-    private async Task EnsureCudaRuntimeAvailableForLoadAsync(CancellationToken cancellationToken)
+    private async Task<bool> EnsureCudaRuntimeAvailableForLoadAsync(CancellationToken cancellationToken)
     {
         if (_accelerationPreference != TranscriptionAccelerationPreference.NvidiaCuda)
-            return;
+            return false;
 
         if (_cudaRuntimeRestartRequired)
         {
@@ -640,7 +640,7 @@ public sealed partial class WhisperCppPlugin :
             ?? throw new InvalidOperationException("The whisper.cpp CUDA runtime installer is not available.");
 
         if (installer.IsInstalled)
-            return;
+            return true;
 
         _accelerationStatus = new(
             TranscriptionAccelerationBackend.Cpu,
@@ -675,16 +675,54 @@ public sealed partial class WhisperCppPlugin :
         throw new InvalidOperationException(_accelerationStatus.Detail);
     }
 
-    private void PrepareCudaRuntimeSearchPath()
+    private void PrepareCudaRuntimeSearchPath(bool installationVerified)
     {
+        var installer = _cudaRuntimeInstaller;
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64
             || _accelerationPreference is not (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda)
-            || _cudaRuntimeInstaller?.IsInstalled != true || _host is null || _pluginDirectory is null)
+            || installer is null || (!installationVerified && !installer.IsInstalled) || _host is null || _pluginDirectory is null)
             return;
-        var cacheRoot = Path.Join(_host.PluginAssetDirectory, "NativeRuntime", PluginVersion);
-        StageCudaRuntime(_pluginDirectory, _cudaRuntimeInstaller.RuntimeDirectory, cacheRoot);
+        var cacheParent = Path.Join(_host.PluginAssetDirectory, "NativeRuntime");
+        var cacheRoot = Path.Join(cacheParent, PluginVersion);
+        StageCudaRuntime(_pluginDirectory, installer.RuntimeDirectory, cacheRoot);
+        RemoveObsoleteNativeCaches(cacheParent, PluginVersion);
         // Whisper.net searches runtimes next to LibraryPath before its own assembly directory.
         RuntimeOptions.LibraryPath = Path.Join(cacheRoot, "whisper.dll");
+    }
+
+    internal static void RemoveObsoleteNativeCaches(string cacheParent, string currentVersion)
+    {
+        var root = Path.GetFullPath(cacheParent);
+        if (!Directory.Exists(root) || (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) return;
+        foreach (var candidate in Directory.EnumerateDirectories(root))
+        {
+            var full = Path.GetFullPath(candidate);
+            var name = Path.GetFileName(full);
+            if (name == currentVersion || !Version.TryParse(name, out _) || Path.GetDirectoryName(full) != root) continue;
+            try
+            {
+                var directories = new Stack<string>(); directories.Push(full);
+                var files = new List<string>(); var safe = true;
+                while (directories.Count > 0 && safe)
+                {
+                    var directory = directories.Pop();
+                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) { safe = false; break; }
+                    foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+                    {
+                        var attributes = File.GetAttributes(entry);
+                        if ((attributes & FileAttributes.ReparsePoint) != 0) { safe = false; break; }
+                        if ((attributes & FileAttributes.Directory) != 0) directories.Push(entry); else files.Add(entry);
+                    }
+                }
+                if (!safe) continue;
+                // Loaded Windows DLLs reject exclusive write access. Leave their cache intact.
+                foreach (var file in files)
+                { using var probe = new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None); }
+                Directory.Delete(full, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { System.Diagnostics.Debug.WriteLine("Obsolete native cache remains in use: " + ex.GetType().Name); }
+        }
     }
 
     internal static void StageCudaRuntime(string packageRoot, string cudaAssets, string cacheRoot)

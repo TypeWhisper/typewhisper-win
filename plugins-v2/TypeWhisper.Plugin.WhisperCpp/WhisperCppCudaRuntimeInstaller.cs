@@ -98,6 +98,7 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     /// </summary>
     public async Task EnsureInstalledAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (IsInstalled)
             return;
 
@@ -108,6 +109,7 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
                 return;
 
             Directory.CreateDirectory(RuntimeDirectory);
+            RemoveAbandonedDownloads();
 
             var archivePath = Path.Join(
                 RuntimeDirectory,
@@ -117,7 +119,7 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
             {
                 await DownloadArchiveAsync(archivePath, cancellationToken);
                 await ValidateArchiveHashAsync(archivePath, cancellationToken);
-                ExtractRequiredDlls(archivePath);
+                await ExtractRequiredDllsAsync(archivePath, cancellationToken);
             }
             finally
             {
@@ -185,8 +187,9 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
         }
     }
 
-    private void ExtractRequiredDlls(string archivePath)
+    internal async Task ExtractRequiredDllsAsync(string archivePath, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         using var archive = ZipFile.OpenRead(archivePath);
         var staged = new List<(string Name, string Path)>();
         var hashes = new Dictionary<string, string>();
@@ -195,18 +198,22 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
         {
             foreach (var name in _package.RequiredDlls)
             {
+                ct.ThrowIfCancellationRequested();
                 var entry = archive.Entries.SingleOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
                 if (entry is null || entry.Length == 0)
                     throw new InvalidOperationException("The NVIDIA CUDA runtime download was incomplete. Missing: " + name);
                 var temporary = GetRuntimeFilePath(name) + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 staged.Add((name, temporary));
-                entry.ExtractToFile(temporary);
-                using var input = File.OpenRead(temporary);
-                hashes[name] = Convert.ToHexString(SHA256.HashData(input));
+                await using (var input = entry.Open())
+                await using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
+                    await input.CopyToAsync(output, ct);
+                await using var extracted = File.OpenRead(temporary);
+                hashes[name] = Convert.ToHexString(await SHA256.HashDataAsync(extracted, ct));
             }
-            File.WriteAllText(receiptTemporary, JsonSerializer.Serialize(new RuntimeReceipt(_package.RuntimeVersion, _package.Sha256, hashes)));
+            await File.WriteAllTextAsync(receiptTemporary, JsonSerializer.Serialize(new RuntimeReceipt(_package.RuntimeVersion, _package.Sha256, hashes)), ct);
             lock (_verificationLock)
             {
+                ct.ThrowIfCancellationRequested();
                 // Invalidate the receipt before replacing files; interruption must never
                 // make a partial installation appear complete on the next startup.
                 File.Delete(ReceiptPath);
@@ -219,6 +226,24 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
             foreach (var file in staged) TryDeleteFile(file.Path);
             TryDeleteFile(receiptTemporary);
         }
+    }
+
+    internal void RemoveAbandonedDownloads()
+    {
+        foreach (var path in Directory.EnumerateFiles(RuntimeDirectory, "nvidia-cublas-*.zip.tmp"))
+        {
+            var name = Path.GetFileName(path);
+            if (name.Length < 42 || name[^41] != '.' || !Guid.TryParseExact(name[^40..^8], "N", out _)) continue;
+            try
+            {
+                if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) continue;
+                using var orphan = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { Debug.WriteLine("Temporary CUDA archive is still in use or cannot be removed: " + ex.GetType().Name); }
+        }
+        foreach (var file in _package.RequiredDlls.Append("installed.json"))
+            WhisperCppPlugin.RemoveOrphanedModelDownloads(GetRuntimeFilePath(file));
     }
 
     private string GetRuntimeFilePath(string fileName) =>

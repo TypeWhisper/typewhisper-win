@@ -1,0 +1,93 @@
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using TypeWhisper.Plugin.WhisperCpp;
+using TypeWhisper.PluginSDK.Models;
+using Whisper.net;
+
+namespace TypeWhisper.PluginSystem.Tests;
+
+public partial class WhisperCppPluginTests
+{
+    [Fact]
+    public void CudaArchiveCleanupPreservesActiveAndUnrelatedFiles()
+    {
+        using var temp = new TempDirectory(); using var client = new HttpClient();
+        using var installer = new WhisperCppCudaRuntimeInstaller(temp.Path, client);
+        Directory.CreateDirectory(installer.RuntimeDirectory);
+        var stale = Path.Join(installer.RuntimeDirectory, "nvidia-cublas-old." + Guid.NewGuid().ToString("N") + ".zip.tmp");
+        var active = Path.Join(installer.RuntimeDirectory, "nvidia-cublas-current." + Guid.NewGuid().ToString("N") + ".zip.tmp");
+        var other = Path.Join(installer.RuntimeDirectory, "nvidia-cublas-notes.zip.tmp");
+        File.WriteAllText(stale, "partial"); File.WriteAllText(other, "notes");
+        using (var download = new FileStream(active, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            installer.RemoveAbandonedDownloads();
+            Assert.False(File.Exists(stale)); Assert.True(File.Exists(active)); Assert.True(File.Exists(other));
+        }
+        installer.RemoveAbandonedDownloads(); Assert.False(File.Exists(active));
+    }
+
+    [Fact]
+    public async Task CanceledCudaExtractionDoesNotPublishFilesOrReceipt()
+    {
+        using var temp = new TempDirectory();
+        var bytes = CreateZipArchive(("bin/cublas.dll", "valid-library"));
+        var package = new WhisperCppCudaRuntimePackage("test", "https://example.test/runtime.zip",
+            Convert.ToHexString(SHA256.HashData(bytes)), ["cublas.dll"]);
+        using var client = new HttpClient(); using var installer = new WhisperCppCudaRuntimeInstaller(temp.Path, client, package);
+        Directory.CreateDirectory(installer.RuntimeDirectory);
+        var archive = Path.Join(temp.Path, "fixture.zip"); File.WriteAllBytes(archive, bytes);
+        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => installer.ExtractRequiredDllsAsync(archive, cancellation.Token));
+        Assert.False(installer.IsInstalled); Assert.Empty(Directory.GetFiles(installer.RuntimeDirectory));
+    }
+
+    [Fact]
+    public void OldNativeCachesAreRemovedWithoutTouchingCurrentOrActiveCaches()
+    {
+        using var temp = new TempDirectory();
+        foreach (var name in new[] { "1.0.0", "1.1.0", "1.2.9", "user-notes" })
+        {
+            Directory.CreateDirectory(Path.Join(temp.Path, name)); File.WriteAllText(Path.Join(temp.Path, name, "cache.dll"), "native");
+        }
+        using (var active = new FileStream(Path.Join(temp.Path, "1.1.0", "cache.dll"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            WhisperCppPlugin.RemoveObsoleteNativeCaches(temp.Path, "1.2.9");
+            Assert.False(Directory.Exists(Path.Join(temp.Path, "1.0.0")));
+            Assert.True(Directory.Exists(Path.Join(temp.Path, "1.1.0")));
+            Assert.True(Directory.Exists(Path.Join(temp.Path, "1.2.9")));
+            Assert.True(Directory.Exists(Path.Join(temp.Path, "user-notes")));
+        }
+    }
+
+    [Fact]
+    public void StagedPackageContainsOnlyWindowsNativeRuntimes()
+    {
+        var root = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+        var runtimes = Path.Join(root, "plugins-v2", "TypeWhisper.Plugin.WhisperCpp", "bin", configuration,
+            "portable-host", "Plugins", "com.typewhisper.whisper-cpp", "runtimes");
+        var files = Directory.GetFiles(runtimes, "*", SearchOption.AllDirectories);
+        Assert.NotEmpty(files);
+        Assert.DoesNotContain(files, path => Path.GetRelativePath(runtimes, path).Split(Path.DirectorySeparatorChar)
+            .Any(part => new[] { "linux", "macos", "osx", "android", "ios" }.Any(prefix => part.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))));
+    }
+
+    [Fact]
+    public async Task ExplicitCudaLoadValidatesPersistentFilesOnlyOnce()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); var assets = Path.Join(temp.Path, "cuda-assets"); Directory.CreateDirectory(assets);
+        var installer = new FakeCudaRuntimeInstaller(assets) { IsInstalledOverride = true };
+        using var plugin = new WhisperCppPlugin(installer)
+        {
+            CreateFactory = _ => (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory)),
+            ReleaseFactory = _ => { }
+        };
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); File.WriteAllText(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "weights");
+        var before = installer.IntegrityReadCount;
+        await plugin.LoadModelAsync("tiny", default);
+        Assert.Equal(before + 1, installer.IntegrityReadCount);
+    }
+}

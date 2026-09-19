@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <Version>1.2.9</Version><PortableRuntimeIdentifiers Condition="'$(PortableRuntimeIdentifiers)' == ''">win-x64</PortableRuntimeIdentifiers><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Version>1.2.10</Version><PortableRuntimeIdentifiers Condition="'$(PortableRuntimeIdentifiers)' == ''">win-x64</PortableRuntimeIdentifiers><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
@@ -19,7 +19,7 @@
     <ItemGroup>
       <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" />
       <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
-      <PackageTree Include="$(TargetDir)**/*" Exclude="$(TargetDir)*;$(TargetDir)**/*.pdb;$(TargetDir)**/*.xml" />
+      <PackageTree Include="$(TargetDir)**/*" Exclude="$(TargetDir)*;$(TargetDir)**/*.pdb;$(TargetDir)**/*.xml;$(TargetDir)runtimes/**/linux*/**/*;$(TargetDir)runtimes/**/osx*/**/*;$(TargetDir)runtimes/**/macos*/**/*;$(TargetDir)runtimes/**/android*/**/*;$(TargetDir)runtimes/**/ios*/**/*" />
     </ItemGroup>
     <RemoveDir Directories="$(PackageDirectory)" />
     <MakeDir Directories="$(PackageDirectory)" />
