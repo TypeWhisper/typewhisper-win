@@ -69,11 +69,10 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Script | Separate v2 port pending |
 | SherpaOnnx | Existing portable build |
 | SmallestAi | Separate v2 port pending |
-| Soniox | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Soniox`; 39 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
+| Soniox | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Soniox`; 78 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Speechmatics | Independent v2 package 1.2.4 in `plugins-v2/TypeWhisper.Plugin.Speechmatics`; 67 tests pass (manual acceptance on 1.2.0). EU batch and live API acceptance, language selection, shared Save and provider logos included. Native live microphone acceptance confirmed by Marco; publication pending. See the plugin README. |
-
 | SupertonicTts | Separate v2 port pending |
 | Voxtral | Separate v2 port pending |
 | Webhook | Separate v2 port pending |
-| WhisperCpp | Separate v2 port pending |
+| WhisperCpp | Whisper (Local) source 1.2.19 in `plugins-v2/TypeWhisper.Plugin.WhisperCpp`; 95 regression tests pass. Installed 1.2.4: CUDA Large V3 Turbo, German microphone dictation, local live preview, restart loading, shared settings and chip icon manually verified; screenshots are from 1.2.4. Historical source 1.2.6 verification: persistent CUDA cache paths and cold PCM/WAV inference verified. Later source changes have automated regression coverage; public package/catalog publication pending. See the plugin README. |
 | Xai | Separate v2 port pending |

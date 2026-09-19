@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <Version>1.2.19</Version><PortableRuntimeIdentifiers Condition="'$(PortableRuntimeIdentifiers)' == ''">win-x64</PortableRuntimeIdentifiers><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.WhisperCpp.Portable.Tests" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <PackageReference Include="Whisper.net" Version="1.9.0" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
+    <PackageReference Include="Whisper.net.Runtime.Cuda.Windows" Version="1.9.0" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.0" />
+    <Content Include="manifest.json;Localization/*.json;Scripts/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.whisper-cpp/</PackageDirectory></PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../eng/Copy-WhisperCppMsvcRuntime.ps1&quot; -OutputDirectory &quot;$(TargetDir).&quot; -RuntimeIdentifiers $(PortableRuntimeIdentifiers) -Required" Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT'" />
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" />
+      <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+      <PackageTree Include="$(TargetDir)**/*" Exclude="$(TargetDir)*;$(TargetDir)**/*.pdb;$(TargetDir)**/*.xml;$(TargetDir)runtimes/**/linux*/**/*;$(TargetDir)runtimes/**/osx*/**/*;$(TargetDir)runtimes/**/macos*/**/*;$(TargetDir)runtimes/**/android*/**/*;$(TargetDir)runtimes/**/ios*/**/*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PackageDirectory)" />
+    <MakeDir Directories="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageFile);@(PackageDependency)" DestinationFolder="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageTree)" DestinationFiles="@(PackageTree->'$(PackageDirectory)%(RecursiveDir)%(Filename)%(Extension)')" Condition="'@(PackageTree)' != ''" />
+    <Error Condition="!Exists('$(PackageDirectory)runtimes/cuda/win-x64/ggml-cuda-whisper.dll')" Text="Missing CUDA runtime." />
+    <Error Condition="!Exists('$(PackageDirectory)runtimes/vulkan/win-x64/ggml-vulkan-whisper.dll')" Text="Missing Vulkan runtime." />
+  </Target>
+</Project>

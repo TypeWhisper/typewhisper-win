@@ -75,5 +75,8 @@ public sealed class PluginBrandIcon : UserControl
         logo.Source = raster ? new BitmapImage(uri) : new SvgImageSource(uri);
     }
 
-    private void ShowFallback() => Content = new TypeWhisperGlyph { Kind = "plugin" };
+    private void ShowFallback() => Content = new TypeWhisperGlyph
+    {
+        Kind = PluginId == "com.typewhisper.whisper-cpp" ? "chip" : "plugin"
+    };
 }
