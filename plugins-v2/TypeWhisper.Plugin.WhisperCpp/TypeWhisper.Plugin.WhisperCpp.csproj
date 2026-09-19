@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <Version>1.2.18</Version><PortableRuntimeIdentifiers Condition="'$(PortableRuntimeIdentifiers)' == ''">win-x64</PortableRuntimeIdentifiers><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Version>1.2.19</Version><PortableRuntimeIdentifiers Condition="'$(PortableRuntimeIdentifiers)' == ''">win-x64</PortableRuntimeIdentifiers><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />

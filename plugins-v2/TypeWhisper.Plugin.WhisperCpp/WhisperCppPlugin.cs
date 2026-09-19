@@ -104,7 +104,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.18";
+    public string PluginVersion => "1.2.19";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -679,6 +679,7 @@ public sealed partial class WhisperCppPlugin :
         if (await installer.VerifyInstalledAsync(cancellationToken).ConfigureAwait(false))
             return true;
 
+        var statusBeforeInstall = _accelerationStatus;
         _accelerationStatus = new(
             TranscriptionAccelerationBackend.Cpu,
             "Installing CUDA support",
@@ -699,7 +700,13 @@ public sealed partial class WhisperCppPlugin :
                 _host?.NotifyCapabilitiesChanged();
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            _accelerationStatus = statusBeforeInstall;
+            _host?.NotifyCapabilitiesChanged();
+            throw;
+        }
+        catch (Exception ex)
         {
             _accelerationStatus = CreateCudaRuntimeInstallFailureStatus(
                 "CUDA support download failed. " + ex.Message);
@@ -781,6 +788,7 @@ public sealed partial class WhisperCppPlugin :
             .Concat(Directory.EnumerateFiles(cudaAssets, "*.dll")))
         {
             var target = Path.Join(destination, Path.GetFileName(source));
+            RemoveOrphanedStagingFiles(target);
             // Reuse intact loaded DLLs, but repair a damaged cache before native loading.
             if (!RuntimeFilesMatch(source, target))
             {
@@ -804,6 +812,9 @@ public sealed partial class WhisperCppPlugin :
     }
 
     internal static void RemoveOrphanedModelDownloads(string modelPath)
+        => RemoveOrphanedStagingFiles(modelPath);
+
+    private static void RemoveOrphanedStagingFiles(string modelPath)
     {
         var directory = Path.GetDirectoryName(modelPath)!;
         var prefix = Path.GetFileName(modelPath) + ".";
@@ -813,13 +824,13 @@ public sealed partial class WhisperCppPlugin :
             if (!Guid.TryParseExact(name[prefix.Length..^4], "N", out _)) continue;
             try
             {
-                // An active download holds FileShare.None. Delete only an orphan
-                // we can open exclusively, and only for this exact model filename.
+                // An active writer rejects exclusive access. Delete only an orphan
+                // we can open exclusively, and only for this exact target filename.
                 using var orphan = new FileStream(candidate, FileMode.Open, FileAccess.ReadWrite,
                     FileShare.None, 1, FileOptions.DeleteOnClose);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            { System.Diagnostics.Debug.WriteLine("Temporary model download is still in use or cannot be removed: " + ex.GetType().Name); }
+            { System.Diagnostics.Debug.WriteLine("Temporary staging file is still in use or cannot be removed: " + ex.GetType().Name); }
         }
     }
 

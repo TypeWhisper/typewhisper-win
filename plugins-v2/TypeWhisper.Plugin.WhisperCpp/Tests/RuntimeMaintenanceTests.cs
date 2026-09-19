@@ -10,6 +10,44 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class WhisperCppPluginTests
 {
     [Fact]
+    public async Task CanceledCudaInstallationRestoresStatusWithoutSettingRestartGate()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); var host = new FakePluginHostServices(temp.Path);
+        using var plugin = new WhisperCppPlugin(new FakeCudaRuntimeInstaller(temp.Path) { InstallException = new OperationCanceledException() });
+        await plugin.ActivateAsync(host); plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        var previous = plugin.AccelerationStatus;
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.LoadModelAsync("tiny", default));
+        Assert.Equal(previous, plugin.AccelerationStatus); Assert.False(plugin.AccelerationStatus.RequiresRestart);
+        Assert.True(host.CapabilityChangeCount > 0);
+    }
+
+    [Fact]
+    public void NativeStagingRemovesOnlyAbandonedMatchingTemporaryFiles()
+    {
+        using var temp = new TempDirectory();
+        var package = Path.Join(temp.Path, "package"); var assets = Path.Join(temp.Path, "assets");
+        var cache = Path.Join(temp.Path, "cache");
+        var runtime = Path.Join(package, "runtimes", "cuda", "win-x64");
+        var destination = Path.Join(cache, "runtimes", "cuda", "win-x64");
+        Directory.CreateDirectory(runtime); Directory.CreateDirectory(assets); Directory.CreateDirectory(destination);
+        File.WriteAllText(Path.Join(runtime, "whisper.dll"), "native");
+        var orphan = Path.Join(destination, "whisper.dll." + Guid.NewGuid().ToString("N") + ".tmp");
+        var active = Path.Join(destination, "whisper.dll." + Guid.NewGuid().ToString("N") + ".tmp");
+        var unrelated = Path.Join(destination, "whisper.dll.user.tmp");
+        File.WriteAllText(orphan, "partial"); File.WriteAllText(unrelated, "keep");
+        using (var writer = new FileStream(active, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            WhisperCppPlugin.StageCudaRuntime(package, assets, cache);
+            Assert.False(File.Exists(orphan)); Assert.True(File.Exists(active)); Assert.True(File.Exists(unrelated));
+            Assert.Equal("native", File.ReadAllText(Path.Join(destination, "whisper.dll")));
+        }
+        WhisperCppPlugin.StageCudaRuntime(package, assets, cache);
+        Assert.False(File.Exists(active)); Assert.True(File.Exists(unrelated));
+    }
+
+    [Fact]
     public async Task ReusingAnExistingCudaInstallationDoesNotRequireRestart()
     {
         if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
