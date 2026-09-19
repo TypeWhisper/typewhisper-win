@@ -8,6 +8,30 @@ using TypeWhisper.PluginSDK;
 namespace PortableMigration.Tests;
 public sealed class StreamingCompletionTests
 {
+    [Fact]
+    public async Task SubscriberFailureFaultsFinalizationImmediately()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)); var ct = timeout.Token;
+        using var tcp = new TcpListener(IPAddress.Loopback, 0); tcp.Start();
+        var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
+        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync().WaitAsync(ct);
+            using var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
+            await Receive(socket, ct);
+            await Send(socket, """{"type":"transcript","text":"Hello","is_final":true}""", ct);
+            await finished.Task.WaitAsync(ct);
+        }, ct);
+        await using var session = await Reson8StreamingSession.ConnectAsync("fixture", "https://api.reson8.dev",
+            "Authorization", null, "en", ct, new Uri($"ws://127.0.0.1:{port}/"));
+        session.TranscriptReceived += _ => throw new ApplicationException("Callback failed");
+        await session.SendAudioAsync(new byte[] { 0, 0 }, ct);
+        await Assert.ThrowsAsync<ApplicationException>(() => session.FinalizeAsync(ct));
+        finished.TrySetResult(); await server.WaitAsync(ct);
+    }
+
     [Theory]
     [InlineData(false)][InlineData(true)]
     public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose)

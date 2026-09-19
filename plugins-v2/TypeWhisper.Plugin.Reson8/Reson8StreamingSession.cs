@@ -202,6 +202,15 @@ internal sealed class Reson8StreamingSession : IStreamingSession
             Debug.WriteLine($"Reson8 stream error: {ex.Message}");
             _flushConfirmed.TrySetException(ex);
         }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _flushConfirmed.TrySetException(ex);
+            Debug.WriteLine($"Reson8 receive callback failed: {ex.GetType().Name}");
+        }
+        finally
+        {
+            _flushConfirmed.TrySetException(new IOException("The receive loop ended before stream completion."));
+        }
     }
 
     /// <summary>

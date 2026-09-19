@@ -417,6 +417,7 @@ public partial class Reson8PluginTests
         private readonly Dictionary<string, JsonElement> _settings = [];
         public Dictionary<string, string?> Secrets { get; } = [];
         public bool FailSecretWrites { get; set; }
+        public string? FailSettingName { get; set; }
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
         public Task StoreSecretAsync(string key, string value)
@@ -441,8 +442,11 @@ public partial class Reson8PluginTests
                 ? value.Deserialize<T>(JsonOptions)
                 : default;
 
-        public void SetSetting<T>(string key, T value) =>
+        public void SetSetting<T>(string key, T value)
+        {
+            if (key == FailSettingName) throw new IOException("Cannot save setting");
             _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
+        }
 
         public string PluginDataDirectory => Path.GetTempPath();
         public string? ActiveAppProcessName => null;

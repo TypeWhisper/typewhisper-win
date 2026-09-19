@@ -2,7 +2,7 @@
 
 Batch and realtime transcription, model refresh and portable server/model/header settings.
 
-Version `1.2.4`; plugin ID `com.typewhisper.reson8`; minimum host `1.1.2`.
+Version `1.2.5`; plugin ID `com.typewhisper.reson8`; minimum host `1.1.2`.
 Independent branch: `seofood/reson8-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -28,7 +28,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Reson8/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.reson8` inside the plugin project. Package that directory as the ZIP root.
 
-33 plugin tests pass. Fake HTTP, normalization/persistence, model discovery, real local WebSocket finalization/premature close and package lifecycle. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+44 plugin tests pass. Fake HTTP, normalization/persistence, model discovery, real local WebSocket finalization/premature close and package lifecycle. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
@@ -37,3 +37,5 @@ The installed 1.2.2 package passed authenticated connection validation, prerecor
 Source 1.2.3 preserves custom models after failed refreshes, resets account models on credential changes, honors progress cancellation, preserves realtime proxy paths and includes the logo in build/publish output. The development microphone test and screenshots use installed 1.2.2.
 
 Source 1.2.4 also resets endpoint-specific models when changing servers, while preserving them for equivalent normalized URLs.
+
+Source 1.2.5 validates connection settings before saving, persists a safe model selection before changing credentials and propagates receive callback failures immediately.

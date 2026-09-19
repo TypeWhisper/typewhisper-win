@@ -7,6 +7,43 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class Reson8PluginTests
 {
     [Theory]
+    [InlineData("baseUrl", "relative/path")]
+    [InlineData("baseUrl", "ftp://example.test")]
+    [InlineData("baseUrl", "https://example.test?key=value")]
+    [InlineData("baseUrl", "https://example.test#fragment")]
+    [InlineData("baseUrl", "https://user:password@example.test")]
+    [InlineData("authHeader", "X API Key")]
+    [InlineData("authHeader", "Authorization:")]
+    [InlineData("authHeader", "X-Äpi-Key")]
+    public async Task InvalidConnectionSettingsLeaveSavedConfigurationUntouched(string id, string value)
+    {
+        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync(id, value, default));
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal(Reson8Plugin.DefaultBaseUrl, plugin.CustomBaseUrl);
+        Assert.Equal(Reson8Plugin.DefaultAuthHeader, plugin.CustomAuthHeader);
+        Assert.Equal("custom", plugin.SelectedModelId);
+    }
+
+    [Theory]
+    [InlineData("selectedModel")]
+    [InlineData("fetchedCustomModels")]
+    public async Task FailedDependentSettingsCannotCommitNewCredential(string failingSetting)
+    {
+        using var plugin = new Reson8Plugin();
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "old-key";
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        host.FailSettingName = failingSetting;
+        await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync("new-key"));
+        Assert.Equal("old-key", plugin.ApiKey); Assert.Equal("old-key", host.Secrets["api-key"]);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal("old-key", plugin.ApiKey);
+    }
+
+    [Theory]
     [InlineData("https://proxy.example.test/reson8", true)]
     [InlineData(" https://api.reson8.dev/ ", false)]
     public async Task ServerChangesInvalidateModelsOnlyForDifferentEndpoints(string endpoint, bool changed)

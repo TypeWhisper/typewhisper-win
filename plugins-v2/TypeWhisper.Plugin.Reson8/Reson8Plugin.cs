@@ -69,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.4";
+    public string PluginVersion => "1.2.5";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -271,6 +271,13 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
             if (_host is not null)
             {
+                if (changed)
+                {
+                    // Persist a safe model selection before changing accounts. If
+                    // settings fail, the saved and active credentials remain unchanged.
+                    _host.SetSetting(SelectedModelSettingName, DefaultModelId);
+                    _host.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
+                }
                 if (normalized is null)
                     await _host.DeleteSecretAsync(ApiKeySecretName).ConfigureAwait(false);
                 else
@@ -282,8 +289,6 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             {
                 _fetchedCustomModels = [];
                 _selectedModelId = DefaultModelId;
-                _host?.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
-                _host?.SetSetting(SelectedModelSettingName, DefaultModelId);
                 hostToNotify = _host;
             }
         }
@@ -357,6 +362,10 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     internal void SetCustomBaseUrl(string? url)
     {
         var normalized = NormalizeBaseUrl(url);
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var endpoint) ||
+            endpoint.Scheme is not ("http" or "https") || string.IsNullOrEmpty(endpoint.Host) ||
+            !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment) || !string.IsNullOrEmpty(endpoint.UserInfo))
+            throw new ArgumentException("Enter an absolute HTTP(S) server URL without credentials, query or fragment.", nameof(url));
         if (string.Equals(normalized, _customBaseUrl, StringComparison.Ordinal)) return;
         _host?.SetSetting(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized);
         _customBaseUrl = normalized;
@@ -365,8 +374,11 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
     internal void SetCustomAuthHeader(string? header)
     {
-        _host?.SetSetting(CustomAuthHeaderSettingName, NormalizeAuthHeader(header) == DefaultAuthHeader ? null : NormalizeAuthHeader(header));
-        _customAuthHeader = NormalizeAuthHeader(header);
+        var normalized = NormalizeAuthHeader(header);
+        if (normalized.Any(c => !char.IsAsciiLetterOrDigit(c) && !"!#$%&'*+-.^_`|~".Contains(c)))
+            throw new ArgumentException("Enter a valid HTTP header name.", nameof(header));
+        _host?.SetSetting(CustomAuthHeaderSettingName, normalized == DefaultAuthHeader ? null : normalized);
+        _customAuthHeader = normalized;
     }
 
     internal static Uri BuildPrerecordedUri(string baseUrl, string? modelId, string? language)
