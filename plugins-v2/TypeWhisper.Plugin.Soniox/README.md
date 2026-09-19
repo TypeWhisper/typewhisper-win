@@ -48,4 +48,6 @@ References: [WebSocket API](https://soniox.com/docs/api-reference/stt/websocket-
 
 On 2026-09-19 (Europe/Berlin), Marco also confirmed successful live dictation with the installed 1.3.0 package. The development UI showed Soniox selected and Live transcription enabled. The installed-package synthetic streaming check returned 22 live updates and the complete sentence without fallback.
 
-Version 1.3.1 drains all outstanding batch cleanup tasks before deactivation/disposal, skips untimed tokens correctly in subtitle timing, and includes the Soniox PNG in published host output. The native Media Foundation encoding test runs only on Windows; the remaining tests run on both CI platforms.
+Version 1.3.1 drains all outstanding batch cleanup tasks before deactivation/disposal, skips untimed tokens correctly in subtitle timing, and includes the Soniox PNG in published host output. The native Media Foundation encoding test runs only on Windows with an available 16 kHz mono AAC encoder; the remaining tests run on both CI platforms.
+
+The native-codec test probes AAC availability and skips missing Media Foundation installations, including Windows N without its Media Feature Pack. Regression tests cover absent libraries, missing encoders and unexpected probe failures. The Soniox PNG is excluded from implicit None items before being included as build/publish Content to avoid duplicate PRI resources.
