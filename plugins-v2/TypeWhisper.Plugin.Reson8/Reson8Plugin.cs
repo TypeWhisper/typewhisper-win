@@ -69,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.7";
+    public string PluginVersion => "1.2.8";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -359,8 +359,12 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         using var response = await _httpClient.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(ct);
-        return JsonSerializer.Deserialize<List<Reson8CustomModel>>(json, JsonOptions)
+        var models = JsonSerializer.Deserialize<List<Reson8CustomModel>>(json, JsonOptions)
             ?? throw new JsonException("The custom model catalog was empty or invalid.");
+        if (models.Any(model => model is null || string.IsNullOrWhiteSpace(model.Id) || string.IsNullOrWhiteSpace(model.Name)) ||
+            models.Select(model => model.Id).Distinct(StringComparer.Ordinal).Count() != models.Count)
+            throw new JsonException("The custom model catalog contains invalid or duplicate entries.");
+        return models;
     }
 
     internal void SetFetchedCustomModels(IReadOnlyList<Reson8CustomModel> models)
@@ -394,6 +398,13 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment) || !string.IsNullOrEmpty(endpoint.UserInfo))
             throw new ArgumentException("Enter an absolute HTTP(S) server URL without credentials, query or fragment.", nameof(url));
         if (string.Equals(normalized, _customBaseUrl, StringComparison.Ordinal)) return;
+        PersistConnectionChange(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized);
+        _customBaseUrl = normalized;
+        _host?.NotifyCapabilitiesChanged();
+    }
+
+    private void PersistConnectionChange(string settingName, string? value)
+    {
         if (_host is { } host)
         {
             var oldSelection = host.GetSetting<string>(SelectedModelSettingName);
@@ -406,8 +417,8 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                 selectionWritten = true;
                 host.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
                 modelsWritten = true;
-                // Commit the endpoint only after all dependent settings succeed.
-                host.SetSetting(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized);
+                // Commit connection identity only after dependent settings succeed.
+                host.SetSetting(settingName, value);
             }
             catch (Exception failure) when (failure is not OutOfMemoryException)
             {
@@ -416,14 +427,12 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                 catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
                 try { if (selectionWritten) host.SetSetting(SelectedModelSettingName, oldSelection); }
                 catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
-                if (errors.Count > 1) throw new AggregateException("Server update failed and model settings could not be fully restored.", errors);
+                if (errors.Count > 1) throw new AggregateException("Connection update failed and model settings could not be fully restored.", errors);
                 throw;
             }
         }
-        _customBaseUrl = normalized;
         _selectedModelId = DefaultModelId;
         _fetchedCustomModels = [];
-        _host?.NotifyCapabilitiesChanged();
     }
 
     internal void SetCustomAuthHeader(string? header)
@@ -431,8 +440,10 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         var normalized = NormalizeAuthHeader(header);
         if (normalized.Any(c => !char.IsAsciiLetterOrDigit(c) && !"!#$%&'*+-.^_`|~".Contains(c)))
             throw new ArgumentException("Enter a valid HTTP header name.", nameof(header));
-        _host?.SetSetting(CustomAuthHeaderSettingName, normalized == DefaultAuthHeader ? null : normalized);
+        if (string.Equals(normalized, _customAuthHeader, StringComparison.OrdinalIgnoreCase)) return;
+        PersistConnectionChange(CustomAuthHeaderSettingName, normalized == DefaultAuthHeader ? null : normalized);
         _customAuthHeader = normalized;
+        _host?.NotifyCapabilitiesChanged();
     }
 
     internal static Uri BuildPrerecordedUri(string baseUrl, string? modelId, string? language)

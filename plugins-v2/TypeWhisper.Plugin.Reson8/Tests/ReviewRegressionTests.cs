@@ -7,6 +7,38 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class Reson8PluginTests
 {
     [Theory]
+    [InlineData("X-Api-Key", true)]
+    [InlineData("authorization", false)]
+    public async Task AuthHeaderChangesInvalidateConnectionModels(string header, bool changed)
+    {
+        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        var notifications = host.NotifyCapabilitiesChangedCount;
+        await plugin.SaveTextSettingAsync("authHeader", header, default);
+        Assert.Equal(notifications + (changed ? 1 : 0), host.NotifyCapabilitiesChangedCount);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal(changed ? Reson8Plugin.DefaultModelId : "custom", plugin.SelectedModelId);
+    }
+
+    [Theory]
+    [InlineData("selectedModel")]
+    [InlineData("fetchedCustomModels")]
+    [InlineData("customAuthHeader")]
+    public async Task FailedHeaderChangePreservesConfiguration(string failingSetting)
+    {
+        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        host.FailSettingName = failingSetting;
+        await Assert.ThrowsAsync<IOException>(() => plugin.SaveTextSettingAsync("authHeader", "X-Api-Key", default));
+        Assert.Equal(Reson8Plugin.DefaultAuthHeader, plugin.CustomAuthHeader);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal(Reson8Plugin.DefaultAuthHeader, plugin.CustomAuthHeader);
+        Assert.Equal("custom", plugin.SelectedModelId); Assert.Single(plugin.FetchedCustomModels);
+    }
+
+    [Theory]
     [InlineData("selectedModel")]
     [InlineData("fetchedCustomModels")]
     public async Task FailedModelPersistencePreservesCatalogAndSelection(string failingSetting)
@@ -132,6 +164,11 @@ public partial class Reson8PluginTests
     [InlineData(429, "[]")]
     [InlineData(500, "[]")]
     [InlineData(200, "invalid-json")]
+    [InlineData(200, "[null]")]
+    [InlineData(200, "[{\"name\":\"Missing ID\"}]")]
+    [InlineData(200, "[{\"id\":\"missing-name\"}]")]
+    [InlineData(200, "[{\"id\":\" \",\"name\":\"Blank\"}]")]
+    [InlineData(200, "[{\"id\":\"a\",\"name\":\"A\"},{\"id\":\"a\",\"name\":\"B\"}]")]
     public async Task FailedRefreshPreservesCustomModelSelection(int status, string json)
     {
         using var client = new HttpClient(new CapturingHandler((_, _) => JsonResponse(json, (HttpStatusCode)status)));

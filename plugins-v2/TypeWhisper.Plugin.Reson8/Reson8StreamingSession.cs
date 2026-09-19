@@ -16,11 +16,14 @@ internal sealed class Reson8StreamingSession : IStreamingSession
     private readonly TaskCompletionSource _flushConfirmed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _receiveTask;
     private bool _disposed;
+    private long _sentAudioBytes;
+    private readonly TimeSpan? _finalizationTimeout;
 
-    private Reson8StreamingSession(ClientWebSocket ws, Reson8TranscriptCollector collector)
+    private Reson8StreamingSession(ClientWebSocket ws, Reson8TranscriptCollector collector, TimeSpan? finalizationTimeout)
     {
         _ws = ws;
         _collector = collector;
+        _finalizationTimeout = finalizationTimeout;
     }
 
     /// <summary>
@@ -37,16 +40,20 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         string authHeader,
         string? modelId,
         string? language,
-        CancellationToken ct, Uri? endpoint = null)
+        CancellationToken ct, Uri? endpoint = null, TimeSpan? connectionTimeout = null, TimeSpan? finalizationTimeout = null)
     {
         var ws = new ClientWebSocket();
         foreach (var header in CreateStreamingHeaders(apiKey, authHeader))
             ws.Options.SetRequestHeader(header.Key, header.Value);
 
-        try { await ws.ConnectAsync(endpoint ?? BuildRealtimeUri(baseUrl, modelId, language), ct); }
+        using var timeout = new CancellationTokenSource(connectionTimeout ?? TimeSpan.FromSeconds(15));
+        using var connection = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        try { await ws.ConnectAsync(endpoint ?? BuildRealtimeUri(baseUrl, modelId, language), connection.Token); }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
+        { ws.Dispose(); throw new TimeoutException("The Reson8 streaming connection timed out.", ex); }
         catch { ws.Dispose(); throw; }
 
-        var session = new Reson8StreamingSession(ws, new Reson8TranscriptCollector());
+        var session = new Reson8StreamingSession(ws, new Reson8TranscriptCollector(), finalizationTimeout);
         session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
         return session;
     }
@@ -103,14 +110,18 @@ internal sealed class Reson8StreamingSession : IStreamingSession
     /// </summary>
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
-        if (_disposed || _ws.State != WebSocketState.Open || pcm16Audio.Length == 0)
-            return;
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_flushConfirmed.Task.IsFaulted) await _flushConfirmed.Task;
+        if (pcm16Audio.Length == 0) return;
 
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (_ws.State == WebSocketState.Open)
-                await _ws.SendAsync(pcm16Audio, WebSocketMessageType.Binary, true, ct);
+            if (_flushConfirmed.Task.IsFaulted) await _flushConfirmed.Task;
+            if (_ws.State != WebSocketState.Open) throw new WebSocketException("The streaming connection is no longer open.");
+            await _ws.SendAsync(pcm16Audio, WebSocketMessageType.Binary, true, ct);
+            Interlocked.Add(ref _sentAudioBytes, pcm16Audio.Length);
+            if (_flushConfirmed.Task.IsFaulted) await _flushConfirmed.Task;
         }
         finally
         {
@@ -123,25 +134,34 @@ internal sealed class Reson8StreamingSession : IStreamingSession
     /// </summary>
     public async Task FinalizeAsync(CancellationToken ct)
     {
-        if (_disposed || _ws.State != WebSocketState.Open)
-        { await _flushConfirmed.Task.WaitAsync(ct); return; }
-
-        var json = $$"""{"type":"flush_request","id":"{{Guid.NewGuid()}}"}""";
-        await _sendLock.WaitAsync(ct);
+        // Prerecorded audio may be sent faster than realtime. Give the provider
+        // its audio duration plus grace; live callers can impose a shorter token.
+        using var timeout = new CancellationTokenSource(_finalizationTimeout ??
+            TimeSpan.FromSeconds(15 + Interlocked.Read(ref _sentAudioBytes) / 32000d));
+        using var completion = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        var finishToken = completion.Token;
         try
         {
-            if (_ws.State == WebSocketState.Open)
-            {
-                var payload = Encoding.UTF8.GetBytes(json);
-                await _ws.SendAsync(payload, WebSocketMessageType.Text, true, ct);
-            }
-        }
-        finally
-        {
-            _sendLock.Release();
-        }
+            if (_disposed || _ws.State != WebSocketState.Open)
+            { await _flushConfirmed.Task.WaitAsync(finishToken); return; }
 
-        await _flushConfirmed.Task.WaitAsync(ct);
+            var json = $$"""{"type":"flush_request","id":"{{Guid.NewGuid()}}"}""";
+            await _sendLock.WaitAsync(finishToken);
+            try
+            {
+                if (_ws.State == WebSocketState.Open)
+                {
+                    var payload = Encoding.UTF8.GetBytes(json);
+                    await _ws.SendAsync(payload, WebSocketMessageType.Text, true, finishToken);
+                }
+            }
+            finally { _sendLock.Release(); }
+            await _flushConfirmed.Task.WaitAsync(finishToken);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
+        {
+            throw new TimeoutException("The Reson8 streaming completion timed out.", ex);
+        }
     }
 
     private async Task ReceiveLoopAsync(CancellationToken ct)
