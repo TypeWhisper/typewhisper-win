@@ -116,8 +116,12 @@ public partial class WhisperCppPluginTests
             "portable-host", "Plugins", "com.typewhisper.whisper-cpp", "runtimes");
         var files = Directory.GetFiles(runtimes, "*", SearchOption.AllDirectories);
         Assert.NotEmpty(files);
-        Assert.DoesNotContain(files, path => Path.GetRelativePath(runtimes, path).Split(Path.DirectorySeparatorChar)
-            .Any(part => new[] { "linux", "macos", "osx", "android", "ios" }.Any(prefix => part.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))));
+        string[] supportedPrefixes = ["win-x64/", "win-x86/", "win-arm64/", "cuda/win-x64/", "vulkan/win-x64/"];
+        Assert.All(files, path =>
+        {
+            var relative = Path.GetRelativePath(runtimes, path).Replace(Path.DirectorySeparatorChar, '/');
+            Assert.Contains(supportedPrefixes, prefix => relative.StartsWith(prefix, StringComparison.Ordinal));
+        });
     }
 
     [Fact]
