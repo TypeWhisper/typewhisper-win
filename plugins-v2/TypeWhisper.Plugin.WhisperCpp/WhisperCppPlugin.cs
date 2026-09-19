@@ -95,7 +95,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.6";
+    public string PluginVersion => "1.2.7";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.

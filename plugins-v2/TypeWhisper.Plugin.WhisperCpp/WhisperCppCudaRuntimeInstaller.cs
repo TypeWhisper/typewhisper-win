@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace TypeWhisper.Plugin.WhisperCpp;
 
@@ -33,6 +34,10 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     private readonly HttpClient _httpClient;
     private readonly WhisperCppCudaRuntimePackage _package;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Dictionary<string, (long Length, DateTime Written, string Hash)> _verifiedFiles = new();
+    private readonly object _verificationLock = new();
+    private string ReceiptPath => Path.Join(RuntimeDirectory, "installed.json");
+    private sealed record RuntimeReceipt(string Version, string ArchiveHash, Dictionary<string, string> Files);
 
     /// <summary>
     /// Performs whisper cpp cuda runtime installer.
@@ -61,8 +66,37 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     /// <summary>
     /// Returns whether installed.
     /// </summary>
-    public bool IsInstalled => _package.RequiredDlls.All(file =>
-        File.Exists(GetRuntimeFilePath(file)));
+    public bool IsInstalled
+    {
+        get
+        {
+            lock (_verificationLock)
+            {
+                try
+                {
+                    if (!File.Exists(ReceiptPath)) return false;
+                    var receipt = JsonSerializer.Deserialize<RuntimeReceipt>(File.ReadAllText(ReceiptPath));
+                    if (receipt?.Version != _package.RuntimeVersion || receipt.ArchiveHash != _package.Sha256 || receipt.Files is null)
+                        return false;
+                    foreach (var name in _package.RequiredDlls)
+                    {
+                        var file = new FileInfo(GetRuntimeFilePath(name));
+                        if (!file.Exists || file.Length == 0 || !receipt.Files.TryGetValue(name, out var expected)) return false;
+                        if (!_verifiedFiles.TryGetValue(name, out var cached) || cached.Length != file.Length || cached.Written != file.LastWriteTimeUtc)
+                        {
+                            using var input = file.OpenRead();
+                            cached = (file.Length, file.LastWriteTimeUtc, Convert.ToHexString(SHA256.HashData(input)));
+                            _verifiedFiles[name] = cached;
+                        }
+                        if (!string.Equals(cached.Hash, expected, StringComparison.OrdinalIgnoreCase)) return false;
+                    }
+                    return true;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+                { return false; }
+            }
+        }
+    }
 
     /// <summary>
     /// Ensures installed asynchronously..
@@ -89,7 +123,6 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
                 await DownloadArchiveAsync(archivePath, cancellationToken);
                 await ValidateArchiveHashAsync(archivePath, cancellationToken);
                 ExtractRequiredDlls(archivePath);
-                ValidateInstalledRuntime();
             }
             finally
             {
@@ -160,27 +193,37 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     private void ExtractRequiredDlls(string archivePath)
     {
         using var archive = ZipFile.OpenRead(archivePath);
-        var remaining = new HashSet<string>(_package.RequiredDlls, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in archive.Entries.Where(entry =>
-                     remaining.Contains(entry.Name)))
+        var staged = new List<(string Name, string Path)>();
+        var hashes = new Dictionary<string, string>();
+        var receiptTemporary = ReceiptPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
         {
-            var destination = GetRuntimeFilePath(entry.Name);
-            entry.ExtractToFile(destination, overwrite: true);
-            remaining.Remove(entry.Name);
+            foreach (var name in _package.RequiredDlls)
+            {
+                var entry = archive.Entries.SingleOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (entry is null || entry.Length == 0)
+                    throw new InvalidOperationException("The NVIDIA CUDA runtime download was incomplete. Missing: " + name);
+                var temporary = GetRuntimeFilePath(name) + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                staged.Add((name, temporary));
+                entry.ExtractToFile(temporary);
+                using var input = File.OpenRead(temporary);
+                hashes[name] = Convert.ToHexString(SHA256.HashData(input));
+            }
+            File.WriteAllText(receiptTemporary, JsonSerializer.Serialize(new RuntimeReceipt(_package.RuntimeVersion, _package.Sha256, hashes)));
+            lock (_verificationLock)
+            {
+                // Invalidate the receipt before replacing files; interruption must never
+                // make a partial installation appear complete on the next startup.
+                File.Delete(ReceiptPath);
+                _verifiedFiles.Clear();
+                foreach (var file in staged) File.Move(file.Path, GetRuntimeFilePath(file.Name), overwrite: true);
+                File.Move(receiptTemporary, ReceiptPath, overwrite: true);
+            }
         }
-    }
-
-    private void ValidateInstalledRuntime()
-    {
-        var missing = _package.RequiredDlls
-            .Where(file => !File.Exists(GetRuntimeFilePath(file)))
-            .ToList();
-
-        if (missing.Count > 0)
+        finally
         {
-            throw new InvalidOperationException(
-                "The NVIDIA CUDA runtime download was incomplete. Missing: " + string.Join(", ", missing));
+            foreach (var file in staged) TryDeleteFile(file.Path);
+            TryDeleteFile(receiptTemporary);
         }
     }
 
