@@ -52,6 +52,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.openai" => "openai",
             "com.typewhisper.openrouter" => "openrouter",
             "com.typewhisper.soniox" => "soniox",
+            "com.typewhisper.reson8" => "reson8",
             "com.typewhisper.speechmatics" => "speechmatics",
             _ => null
         };
@@ -70,7 +71,7 @@ public sealed class PluginBrandIcon : UserControl
         var logo = new Image { Stretch = Stretch.Uniform };
         logo.ImageFailed += (_, _) => { if (ReferenceEquals(Content, logo)) ShowFallback(); };
         Content = logo;
-        var raster = brand is "claude" or "gemini" or "soniox";
+        var raster = brand is "claude" or "gemini" or "soniox" or "reson8";
         var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (raster ? ".png" : ".svg")));
         logo.Source = raster ? new BitmapImage(uri) : new SvgImageSource(uri);
     }
