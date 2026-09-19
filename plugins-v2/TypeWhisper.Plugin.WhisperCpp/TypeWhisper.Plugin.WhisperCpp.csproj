@@ -15,7 +15,7 @@
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">
     <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.whisper-cpp/</PackageDirectory></PropertyGroup>
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../eng/Copy-WhisperCppMsvcRuntime.ps1&quot; -OutputDirectory &quot;$(TargetDir).&quot; -RuntimeIdentifiers $(PortableRuntimeIdentifiers) -Required" Condition="'$(Configuration)' == 'Release'" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../eng/Copy-WhisperCppMsvcRuntime.ps1&quot; -OutputDirectory &quot;$(TargetDir).&quot; -RuntimeIdentifiers $(PortableRuntimeIdentifiers) -Required" Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT'" />
     <ItemGroup>
       <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" />
       <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
