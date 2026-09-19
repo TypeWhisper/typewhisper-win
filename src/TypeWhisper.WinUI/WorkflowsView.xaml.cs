@@ -56,7 +56,7 @@ public sealed partial class WorkflowsView : UserControl
     private string? _loadError;
     private CancellationTokenSource? _run;
     private IReadOnlyList<Choice> Providers => [new(WorkflowLlmDefaults.Inherit, "Use default", "Use the shared workflow LLM"), new("none", "Not configured", "Choose an installed LLM provider"),
-        .. (_session?.LlmProviders.Select(p => new Choice(p.SelectionId, p.Name, p.Ready ? "Ready" : "Requires configuration")) ?? [])];
+        .. (_session?.LlmProviders.Select(p => new Choice(p.SelectionId, p.Name, p.Ready ? "Ready" : "Requires configuration") { PluginId = p.PluginId }) ?? [])];
 
     internal void Connect(LocalDictationSession session)
     {
