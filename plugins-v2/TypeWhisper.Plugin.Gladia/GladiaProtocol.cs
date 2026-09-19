@@ -51,8 +51,9 @@ public sealed partial class GladiaPlugin
         if(terms.Length>0) { body["custom_vocabulary"]=true; body["custom_vocabulary_config"]=new { vocabulary=terms, default_intensity=0.7 }; }
         using var submit=Connection.Request(HttpMethod.Post,"https://api.gladia.io/v2/pre-recorded",key,"x-gladia-key"); submit.Content=ProviderConnection.Json(body);
         using var job=await Connection.ReadAsync(submit,ct);
-        var resultUrl=ProviderConnection.RequiredText(job.RootElement,"result_url");
-        if(!Uri.TryCreate(resultUrl,UriKind.Absolute,out var uri) || uri.Scheme!="https" || uri.Host!="api.gladia.io" || uri.UserInfo.Length!=0 || !uri.AbsolutePath.StartsWith("/v2/pre-recorded/",StringComparison.Ordinal)) throw ProviderConnection.InvalidResponse();
+        var jobId=ProviderConnection.RequiredText(job.RootElement,"id");
+        if(!Guid.TryParse(jobId,out var parsedJobId)) throw ProviderConnection.InvalidResponse();
+        var resultUrl=$"https://api.gladia.io/v2/pre-recorded/{parsedJobId:D}";
         for(var attempt=0;attempt<300;attempt++)
         {
             ct.ThrowIfCancellationRequested();
@@ -60,11 +61,13 @@ public sealed partial class GladiaPlugin
             var root=document.RootElement; var status=ProviderConnection.Text(root,"status");
             if(status=="done")
             {
-                var transcription=ProviderConnection.Required(ProviderConnection.Required(root,"result",JsonValueKind.Object),"transcription",JsonValueKind.Object);
+                var result=ProviderConnection.Required(root,"result",JsonValueKind.Object);
+                var transcription=ProviderConnection.Required(result,"transcription",JsonValueKind.Object);
+                var metadata=ProviderConnection.Required(result,"metadata",JsonValueKind.Object);
                 var text=ProviderConnection.Text(transcription,"full_transcript") ?? throw ProviderConnection.InvalidResponse();
                 var detected = languages.FirstOrDefault();
                 if (transcription.TryGetProperty("languages", out var detectedLanguages) && detectedLanguages.ValueKind == JsonValueKind.Array && detectedLanguages.GetArrayLength() > 0 && detectedLanguages[0].ValueKind == JsonValueKind.String) detected = detectedLanguages[0].GetString();
-                return new(text.Trim(), detected, ProviderConnection.Number(transcription,"duration"), NoSpeechProbability: null);
+                return new(text.Trim(), detected, ProviderConnection.Number(metadata,"audio_duration"), NoSpeechProbability: null);
             }
             if(status is not ("queued" or "processing")) throw new PluginRequestException("Gladia transcription job failed.",PluginRequestFailureKind.ServerError);
             await Delay(TimeSpan.FromSeconds(2),ct);

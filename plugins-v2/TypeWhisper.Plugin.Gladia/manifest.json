@@ -1,10 +1,10 @@
 {
   "id": "com.typewhisper.gladia",
   "name": "Gladia",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
-  "description": "Corrects the legacy single-request assumption: upload audio, submit an asynchronous transcription job and poll its result.",
+  "description": "Transcribes recorded audio and provides live dictation with Gladia.",
   "categories": [
     "transcription"
   ],
@@ -12,6 +12,6 @@
   "assemblyName": "TypeWhisper.Plugin.Gladia.dll",
   "pluginClass": "TypeWhisper.Plugin.Gladia.GladiaPlugin",
   "descriptions": {
-    "de": "Gladia-Integration mit portablen Einstellungen."
+    "de": "Transkribiert Aufnahmen und ermöglicht Live-Diktieren mit Gladia."
   }
 }

@@ -68,15 +68,50 @@ public sealed partial class ProviderTests
         {
             if(r.RequestUri!.AbsolutePath=="/v2/pre-recorded")
             {using var doc=JsonDocument.Parse(b!);var root=doc.RootElement;Assert.Equal("TypeWhisper",root.GetProperty("custom_vocabulary_config").GetProperty("vocabulary")[0].GetString());Assert.True(root.GetProperty("language_config").GetProperty("code_switching").GetBoolean());}
-            if(r.RequestUri.AbsolutePath.EndsWith("/job") && polls++==0)return Json("""{"status":"processing"}""");return Success(r,b);
+            if(r.RequestUri.AbsolutePath == PollPath && polls++==0)return Json("""{"status":"processing"}""");return Success(r,b);
         }));using var plugin=new GladiaPlugin(http){Delay=(_,ct)=>Task.CompletedTask};await plugin.ActivateAsync(new Host());await Configure(plugin);
         Assert.Equal("Hallo Welt",(await plugin.TranscribeWithLanguageHintsAsync(Audio(),["de","en"],false,"TypeWhisper",default)).Text);Assert.Equal(2,polls);
     }
-    [Fact]
-    public async Task ResultUrlCannotSendKeyToAnotherHost()
+    [Theory]
+    [InlineData("https://api.gladia.io/v2/transcription/")]
+    [InlineData("https://attacker.invalid/")]
+    public async Task PollUsesCanonicalJobIdAndReturnsMetadataDuration(string resultBase)
     {
-        var calls=0;using var http=new HttpClient(new Handler((r,b)=>{calls++;return r.RequestUri!.AbsolutePath=="/v2/upload"?Success(r,b):Json("""{"result_url":"https://attacker.invalid/job"}""");}));
-        using var plugin=new GladiaPlugin(http);await plugin.ActivateAsync(new Host());await Configure(plugin);await Assert.ThrowsAsync<PluginRequestException>(()=>Run(plugin));Assert.Equal(2,calls);
+        var calls = 0;
+        using var http = new HttpClient(new Handler((request, body) =>
+        {
+            calls++;
+            if (request.RequestUri!.AbsolutePath == "/v2/pre-recorded")
+                return Json(JsonSerializer.Serialize(new { id = JobId, result_url = resultBase + JobId }));
+            Assert.Equal("api.gladia.io", request.RequestUri.Host);
+            return Success(request, body);
+        }));
+        using var plugin = new GladiaPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        var result = await plugin.TranscribeAsync(Audio(), "de", false, null, default);
+        Assert.Equal("Hallo Welt", result.Text);
+        Assert.Equal(3.125, result.DurationSeconds);
+        Assert.Equal(3, calls);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("../another-job")]
+    [InlineData("https://attacker.invalid/")]
+    public async Task InvalidJobIdNeverStartsPolling(string? jobId)
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler((request, body) =>
+        {
+            calls++;
+            return request.RequestUri!.AbsolutePath == "/v2/upload"
+                ? Success(request, body)
+                : Json(JsonSerializer.Serialize(new { id = jobId, result_url = "https://api.gladia.io" + PollPath }));
+        }));
+        using var plugin = new GladiaPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        await Assert.ThrowsAsync<PluginRequestException>(() => Run(plugin));
+        Assert.Equal(2, calls);
+    }
 }

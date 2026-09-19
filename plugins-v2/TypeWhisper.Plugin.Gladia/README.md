@@ -1,6 +1,6 @@
 # Gladia for the portable host
 
-Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.1`, requiring host `1.1.2`. Implemented on its own `seofood/gladia-portable` branch, originally based on Windows `4db8f6ac` and updated with current main before review. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.2`, requiring host `1.1.2`. Implemented on its own `seofood/gladia-portable` branch, originally based on Windows `4db8f6ac` and updated with current main before review. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -10,6 +10,8 @@ The corresponding Mac sources were inspected at `ac00e39e` in `TypeWhisperPlugin
 
 Setup: **Gladia API key**. Settings are rendered by the host in English/German. API keys use the host secret store, with a staged encrypted-key reference and one configuration commit. Failed writes keep the active configuration. Removing a key retains nonsecret preferences. No legacy credentials or settings are imported. Redirects are disabled and provider HTTP failures retain status/retry metadata. Opening the settings page sends no network request.
 
+Version 1.2.2 constructs the polling endpoint from the returned job UUID, reads duration from result metadata, and updates the provider description. Regression fixtures use the documented submission response and assert the complete upload/submit/poll sequence. An isolated authenticated test of the built 1.2.2 package passed configuration validation and recorded-audio transcription with the full expected text and 5.088 seconds of metadata duration; it did not replace the running development package.
+
 ## Verification
 
 ```powershell
@@ -17,7 +19,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Gladia/Tests/TypeWhisper.Plugin.Gladia
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.Gladia/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **47 provider tests passed** (including 27 streaming cases). The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+All **52 provider tests passed** (including 27 streaming cases). The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
 
 On 2026-09-19, all 20 provider tests passed again. The installed 1.1.0 package loaded through the real portable host using the development profile's Windows secret store. Authenticated configuration validation and recorded-audio transcription passed with a short synthetic English WAV. The result was: "This is a short test. Tomorrow we will meet at 10 in the office."
 
