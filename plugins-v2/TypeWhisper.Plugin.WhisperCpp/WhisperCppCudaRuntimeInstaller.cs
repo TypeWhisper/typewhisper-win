@@ -37,18 +37,18 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     /// <summary>
     /// Performs whisper cpp cuda runtime installer.
     /// </summary>
-    public WhisperCppCudaRuntimeInstaller(string pluginDirectory, HttpClient httpClient)
-        : this(pluginDirectory, httpClient, DefaultPackage)
+    public WhisperCppCudaRuntimeInstaller(string assetDirectory, HttpClient httpClient)
+        : this(assetDirectory, httpClient, DefaultPackage)
     {
     }
 
     internal WhisperCppCudaRuntimeInstaller(
-        string pluginDirectory,
+        string assetDirectory,
         HttpClient httpClient,
         WhisperCppCudaRuntimePackage package)
     {
-        var pluginRoot = Path.GetFullPath(pluginDirectory);
-        RuntimeDirectory = Path.Join(pluginRoot, "runtimes", "cuda", CudaRuntimeIdentifier);
+        var assetRoot = Path.GetFullPath(assetDirectory);
+        RuntimeDirectory = Path.Join(assetRoot, "runtimes", "cuda", CudaRuntimeIdentifier);
         _httpClient = httpClient;
         _package = package;
     }

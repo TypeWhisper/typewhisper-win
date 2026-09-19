@@ -108,6 +108,87 @@ public partial class WhisperCppPluginTests
         Assert.Null(unknown.NoSpeechProbability);
     }
 
+    [Fact]
+    public async Task UnloadPreservesSelectionAndRemovalClearsItPersistently()
+    {
+        using var temp = new TempDirectory();
+        var host = new FakePluginHostServices(temp.Path);
+        using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(host);
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
+        await File.WriteAllBytesAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), [1]);
+        plugin.SelectModel("tiny");
+        await plugin.UnloadModelAsync();
+        Assert.Equal("tiny", plugin.SelectedModelId);
+        Assert.True(plugin.IsConfigured);
+        await plugin.RemoveModelAsync("tiny", default);
+        Assert.Null(plugin.SelectedModelId);
+        Assert.Null(host.GetSetting<string>("selectedModel"));
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(host);
+        Assert.Null(plugin.SelectedModelId);
+    }
+
+    [Fact]
+    public async Task FailedSelectionPersistenceKeepsPreviousModel()
+    {
+        using var temp = new TempDirectory();
+        var host = new FakePluginHostServices(temp.Path);
+        using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(host);
+        plugin.SelectModel("tiny");
+        host.FailSetting = true;
+        Assert.Throws<IOException>(() => plugin.SelectModel("base"));
+        Assert.Equal("tiny", plugin.SelectedModelId);
+        Assert.Equal("tiny", host.GetSetting<string>("selectedModel"));
+    }
+
+    [Theory]
+    [InlineData("tiny.en", false)]
+    [InlineData("large-v3-turbo", true)]
+    public void TranslationRequiresMultilingualWeights(string model, bool supported)
+    {
+        using var plugin = new WhisperCppPlugin();
+        plugin.SelectModel(model);
+        Assert.Equal(supported, plugin.SupportsTranslation);
+    }
+
+    [Fact]
+    public async Task CudaInstallerUsesPersistentAssetsAndOwnsTheDownloadTimeout()
+    {
+        using var temp = new TempDirectory();
+        using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        var installer = GetPrivateField<IWhisperCppCudaRuntimeInstaller>(plugin, "_cudaRuntimeInstaller");
+        Assert.Equal(Path.Join(temp.Path, "runtimes", "cuda", "win-x64"), installer!.RuntimeDirectory);
+        Assert.Equal(Timeout.InfiniteTimeSpan, GetPrivateField<System.Net.Http.HttpClient>(plugin, "_httpClient")!.Timeout);
+    }
+
+    [Fact]
+    public void CudaStagingReusesPersistentDownloadsWithoutMutatingPackages()
+    {
+        using var temp = new TempDirectory();
+        var package = Path.Join(temp.Path, "package");
+        var runtime = Path.Join(package, "runtimes", "cuda", "win-x64");
+        var assets = Path.Join(temp.Path, "assets");
+        Directory.CreateDirectory(runtime);
+        Directory.CreateDirectory(assets);
+        File.WriteAllText(Path.Join(runtime, "whisper.dll"), "native");
+        File.WriteAllText(Path.Join(assets, "cublas64_13.dll"), "downloaded");
+        foreach (var version in new[] { "first", "updated" })
+        {
+            var cache = Path.Join(temp.Path, "cache", version);
+            WhisperCppPlugin.StageCudaRuntime(package, assets, cache);
+            WhisperCppPlugin.StageCudaRuntime(package, assets, cache);
+            var staged = Path.Join(cache, "runtimes", "cuda", "win-x64");
+            Assert.Equal("native", File.ReadAllText(Path.Join(staged, "whisper.dll")));
+            Assert.Equal("downloaded", File.ReadAllText(Path.Join(staged, "cublas64_13.dll")));
+            Assert.Empty(Directory.GetFiles(staged, "*.tmp"));
+        }
+        Assert.Single(Directory.GetFiles(runtime));
+        Assert.Equal("downloaded", File.ReadAllText(Path.Join(assets, "cublas64_13.dll")));
+    }
+
     private static SegmentData Segment(string text, double start, double end, float noSpeech) =>
         new(text, TimeSpan.FromSeconds(start), TimeSpan.FromSeconds(end), 0, 1, 1, noSpeech, "en", []);
 

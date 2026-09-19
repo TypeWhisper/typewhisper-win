@@ -53,7 +53,7 @@ public sealed partial class WhisperCppPlugin :
     ];
 
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient = new() { Timeout = Timeout.InfiniteTimeSpan };
     private IWhisperCppCudaRuntimeInstaller? _cudaRuntimeInstaller;
     private IPluginHostServices? _host;
     private WhisperFactory? _factory;
@@ -95,7 +95,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.5";
+    public string PluginVersion => "1.2.6";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -120,7 +120,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets whether the provider supports translation requests.
     /// </summary>
-    public bool SupportsTranslation => true;
+    public bool SupportsTranslation => _selectedModelId?.EndsWith(".en", StringComparison.Ordinal) != true;
     /// <summary>
     /// Gets whether the provider can download models through the host.
     /// </summary>
@@ -183,8 +183,7 @@ public sealed partial class WhisperCppPlugin :
     {
         _host = host;
         _pluginDirectory = Path.GetDirectoryName(typeof(WhisperCppPlugin).Assembly.Location);
-        if (_pluginDirectory is not null)
-            _cudaRuntimeInstaller ??= new WhisperCppCudaRuntimeInstaller(_pluginDirectory, _httpClient);
+        _cudaRuntimeInstaller ??= new WhisperCppCudaRuntimeInstaller(host.PluginAssetDirectory, _httpClient);
         _selectedModelId = host.GetSetting<string>("selectedModel");
         if (Enum.TryParse<TranscriptionAccelerationPreference>(host.GetSetting<string>("acceleration"), out var preference) && Enum.IsDefined(preference)) SetAccelerationPreference(preference);
         host.Log(PluginLogLevel.Info, "Activated");
@@ -234,8 +233,8 @@ public sealed partial class WhisperCppPlugin :
     public void SelectModel(string modelId)
     {
         _ = GetModel(modelId);
-        _selectedModelId = modelId;
         _host?.SetSetting("selectedModel", modelId);
+        _selectedModelId = modelId;
     }
 
     /// <summary>
@@ -364,6 +363,7 @@ public sealed partial class WhisperCppPlugin :
         ApplyRuntimeConfiguration(_accelerationPreference);
         await EnsureCudaRuntimeAvailableForLoadAsync(ct).ConfigureAwait(false);
         EnsureRocmRuntimeAvailableForLoad();
+        PrepareCudaRuntimeSearchPath();
         DisposeFactoryUnsafe();
         try
         {
@@ -507,7 +507,6 @@ public sealed partial class WhisperCppPlugin :
         {
             DisposeFactoryUnsafe();
             _loadedModelId = null;
-            _selectedModelId = null;
         }
         finally
         {
@@ -674,6 +673,41 @@ public sealed partial class WhisperCppPlugin :
         throw new InvalidOperationException(_accelerationStatus.Detail);
     }
 
+    private void PrepareCudaRuntimeSearchPath()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64
+            || _accelerationPreference is not (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda)
+            || _cudaRuntimeInstaller?.IsInstalled != true || _host is null || _pluginDirectory is null)
+            return;
+        var cacheRoot = Path.Join(_host.PluginAssetDirectory, "NativeRuntime", PluginVersion);
+        StageCudaRuntime(_pluginDirectory, _cudaRuntimeInstaller.RuntimeDirectory, cacheRoot);
+        // Whisper.net searches runtimes next to LibraryPath before its own assembly directory.
+        RuntimeOptions.LibraryPath = Path.Join(cacheRoot, "whisper.dll");
+    }
+
+    internal static void StageCudaRuntime(string packageRoot, string cudaAssets, string cacheRoot)
+    {
+        var destination = Path.Join(cacheRoot, "runtimes", "cuda", "win-x64");
+        var packagedRuntime = Path.Join(packageRoot, "runtimes", "cuda", "win-x64");
+        Directory.CreateDirectory(destination);
+        foreach (var source in Directory.EnumerateFiles(packagedRuntime, "*.dll")
+            .Concat(Directory.EnumerateFiles(cudaAssets, "*.dll")))
+        {
+            var target = Path.Join(destination, Path.GetFileName(source));
+            // A cache is version-specific; do not overwrite DLLs already loaded by this process.
+            if (!File.Exists(target))
+            {
+                var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    File.Copy(source, temporary);
+                    File.Move(temporary, target);
+                }
+                finally { TryDeleteFile(temporary); }
+            }
+        }
+    }
+
     private static TranscriptionAccelerationStatus CreateCudaRuntimeInstallFailureStatus(string detail) =>
         new(
             TranscriptionAccelerationBackend.Cpu,
@@ -828,7 +862,7 @@ public sealed partial class WhisperCppPlugin :
         var runtimeIdentifier = Path.GetFileName(RuntimeInformation.RuntimeIdentifier);
         var runtimeDirectory = effectiveLibrary switch
         {
-            RuntimeLibrary.Cuda => Path.Join(_pluginDirectory, "runtimes", "cuda", runtimeIdentifier),
+            RuntimeLibrary.Cuda => Path.Join(Path.GetDirectoryName(RuntimeOptions.LibraryPath) ?? _pluginDirectory, "runtimes", "cuda", runtimeIdentifier),
             RuntimeLibrary.Vulkan => Path.Join(_pluginDirectory, "runtimes", "vulkan", runtimeIdentifier),
             _ => Path.Join(_pluginDirectory, "runtimes", runtimeIdentifier),
         };
