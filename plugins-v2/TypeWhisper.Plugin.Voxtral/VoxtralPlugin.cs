@@ -9,7 +9,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.Plugin.Voxtral;
 
 /// <summary>Independent portable Voxtral (Mistral API) provider, compared with Windows 4db8f6ac and macOS ac00e39e.</summary>
-public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin, IPluginTextSettings
+public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin, IPluginTextSettings, ILlmProviderPlugin, ILlmRequestHedgingSupport, IPluginSettingsActions
 {
     private readonly ProviderConnection Connection;
     /// <summary>Creates a provider with isolated HTTP transport.</summary>
@@ -18,9 +18,9 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.voxtral";
     /// <inheritdoc />
-    public string PluginName => "Voxtral (Mistral API)";
+    public string PluginName => "Mistral";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.2.0";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
@@ -40,6 +40,9 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
         cancellationToken.ThrowIfCancellationRequested();
         var field = TextSettings.FirstOrDefault(f => f.Id == id) ?? throw new ArgumentException("Unknown setting.");
         value = value.Trim();
+        if (id == "model" && !TranscriptionModels.Any(m => m.Id == value)
+            || id == "llmModel" && !SupportedModels.Any(m => m.Id == value))
+            throw new ArgumentException("Unknown model. Refresh models and select an available model.");
         if (value.Length > 2048 || value.Any(char.IsControl) || (field.Choices.Count > 0 && !field.Choices.Any(c => c.Value == value)))
             throw new ArgumentException("Invalid setting value.");
         ValidateValue(id, value);
@@ -68,9 +71,10 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
     /// <inheritdoc />
     public string ProviderDisplayName => PluginName;
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("voxtral-mini-latest", "Voxtral Mini Latest")];
+    public IReadOnlyList<PluginModelInfo> TranscriptionModels => Catalog.Transcription;
     /// <inheritdoc />
-    public string? SelectedModelId => TranscriptionModels.Any(m => m.Id == Connection.Get("model")) ? Connection.Get("model") : TranscriptionModels[0].Id;
+    public string? SelectedModelId => TranscriptionModels.Any(m => m.Id == Connection.Get("model")) ? Connection.Get("model")
+        : TranscriptionModels.FirstOrDefault(m => m.Id == "voxtral-mini-latest")?.Id ?? TranscriptionModels.FirstOrDefault()?.Id;
     /// <inheritdoc />
     public void SelectModel(string modelId)
     {

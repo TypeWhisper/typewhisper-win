@@ -40,6 +40,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.cerebras" => "cerebras",
             "com.typewhisper.cloudflare-asr" => "cloudflare",
             "com.typewhisper.claude" => "claude",
+            "com.typewhisper.voxtral" => "mistral",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.fireworks" => "fireworks",

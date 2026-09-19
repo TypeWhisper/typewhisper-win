@@ -44,7 +44,9 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
             try
             {
                 if (staged is not null) await host.StoreSecretAsync(staged, key!);
-                var next = previous with { SecretName = staged };
+                var values = new Dictionary<string, string>(previous.Values);
+                if (!string.Equals(key, Key, StringComparison.Ordinal)) values.Remove("modelCatalog");
+                var next = previous with { SecretName = staged, Values = values };
                 host.SetSetting("configuration", next);
                 _configuration = next; Key = key;
             }
@@ -64,12 +66,14 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         { host.Log(PluginLogLevel.Warning, "An inactive encrypted provider key could not be removed."); }
     }
-    internal async Task SaveAsync(string id, string value, CancellationToken ct)
+    internal async Task SaveAsync(string id, string value, CancellationToken ct, string? expectedKey = null)
     {
         await _gate.WaitAsync(ct);
         try
         {
             var host = Host ?? throw new InvalidOperationException("Activate the plugin first."); ct.ThrowIfCancellationRequested();
+            if (expectedKey is not null && !string.Equals(expectedKey, Key, StringComparison.Ordinal))
+                throw new InvalidOperationException("The API key changed. Refresh models again.");
             var values = new Dictionary<string, string>(_configuration.Values) { [id] = value };
             var next = _configuration with { Values = values };
             host.SetSetting("configuration", next); _configuration = next; host.NotifyCapabilitiesChanged();

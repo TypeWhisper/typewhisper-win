@@ -14,12 +14,12 @@ public sealed partial class VoxtralPlugin
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
-    public IReadOnlyList<PluginTextSetting> TextSettings => [];
+    public IReadOnlyList<string> SupportedLanguages => ["ar", "de", "en", "es", "fr", "hi", "it", "ja", "ko", "nl", "pt", "ru", "zh"];
     /// <inheritdoc />
     public Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio,string? language,bool translate,string? prompt,CancellationToken ct)
     {
         ProviderConnection.Audio(wavAudio,translate,false,ct);
-        return Connection.MultipartAsync("https://api.mistral.ai/v1/audio/transcriptions",SelectedModelId!,wavAudio,language,null,ct);
+        return Connection.MultipartAsync("https://api.mistral.ai/v1/audio/transcriptions",SelectedModelId ?? throw new PluginRequestException("No transcription model is available. Refresh models.", PluginRequestFailureKind.Configuration),wavAudio,language,null,ct);
     }
     /// <inheritdoc />
     public async Task ValidateConfigurationAsync(CancellationToken ct)

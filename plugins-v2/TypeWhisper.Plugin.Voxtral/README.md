@@ -1,26 +1,25 @@
-# Voxtral (Mistral API) for the portable host
+# Mistral for the portable host
 
-Independent .NET 10 package `com.typewhisper.voxtral`, version `1.1.0`, requiring host `1.1.2`. Implemented on its own `seofood/voxtral-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.voxtral`, version `1.2.0`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename. Developed on `seofood/voxtral-portable`; no other migration branch is required.
 
 ## Behavior and macOS comparison
 
-Preserves the Windows Mistral cloud integration, replacing the obsolete `mistral-whisper` model with the documented `voxtral-mini-latest` audio-transcription endpoint.
+The plugin uses one Mistral API key for Voxtral audio transcription and Mistral chat completions. **Refresh models** reads `/v1/models`, classifies models by their advertised capabilities and persists the account catalog. Batch transcription models and text completion models have separate selectors. Archived models, embeddings, OCR, speech generation and realtime-only models are not offered for these endpoints. Model listing is not a guarantee of quota or inference permission for every model.
 
-The corresponding Mac sources were inspected at `ac00e39e` in `TypeWhisperPluginSDK/Plugins/`. Mac `VoxtralPlugin` is an MLX local engine; the comparable Mac cloud path is in `MistralAIPlugin`. This port is explicitly cloud-based and does not include MLX, local downloads, translation, dictionary biasing or realtime streaming.
+Text processing supports the selected default or an explicit workflow model, provider-default or custom temperature, complete-response validation, and reasoning responses containing text chunks. Thinking chunks are excluded from the returned text. Voxtral supports automatic language detection and explicit hints for the 13 documented languages.
 
-Setup: **Mistral API key**. Settings are rendered by the host in English/German. API keys use the host secret store, with a staged encrypted-key reference and one configuration commit. Failed writes keep the active configuration. Removing a key retains nonsecret preferences. No legacy credentials or settings are imported. Redirects are disabled and provider HTTP failures retain status/retry metadata. Opening the settings page sends no network request.
+Settings use the host's single **Save settings** button. The key stays in encrypted host storage. Opening settings performs no network request. A failed model fetch or settings write retains the previous catalog. Changing accounts resets the old catalog, and a concurrent refresh cannot publish models fetched using a replaced key. Redirects are disabled; HTTP status, retry information and cancellation remain typed.
+
+The Mac sources were compared at `ac00e39e` in `TypeWhisperPluginSDK/Plugins/`. Mac `VoxtralPlugin` is a local MLX engine; `MistralAIPlugin` is the comparable cloud provider. This package is cloud-based, without local downloads, translation, dictionary biasing or live transcription. Mistral offers a separate realtime API, but this version implements uploaded-audio transcription and text processing.
 
 ## Verification
 
 ```powershell
 dotnet test plugins-v2/TypeWhisper.Plugin.Voxtral/Tests/TypeWhisper.Plugin.Voxtral.Portable.Tests.csproj -c Release
-dotnet msbuild plugins-v2/TypeWhisper.Plugin.Voxtral/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **19 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+All **32 tests passed**, including capability discovery, filtering/deduplication, restart persistence, failed writes, account changes during refresh, empty account catalogs, shared-key chat requests, optional temperature, reasoning chunks, incomplete replies and independent ZIP lifecycle tests.
 
-On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
+On September 19, 2026, real API checks passed for credentials, model discovery (2 batch transcription IDs and 27 text completion IDs), English synthetic WAV transcription and text correction using `ministral-8b-latest`. `mistral-small-latest` returned HTTP 429 during two attempts; its inference was not accepted as verified. No claim is made that every listed model was individually tested. Marco confirmed normal microphone dictation in the running development app on the same day. Manual text-workflow acceptance, ARM64 and realtime implementation remain pending. No public package or catalog was published.
 
-Authenticated provider requests, microphone/workflow execution, native visual inspection, version-upgrade acceptance and ARM64 execution remain pending. Marco will enter credentials and perform live acceptance later. No public package or catalog was published.
-
-Reference: [provider documentation](https://docs.mistral.ai/api/endpoint/audio/transcriptions).
+References: [models](https://docs.mistral.ai/api/endpoint/models), [chat](https://docs.mistral.ai/api/endpoint/chat), [transcription](https://docs.mistral.ai/studio/audio/speech_to_text).

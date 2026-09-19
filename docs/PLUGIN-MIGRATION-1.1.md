@@ -72,7 +72,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Soniox | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Soniox`; 39 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Speechmatics | Separate v2 port pending |
 | SupertonicTts | Separate v2 port pending |
-| Voxtral | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Voxtral`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
+| Mistral (formerly Voxtral) | Independent v2 `1.2.0` in `plugins-v2/TypeWhisper.Plugin.Voxtral`: batch transcription, chat processing, account model discovery, provider icon and shared Save settings. 32 tests and real transcription/Ministral text checks passed; normal microphone dictation accepted by Marco; manual text-workflow acceptance pending. |
 | Webhook | Separate v2 port pending |
 | WhisperCpp | Separate v2 port pending |
 | Xai | Separate v2 port pending |

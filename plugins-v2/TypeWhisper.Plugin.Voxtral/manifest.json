@@ -1,17 +1,18 @@
 {
   "id": "com.typewhisper.voxtral",
-  "name": "Voxtral (Mistral API)",
-  "version": "1.1.0",
+  "name": "Mistral",
+  "version": "1.2.0",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
-  "description": "Preserves the Windows Mistral cloud integration, replacing the obsolete `mistral-whisper` model with the documented `voxtral-mini-latest` audio-transcription endpoint..",
+  "description": "Mistral cloud transcription and text processing with account model discovery.",
   "categories": [
-    "transcription"
+    "transcription",
+    "llm"
   ],
   "requiresApiKey": true,
   "assemblyName": "TypeWhisper.Plugin.Voxtral.dll",
   "pluginClass": "TypeWhisper.Plugin.Voxtral.VoxtralPlugin",
   "descriptions": {
-    "de": "Voxtral (Mistral API)-Integration mit portablen Einstellungen."
+    "de": "Mistral für Transkription und Textverarbeitung mit Modellauswahl aus dem API-Katalog."
   }
 }
