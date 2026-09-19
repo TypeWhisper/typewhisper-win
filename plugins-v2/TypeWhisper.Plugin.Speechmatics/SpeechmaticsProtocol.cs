@@ -44,14 +44,20 @@ public sealed partial class SpeechmaticsPlugin
             {
                 using var fetch=Connection.Request(HttpMethod.Get,server+"/jobs/"+id+"/transcript?format=json-v2",key); using var transcript=await Connection.ReadAsync(fetch,ct);
                 var results=ProviderConnection.Required(transcript.RootElement,"results",JsonValueKind.Array); var text=new StringBuilder();
+                string? detected = null;
                 foreach(var item in results.EnumerateArray())
                 {
                     var alternatives=ProviderConnection.Required(item,"alternatives",JsonValueKind.Array); if(alternatives.GetArrayLength()==0) continue;
                     var word=ProviderConnection.Text(alternatives[0],"content") ?? throw ProviderConnection.InvalidResponse();
+                    // With automatic identification the config remains "auto"; words carry the effective language.
+                    if (ProviderConnection.Text(item,"type") == "word")
+                        detected ??= ProviderConnection.Language(ProviderConnection.Text(alternatives[0],"language"));
                     if(text.Length>0 && ProviderConnection.Text(item,"type")!="punctuation") text.Append(' '); text.Append(word);
                 }
-                var detected = ProviderConnection.Language(language);
-                if (transcript.RootElement.TryGetProperty("metadata", out var metadata)) detected = ProviderConnection.Text(metadata,"language") ?? detected;
+                if (transcript.RootElement.TryGetProperty("metadata", out var metadata) && metadata.ValueKind == JsonValueKind.Object
+                    && metadata.TryGetProperty("transcription_config", out var effectiveConfig))
+                    detected ??= ProviderConnection.Language(ProviderConnection.Text(effectiveConfig,"language"));
+                detected ??= ProviderConnection.Language(language);
                 return new(text.ToString().Trim(),detected,ProviderConnection.Number(job,"duration"),NoSpeechProbability: null);
             }
             if(status is not ("running" or "queued")) throw new PluginRequestException("Speechmatics transcription job failed.",PluginRequestFailureKind.ServerError);

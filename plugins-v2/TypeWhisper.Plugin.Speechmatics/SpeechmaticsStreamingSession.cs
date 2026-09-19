@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
@@ -190,7 +191,8 @@ internal sealed class SpeechmaticsStreamingSession : IStreamingSession
     {
         // Speechmatics can emit punctuation in its own fragment, preceded by a space.
         var trimmed = fragment.TrimStart();
-        if (target.Length > 0 && trimmed.Length > 0 && ".,!?。！，？".Contains(trimmed[0]))
+        if (target.Length > 0 && trimmed.Length > 0 && (".,!?:;。！，？：；".Contains(trimmed[0])
+            || char.GetUnicodeCategory(trimmed[0]) is UnicodeCategory.ClosePunctuation or UnicodeCategory.FinalQuotePunctuation))
         {
             while (target.Length > 0 && char.IsWhiteSpace(target[target.Length - 1])) target.Length--;
             fragment = trimmed;

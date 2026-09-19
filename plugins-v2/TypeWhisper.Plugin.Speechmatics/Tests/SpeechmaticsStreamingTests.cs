@@ -61,16 +61,21 @@ public sealed partial class ProviderTests
         Assert.Equal("Grüße, Welt! Letzter Satz.", final.Text); Assert.False(events.Reader.TryRead(out _));
     }
 
-    [Fact]
-    public async Task SeparatePunctuationFragmentAttachesToPreviousWord()
+    [Theory]
+    [InlineData(".")] [InlineData(":")] [InlineData(";")]
+    [InlineData(")")] [InlineData("]")] [InlineData("}")]
+    [InlineData("”")] [InlineData("’")]
+    public async Task SeparatePunctuationFragmentAttachesToPreviousWord(string punctuation)
     {
         var socket = new SpeechmaticsSocket(); await using var session = await ReadySession(socket);
         var events = Channel.CreateUnbounded<StreamingTranscriptEvent>(); session.TranscriptReceived += e => events.Writer.TryWrite(e);
         socket.Text("""{"message":"AddTranscript","metadata":{"transcript":"Hello "}}"""); await events.Reader.ReadAsync();
-        socket.Text("""{"message":"AddTranscript","metadata":{"transcript":" . Next sentence."}}""");
-        Assert.Equal("Hello. Next sentence.", (await events.Reader.ReadAsync()).Text);
+        socket.Text(JsonSerializer.Serialize(new { message = "AddPartialTranscript", metadata = new { transcript = " " + punctuation + " Next sentence." } }));
+        Assert.Equal("Hello" + punctuation + " Next sentence.", (await events.Reader.ReadAsync()).Text);
+        socket.Text(JsonSerializer.Serialize(new { message = "AddTranscript", metadata = new { transcript = " " + punctuation + " Next sentence." } }));
+        Assert.Equal("Hello" + punctuation + " Next sentence.", (await events.Reader.ReadAsync()).Text);
         var finish = session.FinalizeAsync(default); await socket.Ended.Reader.ReadAsync(); socket.Text("""{"message":"EndOfTranscript"}""");
-        await finish; Assert.Equal("Hello. Next sentence.", (await events.Reader.ReadAsync()).Text);
+        await finish; Assert.Equal("Hello" + punctuation + " Next sentence.", (await events.Reader.ReadAsync()).Text);
     }
 
     [Fact]
