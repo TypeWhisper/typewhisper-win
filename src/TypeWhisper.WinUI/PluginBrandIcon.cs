@@ -42,6 +42,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.claude" => "claude",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
+            "com.typewhisper.fireworks" => "fireworks",
             "com.typewhisper.gemini" => "gemini",
             "com.typewhisper.groq" => "groq",
             "com.typewhisper.github-copilot" => "github-copilot",
