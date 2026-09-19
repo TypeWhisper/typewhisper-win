@@ -6,6 +6,19 @@ using TypeWhisper.PluginSDK;
 public sealed partial class ProviderTests
 {
     [Fact]
+    public async Task TextOnlyAccountRetainsChatAndCredentialsWithoutDictationReadiness()
+    {
+        using var http = new HttpClient(new Handler((_, _) => Json("""{"data":[{"id":"mistral-small-latest","capabilities":{"completion_chat":true}}]}""")));
+        using var plugin = new VoxtralPlugin(http); var host = new Host();
+        await plugin.ActivateAsync(host); await Configure(plugin);
+        await plugin.ExecuteSettingsActionAsync("refreshModels", default);
+        Assert.True(((IApiKeyPlugin)plugin).IsConfigured); Assert.True(plugin.IsAvailable);
+        Assert.False(((ITranscriptionEnginePlugin)plugin).IsConfigured); Assert.Null(plugin.SelectedModelId);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.True(plugin.IsAvailable); Assert.False(((ITranscriptionEnginePlugin)plugin).IsConfigured);
+    }
+
+    [Fact]
     public async Task ContendedKeyAndModelSavesDoNotCaptureUiContext()
     {
         using var plugin = new VoxtralPlugin(); var host = new Host();
@@ -122,6 +135,8 @@ public sealed partial class ProviderTests
         await plugin.ExecuteSettingsActionAsync("refreshModels", default);
         Assert.Empty(plugin.SupportedModels); Assert.Empty(plugin.TranscriptionModels);
         Assert.Null(plugin.SelectedModelId); Assert.False(plugin.IsAvailable);
+        Assert.True(((IApiKeyPlugin)plugin).IsConfigured);
+        Assert.False(((ITranscriptionEnginePlugin)plugin).IsConfigured);
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("llmModel", "invented", default));
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("model", "invented", default));
         await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(Audio(), "de", false, null, default));

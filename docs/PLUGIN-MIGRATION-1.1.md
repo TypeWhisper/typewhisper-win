@@ -73,7 +73,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Speechmatics | Independent v2 package 1.2.4 in `plugins-v2/TypeWhisper.Plugin.Speechmatics`; 67 tests pass (manual acceptance on 1.2.0). EU batch and live API acceptance, language selection, shared Save and provider logos included. Native live microphone acceptance confirmed by Marco; publication pending. See the plugin README. |
 
 | SupertonicTts | Separate v2 port pending |
-| Mistral (formerly Voxtral) | Independent v2 `1.3.1` in `plugins-v2/TypeWhisper.Plugin.Voxtral`: batch and realtime transcription, chat processing, account model discovery, provider icon and shared Save settings. 62 tests passed; real batch/live transcription/Ministral text checks passed on 1.3.0; normal and live microphone dictation accepted by Marco, including finalization; manual text-workflow acceptance pending. |
+| Mistral (formerly Voxtral) | Independent v2 `1.3.2` in `plugins-v2/TypeWhisper.Plugin.Voxtral`: batch and realtime transcription, chat processing, account model discovery, provider icon and shared Save settings. 67 tests passed; real batch/live transcription/Ministral text checks passed on 1.3.0; normal and live microphone dictation accepted by Marco, including finalization; manual text-workflow acceptance pending. |
 | Webhook | Separate v2 port pending |
 | WhisperCpp | Separate v2 port pending |
 | Xai | Separate v2 port pending |

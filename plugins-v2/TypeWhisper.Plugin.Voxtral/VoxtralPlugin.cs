@@ -20,13 +20,14 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
     /// <inheritdoc />
     public string PluginName => "Mistral";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.1";
+    public string PluginVersion => "1.3.2";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
     public Task DeactivateAsync() { Connection.Deactivate(); return Task.CompletedTask; }
     /// <inheritdoc />
     public bool IsConfigured => Connection.Configured;
+    bool ITranscriptionEnginePlugin.IsConfigured => Connection.Configured && SelectedModelId is not null;
     /// <inheritdoc />
     public Task SetApiKeyAsync(string apiKey) => Connection.SetKeyAsync(apiKey);
     /// <inheritdoc />

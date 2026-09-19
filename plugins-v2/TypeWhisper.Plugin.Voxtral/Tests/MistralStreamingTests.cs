@@ -8,6 +8,17 @@ using TypeWhisper.PluginSDK;
 
 public sealed partial class ProviderTests
 {
+    [Theory]
+    [InlineData(null, PluginRequestFailureKind.Network)]
+    [InlineData(101, PluginRequestFailureKind.Network)]
+    [InlineData(401, PluginRequestFailureKind.Authentication)]
+    [InlineData(503, PluginRequestFailureKind.ServerError)]
+    public void FailedHandshakeMapsAbsentHttpStatusToNetworkFailure(int? status, PluginRequestFailureKind expected)
+    {
+        var error = MistralStreamingSession.ConnectionFailure((System.Net.HttpStatusCode?)status);
+        Assert.Equal(expected, error.FailureKind);
+    }
+
     [Fact]
     public async Task StreamingCapabilityFollowsSelectedModelAndLanguageIsAutomatic()
     {

@@ -47,9 +47,9 @@ internal sealed class MistralStreamingSession : IStreamingSession
         }
         catch (WebSocketException)
         {
-            var status = (int)socket.HttpStatusCode;
+            var status = socket.HttpStatusCode;
             if (session is not null) await session.DisposeAsync().ConfigureAwait(false); else socket.Dispose();
-            throw status >= 400 ? ProviderError(status) : new PluginRequestException("Mistral live connection failed.", PluginRequestFailureKind.Network);
+            throw ConnectionFailure(status);
         }
         catch
         {
@@ -57,6 +57,10 @@ internal sealed class MistralStreamingSession : IStreamingSession
             throw;
         }
     }
+
+    internal static PluginRequestException ConnectionFailure(System.Net.HttpStatusCode? status) =>
+        status is { } value && (int)value >= 400 ? ProviderError((int)value)
+            : new PluginRequestException("Mistral live connection failed.", PluginRequestFailureKind.Network);
 
     internal async Task InitializeAsync(CancellationToken ct)
     {
