@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.gladia",
   "name": "Gladia",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
   "description": "Corrects the legacy single-request assumption: upload audio, submit an asynchronous transcription job and poll its result.",

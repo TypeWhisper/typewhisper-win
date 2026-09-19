@@ -115,7 +115,7 @@ public sealed partial class ProviderTests
             Assert.Equal(3,Directory.GetFiles(source).Length);
             using var http=new HttpClient(new Handler((r,_)=>new(HttpStatusCode.OK){RequestMessage=r,Content=new ByteArrayContent(bytes)}));var host=new Host();
             PortablePluginStore Store()=>new(Path.Combine(root,"store"),new(1,1,2),http,_=>host);
-            var entry=new PortableCatalogEntry{Id=Id,Name="Gladia",Version="1.1.0",MinHostVersion="1.1.2",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
+            var entry=new PortableCatalogEntry{Id=Id,Name="Gladia",Version="1.2.0",MinHostVersion="1.1.2",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
             var store=Store();await store.InitializeAsync();await store.InstallAsync(entry);
             await using(var runtime=new PortablePluginRuntimeRegistry(store,new(1,1,2),_=>host))
             {

@@ -4,6 +4,30 @@ using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.Gladia;
 public sealed partial class ProviderTests
 {
+    [Fact]
+    public async Task LiveSessionIsAuthenticatedAndConnectsOnlyToValidatedEndpoint()
+    {
+        using var http = new HttpClient(new Handler((request, body) =>
+        {
+            Assert.Equal("https://api.gladia.io/v2/live", request.RequestUri!.AbsoluteUri);
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("fixture-key", Assert.Single(request.Headers.GetValues("x-gladia-key")));
+            using var doc = JsonDocument.Parse(body!);
+            Assert.Equal("TypeWhisper", doc.RootElement.GetProperty("realtime_processing").GetProperty("custom_vocabulary_config").GetProperty("vocabulary")[0].GetString());
+            return Json("""{"id":"fixture","url":"wss://api.gladia.io/v2/live?token=fixture"}""");
+        }));
+        using var plugin = new GladiaPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        var connected = false;
+        plugin.ConnectStreaming = (uri, ct) =>
+        {
+            Assert.Equal("wss://api.gladia.io/v2/live?token=fixture", uri.AbsoluteUri);
+            ct.ThrowIfCancellationRequested(); connected = true;
+            return Task.FromResult<IStreamingSession>(null!);
+        };
+        await plugin.StartStreamingWithLanguageHintsAndPromptAsync(["de", "en"], "TypeWhisper", default);
+        Assert.True(connected);
+    }
 
     [Fact]
     public async Task SettingsRenderThroughActualPortableHostServices()
