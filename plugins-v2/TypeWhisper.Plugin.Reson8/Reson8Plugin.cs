@@ -69,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.8";
+    public string PluginVersion => "1.2.9";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -361,7 +361,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         var json = await response.Content.ReadAsStringAsync(ct);
         var models = JsonSerializer.Deserialize<List<Reson8CustomModel>>(json, JsonOptions)
             ?? throw new JsonException("The custom model catalog was empty or invalid.");
-        if (models.Any(model => model is null || string.IsNullOrWhiteSpace(model.Id) || string.IsNullOrWhiteSpace(model.Name)) ||
+        if (models.Any(model => model is null || string.IsNullOrWhiteSpace(model.Id) || model.Id == DefaultModelId || string.IsNullOrWhiteSpace(model.Name)) ||
             models.Select(model => model.Id).Distinct(StringComparer.Ordinal).Count() != models.Count)
             throw new JsonException("The custom model catalog contains invalid or duplicate entries.");
         return models;
@@ -525,8 +525,13 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     private static string NormalizeModelId(string? modelId) =>
         string.IsNullOrWhiteSpace(modelId) ? DefaultModelId : modelId.Trim();
 
-    private static string? NormalizeApiKey(string? apiKey) =>
-        string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+    private static string? NormalizeApiKey(string? apiKey)
+    {
+        var normalized = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+        if (normalized?.Any(char.IsControl) == true)
+            throw new ArgumentException("API keys must not contain control characters.", nameof(apiKey));
+        return normalized;
+    }
 
     private static string NormalizeBaseUrl(string? url)
     {

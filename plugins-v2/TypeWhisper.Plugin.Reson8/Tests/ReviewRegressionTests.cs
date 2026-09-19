@@ -7,6 +7,23 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class Reson8PluginTests
 {
     [Theory]
+    [InlineData("bad\r\nkey")]
+    [InlineData("bad\tkey")]
+    [InlineData("bad\0key")]
+    public async Task InvalidCredentialsPreserveKeyAndAccountModels(string invalid)
+    {
+        using var plugin = new Reson8Plugin();
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "first";
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SetApiKeyAsync(invalid));
+        Assert.Equal("first", host.Secrets["api-key"]);
+        Assert.Equal("first", plugin.ApiKey); Assert.Equal("custom", plugin.SelectedModelId);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal("custom", plugin.SelectedModelId); Assert.Single(plugin.FetchedCustomModels);
+    }
+
+    [Theory]
     [InlineData("X-Api-Key", true)]
     [InlineData("authorization", false)]
     public async Task AuthHeaderChangesInvalidateConnectionModels(string header, bool changed)
@@ -163,6 +180,7 @@ public partial class Reson8PluginTests
     [InlineData(401, "[]")]
     [InlineData(429, "[]")]
     [InlineData(500, "[]")]
+    [InlineData(200, "[{\"id\":\"__default__\",\"name\":\"Collision\"}]")]
     [InlineData(200, "invalid-json")]
     [InlineData(200, "[null]")]
     [InlineData(200, "[{\"name\":\"Missing ID\"}]")]

@@ -2,7 +2,7 @@
 
 Batch and realtime transcription, model refresh and portable server/model/header settings.
 
-Version `1.2.8`; plugin ID `com.typewhisper.reson8`; minimum host `1.1.2`.
+Version `1.2.9`; plugin ID `com.typewhisper.reson8`; minimum host `1.1.2`.
 Independent branch: `seofood/reson8-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -28,7 +28,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Reson8/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.reson8` inside the plugin project. Package that directory as the ZIP root.
 
-69 plugin tests pass. Fake HTTP, normalization/persistence, model discovery, real local WebSocket finalization/premature close and package lifecycle. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+73 plugin tests pass. Fake HTTP, normalization/persistence, model discovery, real local WebSocket finalization/premature close and package lifecycle. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
