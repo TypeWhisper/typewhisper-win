@@ -36,7 +36,7 @@ public partial class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.4", manifest.Version);
+        Assert.Equal("1.2.5", manifest.Version);
         Assert.Equal("1.1.2", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
@@ -436,6 +436,15 @@ public partial class WhisperCppPluginTests
         Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
         await File.WriteAllTextAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "not a real model");
 
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            var unsupported = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sut.LoadModelAsync("tiny", CancellationToken.None));
+            Assert.Contains("only available on Windows x64", unsupported.Message);
+            Assert.Equal(0, installer.EnsureInstalledCallCount);
+            return;
+        }
+
         await Assert.ThrowsAsync<OperationCanceledException>(
             () => sut.LoadModelAsync("tiny", CancellationToken.None));
 
@@ -487,6 +496,12 @@ public partial class WhisperCppPluginTests
             () => sut.LoadModelAsync("tiny", CancellationToken.None));
 
         Assert.Equal("CUDA unavailable", sut.AccelerationStatus.DisplayText);
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            Assert.Contains("only available on Windows x64", ex.Message);
+            Assert.Equal(0, installer.EnsureInstalledCallCount);
+            return;
+        }
         Assert.Contains("download", sut.AccelerationStatus.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("network offline", sut.AccelerationStatus.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("network offline", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -512,6 +527,13 @@ public partial class WhisperCppPluginTests
         var task = Assert.IsAssignableFrom<Task>(method.Invoke(sut, [CancellationToken.None]));
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => task);
 
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            Assert.Contains("only available on Windows x64", ex.Message);
+            Assert.Equal(0, installer.EnsureInstalledCallCount);
+            Assert.False(sut.AccelerationStatus.RequiresRestart);
+            return;
+        }
         Assert.Equal(1, installer.EnsureInstalledCallCount);
         Assert.True(sut.AccelerationStatus.RequiresRestart);
         Assert.Equal("Restart required", sut.AccelerationStatus.DisplayText);

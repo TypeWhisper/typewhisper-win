@@ -2,7 +2,7 @@
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.4`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
+Version `1.2.5`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
 Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -30,7 +30,9 @@ The complete package is staged under `bin/Release/portable-host/Plugins/com.type
 
 Create distributable packages on Windows, where the required Visual C++ runtime DLLs are staged. Non-Windows builds skip that Windows-only step for headless tests; their staging directories are not complete distribution packages, and `CopyPackage` rejects non-Windows hosts.
 
-39 plugin tests pass, covering model/runtime contracts, download integrity, native package contents, package lifecycle, processing-device persistence, language choices and PCM validation. Large V3 Turbo was downloaded and verified on an NVIDIA RTX 4060 Ti using CUDA. A synthetic English WAV and both partial and complete PCM buffers transcribed successfully. The saved model is loaded on the first WAV or PCM decode after activation, including after an app restart. Cold-start inference was verified without calling LoadModelAsync first. Local live preview uses repeated decoding of recording buffers; this is not a native streaming model. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+51 plugin tests pass, covering model/runtime contracts, download integrity, native package contents, package lifecycle, processing-device persistence, language choices and PCM validation. Large V3 Turbo was downloaded and verified on an NVIDIA RTX 4060 Ti using CUDA. A synthetic English WAV and both partial and complete PCM buffers transcribed successfully. The saved model is loaded on the first WAV or PCM decode after activation, including after an app restart. Cold-start inference was verified without calling LoadModelAsync first. Local live preview uses repeated decoding of recording buffers; this is not a native streaming model. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+
+Review regressions also cover readiness with missing model files, English-only decoder language, cancelled model loads, multilingual segment spacing, timestamp export and no-speech aggregation. CUDA installer tests verify Windows behavior and reject unsupported hosts without attempting downloads.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 

@@ -57,6 +57,8 @@ public sealed partial class WhisperCppPlugin :
     private IWhisperCppCudaRuntimeInstaller? _cudaRuntimeInstaller;
     private IPluginHostServices? _host;
     private WhisperFactory? _factory;
+    internal Func<string, WhisperFactory> CreateFactory { get; set; } = path => WhisperFactory.FromPath(path);
+    internal Action<WhisperFactory> ReleaseFactory { get; set; } = factory => factory.Dispose();
     private string? _selectedModelId;
     private string? _loadedModelId;
     private string? _pluginDirectory;
@@ -93,7 +95,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.4";
+    public string PluginVersion => "1.2.5";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -107,7 +109,10 @@ public sealed partial class WhisperCppPlugin :
     /// Gets whether the provider has the configuration required to run.
     /// </summary>
     /// <inheritdoc />
-    public bool IsConfigured => true;
+    public bool IsConfigured => _host is not null
+        && _selectedModelId is { } modelId
+        && Models.Any(model => model.Id == modelId)
+        && IsModelDownloaded(modelId);
     /// <summary>
     /// Gets the currently selected provider model identifier.
     /// </summary>
@@ -362,7 +367,13 @@ public sealed partial class WhisperCppPlugin :
         DisposeFactoryUnsafe();
         try
         {
-            _factory = WhisperFactory.FromPath(modelPath);
+            var factory = CreateFactory(modelPath);
+            if (ct.IsCancellationRequested)
+            {
+                ReleaseFactory(factory);
+                ct.ThrowIfCancellationRequested();
+            }
+            _factory = factory;
         }
         catch (Exception ex) when (IsNativeLoadFailure(ex))
         {
@@ -394,8 +405,6 @@ public sealed partial class WhisperCppPlugin :
             useRequestedBackend: false);
         _lastNativeError = null;
         _loadedModelId = modelId;
-        _selectedModelId = modelId;
-        _host?.SetSetting("selectedModel", modelId);
         _host?.Log(
             PluginLogLevel.Info,
             $"Loaded model {modelId}. {BuildAccelerationDiagnosticMessage(AccelerationDiagnostics)}");
@@ -435,7 +444,7 @@ public sealed partial class WhisperCppPlugin :
             await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false);
 
             var builder = _factory!.CreateBuilder()
-                .WithLanguage(string.IsNullOrWhiteSpace(language) ? "auto" : language);
+                .WithLanguage(ResolveDecodeLanguage(modelId, language));
 
             if (!string.IsNullOrWhiteSpace(prompt))
                 builder.WithPrompt(prompt);
@@ -445,39 +454,47 @@ public sealed partial class WhisperCppPlugin :
 
             using var processor = builder.Build();
 
-            var text = new StringBuilder();
-            string? detectedLanguage = null;
-            double durationSeconds = 0;
-            float? noSpeechProbability = null;
-
-            await foreach (var segment in process(processor).ConfigureAwait(false))
-            {
-                var segmentText = segment.Text.Trim();
-                if (segmentText.Length > 0)
-                {
-                    if (text.Length > 0)
-                        text.Append(' ');
-
-                    text.Append(segmentText);
-                }
-
-                if (string.IsNullOrWhiteSpace(detectedLanguage) && !string.IsNullOrWhiteSpace(segment.Language))
-                    detectedLanguage = segment.Language;
-
-                durationSeconds = Math.Max(durationSeconds, segment.End.TotalSeconds);
-                noSpeechProbability = segment.NoSpeechProbability;
-            }
-
-            return new PluginTranscriptionResult(
-                text.ToString().Trim(),
-                detectedLanguage,
-                durationSeconds,
-                noSpeechProbability);
+            return await CollectResultAsync(process(processor), ct).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    internal static string ResolveDecodeLanguage(string modelId, string? language) =>
+        modelId.EndsWith(".en", StringComparison.Ordinal)
+            ? "en"
+            : string.IsNullOrWhiteSpace(language) ? "auto" : language.Trim().ToLowerInvariant();
+
+    internal static async Task<PluginTranscriptionResult> CollectResultAsync(
+        IAsyncEnumerable<SegmentData> source, CancellationToken ct)
+    {
+        var text = new StringBuilder();
+        var segments = new List<PluginTranscriptionSegment>();
+        string? detectedLanguage = null;
+        double durationSeconds = 0;
+        float? noSpeechProbability = null;
+
+        await foreach (var segment in source.WithCancellation(ct).ConfigureAwait(false))
+        {
+            ct.ThrowIfCancellationRequested();
+            // Whisper supplies its own whitespace, including no separator for CJK text.
+            text.Append(segment.Text);
+            if (!string.IsNullOrWhiteSpace(segment.Text))
+                segments.Add(new(segment.Text.Trim(), segment.Start.TotalSeconds, segment.End.TotalSeconds));
+            if (string.IsNullOrWhiteSpace(detectedLanguage) && !string.IsNullOrWhiteSpace(segment.Language))
+                detectedLanguage = segment.Language;
+            durationSeconds = Math.Max(durationSeconds, segment.End.TotalSeconds);
+            var probability = segment.NoSpeechProbability;
+            if (float.IsFinite(probability) && probability is >= 0 and <= 1)
+                noSpeechProbability = noSpeechProbability is { } current ? Math.Min(current, probability) : probability;
+        }
+
+        return new PluginTranscriptionResult(text.ToString().Trim(), detectedLanguage, durationSeconds, noSpeechProbability)
+        {
+            Segments = segments
+        };
     }
 
     /// <summary>
@@ -830,8 +847,9 @@ public sealed partial class WhisperCppPlugin :
 
     private void DisposeFactoryUnsafe()
     {
-        _factory?.Dispose();
+        if (_factory is { } factory) ReleaseFactory(factory);
         _factory = null;
+        _loadedModelId = null;
     }
 
     internal static string? ResolveRocmLibraryPath(string? configuredPath)
