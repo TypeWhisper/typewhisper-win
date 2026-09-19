@@ -323,9 +323,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>
     /// Serializes host-rendered configuration with requests, including IApiKeyPlugin operations.
     /// The callback must not retain the plugin reference or activate/dispose the plugin itself.
+    /// Set preserveCompletedResult for write operations whose completion metadata must survive late cancellation.
     /// </summary>
     public Task<T> UseConfigurationAsync<T>(string pluginId,
-        Func<ITypeWhisperPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default)
+        Func<ITypeWhisperPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default,
+        bool preserveCompletedResult = false)
     {
         Slot owner;
         lock (_sync)
@@ -333,7 +335,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_slots.TryGetValue(pluginId, out var slot) || slot.Package is null) throw new InvalidOperationException("Enable this plugin first.");
             owner = slot;
         }
-        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken);
+        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken, preserveCompletedResult);
     }
 
     private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false)

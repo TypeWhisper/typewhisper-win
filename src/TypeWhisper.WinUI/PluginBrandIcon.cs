@@ -38,9 +38,11 @@ public sealed class PluginBrandIcon : UserControl
         {
             "com.typewhisper.assemblyai" => "assemblyai",
             "com.typewhisper.cerebras" => "cerebras",
+            "com.typewhisper.cloudflare-asr" => "cloudflare",
             "com.typewhisper.claude" => "claude",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
+            "com.typewhisper.gemini" => "gemini",
             "com.typewhisper.groq" => "groq",
             "com.typewhisper.github-copilot" => "github-copilot",
             LocalTranscriptionPlugin.PluginId => "nvidia",
@@ -63,7 +65,7 @@ public sealed class PluginBrandIcon : UserControl
         var logo = new Image { Stretch = Stretch.Uniform };
         logo.ImageFailed += (_, _) => { if (ReferenceEquals(Content, logo)) ShowFallback(); };
         Content = logo;
-        var raster = brand is "claude" or "soniox";
+        var raster = brand is "claude" or "gemini" or "soniox";
         var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (raster ? ".png" : ".svg")));
         logo.Source = raster ? new BitmapImage(uri) : new SvgImageSource(uri);
     }
