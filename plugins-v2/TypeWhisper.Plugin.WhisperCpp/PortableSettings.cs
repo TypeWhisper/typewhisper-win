@@ -11,7 +11,10 @@ public sealed partial class WhisperCppPlugin
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
         new("acceleration", L("Processing device", "Verarbeitungsgerät"),
-            L("Local transcription with whisper.cpp. Choose the processor used for transcription. Changing a loaded runtime may require an app restart.",
+            _cudaRuntimeRestartRequired
+                ? L("CUDA support was installed successfully. Restart TypeWhisper, then select this model again.",
+                    "CUDA-Unterstützung wurde erfolgreich installiert. Starte TypeWhisper neu und wähle danach das Modell erneut aus.")
+                : L("Local transcription with whisper.cpp. Choose the processor used for transcription. Changing a loaded runtime may require an app restart.",
               "Lokale Transkription mit whisper.cpp. Wähle den Prozessor für die Transkription. Der Wechsel einer geladenen Laufzeit kann einen App-Neustart erfordern."),
             _accelerationPreference.ToString())
         {

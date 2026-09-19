@@ -100,7 +100,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.12";
+    public string PluginVersion => "1.2.13";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -389,11 +389,12 @@ public sealed partial class WhisperCppPlugin :
         ApplyRuntimeConfiguration(_accelerationPreference);
         var cudaVerified = await EnsureCudaRuntimeAvailableForLoadAsync(ct).ConfigureAwait(false);
         EnsureRocmRuntimeAvailableForLoad();
-        PrepareCudaRuntimeSearchPath(cudaVerified);
+        await Task.Run(() => PrepareCudaRuntimeSearchPath(cudaVerified), ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
         DisposeFactoryUnsafe();
         try
         {
-            var factory = CreateFactory(modelPath);
+            var factory = await Task.Run(() => CreateFactory(modelPath), ct).ConfigureAwait(false);
             if (ct.IsCancellationRequested)
             {
                 ReleaseFactory(factory);
@@ -699,6 +700,7 @@ public sealed partial class WhisperCppPlugin :
 
         _cudaRuntimeRestartRequired = true;
         _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+        _host?.NotifyCapabilitiesChanged();
         throw new InvalidOperationException(_accelerationStatus.Detail);
     }
 

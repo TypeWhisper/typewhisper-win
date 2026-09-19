@@ -36,7 +36,7 @@ public partial class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.12", manifest.Version);
+        Assert.Equal("1.2.13", manifest.Version);
         Assert.Equal("1.1.2", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
@@ -624,9 +624,10 @@ public partial class WhisperCppPluginTests
         public bool DisposeCalled { get; private set; }
         public Exception? InstallException { get; init; }
         public bool IsInstalledOverride { get; init; }
+        public Action? OnVerify { get; init; }
         public int IntegrityReadCount { get; private set; }
         public bool HasRuntimeFiles => _isInstalled || IsInstalledOverride;
-        public Task<bool> VerifyInstalledAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult(IsInstalled); }
+        public Task<bool> VerifyInstalledAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); OnVerify?.Invoke(); return Task.FromResult(IsInstalled); }
         public bool IsInstalled { get { IntegrityReadCount++; return _isInstalled || IsInstalledOverride; } }
         public string RuntimeDirectory { get; } = runtimeDirectory;
 
@@ -662,7 +663,8 @@ public partial class WhisperCppPluginTests
         public bool FailSetting { get; set; }
         public void SetSetting<T>(string key, T value) { if(FailSetting) throw new IOException("setting failure"); _settings[key] = JsonSerializer.SerializeToElement(value); }
         public void Log(PluginLogLevel level, string message) { }
-        public void NotifyCapabilitiesChanged() { }
+        public int CapabilityChangeCount { get; private set; }
+        public void NotifyCapabilitiesChanged() { CapabilityChangeCount++; }
     }
 
     private sealed class NoOpPluginEventBus : IPluginEventBus

@@ -9,6 +9,61 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public partial class WhisperCppPluginTests
 {
+    [Fact]
+    public async Task NativeFactoryConstructionDoesNotRunOnTheCallingThread()
+    {
+        using var temp = new TempDirectory();
+        var callerThread = 0; var factoryThread = 0;
+        using var plugin = new WhisperCppPlugin
+        {
+            CreateFactory = _ => { factoryThread = Environment.CurrentManagedThreadId; return (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory)); },
+            ReleaseFactory = _ => { }
+        };
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var caller = new Thread(() =>
+        {
+            try { callerThread = Environment.CurrentManagedThreadId; plugin.LoadModelAsync("tiny", default).GetAwaiter().GetResult(); complete.SetResult(); }
+            catch (Exception ex) { complete.SetException(ex); }
+        }) { IsBackground = true };
+        caller.Start(); await complete.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.NotEqual(0, factoryThread); Assert.NotEqual(callerThread, factoryThread);
+    }
+
+    [Fact]
+    public async Task CancellationDuringRuntimePreparationPreservesExistingFactory()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); using var cancellation = new CancellationTokenSource();
+        var installer = new FakeCudaRuntimeInstaller(temp.Path) { IsInstalledOverride = true, OnVerify = cancellation.Cancel };
+        var released = 0;
+        using var plugin = new WhisperCppPlugin(installer) { ReleaseFactory = _ => released++ };
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        var previous = (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory));
+        SetPrivateField(plugin, "_factory", previous); SetPrivateField(plugin, "_loadedModelId", "base");
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.LoadModelAsync("tiny", cancellation.Token));
+        Assert.Same(previous, GetPrivateField<WhisperFactory>(plugin, "_factory")); Assert.Equal(0, released);
+    }
+
+    [Fact]
+    public async Task SuccessfulCudaInstallationPublishesRestartGuidanceToPortableSettings()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); var host = new FakePluginHostServices(temp.Path);
+        var installer = new FakeCudaRuntimeInstaller(temp.Path);
+        using var plugin = new WhisperCppPlugin(installer); await plugin.ActivateAsync(host);
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.LoadModelAsync("tiny", default));
+        var description = Assert.Single(plugin.TextSettings).Description;
+        Assert.Contains("installed successfully", description); Assert.Contains("Restart TypeWhisper", description);
+        Assert.Contains("select this model again", description); Assert.True(host.CapabilityChangeCount > 0);
+    }
+
     [Theory]
     [InlineData(RuntimeLibrary.Cuda, TranscriptionAccelerationBackend.NvidiaCuda)]
     [InlineData(RuntimeLibrary.Vulkan, TranscriptionAccelerationBackend.AmdVulkan)]
