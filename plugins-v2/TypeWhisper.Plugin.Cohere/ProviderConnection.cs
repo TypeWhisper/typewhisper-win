@@ -157,7 +157,13 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
             ["model"] = model, ["messages"] = new[] { new { role = "system", content = system }, new { role = "user", content = input } },
             ["max_tokens"] = Math.Min(8192, LlmOutputTokenBudget.CalculateWithReasoningReserve(system, input))
         };
-        if (Get("temperatureMode", "providerDefault") == "custom") body["temperature"] = double.Parse(Get("temperature", "0.3"), CultureInfo.InvariantCulture);
+        if (Get("temperatureMode", "providerDefault") == "custom")
+        {
+            if (!double.TryParse(Get("temperature", "0.3"), NumberStyles.Float, CultureInfo.InvariantCulture, out var temperature)
+                || !double.IsFinite(temperature) || temperature < 0 || temperature > 2)
+                throw new PluginRequestException("The saved Cohere temperature must be a number from 0 to 2.", PluginRequestFailureKind.Configuration);
+            body["temperature"] = temperature;
+        }
         using var request = Request(HttpMethod.Post, url); request.Content = Json(body);
         using var document = await ReadAsync(request, ct); var root = document.RootElement;
         LlmResponseTruncationGuard.ThrowIfOpenAiChatCompletionTruncated(root, "Provider");

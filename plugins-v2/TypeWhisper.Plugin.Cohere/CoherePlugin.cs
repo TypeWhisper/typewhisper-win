@@ -20,7 +20,7 @@ public sealed partial class CoherePlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// <inheritdoc />
     public string PluginName => "Cohere";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.1.2";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
@@ -54,7 +54,7 @@ public sealed partial class CoherePlugin : ITranscriptionEnginePlugin, ILlmProvi
         if (id is "teamId" or "projectId" && value.Length != 0 && !Guid.TryParse(value, out _))
             throw new ArgumentException("Enter a valid UUID.");
         if (id == "baseUrl") _ = Endpoint(value);
-        if (id is "llmModel" or "apiModel" && (value.Length == 0 || value.Any(char.IsWhiteSpace))) throw new ArgumentException("Enter a model ID.");
+        if (id is "llmModel" or "apiModel" && (value.Length == 0 || value.Length > 256 || value.Any(char.IsWhiteSpace))) throw new ArgumentException("Enter a model ID.");
     }
     private static string Endpoint(string value)
     {

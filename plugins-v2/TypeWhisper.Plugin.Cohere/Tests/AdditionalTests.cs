@@ -119,4 +119,39 @@ public sealed partial class ProviderTests
         await Assert.ThrowsAsync<ArgumentException>(()=>plugin.TranscribeAsync(Audio(),"xx",false,null,default));
     }
 
+    [Theory]
+    [InlineData(257)]
+    [InlineData(2048)]
+    public async Task OverlongModelIdDoesNotReplaceSavedModel(int length)
+    {
+        using var plugin = new CoherePlugin(); var host = new Host();
+        await plugin.ActivateAsync(host);
+        var valid = new string('a', 256);
+        await plugin.SaveTextSettingAsync("llmModel", valid, default);
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("llmModel", new string('b', length), default));
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal(valid, Assert.Single(plugin.SupportedModels).Id);
+    }
+
+    [Theory]
+    [InlineData("not-a-number")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-0.1")]
+    [InlineData("2.1")]
+    public async Task InvalidRestoredTemperatureFailsBeforeHttp(string temperature)
+    {
+        using var http = new HttpClient(new Handler((_, _) => throw new Xunit.Sdk.XunitException("Unexpected HTTP request")));
+        using var plugin = new CoherePlugin(http); var host = new Host();
+        await plugin.ActivateAsync(host); await Configure(plugin);
+        var configuration = host.Settings["configuration"].Deserialize<ProviderConnection.Configuration>()!;
+        host.Settings["configuration"] = JsonSerializer.SerializeToElement(configuration with
+        {
+            Values = new Dictionary<string, string> { ["temperatureMode"] = "custom", ["temperature"] = temperature }
+        });
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ProcessAsync("Rewrite", "Hallo", "", default));
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+    }
+
 }

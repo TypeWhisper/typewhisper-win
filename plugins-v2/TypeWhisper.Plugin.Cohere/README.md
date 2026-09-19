@@ -1,6 +1,6 @@
 # Cohere for the portable host
 
-Independent .NET 10 package `com.typewhisper.cohere`, version `1.1.1`, requiring host `1.1.2`. Implemented on its own `seofood/cohere-portable` branch, originally based on Windows `4db8f6ac` and updated with current main. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.cohere`, version `1.1.2`, requiring host `1.1.2`. Implemented on its own `seofood/cohere-portable` branch, originally based on Windows `4db8f6ac` and updated with current main. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -10,6 +10,8 @@ The corresponding Mac sources were inspected at `ac00e39e` in `TypeWhisperPlugin
 
 Setup: **API key; choose the default transcription language**. Settings are rendered by the host in English/German. API keys use the host secret store, with a staged encrypted-key reference and one configuration commit. Failed writes keep the active configuration. Removing a key retains nonsecret preferences. No legacy credentials or settings are imported. Redirects are disabled and provider HTTP failures retain status/retry metadata. Opening the settings page sends no network request.
 
+Version 1.1.2 rejects model IDs exceeding the request limit when saving, and reports a typed configuration failure for invalid restored custom temperatures before sending a request. Regression tests cover both cases.
+
 ## Verification
 
 ```powershell
@@ -17,7 +19,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Cohere/Tests/TypeWhisper.Plugin.Cohere
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.Cohere/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **34 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+All **41 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
 
 On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
 
