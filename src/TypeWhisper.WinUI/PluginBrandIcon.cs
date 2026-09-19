@@ -40,10 +40,12 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.cerebras" => "cerebras",
             "com.typewhisper.cloudflare-asr" => "cloudflare",
             "com.typewhisper.claude" => "claude",
+            "com.typewhisper.cohere" => "cohere",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.fireworks" => "fireworks",
             "com.typewhisper.gemini" => "gemini",
+            "com.typewhisper.gladia" => "gladia",
             "com.typewhisper.groq" => "groq",
             "com.typewhisper.github-copilot" => "github-copilot",
             LocalTranscriptionPlugin.PluginId => "nvidia",
@@ -51,6 +53,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.openrouter" => "openrouter",
             "com.typewhisper.soniox" => "soniox",
             "com.typewhisper.reson8" => "reson8",
+            "com.typewhisper.speechmatics" => "speechmatics",
             _ => null
         };
         if (brand is null) { ShowFallback(); return; }
@@ -61,6 +64,7 @@ public sealed class PluginBrandIcon : UserControl
             "openai" => light ? "openai-light" : "openai-dark",
             "github-copilot" => light ? "github-copilot-light" : "github-copilot-dark",
             "openrouter" => light ? "openrouter-light" : "openrouter-dark",
+            "speechmatics" => light ? "speechmatics-light" : "speechmatics-dark",
             "elevenlabs" when light => "elevenlabs-light",
             _ => brand
         };
