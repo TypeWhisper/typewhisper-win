@@ -9,7 +9,7 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
-public class Reson8PluginTests
+public partial class Reson8PluginTests
 {
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
@@ -121,15 +121,15 @@ public class Reson8PluginTests
     }
 
     [Fact]
-    public async Task ValidateApiKeyAsync_TreatsBadAudioAsAuthenticatedAndUnauthorizedAsInvalid()
+    public async Task ValidateApiKeyAsync_ChecksModelListWithoutUploadingAudio()
     {
-        var statuses = new Queue<HttpStatusCode>([HttpStatusCode.BadRequest, HttpStatusCode.Unauthorized]);
+        var statuses = new Queue<HttpStatusCode>([HttpStatusCode.OK, HttpStatusCode.Unauthorized]);
         var handler = new CapturingHandler((request, body) =>
         {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://api.reson8.dev/v1/speech-to-text/prerecorded", request.RequestUri?.GetLeftPart(UriPartial.Path));
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("https://api.reson8.dev/v1/custom-model", request.RequestUri?.GetLeftPart(UriPartial.Path));
             Assert.Equal("ApiKey probe-key", request.Headers.Authorization?.ToString());
-            Assert.Equal("application/octet-stream", request.Content?.Headers.ContentType?.MediaType);
+            Assert.Null(request.Content);
             Assert.Empty(body ?? []);
 
             return JsonResponse("""{ "message": "probe" }""", statuses.Dequeue());
@@ -143,7 +143,7 @@ public class Reson8PluginTests
     }
 
     [Fact]
-    public async Task ValidateApiKeyAsync_MatchesMacBehaviorAndOnlyTreatsUnauthorizedAsInvalid()
+    public async Task ValidateApiKeyAsync_RejectsServerAndAuthorizationFailures()
     {
         var statuses = new Queue<HttpStatusCode>([
             HttpStatusCode.InternalServerError,
@@ -157,9 +157,9 @@ public class Reson8PluginTests
         using var httpClient = new HttpClient(handler);
         var sut = new Reson8Plugin(httpClient);
 
-        Assert.True(await sut.ValidateApiKeyAsync("probe-key"));
-        Assert.True(await sut.ValidateApiKeyAsync("probe-key"));
-        Assert.True(await sut.ValidateApiKeyAsync("probe-key"));
+        Assert.False(await sut.ValidateApiKeyAsync("probe-key"));
+        Assert.False(await sut.ValidateApiKeyAsync("probe-key"));
+        Assert.False(await sut.ValidateApiKeyAsync("probe-key"));
         Assert.False(await sut.ValidateApiKeyAsync("probe-key"));
     }
 
@@ -416,10 +416,12 @@ public class Reson8PluginTests
 
         private readonly Dictionary<string, JsonElement> _settings = [];
         public Dictionary<string, string?> Secrets { get; } = [];
+        public bool FailSecretWrites { get; set; }
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
         public Task StoreSecretAsync(string key, string value)
         {
+            if (FailSecretWrites) throw new IOException("Cannot save secret");
             Secrets[key] = value;
             return Task.CompletedTask;
         }
@@ -429,6 +431,7 @@ public class Reson8PluginTests
 
         public Task DeleteSecretAsync(string key)
         {
+            if (FailSecretWrites) throw new IOException("Cannot delete secret");
             Secrets.Remove(key);
             return Task.CompletedTask;
         }

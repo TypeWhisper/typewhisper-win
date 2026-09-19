@@ -2,12 +2,8 @@ using TypeWhisper.PluginSDK;
 namespace TypeWhisper.Plugin.Reson8;
 public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, IPluginSettingsActions
 {
-    async Task IApiKeyPlugin.SetApiKeyAsync(string apiKey)
-    {
-        var previous = _apiKey;
-        try { await SetApiKeyAsync(apiKey); }
-        catch { _apiKey = previous; throw; }
-    }
+    Task IApiKeyPlugin.SetApiKeyAsync(string apiKey) => SetApiKeyAsync(apiKey);
+    private string L(string en, string de) => Loc?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
     /// <inheritdoc />
     public async Task ValidateConfigurationAsync(CancellationToken ct)
     {
@@ -16,7 +12,11 @@ public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, I
             throw new InvalidOperationException("The API key could not be validated.");
     }
     /// <inheritdoc />
-    public IReadOnlyList<PluginTextSetting> TextSettings => [new("baseUrl", "Server URL", "", _customBaseUrl), new("authHeader", "Authentication header", "", _customAuthHeader)];
+    public IReadOnlyList<PluginTextSetting> TextSettings =>
+    [
+        new("baseUrl", L("Server URL", "Server-URL"), L("Keep the default unless using a compatible server.", "Behalte den Standard bei, sofern du keinen kompatiblen Server verwendest."), _customBaseUrl) { Section = PluginSettingsSection.Connection },
+        new("authHeader", L("Authentication header", "Authentifizierungsheader"), L("Use Authorization for Reson8.", "Verwende Authorization für Reson8."), _customAuthHeader) { Section = PluginSettingsSection.Connection }
+    ];
     /// <inheritdoc />
     public Task SaveTextSettingAsync(string id, string value, CancellationToken ct)
     {
@@ -29,7 +29,7 @@ public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, I
         return Task.CompletedTask;
     }
     /// <inheritdoc />
-    public IReadOnlyList<PluginSettingsAction> SettingsActions => [new("refresh", "Refresh custom models", "Uses the stored API key only when selected.")];
+    public IReadOnlyList<PluginSettingsAction> SettingsActions => [new("refresh", L("Refresh custom models", "Eigene Modelle aktualisieren"), L("Fetches custom models available to this API key.", "Lädt die eigenen Modelle, die mit diesem API-Schlüssel verfügbar sind."))];
     /// <inheritdoc />
     public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken ct)
     {

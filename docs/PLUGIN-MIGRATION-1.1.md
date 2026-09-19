@@ -65,7 +65,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | OpenRouter | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenRouter`; protocol/settings and isolated package lifecycle tests pass. Native settings, authenticated text/transcription, app HTTP JSON/SRT and a development 1.1.0 to 1.1.1 update passed; public release pending (see plugin README). |
 | ParakeetCtc | Bundled dependency |
 | Qwen3Stt | Separate v2 port pending |
-| Reson8 | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Reson8`; 20 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
+| Reson8 | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Reson8`; 22 plugin tests pass. Native branding, shared settings, authenticated connection/batch/streaming tests and manual German live microphone acceptance passed. Public package publication pending. See the plugin README for platform differences. |
 | Script | Separate v2 port pending |
 | SherpaOnnx | Existing portable build |
 | SmallestAi | Separate v2 port pending |

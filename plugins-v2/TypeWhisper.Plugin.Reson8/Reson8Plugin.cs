@@ -26,7 +26,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
     private static readonly IReadOnlyList<string> Languages =
     [
-        "nl", "en", "fr", "de", "it", "pl", "pt", "es", "sv"
+        "nl", "en", "fr", "de", "it", "pl", "pt", "es", "sv", "fy"
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -67,7 +67,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -262,23 +262,23 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         var normalized = NormalizeApiKey(apiKey);
         IPluginHostServices? hostToNotify = null;
 
-        await _apiKeyWriteLock.WaitAsync();
+        await _apiKeyWriteLock.WaitAsync().ConfigureAwait(false);
         try
         {
             var wasConfigured = IsConfigured;
             var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
-            _apiKey = normalized;
             if (_host is not null)
             {
                 if (normalized is null)
-                    await _host.DeleteSecretAsync(ApiKeySecretName);
+                    await _host.DeleteSecretAsync(ApiKeySecretName).ConfigureAwait(false);
                 else
-                    await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+                    await _host.StoreSecretAsync(ApiKeySecretName, normalized).ConfigureAwait(false);
 
-                if (changed && wasConfigured != IsConfigured)
+                if (changed && wasConfigured != !string.IsNullOrEmpty(normalized))
                     hostToNotify = _host;
             }
+            _apiKey = normalized;
         }
         finally
         {
@@ -295,16 +295,13 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             return false;
 
         using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            BuildPrerecordedUri(_customBaseUrl, DefaultModelId, language: null));
+            HttpMethod.Get, $"{_customBaseUrl}/v1/custom-model");
         AddAuthHeader(request, normalized, _customAuthHeader);
-        request.Content = new ByteArrayContent([]);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
         try
         {
             using var response = await _httpClient.SendAsync(request, ct);
-            return response.StatusCode != HttpStatusCode.Unauthorized;
+            return response.IsSuccessStatusCode;
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {

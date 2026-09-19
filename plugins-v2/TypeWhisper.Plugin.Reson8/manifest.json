@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.reson8",
   "name": "Reson8",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "author": "Y. Vos",
   "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
   "category": "transcription",
@@ -12,7 +12,7 @@
   "requiresApiKey": true,
   "iconSystemName": "waveform.badge.mic",
   "descriptions": {
-    "de": "Cloud-Transkription ueber die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+    "de": "Cloud-Transkription über die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
   },
   "assemblyName": "TypeWhisper.Plugin.Reson8.dll",
   "pluginClass": "TypeWhisper.Plugin.Reson8.Reson8Plugin",
