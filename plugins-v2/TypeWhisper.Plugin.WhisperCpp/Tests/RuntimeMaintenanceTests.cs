@@ -9,6 +9,54 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class WhisperCppPluginTests
 {
     [Fact]
+    public async Task ApplyingCudaPreferenceDoesNotHashRuntimeFiles()
+    {
+        using var temp = new TempDirectory();
+        var installer = new FakeCudaRuntimeInstaller(temp.Path) { IsInstalledOverride = true };
+        using var plugin = new WhisperCppPlugin(installer);
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+        Assert.Equal(0, installer.IntegrityReadCount);
+    }
+
+    [Fact]
+    public async Task RuntimeIntegrityVerificationHonorsCancellation()
+    {
+        using var temp = new TempDirectory(); using var client = new HttpClient();
+        using var installer = new WhisperCppCudaRuntimeInstaller(temp.Path, client);
+        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => installer.VerifyInstalledAsync(cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData(0, 75, null)]
+    [InlineData(500000, 75, null)]
+    [InlineData(74000000L, 75, 75000000L)]
+    public void ImplausibleOrIncompleteModelDownloadIsRejected(long bytes, double estimate, long? expected)
+    {
+        Assert.Throws<InvalidDataException>(() => WhisperCppPlugin.ValidateModelDownload(bytes, estimate, expected));
+    }
+
+    [Fact]
+    public void RoundedModelSizeEstimatesDoNotRequireExactLengths()
+    {
+        WhisperCppPlugin.ValidateModelDownload(74000000, 75, null);
+    }
+
+    [Fact]
+    public async Task EmptyModelDownloadIsNotPublished()
+    {
+        using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights([]));
+        var progress = new CapturedProgress();
+        await Assert.ThrowsAsync<InvalidDataException>(() => plugin.DownloadModelAsync("tiny", progress, default));
+        Assert.False(plugin.IsModelDownloaded("tiny")); Assert.DoesNotContain(1.0, progress.Values);
+        Assert.Empty(Directory.GetFiles(Path.Join(temp.Path, "Models")));
+    }
+
+    [Fact]
     public void CudaArchiveCleanupPreservesActiveAndUnrelatedFiles()
     {
         using var temp = new TempDirectory(); using var client = new HttpClient();

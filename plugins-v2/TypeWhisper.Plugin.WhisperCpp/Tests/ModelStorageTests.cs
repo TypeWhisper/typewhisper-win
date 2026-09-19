@@ -23,11 +23,11 @@ public partial class WhisperCppPluginTests
     {
         using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
         await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
-        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[200_000]));
+        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[31_000_000]));
         var progress = new CapturedProgress();
-        await plugin.DownloadModelAsync("tiny", progress, default);
+        await plugin.DownloadModelAsync("tiny-q5_0", progress, default);
         Assert.Contains(progress.Values, p => p > 0 && p < 1);
-        Assert.Equal(1, progress.Values[^1]); Assert.True(plugin.IsModelDownloaded("tiny"));
+        Assert.Equal(1, progress.Values[^1]); Assert.True(plugin.IsModelDownloaded("tiny-q5_0"));
     }
 
     [Fact]

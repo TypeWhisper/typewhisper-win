@@ -98,7 +98,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.10";
+    public string PluginVersion => "1.2.11";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -226,7 +226,7 @@ public sealed partial class WhisperCppPlugin :
             ? CreateRuntimeRestartStatus(preference)
             : CreatePendingAccelerationStatus(
                 preference,
-                _cudaRuntimeInstaller?.IsInstalled == true,
+                _cudaRuntimeInstaller?.HasRuntimeFiles == true,
                 ResolveRocmLibraryPathFromEnvironment() is not null);
     }
 
@@ -293,6 +293,8 @@ public sealed partial class WhisperCppPlugin :
                     await fileStream.FlushAsync(ct);
                 }
 
+                ct.ThrowIfCancellationRequested();
+                ValidateModelDownload(bytesCopied, model.EstimatedSizeMB, modelStream.CanSeek ? modelStream.Length : null);
                 if (File.Exists(modelPath))
                     File.Delete(modelPath);
 
@@ -309,6 +311,15 @@ public sealed partial class WhisperCppPlugin :
         {
             _gate.Release();
         }
+    }
+
+    internal static void ValidateModelDownload(long bytesCopied, double estimatedSizeMB, long? expectedLength)
+    {
+        // Catalog sizes are rounded estimates; reject clearly truncated responses
+        // without treating those estimates as exact artifact lengths.
+        if (bytesCopied < estimatedSizeMB * 1_000_000 * 0.8
+            || (expectedLength is { } length && bytesCopied != length))
+            throw new InvalidDataException("The model download is incomplete. Please retry the download.");
     }
 
     /// <summary>
@@ -621,7 +632,10 @@ public sealed partial class WhisperCppPlugin :
     private async Task<bool> EnsureCudaRuntimeAvailableForLoadAsync(CancellationToken cancellationToken)
     {
         if (_accelerationPreference != TranscriptionAccelerationPreference.NvidiaCuda)
-            return false;
+            return _accelerationPreference == TranscriptionAccelerationPreference.Auto
+                && OperatingSystem.IsWindows() && RuntimeInformation.ProcessArchitecture == Architecture.X64
+                && _cudaRuntimeInstaller is { } automaticInstaller
+                && await automaticInstaller.VerifyInstalledAsync(cancellationToken).ConfigureAwait(false);
 
         if (_cudaRuntimeRestartRequired)
         {
@@ -639,7 +653,7 @@ public sealed partial class WhisperCppPlugin :
         var installer = _cudaRuntimeInstaller
             ?? throw new InvalidOperationException("The whisper.cpp CUDA runtime installer is not available.");
 
-        if (installer.IsInstalled)
+        if (await installer.VerifyInstalledAsync(cancellationToken).ConfigureAwait(false))
             return true;
 
         _accelerationStatus = new(
@@ -659,7 +673,7 @@ public sealed partial class WhisperCppPlugin :
             throw new InvalidOperationException(_accelerationStatus.Detail, ex);
         }
 
-        if (!installer.IsInstalled)
+        if (!await installer.VerifyInstalledAsync(cancellationToken).ConfigureAwait(false))
         {
             _accelerationStatus = CreateCudaRuntimeInstallFailureStatus(
                 "CUDA support download completed, but the required NVIDIA runtime files are still missing.");
@@ -680,7 +694,7 @@ public sealed partial class WhisperCppPlugin :
         var installer = _cudaRuntimeInstaller;
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64
             || _accelerationPreference is not (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda)
-            || installer is null || (!installationVerified && !installer.IsInstalled) || _host is null || _pluginDirectory is null)
+            || installer is null || !installationVerified || _host is null || _pluginDirectory is null)
             return;
         var cacheParent = Path.Join(_host.PluginAssetDirectory, "NativeRuntime");
         var cacheRoot = Path.Join(cacheParent, PluginVersion);

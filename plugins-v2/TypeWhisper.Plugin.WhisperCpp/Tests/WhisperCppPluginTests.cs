@@ -36,7 +36,7 @@ public partial class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.10", manifest.Version);
+        Assert.Equal("1.2.11", manifest.Version);
         Assert.Equal("1.1.2", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
@@ -625,6 +625,8 @@ public partial class WhisperCppPluginTests
         public Exception? InstallException { get; init; }
         public bool IsInstalledOverride { get; init; }
         public int IntegrityReadCount { get; private set; }
+        public bool HasRuntimeFiles => _isInstalled || IsInstalledOverride;
+        public Task<bool> VerifyInstalledAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult(IsInstalled); }
         public bool IsInstalled { get { IntegrityReadCount++; return _isInstalled || IsInstalledOverride; } }
         public string RuntimeDirectory { get; } = runtimeDirectory;
 

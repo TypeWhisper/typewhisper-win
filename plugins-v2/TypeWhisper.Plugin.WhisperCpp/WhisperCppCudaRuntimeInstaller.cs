@@ -10,6 +10,8 @@ namespace TypeWhisper.Plugin.WhisperCpp;
 internal interface IWhisperCppCudaRuntimeInstaller
 {
     bool IsInstalled { get; }
+    bool HasRuntimeFiles { get; }
+    Task<bool> VerifyInstalledAsync(CancellationToken cancellationToken);
     string RuntimeDirectory { get; }
     Task EnsureInstalledAsync(CancellationToken cancellationToken);
 }
@@ -65,31 +67,47 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     /// <summary>
     /// Returns whether installed.
     /// </summary>
-    public bool IsInstalled
+    public bool HasRuntimeFiles => File.Exists(ReceiptPath)
+        && _package.RequiredDlls.All(name => File.Exists(GetRuntimeFilePath(name)));
+
+    public bool IsInstalled => VerifyInstalled(CancellationToken.None);
+
+    public Task<bool> VerifyInstalledAsync(CancellationToken cancellationToken) =>
+        Task.Run(() => VerifyInstalled(cancellationToken), cancellationToken);
+
+    private bool VerifyInstalled(CancellationToken cancellationToken)
     {
-        get
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_verificationLock)
         {
-            lock (_verificationLock)
+            try
             {
-                try
+                if (!File.Exists(ReceiptPath)) return false;
+                var receipt = JsonSerializer.Deserialize<RuntimeReceipt>(File.ReadAllText(ReceiptPath));
+                if (receipt is null || receipt.Version != _package.RuntimeVersion || receipt.ArchiveHash != _package.Sha256 || receipt.Files is null)
+                    return false;
+                var buffer = new byte[81920];
+                foreach (var name in _package.RequiredDlls)
                 {
-                    if (!File.Exists(ReceiptPath)) return false;
-                    var receipt = JsonSerializer.Deserialize<RuntimeReceipt>(File.ReadAllText(ReceiptPath));
-                    if (receipt?.Version != _package.RuntimeVersion || receipt.ArchiveHash != _package.Sha256 || receipt.Files is null)
-                        return false;
-                    foreach (var name in _package.RequiredDlls)
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var file = new FileInfo(GetRuntimeFilePath(name));
+                    if (!file.Exists || file.Length == 0 || !receipt.Files.TryGetValue(name, out var expected)) return false;
+                    using var input = file.OpenRead();
+                    using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                    int read;
+                    while ((read = input.Read(buffer)) > 0)
                     {
-                        var file = new FileInfo(GetRuntimeFilePath(name));
-                        if (!file.Exists || file.Length == 0 || !receipt.Files.TryGetValue(name, out var expected)) return false;
-                        using var input = file.OpenRead();
-                        var hash = Convert.ToHexString(SHA256.HashData(input));
-                        if (!string.Equals(hash, expected, StringComparison.OrdinalIgnoreCase)) return false;
+                        cancellationToken.ThrowIfCancellationRequested();
+                        hasher.AppendData(buffer, 0, read);
                     }
-                    return true;
+                    var hash = Convert.ToHexString(hasher.GetHashAndReset());
+                    if (!string.Equals(hash, expected, StringComparison.OrdinalIgnoreCase)) return false;
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-                { return false; }
+                cancellationToken.ThrowIfCancellationRequested();
+                return true;
             }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            { return false; }
         }
     }
 
@@ -99,13 +117,13 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     public async Task EnsureInstalledAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (IsInstalled)
+        if (await VerifyInstalledAsync(cancellationToken).ConfigureAwait(false))
             return;
 
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (IsInstalled)
+            if (await VerifyInstalledAsync(cancellationToken).ConfigureAwait(false))
                 return;
 
             Directory.CreateDirectory(RuntimeDirectory);
