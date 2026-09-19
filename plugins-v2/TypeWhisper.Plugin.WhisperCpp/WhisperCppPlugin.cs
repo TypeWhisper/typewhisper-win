@@ -100,7 +100,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.13";
+    public string PluginVersion => "1.2.14";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -300,6 +300,8 @@ public sealed partial class WhisperCppPlugin :
                         if (read == 0)
                             break;
 
+                        if (bytesCopied > totalBytes - read)
+                            throw new InvalidDataException("The model download exceeds the expected artifact size.");
                         await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
                         bytesCopied += read;
 
@@ -391,6 +393,8 @@ public sealed partial class WhisperCppPlugin :
         EnsureRocmRuntimeAvailableForLoad();
         await Task.Run(() => PrepareCudaRuntimeSearchPath(cudaVerified), ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
+        // Keep only one native context: overlapping large models can exhaust RAM/VRAM.
+        // The saved selection survives failure/cancellation and is reloaded on the next decode.
         DisposeFactoryUnsafe();
         try
         {

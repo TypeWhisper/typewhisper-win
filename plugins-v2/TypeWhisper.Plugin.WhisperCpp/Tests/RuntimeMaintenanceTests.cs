@@ -10,6 +10,35 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class WhisperCppPluginTests
 {
     [Fact]
+    public async Task CanceledReplacementRetainsSelectionAndReloadsWithoutOverlappingFactories()
+    {
+        using var temp = new TempDirectory(); using var cancellation = new CancellationTokenSource();
+        var activeFactories = 1;
+        using var plugin = new WhisperCppPlugin
+        {
+            CreateFactory = _ =>
+            {
+                Assert.Equal(0, activeFactories); activeFactories++;
+                cancellation.Cancel();
+                return (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory));
+            },
+            ReleaseFactory = _ => activeFactories--
+        };
+        var host = new FakePluginHostServices(temp.Path); await plugin.ActivateAsync(host);
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        plugin.SelectModel("base");
+        SetPrivateField(plugin, "_factory", (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory)));
+        SetPrivateField(plugin, "_loadedModelId", "base");
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
+        CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-base.bin"));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.LoadModelAsync("tiny", cancellation.Token));
+        Assert.Equal(0, activeFactories); Assert.Equal("base", plugin.SelectedModelId);
+        Assert.Equal("base", host.GetSetting<string>("selectedModel")); Assert.True(plugin.IsConfigured);
+        await plugin.LoadModelAsync(plugin.SelectedModelId!, default);
+        Assert.Equal(1, activeFactories); Assert.Equal("base", GetPrivateField<string>(plugin, "_loadedModelId"));
+    }
+
+    [Fact]
     public async Task NativeFactoryConstructionDoesNotRunOnTheCallingThread()
     {
         using var temp = new TempDirectory();

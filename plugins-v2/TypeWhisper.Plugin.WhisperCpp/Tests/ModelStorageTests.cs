@@ -10,6 +10,30 @@ public partial class WhisperCppPluginTests
         file.SetLength(Path.GetFileName(path).StartsWith("ggml-base", StringComparison.Ordinal) ? 147_951_465 : 77_691_713);
     }
 
+    [Fact]
+    public async Task OversizedModelResponseStopsBeforeConsumingTheWholeBody()
+    {
+        using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        const int expected = 29_875_721;
+        var stream = new CountedNonSeekableWeights(new byte[expected + 81920 * 3]);
+        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(stream);
+        await Assert.ThrowsAsync<InvalidDataException>(() => plugin.DownloadModelAsync("tiny-q5_0", null, default));
+        Assert.InRange(stream.BytesRead, expected + 1L, expected + 81920L);
+        Assert.False(plugin.IsModelDownloaded("tiny-q5_0"));
+        Assert.Empty(Directory.GetFiles(Path.Join(temp.Path, "Models")));
+    }
+
+    private sealed class CountedNonSeekableWeights(byte[] bytes) : MemoryStream(bytes)
+    {
+        public long BytesRead { get; private set; }
+        public override bool CanSeek => false;
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var read = await base.ReadAsync(buffer, cancellationToken); BytesRead += read; return read;
+        }
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1000)]
