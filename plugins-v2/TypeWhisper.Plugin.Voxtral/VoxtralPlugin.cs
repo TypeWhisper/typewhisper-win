@@ -20,7 +20,7 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
     /// <inheritdoc />
     public string PluginName => "Mistral";
     /// <inheritdoc />
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.3.0";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />

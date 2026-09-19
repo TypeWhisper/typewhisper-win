@@ -1,10 +1,10 @@
 {
   "id": "com.typewhisper.voxtral",
   "name": "Mistral",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
-  "description": "Mistral cloud transcription and text processing with account model discovery.",
+  "description": "Mistral cloud transcription, Voxtral Realtime and text processing with account model discovery.",
   "categories": [
     "transcription",
     "llm"
@@ -13,6 +13,6 @@
   "assemblyName": "TypeWhisper.Plugin.Voxtral.dll",
   "pluginClass": "TypeWhisper.Plugin.Voxtral.VoxtralPlugin",
   "descriptions": {
-    "de": "Mistral für Transkription und Textverarbeitung mit Modellauswahl aus dem API-Katalog."
+    "de": "Mistral für Transkription, Voxtral Realtime und Textverarbeitung mit Modellen aus dem API-Katalog."
   }
 }

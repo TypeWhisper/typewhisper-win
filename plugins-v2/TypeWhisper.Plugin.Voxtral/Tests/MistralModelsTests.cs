@@ -36,7 +36,7 @@ public sealed partial class ProviderTests
         Assert.Equal(0, calls);
         await plugin.ExecuteSettingsActionAsync("refreshModels", default);
         Assert.Equal(new[] { "codestral-latest", "mistral-small-latest" }, plugin.SupportedModels.Select(m => m.Id));
-        Assert.Equal("voxtral-mini-latest", Assert.Single(plugin.TranscriptionModels).Id);
+        Assert.Equal(new[] { "realtime", "voxtral-mini-latest" }, plugin.TranscriptionModels.Select(m => m.Id));
         await plugin.SaveTextSettingAsync("llmModel", "codestral-latest", default);
         await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
         Assert.Equal(2, plugin.SupportedModels.Count);

@@ -12,7 +12,12 @@ public sealed partial class VoxtralPlugin
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
         Field("model", "Transcription model", "Transkriptionsmodell", SelectedModelId ?? "", PluginSettingsSection.Transcription,
-            TranscriptionModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray()) with { Value = SelectedModelId ?? "" },
+            TranscriptionModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray()) with
+            {
+                Value = SelectedModelId ?? "",
+                Description = IsRealtime ? Connection.L("Live transcription; the language is detected automatically.",
+                    "Live-Transkription; die Sprache wird automatisch erkannt.") : Connection.L("Transcribes after recording stops.", "Transkribiert nach dem Ende der Aufnahme.")
+            },
         Field("llmModel", "Text model", "Textmodell", SelectedTextModel, PluginSettingsSection.TextProcessing,
             SupportedModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray()) with { Value = SelectedTextModel },
         Field("temperatureMode", "Temperature", "Temperatur", "providerDefault", PluginSettingsSection.TextProcessing,
