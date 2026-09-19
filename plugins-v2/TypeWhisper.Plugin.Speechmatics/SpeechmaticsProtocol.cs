@@ -44,6 +44,10 @@ public sealed partial class SpeechmaticsPlugin
             {
                 using var fetch=Connection.Request(HttpMethod.Get,server+"/jobs/"+id+"/transcript?format=json-v2",key); using var transcript=await Connection.ReadAsync(fetch,ct);
                 var results=ProviderConnection.Required(transcript.RootElement,"results",JsonValueKind.Array); var text=new StringBuilder();
+                transcript.RootElement.TryGetProperty("metadata", out var metadata);
+                var delimiter = metadata.ValueKind == JsonValueKind.Object && metadata.TryGetProperty("language_pack_info", out var languagePack)
+                    ? ProviderConnection.Text(languagePack,"word_delimiter") ?? " " : " ";
+                var previousAttachesNext = false;
                 string? detected = null;
                 foreach(var item in results.EnumerateArray())
                 {
@@ -52,10 +56,14 @@ public sealed partial class SpeechmaticsPlugin
                     // With automatic identification the config remains "auto"; words carry the effective language.
                     if (ProviderConnection.Text(item,"type") == "word")
                         detected ??= ProviderConnection.Language(ProviderConnection.Text(alternatives[0],"language"));
-                    if(text.Length>0 && ProviderConnection.Text(item,"type")!="punctuation") text.Append(' '); text.Append(word);
+                    var punctuation = ProviderConnection.Text(item,"type") == "punctuation";
+                    var attachment = ProviderConnection.Text(item,"attaches_to");
+                    var attachesPrevious = punctuation && attachment is not ("next" or "none");
+                    if (text.Length > 0 && !previousAttachesNext && !attachesPrevious) text.Append(delimiter);
+                    text.Append(word);
+                    previousAttachesNext = punctuation && attachment is "next" or "both";
                 }
-                if (transcript.RootElement.TryGetProperty("metadata", out var metadata) && metadata.ValueKind == JsonValueKind.Object
-                    && metadata.TryGetProperty("transcription_config", out var effectiveConfig))
+                if (metadata.ValueKind == JsonValueKind.Object && metadata.TryGetProperty("transcription_config", out var effectiveConfig))
                     detected ??= ProviderConnection.Language(ProviderConnection.Text(effectiveConfig,"language"));
                 detected ??= ProviderConnection.Language(language);
                 return new(text.ToString().Trim(),detected,ProviderConnection.Number(job,"duration"),NoSpeechProbability: null);

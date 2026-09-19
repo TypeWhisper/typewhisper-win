@@ -5,6 +5,45 @@ using TypeWhisper.Plugin.Speechmatics;
 public sealed partial class ProviderTests
 {
     [Theory]
+    [InlineData("previous", "said- hello")]
+    [InlineData("next", "said -hello")]
+    [InlineData("both", "said-hello")]
+    [InlineData("none", "said - hello")]
+    [InlineData(null, "said- hello")]
+    public async Task BatchHonorsPunctuationAttachment(string? attachment, string expected)
+    {
+        var results = new[] { BatchToken("word","said"), BatchToken("punctuation","-",attachment), BatchToken("word","hello") };
+        Assert.Equal(expected, await BatchText(results));
+    }
+
+    [Fact]
+    public async Task BatchPreservesBracketsAndContractions()
+    {
+        var results = new[] { BatchToken("word","said"), BatchToken("punctuation","(","next"),
+            BatchToken("word","it"), BatchToken("punctuation","'","both"), BatchToken("word","s"),
+            BatchToken("word","fine"), BatchToken("punctuation",")","previous"), BatchToken("punctuation",".","previous") };
+        Assert.Equal("said (it's fine).", await BatchText(results));
+    }
+
+    [Theory]
+    [InlineData("", "你好")]
+    [InlineData(" ", "你 好")]
+    public async Task BatchUsesProviderWordDelimiter(string delimiter, string expected) =>
+        Assert.Equal(expected, await BatchText([BatchToken("word","你"), BatchToken("word","好")], delimiter));
+
+    private static object BatchToken(string type, string content, string? attachesTo = null) =>
+        new { type, attaches_to = attachesTo, alternatives = new[] { new { content } } };
+
+    private static async Task<string> BatchText(object[] results, string delimiter = " ")
+    {
+        using var http = new HttpClient(new Handler((request, body) =>
+            request.RequestUri!.AbsolutePath.EndsWith("/transcript", StringComparison.Ordinal)
+                ? Json(JsonSerializer.Serialize(new { results, metadata = new { language_pack_info = new { word_delimiter = delimiter } } })) : Success(request, body)));
+        using var plugin = new SpeechmaticsPlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        return (await plugin.TranscribeAsync(Audio(), "en", false, null, default)).Text;
+    }
+
+    [Theory]
     [InlineData(null)] [InlineData("auto")] [InlineData("de")]
     public async Task AutomaticBatchUsesLanguageOfFirstRecognizedWord(string? requested)
     {
