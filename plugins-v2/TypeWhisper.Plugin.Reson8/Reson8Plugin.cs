@@ -69,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.5";
+    public string PluginVersion => "1.2.6";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -271,18 +271,36 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
             if (_host is not null)
             {
-                if (changed)
+                var oldSelection = _host.GetSetting<string>(SelectedModelSettingName);
+                var oldModels = _host.GetSetting<List<Reson8CustomModel>>(FetchedCustomModelsSettingName);
+                var selectionWritten = false;
+                var modelsWritten = false;
+                try
                 {
-                    // Persist a safe model selection before changing accounts. If
-                    // settings fail, the saved and active credentials remain unchanged.
-                    _host.SetSetting(SelectedModelSettingName, DefaultModelId);
-                    _host.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
+                    if (changed)
+                    {
+                        // Write dependent settings first; restore them if a later
+                        // write fails so the old credential keeps its model state.
+                        _host.SetSetting(SelectedModelSettingName, DefaultModelId);
+                        selectionWritten = true;
+                        _host.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
+                        modelsWritten = true;
+                    }
+                    if (normalized is null)
+                        await _host.DeleteSecretAsync(ApiKeySecretName).ConfigureAwait(false);
+                    else
+                        await _host.StoreSecretAsync(ApiKeySecretName, normalized).ConfigureAwait(false);
                 }
-                if (normalized is null)
-                    await _host.DeleteSecretAsync(ApiKeySecretName).ConfigureAwait(false);
-                else
-                    await _host.StoreSecretAsync(ApiKeySecretName, normalized).ConfigureAwait(false);
-
+                catch (Exception failure) when (failure is not OutOfMemoryException)
+                {
+                    var errors = new List<Exception> { failure };
+                    try { if (modelsWritten) _host.SetSetting(FetchedCustomModelsSettingName, oldModels); }
+                    catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
+                    try { if (selectionWritten) _host.SetSetting(SelectedModelSettingName, oldSelection); }
+                    catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
+                    if (errors.Count > 1) throw new AggregateException("Credential update failed and model settings could not be fully restored.", errors);
+                    throw;
+                }
             }
             _apiKey = normalized;
             if (changed)
@@ -527,7 +545,7 @@ internal static class WavPcm16Extractor
             || !HasAscii(wavAudio, 0, "RIFF")
             || !HasAscii(wavAudio, 8, "WAVE"))
         {
-            return wavAudio;
+            throw new ArgumentException("Audio must be a PCM16 mono 16 kHz WAV file.", nameof(wavAudio));
         }
 
         var offset = 12;
@@ -542,8 +560,8 @@ internal static class WavPcm16Extractor
             var chunkId = Encoding.ASCII.GetString(wavAudio, offset, 4);
             var chunkSize = BitConverter.ToInt32(wavAudio, offset + 4);
             offset += 8;
-            if (chunkSize < 0 || offset + chunkSize > wavAudio.Length)
-                break;
+            if (chunkSize < 0 || (long)offset + chunkSize > wavAudio.Length)
+                throw new ArgumentException("The WAV contains a truncated or invalid chunk.", nameof(wavAudio));
 
             if (chunkId == "fmt " && chunkSize >= 16)
             {
@@ -561,12 +579,12 @@ internal static class WavPcm16Extractor
         }
 
         if (data is null)
-            return wavAudio;
+            throw new ArgumentException("The WAV contains no audio data.", nameof(wavAudio));
 
-        if (audioFormat == 1 && channels == 1 && sampleRate == 16000 && bitsPerSample == 16)
+        if (audioFormat == 1 && channels == 1 && sampleRate == 16000 && bitsPerSample == 16 && data.Length % 2 == 0)
             return data;
 
-        return data;
+        throw new ArgumentException("Audio must be PCM16 mono at 16 kHz.", nameof(wavAudio));
     }
 
     private static bool HasAscii(byte[] bytes, int offset, string value)

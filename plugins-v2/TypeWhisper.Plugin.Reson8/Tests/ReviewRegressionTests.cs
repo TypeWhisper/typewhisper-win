@@ -7,6 +7,41 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class Reson8PluginTests
 {
     [Theory]
+    [InlineData("replacement")]
+    [InlineData("")]
+    public async Task FailedSecretWriteRestoresModelStateAcrossRestart(string replacement)
+    {
+        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "old-key"; await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        host.FailSecretWrites = true;
+        await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync(replacement));
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal("old-key", plugin.ApiKey); Assert.Equal("custom", plugin.SelectedModelId);
+        Assert.Equal("custom", Assert.Single(plugin.FetchedCustomModels).Id);
+    }
+
+    [Theory]
+    [InlineData(20, 3)]
+    [InlineData(22, 2)]
+    [InlineData(24, 44100)]
+    [InlineData(34, 32)]
+    [InlineData(40, 100)]
+    public async Task UnsupportedOrTruncatedWavNeverUploads(int offset, int value)
+    {
+        var requests = 0;
+        using var client = new HttpClient(new CapturingHandler((_, _) => { requests++; return JsonResponse("{}"); }));
+        using var plugin = new Reson8Plugin(client); var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "fixture"; await plugin.ActivateAsync(host);
+        var wav = BuildPcm16Wav(new byte[8]);
+        var bytes = offset is 24 or 40 ? BitConverter.GetBytes(value) : BitConverter.GetBytes((short)value);
+        bytes.CopyTo(wav, offset);
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.TranscribeAsync(wav, "de", false, null, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.TranscribeStreamingAsync(wav, "de", false, null, _ => true, default));
+        Assert.Equal(0, requests);
+    }
+
+    [Theory]
     [InlineData("baseUrl", "relative/path")]
     [InlineData("baseUrl", "ftp://example.test")]
     [InlineData("baseUrl", "https://example.test?key=value")]
