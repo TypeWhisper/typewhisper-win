@@ -1,0 +1,18 @@
+{
+  "id": "com.typewhisper.fireworks",
+  "name": "Fireworks AI",
+  "version": "1.1.6",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Portable Fireworks AI transcription and text processing. Whisper V3 Turbo currently works; live transcription is unavailable.",
+  "categories": [
+    "transcription",
+    "llm"
+  ],
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Fireworks.dll",
+  "pluginClass": "TypeWhisper.Plugin.Fireworks.FireworksPlugin",
+  "descriptions": {
+    "de": "Fireworks AI-Integration mit portablen Einstellungen."
+  }
+}

@@ -3,6 +3,30 @@ using Xunit;
 
 public class OriginalFieldFocusTests
 {
+    [Theory]
+    [InlineData(50025)]
+    [InlineData(50026)]
+    public void CustomEditorsRequireFocusAndWritableTextMetadata(int controlType)
+    {
+        Assert.True(OriginalFieldFocus.IsEditableControl(controlType,true,()=>true));
+        Assert.False(OriginalFieldFocus.IsEditableControl(controlType,true,()=>false));
+        Assert.False(OriginalFieldFocus.IsEditableControl(controlType,false,()=>throw new Exception("Non-focusable groups must not be queried.")));
+    }
+
+    [Theory]
+    [InlineData(50000)]
+    [InlineData(50020)]
+    [InlineData(50032)]
+    [InlineData(50033)]
+    public void OtherControlsCannotBecomeEditorsThroughAPattern(int controlType) =>
+        Assert.False(OriginalFieldFocus.IsEditableControl(controlType,true,()=>throw new Exception("Unexpected pattern query.")));
+
+    [Theory]
+    [InlineData(50004)]
+    [InlineData(50030)]
+    public void ExistingEditAndDocumentProvidersKeepTheirCompatibility(int controlType) =>
+        Assert.True(OriginalFieldFocus.IsEditableControl(controlType,true,()=>throw new Exception("Existing providers do not require new patterns.")));
+
     [Fact]
     public async Task ExpiredWindowDeadlineDoesNotActivate()
     {
