@@ -1,6 +1,6 @@
 # Gladia for the portable host
 
-Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.0`, requiring host `1.1.2`. Implemented on its own `seofood/gladia-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.1`, requiring host `1.1.2`. Implemented on its own `seofood/gladia-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -17,7 +17,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Gladia/Tests/TypeWhisper.Plugin.Gladia
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.Gladia/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **45 provider tests passed** (including 25 streaming cases). The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+All **47 provider tests passed** (including 27 streaming cases). The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
 
 On 2026-09-19, all 20 provider tests passed again. The installed 1.1.0 package loaded through the real portable host using the development profile's Windows secret store. Authenticated configuration validation and recorded-audio transcription passed with a short synthetic English WAV. The result was: "This is a short test. Tomorrow we will meet at 10 in the office."
 
@@ -27,12 +27,14 @@ Marco confirmed recorded-audio dictation in the app on 2026-09-19. The developme
 
 The restarted development app shows Gladia selected for dictation and the Live transcription toggle enabled. Settings screenshots are included below.
 
-Streaming tests cover authenticated session initialization, PCM format/chunk ordering, language/vocabulary configuration, endpoint validation, fragmented messages, replacement partials, duplicate final suppression, final-utterance delivery, typed provider errors, malformed/premature closure, cancellation and completion timeout. Live microphone/end-to-end manual acceptance and ARM64 execution remain pending. No public package or catalog was published.
+Streaming tests cover authenticated session initialization, PCM format/chunk ordering, language/vocabulary configuration, endpoint validation, fragmented messages, replacement partials, duplicate final suppression, final-utterance delivery, typed provider errors, malformed/premature closure, cancellation and completion timeout. Marco confirmed live microphone transcription on 2026-09-19. Version 1.2.1 also exposes Gladia's documented language codes to the host, enabling the Spoken language selector. A single selection is sent as a fixed language with code switching disabled; Automatic keeps provider detection. The restarted development app exposes the language selector; German was selected and verified persisted as `de`. Fixed-language microphone dictation still needs manual acceptance. ARM64 execution remains pending. No public package or catalog was published.
 
 ![Gladia settings in the combined Windows development app](../../docs/screenshots/gladia/settings-dark.png)
 
 ![Gladia selected with streaming available](../../docs/screenshots/gladia/dictation-live.png)
 
 ![Live transcription enabled for Gladia](../../docs/screenshots/gladia/appearance-live.png)
+
+![Gladia with German selected](../../docs/screenshots/gladia/dictation-german.png)
 
 References: [live quickstart](https://docs.gladia.io/chapters/live-stt/quickstart), [session configuration](https://docs.gladia.io/api-reference/v2/live/init), [WebSocket protocol](https://docs.gladia.io/api-reference/v2/live/websocket).

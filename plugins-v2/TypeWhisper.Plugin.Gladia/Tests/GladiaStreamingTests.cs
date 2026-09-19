@@ -10,6 +10,22 @@ namespace PortableMigration.Tests;
 
 public sealed class GladiaStreamingTests
 {
+    [Theory]
+    [InlineData("de", 1)]
+    [InlineData("auto", 0)]
+    public void FixedLanguageIsSentWithoutCodeSwitchingWhileAutomaticRemainsAvailable(string language, int expectedCount)
+    {
+        using var plugin = new GladiaPlugin();
+        Assert.Contains("de", plugin.SupportedLanguages);
+        Assert.Contains("en", plugin.SupportedLanguages);
+        Assert.DoesNotContain("auto", plugin.SupportedLanguages);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(GladiaPlugin.StreamingConfiguration([language], null)));
+        var config = doc.RootElement.GetProperty("language_config");
+        Assert.Equal(expectedCount, config.GetProperty("languages").GetArrayLength());
+        if (expectedCount > 0) Assert.Equal(language, config.GetProperty("languages")[0].GetString());
+        Assert.False(config.GetProperty("code_switching").GetBoolean());
+    }
+
     [Fact]
     public void ConfigurationPreservesOrderedHintsVocabularyAndPcmFormat()
     {
