@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Security.Cryptography;
 
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -71,6 +72,8 @@ public sealed partial class WhisperCppPlugin :
     private TranscriptionAccelerationStatus _accelerationStatus = new(
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
+    internal Func<GgmlType, QuantizationType, CancellationToken, Task<Stream>> OpenModelDownloadAsync { get; set; } =
+        (type, quantization, ct) => WhisperGgmlDownloader.Default.GetGgmlModelAsync(type, quantization, ct);
 
     /// <summary>
     /// Initializes a new instance of the WhisperCppPlugin class.
@@ -95,7 +98,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.8";
+    public string PluginVersion => "1.2.9";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -254,6 +257,7 @@ public sealed partial class WhisperCppPlugin :
             var modelPath = GetModelPath(modelId);
             var modelDirectory = Path.GetDirectoryName(modelPath)!;
             Directory.CreateDirectory(modelDirectory);
+            RemoveOrphanedModelDownloads(modelPath);
 
             if (File.Exists(modelPath))
             {
@@ -265,12 +269,11 @@ public sealed partial class WhisperCppPlugin :
 
             try
             {
-                await using var modelStream = await WhisperGgmlDownloader.Default
-                    .GetGgmlModelAsync(model.Type, model.Quantization, ct);
+                await using var modelStream = await OpenModelDownloadAsync(model.Type, model.Quantization, ct);
 
                 var buffer = new byte[81920];
                 long bytesCopied = 0;
-                var totalBytes = modelStream.CanSeek ? modelStream.Length : 0;
+                var totalBytes = modelStream.CanSeek ? modelStream.Length : model.EstimatedSizeMB * 1_000_000;
 
                 await using (var fileStream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
                 {
@@ -284,7 +287,7 @@ public sealed partial class WhisperCppPlugin :
                         bytesCopied += read;
 
                         if (totalBytes > 0)
-                            progress?.Report((double)bytesCopied / totalBytes);
+                            progress?.Report(Math.Min(0.99, (double)bytesCopied / totalBytes));
                     }
 
                     await fileStream.FlushAsync(ct);
@@ -317,21 +320,20 @@ public sealed partial class WhisperCppPlugin :
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            ct.ThrowIfCancellationRequested();
+            if (string.Equals(_selectedModelId, modelId, StringComparison.Ordinal))
+            {
+                _host?.SetSetting<string?>("selectedModel", null);
+                _selectedModelId = null;
+            }
             if (string.Equals(_loadedModelId, modelId, StringComparison.Ordinal))
             {
                 DisposeFactoryUnsafe();
                 _loadedModelId = null;
             }
 
-            ct.ThrowIfCancellationRequested();
             if (File.Exists(modelPath))
                 File.Delete(modelPath);
-
-            if (string.Equals(_selectedModelId, modelId, StringComparison.Ordinal))
-            {
-                _selectedModelId = null;
-                _host?.SetSetting<string?>("selectedModel", null);
-            }
         }
         finally
         {
@@ -694,17 +696,45 @@ public sealed partial class WhisperCppPlugin :
             .Concat(Directory.EnumerateFiles(cudaAssets, "*.dll")))
         {
             var target = Path.Join(destination, Path.GetFileName(source));
-            // A cache is version-specific; do not overwrite DLLs already loaded by this process.
-            if (!File.Exists(target))
+            // Reuse intact loaded DLLs, but repair a damaged cache before native loading.
+            if (!RuntimeFilesMatch(source, target))
             {
                 var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
                     File.Copy(source, temporary);
-                    File.Move(temporary, target);
+                    File.Move(temporary, target, overwrite: true);
                 }
                 finally { TryDeleteFile(temporary); }
             }
+        }
+    }
+
+    private static bool RuntimeFilesMatch(string source, string target)
+    {
+        if (!File.Exists(target) || new FileInfo(source).Length != new FileInfo(target).Length) return false;
+        using var original = File.OpenRead(source);
+        using var cached = File.OpenRead(target);
+        return SHA256.HashData(original).AsSpan().SequenceEqual(SHA256.HashData(cached));
+    }
+
+    internal static void RemoveOrphanedModelDownloads(string modelPath)
+    {
+        var directory = Path.GetDirectoryName(modelPath)!;
+        var prefix = Path.GetFileName(modelPath) + ".";
+        foreach (var candidate in Directory.EnumerateFiles(directory, prefix + "*.tmp"))
+        {
+            var name = Path.GetFileName(candidate);
+            if (!Guid.TryParseExact(name[prefix.Length..^4], "N", out _)) continue;
+            try
+            {
+                // An active download holds FileShare.None. Delete only an orphan
+                // we can open exclusively, and only for this exact model filename.
+                using var orphan = new FileStream(candidate, FileMode.Open, FileAccess.ReadWrite,
+                    FileShare.None, 1, FileOptions.DeleteOnClose);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { System.Diagnostics.Debug.WriteLine("Temporary model download is still in use or cannot be removed: " + ex.GetType().Name); }
         }
     }
 
