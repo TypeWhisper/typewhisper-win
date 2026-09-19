@@ -10,6 +10,24 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class WhisperCppPluginTests
 {
     [Fact]
+    public async Task AutoCannotBypassTheNewlyInstalledCudaRestartGate()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); var installer = new FakeCudaRuntimeInstaller(temp.Path);
+        using var plugin = new WhisperCppPlugin(installer); await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.LoadModelAsync("tiny", default));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+        Assert.True(plugin.AccelerationStatus.RequiresRestart);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.LoadModelAsync("tiny", default));
+        Assert.Contains("Restart TypeWhisper", error.Message); Assert.Equal(1, installer.EnsureInstalledCallCount);
+        Assert.Null(GetPrivateField<WhisperFactory>(plugin, "_factory"));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        Assert.False(plugin.AccelerationStatus.RequiresRestart);
+    }
+
+    [Fact]
     public async Task CanceledReplacementRetainsSelectionAndReloadsWithoutOverlappingFactories()
     {
         using var temp = new TempDirectory(); using var cancellation = new CancellationTokenSource();

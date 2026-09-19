@@ -74,5 +74,5 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | SupertonicTts | Separate v2 port pending |
 | Voxtral | Separate v2 port pending |
 | Webhook | Separate v2 port pending |
-| WhisperCpp | Whisper (Local) source 1.2.14 in `plugins-v2/TypeWhisper.Plugin.WhisperCpp`; 89 regression tests pass. Installed 1.2.4: CUDA Large V3 Turbo, German microphone dictation, local live preview, restart loading, shared settings and chip icon manually verified; screenshots are from 1.2.4. Source 1.2.6: persistent CUDA cache paths and cold PCM/WAV inference verified. Later source changes have automated regression coverage; public package/catalog publication pending. See the plugin README. |
+| WhisperCpp | Whisper (Local) source 1.2.15 in `plugins-v2/TypeWhisper.Plugin.WhisperCpp`; 90 regression tests pass. Installed 1.2.4: CUDA Large V3 Turbo, German microphone dictation, local live preview, restart loading, shared settings and chip icon manually verified; screenshots are from 1.2.4. Source 1.2.6: persistent CUDA cache paths and cold PCM/WAV inference verified. Later source changes have automated regression coverage; public package/catalog publication pending. See the plugin README. |
 | Xai | Separate v2 port pending |

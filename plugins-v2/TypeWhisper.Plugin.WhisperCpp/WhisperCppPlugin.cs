@@ -100,7 +100,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.14";
+    public string PluginVersion => "1.2.15";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -213,12 +213,12 @@ public sealed partial class WhisperCppPlugin :
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
     {
         _runtimeRestartRequired = RequiresRuntimeRestart(preference)
-            || preference == TranscriptionAccelerationPreference.NvidiaCuda && _cudaRuntimeRestartRequired;
+            || preference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda) && _cudaRuntimeRestartRequired;
         _accelerationPreference = preference;
         if (!_runtimeRestartRequired)
             ApplyRuntimeConfiguration(preference);
 
-        if (preference == TranscriptionAccelerationPreference.NvidiaCuda && _cudaRuntimeRestartRequired)
+        if (preference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda) && _cudaRuntimeRestartRequired)
         {
             _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
             return;
@@ -649,17 +649,18 @@ public sealed partial class WhisperCppPlugin :
 
     private async Task<bool> EnsureCudaRuntimeAvailableForLoadAsync(CancellationToken cancellationToken)
     {
+        if (_cudaRuntimeRestartRequired
+            && _accelerationPreference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda))
+        {
+            _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+            throw new InvalidOperationException(_accelerationStatus.Detail);
+        }
+
         if (_accelerationPreference != TranscriptionAccelerationPreference.NvidiaCuda)
             return _accelerationPreference == TranscriptionAccelerationPreference.Auto
                 && OperatingSystem.IsWindows() && RuntimeInformation.ProcessArchitecture == Architecture.X64
                 && _cudaRuntimeInstaller is { } automaticInstaller
                 && await automaticInstaller.VerifyInstalledAsync(cancellationToken).ConfigureAwait(false);
-
-        if (_cudaRuntimeRestartRequired)
-        {
-            _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
-            throw new InvalidOperationException(_accelerationStatus.Detail);
-        }
 
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
         {
