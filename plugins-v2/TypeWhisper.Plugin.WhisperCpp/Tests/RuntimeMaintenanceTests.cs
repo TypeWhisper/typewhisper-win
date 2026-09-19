@@ -10,6 +10,30 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class WhisperCppPluginTests
 {
     [Fact]
+    public async Task CudaRestartGateSurvivesFreshPluginInstancesInTheSameProcess()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); var host = new FakePluginHostServices(temp.Path);
+        host.SetSetting("acceleration", "NvidiaCuda");
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        using (var first = new WhisperCppPlugin(new FakeCudaRuntimeInstaller(temp.Path)))
+        {
+            await first.ActivateAsync(host);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => first.LoadModelAsync("tiny", default));
+            await first.DeactivateAsync();
+        }
+        var installed = new FakeCudaRuntimeInstaller(temp.Path) { IsInstalledOverride = true };
+        using var reloaded = new WhisperCppPlugin(installed); await reloaded.ActivateAsync(host);
+        Assert.True(reloaded.AccelerationStatus.RequiresRestart);
+        Assert.Contains("Restart TypeWhisper", Assert.Single(reloaded.TextSettings).Description);
+        reloaded.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => reloaded.LoadModelAsync("tiny", default));
+        Assert.Contains("Restart TypeWhisper", error.Message); Assert.Equal(0, installed.EnsureInstalledCallCount);
+        reloaded.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        Assert.False(reloaded.AccelerationStatus.RequiresRestart);
+    }
+
+    [Fact]
     public async Task AutoCannotBypassTheNewlyInstalledCudaRestartGate()
     {
         if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;

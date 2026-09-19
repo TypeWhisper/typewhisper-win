@@ -66,6 +66,10 @@ public sealed partial class WhisperCppPlugin :
     private string? _loadedModelId;
     private string? _pluginDirectory;
     private bool _cudaRuntimeRestartRequired;
+    private bool IsCudaRuntimeRestartRequired => _cudaRuntimeRestartRequired
+        || (_cudaRuntimeInstaller is { } installer && AppDomain.CurrentDomain.GetData(CudaRestartGateKey(installer.RuntimeDirectory)) is true);
+    private static string CudaRestartGateKey(string directory) =>
+        "TypeWhisper.WhisperCpp.CudaRestart:" + Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant();
     private TranscriptionAccelerationPreference _accelerationPreference = TranscriptionAccelerationPreference.Auto;
     private bool _customRocmRuntimeLoaded;
     private bool _runtimeRestartRequired;
@@ -100,7 +104,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.15";
+    public string PluginVersion => "1.2.16";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -213,12 +217,12 @@ public sealed partial class WhisperCppPlugin :
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
     {
         _runtimeRestartRequired = RequiresRuntimeRestart(preference)
-            || preference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda) && _cudaRuntimeRestartRequired;
+            || preference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda) && IsCudaRuntimeRestartRequired;
         _accelerationPreference = preference;
         if (!_runtimeRestartRequired)
             ApplyRuntimeConfiguration(preference);
 
-        if (preference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda) && _cudaRuntimeRestartRequired)
+        if (preference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda) && IsCudaRuntimeRestartRequired)
         {
             _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
             return;
@@ -649,7 +653,7 @@ public sealed partial class WhisperCppPlugin :
 
     private async Task<bool> EnsureCudaRuntimeAvailableForLoadAsync(CancellationToken cancellationToken)
     {
-        if (_cudaRuntimeRestartRequired
+        if (IsCudaRuntimeRestartRequired
             && _accelerationPreference is (TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.NvidiaCuda))
         {
             _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
@@ -704,6 +708,9 @@ public sealed partial class WhisperCppPlugin :
             $"Installed NVIDIA CUDA runtime for whisper.cpp at {installer.RuntimeDirectory}.");
 
         _cudaRuntimeRestartRequired = true;
+        // AppDomain data survives collectible plugin instances but ends with the app process.
+        // Store only a BCL value so the gate cannot retain a plugin load context.
+        AppDomain.CurrentDomain.SetData(CudaRestartGateKey(installer.RuntimeDirectory), true);
         _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
         _host?.NotifyCapabilitiesChanged();
         throw new InvalidOperationException(_accelerationStatus.Detail);
