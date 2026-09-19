@@ -38,10 +38,10 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Plugin | Status |
 | --- | --- |
 | AssemblyAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AssemblyAi`; 56 plugin tests and 259 portable SDK/host tests pass. Includes macOS model/dictionary/diarization features and native branding. Development install/start, authenticated REST/WebSocket requests for both models, Pro speaker labeling and app HTTP transcription passed; native UI, update acceptance and publication pending (see plugin README). |
-| AuthenticatedCli | Separate v2 port pending |
+| AuthenticatedCli | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AuthenticatedCli`; 50 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Cerebras | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Cerebras`; 43 provider/package tests and 259 portable SDK/host tests pass. Model discovery, grouped settings and native branding included. Development key validation/model discovery passed; real text requests returned HTTP 402 (account quota), so live inference and microphone workflow acceptance remain pending. See plugin README. |
 | Claude | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Claude`; 57 provider/package tests and 259 portable SDK/host tests pass. Paginated model discovery, preserved model selection, portable settings and native branding included. Development package installation passed; authenticated requests, update acceptance and publication pending. See plugin README. |
-| CloudflareAsr | Separate v2 port pending |
+| CloudflareAsr | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.CloudflareAsr`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
 | Cohere | Separate v2 port pending |
 | CohereTranscribe | Separate v2 port pending |
 | Deepgram | Existing portable build |
@@ -49,7 +49,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | FileMemory | Separate v2 port pending |
 | FillerWords | Existing portable build |
 | Fireworks | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Fireworks`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
-| Gemini | Separate v2 port pending |
+| Gemini | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gemini`; 95 provider/package/loopback tests pass. Includes language mapping, dictionary terms, LLM selection/temperature and confirmed streaming completion. Authenticated text/audio/streaming, package upgrade and manual live-preview acceptance passed; public package publication pending. |
 | GemmaLocal | Separate v2 port pending |
 | Gladia | Separate v2 port pending |
 | GoogleCloudStt | Separate v2 port pending |

@@ -6,7 +6,10 @@ using Microsoft.UI.Xaml.Media;
 
 namespace TypeWhisper.WinUI;
 
-public sealed record Choice(string Id, string Label, string Description, bool Enabled = true);
+public sealed record Choice(string Id, string Label, string Description, bool Enabled = true)
+{
+    public string? PluginId { get; init; }
+}
 
 public sealed partial class ChoicePicker : UserControl
 {
@@ -36,7 +39,18 @@ public sealed partial class ChoicePicker : UserControl
         _options = options;
         SelectedId = selectedId;
         ChoiceLabel.Text = options.FirstOrDefault(option => option.Id == selectedId)?.Label ?? placeholder;
+        UpdateSelectedIcon();
         UpdateComparisonContent();
+        if (IsPopupOpen) RebuildChoices(restoreFocus: true);
+    }
+
+    private void UpdateSelectedIcon()
+    {
+        var pluginId = _options.FirstOrDefault(option => option.Id == SelectedId)?.PluginId;
+        var branded = !string.IsNullOrEmpty(pluginId);
+        ChoiceBrandIcon.PluginId = pluginId ?? string.Empty;
+        ChoiceBrandIcon.Visibility = branded ? Visibility.Visible : Visibility.Collapsed;
+        ChoiceIcon.Visibility = branded ? Visibility.Collapsed : Visibility.Visible;
     }
 
     // Used only by the isolated select-box comparison. Existing consumers stay unchanged.
@@ -92,7 +106,7 @@ public sealed partial class ChoicePicker : UserControl
     private void UpdateComparisonContent()
     {
         var selected = _options.FirstOrDefault(o => o.Id == SelectedId);
-        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? "Choose…";
+        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? "Choose\u2026";
         if (_comparisonDescription is not null) _comparisonDescription.Text = selected?.Description ?? "";
     }
 
@@ -100,6 +114,14 @@ public sealed partial class ChoicePicker : UserControl
     {
         IsPopupOpen = true;
         _keyboard = ChoiceButton.FocusState == FocusState.Keyboard;
+        RebuildChoices();
+    }
+
+    private void RebuildChoices(bool restoreFocus = false)
+    {
+        var focused = FocusManager.GetFocusedElement(XamlRoot) as HandCursorButton;
+        var focusedId = focused is not null && Choices.Children.Contains(focused) ? focused.Tag as string : null;
+        var focusState = focusedId is not null ? focused!.FocusState : _keyboard ? FocusState.Keyboard : FocusState.Programmatic;
         _selectedButton = null;
         Choices.Children.Clear();
         var compact = _comparisonVariant is 2 or 3;
@@ -108,6 +130,12 @@ public sealed partial class ChoicePicker : UserControl
         {
             var selected = option.Id == SelectedId;
             var grid = new Grid { ColumnSpacing = 12 };
+            var branded = !string.IsNullOrEmpty(option.PluginId);
+            if (branded)
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+                grid.Children.Add(new PluginBrandIcon(option.PluginId!) { Width = 18, Height = 18, VerticalAlignment = VerticalAlignment.Center });
+            }
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
             var labels = new StackPanel { Spacing = 4 };
@@ -115,12 +143,14 @@ public sealed partial class ChoicePicker : UserControl
                 Foreground = (Brush)Application.Current.Resources["TextBrush"] });
             if (!compact) labels.Children.Add(new TextBlock { Text = option.Description, FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.Normal,
                 TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
+            Grid.SetColumn(labels, branded ? 1 : 0);
             grid.Children.Add(labels);
             var check = new TypeWhisperGlyph { Kind = "check", Width = 16, Height = 16, Opacity = selected ? 1 : 0 };
-            Grid.SetColumn(check, 1);
+            Grid.SetColumn(check, branded ? 2 : 1);
             grid.Children.Add(check);
             var button = new HandCursorButton { Content = grid, MinHeight = compact ? 36 : 56, Padding = new Thickness(12, compact ? 6 : 9, 12, compact ? 6 : 9),
                 HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
+            button.Tag = option.Id;
             button.IsEnabled = option.Enabled;
             if (selected)
             {
@@ -135,12 +165,16 @@ public sealed partial class ChoicePicker : UserControl
                 var changed = SelectedId != option.Id;
                 SelectedId = option.Id;
                 ChoiceLabel.Text = option.Label;
+                UpdateSelectedIcon();
                 UpdateComparisonContent();
                 ChoiceButton.Flyout.Hide();
                 if (changed) SelectionChanged?.Invoke(option.Id);
             };
             Choices.Children.Add(button);
         }
+        if (restoreFocus)
+            (Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled && button.Tag as string == focusedId)
+                ?? _selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled))?.Focus(focusState);
     }
 
     private void Choice_Opened(object sender, object e) =>
