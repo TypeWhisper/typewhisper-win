@@ -14,7 +14,9 @@ public sealed partial class CoherePlugin
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
-    public IReadOnlyList<string> SupportedLanguages => ["ar","bn","de","en","es","fr","hi","ja","ko","pt","ru","sw","tr","zh"];
+    public int MaximumAudioUploadBytes => 25 * 1024 * 1024;
+    /// <inheritdoc />
+    public IReadOnlyList<string> SupportedLanguages => ["ar","de","el","en","es","fr","it","ja","ko","nl","pl","pt","vi","zh"];
     /// <inheritdoc />
     public string ProviderName => PluginName;
     /// <inheritdoc />
@@ -25,15 +27,16 @@ public sealed partial class CoherePlugin
     public IReadOnlyList<PluginModelInfo> SupportedModels => [new(Connection.Get("llmModel","command-a-03-2025"),"Command / custom model")];
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [
-        Field("language", "Default transcription language", "Standardsprache fÃ¼r Transkription", "en", PluginSettingsSection.Transcription, SupportedLanguages.Select(l => new PluginSettingChoice(l,l)).ToArray()),
+        Field("language", "Default transcription language", "Standardsprache für Transkription", "en", PluginSettingsSection.Transcription, SupportedLanguages.Select(l => new PluginSettingChoice(l,l)).ToArray()),
         Field("llmModel", "Text model ID", "Textmodell-ID", "command-a-03-2025", PluginSettingsSection.TextProcessing),
         Field("temperatureMode", "Temperature", "Temperatur", "providerDefault", PluginSettingsSection.TextProcessing, new("providerDefault","Provider default"),new("custom","Custom")),
-        Field("temperature", "Custom temperature (0â€“2)", "Eigene Temperatur (0â€“2)", "0.3", PluginSettingsSection.TextProcessing) with { VisibleWhen = new("temperatureMode",["custom"]) }
+        Field("temperature", "Custom temperature (0–2)", "Eigene Temperatur (0–2)", "0.3", PluginSettingsSection.TextProcessing) with { VisibleWhen = new("temperatureMode",["custom"]) }
     ];
     /// <inheritdoc />
     public Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio,string? language,bool translate,string? prompt,CancellationToken ct)
     {
         ProviderConnection.Audio(wavAudio,translate,false,ct);
+        if (wavAudio.Length > MaximumAudioUploadBytes) throw new PluginRequestException("Cohere audio uploads must not exceed 25 MB.", PluginRequestFailureKind.RequestTooLarge);
         var lang = (ProviderConnection.Language(language) ?? Connection.Get("language","en")).Split('-','_')[0].ToLowerInvariant();
         if(!SupportedLanguages.Contains(lang)) throw new ArgumentException("Unsupported Cohere transcription language.");
         return Connection.MultipartAsync("https://api.cohere.com/v2/audio/transcriptions",SelectedModelId!,wavAudio,lang,null,ct);

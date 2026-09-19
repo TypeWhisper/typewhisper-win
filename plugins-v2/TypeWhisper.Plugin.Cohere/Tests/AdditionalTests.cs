@@ -4,6 +4,51 @@ using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.Cohere;
 public sealed partial class ProviderTests
 {
+    [Fact]
+    public async Task TranscriptionFieldsPrecedeFileAndChatBudgetFitsCommandA()
+    {
+        using var http = new HttpClient(new Handler((request, body) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/transcriptions"))
+            {
+                var form = Assert.IsType<MultipartFormDataContent>(request.Content);
+                Assert.Equal(new[] { "model", "language", "file" }, form.Select(part => part.Headers.ContentDisposition!.Name!.Trim('"')));
+                return Json("""{"text":"Hallo"}""");
+            }
+            using var doc = JsonDocument.Parse(body!);
+            Assert.InRange(doc.RootElement.GetProperty("max_tokens").GetInt32(), 1, 8192);
+            return Json("""{"choices":[{"finish_reason":"stop","message":{"content":"Hallo"}}]}""");
+        }));
+        using var plugin = new CoherePlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        await plugin.TranscribeAsync(Audio(), "de", false, null, default);
+        await plugin.ProcessAsync("Correct spelling", "hallo", "", default);
+    }
+    [Theory]
+    [InlineData("it")]
+    [InlineData("el")]
+    [InlineData("nl")]
+    [InlineData("pl")]
+    [InlineData("vi")]
+    public async Task DocumentedTranscribeLanguagesReachTheApi(string language)
+    {
+        using var http = new HttpClient(new Handler((request, body) =>
+        {
+            Assert.Contains(language, body); return Json("""{"text":"fixture"}""");
+        }));
+        using var plugin = new CoherePlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        Assert.Contains(language, plugin.SupportedLanguages);
+        Assert.Equal("fixture", (await plugin.TranscribeAsync(Audio(), language, false, null, default)).Text);
+    }
+
+    [Fact]
+    public async Task OversizedAudioIsRejectedBeforeAnyHttpRequest()
+    {
+        using var http = new HttpClient(new Handler((_, _) => throw new Xunit.Sdk.XunitException("Unexpected HTTP request")));
+        using var plugin = new CoherePlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(new byte[plugin.MaximumAudioUploadBytes + 1], "de", false, null, default));
+        Assert.Equal(PluginRequestFailureKind.RequestTooLarge, error.FailureKind);
+        Assert.DoesNotContain("ru", plugin.SupportedLanguages);
+    }
 
     [Fact]
     public async Task SettingsRenderThroughActualPortableHostServices()
@@ -43,8 +88,8 @@ public sealed partial class ProviderTests
         string? body=null;using var http=new HttpClient(new Handler((r,b)=>{Assert.Equal("/compatibility/v1/chat/completions",r.RequestUri!.AbsolutePath);body=b;return Json("""{"choices":[{"finish_reason":"stop","message":{"content":"Ergebnis"}}]}""");}));
         var host=new Host();using var plugin=new CoherePlugin(http);await plugin.ActivateAsync(host);await Configure(plugin);
         await plugin.SaveTextSettingAsync("llmModel","custom-model",default);await plugin.SaveTextSettingAsync("temperature","0.6",default);await plugin.SaveTextSettingAsync("temperatureMode","custom",default);
-        await plugin.DeactivateAsync();await plugin.ActivateAsync(host);Assert.Equal("Ergebnis",await plugin.ProcessAsync("Rewrite","GrÃ¼ÃŸe","",default));
-        using(var doc=JsonDocument.Parse(body!)){Assert.Equal("custom-model",doc.RootElement.GetProperty("model").GetString());Assert.Equal(0.6,doc.RootElement.GetProperty("temperature").GetDouble());Assert.Equal("GrÃ¼ÃŸe",doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());}
+        await plugin.DeactivateAsync();await plugin.ActivateAsync(host);Assert.Equal("Ergebnis",await plugin.ProcessAsync("Rewrite","Grüße","",default));
+        using(var doc=JsonDocument.Parse(body!)){Assert.Equal("custom-model",doc.RootElement.GetProperty("model").GetString());Assert.Equal(0.6,doc.RootElement.GetProperty("temperature").GetDouble());Assert.Equal("Grüße",doc.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());}
         await plugin.SaveTextSettingAsync("temperatureMode","providerDefault",default);await plugin.ProcessAsync("","text","workflow-model",default);
         using var final=JsonDocument.Parse(body!);Assert.Equal("workflow-model",final.RootElement.GetProperty("model").GetString());Assert.False(final.RootElement.TryGetProperty("temperature",out _));
     }

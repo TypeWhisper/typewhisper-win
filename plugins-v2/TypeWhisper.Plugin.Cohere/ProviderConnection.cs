@@ -126,11 +126,12 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     {
         using var request = Request(HttpMethod.Post, url, key);
         using var form = new MultipartFormDataContent();
-        var file = new ByteArrayContent(audio); file.Headers.ContentType = new("audio/wav"); form.Add(file, fileField, "audio.wav");
         form.Add(new StringContent(model), "model");
         if (responseFormat is not null) form.Add(new StringContent(responseFormat), "response_format");
         if (Language(language) is { } lang) form.Add(new StringContent(lang), "language");
         if (!string.IsNullOrWhiteSpace(prompt)) form.Add(new StringContent(prompt), "prompt");
+        // Cohere requires every scalar field before the file part.
+        var file = new ByteArrayContent(audio); file.Headers.ContentType = new("audio/wav"); form.Add(file, fileField, "audio.wav");
         request.Content = form;
         using var document = await ReadAsync(request, ct); var root = document.RootElement;
         var text = Text(root, "text") ?? throw InvalidResponse();
@@ -154,7 +155,7 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         var body = new Dictionary<string, object>
         {
             ["model"] = model, ["messages"] = new[] { new { role = "system", content = system }, new { role = "user", content = input } },
-            ["max_tokens"] = LlmOutputTokenBudget.CalculateWithReasoningReserve(system, input)
+            ["max_tokens"] = Math.Min(8192, LlmOutputTokenBudget.CalculateWithReasoningReserve(system, input))
         };
         if (Get("temperatureMode", "providerDefault") == "custom") body["temperature"] = double.Parse(Get("temperature", "0.3"), CultureInfo.InvariantCulture);
         using var request = Request(HttpMethod.Post, url); request.Content = Json(body);
