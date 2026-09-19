@@ -154,4 +154,44 @@ public sealed partial class ProviderTests
         Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("white space")]
+    [InlineData("tab\tmodel")]
+    [InlineData(null)]
+    public async Task InvalidRestoredModelIsNotAdvertisedAndFailsBeforeHttp(string? model)
+    {
+        using var http = new HttpClient(new Handler((_, _) => throw new Xunit.Sdk.XunitException("Unexpected HTTP request")));
+        using var plugin = new CoherePlugin(http); var host = new Host();
+        await plugin.ActivateAsync(host); await Configure(plugin);
+        var configuration = host.Settings["configuration"].Deserialize<ProviderConnection.Configuration>()!;
+        host.Settings["configuration"] = JsonSerializer.SerializeToElement(configuration with
+        {
+            Values = new Dictionary<string, string> { ["llmModel"] = model ?? new string('x', 257) }
+        });
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Empty(plugin.SupportedModels);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ProcessAsync("Rewrite", "Hallo", "", default));
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+    }
+
+    [Theory]
+    [InlineData("xx")]
+    [InlineData("")]
+    [InlineData("auto")]
+    public async Task InvalidRestoredFallbackLanguageFailsBeforeHttp(string language)
+    {
+        using var http = new HttpClient(new Handler((_, _) => throw new Xunit.Sdk.XunitException("Unexpected HTTP request")));
+        using var plugin = new CoherePlugin(http); var host = new Host();
+        await plugin.ActivateAsync(host); await Configure(plugin);
+        var configuration = host.Settings["configuration"].Deserialize<ProviderConnection.Configuration>()!;
+        host.Settings["configuration"] = JsonSerializer.SerializeToElement(configuration with
+        {
+            Values = new Dictionary<string, string> { ["language"] = language }
+        });
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(Audio(), "auto", false, null, default));
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+    }
+
 }

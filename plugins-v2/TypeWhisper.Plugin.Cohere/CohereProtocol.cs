@@ -24,7 +24,8 @@ public sealed partial class CoherePlugin
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> SupportedModels => [new(Connection.Get("llmModel","command-a-03-2025"),"Command / custom model")];
+    public IReadOnlyList<PluginModelInfo> SupportedModels => ProviderConnection.ValidModelId(Connection.Get("llmModel","command-a-03-2025"))
+        ? [new(Connection.Get("llmModel","command-a-03-2025"),"Command / custom model")] : [];
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [
         Field("language", "Default transcription language", "Standardsprache für Transkription", "en", PluginSettingsSection.Transcription, SupportedLanguages.Select(l => new PluginSettingChoice(l,l)).ToArray()),
@@ -37,13 +38,24 @@ public sealed partial class CoherePlugin
     {
         ProviderConnection.Audio(wavAudio,translate,false,ct);
         if (wavAudio.Length > MaximumAudioUploadBytes) throw new PluginRequestException("Cohere audio uploads must not exceed 25 MB.", PluginRequestFailureKind.RequestTooLarge);
-        var lang = (ProviderConnection.Language(language) ?? Connection.Get("language","en")).Split('-','_')[0].ToLowerInvariant();
-        if(!SupportedLanguages.Contains(lang)) throw new ArgumentException("Unsupported Cohere transcription language.");
+        var explicitLanguage = ProviderConnection.Language(language);
+        var lang = (explicitLanguage ?? ProviderConnection.Language(Connection.Get("language","en")))?.Split('-','_')[0].ToLowerInvariant();
+        if(lang is null || !SupportedLanguages.Contains(lang))
+        {
+            if (explicitLanguage is null) throw new PluginRequestException("The saved Cohere transcription language is unsupported.", PluginRequestFailureKind.Configuration);
+            throw new ArgumentException("Unsupported Cohere transcription language.");
+        }
         return Connection.MultipartAsync("https://api.cohere.com/v2/audio/transcriptions",SelectedModelId!,wavAudio,lang,null,ct);
     }
     /// <inheritdoc />
     public Task<string> ProcessAsync(string systemPrompt,string userText,string model,CancellationToken ct) => Connection.ChatAsync(
-        "https://api.cohere.com/compatibility/v1/chat/completions",string.IsNullOrWhiteSpace(model) ? Connection.Get("llmModel","command-a-03-2025") : model.Trim(),systemPrompt,userText,ct);
+        "https://api.cohere.com/compatibility/v1/chat/completions",string.IsNullOrWhiteSpace(model) ? RequireSavedModel() : model.Trim(),systemPrompt,userText,ct);
+    private string RequireSavedModel()
+    {
+        var model = Connection.Get("llmModel", "command-a-03-2025");
+        if (!ProviderConnection.ValidModelId(model)) throw new PluginRequestException("The saved Cohere text model ID is invalid.", PluginRequestFailureKind.Configuration);
+        return model;
+    }
     /// <inheritdoc />
     public async Task ValidateConfigurationAsync(CancellationToken ct)
     {

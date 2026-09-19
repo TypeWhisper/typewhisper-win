@@ -20,7 +20,7 @@ public sealed partial class CoherePlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// <inheritdoc />
     public string PluginName => "Cohere";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.1.3";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />

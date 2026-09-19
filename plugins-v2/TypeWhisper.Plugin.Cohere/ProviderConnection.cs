@@ -148,10 +148,12 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         }
         return new(text.Trim(), Text(root, "language") ?? Language(language), Number(root, "duration"), noSpeech) { Segments = segments };
     }
+    internal static bool ValidModelId(string? model) => !string.IsNullOrWhiteSpace(model) && model.Length <= 256
+        && !model.Any(character => char.IsWhiteSpace(character) || char.IsControl(character));
     internal async Task<string> ChatAsync(string url, string model, string system, string input, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(model) || model.Length > 256 || model.Any(char.IsControl)) throw new ArgumentException("Invalid model ID.");
+        if (!ValidModelId(model)) throw new ArgumentException("Invalid model ID.");
         var body = new Dictionary<string, object>
         {
             ["model"] = model, ["messages"] = new[] { new { role = "system", content = system }, new { role = "user", content = input } },
