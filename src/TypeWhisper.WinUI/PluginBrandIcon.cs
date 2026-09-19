@@ -38,6 +38,7 @@ public sealed class PluginBrandIcon : UserControl
         {
             "com.typewhisper.assemblyai" => "assemblyai",
             "com.typewhisper.cerebras" => "cerebras",
+            "com.typewhisper.cloudflare-asr" => "cloudflare",
             "com.typewhisper.claude" => "claude",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
