@@ -7,6 +7,23 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class Reson8PluginTests
 {
     [Theory]
+    [InlineData("https://proxy.example.test/reson8", true)]
+    [InlineData(" https://api.reson8.dev/ ", false)]
+    public async Task ServerChangesInvalidateModelsOnlyForDifferentEndpoints(string endpoint, bool changed)
+    {
+        using var plugin = new Reson8Plugin();
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "first";
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        var notifications = host.NotifyCapabilitiesChangedCount;
+        await plugin.SaveTextSettingAsync("baseUrl", endpoint, default);
+        Assert.Equal(notifications + (changed ? 1 : 0), host.NotifyCapabilitiesChangedCount);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal(changed ? Reson8Plugin.DefaultModelId : "custom", plugin.SelectedModelId);
+        Assert.Equal(changed ? 0 : 1, plugin.FetchedCustomModels.Count);
+    }
+
+    [Theory]
     [InlineData(401, "[]")]
     [InlineData(429, "[]")]
     [InlineData(500, "[]")]

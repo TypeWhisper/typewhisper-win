@@ -69,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.3";
+    public string PluginVersion => "1.2.4";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -356,8 +356,11 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
     internal void SetCustomBaseUrl(string? url)
     {
-        _host?.SetSetting(CustomBaseUrlSettingName, NormalizeBaseUrl(url) == DefaultBaseUrl ? null : NormalizeBaseUrl(url));
-        _customBaseUrl = NormalizeBaseUrl(url);
+        var normalized = NormalizeBaseUrl(url);
+        if (string.Equals(normalized, _customBaseUrl, StringComparison.Ordinal)) return;
+        _host?.SetSetting(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized);
+        _customBaseUrl = normalized;
+        SetFetchedCustomModels([]);
     }
 
     internal void SetCustomAuthHeader(string? header)
