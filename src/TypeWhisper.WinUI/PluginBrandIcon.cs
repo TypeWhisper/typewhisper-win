@@ -44,6 +44,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.fireworks" => "fireworks",
             "com.typewhisper.gemini" => "gemini",
+            "com.typewhisper.gladia" => "gladia",
             "com.typewhisper.groq" => "groq",
             "com.typewhisper.github-copilot" => "github-copilot",
             LocalTranscriptionPlugin.PluginId => "nvidia",
