@@ -1,6 +1,6 @@
 # Speechmatics for the portable host
 
-Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.0`, requiring host `1.1.2`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
+Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.1`, requiring host `1.1.2`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
 
 ## Behavior
 
@@ -23,10 +23,12 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Speechmatics/Tests/TypeWhisper.Plugin.
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.Speechmatics/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **39 tests passed**, covering HTTP protocols/errors, cancellation, encrypted-key persistence and failed saves, standalone immutable package lifecycle, regional WebSockets, explicit/fallback languages, vocabulary, fragmented/revised transcripts, punctuation boundaries, binary audio ordering, exact stop sequence counts, completion timeouts and real host accumulation.
+All **40 tests passed**, covering HTTP protocols/errors, cancellation, encrypted-key persistence and failed saves, standalone immutable package lifecycle, regional WebSockets, explicit/fallback languages, vocabulary, fragmented/revised transcripts, punctuation boundaries, binary audio ordering, exact stop sequence counts, completion timeouts and real host accumulation.
 
 Authenticated tests on September 19, 2026 passed against Europe: connection validation, Enhanced batch transcription and paced live audio through the actual portable host. Live previews appeared during capture (first preview about 0.7 seconds), and the complete final sentence arrived after stopping without batch fallback. The 1.2.0 immutable ZIP was installed in the development profile with credentials and unrelated package receipts preserved. The development WinUI build and launch succeeded.
 
-Native UI verification passed: provider logos, Europe, Enhanced, German, live text enabled and the shared Save button. The installed immutable package also passed paced live transcription through the real host. Screenshots are in `docs/screenshots/speechmatics/`. Marco confirmed successful live microphone transcription in the development app on September 19, 2026, with Europe and German selected. US endpoint access and ARM64 execution are not live-tested. No public package/catalog release or PR push has been performed.
+The 1.2.1 review fix prevents settings saves from capturing the UI synchronization context under contention. A regression test reproduces the previous behavior and verifies the correction. Installed/UI acceptance remains on 1.2.0.
+
+Native UI verification passed: provider logos, Europe, Enhanced, German, live text enabled and the shared Save button. The installed immutable package also passed paced live transcription through the real host. Screenshots are in `docs/screenshots/speechmatics/`. Marco confirmed successful live microphone transcription in the development app on September 19, 2026, with Europe and German selected. US endpoint access and ARM64 execution are not live-tested. No public package/catalog release has been performed.
 
 References: [regions and authentication](https://docs.speechmatics.com/get-started/authentication), [realtime protocol](https://docs.speechmatics.com/api-ref/realtime-transcription-websocket), [supported languages](https://docs.speechmatics.com/speech-to-text/languages).

@@ -28,14 +28,14 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     internal async Task ActivateAsync(IPluginHostServices host)
     {
         var saved = host.GetSetting<Configuration>("configuration") ?? new(null, []);
-        var key = saved.SecretName is null ? null : NormalizeKey(await host.LoadSecretAsync(saved.SecretName));
+        var key = saved.SecretName is null ? null : NormalizeKey(await host.LoadSecretAsync(saved.SecretName).ConfigureAwait(false));
         _configuration = saved with { Values = saved.Values ?? [] }; Key = key; Host = host;
     }
     internal void Deactivate() { Host = null; Key = null; _configuration = new(null, []); }
     internal async Task SetKeyAsync(string value)
     {
         var key = NormalizeKey(value);
-        await _gate.WaitAsync();
+        await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
             var host = Host ?? throw new InvalidOperationException("Activate the plugin first.");
@@ -43,30 +43,30 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
             var staged = key is null ? null : "api-key-" + Guid.NewGuid().ToString("N");
             try
             {
-                if (staged is not null) await host.StoreSecretAsync(staged, key!);
+                if (staged is not null) await host.StoreSecretAsync(staged, key!).ConfigureAwait(false);
                 var next = previous with { SecretName = staged };
                 host.SetSetting("configuration", next);
                 _configuration = next; Key = key;
             }
             catch
             {
-                if (staged is not null) await CleanupAsync(host, staged);
+                if (staged is not null) await CleanupAsync(host, staged).ConfigureAwait(false);
                 throw;
             }
-            if (previous.SecretName is not null) await CleanupAsync(host, previous.SecretName);
+            if (previous.SecretName is not null) await CleanupAsync(host, previous.SecretName).ConfigureAwait(false);
             host.NotifyCapabilitiesChanged();
         }
         finally { _gate.Release(); }
     }
     private static async Task CleanupAsync(IPluginHostServices host, string key)
     {
-        try { await host.DeleteSecretAsync(key); }
+        try { await host.DeleteSecretAsync(key).ConfigureAwait(false); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         { host.Log(PluginLogLevel.Warning, "An inactive encrypted provider key could not be removed."); }
     }
     internal async Task SaveAsync(string id, string value, CancellationToken ct)
     {
-        await _gate.WaitAsync(ct);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var host = Host ?? throw new InvalidOperationException("Activate the plugin first."); ct.ThrowIfCancellationRequested();
@@ -95,8 +95,8 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     internal static StringContent Json(object value) => new(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
     internal async Task<JsonDocument> ReadAsync(HttpRequestMessage request, CancellationToken ct)
     {
-        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(http, request, ct);
-        var json = await response.Content.ReadAsStringAsync(ct); ct.ThrowIfCancellationRequested();
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(http, request, ct).ConfigureAwait(false);
+        var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false); ct.ThrowIfCancellationRequested();
         try { var document = JsonDocument.Parse(json); if (document.RootElement.ValueKind != JsonValueKind.Object) { document.Dispose(); throw InvalidResponse(); } return document; }
         catch (JsonException) { throw InvalidResponse(); }
     }
