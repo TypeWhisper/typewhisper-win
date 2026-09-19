@@ -35,6 +35,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     };
 
     private readonly HttpClient _httpClient;
+    private readonly Func<string?, CancellationToken, Task<IStreamingSession>>? _streamingFactory;
     private readonly SemaphoreSlim _apiKeyWriteLock = new(1, 1);
     private IPluginHostServices? _host;
     private string? _apiKey;
@@ -51,9 +52,10 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     {
     }
 
-    internal Reson8Plugin(HttpClient httpClient)
+    internal Reson8Plugin(HttpClient httpClient, Func<string?, CancellationToken, Task<IStreamingSession>>? streamingFactory = null)
     {
         _httpClient = httpClient;
+        _streamingFactory = streamingFactory;
     }
 
     /// <summary>
@@ -67,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.2";
+    public string PluginVersion => "1.2.3";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -199,44 +201,43 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         if (!IsConfigured)
             throw new InvalidOperationException("Plugin not configured. API key required.");
 
+        using var progressCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var streamToken = progressCancellation.Token;
         try
         {
             var pcm16 = WavPcm16Extractor.ExtractPcm16(wavAudio);
-            await using var session = await StartStreamingAsync(language, ct);
+            await using var session = await StartStreamingAsync(language, streamToken);
             var collector = new Reson8TranscriptCollector();
-            var transcriptReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             session.TranscriptReceived += evt =>
             {
                 var text = collector.ApplyEvent(evt);
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    if (!onProgress(text))
-                        transcriptReceived.TrySetCanceled(ct);
-                }
-
-                if (evt.IsFinal)
-                    transcriptReceived.TrySetResult();
+                if (!streamToken.IsCancellationRequested && !string.IsNullOrWhiteSpace(text) && !onProgress(text))
+                    progressCancellation.Cancel();
             };
 
             const int chunkSize = 8192;
             for (var offset = 0; offset < pcm16.Length; offset += chunkSize)
             {
                 var count = Math.Min(chunkSize, pcm16.Length - offset);
-                await session.SendAudioAsync(pcm16.AsMemory(offset, count), ct);
+                streamToken.ThrowIfCancellationRequested();
+                await session.SendAudioAsync(pcm16.AsMemory(offset, count), streamToken);
             }
 
-            await session.FinalizeAsync(ct);
+            streamToken.ThrowIfCancellationRequested();
+            await session.FinalizeAsync(streamToken);
+            streamToken.ThrowIfCancellationRequested();
 
             var text = collector.FinalText;
             return string.IsNullOrWhiteSpace(text)
-                ? await TranscribeAsync(wavAudio, language, translate, prompt, ct)
+                ? await TranscribeAsync(wavAudio, language, translate, prompt, streamToken)
                 : new PluginTranscriptionResult(text, NormalizeLanguage(language), PcmDurationSeconds(pcm16.Length), NoSpeechProbability: null);
         }
         catch (OperationCanceledException) { throw; }
         catch
         {
-            return await TranscribeAsync(wavAudio, language, translate, prompt, ct);
+            streamToken.ThrowIfCancellationRequested();
+            return await TranscribeAsync(wavAudio, language, translate, prompt, streamToken);
         }
     }
 
@@ -247,6 +248,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     {
         if (!IsConfigured)
             throw new InvalidOperationException("Plugin not configured. API key required.");
+        if (_streamingFactory is not null) return await _streamingFactory(language, ct);
 
         return await Reson8StreamingSession.ConnectAsync(
             _apiKey!,
@@ -265,7 +267,6 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         await _apiKeyWriteLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            var wasConfigured = IsConfigured;
             var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
             if (_host is not null)
@@ -275,10 +276,16 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                 else
                     await _host.StoreSecretAsync(ApiKeySecretName, normalized).ConfigureAwait(false);
 
-                if (changed && wasConfigured != !string.IsNullOrEmpty(normalized))
-                    hostToNotify = _host;
             }
             _apiKey = normalized;
+            if (changed)
+            {
+                _fetchedCustomModels = [];
+                _selectedModelId = DefaultModelId;
+                _host?.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
+                _host?.SetSetting(SelectedModelSettingName, DefaultModelId);
+                hostToNotify = _host;
+            }
         }
         finally
         {
@@ -326,23 +333,11 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{_customBaseUrl}/v1/custom-model");
         AddAuthHeader(request, _apiKey!, _customAuthHeader);
 
-        try
-        {
-            using var response = await _httpClient.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode)
-                return [];
-
-            var json = await response.Content.ReadAsStringAsync(ct);
-            return JsonSerializer.Deserialize<List<Reson8CustomModel>>(json, JsonOptions) ?? [];
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-        catch (HttpRequestException)
-        {
-            return [];
-        }
+        using var response = await _httpClient.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<List<Reson8CustomModel>>(json, JsonOptions)
+            ?? throw new JsonException("The custom model catalog was empty or invalid.");
     }
 
     internal void SetFetchedCustomModels(IReadOnlyList<Reson8CustomModel> models)

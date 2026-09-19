@@ -61,7 +61,7 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         var builder = new UriBuilder(baseUri)
         {
             Scheme = baseUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase) ? "ws" : "wss",
-            Path = "/v1/speech-to-text/realtime"
+            Path = baseUri.AbsolutePath.TrimEnd('/') + "/v1/speech-to-text/realtime"
         };
 
         var query = new List<string>
