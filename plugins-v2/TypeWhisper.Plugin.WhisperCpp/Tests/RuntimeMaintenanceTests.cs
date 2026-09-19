@@ -10,6 +10,25 @@ namespace TypeWhisper.PluginSystem.Tests;
 public partial class WhisperCppPluginTests
 {
     [Fact]
+    public async Task ReusingAnExistingCudaInstallationDoesNotRequireRestart()
+    {
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;
+        using var temp = new TempDirectory(); var installer = new FakeCudaRuntimeInstaller(temp.Path) { ReuseExistingInstallation = true };
+        using var plugin = new WhisperCppPlugin(installer)
+        {
+            CreateFactory = _ => (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory)),
+            ReleaseFactory = _ => { }
+        };
+        var host = new FakePluginHostServices(temp.Path); await plugin.ActivateAsync(host);
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        Directory.CreateDirectory(Path.Join(temp.Path, "Models")); CreateModelFixture(Path.Join(temp.Path, "Models", "ggml-tiny.bin"));
+        await plugin.LoadModelAsync("tiny", default);
+        Assert.Equal(1, installer.EnsureInstalledCallCount); Assert.False(plugin.AccelerationStatus.RequiresRestart);
+        Assert.DoesNotContain("installed successfully", Assert.Single(plugin.TextSettings).Description);
+        Assert.Equal(0, host.CapabilityChangeCount); Assert.NotNull(GetPrivateField<WhisperFactory>(plugin, "_factory"));
+    }
+
+    [Fact]
     public async Task CancellationAfterCudaInstallationDoesNotLoseTheProcessRestartGate()
     {
         if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) return;

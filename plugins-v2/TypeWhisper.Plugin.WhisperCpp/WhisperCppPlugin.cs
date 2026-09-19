@@ -104,7 +104,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.17";
+    public string PluginVersion => "1.2.18";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -685,16 +685,19 @@ public sealed partial class WhisperCppPlugin :
             "Downloading the NVIDIA CUDA runtime needed for whisper.cpp.");
         _host?.Log(PluginLogLevel.Info, "Installing NVIDIA CUDA runtime for whisper.cpp.");
 
+        bool installedNow;
         try
         {
-            await installer.EnsureInstalledAsync(cancellationToken);
-            _cudaRuntimeRestartRequired = true;
-            // AppDomain data survives collectible plugin instances but ends with the app process.
-            // Store only a BCL value so the gate cannot retain a plugin load context.
-            AppDomain.CurrentDomain.SetData(CudaRestartGateKey(installer.RuntimeDirectory), true);
-            _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
-            _host?.NotifyCapabilitiesChanged();
-
+            installedNow = await installer.EnsureInstalledAsync(cancellationToken);
+            if (installedNow)
+            {
+                _cudaRuntimeRestartRequired = true;
+                // AppDomain data survives collectible plugin instances but ends with the app process.
+                // Store only a BCL value so the gate cannot retain a plugin load context.
+                AppDomain.CurrentDomain.SetData(CudaRestartGateKey(installer.RuntimeDirectory), true);
+                _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+                _host?.NotifyCapabilitiesChanged();
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -710,10 +713,12 @@ public sealed partial class WhisperCppPlugin :
             throw new InvalidOperationException(_accelerationStatus.Detail);
         }
 
-        _host?.Log(
-            PluginLogLevel.Info,
-            $"Installed NVIDIA CUDA runtime for whisper.cpp at {installer.RuntimeDirectory}.");
-
+        if (!installedNow && !IsCudaRuntimeRestartRequired)
+            return true;
+        if (installedNow)
+            _host?.Log(PluginLogLevel.Info,
+                $"Installed NVIDIA CUDA runtime for whisper.cpp at {installer.RuntimeDirectory}.");
+        _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
         throw new InvalidOperationException(_accelerationStatus.Detail);
     }
 

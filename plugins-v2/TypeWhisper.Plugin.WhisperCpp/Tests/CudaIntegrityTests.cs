@@ -18,7 +18,8 @@ public partial class WhisperCppPluginTests
             Convert.ToHexString(SHA256.HashData(bytes)), ["cublas.dll"]);
         using var client = new HttpClient(new StaticArchiveHandler(bytes));
         using var installer = new WhisperCppCudaRuntimeInstaller(temp.Path, client, package);
-        await installer.EnsureInstalledAsync(default);
+        Assert.True(await installer.EnsureInstalledAsync(default));
+        Assert.False(await installer.EnsureInstalledAsync(default));
         Assert.True(installer.IsInstalled);
         var file = Path.Join(installer.RuntimeDirectory, "cublas.dll");
         var written = File.GetLastWriteTimeUtc(file);

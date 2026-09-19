@@ -36,7 +36,7 @@ public partial class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.17", manifest.Version);
+        Assert.Equal("1.2.18", manifest.Version);
         Assert.Equal("1.1.2", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
@@ -626,13 +626,14 @@ public partial class WhisperCppPluginTests
         public bool IsInstalledOverride { get; init; }
         public Action? OnVerify { get; init; }
         public Action? OnInstalled { get; init; }
+        public bool ReuseExistingInstallation { get; init; }
         public int IntegrityReadCount { get; private set; }
         public bool HasRuntimeFiles => _isInstalled || IsInstalledOverride;
         public Task<bool> VerifyInstalledAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); OnVerify?.Invoke(); return Task.FromResult(IsInstalled); }
         public bool IsInstalled { get { IntegrityReadCount++; return _isInstalled || IsInstalledOverride; } }
         public string RuntimeDirectory { get; } = runtimeDirectory;
 
-        public Task EnsureInstalledAsync(CancellationToken cancellationToken)
+        public Task<bool> EnsureInstalledAsync(CancellationToken cancellationToken)
         {
             EnsureInstalledCallCount++;
             if (InstallException is not null)
@@ -640,7 +641,7 @@ public partial class WhisperCppPluginTests
 
             _isInstalled = true;
             OnInstalled?.Invoke();
-            return Task.CompletedTask;
+            return Task.FromResult(!ReuseExistingInstallation);
         }
 
         public void Dispose() => DisposeCalled = true;

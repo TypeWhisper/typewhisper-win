@@ -13,7 +13,7 @@ internal interface IWhisperCppCudaRuntimeInstaller
     bool HasRuntimeFiles { get; }
     Task<bool> VerifyInstalledAsync(CancellationToken cancellationToken);
     string RuntimeDirectory { get; }
-    Task EnsureInstalledAsync(CancellationToken cancellationToken);
+    Task<bool> EnsureInstalledAsync(CancellationToken cancellationToken);
 }
 
 internal sealed record WhisperCppCudaRuntimePackage(
@@ -112,19 +112,19 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     }
 
     /// <summary>
-    /// Ensures installed asynchronously..
+    /// Ensures a verified installation and returns whether new files were published.
     /// </summary>
-    public async Task EnsureInstalledAsync(CancellationToken cancellationToken)
+    public async Task<bool> EnsureInstalledAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (await VerifyInstalledAsync(cancellationToken).ConfigureAwait(false))
-            return;
+            return false;
 
         await _gate.WaitAsync(cancellationToken);
         try
         {
             if (await VerifyInstalledAsync(cancellationToken).ConfigureAwait(false))
-                return;
+                return false;
 
             Directory.CreateDirectory(RuntimeDirectory);
             RemoveAbandonedDownloads();
@@ -143,6 +143,7 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
             {
                 TryDeleteFile(archivePath);
             }
+            return true;
         }
         finally
         {
