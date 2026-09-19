@@ -2,7 +2,7 @@
 
 Soniox live transcription over WebSocket, plus recorded-audio transcription with upload, Windows audio compression, polling, cleanup and region selection.
 
-Version `1.3.1`; plugin ID `com.typewhisper.soniox`; minimum host `1.1.2`.
+Version `1.3.2`; plugin ID `com.typewhisper.soniox`; minimum host `1.1.2`.
 Independent branch: `seofood/soniox-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -28,7 +28,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Soniox/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.soniox` inside the plugin project. Package that directory as the ZIP root.
 
-65 plugin tests pass, including streaming protocol, host preview/final assembly, fragmented responses, region configuration, interim replacement, cancellation, timeout, and typed failures. The original batch tests cover upload/poll/delete, metadata/language/region contracts, audio encoding, cancellation and package lifecycle. On 2026-09-18 the installed 1.2.0 package passed API-key validation and authenticated transcription of the synthetic English acceptance WAV using the existing development-profile credentials. It returned the complete test sentence and two segments. The harness used an isolated settings copy; no microphone audio was uploaded. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+78 plugin tests pass, including streaming protocol, host preview/final assembly, fragmented responses, region configuration, interim replacement, cancellation, timeout, and typed failures. The original batch tests cover upload/poll/delete, metadata/language/region contracts, audio encoding, cancellation and package lifecycle. On 2026-09-18 the installed 1.2.0 package passed API-key validation and authenticated transcription of the synthetic English acceptance WAV using the existing development-profile credentials. It returned the complete test sentence and two segments. The harness used an isolated settings copy; no microphone audio was uploaded. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
@@ -50,4 +50,6 @@ On 2026-09-19 (Europe/Berlin), Marco also confirmed successful live dictation wi
 
 Version 1.3.1 drains all outstanding batch cleanup tasks before deactivation/disposal, skips untimed tokens correctly in subtitle timing, and includes the Soniox PNG in published host output. The native Media Foundation encoding test runs only on Windows with an available 16 kHz mono AAC encoder; the remaining tests run on both CI platforms.
 
-The native-codec test probes AAC availability and skips missing Media Foundation installations, including Windows N without its Media Feature Pack. Regression tests cover absent libraries, missing encoders and unexpected probe failures. The Soniox PNG is excluded from implicit None items before being included as build/publish Content to avoid duplicate PRI resources.
+The native-codec test probes AAC availability and skips missing Media Foundation installations, including Windows N without its Media Feature Pack. Regression tests cover absent libraries, missing encoders and unexpected probe failures. The Soniox PNG removes the implicit Content entries before adding one explicit asset with build/publish metadata, avoiding duplicate PRI resources. Resource-item verification runs after restoring the WinUI SDK imports.
+
+Version 1.3.2 also falls back to the original WAV when Media Foundation DLLs or entry points are missing, including wrapped native initialization failures. Six protocol cases verify a complete transcription with the WAV upload; the running manually accepted development package remains 1.3.0.

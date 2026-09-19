@@ -28,8 +28,8 @@ public class SonioxPluginTests
         var manifest = LoadManifest();
         var sut = new SonioxPlugin();
 
-        Assert.Equal("1.3.1", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.3.1", sut.PluginVersion);
+        Assert.Equal("1.3.2", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.3.2", sut.PluginVersion);
     }
 
     [WindowsMediaFoundationFact]
@@ -314,9 +314,24 @@ public class SonioxPluginTests
         Assert.Contains("DELETE https://api.soniox.com/v1/files/84c32fc6-4fb5-4e7a-b656-b5ec70493753", seen);
     }
 
-    [Fact]
-    public async Task TranscribeAsync_EncoderFailureFallsBackToWavBeforeRequest()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task TranscribeAsync_EncoderFailureFallsBackToWavBeforeRequest(int failureKind)
     {
+        Exception encoderFailure = failureKind switch
+        {
+            0 => new COMException("encoder unavailable"),
+            1 => new DllNotFoundException("Media Foundation unavailable"),
+            2 => new EntryPointNotFoundException("Media Foundation entry point unavailable"),
+            3 => new TypeInitializationException("MediaFoundation", new DllNotFoundException()),
+            4 => new TypeInitializationException("MediaFoundation", new EntryPointNotFoundException()),
+            _ => new TypeInitializationException("MediaFoundation", new COMException())
+        };
         string? uploadBody = null;
         var handler = new SonioxFlowHandler(
             inspectCreateBody: _ => { },
@@ -328,7 +343,7 @@ public class SonioxPluginTests
             httpClient,
             pollDelay: TimeSpan.Zero,
             maxPollAttempts: 2,
-            compressedUploadFactory: _ => throw new COMException("encoder unavailable"));
+            compressedUploadFactory: _ => throw encoderFailure);
         await sut.ActivateAsync(host);
 
         var result = await sut.TranscribeAsync(

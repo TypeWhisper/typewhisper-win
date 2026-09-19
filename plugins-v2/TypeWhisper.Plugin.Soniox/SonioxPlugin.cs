@@ -119,7 +119,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.1";
+    public string PluginVersion => "1.3.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -446,6 +446,9 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         or IOException
         or InvalidOperationException
         or COMException
+        or DllNotFoundException
+        or EntryPointNotFoundException
+        or TypeInitializationException { InnerException: DllNotFoundException or EntryPointNotFoundException or COMException }
         or NotSupportedException;
 
     internal static SonioxTranscriptionUpload CreateCompressedUpload(byte[] wavAudio)
