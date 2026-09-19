@@ -4,6 +4,12 @@ namespace TypeWhisper.WinUI;
 
 internal static class OriginalFieldFocus
 {
+    // Chromium/Electron contenteditable controls may expose Group or Custom, not Edit.
+    // Keep the exact captured element; accept those roles only with writable text metadata.
+    internal static bool IsEditableControl(int controlType, bool keyboardFocusable, Func<bool> writableTextPattern) =>
+        controlType is 50004 or 50030 ||
+        (controlType is 50025 or 50026 && keyboardFocusable && writableTextPattern());
+
     internal static Func<bool> Deadline()
     {
         var clock = Stopwatch.StartNew();

@@ -1,6 +1,6 @@
 # Gladia for the portable host
 
-Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.1`, requiring host `1.1.2`. Implemented on its own `seofood/gladia-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.1`, requiring host `1.1.2`. Implemented on its own `seofood/gladia-portable` branch, originally based on Windows `4db8f6ac` and updated with current main before review. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -27,7 +27,7 @@ Marco confirmed recorded-audio dictation in the app on 2026-09-19. The developme
 
 The restarted development app shows Gladia selected for dictation and the Live transcription toggle enabled. Settings screenshots are included below.
 
-Streaming tests cover authenticated session initialization, PCM format/chunk ordering, language/vocabulary configuration, endpoint validation, fragmented messages, replacement partials, duplicate final suppression, final-utterance delivery, typed provider errors, malformed/premature closure, cancellation and completion timeout. Marco confirmed live microphone transcription on 2026-09-19. Version 1.2.1 also exposes Gladia's documented language codes to the host, enabling the Spoken language selector. A single selection is sent as a fixed language with code switching disabled; Automatic keeps provider detection. The restarted development app exposes the language selector; German was selected and verified persisted as `de`. Fixed-language microphone dictation still needs manual acceptance. ARM64 execution remains pending. No public package or catalog was published.
+Streaming tests cover authenticated session initialization, PCM format/chunk ordering, language/vocabulary configuration, endpoint validation, fragmented messages, replacement partials, duplicate final suppression, final-utterance delivery, typed provider errors, malformed/premature closure, cancellation and completion timeout. Marco confirmed live microphone transcription on 2026-09-19. Version 1.2.1 also exposes Gladia's documented language codes to the host, enabling the Spoken language selector. A single selection is sent as a fixed language with code switching disabled; Automatic keeps provider detection. The restarted development app exposes the language selector; German was selected and verified persisted as `de`. Marco also confirmed that German live dictation works better with the explicit language selection. ARM64 execution remains pending. No public package or catalog was published.
 
 ![Gladia settings in the combined Windows development app](../../docs/screenshots/gladia/settings-dark.png)
 
