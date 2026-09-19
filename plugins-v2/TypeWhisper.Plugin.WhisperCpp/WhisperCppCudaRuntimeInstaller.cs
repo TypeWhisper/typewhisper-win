@@ -34,7 +34,6 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     private readonly HttpClient _httpClient;
     private readonly WhisperCppCudaRuntimePackage _package;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly Dictionary<string, (long Length, DateTime Written, string Hash)> _verifiedFiles = new();
     private readonly object _verificationLock = new();
     private string ReceiptPath => Path.Join(RuntimeDirectory, "installed.json");
     private sealed record RuntimeReceipt(string Version, string ArchiveHash, Dictionary<string, string> Files);
@@ -82,13 +81,9 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
                     {
                         var file = new FileInfo(GetRuntimeFilePath(name));
                         if (!file.Exists || file.Length == 0 || !receipt.Files.TryGetValue(name, out var expected)) return false;
-                        if (!_verifiedFiles.TryGetValue(name, out var cached) || cached.Length != file.Length || cached.Written != file.LastWriteTimeUtc)
-                        {
-                            using var input = file.OpenRead();
-                            cached = (file.Length, file.LastWriteTimeUtc, Convert.ToHexString(SHA256.HashData(input)));
-                            _verifiedFiles[name] = cached;
-                        }
-                        if (!string.Equals(cached.Hash, expected, StringComparison.OrdinalIgnoreCase)) return false;
+                        using var input = file.OpenRead();
+                        var hash = Convert.ToHexString(SHA256.HashData(input));
+                        if (!string.Equals(hash, expected, StringComparison.OrdinalIgnoreCase)) return false;
                     }
                     return true;
                 }
@@ -215,7 +210,6 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
                 // Invalidate the receipt before replacing files; interruption must never
                 // make a partial installation appear complete on the next startup.
                 File.Delete(ReceiptPath);
-                _verifiedFiles.Clear();
                 foreach (var file in staged) File.Move(file.Path, GetRuntimeFilePath(file.Name), overwrite: true);
                 File.Move(receiptTemporary, ReceiptPath, overwrite: true);
             }

@@ -8,6 +8,7 @@ public partial class WhisperCppPluginTests
     [Theory]
     [InlineData("truncated")]
     [InlineData("same-length")]
+    [InlineData("same-metadata")]
     [InlineData("missing-receipt")]
     public async Task CudaCacheRepairsIncompleteOrCorruptInstallation(string damage)
     {
@@ -20,11 +21,12 @@ public partial class WhisperCppPluginTests
         await installer.EnsureInstalledAsync(default);
         Assert.True(installer.IsInstalled);
         var file = Path.Join(installer.RuntimeDirectory, "cublas.dll");
+        var written = File.GetLastWriteTimeUtc(file);
         if (damage == "missing-receipt") File.Delete(Path.Join(installer.RuntimeDirectory, "installed.json"));
         else
         {
             File.WriteAllText(file, damage == "truncated" ? "x" : "wrong-library");
-            File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(1));
+            File.SetLastWriteTimeUtc(file, damage == "same-metadata" ? written : DateTime.UtcNow.AddMinutes(1));
         }
         Assert.False(installer.IsInstalled);
         using var restarted = new WhisperCppCudaRuntimeInstaller(temp.Path, client, package);
