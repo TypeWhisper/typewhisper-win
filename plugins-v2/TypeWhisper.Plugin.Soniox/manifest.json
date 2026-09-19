@@ -1,0 +1,16 @@
+{
+  "id": "com.typewhisper.soniox",
+  "name": "Soniox",
+  "version": "1.3.2",
+  "author": "TypeWhisper",
+  "description": "Soniox speech-to-text transcription engine",
+  "category": "transcription",
+  "categories": [
+    "transcription"
+  ],
+  "isLocal": false,
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Soniox.dll",
+  "pluginClass": "TypeWhisper.Plugin.Soniox.SonioxPlugin",
+  "minHostVersion": "1.1.2"
+}

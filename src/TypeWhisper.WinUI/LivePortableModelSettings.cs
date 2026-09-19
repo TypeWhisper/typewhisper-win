@@ -20,6 +20,7 @@ internal sealed class LivePortableModelSettings : UserControl
     private bool _cloudMode;
     private bool _settingCloudModel;
     internal bool ShowLlmSummary { get; set; } = true;
+    internal IReadOnlyList<HashSet<string>> TranscriptionModelSettingChoices { get; set; } = [];
     private readonly Dictionary<(string Provider, string Model), Row> _items = [];
     private CancellationTokenSource? _lifetime;
     private bool _reading;
@@ -117,7 +118,9 @@ internal sealed class LivePortableModelSettings : UserControl
             }
             _cloudMode = models.Count > 0 && models.All(m => !m.SupportsDownload && !m.SupportsRemoval)
                 && models.Select(m => m.SelectionId).Distinct().Count() == 1;
-            _cloudPanel.Visibility = _cloudMode ? Visibility.Visible : Visibility.Collapsed;
+            var hasModelSetting = _cloudMode && TranscriptionModelSettingChoices.Any(choices =>
+                choices.SetEquals(models.Select(model => model.ModelId)));
+            _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
             _rows.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
             _refresh.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
             _settingCloudModel = true;
