@@ -19,8 +19,12 @@ dotnet msbuild plugins-v2/TypeWhisper.Plugin.Gladia/portable.proj '-t:Build;Copy
 
 All **20 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
 
-On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
+On 2026-09-19, all 20 provider tests passed again. The installed 1.1.0 package loaded through the real portable host using the development profile's Windows secret store. Authenticated configuration validation and recorded-audio transcription passed with a short synthetic English WAV. The result was: "This is a short test. Tomorrow we will meet at 10 in the office."
 
-Authenticated provider requests, microphone/workflow execution, native visual inspection, version-upgrade acceptance and ARM64 execution remain pending. Marco will enter credentials and perform live acceptance later. No public package or catalog was published.
+The combined development app was inspected visually: Gladia branding, a saved-key placeholder, the model selector and the shared Save settings action are present. The host-side Gladia logo mapping and SVG are included on this independent branch; the shared Save behavior comes from #479 and provider-selection logos from #482. Gladia was selected for the next manual dictation test. No credential values are included in the screenshot.
+
+Microphone/end-to-end manual acceptance, version-upgrade acceptance and ARM64 execution remain pending. Realtime streaming is not implemented in this package. No public package or catalog was published.
+
+![Gladia settings in the combined Windows development app](../../docs/screenshots/gladia/settings-dark.png)
 
 Reference: [provider documentation](https://docs.gladia.io/api-reference/v2/transcription/post).
