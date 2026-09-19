@@ -25,7 +25,7 @@ public sealed partial class ProviderTests
             Assert.Equal("TypeWhisper", json.GetProperty("additional_vocab")[0].GetProperty("content").GetString());
             return await ReadySession(new SpeechmaticsSocket(), config: config);
         };
-        await using var session = await plugin.StartStreamingWithLanguageHintsAndPromptAsync(["de"], "TypeWhisper", default);
+        await using var session = await plugin.StartStreamingWithLanguageHintsAndPromptAsync([" De "], "TypeWhisper", default);
     }
 
     [Fact]

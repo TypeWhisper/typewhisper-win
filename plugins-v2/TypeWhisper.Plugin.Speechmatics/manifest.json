@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.speechmatics",
   "name": "Speechmatics",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
   "description": "Speechmatics batch and live transcription with regional processing, spoken languages and custom vocabulary.",

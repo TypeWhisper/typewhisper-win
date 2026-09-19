@@ -70,7 +70,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | SherpaOnnx | Existing portable build |
 | SmallestAi | Separate v2 port pending |
 | Soniox | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Soniox`; 39 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
-| Speechmatics | Independent v2 package 1.2.3 in `plugins-v2/TypeWhisper.Plugin.Speechmatics`; 64 tests pass (manual acceptance on 1.2.0). EU batch and live API acceptance, language selection, shared Save and provider logos included. Native live microphone acceptance confirmed by Marco; publication pending. See the plugin README. |
+| Speechmatics | Independent v2 package 1.2.4 in `plugins-v2/TypeWhisper.Plugin.Speechmatics`; 67 tests pass (manual acceptance on 1.2.0). EU batch and live API acceptance, language selection, shared Save and provider logos included. Native live microphone acceptance confirmed by Marco; publication pending. See the plugin README. |
 
 | SupertonicTts | Separate v2 port pending |
 | Voxtral | Separate v2 port pending |

@@ -5,6 +5,27 @@ using TypeWhisper.Plugin.Speechmatics;
 public sealed partial class ProviderTests
 {
     [Theory]
+    [InlineData("DE", "de")]
+    [InlineData(" eN ", "en")]
+    [InlineData(" aUtO ", "auto")]
+    public async Task BatchNormalizesExplicitLanguageBeforeSubmitting(string language, string expected)
+    {
+        var submitted = false;
+        using var http = new HttpClient(new Handler((request, body) =>
+        {
+            if (request.Method == HttpMethod.Post)
+            {
+                submitted = true;
+                Assert.Contains("\"language\":\"" + expected + "\"", body);
+            }
+            return Success(request, body);
+        }));
+        using var plugin = new SpeechmaticsPlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        await plugin.TranscribeAsync(Audio(), language, false, null, default);
+        Assert.True(submitted);
+    }
+
+    [Theory]
     [InlineData("previous", "said- hello")]
     [InlineData("next", "said -hello")]
     [InlineData("both", "said-hello")]
