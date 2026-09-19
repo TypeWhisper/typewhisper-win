@@ -59,7 +59,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 var providers = session.DictationProviders;
                 var selected = providers.FirstOrDefault(item => item.Id == selectedProviderId);
                 provider.SetOptions(providers.Select(item => new Choice(item.Id, item.Name,
-                    (item.Cloud ? "Cloud" : "On-device") + " · " + item.Status)).ToArray(), selectedProviderId, "Choose a provider");
+                    (item.Cloud ? "Cloud" : "On-device") + " · " + item.Status) { PluginId = item.PluginId }).ToArray(), selectedProviderId, "Choose a provider");
                 var canChange = session.CanChangeProvider && !session.Models.Busy && !selecting;
                 provider.IsEnabled = canChange;
                 modelSection.Visibility = selected?.Models.Count > 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;

@@ -2,6 +2,8 @@
 
 These assets are bundled with the host; plugin packages do not need to provide new metadata.
 
+- Fireworks AI: official [website icon](https://fireworks.ai/icon0.svg), retrieved September 18, 2026. Original geometry, view box and purple color are preserved; redundant SVG wrappers and no-op browser media styles are omitted for native rendering.
+
 - Claude: reuses the existing TypeWhisper Windows `Resources/PluginLogos/claude.png` asset through a linked build item; the source image is unchanged.
 
 - Cerebras: orange concentric symbol extracted from the official [Cerebras homepage](https://www.cerebras.ai/) header SVG on September 14, 2026. Original path, stroke width and color are preserved; the view box contains the symbol without the wordmark.
