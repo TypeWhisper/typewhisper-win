@@ -44,4 +44,18 @@ internal sealed partial class LocalDictationSession
         });
         return error ?? validationError;
     }
+
+    internal async Task<PortablePluginSettingsSaveResult> SavePluginSettingsAsync(string id,
+        IReadOnlyDictionary<string, string> changes, string? apiKey)
+    {
+        PortablePluginSettingsSaveResult? result = null;
+        var error = await ChangeRegistryPluginAsync(id, async () =>
+        {
+            result = await PluginRuntime.UseConfigurationAsync(id,
+                (plugin, ct) => PortablePluginSettingsWriter.SaveAsync(plugin, changes, apiKey, ct),
+                preserveCompletedResult: true);
+        });
+        return result is null ? new([], false, error ?? "The settings could not be saved.")
+            : result with { Error = error ?? result.Error };
+    }
 }
