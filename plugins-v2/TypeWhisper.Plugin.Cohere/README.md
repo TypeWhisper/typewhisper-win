@@ -25,7 +25,7 @@ On 2026-09-19, authenticated validation, recorded-audio transcription and Comman
 
 The development package was upgraded from 1.1.0 to 1.1.1 with unrelated installation receipts preserved. Native branding is included on this independent branch, and the shared settings host supplies the single Save settings action. Cohere's uploaded-audio API requires an explicit language; the plugin uses its configured default when the host requests Automatic. Realtime dictation is not advertised.
 
-The development app was inspected with Cohere selected for dictation, German selected under Spoken language, and `de` saved as the provider default using the shared Save settings button. Settings and provider selection screenshots are included. Microphone/workflow execution and ARM64 execution remain pending. No public package or catalog was published.
+The development app was inspected with Cohere selected for dictation, German selected under Spoken language, and `de` saved as the provider default using the shared Save settings button. Settings and provider selection screenshots are included. Marco confirmed normal microphone dictation in the app on 2026-09-19. Workflow UI execution and ARM64 execution remain pending. No public package or catalog was published.
 
 Reference: [provider documentation](https://docs.cohere.com/docs/audio-transcription-quickstart).
 
