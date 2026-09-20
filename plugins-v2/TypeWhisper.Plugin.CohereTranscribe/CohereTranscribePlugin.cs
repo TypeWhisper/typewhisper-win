@@ -11,7 +11,7 @@ namespace TypeWhisper.Plugin.CohereTranscribe;
 /// <summary>
 /// Provides fully local Cohere Transcribe inference on Windows through CrispASR.
 /// </summary>
-public sealed partial class CohereTranscribePlugin : ITranscriptionEnginePlugin, IModelDownloadRequirementsProvider
+public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlugin, IModelDownloadRequirementsProvider, IPluginTextSettings
 {
     internal const string ModelId = CohereModelCatalog.DefaultModelId;
     internal const string HuggingFaceTokenSecretName = PluginHuggingFaceTokenHelper.StorageKey;
@@ -69,7 +69,10 @@ public sealed partial class CohereTranscribePlugin : ITranscriptionEnginePlugin,
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.2";
+
+    /// <inheritdoc />
+    public bool SupportsLocalLivePreview => true;
 
     /// <summary>
     /// Gets the stable transcription provider identifier.
@@ -87,7 +90,8 @@ public sealed partial class CohereTranscribePlugin : ITranscriptionEnginePlugin,
     /// <inheritdoc />
     public bool IsConfigured =>
         OperatingSystem.IsWindows()
-        && RuntimeInformation.ProcessArchitecture == Architecture.X64;
+        && RuntimeInformation.ProcessArchitecture == Architecture.X64
+        && _selectedModelId is { } selected && _assets?.IsModelInstalled(selected) == true;
 
     /// <summary>
     /// Gets the available local Cohere transcription models.
@@ -206,6 +210,10 @@ public sealed partial class CohereTranscribePlugin : ITranscriptionEnginePlugin,
         }
 
         _assets.SetHuggingFaceToken(_huggingFaceToken);
+        if (Enum.TryParse<TranscriptionAccelerationPreference>(host.GetSetting<string>("acceleration"), out var preference)
+            && preference is TranscriptionAccelerationPreference.Auto or TranscriptionAccelerationPreference.Cpu
+                or TranscriptionAccelerationPreference.NvidiaCuda or TranscriptionAccelerationPreference.AmdVulkan)
+            SetAccelerationPreference(preference);
 
         var persistedModel = host.GetSetting<string>("selectedModel");
         _selectedModelId = CohereModelCatalog.Contains(persistedModel) ? persistedModel : ModelId;
@@ -497,6 +505,12 @@ public sealed partial class CohereTranscribePlugin : ITranscriptionEnginePlugin,
             throw new NotSupportedException("Cohere Transcribe does not support speech translation.");
 
         var normalizedLanguage = NormalizeLanguage(language);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_loadedModelId is null)
+        {
+            var selected = _selectedModelId ?? throw new InvalidOperationException("Select a Cohere Transcribe model first.");
+            await LoadModelAsync(selected, cancellationToken);
+        }
         var restartAttempted = false;
 
         while (true)

@@ -16,6 +16,40 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class CohereTranscribePluginTests
 {
     [Fact]
+    public async Task SavedProcessingDeviceAndModelLoadOnFirstPcmRequestAfterRestart()
+    {
+        using var temp = new TempDirectory(); var host = new FakePluginHostServices(temp.Path);
+        var assets = new FakeAssetManager(); var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        await sut.ActivateAsync(host);
+        await sut.SaveTextSettingAsync("acceleration", "Cpu", default);
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        sut.SelectModel(CohereTranscribePlugin.ModelId); await sut.DeactivateAsync(); await sut.ActivateAsync(host);
+        Assert.True(sut.IsConfigured); Assert.Equal(TranscriptionAccelerationPreference.Cpu, sut.AccelerationPreference);
+        var result = await sut.TranscribePcmAsync(new float[] { -1f, 0f, 1f }, "de", false, default);
+        Assert.Equal("lokal", result.Text); Assert.Equal(1, server.StartCount);
+        Assert.Equal("de", server.LastLanguage); Assert.Equal(50, server.LastAudio!.Length);
+        Assert.Equal(short.MinValue, System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(server.LastAudio.AsSpan(44)));
+        Assert.Equal(short.MaxValue, System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(server.LastAudio.AsSpan(48)));
+        await sut.TranscribeAsync(server.LastAudio, "de", false, null, default); Assert.Equal(1, server.StartCount);
+        host.FailSettings = true;
+        await Assert.ThrowsAsync<IOException>(() => sut.SaveTextSettingAsync("acceleration", "NvidiaCuda", default));
+        Assert.Equal(TranscriptionAccelerationPreference.Cpu, sut.AccelerationPreference);
+    }
+
+    [Fact]
+    public async Task PcmRejectsNonFiniteInputAndCanceledRequestsBeforeStartingSidecar()
+    {
+        using var temp = new TempDirectory(); var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(new FakeAssetManager(), server);
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.TranscribePcmAsync(new float[] { float.NaN }, "de", false, default));
+        using var cts = new CancellationTokenSource(); cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.TranscribePcmAsync(new float[10], "de", false, cts.Token));
+        Assert.Equal(0, server.StartCount);
+    }
+
+    [Fact]
     public void ManifestAndPluginMetadata_AreLocalAndVersionMatched()
     {
         var manifest = JsonSerializer.Deserialize<PluginManifest>(
@@ -35,6 +69,8 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal(manifest.Id, sut.PluginId);
         Assert.Equal("cohere-transcribe", sut.ProviderId);
         Assert.True(sut.SupportsModelDownload);
+        Assert.True(sut.SupportsLocalLivePreview);
+        Assert.IsAssignableFrom<IPcmTranscriptionEnginePlugin>(sut);
         Assert.False(sut.SupportsTranslation);
     }
 
@@ -735,7 +771,7 @@ public sealed class CohereTranscribePluginTests
 
         Assert.Equal("hf_saved", sut.HuggingFaceToken);
         Assert.Equal("hf_saved", assets.HuggingFaceToken);
-        Assert.True(sut.IsConfigured);
+        Assert.False(sut.IsConfigured); // A download token does not make an absent model ready.
 
         await sut.SetHuggingFaceTokenAsync("  hf_replaced  ");
 
@@ -1069,6 +1105,7 @@ public sealed class CohereTranscribePluginTests
         public CrispAsrBackend? ActiveBackend { get; private set; }
         public CrispAsrServerConfiguration? LastConfiguration { get; private set; }
         public string? LastLanguage { get; private set; }
+        public byte[]? LastAudio { get; private set; }
         public int StartCount { get; private set; }
         public bool FailNextTranscriptionAndStop { get; set; }
 
@@ -1088,6 +1125,7 @@ public sealed class CohereTranscribePluginTests
             string? language,
             CancellationToken cancellationToken)
         {
+            LastAudio = wavAudio;
             LastLanguage = language;
             if (FailNextTranscriptionAndStop)
             {
@@ -1156,8 +1194,14 @@ public sealed class CohereTranscribePluginTests
             Secrets.Remove(key);
             return Task.CompletedTask;
         }
-        public T? GetSetting<T>(string key) => default;
-        public void SetSetting<T>(string key, T value) { }
+        private readonly Dictionary<string, JsonElement> _settings = [];
+        public bool FailSettings { get; set; }
+        public T? GetSetting<T>(string key) => _settings.TryGetValue(key, out var value) ? value.Deserialize<T>() : default;
+        public void SetSetting<T>(string key, T value)
+        {
+            if (FailSettings) throw new IOException("Fixture write failure");
+            _settings[key] = JsonSerializer.SerializeToElement(value);
+        }
         public void Log(PluginLogLevel level, string message) =>
             Logs.Add((level, message));
         public void NotifyCapabilitiesChanged() { }
