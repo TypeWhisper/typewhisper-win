@@ -283,7 +283,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
                 "Downloading local model",
                 "Downloading SHA-256 verified Cohere, VAD, and language-ID files.");
 
-            var candidates = GetBackendCandidatesForCurrentMachine(_accelerationPreference);
+            var candidates = GetPreferredBackendCandidates(assets);
             var initialBackend = candidates[0];
             var modelTransferSize = assets.GetModelTransferSize(modelId);
             var totalBytes = modelTransferSize + assets.GetRuntimeTransferSize(initialBackend);
@@ -362,12 +362,12 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await GetAssets().RemoveModelAsync(modelId, cancellationToken);
             if (_selectedModelId == modelId)
             {
                 _host?.SetSetting<string?>("selectedModel", null);
                 _selectedModelId = null;
             }
+            await GetAssets().RemoveModelAsync(modelId, cancellationToken);
             _host?.NotifyCapabilitiesChanged();
             if (_loadedModelId is null || _server?.IsRunning != true)
                 _accelerationStatus = CreatePendingStatus(_accelerationPreference);
@@ -402,9 +402,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
             IReadOnlyList<CrispAsrBackend> candidates;
             try
             {
-                candidates = _resolveBackends(_accelerationPreference);
-                if (_accelerationPreference == TranscriptionAccelerationPreference.Auto)
-                    candidates = candidates.OrderByDescending(assets.IsRuntimeInstalled).ToArray();
+                candidates = GetPreferredBackendCandidates(assets);
             }
             catch (Exception error) when (error is not OperationCanceledException)
             { _accelerationStatus = CreateUnavailableStatus(_accelerationPreference, error.Message); throw; }
@@ -843,6 +841,14 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
 
         NativeLibrary.Free(handle);
         return true;
+    }
+
+    private IReadOnlyList<CrispAsrBackend> GetPreferredBackendCandidates(ICohereLocalAssetManager assets)
+    {
+        var candidates = _resolveBackends(_accelerationPreference);
+        return _accelerationPreference == TranscriptionAccelerationPreference.Auto
+            ? candidates.OrderByDescending(assets.IsRuntimeInstalled).ToArray()
+            : candidates;
     }
 
     private static TranscriptionAccelerationStatus CreatePendingStatus(

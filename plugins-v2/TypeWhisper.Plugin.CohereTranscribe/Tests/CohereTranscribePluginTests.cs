@@ -1193,11 +1193,13 @@ public sealed class CohereTranscribePluginTests
     public async Task MissingBackendReportsUnavailableInsteadOfPending()
     {
         using var temp = new TempDirectory();
+        var failResolution = false;
         using var sut = new CohereTranscribePlugin(new FakeAssetManager(), new FakeCrispAsrServer(),
-            resolveBackends: _ => throw new InvalidOperationException("fixture backend unavailable"));
+            resolveBackends: _ => failResolution ? throw new InvalidOperationException("fixture backend unavailable") : [CrispAsrBackend.Cpu]);
         await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
         await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        failResolution = true;
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default));
         Assert.Contains("fixture backend unavailable", sut.AccelerationStatus.Detail);
     }
@@ -1301,7 +1303,8 @@ public sealed class CohereTranscribePluginTests
     {
         using var temp = new TempDirectory();
         var assets = new FakeAssetManager(); var server = new FakeCrispAsrServer();
-        using var sut = new CohereTranscribePlugin(assets, server, resolveBackends: _ => [CrispAsrBackend.Cuda, CrispAsrBackend.Cpu]);
+        using var sut = new CohereTranscribePlugin(assets, server, resolveBackends: preference =>
+            preference == TranscriptionAccelerationPreference.Cpu ? [CrispAsrBackend.Cpu] : [CrispAsrBackend.Cuda, CrispAsrBackend.Cpu]);
         await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
         await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
@@ -1309,6 +1312,8 @@ public sealed class CohereTranscribePluginTests
         Assert.True(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
         Assert.Contains("installed compatible runtime", sut.AccelerationStatus.Detail);
         Assert.DoesNotContain("CUDA", sut.AccelerationStatus.Detail);
+        await sut.DownloadModelAsync(CohereModelCatalog.All.First(model => model.Id != CohereTranscribePlugin.ModelId).Id, null, default);
+        Assert.DoesNotContain(CrispAsrBackend.Cuda, assets.EnsuredRuntimes);
         await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default);
         Assert.Equal(CrispAsrBackend.Cpu, server.ActiveBackend);
         Assert.DoesNotContain(CrispAsrBackend.Cuda, assets.EnsuredRuntimes);
@@ -1354,11 +1359,74 @@ public sealed class CohereTranscribePluginTests
         Assert.Null(sut.ActiveBackend);
     }
 
+    [WindowsFact]
+    public async Task FailedSelectionClearKeepsDownloadedWeightsAndPreviousSelection()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager(); var host = new FakePluginHostServices(temp.Path);
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        await sut.ActivateAsync(host);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        sut.SelectModel(CohereTranscribePlugin.ModelId);
+        host.FailSettings = true;
+        await Assert.ThrowsAsync<IOException>(() => sut.ExecuteSettingsActionAsync("remove-selected-model", default));
+        Assert.True(assets.IsModelInstalled(CohereTranscribePlugin.ModelId));
+        Assert.Equal(CohereTranscribePlugin.ModelId, sut.SelectedModelId);
+        Assert.True(sut.IsConfigured);
+    }
+
+    [Fact]
+    public async Task IncompleteDownloadsCanBeDiscardedWithoutRemovingCompletedAssets()
+    {
+        using var temp = new TempDirectory();
+        using var assets = new CohereLocalAssetManager(temp.Path);
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        foreach (var path in assets.PartialDownloadPaths())
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllBytesAsync(path, [1, 2]);
+        }
+        var completed = assets.GetModelPaths(CohereTranscribePlugin.ModelId).ModelPath;
+        await File.WriteAllBytesAsync(completed, [3, 4]);
+        Assert.True(assets.HasPartialDownloads);
+        Assert.Contains(sut.SettingsActions, action => action.Id == "discard-partial-downloads");
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.ExecuteSettingsActionAsync("discard-partial-downloads", cancelled.Token));
+        Assert.True(assets.HasPartialDownloads);
+        await sut.ExecuteSettingsActionAsync("discard-partial-downloads", default);
+        Assert.False(assets.HasPartialDownloads);
+        Assert.True(File.Exists(completed));
+        Assert.DoesNotContain(sut.SettingsActions, action => action.Id == "discard-partial-downloads");
+    }
+
+    [WindowsFact]
+    public async Task RuntimeTimestampDriftIsReverifiedWithoutDownloading()
+    {
+        using var temp = new TempDirectory();
+        using var http = new HttpClient(new StaticResponseHandler(HttpStatusCode.BadRequest, "Network must not be used"));
+        using var assets = new CohereLocalAssetManager(temp.Path, http, maxDownloadAttempts: 1);
+        var directory = Path.Join(temp.Path, "Runtimes", "CrispASR", CohereLocalAssetManager.CrispAsrVersion, "cpu");
+        Directory.CreateDirectory(directory);
+        var executable = Path.Join(directory, "crispasr.exe");
+        await File.WriteAllBytesAsync(executable, [1, 2]);
+        await CohereLocalAssetManager.WriteRuntimeFilesAsync(directory, default);
+        await File.WriteAllTextAsync(Path.Join(directory, ".typewhisper-runtime.sha256"), CohereLocalAssetManager.CpuRuntime.Archive.Sha256);
+        File.SetLastWriteTimeUtc(executable, File.GetLastWriteTimeUtc(executable).AddMinutes(1));
+        Assert.False(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
+        Assert.True(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        Assert.Equal(new byte[] { 1, 2 }, await File.ReadAllBytesAsync(executable));
+    }
+
     private sealed class FakeAssetManager : ICohereLocalAssetManager
     {
         private readonly HashSet<string> _installedModelIds = [];
 
         public Action? BeforeEnsureRuntime { get; set; }
+        public bool HasPartialDownloads => false;
+        public Task DiscardPartialDownloadsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Action? BeforeEnsureModel { get; set; }
         public bool ModelInstalled => _installedModelIds.Count > 0;
         public string? LastEnsuredModelId { get; private set; }
