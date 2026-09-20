@@ -94,7 +94,8 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     public bool IsConfigured =>
         OperatingSystem.IsWindows()
         && RuntimeInformation.ProcessArchitecture == Architecture.X64
-        && _selectedModelId is { } selected && _assets?.IsModelInstalled(selected) == true;
+        && _selectedModelId is { } selected
+        && (_loadedModelId == selected && _server?.IsRunning == true || IsModelDownloaded(selected));
 
     /// <summary>
     /// Gets the available local Cohere transcription models.
