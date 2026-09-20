@@ -72,12 +72,18 @@ internal sealed partial class LivePluginTextSettings : UserControl
             var snapshot = await _session.PluginRuntime.UseConfigurationAsync(_id, (plugin, _) =>
                 Task.FromResult((Fields: plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : [],
                     Actions: plugin is not ILocalTtsModelManagement && plugin is IPluginSettingsActions actions ? actions.SettingsActions.ToArray() : [],
+                    LocalTtsModel: plugin is ILocalTtsModelManagement,
                     ShowKey: plugin is IApiKeyPlugin && (plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings),
                     ConnectionId: (plugin as IPluginConnectionSettings)?.ConnectionIdentity,
                     ProfileSelector: (plugin as IPluginProfileSettings)?.ProfileSelectorId,
                     AddProfile: (plugin as IPluginProfileSettings)?.AddProfileActionId,
                     RemoveProfile: (plugin as IPluginProfileSettings)?.RemoveProfileActionId)), _lifetime.Token);
             if (!IsLoaded || generation != _generation) return;
+            if (_models is LivePortableModelSettings speechModels)
+            {
+                speechModels.HasLocalTtsModels = snapshot.LocalTtsModel;
+                if (snapshot.LocalTtsModel) speechModels.Visibility = Visibility.Visible;
+            }
             var selector = snapshot.Fields.FirstOrDefault(f => f.Id == snapshot.ProfileSelector);
             _connectionChanged(snapshot.ConnectionId, selector?.Choices.FirstOrDefault(c => c.Value == selector.Value)?.Title);
             DetachHostControls();

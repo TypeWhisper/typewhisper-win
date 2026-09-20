@@ -21,6 +21,7 @@ internal sealed class LivePortableModelSettings : UserControl
     private readonly HandCursorButton _cloudUse = Button("Use selected model");
     private bool _cloudMode;
     private bool _settingCloudModel;
+    internal bool HasLocalTtsModels { get; set; }
     internal bool ShowLlmSummary { get; set; } = true;
     internal IReadOnlyList<HashSet<string>> TranscriptionModelSettingChoices { get; set; } = [];
     private readonly Dictionary<(string Provider, string Model), Row> _items = [];
