@@ -691,6 +691,45 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public async Task SettingsActionRemovesTheOnlySelectedModelWithoutAnotherDownload()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        var host = new FakePluginHostServices(temp.Path);
+        await sut.ActivateAsync(host);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default);
+        sut.SelectModel(CohereTranscribePlugin.ModelId);
+        await sut.ExecuteSettingsActionAsync(Assert.Single(sut.SettingsActions).Id, default);
+        Assert.Null(sut.SelectedModelId);
+        Assert.False(server.IsRunning);
+        Assert.False(assets.IsModelInstalled(CohereTranscribePlugin.ModelId));
+        Assert.Empty(sut.SettingsActions);
+        await sut.DeactivateAsync();
+        await sut.ActivateAsync(host);
+        Assert.Null(sut.SelectedModelId);
+    }
+
+    [WindowsFact]
+    public async Task CachedArtifactWithStaleMarkerIsRehashedAndInvalidated()
+    {
+        using var temp = new TempDirectory();
+        var path = Path.Join(temp.Path, "model.bin");
+        byte[] expected = [1, 2, 3];
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(expected));
+        await File.WriteAllBytesAsync(path, [3, 2, 1]);
+        await File.WriteAllTextAsync(path + ".sha256", hash);
+        var artifact = new RemoteArtifact("model.bin", "https://fixture.invalid/model", 3, hash);
+        var method = typeof(CohereLocalAssetManager).GetMethod("TryAdoptExistingArtifactAsync", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var valid = await (Task<bool>)method.Invoke(null, [artifact, path, CancellationToken.None])!;
+        Assert.False(valid);
+        Assert.False(File.Exists(path + ".sha256"));
+    }
+
+    [WindowsFact]
     public void WildcardListenerIsNotAcceptedAsLoopbackOnly()
     {
         using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Any, 0);

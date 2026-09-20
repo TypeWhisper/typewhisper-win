@@ -11,7 +11,7 @@ namespace TypeWhisper.Plugin.CohereTranscribe;
 /// <summary>
 /// Provides fully local Cohere Transcribe inference on Windows through CrispASR.
 /// </summary>
-public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlugin, IModelDownloadRequirementsProvider, IPluginTextSettings
+public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlugin, IModelDownloadRequirementsProvider, IPluginTextSettings, IPluginSettingsActions
 {
     internal const string ModelId = CohereModelCatalog.DefaultModelId;
     internal const string HuggingFaceTokenSecretName = PluginHuggingFaceTokenHelper.StorageKey;
@@ -359,6 +359,12 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         try
         {
             await GetAssets().RemoveModelAsync(modelId, cancellationToken);
+            if (_selectedModelId == modelId)
+            {
+                _host?.SetSetting<string?>("selectedModel", null);
+                _selectedModelId = null;
+            }
+            _host?.NotifyCapabilitiesChanged();
             if (_loadedModelId is null || _server?.IsRunning != true)
                 _accelerationStatus = CreatePendingStatus(_accelerationPreference);
         }
@@ -386,6 +392,8 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            // Rehash cached weights and auxiliary models before starting native inference.
+            await assets.EnsureModelAsync(modelId, progress: null, cancellationToken);
             var server = GetServer();
             IReadOnlyList<CrispAsrBackend> candidates;
             try { candidates = _resolveBackends(_accelerationPreference); }
