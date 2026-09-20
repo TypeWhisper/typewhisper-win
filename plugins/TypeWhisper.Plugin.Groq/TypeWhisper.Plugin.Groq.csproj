@@ -1,29 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <UseWPF Condition="'$(TargetFramework)' == 'net10.0-windows'">true</UseWPF>
     <RootNamespace>TypeWhisper.Plugin.Groq</RootNamespace>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.Groq.Tests" />
-    <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
     <InternalsVisibleTo Include="TypeWhisper.PluginSDK.Portable.Tests" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="2.2.1" Condition="'$(TargetFramework)' == 'net10.0-windows'" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="manifest.json" Condition="'$(TargetFramework)' != 'net10.0'">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
-    </Content>
-    <Content Include="manifest.portable.json" Condition="'$(TargetFramework)' == 'net10.0'">
+    <Content Include="manifest.json">
       <Link>manifest.json</Link>
       <TargetPath>manifest.json</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -34,13 +27,9 @@
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <Compile Remove="GroqSettingsView.xaml.cs" />
-  </ItemGroup>
   <Target Name="CopyToAppPlugins" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
     <PropertyGroup>
-      <AppOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\src\TypeWhisper.Windows\bin\$(Configuration)\$(TargetFramework)'))</AppOutputDir>
-      <AppOutputDir Condition="'$(TargetFramework)' == 'net10.0'">$(MSBuildProjectDirectory)\bin\$(Configuration)\portable-host</AppOutputDir>
+      <AppOutputDir>$(MSBuildProjectDirectory)\bin\$(Configuration)\portable-host</AppOutputDir>
       <PluginOutputDir>$(AppOutputDir)\Plugins\com.typewhisper.groq\</PluginOutputDir>
     </PropertyGroup>
     <MakeDir Directories="$(PluginOutputDir)" />

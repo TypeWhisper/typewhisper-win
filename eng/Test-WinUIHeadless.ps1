@@ -19,6 +19,9 @@ $checks = @(
     @{ Name = 'CLI'; Project = 'tests/TypeWhisper.Cli.Tests/TypeWhisper.Cli.Tests.csproj' },
     @{ Name = 'Presentation'; Project = 'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj' }
 )
+if ($IsWindows) {
+    $checks += @{ Name = 'Platform'; Project = 'tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj' }
+}
 # Each portable plugin owns its tests; discovery needs no host-side provider list.
 $checks += @(Get-ChildItem -Path @((Join-Path $repository 'plugins/*/Tests/*.csproj'), (Join-Path $repository 'plugins-v2/*/Tests/*.csproj')) | ForEach-Object {
     @{ Name = $_.BaseName; Project = [IO.Path]::GetRelativePath($repository, $_.FullName) }

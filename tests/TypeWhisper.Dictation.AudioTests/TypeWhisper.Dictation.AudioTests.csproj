@@ -17,13 +17,13 @@
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
-    <Compile Include="../../src/TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="AudioRecordingService.cs" />
-    <Compile Include="../../src/TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="WasapiAudioInputCapture.cs" />
-    <Compile Include="../../src/TypeWhisper.Windows/Services/AudioRecordingResult.cs" Link="AudioRecordingResult.cs" />
-    <Compile Include="../../src/TypeWhisper.Windows/Services/RecorderCaptureModels.cs" Link="RecorderCaptureModels.cs" />
-    <Compile Include="../../src/TypeWhisper.Windows/Services/SystemAudioCaptureService.cs" Link="SystemAudioCaptureService.cs" />
-    <Compile Include="../../src/TypeWhisper.Windows/Services/AudioCaptureDiagnostics.cs" Link="AudioCaptureDiagnostics.cs" />
-    <Compile Include="../../src/TypeWhisper.Windows/Services/NonFatalExceptionFilter.cs" Link="NonFatalExceptionFilter.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioRecordingService.cs" Link="AudioRecordingService.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/WasapiAudioInputCapture.cs" Link="WasapiAudioInputCapture.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioRecordingResult.cs" Link="AudioRecordingResult.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/RecorderCaptureModels.cs" Link="RecorderCaptureModels.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/SystemAudioCaptureService.cs" Link="SystemAudioCaptureService.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioCaptureDiagnostics.cs" Link="AudioCaptureDiagnostics.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/NonFatalExceptionFilter.cs" Link="NonFatalExceptionFilter.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
   </ItemGroup>

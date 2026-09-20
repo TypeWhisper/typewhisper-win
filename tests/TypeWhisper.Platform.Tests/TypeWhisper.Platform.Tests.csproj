@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageReference Include="Velopack" Version="0.0.1298" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/LicenseService.cs" Link="LicenseService.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/AppDistribution.cs" Link="AppDistribution.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/AppReleaseGithubSource.cs" Link="AppReleaseGithubSource.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/WindowsClipboardTransaction.cs" Link="WindowsClipboardTransaction.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/NativeMethods.Clipboard.cs" Link="NativeMethods.Clipboard.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LicenseText.cs" Link="LicenseText.cs" />
+    <EmbeddedResource Include="../../src/TypeWhisper.WinUI/Resources/LicenseStrings.json" LogicalName="TypeWhisper.LicenseStrings.json" />
+  </ItemGroup>
+</Project>
