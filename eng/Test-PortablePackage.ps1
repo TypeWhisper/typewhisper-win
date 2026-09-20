@@ -21,9 +21,9 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $requiredEntries = @(
     ".portable"
-    "TypeWhisper.exe"
+    "TypeWhisper.WinUI.exe"
     "Update.exe"
-    "current/TypeWhisper.exe"
+    "current/TypeWhisper.WinUI.exe"
 )
 $portableArchive = $portableArchives[0]
 $archive = [System.IO.Compression.ZipFile]::OpenRead($portableArchive.FullName)

@@ -3,10 +3,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-#if WINDOWS
-using System.Windows.Controls;
-using NAudio.Wave;
-#endif
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
@@ -87,11 +83,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-#if WINDOWS
-    public string PluginVersion => "1.0.6";
-#else
     public string PluginVersion => "1.1.1";
-#endif
 
     /// <inheritdoc />
     public Task OnInstallAsync(PluginInstallationContext context, CancellationToken cancellationToken)
@@ -138,12 +130,6 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         return Task.CompletedTask;
     }
 
-    #if WINDOWS
-    /// <summary>
-    /// Creates the settings view shown by the host, or null when no UI is required.
-    /// </summary>
-    public UserControl? CreateSettingsView() => new GroqSettingsView(this);
-    #endif
 
     // Whisper language tokens shared by the two multilingual models.
     private static readonly IReadOnlyList<string> TranscriptionLanguageCodes =
@@ -453,20 +439,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         if (wavAudio.Length == 0)
             throw new InvalidOperationException("No WAV audio bytes were provided.");
 
-#if WINDOWS
-        using var input = new MemoryStream(wavAudio, writable: false);
-        using var reader = new WaveFileReader(input);
-        using var output = new MemoryStream();
-        MediaFoundationEncoder.EncodeToAac(reader, output, TranscriptionUploadBitRate);
-
-        var bytes = output.ToArray();
-        if (bytes.Length == 0)
-            throw new InvalidOperationException("Media Foundation produced an empty AAC upload.");
-
-        return new GroqTranscriptionUpload(bytes, "audio.m4a", "audio/mp4");
-#else
         return CreateWavUpload(wavAudio);
-#endif
     }
 
     private static GroqTranscriptionUpload CreateWavUpload(byte[] wavAudio)

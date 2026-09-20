@@ -1,49 +1,21 @@
 # TypeWhisper for Windows
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Windows](https://img.shields.io/badge/Windows-10%2B-0078D4.svg)](https://www.microsoft.com/windows)
+[![Windows](https://img.shields.io/badge/Windows-11%2024H2%2B-0078D4.svg)](https://www.microsoft.com/windows)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4.svg)](https://dotnet.microsoft.com)
 
 Speech-to-text and AI text processing for Windows. Dictate anywhere, transcribe files, and transform text with reusable workflows. Use local models when privacy matters, or add cloud providers through plugins when speed and scale matter more.
 
-TypeWhisper for Windows includes system-wide dictation, file transcription, workflows, history, dictionary, snippets, local and cloud transcription engines, and bundled integrations. Advanced surfaces like the HTTP API, CLI, plugin SDK, marketplace, and action plugins remain available for power users and automation.
+TypeWhisper for Windows includes system-wide dictation, file transcription, workflows, history, dictionary, snippets, local and cloud transcription engines, and portable integrations. Advanced surfaces like the HTTP API, CLI, plugin SDK, marketplace, and action plugins remain available for power users and automation.
 
 See [Platform parity and exclusions](docs/PLATFORM_PARITY.md) for the Windows support matrix, Windows-native replacements, and Apple-only non-goals.
 
-## Screenshots
-
-The complete 1.0.8 screenshot set is available in [`docs/screenshots/windows`](docs/screenshots/windows). App captures use a consistent 1240 x 800 frame. Plugin dialogs keep their content-specific height so every setting remains visible. PNG files are kept for GitHub rendering, and WebP variants are included for web/docs reuse.
-
-### App
-
-| Dashboard | Statistics |
-|-----------|------------|
-| <img src="docs/screenshots/windows/dashboard.png" alt="TypeWhisper Windows dashboard" width="420"> | <img src="docs/screenshots/windows/statistics.png" alt="TypeWhisper Windows usage statistics" width="420"> |
-
-| Dictation | File Transcription |
-|-----------|--------------------|
-| <img src="docs/screenshots/windows/dictation.png" alt="TypeWhisper Windows dictation settings" width="420"> | <img src="docs/screenshots/windows/file-transcription.png" alt="TypeWhisper Windows file transcription" width="420"> |
-
-| Workflows | Integrations |
-|-----------|--------------|
-| <img src="docs/screenshots/windows/workflows.png" alt="TypeWhisper Windows workflows" width="420"> | <img src="docs/screenshots/windows/integrations-installed.png" alt="TypeWhisper Windows integrations" width="420"> |
-
-### Plugin Settings
-
-The complete set of 32 Windows plugin settings dialogs is available in [`docs/screenshots/windows/plugins`](docs/screenshots/windows/plugins). API-key plugins use non-sensitive screenshot fixtures so their configured controls are visible without storing or contacting real provider accounts.
-
-| OpenAI / ChatGPT | xAI / Grok |
-|------------------|------------|
-| <img src="docs/screenshots/windows/plugins/com.typewhisper.openai.png" alt="OpenAI and ChatGPT plugin settings on Windows" width="420"> | <img src="docs/screenshots/windows/plugins/com.typewhisper.xai.png" alt="xAI and Grok plugin settings on Windows" width="420"> |
-
-| ElevenLabs | OpenRouter |
-|------------|------------|
-| <img src="docs/screenshots/windows/plugins/com.typewhisper.elevenlabs.png" alt="ElevenLabs plugin settings on Windows" width="420"> | <img src="docs/screenshots/windows/plugins/com.typewhisper.openrouter.png" alt="OpenRouter plugin settings on Windows" width="420"> |
+This branch contains only the WinUI application. The WPF host, its settings dialogs, legacy plugins and release workflow have been removed. Portable plugins live in `plugins/` and `plugins-v2/`. Historical release notes remain available as records of earlier versions.
 
 ## What's New
 
 - **Workflows:** Prompt actions and matching rules live in one workflow surface with templates for cleanup, translation, email replies, meeting notes, checklists, JSON extraction, summaries, and custom prompts.
-- **Expanded engines:** Local SherpaOnnx, whisper.cpp, Granite Speech, and compatible server-based engines sit alongside cloud transcription providers.
+- **Expanded engines:** Local SherpaOnnx, whisper.cpp, Qwen3 Local, and compatible server-based engines sit alongside cloud transcription providers.
 - **Streaming preview:** The recording overlay can show partial results while speech is still being captured.
 - **Automation refresh:** The local HTTP API and CLI support tokenized discovery, local-file transcription, workflow/rule listing, per-request engine/model overrides, language hints, translation targets, and dictionary term/correction management.
 - **Plugin marketplace:** Browse, install, upgrade, and remove bundled or external plugins from Settings.
@@ -53,8 +25,8 @@ The complete set of 32 Windows plugin settings dialogs is available in [`docs/sc
 
 ### Transcription
 
-- **On-device models:** Parakeet TDT 0.6B, Canary 180M Flash, whisper.cpp models, and Granite Speech run locally through plugins. Recommended local models run on CPU, with no GPU required.
-- **Cloud transcription:** Groq Whisper, xAI/Grok STT, OpenAI Whisper, AssemblyAI, Deepgram, ElevenLabs, Reson8, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, and any OpenAI-compatible server can be added through plugins.
+- **On-device models:** Parakeet TDT 0.6B, Canary 180M Flash, whisper.cpp models, and Qwen3 Local run locally through plugins. Recommended local models run on CPU, with no GPU required.
+- **Cloud transcription:** Groq Whisper, OpenAI Whisper, AssemblyAI, Deepgram, ElevenLabs, Reson8, Gladia, Soniox, Speechmatics, Cloudflare ASR, Voxtral, and any OpenAI-compatible server can be added through plugins.
 - **Streaming preview:** Silero VAD detects speech segments during recording and shows partial transcription results in the overlay before recording stops.
 - **Short-clip handling:** Brief utterances are padded and retained more reliably across local and cloud engines.
 - **File transcription:** Drag and drop audio/video files. Supports WAV, MP3, M4A, AAC, OGG, FLAC, WMA, MP4, MKV, AVI, MOV, and WebM.
@@ -74,7 +46,7 @@ The complete set of 32 Windows plugin settings dialogs is available in [`docs/sc
 ### AI Processing
 
 - **Workflows:** Build reusable transformations for cleanup, translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run by app, website, or dedicated hotkey.
-- **LLM providers:** Groq, xAI/Grok, OpenAI, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, and local Gemma can be used through plugins.
+- **LLM providers:** Groq, OpenAI, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, Mistral, and GitHub Copilot can be used through plugins.
 - **Custom prompts:** Add fine-tuning instructions per workflow, or use custom workflow prompts when the built-in templates are not specific enough.
 - **Translation:** Cloud LLM translation can fall back to local Marian ONNX translation. Supported target languages include EN, DE, FR, ES, IT, NL, PL, SV, DA, FI, CS, RU, UK, HU, JA, ZH, AR, HI, VI, and ID.
 
@@ -82,7 +54,6 @@ The complete set of 32 Windows plugin settings dialogs is available in [`docs/sc
 
 - **Workflow triggers:** Match by process name, website pattern, or hotkey for language, task, model, whisper mode, prompt processing, output format, and action routing.
 - **Dictionary:** Custom term corrections fix names, jargon, and recurring misrecognitions with literal phrase matching, optional case sensitivity, and built-in term packs for developer, medical, legal, finance, and creative domains. Replacement text supports `\s`, `\n`, `\r`, `\t`, and `\\` escapes.
-- **Advanced transformations:** Use the Script Runner integration for regex, Python, or global transformations such as converting `ß` to `ss`.
 - **Snippets:** Text shortcuts with trigger -> replacement. Placeholders include `{date}`, `{time}`, `{datetime}`, `{clipboard}`, `{day}`, and `{year}`. Date/time placeholders support custom formats, such as `{date:dd.MM.yyyy}`.
 - **History:** Searchable transcription history with raw/final text tracking, app context, inline editing, export, retention controls, and recent-transcription access.
 
@@ -90,38 +61,29 @@ The complete set of 32 Windows plugin settings dialogs is available in [`docs/sc
 
 - **Plugin system:** Extend TypeWhisper with custom transcription engines, LLM providers, post-processors, memory providers, TTS providers, event observers, and action plugins.
 - **Plugin marketplace:** Browse, install, upgrade, and remove plugins directly from Settings. Recommended extensions can be installed automatically on first run.
-- **Action plugins:** Linear, Obsidian, Script, Webhook, and LiveTranscript can turn transcriptions into issues, notes, scripts, notifications, or live windows.
+- **Action plugins:** Portable action providers such as Obsidian can route workflow output to external tools.
 - **HTTP API:** Local REST server for status, models, transcription, workflows/rules, history, dictionary terms and corrections, and dictation control.
 - **CLI tool:** Shell-friendly transcription via the bundled `typewhisper` command.
 
 ### General
 
-- **Fluent Design:** WPF-UI with Mica backdrop, native title bar, and Fluent controls.
+- **Fluent Design:** WinUI 3 with Mica backdrop, native title bar, and Fluent controls.
 - **Dynamic Island overlay:** Configurable widgets for LED, timer, waveform, active workflow, and microphone level.
-- **Home dashboard:** Quick access to dictation setup, shortcuts, history, and workflows; detailed usage metrics live on the Statistics page.
+- **Quick Launch:** Access dictation, history, workflows and settings from the WinUI launcher.
 - **Welcome wizard:** Guided setup for extension installation, model download, microphone test, and hotkeys.
 - **Release channels:** Velopack-powered delivery for stable, release-candidate, and daily builds.
 - **Windows autostart:** Optional start with Windows.
 - **System tray:** Minimizes to tray with quick access.
-- **Localization:** English, German, Japanese, and Russian.
 
 ## Install
 
-### Direct Download
+Use a WinUI Daily installer from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-win/releases), or build the current source. Earlier WPF installers are historical releases and do not represent this branch.
 
-Download the latest installer from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-win/releases/latest).
-
-Windows releases are code-signed using SignPath.io. Free code signing is provided by SignPath.io, certificate by SignPath Foundation. See the [privacy policy](docs/PRIVACY.md) for data handling details.
-
-Stable releases use the default Velopack channel. Release candidates and daily builds are published as prereleases on their own update channels. Installed builds can switch channels in Settings.
-
-### Code Signing Policy
-
-TypeWhisper for Windows release artifacts are built from this repository by GitHub Actions and submitted for signing through SignPath.io. Signing approvals are limited to project maintainers. The signed publisher may appear as SignPath Foundation because the certificate is provided through the SignPath Foundation open-source program.
+WinUI packages use their own installation identity and update channels. See the [Daily candidate guide](docs/DAILY-1.1-CANDIDATE.md) for runtime requirements, data import and release acceptance.
 
 ## Quick Start
 
-1. Install TypeWhisper from the latest Windows release.
+1. Install a WinUI build or build the current source.
 2. Open Settings and grant microphone access if Windows asks for it.
 3. Pick a transcription engine and, if needed, download a local model.
 4. Set a global hotkey or create a workflow-specific hotkey.
@@ -129,9 +91,9 @@ TypeWhisper for Windows release artifacts are built from this repository by GitH
 
 ## System Requirements
 
-- Windows 10 or later (x64 or ARM64)
+- Windows 11 24H2 or later, build 26100+ (x64 or ARM64)
 - 8 GB RAM minimum, 16 GB+ recommended for larger local models
-- Around 700 MB disk space for Parakeet, around 200 MB for Canary, more for whisper.cpp or Granite Speech models
+- Around 700 MB disk space for Parakeet, around 200 MB for Canary, more for whisper.cpp or Qwen3 Local models
 - .NET 10 SDK for building from source
 
 ## Model Recommendations
@@ -142,7 +104,6 @@ TypeWhisper for Windows release artifacts are built from this repository by GitH
 | Multilingual dictation with translation | Canary 180M Flash, whisper.cpp Large V3 Turbo |
 | Lowest disk usage | whisper.cpp Tiny Q5_0 |
 | Higher local accuracy | whisper.cpp Small or Large V3 Turbo |
-| Experimental local speech | IBM Granite 4.0 1B Speech |
 
 Local models are provided by bundled plugins and can be installed from the built-in marketplace.
 
@@ -152,103 +113,34 @@ The current Windows evaluation of NVIDIA's streaming Parakeet EOU model is docum
 
 ## Build
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/TypeWhisper/typewhisper-win.git
-   cd typewhisper-win
-   ```
+Install the .NET 10 SDK and Windows SDK 10.0.26100 or later on Windows. The only application project is `src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj`.
 
-2. Build with .NET 10:
-   ```bash
-   dotnet build TypeWhisper.slnx
-   ```
+```powershell
+dotnet build TypeWhisper.slnx
+dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r win-x64 --self-contained false -o publish/win-x64
+```
 
-3. Run the app:
-   ```bash
-   dotnet run --project src/TypeWhisper.Windows
-   ```
+Run `publish/win-x64/TypeWhisper.WinUI.exe`. Use `win-arm64` for ARM64 builds. The publish output includes the WinUI resources and bundled CLI.
 
-4. Run the automated checks before shipping changes:
-   ```bash
-   dotnet test TypeWhisper.slnx
-   ```
+On Marco's development machine, build and launch the current checkout with the shared development script:
 
-The app appears in the system tray, and the welcome wizard guides you through extension installation, model download, and setup.
+```powershell
+& F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run <checkout-path>
+```
+
+It detects WinUI-only checkouts and publishes to the stable development output directory. Do not start binaries directly from a temporary worktree.
+
+Run the automated suites without a desktop, microphone, downloaded models or provider credentials:
+
+```powershell
+./eng/Test-WinUIHeadless.ps1 -Configuration Release
+```
+
+`WinUI Daily` is the release workflow. `Package Dry Run` validates WinUI installers for both architectures without publishing, and `Store Package` creates WinUI MSIX packages. Legacy application and plugin release workflows are retired; existing public packages are unchanged.
 
 ## HTTP API
 
-For the Windows 1.1 WinUI host, use the [Windows 1.1 HTTP API reference](docs/WINUI-HTTP-API.md). The details below describe the legacy Windows host.
-
-The HTTP API is an advanced local automation surface. It binds to `localhost` and `127.0.0.1`, is configurable in Settings, and uses port `8978` by default. When the server starts it writes discovery files to `%LOCALAPPDATA%\TypeWhisper`: legacy `api-port` and `api-discovery.json` with `{ "version": 1, "port": 8978, "token": "..." }`.
-
-Authentication is off by default for local compatibility. If Settings > Advanced > API Server > Require API Token is enabled, `/v1/status` remains public and all other routes require either `Authorization: Bearer <token>` or `X-TypeWhisper-API-Token: <token>`. Settings backup export and import always require a token because backups can contain sensitive transcription text and personal configuration. `OPTIONS` requests return `204 No Content`.
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/status` | GET | App status, active engine, active model, API version, and capability flags |
-| `/v1/models` | GET | List all available local and cloud models |
-| `/v1/transcribe` | POST | Transcribe multipart or raw audio |
-| `/v1/transcribe/local-file` | POST | Transcribe a file path already on this Windows machine |
-| `/v1/history` | GET | Search history with pagination |
-| `/v1/history` | DELETE | Delete a history entry by ID |
-| `/v1/rules` | GET | List workflow-backed rules |
-| `/v1/profiles` | GET | List workflow-backed profiles |
-| `/v1/rules/toggle` | PUT | Toggle a rule by `id` |
-| `/v1/profiles/toggle` | PUT | Toggle a profile by `id` |
-| `/v1/dictation/start` | POST | Start recording |
-| `/v1/dictation/stop` | POST | Stop recording |
-| `/v1/dictation/status` | GET | Check current dictation state |
-| `/v1/dictation/transcription` | GET | Poll dictation result by session ID |
-| `/v1/dictionary/terms` | GET | List enabled dictionary terms |
-| `/v1/dictionary/terms` | PUT | Replace or append dictionary terms |
-| `/v1/dictionary/terms` | DELETE | Delete one dictionary term |
-| `/v1/dictionary/corrections` | GET | List enabled dictionary corrections |
-| `/v1/dictionary/corrections` | PUT | Upsert a correction |
-| `/v1/dictionary/corrections` | DELETE | Delete a correction |
-| `/v1/settings/export` | GET | Export a portable JSON backup |
-| `/v1/settings/import` | POST | Validate and safely merge a portable JSON backup |
-
-`/v1/transcribe` accepts `multipart/form-data` with a `file` part or a raw audio request body. Multipart fields are:
-
-- `language`: exact source language, such as `en` or `de`
-- `language_hint`: repeatable language hints; do not combine with `language`
-- `task`: `transcribe` or `translate`
-- `target_language`: translate the final text to this language
-- `response_format`: `json` or `verbose_json`
-- `prompt`: request-specific transcription prompt/context
-- `engine` and `model`: per-request overrides using IDs from `/v1/models`
-
-Raw audio requests can pass the same options with headers: `X-Language`, `X-Language-Hints`, `X-Task`, `X-Target-Language`, `X-Response-Format`, `X-Prompt`, `X-Engine`, and `X-Model`. Add `?await_download=1` to wait for a local model download or restore when supported.
-
-`/v1/transcribe/local-file` accepts JSON. This is what the CLI uses for normal file paths, so large local files are not uploaded through the API process:
-
-```json
-{
-  "path": "C:\\Audio\\recording.wav",
-  "language_hints": ["de", "en"],
-  "task": "transcribe",
-  "engine": "mock",
-  "model": "tiny"
-}
-```
-
-Dictionary terms use `PUT /v1/dictionary/terms` with `{ "terms": ["TypeWhisper"], "replace": false }` and `DELETE /v1/dictionary/terms` with `{ "term": "TypeWhisper" }`. Corrections use literal phrase matching and optional case sensitivity, for example `{ "original": "neuer Absatz", "replacement": "\\n\\n", "caseSensitive": false }`. Replacement values decode `\s`, `\n`, `\r`, `\t`, and `\\` once when applied. Corrections created through the HTTP API remain literal; regular expression matching can be enabled in the Dictionary UI.
-
-`GET /v1/settings/export` returns the versioned backup document directly as JSON. Send that document unchanged as `application/json` to `POST /v1/settings/import`. Import requests are limited to 64 MiB and return per-category imported, skipped, and conflict counts plus warnings and `restart_required`. Backup responses use `Cache-Control: no-store`. Backups exclude credentials, API tokens, license state, audio, hardware selections, and machine-local paths.
-
-```bash
-curl -X POST http://localhost:8978/v1/transcribe \
-  -F "file=@recording.wav" \
-  -F "language_hint=de" \
-  -F "language_hint=en" \
-  -F "response_format=verbose_json"
-
-curl -X POST http://localhost:8978/v1/dictation/start
-curl -X POST http://localhost:8978/v1/dictation/stop
-curl "http://localhost:8978/v1/dictation/transcription?id=<session-id>"
-```
-
-The browser microphone integration research, security boundary, proof of concept, and test plan are documented in [`docs/BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md`](docs/BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md).
+Use the [WinUI HTTP API reference](docs/WINUI-HTTP-API.md) for authentication, discovery, transcription, dictation, models, history, workflows and backups. The API is controlled from Settings > Advanced.
 
 ## CLI Tool
 
@@ -286,19 +178,9 @@ The active workflow is shown in the recording overlay.
 
 ## Plugins
 
-TypeWhisper supports plugins for adding custom transcription engines, LLM providers, post-processors, memory providers, TTS providers, event observers, and action plugins. Plugins are .NET class libraries with a `manifest.json`, installed to `%LocalAppData%\TypeWhisper\Plugins\`.
+Plugins are portable .NET class libraries with a `manifest.json`. WinUI renders their settings through the portable SDK and installs them in its own profile through the v2 marketplace. It does not load WPF settings assemblies.
 
-Bundled plugin families include:
-
-| Type | Plugins |
-|------|---------|
-| Local transcription | SherpaOnnx, whisper.cpp, Granite Speech |
-| Cloud transcription | OpenAI, Groq, xAI/Grok, AssemblyAI, Deepgram, ElevenLabs, Reson8, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, OpenAI Compatible |
-| Server-backed transcription | Qwen3 STT |
-| LLM providers | OpenAI, Groq, xAI/Grok, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, Gemma Local |
-| TTS providers | OpenAI, xAI/Grok, Supertonic TTS |
-| Actions | Linear, Obsidian, Script, LiveTranscript, Webhook |
-| Memory | File Memory, OpenAI Vector Memory |
+See [plugin package documentation](docs/PLUGIN-PACKAGES-1.1.md) for package layout, lifecycle and host capabilities. The source directories contain six existing portable components under `plugins/` and independent providers under `plugins-v2/`. WPF-only providers without a portable implementation are no longer included.
 
 ### Plugin Types
 
@@ -323,20 +205,19 @@ The SDK includes helpers for OpenAI-compatible APIs:
 ```text
 typewhisper-win/
 |-- src/
-|   |-- TypeWhisper.Core/           # Core logic, models, interfaces, persistence
-|   |-- TypeWhisper.PluginSDK/      # Plugin contracts, helpers, manifest models
+|   |-- TypeWhisper.Core/           # Core logic, models and persistence
+|   |-- TypeWhisper.PluginSDK/      # Portable plugin contracts and helpers
+|   |-- TypeWhisper.PluginHost/     # Isolated plugin loading and package lifecycle
+|   |-- TypeWhisper.Presentation/   # Application logic independent of the UI
 |   |-- TypeWhisper.Cli/            # typewhisper command-line client
-|   `-- TypeWhisper.Windows/        # WPF UI, services, view models, app composition
-|-- plugins/                        # Bundled plugin source
-|-- tests/
-|   |-- TypeWhisper.Core.Tests/     # Core xUnit tests
-|   `-- TypeWhisper.PluginSystem.Tests/
-`-- docs/                           # Design notes and implementation plans
+|   `-- TypeWhisper.WinUI/          # WinUI UI, platform services and app composition
+|-- plugins/                       # Existing portable providers and CTC component
+|-- plugins-v2/                    # Independent portable providers
+|-- tests/                         # Core, host, presentation, CLI and native tests
+`-- docs/                          # Guides and historical design/release records
 ```
 
-**Patterns:** MVVM with CommunityToolkit.Mvvm. `App.xaml.cs` is the composition root. SQLite is used for persistence with a custom migration pattern. Plugins load through AssemblyLoadContext isolation and manifest-based discovery. Workflows drive app/website/hotkey matching and prompt orchestration.
-
-**Key dependencies:** NAudio (audio), NHotkey.Wpf (hotkeys), WPF-UI (Fluent Design), Microsoft.ML.OnnxRuntime (local translation), Velopack (updates), H.NotifyIcon.Wpf (system tray), and org.k2fsa.sherpa.onnx (local ASR).
+**Key dependencies:** Windows App SDK / WinUI 3, NAudio (audio), CommunityToolkit.Mvvm, Velopack (updates), H.NotifyIcon.WinUI (system tray), and plugin-owned native inference runtimes.
 
 ## License
 

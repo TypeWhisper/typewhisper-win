@@ -14,7 +14,7 @@ Installation copies the bundled CLI to `%LOCALAPPDATA%\TypeWhisper\1.1\Cli` and 
 & "$env:LOCALAPPDATA\TypeWhisper\1.1\Cli\typewhisper.exe" status
 ```
 
-The installed CLI remembers the profile of the app that installed it. It reads that profile's `api-discovery.json` for the port and authentication mode/token, with `api-port` as a legacy fallback. An unbound CLI checks `%LOCALAPPDATA%\TypeWhisper-WinUI-DevUserData` before `%LOCALAPPDATA%\TypeWhisper`. Without valid discovery, the port falls back to `8978`.
+The installed CLI remembers the profile of the app that installed it. It reads that profile's `api-discovery.json` for the port and authentication mode/token, with `api-port` as a legacy fallback. An unbound CLI checks `%LOCALAPPDATA%\TypeWhisper-WinUI` before `%LOCALAPPDATA%\TypeWhisper-WinUI-DevUserData`. It does not discover the removed WPF host. Without valid discovery, the port falls back to `8978`.
 
 Use `--profile <directory>` to select another profile, or set `TYPEWHISPER_PROFILE`. The explicit flag takes precedence over the environment variable, then the installed profile binding. For example:
 

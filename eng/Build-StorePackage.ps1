@@ -59,6 +59,7 @@ $architecture = switch ($RuntimeIdentifier) {
     "win-arm64" { "arm64" }
     default { "x64" }
 }
+$platform = if ($RuntimeIdentifier -eq 'win-arm64') { 'ARM64' } else { 'x64' }
 
 $outputRootPath = Join-Path $repoRoot $OutputRoot
 $publishDir = Join-Path $outputRootPath "publish/$RuntimeIdentifier"
@@ -73,9 +74,10 @@ New-Item -ItemType Directory -Force -Path $publishDir, $layoutDir, $packageDir |
 Get-ChildItem -Path $packageDir -Filter "TypeWhisper-$RuntimeIdentifier-*.msix" -File |
     Remove-Item -Force
 
-dotnet publish (Join-Path $repoRoot "src/TypeWhisper.Windows/TypeWhisper.Windows.csproj") `
+dotnet publish (Join-Path $repoRoot "src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj") `
     -c $Configuration `
     -r $RuntimeIdentifier `
+    -p:Platform=$platform `
     --self-contained true `
     -p:Version=$Version `
     -p:TypeWhisperStoreBuild=true `

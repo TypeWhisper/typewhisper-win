@@ -1,0 +1,1532 @@
+using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using CommunityToolkit.Mvvm.ComponentModel;
+using TypeWhisper.Core;
+using Loc = TypeWhisper.WinUI.LicenseText;
+
+namespace TypeWhisper.WinUI.Platform;
+
+/// <summary>
+/// Manages commercial and supporter licenses via Polar.sh.
+/// Mirrors the macOS split between business/commercial licensing and supporter status.
+/// </summary>
+public sealed partial class LicenseService : ObservableObject
+{
+    private const string BaseUrl = "https://api.polar.sh/v1/customer-portal/license-keys";
+    private const string OrganizationId = "96de503c-3c8b-4d08-9ded-c7f6e20fdde4";
+    private const string CredentialStoreFileName = "licenses.dat";
+    private const string LegacyCredentialFileName = "license.json";
+    private static readonly byte[] Entropy = "TypeWhisper.License.v2"u8.ToArray();
+    private static readonly TimeSpan CommercialValidationInterval = TimeSpan.FromDays(7);
+    private static readonly TimeSpan SupporterValidationInterval = TimeSpan.FromDays(30);
+    private static readonly Regex IndividualDeviceCountPattern = new(
+        @"(?<!\d)3 devices?\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
+    private static readonly Dictionary<string, CommercialLicenseTier> KnownCommercialBenefitIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["a4c0b152-0b91-4588-b8f8-779870affba9"] = CommercialLicenseTier.Individual,
+        ["4eb5fa60-ed43-475d-a9b1-c837e67307e5"] = CommercialLicenseTier.Individual,
+        ["5138b20a-57ba-48aa-a664-2139cd6df0de"] = CommercialLicenseTier.Team,
+        ["afc8fac1-0e8f-4bb7-a1bc-60c8250b9923"] = CommercialLicenseTier.Team,
+        ["40b82917-f74e-4cc3-8165-937f1f47b294"] = CommercialLicenseTier.Enterprise,
+        ["1857c2ed-3f80-4a8a-93c7-c1d67e02db2e"] = CommercialLicenseTier.Enterprise,
+    };
+
+    private static readonly Dictionary<string, SupporterTier> KnownSupporterBenefitIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["d3eef5ed-bc8c-469d-809b-79fdfe5fc8e8"] = global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze,
+        ["9ca12e41-b407-4368-9745-76b72ff2c7c2"] = global::TypeWhisper.WinUI.Platform.SupporterTier.Silver,
+        ["0c695b7a-2f3a-4797-81c7-1410dbb76cc2"] = global::TypeWhisper.WinUI.Platform.SupporterTier.Gold,
+    };
+
+    private readonly HttpClient _http;
+    private readonly string _credentialPath;
+    private readonly string _legacyCredentialPath;
+    private readonly AppDistributionKind _distributionKind;
+    private readonly string _appVersion;
+
+    /// <summary>Describes a local credential write failure without exposing the license key.</summary>
+    public string? StorageError { get; private set; }
+
+    private bool _suppressPersistence;
+    private string? _commercialLicenseKey;
+    private string? _commercialActivationId;
+    private DateTime? _commercialLastValidated;
+    private string? _supporterLicenseKey;
+    private string? _supporterActivationId;
+    private DateTime? _supporterLastValidated;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPrivateUser))]
+    [NotifyPropertyChangedFor(nameof(IsBusinessUser))]
+    [NotifyPropertyChangedFor(nameof(ShouldShowReminder))]
+    private LicenseUserType _userType = LicenseUserType.PrivateUser;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCommercialLicense))]
+    [NotifyPropertyChangedFor(nameof(CommercialTierDisplayName))]
+    private LicenseStatus _commercialStatus = LicenseStatus.Unlicensed;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CommercialTierDisplayName))]
+    private CommercialLicenseTier? _commercialTier;
+
+    [ObservableProperty]
+    private bool _commercialIsLifetime;
+
+    [ObservableProperty]
+    private bool _isLicenseActivating;
+
+    [ObservableProperty]
+    private string? _licenseActivationError;
+
+    [ObservableProperty]
+    private bool _isCommercialActivating;
+
+    [ObservableProperty]
+    private string? _commercialActivationError;
+
+    [ObservableProperty]
+    private string? _commercialDeactivationError;
+
+    [ObservableProperty]
+    private bool _isCommercialRefreshing;
+
+    [ObservableProperty]
+    private string? _commercialRefreshError;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSupporterLicense))]
+    [NotifyPropertyChangedFor(nameof(IsSupporter))]
+    [NotifyPropertyChangedFor(nameof(SupporterBadgeTier))]
+    [NotifyPropertyChangedFor(nameof(SupporterTierDisplayName))]
+    private LicenseStatus _supporterStatus = LicenseStatus.Unlicensed;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSupporterLicense))]
+    [NotifyPropertyChangedFor(nameof(IsSupporter))]
+    [NotifyPropertyChangedFor(nameof(SupporterBadgeTier))]
+    [NotifyPropertyChangedFor(nameof(SupporterTierDisplayName))]
+    private SupporterTier? _supporterTier;
+
+    [ObservableProperty]
+    private bool _isSupporterActivating;
+
+    [ObservableProperty]
+    private string? _supporterActivationError;
+
+    [ObservableProperty]
+    private string? _supporterDeactivationError;
+
+    [ObservableProperty]
+    private bool _isSupporterRefreshing;
+
+    [ObservableProperty]
+    private string? _supporterRefreshError;
+
+    /// <summary>
+    /// Raised when status changes.
+    /// </summary>
+    public event Action? StatusChanged;
+
+    /// <summary>
+    /// Initializes a new instance of the LicenseService class.
+    /// </summary>
+    public LicenseService()
+        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
+    {
+    }
+
+    internal LicenseService(
+        HttpClient http,
+        string dataPath,
+        AppDistributionKind? distributionKind = null,
+        string? appVersion = null)
+    {
+        _http = http;
+        _credentialPath = ResolveDataFilePath(dataPath, CredentialStoreFileName);
+        _legacyCredentialPath = ResolveDataFilePath(dataPath, LegacyCredentialFileName);
+        _distributionKind = distributionKind ?? AppDistribution.Current;
+        _appVersion = appVersion ?? GetAppVersion();
+        LoadStore();
+    }
+
+    /// <summary>
+    /// Gets whether is private user.
+    /// </summary>
+    public bool IsPrivateUser => UserType == LicenseUserType.PrivateUser;
+    /// <summary>
+    /// Gets whether is business user.
+    /// </summary>
+    public bool IsBusinessUser => UserType == LicenseUserType.Business;
+    /// <summary>
+    /// Gets whether has commercial license.
+    /// </summary>
+    public bool HasCommercialLicense => CommercialStatus == LicenseStatus.Active;
+    /// <summary>
+    /// Gets whether has supporter license.
+    /// </summary>
+    public bool HasSupporterLicense => SupporterStatus == LicenseStatus.Active;
+    /// <summary>
+    /// Returns whether commercial activation.
+    /// </summary>
+    public bool HasCommercialActivation => !string.IsNullOrWhiteSpace(_commercialLicenseKey) && !string.IsNullOrWhiteSpace(_commercialActivationId);
+    /// <summary>
+    /// Returns whether supporter activation.
+    /// </summary>
+    public bool HasSupporterActivation => !string.IsNullOrWhiteSpace(_supporterLicenseKey) && !string.IsNullOrWhiteSpace(_supporterActivationId);
+    /// <summary>
+    /// Gets whether is supporter.
+    /// </summary>
+    public bool IsSupporter => SupporterStatus == LicenseStatus.Active && EffectiveSupporterTier is not null;
+    /// <summary>
+    /// Gets whether should show reminder.
+    /// </summary>
+    public bool ShouldShowReminder => IsBusinessUser && !HasCommercialLicense;
+    /// <summary>
+    /// Gets the supporter badge tier.
+    /// </summary>
+    public SupporterTier SupporterBadgeTier => EffectiveSupporterTier ?? global::TypeWhisper.WinUI.Platform.SupporterTier.None;
+
+    /// <summary>
+    /// Gets the commercial tier display name.
+    /// </summary>
+    public string? CommercialTierDisplayName => CommercialTier switch
+    {
+        CommercialLicenseTier.Individual => Loc.Instance["License.TierIndividualName"],
+        CommercialLicenseTier.Team => Loc.Instance["License.TierTeamName"],
+        CommercialLicenseTier.Enterprise => Loc.Instance["License.TierEnterpriseName"],
+        _ => null
+    };
+
+    /// <summary>
+    /// Gets the supporter tier display name.
+    /// </summary>
+    public string? SupporterTierDisplayName => EffectiveSupporterTier switch
+    {
+        global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze => Loc.Instance["License.SupporterBronzeName"],
+        global::TypeWhisper.WinUI.Platform.SupporterTier.Silver => Loc.Instance["License.SupporterSilverName"],
+        global::TypeWhisper.WinUI.Platform.SupporterTier.Gold => Loc.Instance["License.SupporterGoldName"],
+        _ => null
+    };
+
+    /// <summary>
+    /// Gets the supporter claim proof.
+    /// </summary>
+    public SupporterClaimProof? SupporterClaimProof =>
+        IsSupporter && !string.IsNullOrWhiteSpace(_supporterLicenseKey) && !string.IsNullOrWhiteSpace(_supporterActivationId)
+            ? new SupporterClaimProof(_supporterLicenseKey!, _supporterActivationId!, EffectiveSupporterTier!.Value)
+            : null;
+
+    /// <summary>
+    /// Returns discord claim proof candidates.
+    /// </summary>
+    public IReadOnlyList<SupporterClaimProof> GetDiscordClaimProofCandidates()
+    {
+        var proofs = new List<SupporterClaimProof>(2);
+
+        if (SupporterClaimProof is { } supporterProof)
+            proofs.Add(supporterProof);
+
+        if (CommercialStatus == LicenseStatus.Active &&
+            !string.IsNullOrWhiteSpace(_commercialLicenseKey) &&
+            !string.IsNullOrWhiteSpace(_commercialActivationId))
+        {
+            var commercialProof = new SupporterClaimProof(
+                _commercialLicenseKey!,
+                _commercialActivationId!,
+                EffectiveSupporterTier ?? global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze);
+
+            if (!proofs.Any(p => p.Key == commercialProof.Key && p.ActivationId == commercialProof.ActivationId))
+                proofs.Add(commercialProof);
+        }
+
+        return proofs;
+    }
+
+    /// <summary>Returns the existing commercial activation proof for linking the signed-in account.</summary>
+    public bool TryGetCommercialAccountProof(out string? key, out string? activationId)
+    {
+        key = HasCommercialLicense ? _commercialLicenseKey : null;
+        activationId = HasCommercialLicense ? _commercialActivationId : null;
+        return !string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(activationId);
+    }
+
+    private SupporterTier? EffectiveSupporterTier => SupporterTier switch
+    {
+        null => null,
+        global::TypeWhisper.WinUI.Platform.SupporterTier.None when SupporterStatus == LicenseStatus.Active
+            => global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze,
+        var tier => tier,
+    };
+
+    /// <summary>
+    /// Sets user type.
+    /// </summary>
+    public void SetUserType(LicenseUserType type)
+    {
+        UserType = type;
+        PersistStore();
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Activates any license key asynchronously..
+    /// </summary>
+    public async Task<ActivatedLicenseEntitlement?> ActivateAnyLicenseKeyAsync(string key, CancellationToken ct = default)
+    {
+        var trimmed = key.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        ct.ThrowIfCancellationRequested();
+        IsLicenseActivating = true;
+        LicenseActivationError = null;
+        CommercialActivationError = null;
+        CommercialDeactivationError = null;
+        SupporterActivationError = null;
+        SupporterDeactivationError = null;
+
+        try
+        {
+            return await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Any, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            LicenseActivationError = ex.Message;
+            return null;
+        }
+        finally
+        {
+            IsLicenseActivating = false;
+        }
+    }
+
+    /// <summary>
+    /// Activates commercial license asynchronously..
+    /// </summary>
+    public async Task ActivateCommercialLicenseAsync(string key, CancellationToken ct = default)
+    {
+        var trimmed = key.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return;
+
+        ct.ThrowIfCancellationRequested();
+        IsCommercialActivating = true;
+        CommercialActivationError = null;
+        CommercialDeactivationError = null;
+        LicenseActivationError = null;
+
+        try
+        {
+            await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Commercial, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            CommercialActivationError = ex.Message;
+        }
+        finally
+        {
+            IsCommercialActivating = false;
+        }
+    }
+
+    /// <summary>
+    /// Performs validate commercial license asynchronously.
+    /// </summary>
+    public Task ValidateCommercialLicenseAsync(CancellationToken ct = default) =>
+        ValidateCommercialLicenseCoreAsync(reportErrors: false, ct);
+
+    /// <summary>
+    /// Refreshes commercial license asynchronously.
+    /// </summary>
+    public async Task RefreshCommercialLicenseAsync(CancellationToken ct = default)
+    {
+        if (!HasCommercialActivation)
+            return;
+
+        IsCommercialRefreshing = true;
+        CommercialRefreshError = null;
+
+        try
+        {
+            await ValidateCommercialLicenseCoreAsync(reportErrors: true, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            CommercialRefreshError = ex.Message;
+        }
+        finally
+        {
+            IsCommercialRefreshing = false;
+        }
+    }
+
+    /// <summary>
+    /// Performs validate commercial if needed asynchronously.
+    /// </summary>
+    public async Task ValidateCommercialIfNeededAsync(CancellationToken ct = default)
+    {
+        if (!HasCommercialActivation)
+        {
+            if (CommercialStatus != LicenseStatus.Unlicensed || CommercialTier is not null || CommercialIsLifetime)
+            {
+                ResetCommercialState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+            }
+
+            return;
+        }
+
+        if (CommercialStatus != LicenseStatus.Active ||
+            !_commercialLastValidated.HasValue ||
+            DateTime.UtcNow - _commercialLastValidated.Value > CommercialValidationInterval)
+        {
+            await ValidateCommercialLicenseAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Deactivates commercial license asynchronously..
+    /// </summary>
+    public async Task DeactivateCommercialLicenseAsync(CancellationToken ct = default)
+    {
+        if (!HasCommercialActivation)
+            return;
+
+        var key = _commercialLicenseKey!;
+        var activationId = _commercialActivationId!;
+        CommercialDeactivationError = null;
+
+        try
+        {
+            await DeactivateCoreAsync(key, activationId, ct);
+            ResetCommercialState(clearSecrets: true);
+            PersistStore();
+            NotifyStateChanged();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetCommercialState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+            }
+            else
+            {
+                CommercialDeactivationError = ex.Message;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Activates supporter key asynchronously..
+    /// </summary>
+    public async Task ActivateSupporterKeyAsync(string key, CancellationToken ct = default)
+    {
+        var trimmed = key.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return;
+
+        ct.ThrowIfCancellationRequested();
+        IsSupporterActivating = true;
+        SupporterActivationError = null;
+        SupporterDeactivationError = null;
+        LicenseActivationError = null;
+
+        try
+        {
+            await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Supporter, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            SupporterActivationError = ex.Message;
+        }
+        finally
+        {
+            IsSupporterActivating = false;
+        }
+    }
+
+    /// <summary>
+    /// Performs validate supporter asynchronously.
+    /// </summary>
+    public Task ValidateSupporterAsync(CancellationToken ct = default) =>
+        ValidateSupporterCoreAsync(reportErrors: false, ct);
+
+    /// <summary>
+    /// Refreshes supporter license asynchronously.
+    /// </summary>
+    public async Task RefreshSupporterLicenseAsync(CancellationToken ct = default)
+    {
+        if (!HasSupporterActivation)
+            return;
+
+        IsSupporterRefreshing = true;
+        SupporterRefreshError = null;
+
+        try
+        {
+            await ValidateSupporterCoreAsync(reportErrors: true, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            SupporterRefreshError = ex.Message;
+        }
+        finally
+        {
+            IsSupporterRefreshing = false;
+        }
+    }
+
+    /// <summary>
+    /// Performs validate supporter if needed asynchronously.
+    /// </summary>
+    public async Task ValidateSupporterIfNeededAsync(CancellationToken ct = default)
+    {
+        if (!HasSupporterActivation)
+        {
+            if (SupporterStatus != LicenseStatus.Unlicensed || SupporterTier is not null)
+            {
+                ResetSupporterState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+            }
+
+            return;
+        }
+
+        if (SupporterStatus != LicenseStatus.Active ||
+            !_supporterLastValidated.HasValue ||
+            DateTime.UtcNow - _supporterLastValidated.Value > SupporterValidationInterval)
+        {
+            await ValidateSupporterAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Performs reactivate stored supporter key asynchronously.
+    /// </summary>
+    public async Task<bool> ReactivateStoredSupporterKeyAsync(CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_supporterLicenseKey))
+            return false;
+
+        var previousActivationId = _supporterActivationId;
+        var previousStatus = SupporterStatus;
+        var previousTier = SupporterTier;
+        var previousLastValidated = _supporterLastValidated;
+
+        await ActivateSupporterKeyAsync(_supporterLicenseKey, ct);
+        if (SupporterStatus == LicenseStatus.Active && !string.IsNullOrWhiteSpace(_supporterActivationId))
+            return true;
+
+        _supporterActivationId = previousActivationId;
+        SupporterStatus = previousStatus;
+        SupporterTier = previousTier;
+        _supporterLastValidated = previousLastValidated;
+        PersistStore();
+        NotifyStateChanged();
+        return false;
+    }
+
+    /// <summary>
+    /// Deactivates supporter license asynchronously..
+    /// </summary>
+    public async Task DeactivateSupporterLicenseAsync(CancellationToken ct = default)
+    {
+        if (!HasSupporterActivation)
+            return;
+
+        var key = _supporterLicenseKey!;
+        var activationId = _supporterActivationId!;
+        SupporterDeactivationError = null;
+
+        try
+        {
+            await DeactivateCoreAsync(key, activationId, ct);
+            ResetSupporterState(clearSecrets: true);
+            PersistStore();
+            NotifyStateChanged();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetSupporterState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+            }
+            else
+            {
+                SupporterDeactivationError = ex.Message;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Performs validate all if needed asynchronously.
+    /// </summary>
+    public async Task ValidateAllIfNeededAsync(CancellationToken ct = default)
+    {
+        await ValidateCommercialIfNeededAsync(ct);
+        await ValidateSupporterIfNeededAsync(ct);
+    }
+
+    private async Task<ActivatedLicenseEntitlement> ActivateKeyAsync(
+        string key,
+        ExpectedLicenseEntitlementKind expectedEntitlement,
+        CancellationToken ct)
+    {
+        var activation = await ActivateCoreAsync(key, ct);
+        var activationId = activation.Id
+            ?? throw new InvalidOperationException(Loc.Instance["License.ActivationMissingId"]);
+
+        try
+        {
+            var validation = await ValidateCoreAsync(key, activationId, ct);
+            if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(Loc.Instance["License.EntitlementInactive"]);
+
+            var entitlement = ClassifyGrantedValidation(validation);
+            EnsureExpectedEntitlement(entitlement, expectedEntitlement);
+            ApplyActivatedEntitlement(entitlement, key, activationId);
+            PersistStore();
+            NotifyStateChanged();
+            return entitlement;
+        }
+        catch
+        {
+            await TryDeactivateCoreAsync(key, activationId, ct);
+            throw;
+        }
+    }
+
+    private async Task ValidateCommercialLicenseCoreAsync(bool reportErrors, CancellationToken ct)
+    {
+        if (!HasCommercialActivation)
+            return;
+
+        ct.ThrowIfCancellationRequested();
+        var key = _commercialLicenseKey!;
+        var activationId = _commercialActivationId!;
+
+        try
+        {
+            var validation = await ValidateCoreAsync(key, activationId, ct);
+            ApplyStoredCommercialValidation(key, activationId, validation, reportErrors);
+            CommercialActivationError = null;
+            CommercialRefreshError = null;
+            PersistStore();
+            NotifyStateChanged();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetCommercialState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+                return;
+            }
+
+            Debug.WriteLine($"Commercial license validation failed: {ex.Message}");
+            if (reportErrors)
+                throw;
+        }
+    }
+
+    private async Task ValidateSupporterCoreAsync(bool reportErrors, CancellationToken ct)
+    {
+        if (!HasSupporterActivation)
+            return;
+
+        ct.ThrowIfCancellationRequested();
+        var key = _supporterLicenseKey!;
+        var activationId = _supporterActivationId!;
+
+        try
+        {
+            var validation = await ValidateCoreAsync(key, activationId, ct);
+            ApplyStoredSupporterValidation(key, activationId, validation, reportErrors);
+            SupporterActivationError = null;
+            SupporterRefreshError = null;
+            PersistStore();
+            NotifyStateChanged();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetSupporterState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+                return;
+            }
+
+            Debug.WriteLine($"Supporter validation failed: {ex.Message}");
+            if (reportErrors)
+                throw;
+        }
+    }
+
+    private void ApplyStoredCommercialValidation(
+        string key,
+        string activationId,
+        PolarValidationResponse validation,
+        bool reportErrors)
+    {
+        if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
+        {
+            MarkCommercialActivationExpired();
+            return;
+        }
+
+        var entitlement = TryClassifyGrantedValidation(validation);
+        if (entitlement is null)
+        {
+            MarkCommercialActivationExpired();
+            if (reportErrors)
+                throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
+            return;
+        }
+
+        if (entitlement.Kind == ActivatedLicenseEntitlementKind.Commercial)
+        {
+            ApplyActivatedEntitlement(entitlement, key, activationId);
+            return;
+        }
+
+        ApplyActivatedEntitlement(entitlement, key, activationId);
+        ResetCommercialState(clearSecrets: true);
+    }
+
+    private void ApplyStoredSupporterValidation(
+        string key,
+        string activationId,
+        PolarValidationResponse validation,
+        bool reportErrors)
+    {
+        if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
+        {
+            MarkSupporterActivationExpired();
+            return;
+        }
+
+        var entitlement = TryClassifyGrantedValidation(validation);
+        if (entitlement is null)
+        {
+            MarkSupporterActivationExpired();
+            if (reportErrors)
+                throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
+            return;
+        }
+
+        if (entitlement.Kind == ActivatedLicenseEntitlementKind.Supporter)
+        {
+            ApplyActivatedEntitlement(entitlement, key, activationId);
+            return;
+        }
+
+        ApplyActivatedEntitlement(entitlement, key, activationId);
+        ResetSupporterState(clearSecrets: true);
+    }
+
+    private void ApplyActivatedEntitlement(ActivatedLicenseEntitlement entitlement, string key, string activationId)
+    {
+        switch (entitlement.Kind)
+        {
+            case ActivatedLicenseEntitlementKind.Commercial:
+                _commercialLicenseKey = key;
+                _commercialActivationId = activationId;
+                CommercialStatus = LicenseStatus.Active;
+                CommercialTier = entitlement.CommercialTier;
+                CommercialIsLifetime = entitlement.IsLifetime;
+                _commercialLastValidated = DateTime.UtcNow;
+                CommercialActivationError = null;
+                CommercialDeactivationError = null;
+                CommercialRefreshError = null;
+                break;
+
+            case ActivatedLicenseEntitlementKind.Supporter:
+                _supporterLicenseKey = key;
+                _supporterActivationId = activationId;
+                SupporterStatus = LicenseStatus.Active;
+                SupporterTier = entitlement.SupporterTier ?? global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze;
+                _supporterLastValidated = DateTime.UtcNow;
+                SupporterActivationError = null;
+                SupporterDeactivationError = null;
+                SupporterRefreshError = null;
+                break;
+        }
+    }
+
+    private static ActivatedLicenseEntitlement ClassifyGrantedValidation(PolarValidationResponse validation) =>
+        TryClassifyGrantedValidation(validation)
+        ?? throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
+
+    private static ActivatedLicenseEntitlement? TryClassifyGrantedValidation(PolarValidationResponse validation)
+    {
+        var benefitId = validation.ResolvedBenefitId;
+        var benefitDescription = validation.ResolvedBenefitDescription;
+
+        if (DetectCommercialTier(benefitId, benefitDescription) is { } commercialTier)
+            return ActivatedLicenseEntitlement.Commercial(commercialTier, validation.ExpiresAt is null);
+
+        if (DetectSupporterTier(benefitId, benefitDescription) is { } supporterTier)
+            return ActivatedLicenseEntitlement.Supporter(supporterTier);
+
+        return null;
+    }
+
+    private static void EnsureExpectedEntitlement(
+        ActivatedLicenseEntitlement entitlement,
+        ExpectedLicenseEntitlementKind expectedEntitlement)
+    {
+        if (expectedEntitlement == ExpectedLicenseEntitlementKind.Commercial &&
+            entitlement.Kind != ActivatedLicenseEntitlementKind.Commercial)
+        {
+            throw new InvalidOperationException(Loc.Instance["License.SupporterKeyForCommercial"]);
+        }
+
+        if (expectedEntitlement == ExpectedLicenseEntitlementKind.Supporter &&
+            entitlement.Kind != ActivatedLicenseEntitlementKind.Supporter)
+        {
+            throw new InvalidOperationException(Loc.Instance["License.CommercialKeyForSupporter"]);
+        }
+    }
+
+    private void MarkCommercialActivationExpired()
+    {
+        CommercialStatus = LicenseStatus.Expired;
+        CommercialTier = null;
+        CommercialIsLifetime = false;
+        _commercialLastValidated = DateTime.UtcNow;
+    }
+
+    private void MarkSupporterActivationExpired()
+    {
+        SupporterStatus = LicenseStatus.Expired;
+        SupporterTier = null;
+        _supporterLastValidated = DateTime.UtcNow;
+    }
+
+    private async Task<PolarActivationResponse> ActivateCoreAsync(string key, CancellationToken ct)
+    {
+        var body = new
+        {
+            key,
+            organization_id = OrganizationId,
+            label = Environment.MachineName,
+            meta = new
+            {
+                platform = "windows",
+                app_version = _appVersion,
+                distribution = _distributionKind == AppDistributionKind.Store ? "store" : "direct"
+            }
+        };
+        var response = await _http.PostAsJsonAsync($"{BaseUrl}/activate", body, ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+            throw CreatePolarException(json, $"Activation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
+
+        return JsonSerializer.Deserialize<PolarActivationResponse>(json)
+            ?? throw new InvalidOperationException(Loc.Instance["License.ActivationEmptyResponse"]);
+    }
+
+    private async Task<PolarValidationResponse> ValidateCoreAsync(string key, string activationId, CancellationToken ct)
+    {
+        var body = new { key, organization_id = OrganizationId, activation_id = activationId };
+        var response = await _http.PostAsJsonAsync($"{BaseUrl}/validate", body, ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+            throw CreatePolarException(json, $"Validation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
+
+        return JsonSerializer.Deserialize<PolarValidationResponse>(json)
+            ?? throw new InvalidOperationException(Loc.Instance["License.ValidationEmptyResponse"]);
+    }
+
+    private static string GetAppVersion()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "0.0.0";
+    }
+
+    private async Task DeactivateCoreAsync(string key, string activationId, CancellationToken ct)
+    {
+        var body = new { key, organization_id = OrganizationId, activation_id = activationId };
+        var response = await _http.PostAsJsonAsync($"{BaseUrl}/deactivate", body, ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+            throw CreatePolarException(json, $"Deactivation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
+    }
+
+    private async Task TryDeactivateCoreAsync(string key, string activationId, CancellationToken ct)
+    {
+        try
+        {
+            await DeactivateCoreAsync(key, activationId, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            Debug.WriteLine($"Best-effort license deactivation failed: {ex.Message}");
+        }
+    }
+
+    internal static CommercialLicenseTier? DetectCommercialTier(string? benefitId, string? benefitDescription)
+    {
+        var normalizedBenefitId = NormalizeBenefitIdentifier(benefitId);
+        if (normalizedBenefitId is not null && KnownCommercialBenefitIds.TryGetValue(normalizedBenefitId, out var tier))
+            return tier;
+
+        var description = JoinBenefitText(benefitId, benefitDescription);
+        if (description.Contains("enterprise") || description.Contains("unlimited device"))
+            return CommercialLicenseTier.Enterprise;
+        if (description.Contains("team") || description.Contains("10 device") || description.Contains("small teams"))
+            return CommercialLicenseTier.Team;
+        if (description.Contains("individual") ||
+            description.Contains("single-seat") ||
+            description.Contains("single seat") ||
+            description.Contains("freelancer") ||
+            IndividualDeviceCountPattern.IsMatch(description))
+        {
+            return CommercialLicenseTier.Individual;
+        }
+
+        return null;
+    }
+
+    internal static SupporterTier? DetectSupporterTier(string? benefitId, string? benefitDescription)
+    {
+        var normalizedBenefitId = NormalizeBenefitIdentifier(benefitId);
+        if (normalizedBenefitId is not null && KnownSupporterBenefitIds.TryGetValue(normalizedBenefitId, out var tier))
+            return tier;
+
+        var description = JoinBenefitText(benefitId, benefitDescription);
+        if (!description.Contains("supporter") &&
+            !description.Contains("bronze") &&
+            !description.Contains("silver") &&
+            !description.Contains("gold"))
+        {
+            return null;
+        }
+
+        if (description.Contains("gold")) return global::TypeWhisper.WinUI.Platform.SupporterTier.Gold;
+        if (description.Contains("silver")) return global::TypeWhisper.WinUI.Platform.SupporterTier.Silver;
+        if (description.Contains("bronze")) return global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze;
+        return global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze;
+    }
+
+    private static string? NormalizeBenefitIdentifier(string? benefitId)
+    {
+        var normalized = benefitId?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static string JoinBenefitText(params string?[] values) =>
+        string.Join(" ", values.Where(value => !string.IsNullOrWhiteSpace(value))).ToLowerInvariant();
+
+    private static bool IsLicenseOperationException(Exception ex) =>
+        ex is HttpRequestException
+            or InvalidOperationException
+            or JsonException
+            or NotSupportedException
+            or OperationCanceledException;
+
+    private static string ResolveDataFilePath(string dataPath, string fileName)
+    {
+        var root = Path.GetFullPath(dataPath);
+        var path = Path.GetFullPath(fileName, root);
+        var relative = Path.GetRelativePath(root, path);
+        if (relative == "." ||
+            (!relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative)))
+        {
+            return path;
+        }
+
+        throw new InvalidOperationException("License data path must stay inside the configured data directory.");
+    }
+
+    private static PolarApiException CreatePolarException(string? json, string fallback, int statusCode)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new PolarApiException(fallback, statusCode);
+
+        try
+        {
+            var error = JsonSerializer.Deserialize<PolarErrorResponse>(json);
+            if (!string.IsNullOrWhiteSpace(error?.Detail))
+                return new PolarApiException(error.Detail, statusCode, error.Detail, error.Type);
+
+            if (!string.IsNullOrWhiteSpace(error?.Type))
+                return new PolarApiException(error.Type, statusCode, null, error.Type);
+        }
+        catch
+        {
+            // Ignore malformed responses and fall back.
+        }
+
+        return new PolarApiException(fallback, statusCode);
+    }
+
+    private static bool IsPolarResourceMissing(Exception ex)
+    {
+        if (ex is PolarApiException { StatusCode: 404 })
+            return true;
+
+        if (ex is PolarApiException polar &&
+            (ContainsResourceMissingSignal(polar.Detail) || ContainsResourceMissingSignal(polar.Type)))
+        {
+            return true;
+        }
+
+        return ContainsResourceMissingSignal(ex.Message);
+    }
+
+    private static bool ContainsResourceMissingSignal(string? value) =>
+        value?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("resource not found", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("resourcenotfound", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("does not exist", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("no licensekeyactivation", StringComparison.OrdinalIgnoreCase) == true;
+
+    private void ResetCommercialState(bool clearSecrets)
+    {
+        CommercialStatus = LicenseStatus.Unlicensed;
+        CommercialTier = null;
+        CommercialIsLifetime = false;
+        CommercialActivationError = null;
+        CommercialDeactivationError = null;
+        CommercialRefreshError = null;
+        _commercialLastValidated = null;
+
+        if (clearSecrets)
+        {
+            _commercialLicenseKey = null;
+            _commercialActivationId = null;
+        }
+    }
+
+    private void ResetSupporterState(bool clearSecrets)
+    {
+        SupporterStatus = LicenseStatus.Unlicensed;
+        SupporterTier = null;
+        SupporterActivationError = null;
+        SupporterDeactivationError = null;
+        SupporterRefreshError = null;
+        _supporterLastValidated = null;
+
+        if (clearSecrets)
+        {
+            _supporterLicenseKey = null;
+            _supporterActivationId = null;
+        }
+    }
+
+    private void PersistStore()
+    {
+        if (_suppressPersistence)
+            return;
+
+        try
+        {
+            var data = new LicenseStoreData
+            {
+                UserType = UserType.ToString(),
+                Commercial = BuildStoredCredential(
+                    _commercialLicenseKey,
+                    _commercialActivationId,
+                    CommercialStatus,
+                    CommercialTier?.ToString(),
+                    CommercialIsLifetime,
+                    _commercialLastValidated),
+                Supporter = BuildStoredCredential(
+                    _supporterLicenseKey,
+                    _supporterActivationId,
+                    SupporterStatus,
+                    SupporterTier?.ToString(),
+                    false,
+                    _supporterLastValidated),
+            };
+
+            var json = JsonSerializer.Serialize(data);
+            var protectedPayload = Protect(json);
+            Directory.CreateDirectory(Path.GetDirectoryName(_credentialPath)!);
+            File.WriteAllText(_credentialPath, protectedPayload, Encoding.UTF8);
+            StorageError = null;
+        }
+        catch (Exception ex)
+        {
+            StorageError = "License changes could not be saved on this device. Keep your key and retry before closing the app.";
+            Debug.WriteLine($"Persisting license store failed: {ex.Message}");
+        }
+    }
+
+    private static StoredCredential? BuildStoredCredential(
+        string? key,
+        string? activationId,
+        LicenseStatus status,
+        string? tier,
+        bool isLifetime,
+        DateTime? lastValidated)
+    {
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(activationId))
+            return null;
+
+        return new StoredCredential
+        {
+            Key = key,
+            ActivationId = activationId,
+            Status = status.ToString(),
+            Tier = tier,
+            IsLifetime = isLifetime,
+            LastValidated = lastValidated?.ToString("o"),
+        };
+    }
+
+    private void LoadStore()
+    {
+        _suppressPersistence = true;
+
+        try
+        {
+            if (TryLoadEncryptedStore())
+                return;
+
+            TryMigrateLegacyStore();
+        }
+        finally
+        {
+            _suppressPersistence = false;
+        }
+    }
+
+    private bool TryLoadEncryptedStore()
+    {
+        if (!File.Exists(_credentialPath))
+            return false;
+
+        try
+        {
+            var raw = File.ReadAllText(_credentialPath, Encoding.UTF8);
+            var json = Unprotect(raw);
+            var data = JsonSerializer.Deserialize<LicenseStoreData>(json);
+            if (data is null)
+                return false;
+
+            ApplyStore(data);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Loading encrypted license store failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private void TryMigrateLegacyStore()
+    {
+        if (!File.Exists(_legacyCredentialPath))
+            return;
+
+        try
+        {
+            var json = File.ReadAllText(_legacyCredentialPath, Encoding.UTF8);
+            var legacy = JsonSerializer.Deserialize<LegacyLicenseData>(json);
+            if (legacy is null || string.IsNullOrWhiteSpace(legacy.Key) || string.IsNullOrWhiteSpace(legacy.ActivationId))
+                return;
+
+            _supporterLicenseKey = legacy.Key;
+            _supporterActivationId = legacy.ActivationId;
+            SupporterStatus = Enum.TryParse<LicenseStatus>(legacy.Status, out var status)
+                ? status
+                : LicenseStatus.Unlicensed;
+            SupporterTier = Enum.TryParse<SupporterTier>(legacy.Tier, out var tier)
+                ? NormalizePersistedSupporterTier(tier, SupporterStatus)
+                : null;
+            _supporterLastValidated = DateTime.TryParse(legacy.LastValidated, out var lastValidated)
+                ? lastValidated
+                : null;
+
+            PersistStore();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Migrating legacy license store failed: {ex.Message}");
+        }
+    }
+
+    private void ApplyStore(LicenseStoreData data)
+    {
+        _userType = Enum.TryParse<LicenseUserType>(data.UserType, out var userType)
+            ? userType
+            : LicenseUserType.PrivateUser;
+
+        if (data.Commercial is { } commercial)
+        {
+            _commercialLicenseKey = commercial.Key;
+            _commercialActivationId = commercial.ActivationId;
+            _commercialStatus = Enum.TryParse<LicenseStatus>(commercial.Status, out var commercialStatus)
+                ? commercialStatus
+                : LicenseStatus.Unlicensed;
+            _commercialTier = Enum.TryParse<CommercialLicenseTier>(commercial.Tier, out var commercialTier)
+                ? commercialTier
+                : null;
+            _commercialIsLifetime = commercial.IsLifetime;
+            _commercialLastValidated = DateTime.TryParse(commercial.LastValidated, out var commercialLastValidated)
+                ? commercialLastValidated
+                : null;
+        }
+
+        if (data.Supporter is { } supporter)
+        {
+            _supporterLicenseKey = supporter.Key;
+            _supporterActivationId = supporter.ActivationId;
+            _supporterStatus = Enum.TryParse<LicenseStatus>(supporter.Status, out var supporterStatus)
+                ? supporterStatus
+                : LicenseStatus.Unlicensed;
+            _supporterTier = Enum.TryParse<SupporterTier>(supporter.Tier, out var supporterTier)
+                ? NormalizePersistedSupporterTier(supporterTier, _supporterStatus)
+                : null;
+            _supporterLastValidated = DateTime.TryParse(supporter.LastValidated, out var supporterLastValidated)
+                ? supporterLastValidated
+                : null;
+        }
+    }
+
+    private static string Protect(string plainText)
+    {
+        var bytes = Encoding.UTF8.GetBytes(plainText);
+        var encrypted = ProtectedData.Protect(bytes, Entropy, DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(encrypted);
+    }
+
+    private static string Unprotect(string encrypted)
+    {
+        var bytes = Convert.FromBase64String(encrypted);
+        var decrypted = ProtectedData.Unprotect(bytes, Entropy, DataProtectionScope.CurrentUser);
+        return Encoding.UTF8.GetString(decrypted);
+    }
+
+    private static SupporterTier? NormalizePersistedSupporterTier(SupporterTier tier, LicenseStatus status) =>
+        tier == global::TypeWhisper.WinUI.Platform.SupporterTier.None && status == LicenseStatus.Active
+            ? global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze
+            : tier;
+
+    private void NotifyStateChanged()
+    {
+        OnPropertyChanged(nameof(HasCommercialLicense));
+        OnPropertyChanged(nameof(HasSupporterLicense));
+        OnPropertyChanged(nameof(HasCommercialActivation));
+        OnPropertyChanged(nameof(HasSupporterActivation));
+        OnPropertyChanged(nameof(IsSupporter));
+        OnPropertyChanged(nameof(SupporterBadgeTier));
+        OnPropertyChanged(nameof(IsPrivateUser));
+        OnPropertyChanged(nameof(IsBusinessUser));
+        OnPropertyChanged(nameof(ShouldShowReminder));
+        OnPropertyChanged(nameof(CommercialTierDisplayName));
+        OnPropertyChanged(nameof(SupporterTierDisplayName));
+        StatusChanged?.Invoke();
+    }
+
+    partial void OnCommercialStatusChanged(LicenseStatus value)
+    {
+        if (!_suppressPersistence)
+            NotifyStateChanged();
+    }
+
+    partial void OnSupporterStatusChanged(LicenseStatus value)
+    {
+        if (!_suppressPersistence)
+            NotifyStateChanged();
+    }
+
+    partial void OnCommercialTierChanged(CommercialLicenseTier? value)
+    {
+        if (!_suppressPersistence)
+            NotifyStateChanged();
+    }
+
+    partial void OnSupporterTierChanged(SupporterTier? value)
+    {
+        if (!_suppressPersistence)
+            NotifyStateChanged();
+    }
+
+    private sealed record LicenseStoreData
+    {
+        [JsonPropertyName("userType")] public string? UserType { get; init; }
+        [JsonPropertyName("commercial")] public StoredCredential? Commercial { get; init; }
+        [JsonPropertyName("supporter")] public StoredCredential? Supporter { get; init; }
+    }
+
+    private sealed record StoredCredential
+    {
+        [JsonPropertyName("key")] public string? Key { get; init; }
+        [JsonPropertyName("activationId")] public string? ActivationId { get; init; }
+        [JsonPropertyName("status")] public string? Status { get; init; }
+        [JsonPropertyName("tier")] public string? Tier { get; init; }
+        [JsonPropertyName("isLifetime")] public bool IsLifetime { get; init; }
+        [JsonPropertyName("lastValidated")] public string? LastValidated { get; init; }
+    }
+
+    private sealed record LegacyLicenseData
+    {
+        [JsonPropertyName("key")] public string? Key { get; init; }
+        [JsonPropertyName("activationId")] public string? ActivationId { get; init; }
+        [JsonPropertyName("status")] public string? Status { get; init; }
+        [JsonPropertyName("tier")] public string? Tier { get; init; }
+        [JsonPropertyName("isLifetime")] public bool IsLifetime { get; init; }
+        [JsonPropertyName("lastValidated")] public string? LastValidated { get; init; }
+    }
+
+    private sealed record PolarActivationResponse
+    {
+        [JsonPropertyName("id")] public string? Id { get; init; }
+    }
+
+    private sealed record PolarValidationResponse
+    {
+        [JsonPropertyName("id")] public string? Id { get; init; }
+        [JsonPropertyName("status")] public string? Status { get; init; }
+        [JsonPropertyName("expires_at")] public string? ExpiresAt { get; init; }
+        [JsonPropertyName("benefit_id")] public string? BenefitId { get; init; }
+        [JsonPropertyName("benefit")] public PolarBenefit? Benefit { get; init; }
+
+        /// <summary>
+        /// Gets the resolved benefit id.
+        /// </summary>
+        public string? ResolvedBenefitId => Benefit?.Id ?? BenefitId;
+        /// <summary>
+        /// Gets the resolved benefit description.
+        /// </summary>
+        public string? ResolvedBenefitDescription => Benefit?.Description;
+    }
+
+    private sealed record PolarBenefit
+    {
+        [JsonPropertyName("id")] public string? Id { get; init; }
+        [JsonPropertyName("description")] public string? Description { get; init; }
+    }
+
+    private sealed record PolarErrorResponse
+    {
+        [JsonPropertyName("detail")] public string? Detail { get; init; }
+        [JsonPropertyName("type")] public string? Type { get; init; }
+    }
+
+    private enum ExpectedLicenseEntitlementKind
+    {
+        Any,
+        Commercial,
+        Supporter,
+    }
+
+    private sealed class PolarApiException : InvalidOperationException
+    {
+        /// <summary>
+        /// Performs polar api exception.
+        /// </summary>
+        public PolarApiException(string message, int statusCode, string? detail = null, string? type = null)
+            : base(message)
+        {
+            StatusCode = statusCode;
+            Detail = detail;
+            Type = type;
+        }
+
+        /// <summary>
+        /// Gets the provider or HTTP status code associated with the result.
+        /// </summary>
+        public int StatusCode { get; }
+        /// <summary>
+        /// Gets the detail.
+        /// </summary>
+        public string? Detail { get; }
+        /// <summary>
+        /// Gets the type.
+        /// </summary>
+        public string? Type { get; }
+    }
+}
+
+/// <summary>
+/// Lists the supported license user type values.
+/// </summary>
+public enum LicenseUserType
+{
+    /// <summary>
+    /// Represents the private user option.
+    /// </summary>
+    PrivateUser,
+    /// <summary>
+    /// Represents the business option.
+    /// </summary>
+    Business,
+}
+
+/// <summary>
+/// Lists the supported license status values.
+/// </summary>
+public enum LicenseStatus
+{
+    /// <summary>
+    /// Represents the unlicensed option.
+    /// </summary>
+    Unlicensed,
+    /// <summary>
+    /// Represents the active option.
+    /// </summary>
+    Active,
+    /// <summary>
+    /// Represents the expired option.
+    /// </summary>
+    Expired,
+}
+
+/// <summary>
+/// Lists the supported commercial license tier values.
+/// </summary>
+public enum CommercialLicenseTier
+{
+    /// <summary>
+    /// Represents the individual option.
+    /// </summary>
+    Individual,
+    /// <summary>
+    /// Represents the team option.
+    /// </summary>
+    Team,
+    /// <summary>
+    /// Represents the enterprise option.
+    /// </summary>
+    Enterprise,
+}
+
+/// <summary>
+/// Lists the supported supporter tier values.
+/// </summary>
+public enum SupporterTier
+{
+    /// <summary>
+    /// Represents the none option.
+    /// </summary>
+    None,
+    /// <summary>
+    /// Represents the bronze option.
+    /// </summary>
+    Bronze,
+    /// <summary>
+    /// Represents the silver option.
+    /// </summary>
+    Silver,
+    /// <summary>
+    /// Represents the gold option.
+    /// </summary>
+    Gold,
+}
+
+/// <summary>
+/// Lists the supported activated license entitlement kind values.
+/// </summary>
+public enum ActivatedLicenseEntitlementKind
+{
+    /// <summary>
+    /// Represents the commercial option.
+    /// </summary>
+    Commercial,
+    /// <summary>
+    /// Represents the supporter option.
+    /// </summary>
+    Supporter,
+}
+
+/// <summary>
+/// Represents activated license entitlement data.
+/// </summary>
+/// <param name="Kind">Kind supplied to the member.</param>
+/// <param name="CommercialTier">Commercial tier supplied to the member.</param>
+/// <param name="SupporterTier">Supporter tier supplied to the member.</param>
+/// <param name="IsLifetime">Is lifetime supplied to the member.</param>
+public sealed record ActivatedLicenseEntitlement(
+    ActivatedLicenseEntitlementKind Kind,
+    CommercialLicenseTier? CommercialTier = null,
+    SupporterTier? SupporterTier = null,
+    bool IsLifetime = false)
+{
+    /// <summary>
+    /// Performs commercial.
+    /// </summary>
+    public static ActivatedLicenseEntitlement Commercial(CommercialLicenseTier tier, bool isLifetime) =>
+        new(ActivatedLicenseEntitlementKind.Commercial, tier, null, isLifetime);
+
+    /// <summary>
+    /// Performs supporter.
+    /// </summary>
+    public static ActivatedLicenseEntitlement Supporter(SupporterTier tier) =>
+        new(ActivatedLicenseEntitlementKind.Supporter, null, tier);
+}
+
+/// <summary>
+/// Represents supporter claim proof data.
+/// </summary>
+/// <param name="Key">Key supplied to the member.</param>
+/// <param name="ActivationId">Activation id supplied to the member.</param>
+/// <param name="Tier">Tier supplied to the member.</param>
+public sealed record SupporterClaimProof(string Key, string ActivationId, SupporterTier Tier);

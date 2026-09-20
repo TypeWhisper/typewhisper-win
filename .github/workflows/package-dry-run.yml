@@ -30,9 +30,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rid:
-          - win-x64
-          - win-arm64
+        include:
+          - rid: win-x64
+            platform: x64
+            framework: net10.0-x64-runtime
+          - rid: win-arm64
+            platform: ARM64
+            framework: net10.0-arm64-runtime
 
     steps:
       - uses: actions/checkout@v7
@@ -56,13 +60,13 @@ jobs:
             }
             default {
               $version = "0.0.1-dryrun.${{ github.run_number }}"
-              $suffix = ""
+              $suffix = "-stable"
             }
           }
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "channel_suffix=$suffix" >> $env:GITHUB_OUTPUT
-          "velopack_channel=$rid$suffix" >> $env:GITHUB_OUTPUT
+          "velopack_channel=$rid-winui$suffix" >> $env:GITHUB_OUTPUT
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -85,20 +89,21 @@ jobs:
         run: dotnet build TypeWhisper.slnx -c Release --no-restore -p:Version=${{ steps.meta.outputs.version }} -bl:artifacts/logs/typewhisper-package.binlog
 
       - name: Publish app
-        run: dotnet publish src/TypeWhisper.Windows/TypeWhisper.Windows.csproj -c Release -r ${{ matrix.rid }} -p:Version=${{ steps.meta.outputs.version }} -o publish/${{ matrix.rid }}
+        run: dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.platform }} -p:Version=${{ steps.meta.outputs.version }} --self-contained false -o publish/${{ matrix.rid }}
 
       - name: Install Velopack CLI
-        run: dotnet tool install -g vpk
+        run: dotnet tool install -g vpk --version 0.0.1298
 
       - name: Pack Velopack dry run
         shell: pwsh
         run: |
           vpk pack `
-            --packId TypeWhisper `
+            --packId TypeWhisperDaily `
             --packVersion ${{ steps.meta.outputs.version }} `
             --packDir "publish/${{ matrix.rid }}" `
-            --mainExe TypeWhisper.exe `
-            --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
+            --mainExe TypeWhisper.WinUI.exe `
+            --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
+            --icon src/TypeWhisper.WinUI/Assets/app.ico `
             --channel ${{ steps.meta.outputs.velopack_channel }} `
             --outputDir "releases/${{ steps.meta.outputs.velopack_channel }}"
 

@@ -1,6 +1,6 @@
 # Microsoft Store Submission
 
-TypeWhisper's Microsoft Store package is an MSIX build that uses the product identity reserved in Partner Center.
+TypeWhisper's Microsoft Store package now contains the WinUI host (`TypeWhisper.WinUI.exe`), requires Windows 11 build 26100 or later, and uses the product identity reserved in Partner Center. The updated MSIX must pass installation and Store activation acceptance before submission.
 
 ## Partner Center Identity
 
@@ -34,7 +34,6 @@ Packages created by this script are intended for Partner Center upload. Microsof
 
 - App updates are owned by Microsoft Store, not Velopack.
 - Store MSIX packages include the host app only; plugins are installed through the curated plugin channel.
-- First-run plugin auto-install is disabled.
 - Store plugin packages must include a `sha256` registry value before they can be installed.
 - The package declares microphone, internet client, and full-trust desktop capabilities.
 
