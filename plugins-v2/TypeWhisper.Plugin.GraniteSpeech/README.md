@@ -2,7 +2,7 @@
 
 Local Granite Speech transcription with the Windows Python/PyTorch sidecar, model management and packaged scripts.
 
-Version `1.2.1`; plugin ID `com.typewhisper.granite-speech`; minimum host `1.1.2`.
+Version `1.2.2`; plugin ID `com.typewhisper.granite-speech`; minimum host `1.1.2`.
 Independent branch: `seofood/granitespeech-portable`, based on `4db8f6ac`.
 
 ## Setup

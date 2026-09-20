@@ -46,7 +46,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.1";
+    public string PluginVersion => "1.2.2";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -92,9 +92,9 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     [
         new(ModelId, "IBM Granite 4.0 1B Speech")
         {
-            SizeDescription = "~5 GB (Python + model)",
-            EstimatedSizeMB = 5000,
-            IsRecommended = false,
+            SizeDescription = "~5–8 GB (runtime + model)",
+            EstimatedSizeMB = 8000,
+            IsRecommended = true,
             LanguageCount = 6,
         }
     ];
