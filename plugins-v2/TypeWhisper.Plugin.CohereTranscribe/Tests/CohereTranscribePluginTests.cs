@@ -635,6 +635,7 @@ public sealed class CohereTranscribePluginTests
             new InlineProgress<double>(downloadProgress.Add),
             CancellationToken.None);
         await sut.LoadModelAsync(modelId, CancellationToken.None);
+        sut.SelectModel(modelId);
         var result = await sut.TranscribeAsync(
             [1, 2, 3],
             "de-DE",
@@ -994,10 +995,59 @@ public sealed class CohereTranscribePluginTests
         }
     }
 
+    [WindowsFact]
+    public async Task UncommittedLoadDoesNotChangeTheNextTranscriptionModel()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager(); var server = new FakeCrispAsrServer();
+        var host = new FakePluginHostServices(temp.Path);
+        using var sut = new CohereTranscribePlugin(assets, server);
+        await sut.ActivateAsync(host);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        var selected = CohereModelCatalog.All[0].Id; var rejected = CohereModelCatalog.All[1].Id;
+        await sut.DownloadModelAsync(selected, null, default);
+        await sut.DownloadModelAsync(rejected, null, default);
+        sut.SelectModel(selected);
+        await sut.LoadModelAsync(rejected, default);
+        host.FailSettings = true;
+        Assert.Throws<IOException>(() => sut.SelectModel(rejected));
+        Assert.Equal(selected, sut.SelectedModelId);
+        await sut.TranscribeAsync([1,2,3], "de", false, null, default);
+        Assert.Equal(selected, server.LastConfiguration?.ModelId);
+    }
+
+    [WindowsFact]
+    public async Task CanceledDownloadRestoresPendingStatus()
+    {
+        using var temp = new TempDirectory();
+        using var cancellation = new CancellationTokenSource();
+        var assets = new FakeAssetManager { BeforeEnsureModel = () => cancellation.Cancel() };
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        var before = sut.AccelerationStatus;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, cancellation.Token));
+        Assert.Equal(before, sut.AccelerationStatus);
+    }
+
+    [WindowsFact]
+    public void LockedChecksumMarkerReportsUnavailableWithoutThrowing()
+    {
+        using var temp = new TempDirectory();
+        var path = Path.Join(temp.Path, "model.bin");
+        File.WriteAllBytes(path, [1,2,3]); File.WriteAllText(path + ".sha256", "hash");
+        var artifact = new RemoteArtifact("model.bin", "https://example.invalid/model", 3, "hash");
+        var method = typeof(CohereLocalAssetManager).GetMethod("IsArtifactReady", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        using (var locked = new FileStream(path + ".sha256", FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.False((bool)method.Invoke(null, [artifact, path])!);
+        Assert.True((bool)method.Invoke(null, [artifact, path])!);
+    }
+
     private sealed class FakeAssetManager : ICohereLocalAssetManager
     {
         private readonly HashSet<string> _installedModelIds = [];
 
+        public Action? BeforeEnsureModel { get; init; }
         public bool ModelInstalled => _installedModelIds.Count > 0;
         public string? LastEnsuredModelId { get; private set; }
         public string? HuggingFaceToken { get; private set; }
@@ -1026,6 +1076,8 @@ public sealed class CohereTranscribePluginTests
             IProgress<ArtifactTransferProgress>? progress,
             CancellationToken cancellationToken)
         {
+            BeforeEnsureModel?.Invoke();
+            cancellationToken.ThrowIfCancellationRequested();
             LastEnsuredModelId = modelId;
             _installedModelIds.Add(modelId);
             progress?.Report(new ArtifactTransferProgress(100, 100));

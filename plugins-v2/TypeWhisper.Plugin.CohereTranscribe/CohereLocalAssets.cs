@@ -269,11 +269,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         var markerPath = GetRuntimeMarkerPath(runtimeDirectory);
 
         return Directory.Exists(runtimeDirectory)
-            && File.Exists(markerPath)
-            && string.Equals(
-                File.ReadAllText(markerPath).Trim(),
-                package.Archive.Sha256,
-                StringComparison.OrdinalIgnoreCase)
+            && MarkerMatches(markerPath, package.Archive.Sha256)
             && FindRuntimeExecutable(runtimeDirectory) is not null;
     }
 
@@ -754,16 +750,19 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
 
     private static bool IsArtifactReady(RemoteArtifact artifact, string destinationPath)
     {
-        var file = new FileInfo(destinationPath);
-        if (!file.Exists || file.Length != artifact.SizeBytes)
-            return false;
+        try
+        {
+            var file = new FileInfo(destinationPath);
+            return file.Exists && file.Length == artifact.SizeBytes
+                && MarkerMatches(GetArtifactMarkerPath(destinationPath), artifact.Sha256);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
 
-        var markerPath = GetArtifactMarkerPath(destinationPath);
-        return File.Exists(markerPath)
-            && string.Equals(
-                File.ReadAllText(markerPath).Trim(),
-                artifact.Sha256,
-                StringComparison.OrdinalIgnoreCase);
+    private static bool MarkerMatches(string markerPath, string expectedHash)
+    {
+        try { return string.Equals(File.ReadAllText(markerPath).Trim(), expectedHash, StringComparison.OrdinalIgnoreCase); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     private static async Task<bool> TryAdoptExistingArtifactAsync(

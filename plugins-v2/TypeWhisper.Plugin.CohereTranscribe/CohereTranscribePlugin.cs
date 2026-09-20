@@ -240,8 +240,8 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     public void SelectModel(string modelId)
     {
         ValidateModelId(modelId);
-        _selectedModelId = modelId;
         _host?.SetSetting("selectedModel", modelId);
+        _selectedModelId = modelId;
     }
 
     /// <summary>
@@ -320,6 +320,11 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
             }
 
             throw lastError ?? new InvalidOperationException("No compatible CrispASR runtime is available.");
+        }
+        catch (OperationCanceledException)
+        {
+            _accelerationStatus = CreatePendingStatus(_accelerationPreference);
+            throw;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -498,11 +503,9 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
 
         var normalizedLanguage = NormalizeLanguage(language);
         cancellationToken.ThrowIfCancellationRequested();
-        if (_loadedModelId is null)
-        {
-            var selected = _selectedModelId ?? throw new InvalidOperationException("Select a Cohere Transcribe model first.");
+        var selected = _selectedModelId ?? throw new InvalidOperationException("Select a Cohere Transcribe model first.");
+        if (!string.Equals(_loadedModelId, selected, StringComparison.Ordinal))
             await LoadModelAsync(selected, cancellationToken);
-        }
         var restartAttempted = false;
 
         while (true)
