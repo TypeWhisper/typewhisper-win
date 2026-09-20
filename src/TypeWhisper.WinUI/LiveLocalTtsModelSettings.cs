@@ -153,7 +153,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
     {
         if (!DispatcherQueue.HasThreadAccess) { DispatcherQueue.TryEnqueue(UpdateButtons); return; }
         var available = !_busy && _session.CanStartPluginSettingsAction;
-        _licenses.IsEnabled = available;
+        foreach (var control in _licenses.Children.OfType<Control>()) control.IsEnabled = available;
         _download.Content = _downloaded ? "Load model" : "Download & Load";
         _download.IsEnabled = available && _accepted && !_loaded;
         _download.Visibility = _loaded ? Visibility.Collapsed : Visibility.Visible;
