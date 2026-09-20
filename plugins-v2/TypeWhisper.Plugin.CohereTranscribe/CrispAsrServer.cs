@@ -187,18 +187,29 @@ internal sealed class CrispAsrServer : ICrispAsrServer
                 $"The local CrispASR process exited unexpectedly with code {_process.ExitCode}.{GetOutputTail()}");
         }
 
-        VerifyListenerOwner(new Uri(_baseUrl).Port, requireListener: true);
-        return await OpenAiTranscriptionHelper.TranscribeAsync(
-            _httpClient,
-            _baseUrl,
-            _apiKey,
-            _modelId,
-            wavAudio,
-            language,
-            translate: false,
-            responseFormat: "verbose_json",
-            cancellationToken,
-            prompt: null);
+        try
+        {
+            VerifyListenerOwner(new Uri(_baseUrl).Port, requireListener: true);
+            return await OpenAiTranscriptionHelper.TranscribeAsync(
+                _httpClient,
+                _baseUrl,
+                _apiKey,
+                _modelId,
+                wavAudio,
+                language,
+                translate: false,
+                responseFormat: "verbose_json",
+                cancellationToken,
+                prompt: null);
+        }
+        catch (Exception error) when (error is IOException or HttpRequestException)
+        {
+            // A live launcher is not proof that its listener survived. Let the caller
+            // restart the owned process before retrying a failed connection.
+            _baseUrl = null;
+            ActiveBackend = null;
+            throw;
+        }
     }
 
     public async Task StopAsync()

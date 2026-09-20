@@ -275,6 +275,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         var assets = GetAssets();
 
         await _gate.WaitAsync(cancellationToken);
+        var previousStatus = _accelerationStatus;
         try
         {
             _accelerationStatus = new(
@@ -342,6 +343,8 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         }
         finally
         {
+            if (_loadedModelId is not null && _server is { IsRunning: true })
+                _accelerationStatus = previousStatus;
             _gate.Release();
         }
     }
@@ -397,7 +400,12 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
             await assets.EnsureModelAsync(modelId, progress: null, cancellationToken);
             var server = GetServer();
             IReadOnlyList<CrispAsrBackend> candidates;
-            try { candidates = _resolveBackends(_accelerationPreference); }
+            try
+            {
+                candidates = _resolveBackends(_accelerationPreference);
+                if (_accelerationPreference == TranscriptionAccelerationPreference.Auto)
+                    candidates = candidates.OrderByDescending(assets.IsRuntimeInstalled).ToArray();
+            }
             catch (Exception error) when (error is not OperationCanceledException)
             { _accelerationStatus = CreateUnavailableStatus(_accelerationPreference, error.Message); throw; }
             Exception? lastError = null;

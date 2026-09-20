@@ -37,3 +37,5 @@ The ZIP was installed and loaded in the WinUI development profile, preserving ex
 The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
 
 After the WinUI-only merge, native packaged CUDA transcription passed with the job-assignment launch gate. Regression coverage also verifies uncommitted model loads, persistence failures, canceled download status and unreadable checksum markers.
+
+Runtime files are rehashed before reuse. Missing or damaged dependencies are repaired from the pinned archive. Preview runtime caches without the per-file manifest are downloaded again once. Automatic device selection prefers an already installed compatible runtime before provisioning another backend.

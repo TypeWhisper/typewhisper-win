@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace TypeWhisper.Plugin.CohereTranscribe;
 
@@ -270,7 +271,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
 
         return Directory.Exists(runtimeDirectory)
             && MarkerMatches(markerPath, package.Archive.Sha256)
-            && FindRuntimeExecutable(runtimeDirectory) is not null;
+            && FindRuntimeExecutable(runtimeDirectory) is not null
+            && RuntimeFilesMatchMetadata(runtimeDirectory);
     }
 
     public long GetRuntimeTransferSize(CrispAsrBackend backend) =>
@@ -392,7 +394,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (IsRuntimeInstalled(backend))
+            var runtimeDirectory = GetRuntimeDirectory(package);
+            if (IsRuntimeInstalled(backend) && await VerifyRuntimeFilesAsync(runtimeDirectory, cancellationToken))
             {
                 progress?.Report(new ArtifactTransferProgress(
                     package.Archive.SizeBytes,
@@ -400,7 +403,6 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 return;
             }
 
-            var runtimeDirectory = GetRuntimeDirectory(package);
             var runtimeParent = Path.GetDirectoryName(runtimeDirectory)
                 ?? throw new InvalidOperationException("CrispASR runtime directory has no parent.");
             Directory.CreateDirectory(runtimeParent);
@@ -429,6 +431,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                         $"The verified CrispASR {package.Id} archive did not contain crispasr.exe.");
                 }
 
+                await WriteRuntimeFilesAsync(stagingDirectory, cancellationToken);
                 File.WriteAllText(
                     GetRuntimeMarkerPath(stagingDirectory),
                     package.Archive.Sha256);
@@ -740,6 +743,73 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         }
 
         await target.FlushAsync(inactivityCts.Token);
+    }
+
+    private const string RuntimeFilesName = ".typewhisper-runtime.files.json";
+    internal sealed record RuntimeFile(string RelativePath, long Size, long ModifiedTicks, string Sha256);
+
+    internal static async Task WriteRuntimeFilesAsync(string directory, CancellationToken ct)
+    {
+        var files = new List<RuntimeFile>();
+        foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(path) is RuntimeFilesName or ".typewhisper-runtime.sha256") continue;
+            ct.ThrowIfCancellationRequested();
+            var file = new FileInfo(path);
+            files.Add(new(Path.GetRelativePath(directory, path), file.Length, file.LastWriteTimeUtc.Ticks,
+                await ComputeSha256Async(path, ct)));
+        }
+        await File.WriteAllTextAsync(Path.Join(directory, RuntimeFilesName), JsonSerializer.Serialize(files), ct);
+    }
+
+    private static RuntimeFile[] ReadRuntimeFiles(string directory)
+    {
+        var path = Path.Join(directory, RuntimeFilesName);
+        if (new FileInfo(path).Length > 1_048_576) throw new InvalidDataException("Runtime manifest is too large.");
+        var files = JsonSerializer.Deserialize<RuntimeFile[]>(File.ReadAllText(path));
+        if (files is not { Length: > 0 } || files.Any(file => file is null || file.Size < 0 || file.Sha256 is not { Length: 64 }))
+            throw new InvalidDataException("Runtime manifest is incomplete.");
+        return files;
+    }
+
+    private static string RuntimeFilePath(string directory, RuntimeFile file)
+    {
+        var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var path = Path.GetFullPath(Path.Join(root, file.RelativePath));
+        if (string.IsNullOrEmpty(file.RelativePath) || Path.IsPathRooted(file.RelativePath)
+            || !path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Runtime manifest path escapes its directory.");
+        return path;
+    }
+
+    internal static bool RuntimeFilesMatchMetadata(string directory)
+    {
+        try
+        {
+            return ReadRuntimeFiles(directory).All(expected =>
+            {
+                var file = new FileInfo(RuntimeFilePath(directory, expected));
+                return file.Exists && file.Length == expected.Size && file.LastWriteTimeUtc.Ticks == expected.ModifiedTicks;
+            });
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException) { return false; }
+    }
+
+    internal static async Task<bool> VerifyRuntimeFilesAsync(string directory, CancellationToken ct)
+    {
+        try
+        {
+            foreach (var expected in ReadRuntimeFiles(directory))
+            {
+                ct.ThrowIfCancellationRequested();
+                var path = RuntimeFilePath(directory, expected);
+                if (!File.Exists(path) || new FileInfo(path).Length != expected.Size
+                    || !string.Equals(await ComputeSha256Async(path, ct), expected.Sha256, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            return true;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException) { return false; }
     }
 
     private static bool IsArtifactReady(RemoteArtifact artifact, string destinationPath)
