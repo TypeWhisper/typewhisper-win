@@ -9,15 +9,36 @@ public sealed partial class CohereTranscribePlugin
     private string L(string en, string de) => PortableLocalization.TryGet(_host)?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
 
     /// <inheritdoc />
-    public IReadOnlyList<PluginSettingsAction> SettingsActions => _selectedModelId is null ? [] :
-    [new("remove-selected-model", L("Unload and remove selected model", "Ausgewähltes Modell entladen und entfernen"),
-        L("Stops the selected model and deletes its downloaded weights. Download it again to use it later.",
-          "Stoppt das ausgewählte Modell und löscht seine heruntergeladenen Gewichte. Für eine spätere Nutzung erneut herunterladen."))
-        { Section = PluginSettingsSection.Transcription }];
+    public IReadOnlyList<PluginSettingsAction> SettingsActions
+    {
+        get
+        {
+            var actions = new List<PluginSettingsAction>();
+            if (_assets?.HasPartialDownloads == true)
+                actions.Add(new("discard-partial-downloads", L("Discard incomplete downloads", "Unvollständige Downloads verwerfen"),
+                    L("Removes unfinished model and runtime downloads. Completed models are kept.",
+                      "Entfernt unvollständige Modell- und Laufzeitdownloads. Vollständige Modelle bleiben erhalten."))
+                    { Section = PluginSettingsSection.Transcription });
+            if (_selectedModelId is not null)
+                actions.Add(new("remove-selected-model", L("Unload and remove selected model", "Ausgewähltes Modell entladen und entfernen"),
+                    L("Stops the selected model and deletes its downloaded weights. Download it again to use it later.",
+                      "Stoppt das ausgewählte Modell und löscht seine heruntergeladenen Gewichte. Für eine spätere Nutzung erneut herunterladen."))
+                    { Section = PluginSettingsSection.Transcription });
+            return actions;
+        }
+    }
 
     /// <inheritdoc />
     public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
     {
+        if (id == "discard-partial-downloads")
+        {
+            await _gate.WaitAsync(cancellationToken);
+            try { await GetAssets().DiscardPartialDownloadsAsync(cancellationToken); }
+            finally { _gate.Release(); }
+            _host?.NotifyCapabilitiesChanged();
+            return L("Incomplete downloads removed.", "Unvollständige Downloads entfernt.");
+        }
         if (id != "remove-selected-model" || _selectedModelId is not { } selected)
             throw new InvalidOperationException("No selected model is available to remove.");
         cancellationToken.ThrowIfCancellationRequested();

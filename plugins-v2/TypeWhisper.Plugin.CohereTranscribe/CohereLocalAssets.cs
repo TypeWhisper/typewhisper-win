@@ -144,6 +144,10 @@ internal interface ICohereLocalAssetManager
 
     Task RemoveModelAsync(string modelId, CancellationToken cancellationToken);
 
+    bool HasPartialDownloads { get; }
+
+    Task DiscardPartialDownloadsAsync(CancellationToken cancellationToken);
+
     Task EnsureRuntimeAsync(
         CrispAsrBackend backend,
         IProgress<ArtifactTransferProgress>? progress,
@@ -395,8 +399,12 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         try
         {
             var runtimeDirectory = GetRuntimeDirectory(package);
-            if (IsRuntimeInstalled(backend) && await VerifyRuntimeFilesAsync(runtimeDirectory, cancellationToken))
+            if (MarkerMatches(GetRuntimeMarkerPath(runtimeDirectory), package.Archive.Sha256)
+                && FindRuntimeExecutable(runtimeDirectory) is not null
+                && await VerifyRuntimeFilesAsync(runtimeDirectory, cancellationToken))
             {
+                if (!RuntimeFilesMatchMetadata(runtimeDirectory))
+                    await WriteRuntimeFilesAsync(runtimeDirectory, cancellationToken);
                 progress?.Report(new ArtifactTransferProgress(
                     package.Archive.SizeBytes,
                     package.Archive.SizeBytes));
@@ -460,6 +468,34 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         {
             _gate.Release();
         }
+    }
+
+    internal IEnumerable<string> PartialDownloadPaths()
+    {
+        foreach (var model in CohereModelCatalog.All)
+            yield return GetModelPaths(model.Id).ModelPath + ".download";
+        var auxiliary = GetModelPaths(CohereModelCatalog.DefaultModelId);
+        yield return auxiliary.VadModelPath + ".download";
+        yield return auxiliary.LanguageIdModelPath + ".download";
+        foreach (var package in new[] { CpuRuntime, CudaRuntime, VulkanRuntime })
+            yield return Path.Join(Path.GetDirectoryName(GetRuntimeDirectory(package))!, "." + package.Archive.FileName + ".download");
+    }
+
+    public bool HasPartialDownloads => PartialDownloadPaths().Any(File.Exists);
+
+    public async Task DiscardPartialDownloadsAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            foreach (var path in PartialDownloadPaths())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                EnsurePathWithinAssetRoot(path);
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+        finally { _gate.Release(); }
     }
 
     public void Dispose()
