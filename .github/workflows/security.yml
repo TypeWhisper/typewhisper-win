@@ -125,7 +125,7 @@ jobs:
         id: requirements
         shell: bash
         run: |
-          if [[ -f plugins/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt ]]; then
+          if [[ -f plugins-v2/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt ]]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -185,7 +185,7 @@ jobs:
           for vuln in "${ignored_vulns[@]}"; do
             ignore_args+=(--ignore-vuln "$vuln")
           done
-          pip-audit -r plugins/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt --progress-spinner off "${ignore_args[@]}" | tee artifacts/security/granite-speech-pip-audit.txt
+          pip-audit -r plugins-v2/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt --progress-spinner off "${ignore_args[@]}" | tee artifacts/security/granite-speech-pip-audit.txt
 
       - uses: actions/upload-artifact@v7
         if: always()

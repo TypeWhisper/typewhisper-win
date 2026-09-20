@@ -15,6 +15,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-sidecar-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Test portable Granite sidecar without model downloads
+        if: hashFiles('plugins-v2/TypeWhisper.Plugin.GraniteSpeech/Tests/test_model_setup.py') != ''
+        run: python -m unittest discover -s plugins-v2/TypeWhisper.Plugin.GraniteSpeech/Tests -p 'test_*.py' -v
+
   discover-plugins:
     runs-on: windows-latest
     outputs:
