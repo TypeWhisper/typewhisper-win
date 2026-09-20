@@ -50,6 +50,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.gemma-local" => "gemma",
             "com.typewhisper.gladia" => "gladia",
             "com.typewhisper.groq" => "groq",
+            "com.typewhisper.granite-speech" => "ibm",
             "com.typewhisper.github-copilot" => "github-copilot",
             LocalTranscriptionPlugin.PluginId => "nvidia",
             "com.typewhisper.openai" => "openai",
