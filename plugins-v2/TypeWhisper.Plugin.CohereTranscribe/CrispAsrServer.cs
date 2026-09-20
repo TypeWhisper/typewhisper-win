@@ -41,7 +41,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(10) };
+    private readonly HttpClient _httpClient;
     private readonly Action<PluginLogLevel, string> _log;
     private readonly object _outputLock = new();
     private readonly Queue<string> _outputTail = new();
@@ -55,13 +55,44 @@ internal sealed class CrispAsrServer : ICrispAsrServer
     internal CrispAsrServer(Action<PluginLogLevel, string> log)
     {
         _log = log;
+        _httpClient = new HttpClient(new SocketsHttpHandler
+        {
+            UseProxy = false, AllowAutoRedirect = false,
+            ConnectCallback = ConnectToOwnedProcessAsync
+        }) { Timeout = TimeSpan.FromMinutes(10) };
+    }
+
+    private async ValueTask<Stream> ConnectToOwnedProcessAsync(SocketsHttpConnectionContext context, CancellationToken ct)
+    {
+        if (context.DnsEndPoint.Host != "127.0.0.1") throw new IOException("Only loopback speech connections are allowed.");
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        try
+        {
+            await socket.ConnectAsync(IPAddress.Loopback, context.DnsEndPoint.Port, ct);
+            var clientPort = ((IPEndPoint)socket.LocalEndPoint!).Port;
+            var owner = LoopbackListenerOwner.FindProcess(context.DnsEndPoint.Port, clientPort);
+            if (owner is null || _processJob?.ContainsProcess(owner.Value) != true)
+                throw new ListenerCollisionException("The speech connection does not belong to the local runtime.");
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch { socket.Dispose(); throw; }
     }
 
     public bool IsRunning => _process is { HasExited: false } && _baseUrl is not null;
 
     public CrispAsrBackend? ActiveBackend { get; private set; }
 
-    public async Task StartAsync(
+    public async Task StartAsync(CrispAsrServerConfiguration configuration, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { await StartAttemptAsync(configuration, cancellationToken); return; }
+            catch (ListenerCollisionException) when (attempt < 2)
+            { cancellationToken.ThrowIfCancellationRequested(); }
+        }
+    }
+
+    private async Task StartAttemptAsync(
         CrispAsrServerConfiguration configuration,
         CancellationToken cancellationToken)
     {
@@ -156,6 +187,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
                 $"The local CrispASR process exited unexpectedly with code {_process.ExitCode}.{GetOutputTail()}");
         }
 
+        VerifyListenerOwner(new Uri(_baseUrl).Port, requireListener: true);
         return await OpenAiTranscriptionHelper.TranscribeAsync(
             _httpClient,
             _baseUrl,
@@ -365,10 +397,13 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             {
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 attempt.CancelAfter(TimeSpan.FromSeconds(2));
+                if (!VerifyListenerOwner(new Uri(baseUrl).Port, requireListener: false))
+                { await Task.Delay(250, cancellationToken); continue; }
                 using var response = await _httpClient.GetAsync(
                     $"{baseUrl}/health",
                     attempt.Token);
-                if (response.StatusCode == HttpStatusCode.OK)
+                if (response.StatusCode == HttpStatusCode.OK && !process.HasExited
+                    && VerifyListenerOwner(new Uri(baseUrl).Port, requireListener: true))
                     return;
             }
             catch (Exception exception) when (
@@ -382,6 +417,17 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             await Task.Delay(250, cancellationToken);
         }
     }
+
+    private bool VerifyListenerOwner(int port, bool requireListener)
+    {
+        var owner = LoopbackListenerOwner.FindProcess(port);
+        if (owner is null && !requireListener) return false;
+        if (owner is null || _processJob?.ContainsProcess(owner.Value) != true)
+            throw new ListenerCollisionException("The local speech port is owned by another process. Retry loading the model.");
+        return true;
+    }
+
+    private sealed class ListenerCollisionException(string message) : IOException(message);
 
     private void CaptureOutput(string? line)
     {

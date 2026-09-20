@@ -186,7 +186,10 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         _host = host;
         _assets ??= new CohereLocalAssetManager(host.PluginAssetDirectory);
         _server ??= new CrispAsrServer(host.Log);
-        var storedToken = await host.LoadSecretAsync(HuggingFaceTokenSecretName);
+        string? storedToken = null;
+        try { storedToken = await host.LoadSecretAsync(HuggingFaceTokenSecretName); }
+        catch (Exception exception) when (IsExpectedSecretStorageFailure(exception))
+        { host.Log(PluginLogLevel.Warning, "The optional Hugging Face credential could not be read. Public downloads remain available."); }
         try
         {
             _huggingFaceToken = PluginHuggingFaceTokenHelper.NormalizeToken(storedToken);
@@ -216,7 +219,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
             SetAccelerationPreference(preference);
 
         var persistedModel = host.GetSetting<string>("selectedModel");
-        _selectedModelId = CohereModelCatalog.Contains(persistedModel) ? persistedModel : ModelId;
+        _selectedModelId = CohereModelCatalog.Contains(persistedModel) ? persistedModel : null;
 
         host.Log(
             PluginLogLevel.Info,
@@ -449,6 +452,13 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
             throw new InvalidOperationException(
                 "Cohere Transcribe could not start with any available local runtime.",
                 lastError);
+        }
+        catch (OperationCanceledException)
+        {
+            _accelerationStatus = _loadedModelId is not null && _server is { IsRunning: true, ActiveBackend: { } backend }
+                ? CreateLoadedStatus(backend, fallbackDetail: null)
+                : CreatePendingStatus(_accelerationPreference);
+            throw;
         }
         finally
         {

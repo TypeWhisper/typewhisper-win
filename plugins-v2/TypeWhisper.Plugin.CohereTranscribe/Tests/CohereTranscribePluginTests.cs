@@ -705,6 +705,7 @@ public sealed class CohereTranscribePluginTests
             CohereModelCatalog.DefaultModelId,
             progress: null,
             CancellationToken.None);
+        sut.SelectModel(CohereTranscribePlugin.ModelId);
         await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
         Assert.Equal(1, server.StartCount);
 
@@ -739,6 +740,7 @@ public sealed class CohereTranscribePluginTests
             CohereModelCatalog.DefaultModelId,
             progress: null,
             CancellationToken.None);
+        sut.SelectModel(CohereTranscribePlugin.ModelId);
         await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
         server.FailNextTranscriptionAndStop = true;
 
@@ -966,6 +968,47 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public async Task ListenerOwnershipDistinguishesUnrelatedProcessFromAssignedLauncher()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        Assert.Equal(Environment.ProcessId, LoopbackListenerOwner.FindProcess(port));
+        using var client = new System.Net.Sockets.TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, port);
+        using var accepted = await listener.AcceptTcpClientAsync();
+        var clientPort = ((IPEndPoint)client.Client.LocalEndPoint!).Port;
+        Assert.Equal(Environment.ProcessId, LoopbackListenerOwner.FindProcess(port, clientPort));
+        using var child = Process.Start(new ProcessStartInfo
+        {
+            FileName = Path.Join(Environment.SystemDirectory, "cmd.exe"),
+            Arguments = CrispAsrServer.GateLaunchCommand("echo released"),
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true
+        })!;
+        try
+        {
+            using var job = WindowsProcessJob.CreateAndAssign(child);
+            Assert.True(job.ContainsProcess(child.Id));
+            Assert.False(job.ContainsProcess(LoopbackListenerOwner.FindProcess(port)!.Value));
+            using (var server = new CrispAsrServer((_, _) => { }))
+            {
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                typeof(CrispAsrServer).GetField("_processJob", flags)!.SetValue(server, job);
+                var http = (HttpClient)typeof(CrispAsrServer).GetField("_httpClient", flags)!.GetValue(server)!;
+                var request = http.GetAsync($"http://127.0.0.1:{port}/health");
+                using var unrelatedConnection = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                await Assert.ThrowsAsync<HttpRequestException>(() => request);
+                var bytes = new byte[1];
+                Assert.Equal(0, await unrelatedConnection.GetStream().ReadAsync(bytes).AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+                typeof(CrispAsrServer).GetField("_processJob", flags)!.SetValue(server, null);
+            }
+            child.StandardInput.Close();
+            await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { if (!child.HasExited) { child.Kill(true); child.WaitForExit(5000); } }
+    }
+
+    [WindowsFact]
     public async Task LauncherCannotRunChildBeforeJobAssignmentAndEofAbortsIt()
     {
         foreach (var release in new[] { false, true })
@@ -1017,6 +1060,47 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public async Task FreshInstallationDoesNotSelectDownloadedDefaultModel()
+    {
+        using var temp = new TempDirectory();
+        using var sut = new CohereTranscribePlugin(new FakeAssetManager(), new FakeCrispAsrServer());
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        Assert.Null(sut.SelectedModelId);
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        Assert.Null(sut.SelectedModelId);
+        Assert.False(sut.IsConfigured);
+        await sut.RemoveModelAsync(CohereTranscribePlugin.ModelId, default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ActivationToleratesUnreadableOptionalSecret(bool denied)
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path) { LoadSecretException = denied ? new UnauthorizedAccessException() : new IOException() });
+        Assert.Null(assets.HuggingFaceToken);
+    }
+
+    [WindowsFact]
+    public async Task CanceledLoadRestoresPendingStatus()
+    {
+        using var temp = new TempDirectory();
+        using var cancellation = new CancellationTokenSource();
+        var assets = new FakeAssetManager();
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        var before = sut.AccelerationStatus;
+        assets.BeforeEnsureRuntime = () => cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.LoadModelAsync(CohereTranscribePlugin.ModelId, cancellation.Token));
+        Assert.Equal(before, sut.AccelerationStatus);
+    }
+
+    [WindowsFact]
     public async Task CanceledDownloadRestoresPendingStatus()
     {
         using var temp = new TempDirectory();
@@ -1047,6 +1131,7 @@ public sealed class CohereTranscribePluginTests
     {
         private readonly HashSet<string> _installedModelIds = [];
 
+        public Action? BeforeEnsureRuntime { get; set; }
         public Action? BeforeEnsureModel { get; init; }
         public bool ModelInstalled => _installedModelIds.Count > 0;
         public string? LastEnsuredModelId { get; private set; }
@@ -1096,6 +1181,8 @@ public sealed class CohereTranscribePluginTests
             IProgress<ArtifactTransferProgress>? progress,
             CancellationToken cancellationToken)
         {
+            BeforeEnsureRuntime?.Invoke();
+            cancellationToken.ThrowIfCancellationRequested();
             if (!EnsuredRuntimes.Contains(backend))
                 EnsuredRuntimes.Add(backend);
             progress?.Report(new ArtifactTransferProgress(20, 20));
@@ -1254,6 +1341,7 @@ public sealed class CohereTranscribePluginTests
 
         public Dictionary<string, string> Secrets { get; }
         public List<(PluginLogLevel Level, string Message)> Logs { get; } = [];
+        public Exception? LoadSecretException { get; init; }
         public Exception? StoreSecretException { get; init; }
         public Exception? DeleteSecretException { get; init; }
         public string PluginDataDirectory { get; }
@@ -1274,7 +1362,7 @@ public sealed class CohereTranscribePluginTests
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
-            Task.FromResult(Secrets.GetValueOrDefault(key));
+            LoadSecretException is { } error ? Task.FromException<string?>(error) : Task.FromResult(Secrets.GetValueOrDefault(key));
 
         public Task DeleteSecretAsync(string key)
         {

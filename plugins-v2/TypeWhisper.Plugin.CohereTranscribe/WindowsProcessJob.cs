@@ -75,6 +75,19 @@ internal sealed class WindowsProcessJob : IDisposable
         }
     }
 
+    internal bool ContainsProcess(int processId)
+    {
+        using var process = OpenProcess(0x1000, false, processId); // PROCESS_QUERY_LIMITED_INFORMATION
+        return !process.IsInvalid && IsProcessInJob(process, _handle, out var assigned) && assigned;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern SafeProcessHandle OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsProcessInJob(SafeProcessHandle process, SafeFileHandle job, [MarshalAs(UnmanagedType.Bool)] out bool assigned);
+
     public void Dispose()
     {
         _handle.Dispose();
