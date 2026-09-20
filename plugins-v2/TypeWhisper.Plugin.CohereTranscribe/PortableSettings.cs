@@ -20,6 +20,8 @@ public sealed partial class CohereTranscribePlugin
     {
         if (id != "remove-selected-model" || _selectedModelId is not { } selected)
             throw new InvalidOperationException("No selected model is available to remove.");
+        cancellationToken.ThrowIfCancellationRequested();
+        await UnloadModelAsync();
         await RemoveModelAsync(selected, cancellationToken);
         return L("Selected model removed. Shared runtime files were kept.", "Ausgewähltes Modell entfernt. Gemeinsame Laufzeitdateien wurden beibehalten.");
     }

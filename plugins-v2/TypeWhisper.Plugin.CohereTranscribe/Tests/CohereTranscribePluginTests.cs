@@ -691,6 +691,45 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public async Task RuntimeVerificationDetectsMissingAndSameSizeChangedDependencies()
+    {
+        using var temp = new TempDirectory();
+        var executable = Path.Join(temp.Path, "crispasr.exe");
+        var dependency = Path.Join(temp.Path, "backend.dll");
+        await File.WriteAllBytesAsync(executable, [1, 2]);
+        await File.WriteAllBytesAsync(dependency, [3, 4]);
+        await CohereLocalAssetManager.WriteRuntimeFilesAsync(temp.Path, default);
+        Assert.True(CohereLocalAssetManager.RuntimeFilesMatchMetadata(temp.Path));
+        Assert.True(await CohereLocalAssetManager.VerifyRuntimeFilesAsync(temp.Path, default));
+        var stamp = File.GetLastWriteTimeUtc(dependency);
+        await File.WriteAllBytesAsync(dependency, [4, 3]);
+        File.SetLastWriteTimeUtc(dependency, stamp);
+        Assert.False(await CohereLocalAssetManager.VerifyRuntimeFilesAsync(temp.Path, default));
+        File.Delete(dependency);
+        Assert.False(CohereLocalAssetManager.RuntimeFilesMatchMetadata(temp.Path));
+        Assert.False(await CohereLocalAssetManager.VerifyRuntimeFilesAsync(temp.Path, default));
+    }
+
+    [WindowsFact]
+    public async Task MalformedRuntimeManifestDoesNotDisableTheProvider()
+    {
+        using var temp = new TempDirectory();
+        await File.WriteAllTextAsync(Path.Join(temp.Path, ".typewhisper-runtime.files.json"), "[null]");
+        Assert.False(CohereLocalAssetManager.RuntimeFilesMatchMetadata(temp.Path));
+        Assert.False(await CohereLocalAssetManager.VerifyRuntimeFilesAsync(temp.Path, default));
+    }
+
+    [WindowsFact]
+    public async Task RuntimeVerificationRejectsPathsOutsideTheRuntimeDirectory()
+    {
+        using var temp = new TempDirectory();
+        var entries = new[] { new CohereLocalAssetManager.RuntimeFile("../outside.dll", 2, 0, new string('a', 64)) };
+        await File.WriteAllTextAsync(Path.Join(temp.Path, ".typewhisper-runtime.files.json"), System.Text.Json.JsonSerializer.Serialize(entries));
+        Assert.False(CohereLocalAssetManager.RuntimeFilesMatchMetadata(temp.Path));
+        Assert.False(await CohereLocalAssetManager.VerifyRuntimeFilesAsync(temp.Path, default));
+    }
+
+    [WindowsFact]
     public async Task SettingsActionRemovesTheOnlySelectedModelWithoutAnotherDownload()
     {
         using var temp = new TempDirectory();
@@ -1231,12 +1270,91 @@ public sealed class CohereTranscribePluginTests
         Assert.True((bool)method.Invoke(null, [artifact, path])!);
     }
 
+    [Theory]
+    [InlineData("success")]
+    [InlineData("cancel")]
+    [InlineData("failure")]
+    public async Task DownloadingAnotherModelPreservesActiveBackend(string outcome)
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager(); var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        var first = CohereModelCatalog.All[0].Id; var second = CohereModelCatalog.All[1].Id;
+        await sut.DownloadModelAsync(first, null, default);
+        await sut.LoadModelAsync(first, default);
+        var before = sut.AccelerationStatus;
+        assets.BeforeEnsureModel = () =>
+        {
+            if (outcome == "cancel") throw new OperationCanceledException();
+            if (outcome == "failure") throw new IOException("fixture download failure");
+        };
+        if (outcome == "success") await sut.DownloadModelAsync(second, null, default);
+        else await Assert.ThrowsAnyAsync<Exception>(() => sut.DownloadModelAsync(second, null, default));
+        Assert.True(server.IsRunning);
+        Assert.Equal(before, sut.AccelerationStatus);
+    }
+
+    [WindowsFact]
+    public async Task AutoReusesInstalledCpuWithoutDownloadingGpuRuntime()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager(); var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server, resolveBackends: _ => [CrispAsrBackend.Cuda, CrispAsrBackend.Cpu]);
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+        Assert.True(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
+        await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default);
+        Assert.Equal(CrispAsrBackend.Cpu, server.ActiveBackend);
+        Assert.DoesNotContain(CrispAsrBackend.Cuda, assets.EnsuredRuntimes);
+    }
+
+    [WindowsFact]
+    public async Task RemovingSelectionAlsoUnloadsUncommittedReplacement()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager(); var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        var first = CohereModelCatalog.All[0].Id; var second = CohereModelCatalog.All[1].Id;
+        await sut.DownloadModelAsync(first, null, default);
+        await sut.DownloadModelAsync(second, null, default);
+        sut.SelectModel(first);
+        await sut.LoadModelAsync(second, default);
+        await sut.ExecuteSettingsActionAsync("remove-selected-model", default);
+        Assert.Null(sut.SelectedModelId);
+        Assert.False(server.IsRunning);
+        Assert.True(assets.IsModelInstalled(second));
+    }
+
+    [WindowsFact]
+    public async Task MissingListenerInvalidatesRunningLauncher()
+    {
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe", "-NoProfile -Command Start-Sleep -Seconds 30")
+        { UseShellExecute = false, CreateNoWindow = true })!;
+        using var sut = new CrispAsrServer((_, _) => { });
+        void Field(string name, object value) => typeof(CrispAsrServer).GetField(name,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(sut, value);
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
+        Field("_process", process); Field("_baseUrl", "http://127.0.0.1:" + port);
+        Field("_apiKey", "fixture"); Field("_modelId", "fixture");
+        Assert.True(sut.IsRunning);
+        await Assert.ThrowsAnyAsync<IOException>(() => sut.TranscribeAsync([1, 2], null, default));
+        Assert.False(sut.IsRunning);
+        Assert.Null(sut.ActiveBackend);
+    }
+
     private sealed class FakeAssetManager : ICohereLocalAssetManager
     {
         private readonly HashSet<string> _installedModelIds = [];
 
         public Action? BeforeEnsureRuntime { get; set; }
-        public Action? BeforeEnsureModel { get; init; }
+        public Action? BeforeEnsureModel { get; set; }
         public bool ModelInstalled => _installedModelIds.Count > 0;
         public string? LastEnsuredModelId { get; private set; }
         public string? HuggingFaceToken { get; private set; }
