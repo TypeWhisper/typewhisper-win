@@ -484,7 +484,11 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         if (!_sidecar.HasExited)
         {
             try { _sidecar.Kill(entireProcessTree: true); }
-            catch { /* ignore */ }
+            catch (InvalidOperationException) when (_sidecar.HasExited) { }
+            // Keep ownership and block replacement if termination did not drain.
+            // A later stop can retry; never overlap two GPU sidecars.
+            if (!_sidecar.WaitForExit(10000))
+                throw new TimeoutException("The local speech process did not stop. Try unloading the model again.");
         }
 
         _sidecar.Dispose();

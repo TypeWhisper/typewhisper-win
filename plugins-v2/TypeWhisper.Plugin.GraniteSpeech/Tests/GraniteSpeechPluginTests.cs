@@ -188,7 +188,7 @@ public sealed class GraniteSpeechPluginTests
         {
             var pending = (Task<JsonElement>)typeof(GraniteSpeechPlugin).GetMethod("SendCommandAsync", flags)!.Invoke(sut, [new { cmd = "transcribe" }, cancellation.Token])!;
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
-            Assert.True(observer.WaitForExit(5000));
+            Assert.True(observer.HasExited);
             Assert.Null(typeof(GraniteSpeechPlugin).GetField("_sidecar", flags)!.GetValue(sut));
         }
         finally { if (!observer.HasExited) observer.Kill(entireProcessTree: true); }
