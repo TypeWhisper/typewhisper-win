@@ -27,13 +27,13 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
         await store.InitializeAsync(bundles);
         return store;
     }
-    private static void Package(string root, string id, Type type, string version = "1.0.0")
+    private static void Package(string root, string id, Type type, string version = "1.0.0", bool isLocal = false)
     {
         var folder = Path.Combine(root, id); Directory.CreateDirectory(folder);
         File.Copy(type.Assembly.Location, Path.Combine(folder, "fixture.dll"), overwrite: true);
         File.WriteAllText(Path.Combine(folder, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
         {
-            Id = id, Name = "Runtime fixture", Version = version, AssemblyName = "fixture.dll", PluginClass = type.FullName!
+            Id = id, Name = "Runtime fixture", Version = version, IsLocal = isLocal, AssemblyName = "fixture.dll", PluginClass = type.FullName!
         }));
     }
     private PortablePluginRuntimeRegistry Registry(PortablePluginStore store) => new(store, Version, id => Host(id));
