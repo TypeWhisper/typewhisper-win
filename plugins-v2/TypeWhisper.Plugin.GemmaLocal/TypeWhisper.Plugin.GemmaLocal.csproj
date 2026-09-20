@@ -6,7 +6,7 @@
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.GemmaLocal.Portable.Tests" />
-    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="LLamaSharp" Version="0.26.0" />
     <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.26.0" />
     <Content Include="manifest.json;Localization/*.json;Scripts/**/*" CopyToOutputDirectory="PreserveNewest" />

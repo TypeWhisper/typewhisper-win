@@ -38,3 +38,5 @@ On Windows x64, the actual 4B Q4_K_M download (2,489,894,016 bytes) passed SHA-2
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
 The shared portable SDK/host suite passed 266 tests on this branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+
+On the WinUI-only acceptance host, model cards rendered correctly and the downloaded 4B model loaded through the settings button. A settings screenshot is included under docs/screenshots/gemma. End-to-end workflow acceptance remains separate from this model-loading check.
