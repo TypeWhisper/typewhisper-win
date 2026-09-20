@@ -94,7 +94,7 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     { ct.ThrowIfCancellationRequested(); _host!.SetSetting("downloadCredential", credential); return Task.FromResult(new PluginModelDownloadRequirementResult(true)); }
     /// <inheritdoc />
     public Task ClearModelDownloadCredentialAsync(string modelId, string requirementId, CancellationToken ct)
-    { ct.ThrowIfCancellationRequested(); _host!.SetSetting<string?>("downloadCredential", null); return Task.CompletedTask; }
+    { ct.ThrowIfCancellationRequested(); if (!_host!.GetSetting<bool>("IgnoreCredentialClear")) _host.SetSetting<string?>("downloadCredential", null); return Task.CompletedTask; }
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />

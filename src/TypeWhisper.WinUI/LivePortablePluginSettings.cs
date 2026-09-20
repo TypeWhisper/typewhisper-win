@@ -89,6 +89,10 @@ internal sealed class LivePortablePluginSettings : UserControl
             UpdateButtons();
             if (_textSettings.Content is LivePluginTextSettings settings) settings.NotifyProfileKeyChanged();
         };
+        _models.ConfigurationChanged += () =>
+        {
+            if (_textSettings.Content is LivePluginTextSettings settings) settings.RequestRefresh();
+        };
         Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
         Unloaded += (_, _) => { session.Changed -= OnChanged; _key.Password = ""; };
         Refresh();

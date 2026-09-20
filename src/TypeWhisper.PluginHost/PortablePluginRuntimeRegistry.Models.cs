@@ -72,6 +72,9 @@ public sealed partial class PortablePluginRuntimeRegistry
             if (credential is not null)
                 return await providers[0]!.SaveModelDownloadCredentialAsync(expected.ModelId, requirementId, credential, token).ConfigureAwait(false);
             await providers[0]!.ClearModelDownloadCredentialAsync(expected.ModelId, requirementId, token).ConfigureAwait(false);
+            if (providers[0]!.ModelDownloadRequirements.Any(requirement => requirement.ModelId == expected.ModelId
+                && requirement.Id == requirementId && requirement.Kind == PluginModelDownloadRequirementKind.Credential && requirement.IsSatisfied))
+                return new PluginModelDownloadRequirementResult(false, "The provider did not confirm that the download credential was removed.");
             return new PluginModelDownloadRequirementResult(true, "Download credential removed.");
         }, cancellationToken, preserveCompletedResult: true);
     }

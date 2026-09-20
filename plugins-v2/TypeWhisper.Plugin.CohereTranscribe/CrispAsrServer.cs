@@ -400,6 +400,8 @@ internal sealed class CrispAsrServer : ICrispAsrServer
 
             if (process.HasExited)
             {
+                if (IsPortUnavailable(new Uri(baseUrl).Port))
+                    throw new ListenerCollisionException("The speech port was unavailable when the runtime tried to bind. Retry loading on another port.");
                 throw new InvalidOperationException(
                     $"CrispASR exited during startup with code {process.ExitCode}.{GetOutputTail()}");
             }
@@ -439,6 +441,13 @@ internal sealed class CrispAsrServer : ICrispAsrServer
     }
 
     private sealed class ListenerCollisionException(string message) : IOException(message);
+
+    private static bool IsPortUnavailable(int port)
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, port) { ExclusiveAddressUse = true };
+        try { listener.Start(); return false; }
+        catch (SocketException error) when (error.SocketErrorCode is SocketError.AddressAlreadyInUse or SocketError.AccessDenied) { return true; }
+    }
 
     private void CaptureOutput(string? line)
     {

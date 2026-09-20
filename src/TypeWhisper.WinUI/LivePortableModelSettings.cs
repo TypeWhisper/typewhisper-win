@@ -11,6 +11,7 @@ namespace TypeWhisper.WinUI;
 internal sealed class LivePortableModelSettings : UserControl
 {
     private readonly LiveLocalTtsModelSettings _localTts;
+    internal event Action? ConfigurationChanged;
     private readonly LocalDictationSession _session;
     private readonly string _pluginId;
     private readonly StackPanel _rows = new() { Spacing = 12 };
@@ -253,7 +254,7 @@ internal sealed class LivePortableModelSettings : UserControl
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (Current(lifetime)) _status.Text = "The model could not be selected. Refresh its status and try again."; }
-        finally { _loadingRow = null; _working = false; if (IsLoaded) RequestRefresh(); }
+        finally { _loadingRow = null; _working = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
     private async Task DownloadAsync(Row row)
@@ -267,7 +268,7 @@ internal sealed class LivePortableModelSettings : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (Current(lifetime)) _status.Text = "The download could not finish. Refresh the model status before retrying."; }
-        finally { _working = false; if (IsLoaded) RequestRefresh(); }
+        finally { _working = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
     private async Task CancelAsync(Row row)
@@ -282,7 +283,7 @@ internal sealed class LivePortableModelSettings : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (Current(lifetime)) _status.Text = "The model operation could not finish stopping. Wait before retrying."; }
-        finally { _canceling = false; if (IsLoaded) RequestRefresh(); }
+        finally { _canceling = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
     private async Task RemoveAsync(Row row)
@@ -308,7 +309,7 @@ internal sealed class LivePortableModelSettings : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (Current(lifetime)) _status.Text = "The model could not be removed. Refresh its status before trying again."; }
-        finally { _working = false; if (IsLoaded) RequestRefresh(); }
+        finally { _working = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
     private bool IsActive(PortableDownloadableModel model) => _session.ActiveRegistryModelDownload is { } active && SameOwner(active, model);
