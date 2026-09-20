@@ -131,6 +131,8 @@ internal interface ICohereLocalAssetManager
 
     bool IsRuntimeInstalled(CrispAsrBackend backend);
 
+    bool CanVerifyRuntimeCache(CrispAsrBackend backend);
+
     long GetRuntimeTransferSize(CrispAsrBackend backend);
 
     CohereModelPaths GetModelPaths(string modelId);
@@ -267,7 +269,11 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             && IsArtifactReady(LanguageIdModel, paths.LanguageIdModelPath);
     }
 
-    public bool IsRuntimeInstalled(CrispAsrBackend backend)
+    public bool IsRuntimeInstalled(CrispAsrBackend backend) => RuntimeCacheMatches(backend, checkTimestamps: true);
+
+    public bool CanVerifyRuntimeCache(CrispAsrBackend backend) => RuntimeCacheMatches(backend, checkTimestamps: false);
+
+    private bool RuntimeCacheMatches(CrispAsrBackend backend, bool checkTimestamps)
     {
         var package = GetRuntimePackage(backend);
         var runtimeDirectory = GetRuntimeDirectory(package);
@@ -276,7 +282,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         return Directory.Exists(runtimeDirectory)
             && MarkerMatches(markerPath, package.Archive.Sha256)
             && FindRuntimeExecutable(runtimeDirectory) is not null
-            && RuntimeFilesMatchMetadata(runtimeDirectory);
+            && RuntimeFilesMatchMetadata(runtimeDirectory, checkTimestamps);
     }
 
     public long GetRuntimeTransferSize(CrispAsrBackend backend) =>
@@ -847,14 +853,14 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         return path;
     }
 
-    internal static bool RuntimeFilesMatchMetadata(string directory)
+    internal static bool RuntimeFilesMatchMetadata(string directory, bool checkTimestamps = true)
     {
         try
         {
             return ReadRuntimeFiles(directory).All(expected =>
             {
                 var file = new FileInfo(RuntimeFilePath(directory, expected));
-                return file.Exists && file.Length == expected.Size && file.LastWriteTimeUtc.Ticks == expected.ModifiedTicks;
+                return file.Exists && file.Length == expected.Size && (!checkTimestamps || file.LastWriteTimeUtc.Ticks == expected.ModifiedTicks);
             });
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException) { return false; }

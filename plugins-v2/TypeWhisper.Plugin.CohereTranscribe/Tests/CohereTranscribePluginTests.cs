@@ -1296,13 +1296,16 @@ public sealed class CohereTranscribePluginTests
             if (outcome == "failure") throw new IOException("fixture download failure");
         };
         if (outcome == "success") await sut.DownloadModelAsync(second, null, default);
-        else await Assert.ThrowsAnyAsync<Exception>(() => sut.DownloadModelAsync(second, null, default));
+        else if (outcome == "cancel") await Assert.ThrowsAsync<OperationCanceledException>(() => sut.DownloadModelAsync(second, null, default));
+        else await Assert.ThrowsAsync<IOException>(() => sut.DownloadModelAsync(second, null, default));
         Assert.True(server.IsRunning);
         Assert.Equal(before, sut.AccelerationStatus);
     }
 
-    [WindowsFact]
-    public async Task AutoReusesInstalledCpuWithoutDownloadingGpuRuntime()
+    [WindowsTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AutoReusesInstalledCpuWithoutDownloadingGpuRuntime(bool metadataDrift)
     {
         using var temp = new TempDirectory();
         var assets = new FakeAssetManager(); var server = new FakeCrispAsrServer();
@@ -1315,6 +1318,7 @@ public sealed class CohereTranscribePluginTests
         Assert.True(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
         Assert.Contains("installed compatible runtime", sut.AccelerationStatus.Detail);
         Assert.DoesNotContain("CUDA", sut.AccelerationStatus.Detail);
+        assets.RuntimeMetadataDrift = metadataDrift;
         await sut.DownloadModelAsync(CohereModelCatalog.All.First(model => model.Id != CohereTranscribePlugin.ModelId).Id, null, default);
         Assert.DoesNotContain(CrispAsrBackend.Cuda, assets.EnsuredRuntimes);
         await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default);
@@ -1443,6 +1447,8 @@ public sealed class CohereTranscribePluginTests
         await File.WriteAllTextAsync(Path.Join(directory, ".typewhisper-runtime.sha256"), CohereLocalAssetManager.CpuRuntime.Archive.Sha256);
         File.SetLastWriteTimeUtc(executable, File.GetLastWriteTimeUtc(executable).AddMinutes(1));
         Assert.False(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        Assert.True(assets.CanVerifyRuntimeCache(CrispAsrBackend.Cpu));
+        Assert.False(assets.CanVerifyRuntimeCache(CrispAsrBackend.Cuda));
         await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
         Assert.True(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
         Assert.Equal(new byte[] { 1, 2 }, await File.ReadAllBytesAsync(executable));
@@ -1485,8 +1491,10 @@ public sealed class CohereTranscribePluginTests
 
         public long GetModelTransferSize(string modelId) => 100;
         public bool IsModelInstalled(string modelId) => _installedModelIds.Contains(modelId);
+        public bool RuntimeMetadataDrift { get; set; }
         public bool IsRuntimeInstalled(CrispAsrBackend backend) =>
-            EnsuredRuntimes.Contains(backend);
+            !RuntimeMetadataDrift && EnsuredRuntimes.Contains(backend);
+        public bool CanVerifyRuntimeCache(CrispAsrBackend backend) => EnsuredRuntimes.Contains(backend);
         public long GetRuntimeTransferSize(CrispAsrBackend backend) => 20;
         public CohereModelPaths GetModelPaths(string modelId) => new(
             $@"C:\models\{modelId}.gguf",
