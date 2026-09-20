@@ -1,9 +1,0 @@
-{
-  "id": "com.typewhisper.openai-vector-memory",
-  "name": "OpenAI Vector Memory",
-  "version": "1.0.0",
-  "author": "TypeWhisper",
-  "description": "Vector-based memory storage using OpenAI embeddings",
-  "assemblyName": "TypeWhisper.Plugin.OpenAiVectorMemory.dll",
-  "pluginClass": "TypeWhisper.Plugin.OpenAiVectorMemory.OpenAiVectorMemoryPlugin"
-}

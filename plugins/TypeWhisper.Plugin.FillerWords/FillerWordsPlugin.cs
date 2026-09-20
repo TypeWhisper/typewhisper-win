@@ -1,7 +1,4 @@
 using System.Reflection;
-#if WINDOWS
-using System.Windows.Controls;
-#endif
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -56,11 +53,6 @@ public sealed class FillerWordsPlugin : IPostProcessorPlugin, IPluginTextSetting
         return Task.CompletedTask;
     }
 
-#if WINDOWS
-    /// <summary>Creates the settings view shown by the host.</summary>
-    public UserControl? CreateSettingsView() =>
-        Settings is null ? null : new FillerWordsSettingsView(this, Settings);
-#endif
 
     /// <summary>Removes the configured filler words from the transcription.</summary>
     public Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct)

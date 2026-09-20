@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using TypeWhisper.Presentation;
-using TypeWhisper.Windows.Services;
+using TypeWhisper.WinUI.Platform;
 using Velopack;
 
 namespace TypeWhisper.WinUI;
@@ -17,7 +17,9 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
     {
         get
         {
-#if DEBUG
+#if TYPEWHISPER_STORE
+            return "App updates are managed by Microsoft Store.";
+#elif DEBUG
             return "Update channels are saved here. Update checks and installation are available in the installed Daily app.";
 #else
             var locator = Velopack.Locators.VelopackLocator.Current;

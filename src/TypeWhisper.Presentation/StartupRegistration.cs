@@ -14,9 +14,22 @@ public interface IStartupRegistrationBackend
 /// <summary>The actual registration state and a visible explanation of unavailable or failed changes.</summary>
 public sealed record StartupRegistrationState(bool IsEnabled, bool CanChange, string? Error);
 
-/// <summary>Changes only an owned startup command and verifies the resulting backend state.</summary>
-public sealed class StartupRegistration(IStartupRegistrationBackend backend, string identity, string? executable, string? unavailableReason = null)
+/// <summary>Reads and changes startup using the host distribution's registration mechanism.</summary>
+public interface IStartupRegistration
 {
+    /// <summary>Reads the current Windows startup state.</summary>
+    Task<StartupRegistrationState> ReadAsync();
+    /// <summary>Applies an explicit user choice and returns the actual resulting state.</summary>
+    Task<StartupRegistrationState> SetEnabledAsync(bool enabled);
+}
+
+/// <summary>Changes only an owned startup command and verifies the resulting backend state.</summary>
+public sealed class StartupRegistration(IStartupRegistrationBackend backend, string identity, string? executable, string? unavailableReason = null) : IStartupRegistration
+{
+    /// <inheritdoc />
+    public Task<StartupRegistrationState> ReadAsync() => Task.FromResult(Read());
+    /// <inheritdoc />
+    public Task<StartupRegistrationState> SetEnabledAsync(bool enabled) => Task.FromResult(SetEnabled(enabled));
     private string Command => QuoteCommand(executable!);
 
     /// <summary>Quotes a validated executable path and requests a silent tray launch.</summary>

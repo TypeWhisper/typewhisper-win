@@ -1,78 +1,22 @@
-# Side-by-side plugin migration for 1.1
+# Portable plugin development
 
-Status: migration plan and repository inventory, 2026-09-09. This document does not mark the pending plugins as ported or publish any packages.
+The WinUI host is the only application. Portable implementations live under `plugins/` and `plugins-v2/`; WPF provider assemblies, settings views and the legacy plugin publishing workflow have been removed.
 
-## Preserve the old generation
+## Current source layout
 
-- Freeze the legacy plugin source, project files, manifests, published ZIPs and catalog during v2 ports. Do not turn the remaining WPF projects into multi-target projects as part of this work.
-- Add new implementations under `plugins-v2/<plugin>/`, with independent projects, manifests, package outputs and tests. Existing portable implementations can remain where they are; relocating them is not a prerequisite.
-- Keep stable logical plugin IDs for workflow references, but separate catalogs and installation roots. The WinUI host already uses `plugins-v2.json` and its own immutable `PluginPackages` store; the WPF host retains its legacy feeds. Never replace an old ZIP at its existing URL.
-- Reuse protocol knowledge and test fixtures. Port or snapshot necessary implementation into the new project with source attribution; do not reference the legacy provider DLL or compile its WPF settings view into WinUI.
-- Build/test discovery must support the new root before the first port lands. The legacy build graph must not include v2 projects or copy their output into legacy app folders.
+- `plugins/`: Deepgram, FillerWords, Groq, Obsidian, SherpaOnnx and its internal ParakeetCtc component. These projects target `net10.0` only.
+- `plugins-v2/`: independent portable providers, with provider-owned projects, manifests, settings contracts and tests.
+- `src/TypeWhisper.PluginSDK`: UI-independent contracts. Settings are rendered by WinUI through those contracts.
+- `src/TypeWhisper.PluginHost`: package verification, activation, configuration and lifecycle management.
 
-## Settings migration is separate from code migration
+Providers that existed only for WPF are no longer included. Their removal does not imply that equivalent WinUI functionality has been implemented. Existing published legacy packages and catalogs are not modified by source cleanup.
 
-Portable host services currently report `AllowLegacyDataMigration = false`. Keep implicit provider-side migration disabled.
+## Acceptance before publication
 
-A future explicit importer should inspect the old profile read-only, show compatible installed plugins, and copy a whitelist of settings into the new profile. Preserve an existing new-profile value and record an idempotent per-plugin completion marker only after the entire copy succeeds. Resolve renamed model/setting identifiers through a versioned mapping. Never move or delete the source.
+1. Build the portable project and run its independent tests, including requests, responses, errors and cancellation.
+2. Verify the complete package, manifest, version and hash, and reject UI-framework dependencies.
+3. Check that each advertised capability has a WinUI consumer and usable host-rendered configuration.
+4. Use an isolated profile to install, configure, execute, restart, update, uninstall and reinstall the package.
+5. Complete provider-specific native and live acceptance. Normal automated tests do not require accounts or paid requests.
 
-Credentials need an explicit supported export/decrypt-and-reencrypt path under the current Windows user, into the new secret store. Do not blindly copy encrypted files or print credentials. Unsupported credentials require re-entry. Downloaded models should initially be copied or downloaded independently; do not introduce writable shared directories where removing a model in one generation breaks the other. The current normal-development NVIDIA asset sharing is a development optimization, not the production migration contract.
-
-## Port acceptance
-
-1. Independent portable build, complete ZIP with manifest/version/hash, no WPF references.
-2. Fake-transport tests for requests, responses, errors and cancellation; preserve each provider's protocol differences.
-3. All advertised capabilities connected to an actual WinUI host consumer. In particular, a TTS or memory package is not complete merely because it loads.
-4. Isolated-profile install, configure, execute, restart, update and uninstall/reinstall checks. No real paid API requests without a separate acceptance run.
-5. Legacy source/catalog/package diff check against the migration baseline and independent legacy regression checks. Install both generations and verify neither changes the other's settings or files.
-6. Publish only after those checks; migrate users only for available, compatible packages. Missing ports remain visible as unavailable rather than silently substituting providers.
-
-## Order
-
-New v2 providers: `plugins-v2/TypeWhisper.Plugin.GitHubCopilot` adds an independent Copilot LLM provider using the official SDK and the user's existing sign-in. Provider, real-SDK loopback, package lifecycle and isolated-runtime tests are included. Live requests through the packaged provider exercised the SDK's `auto` model; native WinUI launch, branding and the shared profile editor were checked. Full dictation/workflow UI execution and remaining release acceptance are pending. See the plugin README and [live acceptance report](copilot-live-acceptance.md). It does not change the legacy plugin count below.
-
-Start with one cloud provider as a pilot (OpenAI-compatible), then port cloud transcription/LLM providers individually. Follow with text processors and actions, then native model engines and capabilities requiring additional host consumers. Shared HTTP helpers are useful only where contracts are actually identical.
-
-The repository contains 39 top-level manifests: five existing portable builds, one CTC dependency bundled with NVIDIA, and 33 remaining standalone ports. This is a repository count, not a claim about the published catalog.
-
-| Plugin | Status |
-| --- | --- |
-| AssemblyAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AssemblyAi`; 56 plugin tests and 259 portable SDK/host tests pass. Includes macOS model/dictionary/diarization features and native branding. Development install/start, authenticated REST/WebSocket requests for both models, Pro speaker labeling and app HTTP transcription passed; native UI, update acceptance and publication pending (see plugin README). |
-| AuthenticatedCli | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AuthenticatedCli`; 50 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
-| Cerebras | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Cerebras`; 43 provider/package tests and 259 portable SDK/host tests pass. Model discovery, grouped settings and native branding included. Development key validation/model discovery passed; real text requests returned HTTP 402 (account quota), so live inference and microphone workflow acceptance remain pending. See plugin README. |
-| Claude | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Claude`; 57 provider/package tests and 259 portable SDK/host tests pass. Paginated model discovery, preserved model selection, portable settings and native branding included. Development package installation passed; authenticated requests, update acceptance and publication pending. See plugin README. |
-| CloudflareAsr | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.CloudflareAsr`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
-| Cohere | Independent portable source package 1.1.3 (not publicly published) with 48 passing tests, branding and shared settings save. Authenticated transcription and text processing passed; German microphone dictation accepted with development package 1.1.1. No realtime audio API is advertised. See plugin README. |
-| CohereTranscribe | Separate v2 port pending |
-| Deepgram | Existing portable build |
-| ElevenLabs | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.ElevenLabs`; 34 plugin tests and live batch/WebSocket acceptance passed; public release pending |
-| FileMemory | Separate v2 port pending |
-| FillerWords | Existing portable build |
-| Fireworks | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Fireworks`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
-| Gemini | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gemini`; 95 provider/package/loopback tests pass. Includes language mapping, dictionary terms, LLM selection/temperature and confirmed streaming completion. Authenticated text/audio/streaming, package upgrade and manual live-preview acceptance passed; public package publication pending. |
-| GemmaLocal | Separate v2 port pending |
-| Gladia | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gladia`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; recorded-audio and live microphone dictation, including explicit German selection, passed manual acceptance. ARM64 execution and publication remain pending. |
-| GoogleCloudStt | Separate v2 port pending |
-| GraniteSpeech | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.GraniteSpeech`; 15 .NET tests and five Python tests pass. Managed runtime setup, native inference and local PCM preview verified on CPU and CUDA. Microphone/UI checks passed on 1.2.3, but German recognition quality was poor. Updated runtime and UI verified on 1.2.5; post-upgrade microphone retest and publication remain pending. |
-| Groq | Existing portable build |
-| Linear | Separate v2 port pending |
-| LiveTranscript | Separate v2 port pending |
-| Meta | Separate v2 port pending |
-| Obsidian | Existing portable build |
-| OpenAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenAi`; 73 provider tests, native settings inspection, real API/ChatGPT and microphone tests passed; update acceptance and publication pending (see plugin README and live-test notes) |
-| OpenAiCompatible | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenAiCompatible`; portable protocol, settings and package lifecycle tests added. Native UI, live-server/update acceptance and publication pending; see plugin README. |
-| OpenAiVectorMemory | Separate v2 port pending |
-| OpenRouter | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenRouter`; protocol/settings and isolated package lifecycle tests pass. Native settings, authenticated text/transcription, app HTTP JSON/SRT and a development 1.1.0 to 1.1.1 update passed; public release pending (see plugin README). |
-| ParakeetCtc | Bundled dependency |
-| Qwen3Stt | Separate v2 port pending |
-| Reson8 | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Reson8`; 73 plugin tests pass. Native branding, shared settings, authenticated connection/batch/streaming tests and manual German live microphone acceptance passed. Public package publication pending. See the plugin README for platform differences. |
-| Script | Separate v2 port pending |
-| SherpaOnnx | Existing portable build |
-| SmallestAi | Separate v2 port pending |
-| Soniox | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Soniox`; 78 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
-| Speechmatics | Independent v2 package 1.2.4 in `plugins-v2/TypeWhisper.Plugin.Speechmatics`; 67 tests pass (manual acceptance on 1.2.0). EU batch and live API acceptance, language selection, shared Save and provider logos included. Native live microphone acceptance confirmed by Marco; publication pending. See the plugin README. |
-| SupertonicTts | Separate v2 port pending |
-| Mistral (formerly Voxtral) | Independent v2 `1.3.2` in `plugins-v2/TypeWhisper.Plugin.Voxtral`: batch and realtime transcription, chat processing, account model discovery, provider icon and shared Save settings. 67 tests passed; real batch/live transcription/Ministral text checks passed on 1.3.0; normal and live microphone dictation accepted by Marco, including finalization; manual text-workflow acceptance pending. |
-| Webhook | Separate v2 port pending |
-| WhisperCpp | Whisper (Local) source 1.2.19 in `plugins-v2/TypeWhisper.Plugin.WhisperCpp`; 95 regression tests pass. Installed 1.2.4: CUDA Large V3 Turbo, German microphone dictation, local live preview, restart loading, shared settings and chip icon manually verified; screenshots are from 1.2.4. Historical source 1.2.6 verification: persistent CUDA cache paths and cold PCM/WAV inference verified. Later source changes have automated regression coverage; public package/catalog publication pending. See the plugin README. |
-| Xai | Separate v2 port pending |
+See [plugin package documentation](PLUGIN-PACKAGES-1.1.md) for the package contract. Run `eng/Test-WinUIHeadless.ps1` for the host, application and provider suites. Published packages continue to use the v2 catalog and immutable package store.

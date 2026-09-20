@@ -2,7 +2,7 @@
 
 ## SVGL Plugin Logos
 
-The Windows plugin logo PNGs in `src/TypeWhisper.Windows/Resources/PluginLogos/` were generated from selected SVG files provided by the SVGL project:
+The Windows plugin logo PNGs in `src/TypeWhisper.WinUI/Assets/PluginLogos/` were generated from selected SVG files provided by the SVGL project:
 
 - https://svgl.app/
 - https://github.com/pheralb/svgl
@@ -11,7 +11,7 @@ SVGL is distributed under the MIT License. The included brand logos remain trade
 
 ## NAudio WASAPI Capture
 
-The prepare-once WASAPI capture implementation in `src/TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs` adapts capture initialization and packet-reading logic from NAudio 2.2.1:
+The prepare-once WASAPI capture implementation in `src/TypeWhisper.WinUI/Platform/WasapiAudioInputCapture.cs` adapts capture initialization and packet-reading logic from NAudio 2.2.1:
 
 - https://github.com/naudio/NAudio/blob/v2.2.1/NAudio.Wasapi/WasapiCapture.cs
 - Copyright (c) 2020 Mark Heath

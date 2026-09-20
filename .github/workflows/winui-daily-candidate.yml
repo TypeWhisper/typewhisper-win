@@ -84,7 +84,7 @@ jobs:
             --packVersion $env:CANDIDATE_VERSION --packDir candidate `
             --mainExe TypeWhisper.WinUI.exe --channel '${{ matrix.rid }}-winui-daily' `
             --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
-            --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
+            --icon src/TypeWhisper.WinUI/Assets/app.ico `
             --outputDir installer
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Get-ChildItem installer -Filter '*Setup.exe')) { throw 'Daily installer is missing.' }
