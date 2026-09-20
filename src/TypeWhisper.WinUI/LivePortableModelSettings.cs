@@ -294,7 +294,7 @@ internal sealed class LivePortableModelSettings : UserControl
             row.Progress.Value = (state.Progress ?? 0) * 100;
             row.State.Text = loading ? "Loading model into memory…" : active && state.Message is not null ? state.Message : provider is null
                 ? "Provider unavailable. Refresh after enabling the plugin." : model.SupportsDownload
-                    ? selected ? "Selected for dictation. Runs on this device." : model.Downloaded ? "Downloaded · choose Use model to load it." : "Not downloaded."
+                    ? selected ? "Downloaded · 100%. Selected for dictation." : model.Downloaded ? "Downloaded · 100%. Choose Use model to load it." : "Not downloaded."
                     : provider.Ready ? "Provider ready." : "Complete provider configuration before selecting a model.";
         }
         if (_cloudMode)
