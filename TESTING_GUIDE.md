@@ -4,7 +4,8 @@
 
 - Windows 11 24H2 oder neuer (Build 26100+), .NET 10 SDK.
 - Für Audio-Smoke-Tests: Mikrofon und ein konfigurierter portabler Provider.
-- Lokaler Build und Start des aktuellen Checkouts:
+- Allgemeine Build- und Startbefehle für Mitwirkende stehen im [README](README.md#build).
+- Auf Marcos Entwicklungsrechner: Build und Start des aktuellen Checkouts mit dem außerhalb dieses Repositories installierten Maintainer-Skript:
 
 ```powershell
 & F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run <checkout-pfad>

@@ -47,6 +47,9 @@ public partial class App : Application
                 // This secondary instance owns no profile stores or UI. Always exit after logging;
                 // do not offer recovery actions against the primary instance's profile.
                 System.Diagnostics.Trace.TraceError("Activation redirection failed: {0}", ex);
+                if (share is not null)
+                    TypeWhisper.Presentation.SharedFileActivation.Reject(new WindowsSharedFileOperation(share.ShareOperation),
+                        "TypeWhisper could not hand the shared files to the running app. Please share them again.");
             }
             finally { Exit(); }
             return;
@@ -56,11 +59,13 @@ public partial class App : Application
         {
             if (redirected.Data is global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs shared)
             {
-                dispatcher.TryEnqueue(async () =>
+                var operation = new WindowsSharedFileOperation(shared.ShareOperation);
+                if (!dispatcher.TryEnqueue(async () =>
                 {
-                    await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(new WindowsSharedFileOperation(shared.ShareOperation), _activations);
+                    await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(operation, _activations, CanReceiveSharedActivation);
                     DrainActivations();
-                });
+                }))
+                    TypeWhisper.Presentation.SharedFileActivation.Reject(operation, "TypeWhisper is shutting down. Reopen the app and share the files again.");
                 return;
             }
             var incoming = WindowsActivationRequest.Parse(redirected);
@@ -96,7 +101,7 @@ public partial class App : Application
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
         if (share is not null)
-            await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(new WindowsSharedFileOperation(share.ShareOperation), _activations);
+            await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(new WindowsSharedFileOperation(share.ShareOperation), _activations, CanReceiveSharedActivation);
         _window = new MainWindow();
         _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
         _window.InstallApplicationUpdateAsync = apply => ExitOrRestartAsync(restart: true, applyUpdate: apply);
@@ -147,6 +152,8 @@ public partial class App : Application
         _activationReady = true;
         DrainActivations();
     }
+
+    private bool CanReceiveSharedActivation() => !_exiting && _profileOperation is null;
 
     private void DrainActivations()
     {

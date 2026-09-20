@@ -5,6 +5,33 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class SharedFileActivationTests
 {
+    [Fact]
+    public async Task UnavailableProfileRejectsRedirectedShareBeforeReadingFiles()
+    {
+        var inbox = new ActivationInbox();
+        var operation = new SharedOperation([@"C:\audio\one.wav"]);
+        await SharedFileActivation.ReceiveAsync(operation, inbox, () => false);
+        Assert.Equal(["error"], operation.Events);
+        Assert.Empty(inbox.Drain());
+    }
+
+    [Fact]
+    public async Task ShutdownDuringFileRetrievalRejectsInsteadOfAcknowledgingReceipt()
+    {
+        var inbox = new ActivationInbox();
+        var paths = new TaskCompletionSource<IReadOnlyList<string>>();
+        var operation = new SharedOperation([]) { PendingPaths = paths.Task };
+        var available = true;
+        var receiving = SharedFileActivation.ReceiveAsync(operation, inbox, () => available);
+        Assert.Contains("read", operation.Events);
+        available = false;
+        paths.SetResult([@"C:\audio\one.wav"]);
+        await receiving;
+        Assert.NotNull(operation.Error);
+        Assert.DoesNotContain("completed", operation.Events);
+        Assert.Empty(inbox.Drain());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -90,13 +117,14 @@ public sealed class SharedFileActivationTests
         public List<string> Events { get; } = [];
         public string? Error { get; private set; }
         public Exception? ReadError { get; init; }
+        public Task<IReadOnlyList<string>>? PendingPaths { get; init; }
         public Action? OnCompleted { get; init; }
         public bool ReportingFails { get; init; }
         public void ReportStarted() => Events.Add("started");
         public Task<IReadOnlyList<string>> ReadPathsAsync()
         {
             Events.Add("read");
-            return ReadError is null ? Task.FromResult(paths) : Task.FromException<IReadOnlyList<string>>(ReadError);
+            return PendingPaths ?? (ReadError is null ? Task.FromResult(paths) : Task.FromException<IReadOnlyList<string>>(ReadError));
         }
         public void ReportDataRetrieved() => Events.Add("retrieved");
         public void ReportCompleted() { OnCompleted?.Invoke(); Events.Add("completed"); }

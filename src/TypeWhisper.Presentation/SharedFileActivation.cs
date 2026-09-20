@@ -27,16 +27,22 @@ public static class SharedFileActivation
     }
 
     /// <summary>Completes the Windows share operation only after valid files have entered the activation inbox.</summary>
-    public static async Task ReceiveAsync(ISharedFileOperation operation, ActivationInbox inbox)
+    public static async Task ReceiveAsync(ISharedFileOperation operation, ActivationInbox inbox, Func<bool>? canReceive = null)
     {
         try
         {
+            if (canReceive?.Invoke() == false)
+            {
+                Reject(operation, "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.");
+                return;
+            }
             operation.ReportStarted();
             var paths = await operation.ReadPathsAsync();
             operation.ReportDataRetrieved();
             var request = ApplicationActivationRequest.Parse(new[] { "--transcribe-file" }.Concat(paths));
             if (request.Error is not null) { operation.ReportError(request.Error); return; }
-            if (!inbox.TryAdd(request))
+            // Profile restoration or shutdown can begin while Windows is retrieving files.
+            if (canReceive?.Invoke() == false || !inbox.TryAdd(request))
             {
                 operation.ReportError("TypeWhisper is busy or shutting down. Please share the files again.");
                 return;

@@ -18,7 +18,7 @@ Connection tests and model discovery use the current editor values, including an
 
 ## Isolation
 
-The project references the portable SDK and contains no WPF references. It neither links legacy provider source nor reads historical profile directories. Fresh profiles do not import the legacy flat settings. The legacy project, manifest, feed and packages remain unchanged. Credentials are stored only through the host secret store, scoped by profile.
+The project references the portable .NET 10 SDK at `src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj` and contains no WPF references. It neither links legacy provider source nor reads historical profile directories. Fresh profiles do not import the legacy flat settings. Previously published legacy manifests, feed entries and packages remain unchanged. Credentials are stored only through the host secret store, scoped by profile.
 
 ## Verification
 
