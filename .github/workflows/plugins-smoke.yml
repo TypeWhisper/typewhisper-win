@@ -1,4 +1,4 @@
-name: Plugins Smoke
+name: Plugins
 
 on:
   pull_request:

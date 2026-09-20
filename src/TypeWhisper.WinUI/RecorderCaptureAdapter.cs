@@ -1,6 +1,6 @@
 using Microsoft.UI.Dispatching;
 using TypeWhisper.Presentation;
-using TypeWhisper.Windows.Services;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 

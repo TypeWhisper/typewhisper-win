@@ -1,9 +1,0 @@
-{
-  "id": "com.typewhisper.cloudflare-asr",
-  "name": "Cloudflare ASR",
-  "version": "1.0.0",
-  "author": "TypeWhisper",
-  "description": "Cloudflare Workers AI Whisper transcription engine",
-  "assemblyName": "TypeWhisper.Plugin.CloudflareAsr.dll",
-  "pluginClass": "TypeWhisper.Plugin.CloudflareAsr.CloudflareAsrPlugin"
-}
