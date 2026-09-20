@@ -2,7 +2,8 @@
 
 Local Gemma 3 GGUF text processing through LLamaSharp. Host-rendered model cards show download progress, cancellation, download completion and loaded state. CPU settings use one Save settings button. Gemma is a workflow text provider, not a speech recognition engine.
 
-Version `1.2.2`; plugin ID `com.typewhisper.gemma-local`; minimum host `1.1.3`.
+Version `1.2.3`; plugin ID `com.typewhisper.gemma-local`; minimum host `1.1.3`.
+Host 1.1.3 adds `ILocalLlmModelManagement`; older hosts reject this package before loading its types.
 Independent branch: `seofood/gemmalocal-portable`, based on `4db8f6ac`.
 
 ## Setup

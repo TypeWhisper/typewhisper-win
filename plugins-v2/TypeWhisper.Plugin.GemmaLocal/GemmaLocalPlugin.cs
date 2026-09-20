@@ -50,7 +50,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.2";
+    public string PluginVersion => "1.2.3";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
