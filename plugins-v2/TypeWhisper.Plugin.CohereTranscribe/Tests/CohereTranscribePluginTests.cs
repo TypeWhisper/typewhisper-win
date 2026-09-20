@@ -691,6 +691,32 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public void WildcardListenerIsNotAcceptedAsLoopbackOnly()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Any, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        Assert.Null(LoopbackListenerOwner.FindProcess(port));
+    }
+
+    [WindowsFact]
+    public async Task ModelWithoutRuntimeStillOffersDownloadAfterCancellation()
+    {
+        using var temp = new TempDirectory();
+        using var cancellation = new CancellationTokenSource();
+        var assets = new FakeAssetManager { BeforeEnsureRuntime = () => cancellation.Cancel() };
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, cancellation.Token));
+        Assert.True(assets.IsModelInstalled(CohereTranscribePlugin.ModelId));
+        Assert.False(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
+        assets.BeforeEnsureRuntime = null;
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        Assert.True(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
+    }
+
+    [WindowsFact]
     public async Task RemovingAnotherModelPreservesActiveBackendStatus()
     {
         using var temp = new TempDirectory();
