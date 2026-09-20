@@ -21,7 +21,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $requiredEntries = @(
     ".portable"
-    "TypeWhisper.WinUI.exe"
+    "TypeWhisperDaily.exe"
     "Update.exe"
     "current/TypeWhisper.WinUI.exe"
 )
