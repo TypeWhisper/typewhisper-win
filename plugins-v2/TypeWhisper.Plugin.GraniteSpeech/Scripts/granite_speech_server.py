@@ -14,6 +14,7 @@ import sys
 import time
 
 MODEL_NAME = "ibm-granite/granite-4.0-1b-speech"
+MODEL_REVISION = "bd87ab862416353633ea431fe49b1614003623c5"
 
 
 def respond(data):
@@ -62,7 +63,9 @@ def cmd_setup():
     api = HfApi()
 
     try:
-        all_files = api.list_repo_files(MODEL_NAME)
+        info = api.model_info(MODEL_NAME, revision=MODEL_REVISION, files_metadata=True)
+        sizes = {item.rfilename: item.size or 0 for item in info.siblings}
+        all_files = list(sizes)
     except Exception as e:
         respond({"error": f"Failed to list model files: {e}"})
         sys.exit(1)
@@ -70,16 +73,34 @@ def cmd_setup():
     model_files = [
         f
         for f in all_files
-        if f.endswith((".safetensors", ".json", ".txt", ".model", ".py"))
+        if f.endswith((".safetensors", ".json", ".txt", ".model", ".py", ".jinja"))
     ]
 
-    total = len(model_files)
+    total_bytes = sum(sizes[f] for f in model_files)
+    completed_bytes = 0
+    from tqdm.auto import tqdm
+
+    class DownloadProgress(tqdm):
+        def __init__(self, *args, **kwargs):
+            self.downloaded = kwargs.get("initial", 0)
+            self.last_report = 0.0
+            kwargs["disable"] = True
+            super().__init__(*args, **kwargs)
+
+        def update(self, amount=1):
+            self.downloaded += amount
+            now = time.monotonic()
+            if now - self.last_report >= 0.25:
+                self.last_report = now
+                respond({"progress": min(1.0, (completed_bytes + self.downloaded) / max(1, total_bytes)), "phase": "model"})
+            return super().update(amount)
+
     max_retries = 3
 
     for i, filename in enumerate(model_files):
         for attempt in range(max_retries):
             try:
-                hf_hub_download(MODEL_NAME, filename)
+                hf_hub_download(MODEL_NAME, filename, revision=MODEL_REVISION, tqdm_class=DownloadProgress)
                 break
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -87,7 +108,7 @@ def cmd_setup():
                     respond(
                         {
                             "warning": f"Retry {attempt + 1}/{max_retries} for {filename}: {e}",
-                            "progress": i / total,
+                            "progress": completed_bytes / max(1, total_bytes),
                             "phase": "model",
                         }
                     )
@@ -96,7 +117,8 @@ def cmd_setup():
                     respond({"error": f"Failed to download {filename} after {max_retries} attempts: {e}"})
                     sys.exit(1)
 
-        respond({"progress": (i + 1) / total, "phase": "model"})
+        completed_bytes += sizes[filename]
+        respond({"progress": completed_bytes / max(1, total_bytes), "phase": "model"})
 
     respond({"progress": 1.0, "phase": "done"})
 
@@ -115,6 +137,10 @@ def cmd_serve():
     import soundfile as sf
     from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
+    device = "cuda" if os.environ.get("TYPEWHISPER_DEVICE", "Auto") != "Cpu" and torch.cuda.is_available() else "cpu"
+    if os.environ.get("TYPEWHISPER_DEVICE") == "NvidiaCuda" and device != "cuda":
+        raise RuntimeError("NVIDIA CUDA is unavailable. Select CPU or install a compatible NVIDIA driver.")
+    torch.set_num_threads(min(8, os.cpu_count() or 4))
     model = None
     processor = None
     tokenizer = None
@@ -137,12 +163,14 @@ def cmd_serve():
 
         elif action == "load":
             try:
-                processor = AutoProcessor.from_pretrained(MODEL_NAME)
+                processor = AutoProcessor.from_pretrained(MODEL_NAME, revision=MODEL_REVISION, local_files_only=True)
                 tokenizer = processor.tokenizer
                 model = AutoModelForSpeechSeq2Seq.from_pretrained(
-                    MODEL_NAME, torch_dtype=torch.float32
+                    MODEL_NAME, revision=MODEL_REVISION, local_files_only=True,
+                    torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32
                 )
-                respond({"status": "ok", "req_id": req_id})
+                model = model.to(device).eval()
+                respond({"status": "ok", "device": device, "req_id": req_id})
             except Exception as e:
                 respond({"error": str(e), "req_id": req_id})
 
@@ -172,6 +200,10 @@ def cmd_serve():
                     question = "Translate the speech into English."
                 else:
                     question = "Transcribe the speech exactly as spoken, preserving the original language."
+                    language = cmd.get("language")
+                    languages = {"de": "German", "en": "English", "fr": "French", "es": "Spanish", "pt": "Portuguese", "ja": "Japanese"}
+                    if language in languages:
+                        question += f" The spoken language is {languages[language]}."
 
                 chat = [{"role": "user", "content": f"<|audio|>{question}"}]
                 prompt = tokenizer.apply_chat_template(
@@ -179,14 +211,16 @@ def cmd_serve():
                 )
 
                 model_inputs = processor(
-                    prompt, wav, device="cpu", return_tensors="pt"
+                    prompt, wav, device=device, return_tensors="pt"
                 )
-                outputs = model.generate(
-                    **model_inputs,
-                    max_new_tokens=500,
-                    do_sample=False,
-                    num_beams=1,
-                )
+                model_inputs = model_inputs.to(device)
+                with torch.inference_mode():
+                    outputs = model.generate(
+                        **model_inputs,
+                        max_new_tokens=500,
+                        do_sample=False,
+                        num_beams=1,
+                    )
 
                 num_input_tokens = model_inputs["input_ids"].shape[-1]
                 new_tokens = outputs[0, num_input_tokens:].unsqueeze(0)

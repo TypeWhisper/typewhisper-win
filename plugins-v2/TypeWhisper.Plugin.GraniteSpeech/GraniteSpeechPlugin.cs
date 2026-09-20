@@ -13,7 +13,7 @@ namespace TypeWhisper.Plugin.GraniteSpeech;
 /// <summary>
 /// Provides granite speech plugin behavior.
 /// </summary>
-public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEnginePlugin
+public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTranscriptionEnginePlugin, IPluginTextSettings
 {
     private const string ModelId = "granite-4.0-1b-speech";
     private const string PythonVersion = "3.12.10";
@@ -46,7 +46,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.1";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -61,7 +61,9 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
     /// Gets whether the provider has the configuration required to run.
     /// </summary>
     /// <inheritdoc />
-    public bool IsConfigured => true;
+    public bool IsConfigured => _host is not null && IsModelDownloaded(ModelId);
+    /// <inheritdoc />
+    public bool SupportsLocalLivePreview => true;
     /// <summary>
     /// Gets the currently selected provider model identifier.
     /// </summary>
@@ -103,17 +105,15 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
+        _selectedModelId = ModelId;
+        _device = host.GetSetting<string>("device") is "Cpu" ? "Cpu" : host.GetSetting<string>("device") is "NvidiaCuda" ? "NvidiaCuda" : "Auto";
         return Task.CompletedTask;
     }
 
     /// <summary>
     /// Deactivates the plugin and releases provider resources.
     /// </summary>
-    public Task DeactivateAsync()
-    {
-        StopSidecar();
-        return Task.CompletedTask;
-    }
+    public Task DeactivateAsync() => UnloadModelAsync();
 
 
 
@@ -131,13 +131,17 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
     /// Gets whether the requested model is available locally.
     /// </summary>
     public bool IsModelDownloaded(string modelId) =>
-        File.Exists(Path.Combine(GetDataDirectory(), ".setup-complete"));
+        modelId == ModelId && _host is not null && File.Exists(Path.Combine(GetDataDirectory(), ".setup-complete"));
 
     /// <summary>
     /// Downloads the requested model and reports progress when available.
     /// </summary>
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
+        if (modelId != ModelId) throw new ArgumentException("Unknown model.", nameof(modelId));
+        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) throw new PlatformNotSupportedException("Granite Speech requires Windows x64.");
+        await _sidecarLock.WaitAsync(ct);
+        try {
         var dataDir = GetDataDirectory();
         Directory.CreateDirectory(dataDir);
 
@@ -177,6 +181,9 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
             Log(PluginLogLevel.Info, "Step 1 complete: Python installed");
         }
 
+        pythonDir = ShortPath(pythonDir);
+        pythonExe = Path.Combine(pythonDir, "python.exe");
+
         // Step 2: Bootstrap pip
         progress?.Report(0.05);
         if (!File.Exists(Path.Combine(pythonDir, "Scripts", "pip.exe")))
@@ -206,13 +213,13 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
         {
             await RunProcessAsync(pythonExe,
                 $"-m pip install -q --no-cache-dir -r \"{reqPath}\" " +
-                "--index-url https://download.pytorch.org/whl/cpu " +
+                (_device == "Cpu" ? "--index-url https://download.pytorch.org/whl/cpu " : "--index-url https://download.pytorch.org/whl/cu130 ") +
                 "--extra-index-url https://pypi.org/simple/",
                 ct, timeoutMs: 1_800_000);
 
             await RunProcessAsync(pythonExe,
                 "-c \"import torch; import transformers; import soundfile; import huggingface_hub\"",
-                ct, timeoutMs: 30_000);
+                ct, timeoutMs: 120_000);
         }, maxRetries: 2, ct);
 
         Log(PluginLogLevel.Info, "Step 3 complete: packages installed");
@@ -236,6 +243,8 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start model download");
 
+        using var setupCancellation = ct.Register(() => { try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } });
+        var setupErrors = proc.StandardError.ReadToEndAsync(ct);
         string? line;
         while ((line = await proc.StandardOutput.ReadLineAsync(ct)) is not null)
         {
@@ -266,7 +275,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
         await proc.WaitForExitAsync(ct);
         if (proc.ExitCode != 0)
         {
-            var stderr = await proc.StandardError.ReadToEndAsync(ct);
+            var stderr = await setupErrors;
             throw new InvalidOperationException(
                 $"Model download failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 1000)..]}");
         }
@@ -277,6 +286,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
 
         Log(PluginLogLevel.Info, "Setup complete");
         progress?.Report(1.0);
+        } finally { _sidecarLock.Release(); }
     }
 
     /// <summary>
@@ -296,7 +306,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
             _loadedModelId = null;
             ct.ThrowIfCancellationRequested();
 
-            var dataDirectory = host.PluginAssetDirectory;
+            var dataDirectory = GetDataDirectory();
             if (Directory.Exists(dataDirectory))
                 Directory.Delete(dataDirectory, recursive: true);
         }
@@ -311,12 +321,14 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
     /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken ct)
     {
+        if (modelId != ModelId) throw new ArgumentException("Unknown model.", nameof(modelId));
         if (!IsModelDownloaded(modelId))
             throw new FileNotFoundException("Model not set up. Run DownloadModelAsync first.");
 
         await _sidecarLock.WaitAsync(ct);
         try
         {
+            if (_loadedModelId == modelId && _sidecar is { HasExited: false }) return;
             StopSidecar();
             StartSidecar();
 
@@ -324,6 +336,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
             if (response.TryGetProperty("error", out var err))
                 throw new InvalidOperationException($"Failed to load model: {err.GetString()}");
 
+            _activeDevice = response.TryGetProperty("device", out var device) ? device.GetString() : "cpu";
             _loadedModelId = modelId;
             _selectedModelId = modelId;
             Debug.WriteLine("[GraniteSpeech] Model loaded via Python sidecar");
@@ -340,6 +353,9 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        if (language is not null && !SupportedLanguages.Contains(language)) throw new ArgumentException("Unsupported spoken language.", nameof(language));
+        if (_loadedModelId is null || _sidecar is null || _sidecar.HasExited) await LoadModelAsync(ModelId, ct);
         await _sidecarLock.WaitAsync(ct);
         try
         {
@@ -399,7 +415,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
 
     private void StartSidecar()
     {
-        var pythonExe = Path.Combine(GetDataDirectory(), "python", "python.exe");
+        var pythonExe = Path.Combine(ShortPath(Path.Combine(GetDataDirectory(), "python")), "python.exe");
         var scriptPath = GetScriptPath("granite_speech_server.py");
 
         var psi = new ProcessStartInfo
@@ -413,13 +429,19 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
             CreateNoWindow = true,
         };
         psi.Environment["PYTHONUNBUFFERED"] = "1";
+        psi.Environment["TYPEWHISPER_DEVICE"] = _device;
+        psi.Environment["HF_HUB_OFFLINE"] = "1";
         psi.Environment["HF_HOME"] = Path.Join(GetDataDirectory(), "hf-cache");
 
         _sidecar = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start Python sidecar");
         _sidecarIn = _sidecar.StandardInput;
         _sidecarOut = _sidecar.StandardOutput;
+        _ = DrainErrorsAsync(_sidecar.StandardError);
     }
+
+    private static async Task DrainErrorsAsync(StreamReader reader)
+    { try { while (await reader.ReadLineAsync() is not null) { } } catch (Exception ex) when (ex is IOException or ObjectDisposedException) { } }
 
     private void StopSidecar()
     {
@@ -438,7 +460,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
 
         if (!_sidecar.HasExited)
         {
-            try { _sidecar.Kill(); }
+            try { _sidecar.Kill(entireProcessTree: true); }
             catch { /* ignore */ }
         }
 
@@ -447,6 +469,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
         _sidecarIn = null;
         _sidecarOut = null;
         _loadedModelId = null;
+        _activeDevice = null;
     }
 
     private async Task<JsonElement> SendCommandAsync(object command, CancellationToken ct)
@@ -501,6 +524,16 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
         File.Move(destPath + ".tmp", destPath, overwrite: true);
     }
 
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathName(string longPath, System.Text.StringBuilder shortPath, uint capacity);
+
+    private static string ShortPath(string path)
+    {
+        var buffer = new System.Text.StringBuilder(32768);
+        return OperatingSystem.IsWindows() && GetShortPathName(path, buffer, (uint)buffer.Capacity) is > 0 and < 32768
+            ? buffer.ToString() : path;
+    }
+
     private static void PatchPthFile(string pythonDir)
     {
         // The ._pth file restricts sys.path in embeddable Python.
@@ -534,7 +567,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
     }
 
     private string GetDataDirectory() =>
-        _host?.PluginAssetDirectory ?? Path.Join(".", "PluginData");
+        Path.Combine((_host ?? throw new InvalidOperationException("Plugin is not activated.")).PluginAssetDirectory, "managed-runtime");
 
     private static string GetScriptPath(string fileName)
     {
@@ -556,6 +589,8 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start {exe}");
 
+        var errors = proc.StandardError.ReadToEndAsync();
+        var output = proc.StandardOutput.ReadToEndAsync();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeoutMs);
 
@@ -563,15 +598,18 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscrip
         {
             await proc.WaitForExitAsync(cts.Token);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            proc.Kill();
+            if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+            await proc.WaitForExitAsync();
+            if (ct.IsCancellationRequested) throw;
             throw new TimeoutException($"Process timed out after {timeoutMs / 1000}s: {exe}");
         }
+        await output;
 
         if (proc.ExitCode != 0)
         {
-            var stderr = await proc.StandardError.ReadToEndAsync(ct);
+            var stderr = await errors;
             throw new InvalidOperationException(
                 $"{exe} failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 500)..]}");
         }

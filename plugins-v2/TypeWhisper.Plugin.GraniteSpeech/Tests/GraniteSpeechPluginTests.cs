@@ -34,16 +34,18 @@ public sealed class GraniteSpeechPluginTests
         var assetDirectory = Path.Join(Path.GetTempPath(), $"tw-granite-remove-{Guid.NewGuid():N}");
         try
         {
-            Directory.CreateDirectory(Path.Join(assetDirectory, "hf-cache"));
-            await File.WriteAllTextAsync(Path.Join(assetDirectory, ".setup-complete"), "ready");
-            await File.WriteAllTextAsync(Path.Join(assetDirectory, "hf-cache", "weights.bin"), "model");
+            Directory.CreateDirectory(Path.Join(assetDirectory, "managed-runtime", "hf-cache"));
+            await File.WriteAllTextAsync(Path.Join(assetDirectory, "settings.json"), "preserve");
+            await File.WriteAllTextAsync(Path.Join(assetDirectory, "managed-runtime", ".setup-complete"), "ready");
+            await File.WriteAllTextAsync(Path.Join(assetDirectory, "managed-runtime", "hf-cache", "weights.bin"), "model");
             using var sut = new GraniteSpeechPlugin();
             await sut.ActivateAsync(new FakePluginHostServices(assetDirectory));
 
             await sut.RemoveModelAsync("granite-4.0-1b-speech", CancellationToken.None);
 
             Assert.True(sut.SupportsModelRemoval);
-            Assert.False(Directory.Exists(assetDirectory));
+            Assert.False(Directory.Exists(Path.Join(assetDirectory, "managed-runtime")));
+            Assert.Equal("preserve", await File.ReadAllTextAsync(Path.Join(assetDirectory, "settings.json")));
             Assert.False(sut.IsModelDownloaded("granite-4.0-1b-speech"));
         }
         finally
@@ -64,6 +66,35 @@ public sealed class GraniteSpeechPluginTests
         Assert.Equal("Plugin is not activated.", error.Message);
     }
 
+    [Fact]
+    public async Task ProcessingDevicePersistsAndInvalidValuesDoNotChangeIt()
+    {
+        var host = new FakePluginHostServices(Path.GetTempPath());
+        using var sut = new GraniteSpeechPlugin();
+        await sut.ActivateAsync(host);
+        Assert.False(sut.IsConfigured);
+        Assert.True(sut.SupportsLocalLivePreview);
+        Assert.IsAssignableFrom<IPcmTranscriptionEnginePlugin>(sut);
+        await sut.SaveTextSettingAsync("device", "NvidiaCuda", default);
+        await sut.DeactivateAsync();
+        await sut.ActivateAsync(host);
+        Assert.Equal("NvidiaCuda", Assert.Single(sut.TextSettings).Value);
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.SaveTextSettingAsync("device", "unknown", default));
+        Assert.Equal("NvidiaCuda", Assert.Single(sut.TextSettings).Value);
+        Assert.False(sut.IsModelDownloaded("unknown"));
+    }
+
+    [Fact]
+    public async Task InvalidPcmAndCanceledCallsNeverStartALocalProcess()
+    {
+        using var sut = new GraniteSpeechPlugin();
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.TranscribePcmAsync(new float[] { float.NaN }, "de", false, default));
+        using var canceled = new CancellationTokenSource(); canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.TranscribePcmAsync(new float[160], "de", false, canceled.Token));
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.TranscribeAsync([], "xx", false, null, default));
+        Assert.Equal("Model not loaded", sut.AccelerationStatus.DisplayText);
+    }
+
     private static PluginManifest? ReadManifest() =>
         JsonSerializer.Deserialize<PluginManifest>(
             TestFile.ReadProjectFile("plugins-v2", "TypeWhisper.Plugin.GraniteSpeech", "manifest.json"),
@@ -81,8 +112,9 @@ public sealed class GraniteSpeechPluginTests
         public Task StoreSecretAsync(string key, string value) => Task.CompletedTask;
         public Task<string?> LoadSecretAsync(string key) => Task.FromResult<string?>(null);
         public Task DeleteSecretAsync(string key) => Task.CompletedTask;
-        public T? GetSetting<T>(string key) => default;
-        public void SetSetting<T>(string key, T value) { }
+        private readonly Dictionary<string, object?> _settings = [];
+        public T? GetSetting<T>(string key) => _settings.TryGetValue(key, out var value) ? (T?)value : default;
+        public void SetSetting<T>(string key, T value) => _settings[key] = value;
         public void Log(PluginLogLevel level, string message) { }
         public void NotifyCapabilitiesChanged() { }
     }
