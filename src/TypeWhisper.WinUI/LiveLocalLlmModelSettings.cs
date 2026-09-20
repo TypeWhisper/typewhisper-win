@@ -27,7 +27,11 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         Content = _content;
         _content.Children.Add(_status);
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        _cancelDownload.Click += async (_, _) => await _session.LocalLlmDownload.CancelAndDrainAsync();
+        _cancelDownload.Click += async (_, _) =>
+        {
+            if (_session.LocalLlmDownloadPluginId == _pluginId)
+                await _session.LocalLlmDownload.CancelAndDrainAsync();
+        };
         Loaded += async (_, _) =>
         {
             _lifetime = new();
@@ -105,7 +109,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private bool ShowActiveDownload()
     {
         var state = _session.LocalLlmDownload.State;
-        if (!state.IsBusy) return false;
+        if (!state.IsBusy || _session.LocalLlmDownloadPluginId != _pluginId) return false;
         _content.Children.Clear(); _rows.Clear();
         _status.Text = "Downloading " + _session.LocalLlmDownloadModelName +
             (state.Progress is { } fraction ? $" · {fraction:P0}" : "…");
