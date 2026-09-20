@@ -109,8 +109,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal LocalTranscriptionPlugin Models => _transcriptionPlugin;
     internal PortablePluginRuntimeRegistry PluginRuntime { get; }
     internal IReadOnlyList<PortableLlmProvider> LlmProviders => PluginRuntime.LlmProviders;
-    internal Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct) =>
-        PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
+    internal event Action? LlmProcessingStarting;
+    internal Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        // Give foreground workflows priority over cancellable settings downloads.
+        LlmProcessingStarting?.Invoke();
+        return PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
+    }
     private string _providerId = "local";
     internal bool UsesRegistryProvider => _providerId != "local";
     private static string RegistrySelectionId(string id) => id == "groq" ? CloudTranscriptionPlugin.PluginId : id;

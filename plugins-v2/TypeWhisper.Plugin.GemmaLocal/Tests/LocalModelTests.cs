@@ -55,6 +55,41 @@ public sealed class LocalModelTests
     }
 
     [Fact]
+    public async Task LoadModel_RejectsSameLengthCorruptionBeforeNativeLoading()
+    {
+        using var fixture = new PortableFixture();
+        byte[] expected = [1, 2, 3, 4];
+        var model = new GemmaModelDefinition("fixture", "Fixture", "4 bytes", 0, false,
+            "https://fixture.invalid/model", "model.gguf", 4, Convert.ToHexString(SHA256.HashData(expected)));
+        using var plugin = new GemmaLocalPlugin([model]);
+        await plugin.ActivateAsync(fixture.Host);
+        var directory = Path.Combine(fixture.Host.PluginAssetDirectory, "Models", model.Id);
+        Directory.CreateDirectory(directory);
+        await File.WriteAllBytesAsync(Path.Combine(directory, model.FileName), [4, 3, 2, 1]);
+        Assert.True(plugin.LocalModels[0].Downloaded);
+        var error = await Assert.ThrowsAsync<IOException>(() => plugin.LoadModelAsync(model.Id, default));
+        Assert.Contains("integrity check", error.Message);
+        Assert.False(plugin.IsAvailable);
+        Assert.Null(plugin.SelectedModelId);
+    }
+
+    [Fact]
+    public async Task DownloadModel_ReusesVerifiedCachedFileWithoutNetwork()
+    {
+        using var fixture = new PortableFixture();
+        byte[] expected = [1, 2, 3, 4];
+        var model = new GemmaModelDefinition("fixture", "Fixture", "4 bytes", 0, false,
+            "https://fixture.invalid/model", "model.gguf", 4, Convert.ToHexString(SHA256.HashData(expected)));
+        using var plugin = new GemmaLocalPlugin([model]);
+        await plugin.ActivateAsync(fixture.Host);
+        var directory = Path.Combine(fixture.Host.PluginAssetDirectory, "Models", model.Id);
+        Directory.CreateDirectory(directory);
+        await File.WriteAllBytesAsync(Path.Combine(directory, model.FileName), expected);
+        await plugin.DownloadModelAsync(model.Id, null, default);
+        Assert.True(plugin.LocalModels[0].Downloaded);
+    }
+
+    [Fact]
     public async Task CancelledOperations_DoNotCreateModelFilesOrPublishAvailability()
     {
         using var fixture = new PortableFixture();

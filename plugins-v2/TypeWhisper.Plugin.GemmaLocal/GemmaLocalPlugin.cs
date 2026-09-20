@@ -16,7 +16,7 @@ namespace TypeWhisper.Plugin.GemmaLocal;
 /// </summary>
 public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmModelManagement
 {
-    private static readonly IReadOnlyList<GemmaModelDefinition> Models =
+    private static readonly IReadOnlyList<GemmaModelDefinition> DefaultModels =
     [
         new("gemma3-4b-q4", "Gemma 3 4B (Q4_K_M)", "~3 GB", 3000, true,
             "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/5a3566e716d80f709ed7b79817eaf7733d2a1fce/gemma-3-4b-it-Q4_K_M.gguf",
@@ -28,6 +28,11 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             "https://huggingface.co/unsloth/gemma-3-27b-it-GGUF/resolve/7cd0121f2530b00e42c4df952d4cad4418c0b3c1/gemma-3-27b-it-Q4_K_M.gguf",
             "gemma-3-27b-it-Q4_K_M.gguf", 16546688736, "f1b699659942c777bd3ec0bcb527d6ebf34ae14ca76e3af103d58d0c9cbdadee"),
     ];
+
+    private readonly IReadOnlyList<GemmaModelDefinition> Models;
+    /// <summary>Creates the local Gemma provider with the pinned model catalog.</summary>
+    public GemmaLocalPlugin() : this(DefaultModels) { }
+    internal GemmaLocalPlugin(IReadOnlyList<GemmaModelDefinition> models) => Models = models;
 
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromHours(2) };
     private readonly SemaphoreSlim _inferenceLock = new(1, 1);
@@ -91,7 +96,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels => ModelCatalog.Where(model => model.Id == _loadedModelId).ToArray();
 
-    private static readonly IReadOnlyList<PluginModelInfo> ModelCatalog = Models.Select(m =>
+    private IReadOnlyList<PluginModelInfo> ModelCatalog => Models.Select(m =>
         new PluginModelInfo(m.Id, m.DisplayName)
         {
             SizeDescription = m.SizeDescription,
@@ -180,7 +185,19 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             var dir = GetModelDirectory(modelId);
             Directory.CreateDirectory(dir);
             var filePath = Path.Combine(dir, model.FileName);
-            if (IsModelDownloaded(modelId)) { progress?.Report(1); return; }
+            if (IsModelDownloaded(modelId))
+            {
+                try
+                {
+                    await VerifyModelFileAsync(filePath, model.SizeBytes, model.Sha256, ct);
+                    progress?.Report(1); return;
+                }
+                catch (IOException)
+                {
+                    // Replace corrupt cached files through the same verified pending-file path.
+                    ct.ThrowIfCancellationRequested();
+                }
+            }
             var pending = filePath + ".download";
             try
             {
@@ -220,6 +237,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             var filePath = GetModelFilePath(modelId, model.FileName);
             if (!IsModelDownloaded(modelId)) throw new FileNotFoundException("Download the model before loading it.");
             if (_loadedModelId == modelId) return;
+            await VerifyModelFileAsync(filePath, model.SizeBytes, model.Sha256, ct);
             await Task.Run(() =>
             {
                 UnloadModel();
@@ -309,7 +327,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     private string GetModelFilePath(string modelId, string fileName) =>
         Path.Combine(GetModelDirectory(modelId), fileName);
 
-    private static GemmaModelDefinition GetModelDefinition(string modelId) =>
+    private GemmaModelDefinition GetModelDefinition(string modelId) =>
         Models.FirstOrDefault(m => m.Id == modelId)
         ?? throw new ArgumentException($"Unknown model: {modelId}");
 

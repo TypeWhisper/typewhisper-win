@@ -38,7 +38,12 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 Task.FromResult((plugin as ILocalLlmModelManagement)?.LocalModels.ToArray() ?? []), lifetime.Token);
             if (!Current(lifetime)) return;
             _rows.Clear(); _content.Children.Clear();
-            if (models.Length == 0) return;
+            if (models.Length == 0)
+            {
+                _status.Text = "No local text models are currently available. Re-enable the plugin or reopen this page to retry.";
+                _content.Children.Add(_status);
+                return;
+            }
             _content.Children.Add(Label("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device."));
             _content.Children.Add(_status);
             foreach (var model in models)
@@ -63,6 +68,11 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private async Task RunAsync(Row row, string action)
     {
         if (_busy || _lifetime is not { } lifetime || !_session.CanStartPluginSettingsAction) return;
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        _operation = operation;
+        void CancelForRecording() => operation.Cancel();
+        _session.RecordingStarting += CancelForRecording;
+        _session.LlmProcessingStarting += CancelForRecording;
         _busy = true;
         foreach (var item in _rows) foreach (var button in item.Actions.Children.OfType<Control>()) button.IsEnabled = false;
         try
@@ -75,10 +85,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                     PrimaryButtonText = "Remove model", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary || !Current(lifetime)) return;
             }
-            using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
-            _operation = operation;
-            void CancelForRecording() => operation.Cancel();
-            _session.RecordingStarting += CancelForRecording;
+            operation.Token.ThrowIfCancellationRequested();
             row.Progress.Visibility = Visibility.Visible; row.Progress.IsIndeterminate = true;
             row.State.Text = action switch { "download" => "Downloading…", "load" => "Loading model into memory…", "unload" => "Releasing model memory…", _ => "Removing downloaded file…" };
             row.Cancel.Visibility = Visibility.Visible; row.Cancel.IsEnabled = true;
@@ -107,15 +114,18 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 }, operation.Token, preserveCompletedResult: true);
                 if (Current(lifetime)) _status.Text = action == "load" ? "Model loaded. Select it in a text-processing workflow." : "Completed.";
             }
-            finally { _session.RecordingStarting -= CancelForRecording; _operation = null; }
+            finally { row.Cancel.IsEnabled = false; }
         }
         catch (OperationCanceledException) { if (Current(lifetime)) _status.Text = "Model operation cancelled."; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (Current(lifetime)) _status.Text = "Model operation failed: " + ex.Message; }
         finally
         {
+            _session.RecordingStarting -= CancelForRecording;
+            _session.LlmProcessingStarting -= CancelForRecording;
+            _operation = null;
             _busy = false;
-            if (Current(lifetime)) await RefreshAsync();
+            if (IsLoaded) await RefreshAsync();
         }
     }
 
