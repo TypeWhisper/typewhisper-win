@@ -7,6 +7,9 @@ Tracking: [issue #471](https://github.com/TypeWhisper/typewhisper-win/issues/471
 `LicenseService` pins activation, validation, deactivation, and activation rollback
 requests to `Polar-Version: 2026-04`. The header belongs to each request, not the
 shared `HttpClient`. There is no retry against unversioned Current.
+Both dedicated production clients (WPF and WinUI) disable automatic redirects so
+license keys and activation IDs cannot be forwarded to a redirected origin.
+Redirect responses fail the operation and retain stored license state.
 
 The [versioning documentation](https://polar.sh/docs/api-reference/2026-04/versioning.md)
 states that omitted headers follow Current, unsupported versions return 404, and
@@ -49,7 +52,7 @@ headers, unsupported/ambiguous responses, persistence across restart, confirmed
 missing/revoked/expired licenses, inactive validation results, and offline retries.
 They do not require a Polar account and do not send network requests.
 
-Local results on 2026-09-20: all 71 `LicenseServiceTests` and all 30
+Local results on 2026-09-20: all 75 `LicenseServiceTests` and all 30
 `AppLocalizationResourcesTests` passed. The supported development script built
 this worktree and started `F:\typewhisper\dev-output\typewhisper-win\Build\TypeWhisper.exe`;
 the process was responding with its Settings window open. Existing MVVM analyzer

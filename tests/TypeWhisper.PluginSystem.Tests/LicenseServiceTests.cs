@@ -75,6 +75,8 @@ public sealed class LicenseServiceTests : IDisposable
             ("""{"detail":[{"type":"unknown_version"}]}""", null, HttpStatusCode.NotFound),
             ("<html>Not found</html>", null, HttpStatusCode.NotFound),
             ("", null, HttpStatusCode.NotFound),
+            ("", null, HttpStatusCode.TemporaryRedirect),
+            ("", null, HttpStatusCode.PermanentRedirect),
             ("""{"error":"ResourceNotFound","detail":"Not found"}""", "2026-04", HttpStatusCode.InternalServerError),
             ("""{"detail":"No LicenseKeyActivation does not exist"}""", "2026-04", HttpStatusCode.BadRequest),
         };
@@ -240,6 +242,8 @@ public sealed class LicenseServiceTests : IDisposable
     private static HttpResponseMessage PolarError(HttpStatusCode status, string body, string? version)
     {
         var response = Json(status, body);
+        if (status is HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect)
+            response.Headers.Location = new Uri("https://example.com/redirected-license-request");
         if (version is not null)
             response.Headers.Add("Polar-Version", version);
         return response;

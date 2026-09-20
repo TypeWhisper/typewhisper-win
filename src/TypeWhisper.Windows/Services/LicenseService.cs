@@ -149,7 +149,8 @@ public sealed partial class LicenseService : ObservableObject
     /// Initializes a new instance of the LicenseService class.
     /// </summary>
     public LicenseService()
-        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
+        : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+            { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
     {
     }
 
