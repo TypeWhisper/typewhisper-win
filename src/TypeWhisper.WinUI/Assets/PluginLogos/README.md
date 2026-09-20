@@ -2,6 +2,8 @@
 
 These assets are bundled with the host; plugin packages do not need to provide new metadata.
 
+- Fireworks AI: official [website icon](https://fireworks.ai/icon0.svg), retrieved September 18, 2026. Original geometry, view box and purple color are preserved; redundant SVG wrappers and no-op browser media styles are omitted for native rendering.
+
 - Claude: reuses the existing TypeWhisper Windows `Resources/PluginLogos/claude.png` asset through a linked build item; the source image is unchanged.
 
 - Cerebras: orange concentric symbol extracted from the official [Cerebras homepage](https://www.cerebras.ai/) header SVG on September 14, 2026. Original path, stroke width and color are preserved; the view box contains the symbol without the wordmark.
@@ -13,3 +15,7 @@ These assets are bundled with the host; plugin packages do not need to provide n
   Source SVG blob IDs: Deepgram `31579cb31bcd948a78c76bc1ae3266917cb979bb`, ElevenLabs `bad5cfb9d03da69f22980499dcc529c3d1a7dcc0`, NVIDIA `2c7ff66f8b1f04c24df0d4653f665cd97a228c92`.
 
 Explicit fill colors support native SVG rendering. Monochrome marks include light and dark variants. Brand names and marks belong to their respective owners.
+
+- Reson8: existing TypeWhisper website brand asset, reused for the portable provider.
+- Speechmatics: standalone symbol path from the [official header SVG](https://www.speechmatics.com/_next/static/media/SM-Logo-main.b945b6cd.svg), with its original dark fill and a white variant for dark backgrounds. Symbol geometry is unchanged.
+- Mistral: reuses the TypeWhisper website brand asset for the Mistral provider.

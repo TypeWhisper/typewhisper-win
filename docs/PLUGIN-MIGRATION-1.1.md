@@ -38,20 +38,20 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | Plugin | Status |
 | --- | --- |
 | AssemblyAi | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AssemblyAi`; 56 plugin tests and 259 portable SDK/host tests pass. Includes macOS model/dictionary/diarization features and native branding. Development install/start, authenticated REST/WebSocket requests for both models, Pro speaker labeling and app HTTP transcription passed; native UI, update acceptance and publication pending (see plugin README). |
-| AuthenticatedCli | Separate v2 port pending |
+| AuthenticatedCli | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.AuthenticatedCli`; 50 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Cerebras | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Cerebras`; 43 provider/package tests and 259 portable SDK/host tests pass. Model discovery, grouped settings and native branding included. Development key validation/model discovery passed; real text requests returned HTTP 402 (account quota), so live inference and microphone workflow acceptance remain pending. See plugin README. |
 | Claude | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Claude`; 57 provider/package tests and 259 portable SDK/host tests pass. Paginated model discovery, preserved model selection, portable settings and native branding included. Development package installation passed; authenticated requests, update acceptance and publication pending. See plugin README. |
-| CloudflareAsr | Separate v2 port pending |
-| Cohere | Separate v2 port pending |
+| CloudflareAsr | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.CloudflareAsr`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
+| Cohere | Independent portable source package 1.1.3 (not publicly published) with 48 passing tests, branding and shared settings save. Authenticated transcription and text processing passed; German microphone dictation accepted with development package 1.1.1. No realtime audio API is advertised. See plugin README. |
 | CohereTranscribe | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.CohereTranscribe`; 51 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
 | Deepgram | Existing portable build |
 | ElevenLabs | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.ElevenLabs`; 34 plugin tests and live batch/WebSocket acceptance passed; public release pending |
 | FileMemory | Separate v2 port pending |
 | FillerWords | Existing portable build |
-| Fireworks | Separate v2 port pending |
-| Gemini | Separate v2 port pending |
+| Fireworks | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Fireworks`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
+| Gemini | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gemini`; 95 provider/package/loopback tests pass. Includes language mapping, dictionary terms, LLM selection/temperature and confirmed streaming completion. Authenticated text/audio/streaming, package upgrade and manual live-preview acceptance passed; public package publication pending. |
 | GemmaLocal | Separate v2 port pending |
-| Gladia | Separate v2 port pending |
+| Gladia | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gladia`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; recorded-audio and live microphone dictation, including explicit German selection, passed manual acceptance. ARM64 execution and publication remain pending. |
 | GoogleCloudStt | Separate v2 port pending |
 | GraniteSpeech | Separate v2 port pending |
 | Groq | Existing portable build |
@@ -65,14 +65,14 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | OpenRouter | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.OpenRouter`; protocol/settings and isolated package lifecycle tests pass. Native settings, authenticated text/transcription, app HTTP JSON/SRT and a development 1.1.0 to 1.1.1 update passed; public release pending (see plugin README). |
 | ParakeetCtc | Bundled dependency |
 | Qwen3Stt | Separate v2 port pending |
-| Reson8 | Separate v2 port pending |
+| Reson8 | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Reson8`; 73 plugin tests pass. Native branding, shared settings, authenticated connection/batch/streaming tests and manual German live microphone acceptance passed. Public package publication pending. See the plugin README for platform differences. |
 | Script | Separate v2 port pending |
 | SherpaOnnx | Existing portable build |
 | SmallestAi | Separate v2 port pending |
-| Soniox | Separate v2 port pending |
-| Speechmatics | Separate v2 port pending |
+| Soniox | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Soniox`; 78 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
+| Speechmatics | Independent v2 package 1.2.4 in `plugins-v2/TypeWhisper.Plugin.Speechmatics`; 67 tests pass (manual acceptance on 1.2.0). EU batch and live API acceptance, language selection, shared Save and provider logos included. Native live microphone acceptance confirmed by Marco; publication pending. See the plugin README. |
 | SupertonicTts | Separate v2 port pending |
-| Voxtral | Separate v2 port pending |
+| Mistral (formerly Voxtral) | Independent v2 `1.3.2` in `plugins-v2/TypeWhisper.Plugin.Voxtral`: batch and realtime transcription, chat processing, account model discovery, provider icon and shared Save settings. 67 tests passed; real batch/live transcription/Ministral text checks passed on 1.3.0; normal and live microphone dictation accepted by Marco, including finalization; manual text-workflow acceptance pending. |
 | Webhook | Separate v2 port pending |
-| WhisperCpp | Separate v2 port pending |
+| WhisperCpp | Whisper (Local) source 1.2.19 in `plugins-v2/TypeWhisper.Plugin.WhisperCpp`; 95 regression tests pass. Installed 1.2.4: CUDA Large V3 Turbo, German microphone dictation, local live preview, restart loading, shared settings and chip icon manually verified; screenshots are from 1.2.4. Historical source 1.2.6 verification: persistent CUDA cache paths and cold PCM/WAV inference verified. Later source changes have automated regression coverage; public package/catalog publication pending. See the plugin README. |
 | Xai | Separate v2 port pending |
