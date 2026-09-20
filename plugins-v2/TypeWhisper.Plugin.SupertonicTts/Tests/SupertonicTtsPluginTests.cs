@@ -15,11 +15,13 @@ public class SupertonicTtsPluginTests
     [InlineData("io")]
     [InlineData("access")]
     [InlineData("crypto")]
+    [InlineData("unsupported")]
     public async Task OptionalSecretFailureDoesNotDisableDownloadedModels(string kind)
     {
         var host = new TestPluginHostServices { SecretReadError = kind switch
         {
             "io" => new IOException(), "access" => new UnauthorizedAccessException(),
+            "unsupported" => new NotSupportedException(),
             _ => new System.Security.Cryptography.CryptographicException()
         } };
         using var plugin = new SupertonicTtsPlugin(new FakeSupertonicAssets { AreAssetsReadyValue = true }, _ => new FakeSupertonicSynthesizer());
