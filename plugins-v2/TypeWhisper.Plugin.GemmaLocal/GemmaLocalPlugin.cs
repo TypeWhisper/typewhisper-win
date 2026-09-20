@@ -61,7 +61,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.3";
+    public string PluginVersion => "1.2.4";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -283,20 +283,11 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
                     ct.ThrowIfCancellationRequested();
                 }
             }
-            var pending = filePath + ".download";
-            try
-            {
-                await ModelFileDownloader.DownloadAsync(_httpClient, model.DownloadUrl, pending, new DownloadProgress(progress), ct);
-                await VerifyModelFileAsync(pending, model.SizeBytes, model.Sha256, ct);
-                ct.ThrowIfCancellationRequested();
-                File.Move(pending, filePath, overwrite: true);
-                RememberVerified(model, filePath);
-                progress?.Report(1);
-            }
-            finally { if (File.Exists(pending)) File.Delete(pending); }
-            _host?.NotifyCapabilitiesChanged();
+            await ResumableModelDownloader.DownloadAsync(_httpClient, model, filePath, new DownloadProgress(progress), ct);
+            RememberVerified(model, filePath);
+            progress?.Report(1);
         }
-        finally { _inferenceLock.Release(); StartCacheVerification(); }
+        finally { _inferenceLock.Release(); StartCacheVerification(); _host?.NotifyCapabilitiesChanged(); }
     }
 
     private async Task VerifyCachedModelAsync(GemmaModelDefinition model, string path, CancellationToken ct)
