@@ -8,6 +8,7 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class LivePortableModelSettings : UserControl
 {
+    private readonly LiveLocalTtsModelSettings _localTts;
     private readonly LocalDictationSession _session;
     private readonly string _pluginId;
     private readonly StackPanel _rows = new() { Spacing = 12 };
@@ -46,7 +47,8 @@ internal sealed class LivePortableModelSettings : UserControl
             if (_settingCloudModel || !_cloudModel.IsLoaded || _cloudModel.SelectedItem is not PortableDownloadableModel model) return;
             if (_items.TryGetValue((model.SelectionId, model.ModelId), out var row)) await UseAsync(row);
         };
-        content.Children.Add(new LiveLocalTtsModelSettings(session, pluginId));
+        _localTts = new(session, pluginId);
+        content.Children.Add(_localTts);
         content.Children.Add(_refresh); content.Children.Add(_status); content.Children.Add(_cloudPanel); content.Children.Add(_rows); content.Children.Add(_llm);
         Content = content;
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
@@ -102,6 +104,8 @@ internal sealed class LivePortableModelSettings : UserControl
         {
             var localTts = await _session.PluginRuntime.UseConfigurationAsync(_pluginId,
                 (plugin, _) => Task.FromResult(plugin is ILocalTtsModelManagement), token);
+            if (!Current(lifetime)) return;
+            _localTts.Visibility = localTts ? Visibility.Visible : Visibility.Collapsed;
             var models = new List<PortableDownloadableModel>();
             foreach (var provider in _session.PluginRuntime.TranscriptionProviders.Where(p => p.PluginId == _pluginId).ToArray())
                 models.AddRange(await _session.PluginRuntime.GetModelStatesAsync(provider.SelectionId, token));
