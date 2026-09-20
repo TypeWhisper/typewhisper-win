@@ -7,7 +7,7 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.SupertonicTts.Portable.Tests" />
-    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.1" />
     <Content Include="manifest.json;Localization/*.json;Scripts/**/*;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
