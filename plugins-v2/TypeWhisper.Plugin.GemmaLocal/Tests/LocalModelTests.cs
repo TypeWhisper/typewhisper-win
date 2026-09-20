@@ -85,6 +85,7 @@ public sealed class LocalModelTests
         await File.WriteAllBytesAsync(path, corrupt ? [4, 3, 2, 1] : expected);
         using var plugin = new GemmaLocalPlugin([model]);
         await plugin.ActivateAsync(fixture.Host);
+        await plugin.CacheVerification;
         Assert.Equal(!corrupt, plugin.LocalModels[0].Downloaded);
         File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
         Assert.False(plugin.LocalModels[0].Downloaded);

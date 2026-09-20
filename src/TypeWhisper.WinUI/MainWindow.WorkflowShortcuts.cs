@@ -55,7 +55,7 @@ public sealed partial class MainWindow
             return;
         }
         if (_closing || _profileRestoreClosing || _workflowShortcutsStopping || _workflowTask is { IsCompleted: false }
-            || ShortcutRecorder.AnyEditing || WorkflowsView.IsBusy || !_dictation.CanChangeProvider
+            || ShortcutRecorder.AnyEditing || WorkflowsView.IsBusy || !_dictation.CanStartWorkflowShortcut
             || _dictationInitialization is not { IsCompleted: true } || _dictationInput?.IsRecordingOrStarting == true) return;
         var usesDefault = workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit;
         try { workflow = _dictation.WorkflowDefaults.Resolve(workflow); }
