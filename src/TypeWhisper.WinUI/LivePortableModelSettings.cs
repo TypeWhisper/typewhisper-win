@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using TypeWhisper.PluginHost;
+using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.WinUI;
 
@@ -45,6 +46,7 @@ internal sealed class LivePortableModelSettings : UserControl
             if (_settingCloudModel || !_cloudModel.IsLoaded || _cloudModel.SelectedItem is not PortableDownloadableModel model) return;
             if (_items.TryGetValue((model.SelectionId, model.ModelId), out var row)) await UseAsync(row);
         };
+        content.Children.Add(new LiveLocalTtsModelSettings(session, pluginId));
         content.Children.Add(_refresh); content.Children.Add(_status); content.Children.Add(_cloudPanel); content.Children.Add(_rows); content.Children.Add(_llm);
         Content = content;
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
@@ -98,6 +100,8 @@ internal sealed class LivePortableModelSettings : UserControl
         _reading = true; UpdateButtons();
         try
         {
+            var localTts = await _session.PluginRuntime.UseConfigurationAsync(_pluginId,
+                (plugin, _) => Task.FromResult(plugin is ILocalTtsModelManagement), token);
             var models = new List<PortableDownloadableModel>();
             foreach (var provider in _session.PluginRuntime.TranscriptionProviders.Where(p => p.PluginId == _pluginId).ToArray())
                 models.AddRange(await _session.PluginRuntime.GetModelStatesAsync(provider.SelectionId, token));
@@ -122,7 +126,7 @@ internal sealed class LivePortableModelSettings : UserControl
                 choices.SetEquals(models.Select(model => model.ModelId)));
             _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
             _rows.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
-            _refresh.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
+            _refresh.Visibility = _cloudMode || localTts ? Visibility.Collapsed : Visibility.Visible;
             _settingCloudModel = true;
             try
             {
@@ -131,7 +135,7 @@ internal sealed class LivePortableModelSettings : UserControl
                 _cloudModel.SelectedItem = models.FirstOrDefault(m => m.ModelId == selectedId);
             }
             finally { _settingCloudModel = false; }
-            _llm.Visibility = ShowLlmSummary ? Visibility.Visible : Visibility.Collapsed;
+            _llm.Visibility = ShowLlmSummary && !localTts ? Visibility.Visible : Visibility.Collapsed;
             var llms = _session.LlmProviders.Where(p => p.PluginId == _pluginId).ToArray();
             _llm.Text = models.Count == 0 && llms.Length == 0 ? "No model providers are currently enabled." :
                 string.Join("\n", llms.Select(p => p.Name + " · Text processing: " + string.Join(", ", p.Models.Select(m => m.DisplayName))));

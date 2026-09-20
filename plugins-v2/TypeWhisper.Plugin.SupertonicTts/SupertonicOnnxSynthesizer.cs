@@ -22,7 +22,7 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
     public SupertonicOnnxSynthesizer(string assetRoot)
     {
         var onnxDir = Path.Combine(assetRoot, "onnx");
-        var options = new SessionOptions
+        using var options = new SessionOptions
         {
             IntraOpNumThreads = Math.Max(1, Environment.ProcessorCount / 2),
             InterOpNumThreads = 1,
@@ -30,10 +30,20 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
 
         _config = SupertonicConfig.Load(Path.Combine(onnxDir, "tts.json"));
         _textProcessor = new SupertonicTextProcessor(Path.Combine(onnxDir, "unicode_indexer.json"));
-        _durationPredictor = new InferenceSession(Path.Combine(onnxDir, "duration_predictor.onnx"), options);
-        _textEncoder = new InferenceSession(Path.Combine(onnxDir, "text_encoder.onnx"), options);
-        _vectorEstimator = new InferenceSession(Path.Combine(onnxDir, "vector_estimator.onnx"), options);
-        _vocoder = new InferenceSession(Path.Combine(onnxDir, "vocoder.onnx"), options);
+        var sessions = new List<InferenceSession>();
+        try
+        {
+            InferenceSession Load(string name)
+            {
+                var session = new InferenceSession(Path.Combine(onnxDir, name), options);
+                sessions.Add(session); return session;
+            }
+            _durationPredictor = Load("duration_predictor.onnx");
+            _textEncoder = Load("text_encoder.onnx");
+            _vectorEstimator = Load("vector_estimator.onnx");
+            _vocoder = Load("vocoder.onnx");
+        }
+        catch { foreach (var session in sessions) session.Dispose(); throw; }
     }
 
     /// <summary>

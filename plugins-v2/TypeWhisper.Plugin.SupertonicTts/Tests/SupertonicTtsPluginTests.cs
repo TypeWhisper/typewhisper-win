@@ -20,7 +20,7 @@ public class SupertonicTtsPluginTests
 
         Assert.Equal("com.typewhisper.supertonic-tts", root.GetProperty("id").GetString());
         Assert.Equal("Supertonic TTS", root.GetProperty("name").GetString());
-        Assert.Equal("1.1.2", root.GetProperty("minHostVersion").GetString());
+        Assert.Equal("1.1.4", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("tts", root.GetProperty("category").GetString());
         Assert.Contains("tts", root.GetProperty("categories").EnumerateArray().Select(x => x.GetString()));
         Assert.True(root.GetProperty("isLocal").GetBoolean());
@@ -310,6 +310,108 @@ public class SupertonicTtsPluginTests
         }
     }
 
+    [Fact]
+    public async Task LocalModel_LoadUnloadAndImmediateLicensePersistence()
+    {
+        var assets = new FakeSupertonicAssets();
+        var host = new TestPluginHostServices();
+        var synth = new FakeSupertonicSynthesizer();
+        using var plugin = new SupertonicTtsPlugin(assets, _ => synth);
+        await plugin.ActivateAsync(host);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.DownloadAndLoadModelAsync(null, default));
+        await plugin.SetModelDownloadLicenseAcceptanceAsync("supertonic-3", "model-license", true, default);
+        Assert.Equal(SupertonicTtsPlugin.ModelLicenseRevision, host.GetSetting<string>(SupertonicTtsPlugin.AcceptedModelLicenseRevisionSettingName));
+        Assert.DoesNotContain(plugin.TextSettings, f => f.Id == "license");
+        var progress = new List<double>();
+        await plugin.DownloadAndLoadModelAsync(new InlineProgress(progress.Add), default);
+        Assert.True(plugin.IsModelDownloaded);
+        Assert.True(plugin.IsModelLoaded);
+        Assert.Equal(1, progress[^1]);
+        await plugin.UnloadModelAsync(default);
+        Assert.True(synth.Disposed);
+        Assert.False(plugin.IsModelLoaded);
+        Assert.True(plugin.IsModelDownloaded);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task LocalModel_CancellationDuringNativeLoadDisposesCandidate()
+    {
+        var assets = new FakeSupertonicAssets { AreAssetsReadyValue = true };
+        var synth = new FakeSupertonicSynthesizer();
+        using var cancellation = new CancellationTokenSource();
+        using var plugin = new SupertonicTtsPlugin(assets, _ => { cancellation.Cancel(); return synth; });
+        await plugin.ActivateAsync(new TestPluginHostServices());
+        await plugin.SetModelDownloadLicenseAcceptanceAsync("supertonic-3", "model-license", true, default);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.DownloadAndLoadModelAsync(null, cancellation.Token));
+        Assert.True(synth.Disposed);
+        Assert.False(plugin.IsModelLoaded);
+        await plugin.UnloadModelAsync(default); // The operation released its gate.
+        await plugin.DeactivateAsync();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AssetManager_RejectsUnverifiedFileAndCleansTemporaryDownload(bool wrongSize)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "supertonic-verification-" + Guid.NewGuid().ToString("N"));
+        var payload = Encoding.UTF8.GetBytes("verified model");
+        using var http = new HttpClient(new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) }));
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload));
+        using var assets = new SupertonicAssetManager(root, http,
+            [new("model.onnx", "https://fixture.invalid/model", wrongSize ? payload.Length + 1 : payload.Length, wrongSize ? hash : new string('0', 64))], "https://fixture.invalid/license");
+        try
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(() => assets.DownloadMissingAssetsAsync(null, null, default));
+            Assert.False(assets.AreAssetsReady);
+            Assert.False(File.Exists(Path.Combine(root, "model.onnx")));
+            Assert.False(File.Exists(Path.Combine(root, "model.onnx.tmp")));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task AssetManager_ReportsCompletionOnlyAfterMetadataIsReady()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "supertonic-progress-" + Guid.NewGuid().ToString("N"));
+        var payload = Encoding.UTF8.GetBytes("verified model");
+        using var http = new HttpClient(new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) }));
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload));
+        using var assets = new SupertonicAssetManager(root, http,
+            [new("model.onnx", "https://fixture.invalid/model", payload.Length, hash)], "https://fixture.invalid/license");
+        var updates = new List<(double Value, bool Ready)>();
+        try
+        {
+            await assets.DownloadMissingAssetsAsync(new InlineProgress(v => updates.Add((v, assets.AreAssetsReady))), null, default);
+            Assert.True(assets.AreAssetsReady);
+            Assert.Equal((1d, true), updates[^1]);
+            Assert.All(updates.Where(u => !u.Ready), u => Assert.True(u.Value < 1));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task PortableSpeechSettings_PersistVoiceSpeedAndQuality()
+    {
+        var host = new TestPluginHostServices();
+        using var plugin = new SupertonicTtsPlugin(new FakeSupertonicAssets(), _ => new FakeSupertonicSynthesizer());
+        await plugin.ActivateAsync(host);
+        await plugin.SaveTextSettingAsync("voice", "F3", default);
+        await plugin.SaveTextSettingAsync("speed", "1.2", default);
+        await plugin.SaveTextSettingAsync("steps", "16", default);
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("voice", "missing", default));
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(host);
+        Assert.Equal("F3", plugin.SelectedVoiceId);
+        Assert.Equal(1.2, plugin.Speed);
+        Assert.Equal(16, plugin.DenoisingSteps);
+        await plugin.DeactivateAsync();
+    }
+
+    private sealed class InlineProgress(Action<double> report) : IProgress<double>
+    { public void Report(double value) => report(value); }
+
     private static string FindRepoFile(params string[] parts)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -349,6 +451,7 @@ public class SupertonicTtsPluginTests
     private sealed class FakeSupertonicSynthesizer : ISupertonicSynthesizer
     {
         public SupertonicSynthesisRequest? LastRequest { get; private set; }
+        public bool Disposed { get; private set; }
 
         public SupertonicSynthesisResult Synthesize(SupertonicSynthesisRequest request, CancellationToken ct)
         {
@@ -357,9 +460,7 @@ public class SupertonicTtsPluginTests
             return new SupertonicSynthesisResult([0.1f, -0.1f], 24_000);
         }
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() => Disposed = true;
     }
 
     private sealed class CapturingHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler

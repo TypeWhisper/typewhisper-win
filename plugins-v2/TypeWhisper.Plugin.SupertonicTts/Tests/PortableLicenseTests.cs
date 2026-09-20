@@ -15,11 +15,12 @@ public sealed class PortableLicenseTests
         {
             IPluginTextSettings settings = plugin;
             IPluginSettingsActions actions = plugin;
-            Assert.Equal("false", Assert.Single(settings.TextSettings, f => f.Id == "license").Value);
+            Assert.DoesNotContain(settings.TextSettings, f => f.Id == "license");
+            Assert.False(plugin.HasAcceptedModelLicense);
             await Assert.ThrowsAsync<InvalidOperationException>(() => actions.ExecuteSettingsActionAsync("download", default));
-            await settings.SaveTextSettingAsync("license", "true", default);
+            await plugin.SetModelDownloadLicenseAcceptanceAsync("supertonic-3", "model-license", true, default);
             Assert.True(plugin.HasAcceptedModelLicense);
-            await settings.SaveTextSettingAsync("license", "false", default);
+            await plugin.SetModelDownloadLicenseAcceptanceAsync("supertonic-3", "model-license", false, default);
             Assert.False(plugin.HasAcceptedModelLicense);
             await Assert.ThrowsAsync<InvalidOperationException>(() => actions.ExecuteSettingsActionAsync("download", default));
         }

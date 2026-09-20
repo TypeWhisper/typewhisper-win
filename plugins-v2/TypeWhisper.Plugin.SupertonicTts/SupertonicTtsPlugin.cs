@@ -10,7 +10,7 @@ namespace TypeWhisper.Plugin.SupertonicTts;
 /// <summary>
 /// Provides supertonic tts plugin behavior.
 /// </summary>
-public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDownloadRequirementsProvider
+public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsModelManagement
 {
     internal const string LicenseAcceptedSettingName = "licenseAccepted";
     internal const string AcceptedModelLicenseIdSettingName = "acceptedModelLicenseId";
@@ -117,7 +117,7 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDown
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.1";
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
     /// </summary>
@@ -148,6 +148,17 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDown
         string.Equals(_acceptedModelLicenseId, ModelLicenseId, StringComparison.Ordinal)
         && string.Equals(_acceptedModelLicenseRevision, ModelLicenseRevision, StringComparison.Ordinal);
     internal bool AreAssetsReady => IsConfigured;
+    /// <inheritdoc />
+    public PluginModelInfo LocalModel => new(ModelId, "Supertonic 3")
+    {
+        Publisher = "Supertone", SizeDescription = "383 MB · CPU · 10 voices",
+        EstimatedSizeMB = 383, LanguageCount = 31,
+        LanguageCodes = SupertonicTextProcessor.SupportedLanguages.Order().ToArray()
+    };
+    /// <inheritdoc />
+    public bool IsModelDownloaded => IsConfigured;
+    /// <inheritdoc />
+    public bool IsModelLoaded => _synthesizer is not null;
     internal IPluginLocalization? Loc => PortableLocalization.TryGet(_host);
 
     /// <summary>Gets the host-renderable model license and optional token requirements.</summary>
@@ -240,12 +251,34 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDown
     /// <summary>
     /// Deactivates the plugin and releases provider resources.
     /// </summary>
-    public Task DeactivateAsync()
+    public async Task DeactivateAsync()
     {
-        _synthesizer?.Dispose();
-        _synthesizer = null;
+        await UnloadModelAsync(CancellationToken.None);
         _host = null;
-        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async Task UnloadModelAsync(CancellationToken cancellationToken)
+    {
+        await _synthesisLock.WaitAsync(cancellationToken);
+        try { _synthesizer?.Dispose(); _synthesizer = null; }
+        finally { _synthesisLock.Release(); }
+    }
+
+    /// <inheritdoc />
+    public async Task DownloadAndLoadModelAsync(IProgress<double>? progress, CancellationToken cancellationToken)
+    {
+        await _synthesisLock.WaitAsync(cancellationToken);
+        try
+        {
+            await DownloadAssetsCoreAsync(progress, cancellationToken);
+            if (_synthesizer is not null) return;
+            // Native initialization cannot be interrupted. Drain it before releasing the lease.
+            var candidate = await Task.Run(() => _synthesizerFactory(_assetManager!.AssetRoot), cancellationToken);
+            try { cancellationToken.ThrowIfCancellationRequested(); _synthesizer = candidate; }
+            catch { candidate.Dispose(); throw; }
+        }
+        finally { _synthesisLock.Release(); }
     }
 
 
@@ -283,6 +316,7 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDown
                     DenoisingSteps,
                     Speed),
                 ct);
+            ct.ThrowIfCancellationRequested();
 
             return synthesis.Samples.Length == 0
                 ? SupertonicInactiveTtsPlaybackSession.Instance
@@ -296,13 +330,13 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDown
 
     internal void SetLicenseAccepted(bool accepted)
     {
-        _acceptedModelLicenseId = accepted ? ModelLicenseId : null;
-        _host?.SetSetting(AcceptedModelLicenseIdSettingName, _acceptedModelLicenseId);
-        _acceptedModelLicenseRevision = accepted ? ModelLicenseRevision : null;
-        _host?.SetSetting(AcceptedModelLicenseRevisionSettingName, _acceptedModelLicenseRevision);
+        _host?.SetSetting(AcceptedModelLicenseIdSettingName, accepted ? ModelLicenseId : null);
+        _host?.SetSetting(AcceptedModelLicenseRevisionSettingName, accepted ? ModelLicenseRevision : null);
         _host?.SetSetting(
             AcceptedModelLicenseAtSettingName,
             accepted ? DateTimeOffset.UtcNow.ToString("O") : null);
+        _acceptedModelLicenseId = accepted ? ModelLicenseId : null;
+        _acceptedModelLicenseRevision = accepted ? ModelLicenseRevision : null;
         _host?.NotifyCapabilitiesChanged();
         ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -321,15 +355,21 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDown
 
     internal async Task DownloadAssetsAsync(IProgress<double>? progress, CancellationToken ct)
     {
+        await _synthesisLock.WaitAsync(ct);
+        try { await DownloadAssetsCoreAsync(progress, ct); }
+        finally { _synthesisLock.Release(); }
+    }
+
+    private async Task DownloadAssetsCoreAsync(IProgress<double>? progress, CancellationToken ct)
+    {
         if (!HasAcceptedModelLicense)
             throw new InvalidOperationException("The Supertonic 3 OpenRAIL-M license must be accepted before downloading model assets.");
 
         if (_assetManager is null)
             throw new InvalidOperationException("Plugin is not activated.");
 
+        ct.ThrowIfCancellationRequested();
         await _assetManager.DownloadMissingAssetsAsync(progress, _huggingFaceToken, ct);
-        _synthesizer?.Dispose();
-        _synthesizer = null;
         _host?.NotifyCapabilitiesChanged();
     }
 

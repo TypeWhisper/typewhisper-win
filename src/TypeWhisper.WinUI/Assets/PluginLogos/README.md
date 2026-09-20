@@ -19,3 +19,5 @@ Explicit fill colors support native SVG rendering. Monochrome marks include ligh
 - Reson8: existing TypeWhisper website brand asset, reused for the portable provider.
 - Speechmatics: standalone symbol path from the [official header SVG](https://www.speechmatics.com/_next/static/media/SM-Logo-main.b945b6cd.svg), with its original dark fill and a white variant for dark backgrounds. Symbol geometry is unchanged.
 - Mistral: reuses the TypeWhisper website brand asset for the Mistral provider.
+
+- Supertonic TTS: unchanged [Supertone 256 px website icon](https://cdn.prod.website-files.com/666c1f308f1a1e34efc9c61a/666fd445621fa9795b5d37b8_SPT_Sym_256px.png), linked by the official Supertone homepage; retrieved September 20, 2026.
