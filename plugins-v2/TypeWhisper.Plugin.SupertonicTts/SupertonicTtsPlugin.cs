@@ -239,10 +239,10 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
         {
             _huggingFaceToken = await PluginHuggingFaceTokenHelper.LoadTokenAsync(host);
         }
-        catch (ArgumentException)
+        catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         {
             _huggingFaceToken = null;
-            await PluginHuggingFaceTokenHelper.ClearTokenAsync(host);
+            host.Log(PluginLogLevel.Warning, "Optional download token could not be read: " + error.GetType().Name);
         }
         PersistSettings();
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");

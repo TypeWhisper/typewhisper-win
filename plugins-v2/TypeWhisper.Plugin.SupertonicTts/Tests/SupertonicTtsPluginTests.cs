@@ -11,6 +11,22 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public class SupertonicTtsPluginTests
 {
+    [Theory]
+    [InlineData("io")]
+    [InlineData("access")]
+    [InlineData("crypto")]
+    public async Task OptionalSecretFailureDoesNotDisableDownloadedModels(string kind)
+    {
+        var host = new TestPluginHostServices { SecretReadError = kind switch
+        {
+            "io" => new IOException(), "access" => new UnauthorizedAccessException(),
+            _ => new System.Security.Cryptography.CryptographicException()
+        } };
+        using var plugin = new SupertonicTtsPlugin(new FakeSupertonicAssets { AreAssetsReadyValue = true }, _ => new FakeSupertonicSynthesizer());
+        await plugin.ActivateAsync(host);
+        Assert.True(plugin.AreAssetsReady);
+    }
+
     [Fact]
     public void Manifest_DeclaresLocalTtsPlugin()
     {
@@ -563,6 +579,7 @@ public class SupertonicTtsPluginTests
 
         private readonly Dictionary<string, JsonElement> _settings = [];
         public Dictionary<string, string> Secrets { get; } = [];
+        public Exception? SecretReadError { get; set; }
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
         public Task StoreSecretAsync(string key, string value)
@@ -571,8 +588,8 @@ public class SupertonicTtsPluginTests
             return Task.CompletedTask;
         }
 
-        public Task<string?> LoadSecretAsync(string key) =>
-            Task.FromResult(Secrets.GetValueOrDefault(key));
+        public Task<string?> LoadSecretAsync(string key) => SecretReadError is { } error
+            ? Task.FromException<string?>(error) : Task.FromResult(Secrets.GetValueOrDefault(key));
 
         public Task DeleteSecretAsync(string key)
         {
