@@ -203,6 +203,29 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     }
 
     [Fact]
+    public async Task CancelingSettingsTransferReleasesQueuedForegroundLlmRequest()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        using var cancellation = new CancellationTokenSource();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var download = registry.UseConfigurationAsync(Id, async (_, ct) =>
+        {
+            entered.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return true;
+        }, cancellation.Token, preserveCompletedResult: true);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var foreground = registry.UseLlmAsync(Id, (plugin, ct) => plugin.ProcessAsync("", "foreground", "llm", ct));
+        Assert.False(foreground.IsCompleted);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => download);
+        Assert.Equal("foreground", await foreground.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.True(await registry.UseConfigurationAsync(Id, (_, _) => Task.FromResult(true)));
+    }
+
+    [Fact]
     public async Task ConfigurationWaitsForRequestsAndSavedEnablementRestoresOnRestart()
     {
         var store = await Store();

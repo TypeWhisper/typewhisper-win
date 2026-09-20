@@ -76,13 +76,15 @@ internal sealed partial class LivePluginTextSettings : UserControl
                     ShowKey: plugin is IApiKeyPlugin && (plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings),
                     ConnectionId: (plugin as IPluginConnectionSettings)?.ConnectionIdentity,
                     ProfileSelector: (plugin as IPluginProfileSettings)?.ProfileSelectorId,
+                    LocalModels: plugin is ILocalLlmModelManagement,
                     AddProfile: (plugin as IPluginProfileSettings)?.AddProfileActionId,
                     RemoveProfile: (plugin as IPluginProfileSettings)?.RemoveProfileActionId)), _lifetime.Token);
             if (!IsLoaded || generation != _generation) return;
-            if (_models is LivePortableModelSettings speechModels)
+            if (_models is LivePortableModelSettings modelSettings)
             {
-                speechModels.HasLocalTtsModels = snapshot.LocalTtsModel;
-                if (snapshot.LocalTtsModel) speechModels.Visibility = Visibility.Visible;
+                modelSettings.HasLocalTtsModels = snapshot.LocalTtsModel;
+                modelSettings.HasLocalLlmModels = snapshot.LocalModels;
+                if (snapshot.LocalTtsModel || snapshot.LocalModels) modelSettings.Visibility = Visibility.Visible;
             }
             var selector = snapshot.Fields.FirstOrDefault(f => f.Id == snapshot.ProfileSelector);
             _connectionChanged(snapshot.ConnectionId, selector?.Choices.FirstOrDefault(c => c.Value == selector.Value)?.Title);
