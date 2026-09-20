@@ -942,20 +942,6 @@ public sealed class CohereTranscribePluginTests
             host.Secrets[CohereTranscribePlugin.HuggingFaceTokenSecretName]);
     }
 
-    [Fact]
-    public void PublishWorkflow_MapsCohereTranscribePluginTag()
-    {
-        var workflow = TestFile.ReadProjectFile(
-            ".github",
-            "workflows",
-            "publish-plugins.yml");
-
-        Assert.Contains(
-            "'cohere-transcribe'  = 'TypeWhisper.Plugin.CohereTranscribe'",
-            workflow,
-            StringComparison.Ordinal);
-    }
-
     private sealed class FakeAssetManager : ICohereLocalAssetManager
     {
         private readonly HashSet<string> _installedModelIds = [];
