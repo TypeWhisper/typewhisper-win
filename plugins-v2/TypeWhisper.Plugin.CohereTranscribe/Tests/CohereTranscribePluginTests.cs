@@ -1404,6 +1404,31 @@ public sealed class CohereTranscribePluginTests
         Assert.DoesNotContain(sut.SettingsActions, action => action.Id == "discard-partial-downloads");
     }
 
+    [Fact]
+    public async Task DiscardRemovesOnlyRecognizedAbandonedRuntimeStagingDirectories()
+    {
+        using var temp = new TempDirectory();
+        using var assets = new CohereLocalAssetManager(temp.Path);
+        var parent = Path.Join(temp.Path, "Runtimes", "CrispASR", CohereLocalAssetManager.CrispAsrVersion);
+        var abandoned = new[] { "cpu", "cuda", "vulkan" }
+            .Select(backend => Path.Join(parent, $".{backend}.{Guid.NewGuid():N}.staging")).ToArray();
+        var retained = new[] { "cpu", ".cpu.not-a-guid.staging", $".other.{Guid.NewGuid():N}.staging" }
+            .Select(name => Path.Join(parent, name)).ToArray();
+        foreach (var directory in abandoned.Concat(retained))
+        {
+            Directory.CreateDirectory(Path.Join(directory, "nested"));
+            await File.WriteAllBytesAsync(Path.Join(directory, "nested", "runtime.dll"), [1, 2]);
+        }
+        Assert.True(assets.HasPartialDownloads);
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => assets.DiscardPartialDownloadsAsync(cancelled.Token));
+        Assert.All(abandoned, path => Assert.True(Directory.Exists(path)));
+        await assets.DiscardPartialDownloadsAsync(default);
+        Assert.All(abandoned, path => Assert.False(Directory.Exists(path)));
+        Assert.All(retained, path => Assert.True(File.Exists(Path.Join(path, "nested", "runtime.dll"))));
+        Assert.False(assets.HasPartialDownloads);
+    }
+
     [WindowsFact]
     public async Task RuntimeTimestampDriftIsReverifiedWithoutDownloading()
     {

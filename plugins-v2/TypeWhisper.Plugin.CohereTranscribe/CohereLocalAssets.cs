@@ -481,7 +481,29 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             yield return Path.Join(Path.GetDirectoryName(GetRuntimeDirectory(package))!, "." + package.Archive.FileName + ".download");
     }
 
-    public bool HasPartialDownloads => PartialDownloadPaths().Any(File.Exists);
+    private IEnumerable<string> RuntimeStagingDirectories()
+    {
+        var parent = Path.GetDirectoryName(GetRuntimeDirectory(CpuRuntime))!;
+        EnsurePathWithinAssetRoot(parent);
+        if (!Directory.Exists(parent)) yield break;
+        foreach (var path in Directory.EnumerateDirectories(parent, ".*.staging", SearchOption.TopDirectoryOnly))
+        {
+            var parts = Path.GetFileName(path).Split('.');
+            if (parts.Length == 4 && parts[0].Length == 0 && parts[3] == "staging"
+                && (parts[1] is "cpu" or "cuda" or "vulkan") && Guid.TryParseExact(parts[2], "N", out _)
+                && (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0)
+                yield return path;
+        }
+    }
+
+    public bool HasPartialDownloads
+    {
+        get
+        {
+            try { return PartialDownloadPaths().Any(File.Exists) || RuntimeStagingDirectories().Any(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        }
+    }
 
     public async Task DiscardPartialDownloadsAsync(CancellationToken cancellationToken)
     {
@@ -493,6 +515,12 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 cancellationToken.ThrowIfCancellationRequested();
                 EnsurePathWithinAssetRoot(path);
                 if (File.Exists(path)) File.Delete(path);
+            }
+            foreach (var path in RuntimeStagingDirectories())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                EnsurePathWithinAssetRoot(path);
+                Directory.Delete(path, recursive: true);
             }
         }
         finally { _gate.Release(); }
