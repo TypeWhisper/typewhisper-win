@@ -5,12 +5,248 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.WinUI.Platform;
+using Loc = TypeWhisper.WinUI.LicenseText;
 
 namespace TypeWhisper.Platform.Tests;
 
 public sealed class LicenseServiceTests : IDisposable
 {
     private readonly List<string> _tempDirs = [];
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LicenseRequests_PinVersionWithoutChangingSharedClient(bool supporter)
+    {
+        var operations = new List<string>();
+        using var client = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            if (request.RequestUri!.Host == "example.com")
+            {
+                Assert.False(request.Headers.Contains("Polar-Version"));
+                return Json(HttpStatusCode.OK, "{}");
+            }
+
+            Assert.Equal("2026-04", Assert.Single(request.Headers.GetValues("Polar-Version")));
+            Assert.Equal(HttpMethod.Post, request.Method);
+            var operation = request.RequestUri.Segments.Last();
+            operations.Add(operation);
+            return operation switch
+            {
+                "activate" => Json(HttpStatusCode.OK, """{"id":"test-activation"}"""),
+                "validate" => GrantedLicense(supporter),
+                "deactivate" => new HttpResponseMessage(HttpStatusCode.NoContent),
+                _ => throw new InvalidOperationException(operation)
+            };
+        }));
+        var service = new LicenseService(client, CreateTempDir());
+        Assert.NotNull(await service.ActivateAnyLicenseKeyAsync("TEST-ONLY"));
+        if (supporter)
+        {
+            await service.RefreshSupporterLicenseAsync();
+            await service.DeactivateSupporterLicenseAsync();
+        }
+        else
+        {
+            await service.RefreshCommercialLicenseAsync();
+            await service.DeactivateCommercialLicenseAsync();
+        }
+
+        using var unrelatedResponse = await client.GetAsync("https://example.com/unrelated");
+        Assert.False(client.DefaultRequestHeaders.Contains("Polar-Version"));
+        Assert.Equal(["activate", "validate", "validate", "deactivate"], operations);
+        Assert.False(service.HasCommercialActivation);
+        Assert.False(service.HasSupporterActivation);
+    }
+
+    public static IEnumerable<object?[]> AmbiguousPolarErrors()
+    {
+        var errors = new (string Body, string? Version, HttpStatusCode Status)[]
+        {
+            // Observed sandbox response for both malformed and unknown versions.
+            ("""{"detail":"Not Found"}""", null, HttpStatusCode.NotFound),
+            ("""{"error":"UnsupportedAPIVersion","detail":"Version not found"}""", null, HttpStatusCode.NotFound),
+            ("""{"error":"RemovedAPIVersion","detail":"Version does not exist"}""", null, HttpStatusCode.NotFound),
+            ("""{"detail":"Not found"}""", "2026-04", HttpStatusCode.NotFound),
+            ("""{"type":"ResourceNotFound","detail":"Not found"}""", "2026-04", HttpStatusCode.NotFound),
+            ("""{"error":"ResourceNotFound","detail":"Not found"}""", null, HttpStatusCode.NotFound),
+            ("""{"error":"ResourceNotFound","detail":"Not found"}""", "2026-10", HttpStatusCode.NotFound),
+            ("""{"detail":[{"type":"unknown_version"}]}""", null, HttpStatusCode.NotFound),
+            ("<html>Not found</html>", null, HttpStatusCode.NotFound),
+            ("", null, HttpStatusCode.NotFound),
+            ("", null, HttpStatusCode.TemporaryRedirect),
+            ("", null, HttpStatusCode.PermanentRedirect),
+            ("""{"error":"ResourceNotFound","detail":"Not found"}""", "2026-04", HttpStatusCode.InternalServerError),
+            ("""{"detail":"No LicenseKeyActivation does not exist"}""", "2026-04", HttpStatusCode.BadRequest),
+        };
+        foreach (var supporter in new[] { false, true })
+        foreach (var error in errors)
+            yield return [supporter, error.Body, error.Version, error.Status];
+    }
+
+    [Theory]
+    [MemberData(nameof(AmbiguousPolarErrors))]
+    public async Task AmbiguousErrors_PreserveStoredLicenseAcrossOperationsAndRestart(
+        bool supporter, string body, string? version, HttpStatusCode status)
+    {
+        var fail = false;
+        var calls = 0;
+        using var client = new HttpClient(new CapturingHandler((request, payload) =>
+        {
+            calls++;
+            using var document = JsonDocument.Parse(payload);
+            Assert.Equal("TEST-ONLY", document.RootElement.GetProperty("key").GetString());
+            if (!request.RequestUri!.AbsolutePath.EndsWith("/activate"))
+                Assert.Equal("test-activation", document.RootElement.GetProperty("activation_id").GetString());
+            return fail ? PolarError(status, body, version)
+                : request.RequestUri.AbsolutePath.EndsWith("/activate")
+                    ? Json(HttpStatusCode.OK, """{"id":"test-activation"}""")
+                    : GrantedLicense(supporter);
+        }));
+        var directory = CreateTempDir();
+        var service = new LicenseService(client, directory);
+        Assert.NotNull(await service.ActivateAnyLicenseKeyAsync("TEST-ONLY"));
+        var stored = File.ReadAllBytes(Path.Combine(directory, "licenses.dat"));
+        var proof = Assert.Single(service.GetDiscordClaimProofCandidates());
+        fail = true;
+
+        if (supporter)
+        {
+            await service.ValidateSupporterAsync();
+            await service.RefreshSupporterLicenseAsync();
+            Assert.NotNull(service.SupporterRefreshError);
+            await service.DeactivateSupporterLicenseAsync();
+            Assert.NotNull(service.SupporterDeactivationError);
+            await service.ActivateSupporterKeyAsync("TEST-ONLY");
+            Assert.NotNull(service.SupporterActivationError);
+        }
+        else
+        {
+            await service.ValidateCommercialLicenseAsync();
+            await service.RefreshCommercialLicenseAsync();
+            Assert.NotNull(service.CommercialRefreshError);
+            await service.DeactivateCommercialLicenseAsync();
+            Assert.NotNull(service.CommercialDeactivationError);
+            await service.ActivateCommercialLicenseAsync("TEST-ONLY");
+            Assert.NotNull(service.CommercialActivationError);
+        }
+
+        if (status == HttpStatusCode.NotFound)
+            Assert.Equal(Loc.Instance["License.ApiCompatibilityError"],
+                supporter ? service.SupporterRefreshError : service.CommercialRefreshError);
+        Assert.Equal(6, calls); // No retries against an unpinned Current contract.
+        Assert.Equal(proof, Assert.Single(service.GetDiscordClaimProofCandidates()));
+        Assert.Equal(stored, File.ReadAllBytes(Path.Combine(directory, "licenses.dat")));
+        var reloaded = new LicenseService(client, directory);
+        Assert.Equal(proof, Assert.Single(reloaded.GetDiscordClaimProofCandidates()));
+        Assert.Equal(LicenseStatus.Active, supporter ? reloaded.SupporterStatus : reloaded.CommercialStatus);
+    }
+
+    [Theory]
+    [InlineData(false, "Not found")]
+    [InlineData(true, "Not found")]
+    [InlineData(false, "License key is no longer active.")]
+    [InlineData(true, "License key is no longer active.")]
+    [InlineData(false, "License key has expired.")]
+    [InlineData(true, "License key has expired.")]
+    public async Task ConfirmedLicenseErrors_ClearStoredState(bool supporter, string detail)
+    {
+        var fail = false;
+        using var client = new HttpClient(new CapturingHandler((request, _) => fail
+            ? PolarError(HttpStatusCode.NotFound, JsonSerializer.Serialize(new { error = "ResourceNotFound", detail }), "2026-04")
+            : request.RequestUri!.AbsolutePath.EndsWith("/activate")
+                ? Json(HttpStatusCode.OK, """{"id":"test-activation"}""")
+                : GrantedLicense(supporter)));
+        var directory = CreateTempDir();
+        var service = new LicenseService(client, directory);
+        Assert.NotNull(await service.ActivateAnyLicenseKeyAsync("TEST-ONLY"));
+        fail = true;
+
+        if (supporter)
+            await service.RefreshSupporterLicenseAsync();
+        else
+            await service.RefreshCommercialLicenseAsync();
+
+        Assert.False(service.HasSupporterActivation);
+        Assert.False(service.HasCommercialActivation);
+        Assert.False(new LicenseService(client, directory).HasCommercialActivation);
+        Assert.False(new LicenseService(client, directory).HasSupporterActivation);
+        Assert.Equal(LicenseStatus.Unlicensed, supporter ? service.SupporterStatus : service.CommercialStatus);
+    }
+
+    [Theory]
+    [InlineData(false, "revoked")]
+    [InlineData(true, "revoked")]
+    [InlineData(false, "expired")]
+    [InlineData(true, "expired")]
+    public async Task InactiveValidation_MarksExpiredAndRetainsActivation(bool supporter, string status)
+    {
+        var service = CreateService((_, _) => Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { status })));
+        SeedStoredActivation(service, supporter, DateTime.UtcNow.AddDays(-40));
+        await service.ValidateAllIfNeededAsync();
+        Assert.Equal(LicenseStatus.Expired, supporter ? service.SupporterStatus : service.CommercialStatus);
+        Assert.True(supporter ? service.HasSupporterActivation : service.HasCommercialActivation);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task OfflineValidation_PreservesEntitlementAndRetryInterval(bool supporter, bool timeout)
+    {
+        var calls = 0;
+        var service = CreateService((_, _) =>
+        {
+            calls++;
+            if (timeout) throw new TaskCanceledException("Timeout");
+            throw new HttpRequestException("Not found");
+        });
+        SeedStoredActivation(service, supporter, DateTime.UtcNow);
+        await service.ValidateAllIfNeededAsync();
+        Assert.Equal(0, calls);
+        SetPrivateField(service, supporter ? "_supporterLastValidated" : "_commercialLastValidated", DateTime.UtcNow.AddDays(-40));
+        await service.ValidateAllIfNeededAsync();
+        await service.ValidateAllIfNeededAsync();
+        Assert.Equal(2, calls);
+        Assert.Equal(LicenseStatus.Active, supporter ? service.SupporterStatus : service.CommercialStatus);
+        Assert.True(supporter ? service.HasSupporterActivation : service.HasCommercialActivation);
+    }
+
+    private static void SeedStoredActivation(LicenseService service, bool supporter, DateTime lastValidated)
+    {
+        var prefix = supporter ? "_supporter" : "_commercial";
+        SetPrivateField(service, prefix + "LicenseKey", "TEST-ONLY");
+        SetPrivateField(service, prefix + "ActivationId", "test-activation");
+        SetPrivateField(service, prefix + "LastValidated", lastValidated);
+        if (supporter)
+        {
+            service.SupporterStatus = LicenseStatus.Active;
+            service.SupporterTier = SupporterTier.Gold;
+        }
+        else
+        {
+            service.CommercialStatus = LicenseStatus.Active;
+            service.CommercialTier = CommercialLicenseTier.Team;
+        }
+    }
+
+    private static HttpResponseMessage GrantedLicense(bool supporter) => Json(HttpStatusCode.OK,
+        JsonSerializer.Serialize(new
+        {
+            status = "granted",
+            benefit_id = supporter ? "0c695b7a-2f3a-4797-81c7-1410dbb76cc2" : "5138b20a-57ba-48aa-a664-2139cd6df0de"
+        }));
+
+    private static HttpResponseMessage PolarError(HttpStatusCode status, string body, string? version)
+    {
+        var response = Json(status, body);
+        if (status is HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect)
+            response.Headers.Location = new Uri("https://example.com/redirected-license-request");
+        if (version is not null)
+            response.Headers.Add("Polar-Version", version);
+        return response;
+    }
 
     [Fact]
     public void CommercialTierInference_MapsKnownPolarBenefitIdsAndLegacyDescriptions()
@@ -255,9 +491,9 @@ public sealed class LicenseServiceTests : IDisposable
     [Fact]
     public async Task ValidateSupporterLicenseAsync_MissingPolarActivationClearsLocalState()
     {
-        var service = CreateService((request, _) => Json(
+        var service = CreateService((request, _) => PolarError(
             HttpStatusCode.NotFound,
-            """{"type":"ResourceNotFound","detail":"Not found"}"""));
+            """{"error":"ResourceNotFound","detail":"Not found"}""", "2026-04"));
         SetPrivateField(service, "_supporterLicenseKey", "TYPEWHISPER-SUP-999");
         SetPrivateField(service, "_supporterActivationId", "activation-999");
         service.SupporterStatus = LicenseStatus.Active;
@@ -273,9 +509,9 @@ public sealed class LicenseServiceTests : IDisposable
     [Fact]
     public async Task DeactivateCommercialLicenseAsync_MissingPolarActivationClearsLocalStateWithoutError()
     {
-        var service = CreateService((request, _) => Json(
+        var service = CreateService((request, _) => PolarError(
             HttpStatusCode.NotFound,
-            """{"type":"ResourceNotFound","detail":"Not found"}"""));
+            """{"error":"ResourceNotFound","detail":"Not found"}""", "2026-04"));
         SetPrivateField(service, "_commercialLicenseKey", "TYPEWHISPER-COM-123");
         SetPrivateField(service, "_commercialActivationId", "activation-123");
         service.CommercialStatus = LicenseStatus.Active;

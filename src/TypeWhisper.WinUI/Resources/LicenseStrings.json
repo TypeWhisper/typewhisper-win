@@ -1,4 +1,5 @@
 {
+  "License.ApiCompatibilityError": "The licensing service could not process this request. Your saved license has been kept. Update TypeWhisper and try again. If the problem persists, contact support.",
   "License.OpenSourceLead": "TypeWhisper is open source. Personal use and GPL-compliant open-source use are free. Proprietary use requires a commercial license.",
   "License.UserTypeTitle": "Usage",
   "License.UserTypeHint": "Tell TypeWhisper which licensing path applies to you.",

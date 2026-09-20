@@ -21,6 +21,8 @@ namespace TypeWhisper.WinUI.Platform;
 public sealed partial class LicenseService : ObservableObject
 {
     private const string BaseUrl = "https://api.polar.sh/v1/customer-portal/license-keys";
+    // Temporary compatibility pin. See docs/POLAR-API-VERSION-MAINTENANCE.md before upgrading.
+    private const string PolarApiVersion = "2026-04";
     private const string OrganizationId = "96de503c-3c8b-4d08-9ded-c7f6e20fdde4";
     private const string CredentialStoreFileName = "licenses.dat";
     private const string LegacyCredentialFileName = "license.json";
@@ -142,7 +144,8 @@ public sealed partial class LicenseService : ObservableObject
     /// Initializes a new instance of the LicenseService class.
     /// </summary>
     public LicenseService()
-        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
+        : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+            { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
     {
     }
 
@@ -872,11 +875,11 @@ public sealed partial class LicenseService : ObservableObject
                 distribution = _distributionKind == AppDistributionKind.Store ? "store" : "direct"
             }
         };
-        var response = await _http.PostAsJsonAsync($"{BaseUrl}/activate", body, ct);
+        using var response = await PostPolarAsync("activate", body, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw CreatePolarException(json, $"Activation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
+            throw CreatePolarException(json, $"Activation failed (HTTP {(int)response.StatusCode})", response);
 
         return JsonSerializer.Deserialize<PolarActivationResponse>(json)
             ?? throw new InvalidOperationException(Loc.Instance["License.ActivationEmptyResponse"]);
@@ -885,11 +888,11 @@ public sealed partial class LicenseService : ObservableObject
     private async Task<PolarValidationResponse> ValidateCoreAsync(string key, string activationId, CancellationToken ct)
     {
         var body = new { key, organization_id = OrganizationId, activation_id = activationId };
-        var response = await _http.PostAsJsonAsync($"{BaseUrl}/validate", body, ct);
+        using var response = await PostPolarAsync("validate", body, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw CreatePolarException(json, $"Validation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
+            throw CreatePolarException(json, $"Validation failed (HTTP {(int)response.StatusCode})", response);
 
         return JsonSerializer.Deserialize<PolarValidationResponse>(json)
             ?? throw new InvalidOperationException(Loc.Instance["License.ValidationEmptyResponse"]);
@@ -906,11 +909,21 @@ public sealed partial class LicenseService : ObservableObject
     private async Task DeactivateCoreAsync(string key, string activationId, CancellationToken ct)
     {
         var body = new { key, organization_id = OrganizationId, activation_id = activationId };
-        var response = await _http.PostAsJsonAsync($"{BaseUrl}/deactivate", body, ct);
+        using var response = await PostPolarAsync("deactivate", body, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw CreatePolarException(json, $"Deactivation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
+            throw CreatePolarException(json, $"Deactivation failed (HTTP {(int)response.StatusCode})", response);
+    }
+
+    private async Task<HttpResponseMessage> PostPolarAsync<T>(string operation, T body, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/{operation}")
+        {
+            Content = JsonContent.Create(body)
+        };
+        request.Headers.Add("Polar-Version", PolarApiVersion);
+        return await _http.SendAsync(request, ct);
     }
 
     private async Task TryDeactivateCoreAsync(string key, string activationId, CancellationToken ct)
@@ -1003,48 +1016,41 @@ public sealed partial class LicenseService : ObservableObject
         throw new InvalidOperationException("License data path must stay inside the configured data directory.");
     }
 
-    private static PolarApiException CreatePolarException(string? json, string fallback, int statusCode)
+    private static PolarApiException CreatePolarException(string? json, string fallback, HttpResponseMessage response)
     {
-        if (string.IsNullOrWhiteSpace(json))
-            return new PolarApiException(fallback, statusCode);
-
+        PolarErrorResponse? error = null;
         try
         {
-            var error = JsonSerializer.Deserialize<PolarErrorResponse>(json);
-            if (!string.IsNullOrWhiteSpace(error?.Detail))
-                return new PolarApiException(error.Detail, statusCode, error.Detail, error.Type);
-
-            if (!string.IsNullOrWhiteSpace(error?.Type))
-                return new PolarApiException(error.Type, statusCode, null, error.Type);
+            if (!string.IsNullOrWhiteSpace(json))
+                error = JsonSerializer.Deserialize<PolarErrorResponse>(json);
         }
-        catch
+        catch (JsonException)
         {
             // Ignore malformed responses and fall back.
         }
 
-        return new PolarApiException(fallback, statusCode);
+        var detail = error?.Detail.ValueKind == JsonValueKind.String ? error.Detail.GetString() : null;
+        var apiVersion = response.Headers.TryGetValues("Polar-Version", out var versions)
+            ? string.Join(",", versions)
+            : null;
+        var message = !string.IsNullOrWhiteSpace(detail) ? detail
+            : !string.IsNullOrWhiteSpace(error?.Error) ? error.Error
+            : !string.IsNullOrWhiteSpace(error?.Type) ? error.Type
+            : fallback;
+        var exception = new PolarApiException(message, (int)response.StatusCode, detail, error?.Type, error?.Error, apiVersion);
+
+        // Version routing failures and unknown 404s must never erase stored activations.
+        if (exception.StatusCode == 404 && !IsPolarResourceMissing(exception))
+            return new PolarApiException(Loc.Instance["License.ApiCompatibilityError"], exception.StatusCode,
+                detail, error?.Type, error?.Error, apiVersion);
+
+        return exception;
     }
 
-    private static bool IsPolarResourceMissing(Exception ex)
-    {
-        if (ex is PolarApiException { StatusCode: 404 })
-            return true;
-
-        if (ex is PolarApiException polar &&
-            (ContainsResourceMissingSignal(polar.Detail) || ContainsResourceMissingSignal(polar.Type)))
-        {
-            return true;
-        }
-
-        return ContainsResourceMissingSignal(ex.Message);
-    }
-
-    private static bool ContainsResourceMissingSignal(string? value) =>
-        value?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true ||
-        value?.Contains("resource not found", StringComparison.OrdinalIgnoreCase) == true ||
-        value?.Contains("resourcenotfound", StringComparison.OrdinalIgnoreCase) == true ||
-        value?.Contains("does not exist", StringComparison.OrdinalIgnoreCase) == true ||
-        value?.Contains("no licensekeyactivation", StringComparison.OrdinalIgnoreCase) == true;
+    // Polar uses this structured error for missing keys/activations and revoked/expired keys.
+    // Require confirmation that the pinned contract actually handled the request.
+    private static bool IsPolarResourceMissing(Exception ex) =>
+        ex is PolarApiException { StatusCode: 404, Error: "ResourceNotFound", ApiVersion: PolarApiVersion };
 
     private void ResetCommercialState(bool clearSecrets)
     {
@@ -1367,8 +1373,9 @@ public sealed partial class LicenseService : ObservableObject
 
     private sealed record PolarErrorResponse
     {
-        [JsonPropertyName("detail")] public string? Detail { get; init; }
+        [JsonPropertyName("detail")] public JsonElement Detail { get; init; }
         [JsonPropertyName("type")] public string? Type { get; init; }
+        [JsonPropertyName("error")] public string? Error { get; init; }
     }
 
     private enum ExpectedLicenseEntitlementKind
@@ -1383,12 +1390,14 @@ public sealed partial class LicenseService : ObservableObject
         /// <summary>
         /// Performs polar api exception.
         /// </summary>
-        public PolarApiException(string message, int statusCode, string? detail = null, string? type = null)
+        public PolarApiException(string message, int statusCode, string? detail, string? type, string? error, string? apiVersion)
             : base(message)
         {
             StatusCode = statusCode;
             Detail = detail;
             Type = type;
+            Error = error;
+            ApiVersion = apiVersion;
         }
 
         /// <summary>
@@ -1403,6 +1412,8 @@ public sealed partial class LicenseService : ObservableObject
         /// Gets the type.
         /// </summary>
         public string? Type { get; }
+        public string? Error { get; }
+        public string? ApiVersion { get; }
     }
 }
 
