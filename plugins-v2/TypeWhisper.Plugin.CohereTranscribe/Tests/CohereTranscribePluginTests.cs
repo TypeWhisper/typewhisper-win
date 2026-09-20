@@ -15,7 +15,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class CohereTranscribePluginTests
 {
-    [Fact]
+    [WindowsFact]
     public async Task SavedProcessingDeviceAndModelLoadOnFirstPcmRequestAfterRestart()
     {
         using var temp = new TempDirectory(); var host = new FakePluginHostServices(temp.Path);
@@ -442,7 +442,7 @@ public sealed class CohereTranscribePluginTests
             CohereTranscribePlugin.NormalizeHuggingFaceToken(token));
     }
 
-    [Fact]
+    [WindowsFact]
     public void BuildStartInfo_IsLoopbackOnlyAuthenticatedAndUsesManagedAuxiliaryModels()
     {
         var paths = new CohereModelPaths(
@@ -489,7 +489,7 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal(System.Diagnostics.ProcessWindowStyle.Hidden, startInfo.WindowStyle);
     }
 
-    [Fact]
+    [WindowsFact]
     public void ResolveUnpackagedChildPath_MapsMsixRedirectedLocalAppDataOnlyOnce()
     {
         const string localAppData = @"C:\Users\tester\AppData\Local";
@@ -531,7 +531,7 @@ public sealed class CohereTranscribePluginTests
                 physicalLocalAppData));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task WindowsProcessJob_DisposeTerminatesAssignedProcess()
     {
         var startInfo = new ProcessStartInfo
@@ -613,7 +613,7 @@ public sealed class CohereTranscribePluginTests
         Assert.True(File.Exists(paths.LanguageIdModelPath));
     }
 
-    [Theory]
+    [WindowsTheory]
     [InlineData(CohereModelCatalog.Q4KModelId)]
     [InlineData(CohereModelCatalog.DefaultModelId)]
     [InlineData(CohereModelCatalog.Q6KModelId)]
@@ -666,7 +666,7 @@ public sealed class CohereTranscribePluginTests
         Assert.False(server.IsRunning);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task PluginRemoveModelAsync_StopsActiveSidecarAndRemovesSelectedQuantization()
     {
         using var temp = new TempDirectory();
@@ -689,7 +689,7 @@ public sealed class CohereTranscribePluginTests
         Assert.Contains(CrispAsrBackend.Cpu, assets.EnsuredRuntimes);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task TranscribeAsync_RestartsUnexpectedlyStoppedSidecar()
     {
         using var temp = new TempDirectory();
@@ -724,7 +724,7 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal("Using CPU", sut.AccelerationStatus.DisplayText);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task TranscribeAsync_RestartsSidecarThatExitsDuringRequest()
     {
         using var temp = new TempDirectory();
