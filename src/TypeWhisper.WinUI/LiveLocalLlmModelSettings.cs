@@ -191,6 +191,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             Unload.Visibility = model.Loaded ? Visibility.Visible : Visibility.Collapsed;
             Remove.Visibility = model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             Cancel.Visibility = Visibility.Collapsed;
+            ToolTipService.SetToolTip(Download, "Download missing files or verify an existing copy.");
             Download.Style = Load.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
             foreach (var button in new[] { Download, Load, Unload, Remove }) Actions.Children.Add(button);
             body.Children.Add(Actions); body.Children.Add(Cancel); Panel.Child = body;

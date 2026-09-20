@@ -41,6 +41,9 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     private LLamaWeights? _weights;
     private LLamaContext? _context;
     private string? _loadedModelId;
+    private CancellationTokenSource? _verificationCancellation;
+    private Task _verificationTask = Task.CompletedTask;
+    internal Task CacheVerification => _verificationTask;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long Size, DateTime Modified)> _verifiedModels = new();
 
     // ITypeWhisperPlugin
@@ -61,21 +64,36 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
     /// </summary>
-    public async Task ActivateAsync(IPluginHostServices host)
+    public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
         _selectedModelId = host.GetSetting<string>("selectedModel");
         host.Log(PluginLogLevel.Info, $"Activated (model={_selectedModelId})");
 
         _verifiedModels.Clear();
-        foreach (var model in Models)
+        var cancellation = _verificationCancellation = new();
+        _verificationTask = Task.Run(async () =>
         {
-            var path = GetModelFilePath(model.Id, model.FileName);
-            if (!File.Exists(path)) continue;
-            try { await VerifyCachedModelAsync(model, path, CancellationToken.None); }
-            catch (IOException) { /* Keep Download available for missing or corrupt files. */ }
-            catch (UnauthorizedAccessException) { /* Loading will report the access failure. */ }
-        }
+            foreach (var model in Models)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                var path = GetModelFilePath(model.Id, model.FileName);
+                if (!File.Exists(path)) continue;
+                try { await VerifyCachedModelAsync(model, path, cancellation.Token); }
+                catch (IOException) { /* Keep Download available for missing or corrupt files. */ }
+                catch (UnauthorizedAccessException) { /* Loading will report the access failure. */ }
+            }
+        }, cancellation.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task StopCacheVerificationAsync()
+    {
+        if (Interlocked.Exchange(ref _verificationCancellation, null) is not { } cancellation) return;
+        cancellation.Cancel();
+        try { await _verificationTask.ConfigureAwait(false); }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        finally { cancellation.Dispose(); }
     }
 
     /// <summary>
@@ -83,6 +101,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// </summary>
     public async Task DeactivateAsync()
     {
+        await StopCacheVerificationAsync();
         await UnloadModelAsync(CancellationToken.None);
         _host = null;
     }
@@ -191,6 +210,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <inheritdoc />
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
+        await StopCacheVerificationAsync();
         await _inferenceLock.WaitAsync(ct);
         try
         {
@@ -269,6 +289,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <inheritdoc />
     public async Task LoadModelAsync(string modelId, CancellationToken ct)
     {
+        await StopCacheVerificationAsync();
         await _inferenceLock.WaitAsync(ct);
         try
         {
@@ -280,7 +301,6 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             await VerifyCachedModelAsync(model, filePath, ct);
             await Task.Run(() =>
             {
-                UnloadModel();
                 var modelParams = new ModelParams(filePath)
                 {
                     ContextSize = 4096,
@@ -296,6 +316,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
                     context = weights.CreateContext(modelParams);
                     ct.ThrowIfCancellationRequested();
                     _host!.SetSetting("selectedModel", modelId);
+                    UnloadModel();
                     _weights = weights; _context = context;
                     weights = null; context = null;
                     _loadedModelId = _selectedModelId = modelId;
@@ -318,6 +339,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <inheritdoc />
     public async Task RemoveModelAsync(string modelId, CancellationToken ct)
     {
+        await StopCacheVerificationAsync();
         await _inferenceLock.WaitAsync(ct);
         try
         {
@@ -387,6 +409,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// </summary>
     public void Dispose()
     {
+        StopCacheVerificationAsync().GetAwaiter().GetResult();
         _inferenceLock.Wait();
         try { UnloadModel(); }
         finally { _inferenceLock.Release(); }
