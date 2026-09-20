@@ -19,6 +19,7 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
     private readonly IReadOnlyList<SupertonicAssetFile> _files;
     private readonly string _licenseUrl;
     private readonly bool _ownsHttpClient;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long Length, DateTime Modified)> _verifiedFiles = new();
 
     /// <summary>
     /// Performs supertonic asset manager.
@@ -60,9 +61,19 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
     /// Gets the are assets ready.
     /// </summary>
     public bool AreAssetsReady =>
-        _files.All(IsFileReady)
+        _files.All(IsFileTrusted)
         && HasContent(GetPath(SupertonicPaths.LicenseFileName))
         && HasContent(GetPath(SupertonicPaths.SourceFileName));
+
+    public async Task<bool> VerifyCachedAssetsAsync(CancellationToken ct)
+    {
+        foreach (var file in _files)
+        {
+            ct.ThrowIfCancellationRequested();
+            await IsFileVerifiedAsync(file, ct).ConfigureAwait(false);
+        }
+        return AreAssetsReady;
+    }
 
     /// <summary>
     /// Downloads missing assets asynchronously.
@@ -134,6 +145,7 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
                 }
                 ct.ThrowIfCancellationRequested();
                 File.Move(tempPath, filePath, overwrite: true);
+                RememberVerified(file);
                 completedFile = true;
                 completedBytes += Math.Max(expectedBytes, fileBytesRead);
                 progress?.Report(ClampProgress(completedBytes / (double)totalBytes));
@@ -227,11 +239,44 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
 
     private async Task<bool> IsFileVerifiedAsync(SupertonicAssetFile file, CancellationToken ct)
     {
-        if (!IsFileReady(file)) return false;
-        if (file.Sha256 is null) return true;
-        await using var stream = File.OpenRead(GetPath(file.RelativePath));
-        var actualHash = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
-        return actualHash.Equals(file.Sha256, StringComparison.OrdinalIgnoreCase);
+        _verifiedFiles.TryRemove(file.RelativePath, out _);
+        try
+        {
+            if (!IsFileReady(file)) return false;
+            var before = new FileInfo(GetPath(file.RelativePath));
+            var stamp = (before.Length, before.LastWriteTimeUtc);
+            if (file.Sha256 is not null)
+            {
+                await using var stream = File.OpenRead(GetPath(file.RelativePath));
+                var actualHash = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct).ConfigureAwait(false));
+                if (!actualHash.Equals(file.Sha256, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            ct.ThrowIfCancellationRequested();
+            var after = new FileInfo(GetPath(file.RelativePath));
+            if (!after.Exists || (after.Length, after.LastWriteTimeUtc) != stamp) return false;
+            _verifiedFiles[file.RelativePath] = stamp;
+            return true;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    private bool IsFileTrusted(SupertonicAssetFile file)
+    {
+        if (!_verifiedFiles.TryGetValue(file.RelativePath, out var stamp)) return false;
+        try
+        {
+            var info = new FileInfo(GetPath(file.RelativePath));
+            return info.Exists && (info.Length, info.LastWriteTimeUtc) == stamp;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    private void RememberVerified(SupertonicAssetFile file)
+    {
+        var info = new FileInfo(GetPath(file.RelativePath));
+        _verifiedFiles[file.RelativePath] = (info.Length, info.LastWriteTimeUtc);
     }
 
     private string GetPath(string relativePath) =>

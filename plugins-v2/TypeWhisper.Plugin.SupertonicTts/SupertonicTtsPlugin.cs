@@ -245,6 +245,7 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
             host.Log(PluginLogLevel.Warning, "Optional download token could not be read: " + error.GetType().Name);
         }
         PersistSettings();
+        await _assetManager.VerifyCachedAssetsAsync(CancellationToken.None);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
@@ -310,6 +311,11 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
         await _synthesisLock.WaitAsync(ct);
         try
         {
+            if (_synthesizer is null && !await _assetManager.VerifyCachedAssetsAsync(ct))
+            {
+                _host?.NotifyCapabilitiesChanged();
+                throw new InvalidOperationException("Supertonic model assets failed verification. Open plugin settings to repair the download.");
+            }
             var synthesis = await Task.Run(() =>
             {
                 var synthesizer = _synthesizer ??= _synthesizerFactory(_assetManager.AssetRoot);

@@ -4,6 +4,7 @@ internal interface ISupertonicAssetManager
 {
     string AssetRoot { get; }
     bool AreAssetsReady { get; }
+    Task<bool> VerifyCachedAssetsAsync(CancellationToken ct);
     Task DownloadMissingAssetsAsync(
         IProgress<double>? progress,
         string? huggingFaceToken,

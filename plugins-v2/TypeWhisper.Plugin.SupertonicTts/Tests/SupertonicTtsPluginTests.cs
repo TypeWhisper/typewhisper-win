@@ -433,6 +433,52 @@ public class SupertonicTtsPluginTests
         await plugin.DeactivateAsync();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CachedAssetsAreRehashedAtActivationAndBeforeLazySynthesis(bool corruptAfterActivation)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "supertonic-cache-" + Guid.NewGuid().ToString("N"));
+        byte[] payload = [1, 2, 3, 4];
+        var requests = 0;
+        using var http = new HttpClient(new CapturingHandler(_ =>
+        {
+            requests++;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) };
+        }));
+        SupertonicAssetFile[] files = [new("model.onnx", "https://fixture.invalid/model", payload.Length,
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)))];
+        var path = Path.Combine(root, "model.onnx");
+        try
+        {
+            using (var download = new SupertonicAssetManager(root, http, files, "https://fixture.invalid/license"))
+                await download.DownloadMissingAssetsAsync(null, null, default);
+            var downloadedRequests = requests;
+            using var restarted = new SupertonicAssetManager(root, http, files, "https://fixture.invalid/license");
+            Assert.False(restarted.AreAssetsReady);
+            async Task CorruptAsync()
+            {
+                var modified = File.GetLastWriteTimeUtc(path);
+                await File.WriteAllBytesAsync(path, [4, 3, 2, 1]);
+                File.SetLastWriteTimeUtc(path, modified); // Even an unchanged size/stamp must not bypass lazy-load validation.
+            }
+            if (!corruptAfterActivation) await CorruptAsync();
+            var constructions = 0;
+            using var plugin = new SupertonicTtsPlugin(restarted, _ => { constructions++; return new FakeSupertonicSynthesizer(); });
+            await plugin.ActivateAsync(new TestPluginHostServices());
+            Assert.Equal(corruptAfterActivation, plugin.IsConfigured);
+            if (corruptAfterActivation) await CorruptAsync();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.SpeakAsync(new TtsSpeakRequest("Hello"), default));
+            Assert.Equal(0, constructions);
+            Assert.False(plugin.IsConfigured);
+            Assert.Equal(downloadedRequests, requests); // Verification never silently downloads files.
+            await restarted.DownloadMissingAssetsAsync(null, null, default);
+            Assert.True(restarted.AreAssetsReady);
+            Assert.Equal(payload, await File.ReadAllBytesAsync(path));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     [Fact]
     public async Task SpeakAsync_LeavesCallerSynchronizationContextDuringInference()
     {
@@ -533,6 +579,8 @@ public class SupertonicTtsPluginTests
         public int DownloadCount { get; private set; }
         public string? LastHuggingFaceToken { get; private set; }
         public bool AreAssetsReady => AreAssetsReadyValue;
+        public Task<bool> VerifyCachedAssetsAsync(CancellationToken ct)
+        { ct.ThrowIfCancellationRequested(); return Task.FromResult(AreAssetsReady); }
 
         public Task DownloadMissingAssetsAsync(
             IProgress<double>? progress,
