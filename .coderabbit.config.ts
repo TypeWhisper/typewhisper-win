@@ -2,8 +2,11 @@
 import { defineConfig } from "@coderabbitai/config";
 
 export default defineConfig((ctx) => {
-  if (ctx.repo.fullName !== "TypeWhisper/typewhisper-win" || ctx.pr?.number !== 497) return {};
+  if (ctx.repo.fullName !== "TypeWhisper/typewhisper-win" || ctx.pr?.number !== 497) {
+    return { inheritance: true };
+  }
   return {
+    inheritance: true,
     reviews: {
       path_filters: [
         "!.github/scripts/**",
