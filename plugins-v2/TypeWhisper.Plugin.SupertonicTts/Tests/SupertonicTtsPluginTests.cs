@@ -371,8 +371,10 @@ public class SupertonicTtsPluginTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
-    [Fact]
-    public async Task AssetManager_ReportsCompletionOnlyAfterMetadataIsReady()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AssetManager_ReportsCompletionOnlyAfterMetadataIsReady(bool emptyLicense)
     {
         var root = Path.Combine(Path.GetTempPath(), "supertonic-progress-" + Guid.NewGuid().ToString("N"));
         var payload = Encoding.UTF8.GetBytes("verified model");
@@ -383,6 +385,8 @@ public class SupertonicTtsPluginTests
         var updates = new List<(double Value, bool Ready)>();
         try
         {
+            if (emptyLicense)
+            { Directory.CreateDirectory(root); await File.WriteAllTextAsync(Path.Combine(root, SupertonicPaths.LicenseFileName), ""); }
             await assets.DownloadMissingAssetsAsync(new InlineProgress(v => updates.Add((v, assets.AreAssetsReady))), null, default);
             Assert.True(assets.AreAssetsReady);
             Assert.Equal((1d, true), updates[^1]);

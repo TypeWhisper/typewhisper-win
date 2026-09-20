@@ -68,7 +68,9 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         {
             session.Changed -= UpdateButtons;
             _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = null;
+            foreach (var credential in _licenses.Children.OfType<PasswordBox>()) credential.Password = "";
         };
+        UpdateButtons();
     }
 
     private async Task ReadAsync()
@@ -116,12 +118,14 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
                 save.Click += async (_, _) =>
                 {
                     var value = credential.Password;
-                    credential.Password = "";
+                    var saved = false;
                     await RunAsync(async (model, ct) =>
                     {
                         var result = await model.SaveModelDownloadCredentialAsync(info.Id, requirement.Id, value, ct);
-                        if (!result.Succeeded) throw new InvalidOperationException(result.Message ?? "The token could not be saved.");
+                        if (!result.Succeeded) throw new CredentialValidationException(result.Message ?? "The token could not be saved.");
+                        saved = true;
                     });
+                    if (saved) credential.Password = "";
                 };
                 clear.Click += async (_, _) => await RunAsync((model, ct) => model.ClearModelDownloadCredentialAsync(info.Id, requirement.Id, ct));
                 _licenses.Children.Add(credential); _licenses.Children.Add(save); _licenses.Children.Add(clear);
@@ -133,7 +137,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded) { Visibility = Visibility.Visible; _message.Text = "Model status could not be read. Reopen this page to retry."; } }
+        { if (IsLoaded) { Visibility = Visibility.Visible; _message.Text = "Model status could not be read. Reopen this page to retry."; UpdateButtons(); } }
     }
 
     private async Task RunAsync(Func<ILocalTtsModelManagement, CancellationToken, Task> action, bool download = false)
@@ -141,6 +145,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         if (_busy || !_session.CanStartPluginSettingsAction || _lifetime is not { } lifetime) { UpdateButtons(); return; }
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         _operation = operation; _busy = true; _message.Text = "";
+        var refresh = true;
         if (download)
         {
             _progress.Visibility = Visibility.Visible;
@@ -159,6 +164,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
                 await action(model, ct); return true;
             }, operation.Token, preserveCompletedResult: true);
         }
+        catch (CredentialValidationException error)
+        { refresh = false; if (IsLoaded) _message.Text = error.Message; }
         catch (OperationCanceledException)
         { if (IsLoaded) _message.Text = "Operation cancelled. Downloaded files are kept for the next attempt."; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -167,7 +174,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         {
             _session.RecordingStarting -= CancelForRecording;
             _operation = null; _busy = false;
-            if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) await ReadAsync();
+            if (IsLoaded && ReferenceEquals(_lifetime, lifetime))
+            { if (refresh) await ReadAsync(); else UpdateButtons(); }
         }
     }
 
@@ -184,6 +192,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         _cancel.Visibility = _busy ? Visibility.Visible : Visibility.Collapsed;
         _cancel.IsEnabled = _busy && _operation?.IsCancellationRequested == false;
     }
+
+    private sealed class CredentialValidationException(string message) : Exception(message);
 
     private sealed class CallbackProgress(Action<double> report) : IProgress<double>
     { public void Report(double value) => report(value); }

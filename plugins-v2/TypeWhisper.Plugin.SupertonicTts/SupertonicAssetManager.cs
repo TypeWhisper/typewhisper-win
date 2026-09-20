@@ -161,7 +161,7 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
     private async Task WriteLicenseMetadataAsync(string? huggingFaceToken, CancellationToken ct)
     {
         var licensePath = GetPath(SupertonicPaths.LicenseFileName);
-        if (!File.Exists(licensePath))
+        if (!HasContent(licensePath))
         {
             try
             {
