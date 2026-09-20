@@ -1,3 +1,4 @@
+import io
 import importlib.util
 import sys
 import types
@@ -22,6 +23,18 @@ class SetupTests(unittest.TestCase):
             with patch.dict(sys.modules, modules), patch.object(server, 'respond', responses.append):
                 server.cmd_check()
             self.assertEqual(responses[-1]['ready'], isinstance(cached, str))
+
+    def test_unavailable_cuda_is_reported_as_load_protocol_error(self):
+        responses = []
+        modules = {
+            "torch": types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: False), set_num_threads=lambda _: None),
+            "soundfile": types.SimpleNamespace(),
+            "transformers": types.SimpleNamespace(AutoModelForSpeechSeq2Seq=None, AutoProcessor=None),
+        }
+        with patch.dict(sys.modules, modules), patch.dict(server.os.environ, {"TYPEWHISPER_DEVICE": "NvidiaCuda"}), patch.object(sys, "stdin", io.StringIO('{"cmd":"load","req_id":42}\n')), patch.object(server, "respond", responses.append):
+            server.cmd_serve()
+        self.assertEqual(responses[-1]["req_id"], 42)
+        self.assertIn("NVIDIA CUDA is unavailable", responses[-1]["error"])
 
     def test_translation_preserves_the_selected_source_language(self):
         self.assertEqual(server.transcription_question(True, "de"), "Translate the speech into English. The spoken language is German.")

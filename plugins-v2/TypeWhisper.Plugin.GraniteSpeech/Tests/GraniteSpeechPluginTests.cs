@@ -21,6 +21,16 @@ public sealed class GraniteSpeechPluginTests
     }
 
     [Fact]
+    public void ModelCard_ListsSupportedLanguages()
+    {
+        using var sut = new GraniteSpeechPlugin();
+        var model = Assert.Single(sut.TranscriptionModels);
+        Assert.Equal(sut.SupportedLanguages, model.LanguageCodes);
+        Assert.Equal(model.LanguageCodes.Count, model.LanguageCount);
+        Assert.Equal("Local (Granite Speech)", sut.ProviderDisplayName);
+    }
+
+    [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
         var manifest = ReadManifest();

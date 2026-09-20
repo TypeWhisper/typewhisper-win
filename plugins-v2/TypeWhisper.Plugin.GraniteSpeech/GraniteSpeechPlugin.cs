@@ -69,7 +69,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the provider display name.
     /// </summary>
-    public string ProviderDisplayName => "Lokal (Granite Speech)";
+    public string ProviderDisplayName => L("Local (Granite Speech)", "Lokal (Granite Speech)");
     /// <summary>
     /// Gets whether the provider has the configuration required to run.
     /// </summary>
@@ -108,7 +108,8 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             SizeDescription = "~5–8 GB (runtime + model)",
             EstimatedSizeMB = 8000,
             IsRecommended = true,
-            LanguageCount = 6,
+            LanguageCount = GraniteSupportedLanguages.Count,
+            LanguageCodes = GraniteSupportedLanguages,
         }
     ];
 

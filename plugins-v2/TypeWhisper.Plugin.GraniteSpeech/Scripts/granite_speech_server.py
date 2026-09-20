@@ -166,8 +166,6 @@ def cmd_serve():
     from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
     device = "cuda" if os.environ.get("TYPEWHISPER_DEVICE", "Auto") != "Cpu" and torch.cuda.is_available() else "cpu"
-    if os.environ.get("TYPEWHISPER_DEVICE") == "NvidiaCuda" and device != "cuda":
-        raise RuntimeError("NVIDIA CUDA is unavailable. Select CPU or install a compatible NVIDIA driver.")
     torch.set_num_threads(min(8, os.cpu_count() or 4))
     model = None
     processor = None
@@ -191,6 +189,8 @@ def cmd_serve():
 
         elif action == "load":
             try:
+                if os.environ.get("TYPEWHISPER_DEVICE") == "NvidiaCuda" and device != "cuda":
+                    raise RuntimeError("NVIDIA CUDA is unavailable. Select CPU or install a compatible NVIDIA driver.")
                 processor = AutoProcessor.from_pretrained(MODEL_NAME, revision=MODEL_REVISION, local_files_only=True)
                 tokenizer = processor.tokenizer
                 model = AutoModelForSpeechSeq2Seq.from_pretrained(
