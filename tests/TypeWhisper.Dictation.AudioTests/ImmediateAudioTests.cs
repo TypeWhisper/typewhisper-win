@@ -3,7 +3,7 @@ using System.Speech.Synthesis;
 using NAudio.Wave;
 using SherpaOnnx;
 using TypeWhisper.WinUI;
-using TypeWhisper.Windows.Services;
+using TypeWhisper.WinUI.Platform;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -119,7 +119,7 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
         public WaveFormat WaveFormat => new(16000, 16, 1);
         public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
         public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
-        public IAudioInputCapture Create(int device, WaveFormat format, int bufferMilliseconds) => this;
+        public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds) => this;
         public void Prepare() { }
         public void StartRecording() => Running = true;
         public void StopRecording() { Running = false; RecordingStopped?.Invoke(this, new()); }

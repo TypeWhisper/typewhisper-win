@@ -6,7 +6,7 @@
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.Soniox.Portable.Tests" />
-    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <Content Include="manifest.json;Localization/*.json;Scripts/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

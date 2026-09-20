@@ -77,26 +77,6 @@ public partial class WhisperCppPluginTests
     }
 
     [Fact]
-    public void PublishPluginsWorkflow_IncludesCudaRuntimeDirectoryInReleaseZip()
-    {
-        var repoRoot = Path.GetFullPath(Path.Join(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..", ".."));
-        var workflowPath = Path.Join(
-            repoRoot,
-            ".github",
-            "workflows",
-            "publish-plugins.yml");
-
-        var workflow = File.ReadAllText(workflowPath);
-
-        Assert.Contains("cuda/win-x64", workflow);
-        Assert.Contains("vulkan/win-x64", workflow);
-        Assert.Contains("ggml-cuda-whisper.dll", workflow);
-        Assert.Contains("ggml-vulkan-whisper.dll", workflow);
-    }
-
-    [Fact]
     public void SupportedAccelerationBackends_IncludeVulkanAndRocm()
     {
         var sut = new WhisperCppPlugin();

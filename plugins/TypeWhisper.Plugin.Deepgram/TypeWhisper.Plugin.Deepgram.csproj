@@ -1,28 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <UseWPF Condition="'$(TargetFramework)' == 'net10.0-windows'">true</UseWPF>
     <RootNamespace>TypeWhisper.Plugin.Deepgram</RootNamespace>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.Deepgram.Tests" />
-    <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
     <InternalsVisibleTo Include="TypeWhisper.PluginSDK.Portable.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="manifest.json" Condition="'$(TargetFramework)' != 'net10.0'">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
-    </Content>
-    <Content Include="manifest.portable.json" Condition="'$(TargetFramework)' == 'net10.0'">
+    <Content Include="manifest.json">
       <Link>manifest.json</Link>
       <TargetPath>manifest.json</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -33,14 +27,9 @@
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <Compile Remove="DeepgramSettingsView.xaml.cs;DeepgramPlugin.cs;DeepgramStreamingSession.cs" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'"><Compile Remove="DeepgramPlugin.Portable.cs;DeepgramStreamingSession.Portable.cs" /></ItemGroup>
   <Target Name="CopyToAppPlugins" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
     <PropertyGroup>
-      <AppOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\src\TypeWhisper.Windows\bin\$(Configuration)\$(TargetFramework)'))</AppOutputDir>
-      <AppOutputDir Condition="'$(TargetFramework)' == 'net10.0'">$(MSBuildProjectDirectory)\bin\$(Configuration)\portable-host</AppOutputDir>
+      <AppOutputDir>$(MSBuildProjectDirectory)\bin\$(Configuration)\portable-host</AppOutputDir>
       <PluginOutputDir>$(AppOutputDir)\Plugins\com.typewhisper.deepgram\</PluginOutputDir>
     </PropertyGroup>
     <MakeDir Directories="$(PluginOutputDir)" />

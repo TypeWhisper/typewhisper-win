@@ -7,7 +7,7 @@ Tracking: [issue #471](https://github.com/TypeWhisper/typewhisper-win/issues/471
 `LicenseService` pins activation, validation, deactivation, and activation rollback
 requests to `Polar-Version: 2026-04`. The header belongs to each request, not the
 shared `HttpClient`. There is no retry against unversioned Current.
-Both dedicated production clients (WPF and WinUI) disable automatic redirects so
+The dedicated WinUI license clients disable automatic redirects so
 license keys and activation IDs cannot be forwarded to a redirected origin.
 Redirect responses fail the operation and retain stored license state.
 
@@ -42,9 +42,8 @@ unchanged. Network failures do not advance validation timestamps or erase licens
 ## Local verification
 
 ```powershell
-dotnet test tests/TypeWhisper.PluginSystem.Tests/TypeWhisper.PluginSystem.Tests.csproj --filter FullyQualifiedName~LicenseServiceTests
+dotnet test tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj --filter FullyQualifiedName~LicenseServiceTests
 F:\typewhisper\typewhisper-dev-tools\build-typewhisper-windows-dev.ps1 --run <current-checkout-or-worktree>
-F:\typewhisper\typewhisper-dev-tools\build-typewhisper-windows-dev.ps1 --run --winui <current-checkout-or-worktree>
 ```
 
 The tests simulate both entitlement types, all license operations, isolated request
@@ -52,16 +51,12 @@ headers, unsupported/ambiguous responses, persistence across restart, confirmed
 missing/revoked/expired licenses, inactive validation results, and offline retries.
 They do not require a Polar account and do not send network requests.
 
-Local results on 2026-09-20: all 75 `LicenseServiceTests` and all 30
-`AppLocalizationResourcesTests` passed. The supported development script built
-this worktree and started `F:\typewhisper\dev-output\typewhisper-win\Build\TypeWhisper.exe`;
-the process was responding with its Settings window open. Existing MVVM analyzer
-warnings were reported during the build. No live license activation was performed.
-The WinUI build also passed using the same script with `--winui`, and the script
-launched `F:\typewhisper\dev-output\typewhisper-win\WinUI\TypeWhisper.WinUI.exe`.
-WinUI compiles the same `LicenseService.cs` through a linked source entry and embeds
-the English license strings; `WinUILicensing` forwards the service errors to its
-license notice. No separate copy of the API integration needs updating.
+The license tests now live in the platform test project and run in Windows PR CI.
+WinUI owns `src/TypeWhisper.WinUI/Platform/LicenseService.cs` and embeds the English
+license strings, including the compatibility error; `WinUILicensing` forwards
+service errors to its license notice. No separate copy of the API integration
+needs updating. Native builds and launches use the supported development script
+and its published WinUI output. Tests do not perform live license activation.
 
 ## Release and migration follow-up
 

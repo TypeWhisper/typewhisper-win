@@ -3,14 +3,14 @@ using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Presentation;
 using RecordingMode = TypeWhisper.Presentation.RecordingMode;
 using TypeWhisper.Core.Models;
-using TypeWhisper.Windows.Services;
+using TypeWhisper.WinUI.Platform;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginHost;
 
 namespace TypeWhisper.WinUI;
 
 // Initial local vertical slice: reuses the existing capture implementation and
-// Parakeet configuration. Does not instantiate the WPF application or plugin UI.
+// Parakeet configuration. Uses portable providers and host-rendered settings.
 internal sealed partial class LocalDictationSession : IAsyncDisposable
 {
     private readonly AudioRecordingService _audio;

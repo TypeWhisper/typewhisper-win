@@ -50,8 +50,11 @@ jobs:
       - name: Test TypeWhisper.Core
         run: dotnet test tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj -c Release --no-build --logger "trx;LogFileName=TypeWhisper.Core.Tests.trx" --results-directory artifacts/test-results
 
-      - name: Test plugin system
-        run: dotnet test tests/TypeWhisper.PluginSystem.Tests/TypeWhisper.PluginSystem.Tests.csproj -c Release --no-build --logger "trx;LogFileName=TypeWhisper.PluginSystem.Tests.trx" --results-directory artifacts/test-results
+      - name: Test WinUI application logic
+        run: dotnet test tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj -c Release --no-build --logger "trx;LogFileName=TypeWhisper.Presentation.Tests.trx" --results-directory artifacts/test-results
+
+      - name: Test Windows platform services
+        run: dotnet test tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj -c Release --no-build --logger "trx;LogFileName=TypeWhisper.Platform.Tests.trx" --results-directory artifacts/test-results
 
       - uses: actions/upload-artifact@v7
         if: always()
