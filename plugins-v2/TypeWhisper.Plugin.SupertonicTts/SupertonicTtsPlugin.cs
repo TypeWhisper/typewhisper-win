@@ -310,15 +310,13 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
         await _synthesisLock.WaitAsync(ct);
         try
         {
-            var synthesizer = _synthesizer ??= _synthesizerFactory(_assetManager.AssetRoot);
-            var synthesis = synthesizer.Synthesize(
-                new SupertonicSynthesisRequest(
-                    text,
-                    NormalizeLanguage(request.Language),
-                    SupertonicPaths.VoiceStylePath(_assetManager.AssetRoot, voiceId),
-                    DenoisingSteps,
-                    Speed),
-                ct);
+            var synthesis = await Task.Run(() =>
+            {
+                var synthesizer = _synthesizer ??= _synthesizerFactory(_assetManager.AssetRoot);
+                return synthesizer.Synthesize(
+                    new SupertonicSynthesisRequest(text, NormalizeLanguage(request.Language),
+                        SupertonicPaths.VoiceStylePath(_assetManager.AssetRoot, voiceId), DenoisingSteps, Speed), ct);
+            }, ct);
             ct.ThrowIfCancellationRequested();
 
             if (synthesis.SampleRate <= 0 || synthesis.Samples.LongLength > (long)synthesis.SampleRate * 120

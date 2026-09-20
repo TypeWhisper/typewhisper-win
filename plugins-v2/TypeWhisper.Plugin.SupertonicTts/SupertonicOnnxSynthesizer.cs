@@ -183,7 +183,7 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
         return mask;
     }
 
-    private static IReadOnlyList<string> ChunkText(string text, int maxLength)
+    internal static IReadOnlyList<string> ChunkText(string text, int maxLength)
     {
         var chunks = new List<string>();
         foreach (var paragraph in Regex.Split(text.Trim(), @"\n\s*\n+").Where(p => !string.IsNullOrWhiteSpace(p)))
@@ -192,6 +192,8 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
             while (remaining.Length > maxLength)
             {
                 var split = FindSplitIndex(remaining, maxLength);
+                if (split > 0 && split < remaining.Length && char.IsHighSurrogate(remaining[split - 1]) && char.IsLowSurrogate(remaining[split]))
+                    split--;
                 chunks.Add(remaining[..split].Trim());
                 remaining = remaining[split..].Trim();
             }

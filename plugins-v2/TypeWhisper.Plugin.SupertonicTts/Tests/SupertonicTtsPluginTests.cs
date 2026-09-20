@@ -410,6 +410,36 @@ public class SupertonicTtsPluginTests
     }
 
     [Fact]
+    public async Task SpeakAsync_LeavesCallerSynchronizationContextDuringInference()
+    {
+        var synth = new FakeSupertonicSynthesizer();
+        using var plugin = new SupertonicTtsPlugin(new FakeSupertonicAssets { AreAssetsReadyValue = true }, _ => synth,
+            (_, _) => new FakeTtsPlaybackSession());
+        await plugin.ActivateAsync(new TestPluginHostServices());
+        var previous = SynchronizationContext.Current;
+        Task<ITtsPlaybackSession> pending;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
+            pending = plugin.SpeakAsync(new TtsSpeakRequest("Hello", "en"), default);
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+        await pending;
+        Assert.Null(synth.SynthesisContext);
+    }
+
+    [Theory]
+    [InlineData(120)]
+    [InlineData(300)]
+    public void TextChunksKeepSupplementaryCharactersIntact(int limit)
+    {
+        var text = new string('a', limit - 1) + "\U0001F600" + "tail";
+        var chunks = SupertonicOnnxSynthesizer.ChunkText(text, limit);
+        Assert.Equal(text, string.Concat(chunks));
+        Assert.All(chunks, chunk => Assert.NotNull(chunk.Normalize(NormalizationForm.FormKD)));
+    }
+
+    [Fact]
     public async Task SpeakAsync_RejectsExplicitUnknownVoiceBeforeSynthesis()
     {
         var synth = new FakeSupertonicSynthesizer();
@@ -496,6 +526,7 @@ public class SupertonicTtsPluginTests
     private sealed class FakeSupertonicSynthesizer : ISupertonicSynthesizer
     {
         public SupertonicSynthesisRequest? LastRequest { get; private set; }
+        public SynchronizationContext? SynthesisContext { get; private set; }
         public bool Disposed { get; private set; }
         public SupertonicSynthesisResult Result { get; set; } = new([0.1f, -0.1f], 24_000);
 
@@ -503,6 +534,7 @@ public class SupertonicTtsPluginTests
         {
             ct.ThrowIfCancellationRequested();
             LastRequest = request;
+            SynthesisContext = SynchronizationContext.Current;
             return Result;
         }
 

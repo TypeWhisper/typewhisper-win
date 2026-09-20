@@ -122,9 +122,9 @@ internal sealed class LivePortablePluginSettings : UserControl
             _textSettings.Content = fallback;
             ProfileLayoutChanged?.Invoke(false);
         }
-        _models.Visibility = _models.HasLocalTtsModels || _session.PluginRuntime.TranscriptionProviders.Any(provider => provider.PluginId == _id) ||
+        _models.Visibility = state?.Enabled == true && (_models.HasLocalTtsModels || _session.PluginRuntime.TranscriptionProviders.Any(provider => provider.PluginId == _id) ||
             _session.LlmProviders.Any(provider => provider.PluginId == _id) ||
-            _session.ActiveRegistryModelDownload?.PluginId == _id ? Visibility.Visible : Visibility.Collapsed;
+            _session.ActiveRegistryModelDownload?.PluginId == _id) ? Visibility.Visible : Visibility.Collapsed;
         UpdateButtons();
     }
     private void UpdateButtons()

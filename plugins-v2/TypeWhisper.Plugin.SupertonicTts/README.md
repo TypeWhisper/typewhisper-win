@@ -25,7 +25,7 @@ dotnet msbuild plugins-v2/TypeWhisper.Plugin.SupertonicTts/portable.proj /t:Buil
 dotnet test plugins-v2/TypeWhisper.Plugin.SupertonicTts/Tests -c Release
 ```
 
-24 plugin tests pass, including license persistence, download integrity failures and cleanup, completion progress, native-load cancellation cleanup, unload/reload state, saved voice/speed/quality, and package installation, restart and removal. The package loader rejects host `1.1.3` and accepts `1.1.4`. The shared portable SDK/host suite passes 266 tests.
+27 plugin tests pass, including license persistence, download integrity failures and cleanup, completion progress, native-load cancellation cleanup, unload/reload state, saved voice/speed/quality, and package installation, restart and removal. The package loader rejects host `1.1.3` and accepts `1.1.4`. The shared portable SDK/host suite passes 266 tests.
 
 An isolated real-model test downloaded and verified the assets, synthesized German with M1 and F1, and produced valid 44.1 kHz mono WAV files. Each sample contains about 7.5 seconds of audio, generated in approximately 1.8 seconds on the test PC. In-flight synthesis cancellation, unloading, reloading and subsequent synthesis passed. These checks establish working audio generation, not subjective voice quality or audible device playback.
 
