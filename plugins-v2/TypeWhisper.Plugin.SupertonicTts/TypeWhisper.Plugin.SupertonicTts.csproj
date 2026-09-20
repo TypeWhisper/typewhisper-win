@@ -9,7 +9,7 @@
     <InternalsVisibleTo Include="TypeWhisper.Plugin.SupertonicTts.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.1" />
-    <Content Include="manifest.json;Localization/*.json;Scripts/**/*;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="manifest.json;Localization/*.json;Scripts/**/*;THIRD-PARTY-NOTICES.md;Licenses/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">
     <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.supertonic-tts/</PackageDirectory></PropertyGroup>

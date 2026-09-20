@@ -31,6 +31,9 @@ public sealed class PortablePackageTests
         var manifest = PortablePluginPackage.ReadManifest(project);
         var source = Path.Combine(project,"bin",new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,"portable-host","Plugins",manifest.Id);
         Assert.True(File.Exists(Path.Combine(source, "THIRD-PARTY-NOTICES.md")));
+        foreach (var license in new[] { "Supertonic-LICENSE.txt", "NAudio-LICENSE.txt", "ONNXRuntime-LICENSE.txt", "DotNet-LICENSE.txt" })
+            Assert.Contains("Permission is hereby granted", File.ReadAllText(Path.Combine(source, "Licenses", license)));
+        Assert.True(File.Exists(Path.Combine(source, "Licenses", "ONNXRuntime-ThirdPartyNotices.txt")));
         var archive = Path.Combine(fixture.Root,"package.zip");
         ZipFile.CreateFromDirectory(source,archive,CompressionLevel.Fastest,false);
         var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archive)));
