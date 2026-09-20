@@ -235,11 +235,6 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     }
 
     /// <summary>
-    /// Creates the optional Hugging Face authentication settings.
-    /// </summary>
-
-
-    /// <summary>
     /// Selects a Cohere Transcribe quantization.
     /// </summary>
     public void SelectModel(string modelId)
@@ -475,7 +470,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
             return;
         }
 
-        if (_server?.IsRunning == true && _server.ActiveBackend is { } activeBackend)
+        if (_server is { IsRunning: true, ActiveBackend: { } activeBackend })
         {
             var preferredBackend = GetPreferredBackendForStatus(preference);
             _accelerationStatus = preferredBackend == activeBackend
