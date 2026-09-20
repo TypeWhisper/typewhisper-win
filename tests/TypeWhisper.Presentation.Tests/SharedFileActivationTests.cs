@@ -11,8 +11,34 @@ public sealed class SharedFileActivationTests
         var inbox = new ActivationInbox();
         var operation = new SharedOperation([@"C:\audio\one.wav"]);
         await SharedFileActivation.ReceiveAsync(operation, inbox, () => false);
-        Assert.Equal(["error"], operation.Events);
+        Assert.Equal(["started", "error"], operation.Events);
         Assert.Empty(inbox.Drain());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RedirectedShareWaitsForStartupAndRejectsRecoveryFailure(bool startupSucceeds)
+    {
+        var inbox = new ActivationInbox();
+        var startup = new TaskCompletionSource<bool>();
+        var operation = new SharedOperation([@"C:\audio\one.wav"]);
+        var receiving = SharedFileActivation.ReceiveAsync(operation, inbox, () => startupSucceeds, startup.Task);
+        Assert.Equal(["started"], operation.Events);
+        Assert.False(receiving.IsCompleted);
+        Assert.Empty(inbox.Drain());
+        startup.SetResult(startupSucceeds);
+        await receiving;
+        if (startupSucceeds)
+        {
+            Assert.Equal(["started", "read", "retrieved", "completed"], operation.Events);
+            Assert.Single(inbox.Drain());
+        }
+        else
+        {
+            Assert.Equal(["started", "error"], operation.Events);
+            Assert.Empty(inbox.Drain());
+        }
     }
 
     [Fact]
