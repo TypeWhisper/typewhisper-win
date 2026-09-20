@@ -41,6 +41,8 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(30) };
     private IPluginHostServices? _host;
     private Process? _sidecar;
+    private Process? _setupProcess;
+    private readonly Func<Process, int, bool> _waitForSetupExit = static (process, timeout) => process.WaitForExit(timeout);
     private StreamWriter? _sidecarIn;
     private StreamReader? _sidecarOut;
     private string? _selectedModelId;
@@ -162,6 +164,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) throw new PlatformNotSupportedException("Granite Speech requires Windows x64.");
         await _sidecarLock.WaitAsync(ct);
         try {
+        StopSidecar();
         var dataDir = GetDataDirectory();
         Directory.CreateDirectory(dataDir);
 
@@ -262,7 +265,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         };
         psi.Environment["HF_HOME"] = Path.Join(dataDir, "hf-cache");
 
-        using var proc = Process.Start(psi)
+        var proc = _setupProcess = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start model download");
 
         await ReadSetupProcessAsync(proc, progress, ct);
@@ -434,6 +437,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 
     private void StopSidecar(bool terminate = false)
     {
+        StopSetupProcess();
         if (_sidecar is null) return;
 
         try
@@ -571,7 +575,10 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 
     internal async Task ReadSetupProcessAsync(Process proc, IProgress<double>? progress, CancellationToken ct)
     {
-        var setupErrors = proc.StandardError.ReadToEndAsync();
+        if (_setupProcess is not null && !ReferenceEquals(_setupProcess, proc)) StopSetupProcess();
+        _setupProcess = proc;
+        using var reads = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var setupErrors = proc.StandardError.ReadToEndAsync(reads.Token);
         try
         {
             string? line;
@@ -604,7 +611,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             await proc.WaitForExitAsync(ct);
             if (proc.ExitCode != 0)
             {
-                var stderr = await setupErrors;
+                var stderr = await setupErrors.WaitAsync(TimeSpan.FromSeconds(10), ct);
                 throw new InvalidOperationException(
                     $"Model download failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 1000)..]}");
             }
@@ -612,11 +619,33 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         }
         finally
         {
-            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) when (proc.HasExited) { }
-            await proc.WaitForExitAsync(CancellationToken.None);
-            await setupErrors;
+            try { StopSetupProcess(); }
+            finally
+            {
+                reads.Cancel();
+                await DrainSetupReadAsync(setupErrors);
+            }
         }
+    }
+
+    private void StopSetupProcess()
+    {
+        if (_setupProcess is not { } process) return;
+        if (!process.HasExited)
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) when (process.HasExited) { }
+            if (!_waitForSetupExit(process, 10000))
+                throw new TimeoutException("The setup process did not stop. Retry unloading before continuing setup.");
+        }
+        process.Dispose();
+        _setupProcess = null;
+    }
+
+    private static async Task DrainSetupReadAsync(Task<string> read)
+    {
+        try { await read.WaitAsync(TimeSpan.FromSeconds(10)); }
+        catch (Exception error) when (error is OperationCanceledException or ObjectDisposedException or IOException) { }
     }
 
     // --- General helpers ---
@@ -636,7 +665,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         return Path.Combine(pluginDir, "Scripts", fileName);
     }
 
-    private static async Task RunProcessAsync(string exe, string args, CancellationToken ct,
+    private async Task RunProcessAsync(string exe, string args, CancellationToken ct,
         int timeoutMs = 120_000)
     {
         var psi = new ProcessStartInfo(exe, args)
@@ -647,32 +676,35 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             CreateNoWindow = true,
         };
 
-        using var proc = Process.Start(psi)
+        StopSetupProcess();
+        var proc = _setupProcess = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start {exe}");
-
-        var errors = proc.StandardError.ReadToEndAsync();
-        var output = proc.StandardOutput.ReadToEndAsync();
+        using var reads = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var errors = proc.StandardError.ReadToEndAsync(reads.Token);
+        var output = proc.StandardOutput.ReadToEndAsync(reads.Token);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeoutMs);
-
         try
         {
-            await proc.WaitForExitAsync(cts.Token);
+            try { await proc.WaitForExitAsync(cts.Token); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            { throw new TimeoutException($"Process timed out after {timeoutMs / 1000}s: {exe}"); }
+            await output.WaitAsync(TimeSpan.FromSeconds(10), ct);
+            if (proc.ExitCode != 0)
+            {
+                var stderr = await errors.WaitAsync(TimeSpan.FromSeconds(10), ct);
+                throw new InvalidOperationException(
+                    $"{exe} failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 500)..]}");
+            }
         }
-        catch (OperationCanceledException)
+        finally
         {
-            if (!proc.HasExited) proc.Kill(entireProcessTree: true);
-            await proc.WaitForExitAsync();
-            if (ct.IsCancellationRequested) throw;
-            throw new TimeoutException($"Process timed out after {timeoutMs / 1000}s: {exe}");
-        }
-        await output;
-
-        if (proc.ExitCode != 0)
-        {
-            var stderr = await errors;
-            throw new InvalidOperationException(
-                $"{exe} failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 500)..]}");
+            try { StopSetupProcess(); }
+            finally
+            {
+                reads.Cancel();
+                await Task.WhenAll(DrainSetupReadAsync(output), DrainSetupReadAsync(errors));
+            }
         }
     }
 

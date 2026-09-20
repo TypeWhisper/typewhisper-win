@@ -176,6 +176,35 @@ public sealed class GraniteSpeechPluginTests
     }
 
     [Fact]
+    public async Task SetupTerminationTimeoutRetainsOwnerUntilUnloadRetries()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var start = new System.Diagnostics.ProcessStartInfo(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 30" }
+        };
+        using var child = System.Diagnostics.Process.Start(start)!;
+        using var observer = System.Diagnostics.Process.GetProcessById(child.Id);
+        using var sut = new GraniteSpeechPlugin();
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var owner = typeof(GraniteSpeechPlugin).GetField("_setupProcess", flags)!;
+        typeof(GraniteSpeechPlugin).GetField("_waitForSetupExit", flags)!.SetValue(sut,
+            new Func<System.Diagnostics.Process, int, bool>((_, timeout) => { Assert.Equal(10000, timeout); return false; }));
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            await Assert.ThrowsAsync<TimeoutException>(() => sut.ReadSetupProcessAsync(child, null, cancellation.Token));
+            Assert.Same(child, owner.GetValue(sut));
+            Assert.True(observer.WaitForExit(5000));
+            await sut.UnloadModelAsync();
+            Assert.Null(owner.GetValue(sut));
+        }
+        finally { if (!observer.HasExited) { observer.Kill(true); observer.WaitForExit(5000); } }
+    }
+
+    [Fact]
     public async Task CancelingSetupWaitsForProcessExit()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -186,14 +215,15 @@ public sealed class GraniteSpeechPluginTests
             ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 30" }
         };
         using var child = System.Diagnostics.Process.Start(start)!;
+        using var observer = System.Diagnostics.Process.GetProcessById(child.Id);
         using var sut = new GraniteSpeechPlugin();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
         try
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.ReadSetupProcessAsync(child, null, cancellation.Token));
-            Assert.True(child.HasExited);
+            Assert.True(observer.HasExited);
         }
-        finally { if (!child.HasExited) { child.Kill(true); child.WaitForExit(5000); } }
+        finally { if (!observer.HasExited) { observer.Kill(true); observer.WaitForExit(5000); } }
     }
 
     [Fact]
