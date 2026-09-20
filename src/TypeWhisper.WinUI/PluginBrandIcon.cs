@@ -47,6 +47,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.fireworks" => "fireworks",
             "com.typewhisper.gemini" => "gemini",
+            "com.typewhisper.gemma-local" => "gemma",
             "com.typewhisper.gladia" => "gladia",
             "com.typewhisper.groq" => "groq",
             "com.typewhisper.granite-speech" => "ibm",

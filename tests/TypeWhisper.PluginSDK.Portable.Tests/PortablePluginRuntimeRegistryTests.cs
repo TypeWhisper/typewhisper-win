@@ -39,6 +39,33 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     private PortablePluginRuntimeRegistry Registry(PortablePluginStore store) => new(store, Version, id => Host(id));
 
     [Fact]
+    public async Task ReadOnlyConfigurationSnapshotDoesNotScheduleAnotherChangeNotification()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        var activated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var activationChanges = 0;
+        void OnActivationChanged()
+        {
+            // Enabling publishes once directly and once through the probe's queued
+            // activation notification. Wait for both before observing read-only work.
+            if (Interlocked.Increment(ref activationChanges) == 2) activated.TrySetResult();
+        }
+        registry.Changed += OnActivationChanged;
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        await activated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        registry.Changed -= OnActivationChanged;
+        var changes = 0;
+        registry.Changed += () => Interlocked.Increment(ref changes);
+        Assert.Equal(Id, await registry.UseConfigurationAsync(Id,
+            (plugin, _) => Task.FromResult(plugin.PluginId), refreshCapabilities: false));
+        await Task.Delay(100);
+        Assert.Equal(0, changes);
+        await registry.RefreshCapabilitiesAsync();
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
     public async Task DisableStillDisposesItsPackageWhenAnotherPackageHasDynamicCollisions()
     {
         var store = await Store(second: true);
@@ -200,6 +227,29 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
         Assert.Null(await disable);
         Assert.Equal(1, Host(Id).GetSetting<int>("disposals"));
+    }
+
+    [Fact]
+    public async Task CancelingSettingsTransferReleasesQueuedForegroundLlmRequest()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        using var cancellation = new CancellationTokenSource();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var download = registry.UseConfigurationAsync(Id, async (_, ct) =>
+        {
+            entered.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return true;
+        }, cancellation.Token, preserveCompletedResult: true);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var foreground = registry.UseLlmAsync(Id, (plugin, ct) => plugin.ProcessAsync("", "foreground", "llm", ct));
+        Assert.False(foreground.IsCompleted);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => download);
+        Assert.Equal("foreground", await foreground.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.True(await registry.UseConfigurationAsync(Id, (_, _) => Task.FromResult(true)));
     }
 
     [Fact]

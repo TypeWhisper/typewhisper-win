@@ -109,8 +109,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal LocalTranscriptionPlugin Models => _transcriptionPlugin;
     internal PortablePluginRuntimeRegistry PluginRuntime { get; }
     internal IReadOnlyList<PortableLlmProvider> LlmProviders => PluginRuntime.LlmProviders;
-    internal Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct) =>
-        PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
+    internal async Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        // Give foreground workflows priority over cancellable settings downloads.
+        await LocalLlmDownload.CancelAndDrainAsync();
+        return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
+    }
     private string _providerId = "local";
     internal bool UsesRegistryProvider => _providerId != "local";
     private static string RegistrySelectionId(string id) => id == "groq" ? CloudTranscriptionPlugin.PluginId : id;
@@ -488,7 +493,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
     // hotkey while one is active so it can reach that cancellation before using a provider.
     internal bool CanStartFromShortcut => CanStartSessionOperation
-        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy) && (IsReady
+        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (IsReady
 #if DEBUG
         || CorrectionProbeEnabled
 #endif
@@ -554,9 +559,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
-                RecordingStarting?.Invoke();
-                await CorrectionLearning.Cancel();
-                _operationCancellation.Begin();
                 if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)
                 {
                     SetStatus("This model cannot translate to English. Choose Transcribe or a translation-capable model in Dictation.");
@@ -574,6 +576,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     SetStatus($"Focus a text field in another app, then press {Shortcut}.");
                     return;
                 }
+                // Invalid recording attempts must not discard a settings download.
+                _operationCancellation.Begin();
+                await LocalLlmDownload.CancelAndDrainAsync();
+                RecordingStarting?.Invoke();
+                await CorrectionLearning.Cancel();
+                _operationCancellation.Token.ThrowIfCancellationRequested();
+                if (_disposed) return;
                 _targetProcessId = processId;
                 PasteDiagnostics.Write("dictation.start");
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)

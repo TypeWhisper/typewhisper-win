@@ -326,10 +326,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// Serializes host-rendered configuration with requests, including IApiKeyPlugin operations.
     /// The callback must not retain the plugin reference or activate/dispose the plugin itself.
     /// Set preserveCompletedResult for write operations whose completion metadata must survive late cancellation.
+    /// Read-only snapshots may suppress the completion refresh to avoid notification feedback loops.
     /// </summary>
     public Task<T> UseConfigurationAsync<T>(string pluginId,
         Func<ITypeWhisperPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default,
-        bool preserveCompletedResult = false)
+        bool preserveCompletedResult = false, bool refreshCapabilities = true)
     {
         Slot owner;
         lock (_sync)
@@ -337,10 +338,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_slots.TryGetValue(pluginId, out var slot) || slot.Package is null) throw new InvalidOperationException("Enable this plugin first.");
             owner = slot;
         }
-        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken, preserveCompletedResult);
+        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken, preserveCompletedResult, refreshCapabilities);
     }
 
-    private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false)
+    private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false, bool refreshCapabilities = true)
     {
         long generation;
         lock (_sync)
@@ -374,7 +375,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             await callbacks.ConfigureAwait(false);
             request?.Dispose();
             _gate.Release();
-            QueueRefresh();
+            if (refreshCapabilities) QueueRefresh();
         }
     }
 

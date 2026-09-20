@@ -69,15 +69,26 @@ internal sealed partial class LivePluginTextSettings : UserControl
         var generation = ++_generation;
         try
         {
+            if (_session.LocalLlmDownload.State.IsBusy && _session.LocalLlmDownloadPluginId == _id)
+            {
+                DetachHostControls();
+                _content.Children.Clear();
+                _content.Children.Add(new LiveLocalLlmModelSettings(_session, _id));
+                await _session.LocalLlmDownload.Completion.WaitAsync(_lifetime.Token);
+                if (!IsLoaded || generation != _generation) return;
+                _content.Children.Clear();
+            }
             var snapshot = await _session.PluginRuntime.UseConfigurationAsync(_id, (plugin, _) =>
                 Task.FromResult((Fields: plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : [],
                     Actions: plugin is IPluginSettingsActions actions ? actions.SettingsActions.ToArray() : [],
                     ShowKey: plugin is IApiKeyPlugin && (plugin is not IPluginConnectionSettings connection || connection.ShowApiKeySettings),
                     ConnectionId: (plugin as IPluginConnectionSettings)?.ConnectionIdentity,
                     ProfileSelector: (plugin as IPluginProfileSettings)?.ProfileSelectorId,
+                    LocalModels: plugin is ILocalLlmModelManagement,
                     AddProfile: (plugin as IPluginProfileSettings)?.AddProfileActionId,
                     RemoveProfile: (plugin as IPluginProfileSettings)?.RemoveProfileActionId)), _lifetime.Token);
             if (!IsLoaded || generation != _generation) return;
+            if (_models is LivePortableModelSettings modelSettings) modelSettings.HasLocalLlmModels = snapshot.LocalModels;
             var selector = snapshot.Fields.FirstOrDefault(f => f.Id == snapshot.ProfileSelector);
             _connectionChanged(snapshot.ConnectionId, selector?.Choices.FirstOrDefault(c => c.Value == selector.Value)?.Title);
             DetachHostControls();

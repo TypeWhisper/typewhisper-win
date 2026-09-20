@@ -20,6 +20,8 @@ internal sealed class LivePortableModelSettings : UserControl
     private readonly ComboBox _cloudModel = new() { DisplayMemberPath = nameof(PortableDownloadableModel.DisplayName), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 40 };
     private readonly TextBlock _cloudStatus = Label("");
     private readonly HandCursorButton _cloudUse = Button("Use selected model");
+    private readonly LiveLocalLlmModelSettings _localLlm;
+    internal bool HasLocalLlmModels { get; set; }
     private bool _cloudMode;
     private bool _settingCloudModel;
     internal bool ShowLlmSummary { get; set; } = true;
@@ -51,6 +53,8 @@ internal sealed class LivePortableModelSettings : UserControl
             if (_settingCloudModel || !_cloudModel.IsLoaded || _cloudModel.SelectedItem is not PortableDownloadableModel model) return;
             if (_items.TryGetValue((model.SelectionId, model.ModelId), out var row)) await UseAsync(row);
         };
+        _localLlm = new(session, pluginId) { Visibility = Visibility.Collapsed };
+        content.Children.Add(_localLlm);
         content.Children.Add(_refresh); content.Children.Add(_status); content.Children.Add(_cloudPanel); content.Children.Add(_rows); content.Children.Add(_llm);
         Content = content;
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
@@ -129,7 +133,8 @@ internal sealed class LivePortableModelSettings : UserControl
                 choices.SetEquals(models.Select(model => model.ModelId)));
             _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
             _rows.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
-            _refresh.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
+            _refresh.Visibility = _cloudMode || HasLocalLlmModels ? Visibility.Collapsed : Visibility.Visible;
+            _localLlm.Visibility = HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             _settingCloudModel = true;
             try
             {
@@ -138,7 +143,7 @@ internal sealed class LivePortableModelSettings : UserControl
                 _cloudModel.SelectedItem = models.FirstOrDefault(m => m.ModelId == selectedId);
             }
             finally { _settingCloudModel = false; }
-            _llm.Visibility = ShowLlmSummary ? Visibility.Visible : Visibility.Collapsed;
+            _llm.Visibility = ShowLlmSummary && !HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             var llms = _session.LlmProviders.Where(p => p.PluginId == _pluginId).ToArray();
             _llm.Text = models.Count == 0 && llms.Length == 0 ? "No model providers are currently enabled." :
                 string.Join("\n", llms.Select(p => p.Name + " · Text processing: " + string.Join(", ", p.Models.Select(m => m.DisplayName))));
