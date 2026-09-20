@@ -510,6 +510,12 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
 
         if (_server is { IsRunning: true, ActiveBackend: { } activeBackend })
         {
+            if (preference == TranscriptionAccelerationPreference.Auto)
+            {
+                _accelerationStatus = CreateLoadedStatus(activeBackend,
+                    "Automatic selection prefers an installed compatible runtime on the next load.");
+                return;
+            }
             var preferredBackend = GetPreferredBackendForStatus(preference);
             _accelerationStatus = preferredBackend == activeBackend
                 ? CreateLoadedStatus(activeBackend, fallbackDetail: null)
@@ -842,6 +848,9 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     private static TranscriptionAccelerationStatus CreatePendingStatus(
         TranscriptionAccelerationPreference preference)
     {
+        if (preference == TranscriptionAccelerationPreference.Auto)
+            return new(TranscriptionAccelerationBackend.Cpu, "Not loaded",
+                "Automatic selection prefers an installed compatible runtime when the model loads.");
         if (preference == TranscriptionAccelerationPreference.AmdRocm)
         {
             return new(

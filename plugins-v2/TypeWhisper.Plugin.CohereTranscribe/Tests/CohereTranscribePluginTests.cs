@@ -1307,9 +1307,14 @@ public sealed class CohereTranscribePluginTests
         await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
         Assert.True(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
+        Assert.Contains("installed compatible runtime", sut.AccelerationStatus.Detail);
+        Assert.DoesNotContain("CUDA", sut.AccelerationStatus.Detail);
         await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default);
         Assert.Equal(CrispAsrBackend.Cpu, server.ActiveBackend);
         Assert.DoesNotContain(CrispAsrBackend.Cuda, assets.EnsuredRuntimes);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+        Assert.Equal("Using CPU", sut.AccelerationStatus.DisplayText);
+        Assert.DoesNotContain("CUDA", sut.AccelerationStatus.Detail);
     }
 
     [WindowsFact]
