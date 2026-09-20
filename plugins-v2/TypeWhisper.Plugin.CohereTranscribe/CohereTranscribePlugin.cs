@@ -385,7 +385,6 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
                         && string.Equals(_loadedModelId, modelId, StringComparison.Ordinal))
                     {
                         _accelerationStatus = CreateLoadedStatus(backend, fallbackDetail: null);
-                        _selectedModelId = modelId;
                         return;
                     }
 
@@ -408,8 +407,6 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
                     await server.StartAsync(configuration, cancellationToken);
 
                     _loadedModelId = modelId;
-                    _selectedModelId = modelId;
-                    _host?.SetSetting("selectedModel", modelId);
                     _accelerationStatus = CreateLoadedStatus(
                         backend,
                         lastError is null

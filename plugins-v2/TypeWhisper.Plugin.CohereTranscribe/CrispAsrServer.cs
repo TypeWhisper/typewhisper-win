@@ -101,6 +101,10 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             _processJob = WindowsProcessJob.CreateAndAssign(process);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            // The launcher is blocked on stdin until job assignment succeeds.
+            // If the host dies first, EOF makes the gate fail and no child starts.
+            process.StandardInput.WriteLine("start");
+            process.StandardInput.Close();
 
             _baseUrl = $"http://127.0.0.1:{port}";
             _apiKey = apiKey;
@@ -267,9 +271,10 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             // its packaged DLL search order. The intermediate command process makes
             // CrispASR a grandchild, which Windows starts outside that environment.
             FileName = Path.Join(Environment.SystemDirectory, "cmd.exe"),
-            Arguments = $"/d /s /v:off /c {command}",
+            Arguments = GateLaunchCommand(command[1..^1]),
             WorkingDirectory = runtimeDirectory,
             UseShellExecute = false,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
@@ -284,6 +289,9 @@ internal sealed class CrispAsrServer : ICrispAsrServer
         startInfo.Environment["TYPEWHISPER_CRISPASR_VAD_MODEL"] = vadModelPath;
         return startInfo;
     }
+
+    internal static string GateLaunchCommand(string command) =>
+        "/d /s /v:off /c \"set /p TYPEWHISPER_CRISPASR_START= >nul && " + command + "\"";
 
     internal static string ResolveUnpackagedChildPath(
         string path,

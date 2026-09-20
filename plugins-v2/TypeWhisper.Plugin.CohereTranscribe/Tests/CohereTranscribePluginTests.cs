@@ -942,6 +942,58 @@ public sealed class CohereTranscribePluginTests
             host.Secrets[CohereTranscribePlugin.HuggingFaceTokenSecretName]);
     }
 
+    [WindowsFact]
+    public async Task LoadingDoesNotPersistSelectionBeforeHostCommitsIt()
+    {
+        using var temp = new TempDirectory();
+        var host = new FakePluginHostServices(temp.Path);
+        var assets = new FakeAssetManager();
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        await sut.ActivateAsync(host);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        var first = CohereModelCatalog.All[0].Id;
+        var next = CohereModelCatalog.All[1].Id;
+        sut.SelectModel(first);
+        await sut.DownloadModelAsync(next, null, default);
+        await sut.LoadModelAsync(next, default);
+        Assert.Equal(first, sut.SelectedModelId);
+        Assert.Equal(first, host.GetSetting<string>("selectedModel"));
+        await sut.LoadModelAsync(next, default); // Already-loaded fast path.
+        Assert.Equal(first, sut.SelectedModelId);
+        sut.SelectModel(next);
+        Assert.Equal(next, host.GetSetting<string>("selectedModel"));
+    }
+
+    [WindowsFact]
+    public async Task LauncherCannotRunChildBeforeJobAssignmentAndEofAbortsIt()
+    {
+        foreach (var release in new[] { false, true })
+        {
+            using var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = Path.Join(Environment.SystemDirectory, "cmd.exe"),
+                    Arguments = CrispAsrServer.GateLaunchCommand("echo child-started"),
+                    UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardInput = true, RedirectStandardOutput = true
+                }
+            };
+            Assert.True(process.Start());
+            try
+            {
+                var output = process.StandardOutput.ReadToEndAsync();
+                Assert.False(process.WaitForExit(150));
+                using var job = WindowsProcessJob.CreateAndAssign(process);
+                if (release) await process.StandardInput.WriteLineAsync("start");
+                process.StandardInput.Close();
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Equal(release ? "child-started" : "", (await output).Trim());
+            }
+            finally { if (!process.HasExited) { process.Kill(true); process.WaitForExit(5000); } }
+        }
+    }
+
     private sealed class FakeAssetManager : ICohereLocalAssetManager
     {
         private readonly HashSet<string> _installedModelIds = [];
