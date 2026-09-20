@@ -155,36 +155,39 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
-        await _inferenceLock.WaitAsync(ct);
+        await _inferenceLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (model != _loadedModelId) throw new InvalidOperationException("Load the selected model in plugin settings first.");
-            if (_context is null || _weights is null)
-                throw new InvalidOperationException("No model loaded. Download and load a model first.");
-
-            // Build Gemma chat prompt
-            var prompt = FormatGemmaPrompt(systemPrompt, userText);
-            var promptTokenCount = _context.Tokenize(prompt, addBos: true, special: true).Length;
-            var maxOutputTokens = RequireOutputBudget(
-                LlmOutputTokenBudget.Calculate(systemPrompt, userText), promptTokenCount, checked((int)_context.ContextSize));
-
-            var executor = new StatelessExecutor(_weights, _context.Params);
-            var inferenceParams = new InferenceParams
+            return await Task.Run(async () =>
             {
-                MaxTokens = maxOutputTokens,
-                AntiPrompts = ["<end_of_turn>", "<eos>"],
-                SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.3f },
-            };
+                if (model != _loadedModelId) throw new InvalidOperationException("Load the selected model in plugin settings first.");
+                if (_context is null || _weights is null)
+                    throw new InvalidOperationException("No model loaded. Download and load a model first.");
 
-            var result = new System.Text.StringBuilder();
-            await foreach (var token in executor.InferAsync(prompt, inferenceParams, ct))
-            {
+                // Build Gemma chat prompt
+                var prompt = FormatGemmaPrompt(systemPrompt, userText);
+                var promptTokenCount = _context.Tokenize(prompt, addBos: true, special: true).Length;
+                var maxOutputTokens = RequireOutputBudget(
+                    LlmOutputTokenBudget.Calculate(systemPrompt, userText), promptTokenCount, checked((int)_context.ContextSize));
+
+                var executor = new StatelessExecutor(_weights, _context.Params);
+                var inferenceParams = new InferenceParams
+                {
+                    MaxTokens = maxOutputTokens,
+                    AntiPrompts = ["<end_of_turn>", "<eos>"],
+                    SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.3f },
+                };
+
+                var result = new System.Text.StringBuilder();
+                await foreach (var token in executor.InferAsync(prompt, inferenceParams, ct))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    result.Append(token);
+                }
+
                 ct.ThrowIfCancellationRequested();
-                result.Append(token);
-            }
-
-            ct.ThrowIfCancellationRequested();
-            return result.ToString().Trim();
+                return result.ToString().Trim();
+            }, ct).ConfigureAwait(false);
         }
         finally
         {
