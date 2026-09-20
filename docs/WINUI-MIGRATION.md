@@ -8,6 +8,6 @@
 
 Use the [current build instructions](../README.md#build) and [test guide](../TESTING_GUIDE.md). On the development machine, pass the current checkout to `F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run`.
 
-`eng/Test-WinUIHeadless.ps1` runs application and portable provider tests. Windows also runs the platform-service tests without a desktop UI framework. `Package Dry Run`, `WinUI Daily` and `Store Package` all target the WinUI application.
+`CI` builds the WinUI solution and runs `eng/Test-WinUIHeadless.ps1` for application and portable provider tests on Windows and Linux. Windows also runs the platform-service tests without a desktop UI framework. `Packaging`, `Candidate` and `Store` all target the WinUI application.
 
 Existing user-data import and published-package compatibility boundaries remain explicit application behavior; they do not require the removed host or its plugin assemblies.

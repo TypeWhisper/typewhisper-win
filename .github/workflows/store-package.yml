@@ -1,4 +1,4 @@
-name: Store Package
+name: Store
 
 on:
   workflow_dispatch:

@@ -22,6 +22,8 @@
 
 Die Headless-Suites prüfen Core, CLI, Plugin-Host, Anwendungslogik und alle portablen Provider. Ergebnisse stehen unter `artifacts/test-results/winui-headless`.
 
+Der Workflow `CI` bündelt den WinUI-Solution-Build auf Windows und die Headless-Suites auf Windows und Linux. Er läuft für Pull Requests, Pushes auf `main` und bei manuellem Start.
+
 Die Windows-Suite `TypeWhisper.Platform.Tests` prüft die übernommenen Lizenz-, Update- und Zwischenablage-Dienste ohne WPF. Die alten WPF-Testprogramme sind entfernt.
 
 ## Manueller Smoke-Test
@@ -36,8 +38,8 @@ Die Windows-Suite `TypeWhisper.Platform.Tests` prüft die übernommenen Lizenz-,
 
 ## Paketierung
 
-- `Package Dry Run`: WinUI-Installer und portable ZIPs für x64 und ARM64.
-- `WinUI Daily`: validierte WinUI-Kandidaten und Daily-Veröffentlichung.
-- `Store Package`: WinUI-MSIX mit Mindestversion Windows Build 26100.
+- `Packaging`: WinUI-Installer und portable ZIPs für x64 und ARM64, ohne Veröffentlichung.
+- `Candidate`: validierte WinUI-Kandidaten und Daily-Veröffentlichung.
+- `Store`: manueller WinUI-MSIX-Build mit Mindestversion Windows Build 26100.
 
 Die alten WPF-Builds, UI-Automationsskripte und Release-Workflows sind entfernt. Historische Abnahmeberichte unter `docs/` beschreiben frühere Versionsstände.
