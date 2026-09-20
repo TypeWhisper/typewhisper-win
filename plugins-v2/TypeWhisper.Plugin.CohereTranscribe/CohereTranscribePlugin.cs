@@ -357,7 +357,8 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         try
         {
             await GetAssets().RemoveModelAsync(modelId, cancellationToken);
-            _accelerationStatus = CreatePendingStatus(_accelerationPreference);
+            if (_loadedModelId is null || _server?.IsRunning != true)
+                _accelerationStatus = CreatePendingStatus(_accelerationPreference);
         }
         finally
         {

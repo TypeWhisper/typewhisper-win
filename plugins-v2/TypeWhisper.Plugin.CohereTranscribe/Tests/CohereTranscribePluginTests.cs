@@ -691,6 +691,28 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public async Task RemovingAnotherModelPreservesActiveBackendStatus()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        var active = sut.TranscriptionModels[0].Id;
+        var other = sut.TranscriptionModels[1].Id;
+        await sut.DownloadModelAsync(active, null, default);
+        await sut.DownloadModelAsync(other, null, default);
+        await sut.LoadModelAsync(active, default);
+        var before = sut.AccelerationStatus;
+        await sut.RemoveModelAsync(other, default);
+        Assert.True(server.IsRunning);
+        Assert.Equal(before, sut.AccelerationStatus);
+        Assert.True(assets.IsModelInstalled(active));
+        Assert.False(assets.IsModelInstalled(other));
+    }
+
+    [WindowsFact]
     public async Task TranscribeAsync_RestartsUnexpectedlyStoppedSidecar()
     {
         using var temp = new TempDirectory();
