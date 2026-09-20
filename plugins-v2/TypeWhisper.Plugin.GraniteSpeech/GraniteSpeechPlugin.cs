@@ -17,6 +17,9 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 {
     private const string ModelId = "granite-4.0-1b-speech";
     internal const string RuntimeRevision = "torch-2.13.0-v1";
+    internal static string RuntimeWheels(string device) => device == "Cpu"
+        ? "torch==2.13.0+cpu torchaudio==2.11.0+cpu"
+        : "torch==2.13.0+cu130 torchaudio==2.11.0+cu130";
     private const string PythonVersion = "3.12.10";
     private const string PythonEmbedUrl =
         $"https://www.python.org/ftp/python/{PythonVersion}/python-{PythonVersion}-embed-amd64.zip";
@@ -47,7 +50,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.4";
+    public string PluginVersion => "1.2.5";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -188,7 +191,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             Log(PluginLogLevel.Info, "Step 1 complete: Python installed");
         }
 
-        pythonDir = ShortPath(pythonDir);
+        pythonDir = ExtendedPythonPath(pythonDir);
         pythonExe = Path.Combine(pythonDir, "python.exe");
 
         // Step 2: Bootstrap pip
@@ -221,6 +224,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         {
             await RunProcessAsync(pythonExe,
                 $"-m pip install -q --no-cache-dir -r \"{reqPath}\" " +
+                RuntimeWheels(_device) + " " +
                 (_device == "Cpu" ? "--index-url https://download.pytorch.org/whl/cpu " : "--index-url https://download.pytorch.org/whl/cu130 ") +
                 "--extra-index-url https://pypi.org/simple/",
                 ct, timeoutMs: 1_800_000);
@@ -425,7 +429,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 
     private void StartSidecar()
     {
-        var pythonExe = Path.Combine(ShortPath(Path.Combine(GetDataDirectory(), "python")), "python.exe");
+        var pythonExe = Path.Combine(ExtendedPythonPath(Path.Combine(GetDataDirectory(), "python")), "python.exe");
         var scriptPath = GetScriptPath("granite_speech_server.py");
 
         var psi = new ProcessStartInfo
@@ -453,13 +457,13 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     private static async Task DrainErrorsAsync(StreamReader reader)
     { try { while (await reader.ReadLineAsync() is not null) { } } catch (Exception ex) when (ex is IOException or ObjectDisposedException) { } }
 
-    private void StopSidecar()
+    private void StopSidecar(bool terminate = false)
     {
         if (_sidecar is null) return;
 
         try
         {
-            if (!_sidecar.HasExited)
+            if (!terminate && !_sidecar.HasExited)
             {
                 _sidecarIn?.WriteLine(JsonSerializer.Serialize(new { cmd = "quit" }));
                 _sidecarIn?.Flush();
@@ -484,9 +488,11 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 
     private async Task<JsonElement> SendCommandAsync(object command, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (_sidecarIn is null || _sidecarOut is null)
             throw new InvalidOperationException("Sidecar not running");
-
+        try
+        {
         var reqId = Interlocked.Increment(ref _requestId);
 
         // Wrap command with request ID
@@ -514,6 +520,12 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 
             Debug.WriteLine($"[GraniteSpeech] Skipping stale response (req_id={id})");
         }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            StopSidecar(terminate: true);
+            throw;
+        }
     }
 
     // --- Setup helpers ---
@@ -534,14 +546,13 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         File.Move(destPath + ".tmp", destPath, overwrite: true);
     }
 
-    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetShortPathName(string longPath, System.Text.StringBuilder shortPath, uint capacity);
-
-    private static string ShortPath(string path)
+    internal static string ExtendedPythonPath(string path)
     {
-        var buffer = new System.Text.StringBuilder(32768);
-        return OperatingSystem.IsWindows() && GetShortPathName(path, buffer, (uint)buffer.Capacity) is > 0 and < 32768
-            ? buffer.ToString() : path;
+        if (!OperatingSystem.IsWindows()) return path;
+        var fullPath = Path.GetFullPath(path);
+        if (fullPath.StartsWith(@"\\?\", StringComparison.Ordinal)) return fullPath;
+        return fullPath.StartsWith(@"\\", StringComparison.Ordinal)
+            ? @"\\?\UNC\" + fullPath[2..] : @"\\?\" + fullPath;
     }
 
     private static void PatchPthFile(string pythonDir)

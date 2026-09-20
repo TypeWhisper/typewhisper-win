@@ -37,6 +37,14 @@ def check_generation_complete(token_ids, budget, eos_token_id):
         raise RuntimeError("Transcription reached the output limit. Split the recording into shorter parts; partial text was not accepted.")
 
 
+def transcription_question(translate, language):
+    question = "Translate the speech into English." if translate else "Transcribe the speech exactly as spoken, preserving the original language."
+    languages = {"de": "German", "en": "English", "fr": "French", "es": "Spanish", "pt": "Portuguese", "ja": "Japanese"}
+    if language in languages:
+        question += f" The spoken language is {languages[language]}."
+    return question
+
+
 def respond(data):
     sys.stdout.write(json.dumps(data) + "\n")
     sys.stdout.flush()
@@ -216,14 +224,7 @@ def cmd_serve():
                 else:
                     wav = torch.tensor(audio_data, dtype=torch.float32).unsqueeze(0)
 
-                if translate:
-                    question = "Translate the speech into English."
-                else:
-                    question = "Transcribe the speech exactly as spoken, preserving the original language."
-                    language = cmd.get("language")
-                    languages = {"de": "German", "en": "English", "fr": "French", "es": "Spanish", "pt": "Portuguese", "ja": "Japanese"}
-                    if language in languages:
-                        question += f" The spoken language is {languages[language]}."
+                question = transcription_question(translate, cmd.get("language"))
 
                 chat = [{"role": "user", "content": f"<|audio|>{question}"}]
                 prompt = tokenizer.apply_chat_template(

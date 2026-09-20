@@ -11,6 +11,11 @@ spec.loader.exec_module(server)
 
 
 class SetupTests(unittest.TestCase):
+    def test_translation_preserves_the_selected_source_language(self):
+        self.assertEqual(server.transcription_question(True, "de"), "Translate the speech into English. The spoken language is German.")
+        self.assertIn("Japanese", server.transcription_question(False, "ja"))
+        self.assertEqual(server.transcription_question(True, None), "Translate the speech into English.")
+
     def test_cuda_precision_falls_back_on_older_gpus(self):
         torch = types.SimpleNamespace(bfloat16="bf16", float32="fp32", cuda=types.SimpleNamespace(is_bf16_supported=lambda: False))
         self.assertEqual(server.inference_dtype(torch, "cuda"), "fp32")

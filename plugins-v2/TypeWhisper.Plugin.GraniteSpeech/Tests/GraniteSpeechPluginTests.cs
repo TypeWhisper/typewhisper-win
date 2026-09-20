@@ -144,6 +144,56 @@ public sealed class GraniteSpeechPluginTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public void PythonPathsPreserveDriveAndUncRootsWithExtendedLengthSupport()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal("/tmp/python", GraniteSpeechPlugin.ExtendedPythonPath("/tmp/python"));
+            return;
+        }
+        Assert.Equal(@"\\?\C:\data\python", GraniteSpeechPlugin.ExtendedPythonPath(@"C:\data\python"));
+        Assert.Equal(@"\\?\UNC\server\share\python", GraniteSpeechPlugin.ExtendedPythonPath(@"\\server\share\python"));
+        Assert.Equal(@"\\?\C:\data\python", GraniteSpeechPlugin.ExtendedPythonPath(@"\\?\C:\data\python"));
+    }
+
+    [Fact]
+    public void RuntimeSelectionPinsTheActualWheelFlavor()
+    {
+        Assert.Equal("torch==2.13.0+cpu torchaudio==2.11.0+cpu", GraniteSpeechPlugin.RuntimeWheels("Cpu"));
+        Assert.Equal("torch==2.13.0+cu130 torchaudio==2.11.0+cu130", GraniteSpeechPlugin.RuntimeWheels("NvidiaCuda"));
+        Assert.Equal(GraniteSpeechPlugin.RuntimeWheels("NvidiaCuda"), GraniteSpeechPlugin.RuntimeWheels("Auto"));
+    }
+
+    [Fact]
+    public async Task CancelingAnInFlightCommandTerminatesTheSidecar()
+    {
+        // Native Windows process behavior; the portable validation suite also runs on Linux.
+        if (!OperatingSystem.IsWindows()) return;
+        var start = new System.Diagnostics.ProcessStartInfo(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", "[Console]::ReadLine() | Out-Null; Start-Sleep -Seconds 30" }
+        };
+        using var child = System.Diagnostics.Process.Start(start)!;
+        using var observer = System.Diagnostics.Process.GetProcessById(child.Id);
+        using var sut = new GraniteSpeechPlugin();
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        void Set(string name, object value) => typeof(GraniteSpeechPlugin).GetField(name, flags)!.SetValue(sut, value);
+        Set("_sidecar", child); Set("_sidecarIn", child.StandardInput); Set("_sidecarOut", child.StandardOutput);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        try
+        {
+            var pending = (Task<JsonElement>)typeof(GraniteSpeechPlugin).GetMethod("SendCommandAsync", flags)!.Invoke(sut, [new { cmd = "transcribe" }, cancellation.Token])!;
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+            Assert.True(observer.WaitForExit(5000));
+            Assert.Null(typeof(GraniteSpeechPlugin).GetField("_sidecar", flags)!.GetValue(sut));
+        }
+        finally { if (!observer.HasExited) observer.Kill(entireProcessTree: true); }
+    }
+
     private static PluginManifest? ReadManifest() =>
         JsonSerializer.Deserialize<PluginManifest>(
             TestFile.ReadProjectFile("plugins-v2", "TypeWhisper.Plugin.GraniteSpeech", "manifest.json"),
