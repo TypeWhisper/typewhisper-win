@@ -82,12 +82,14 @@ public class SupertonicTtsPluginTests
     [InlineData("crypto")]
     [InlineData("unsupported")]
     [InlineData("security")]
+    [InlineData("invalid-operation")]
     public async Task OptionalSecretFailureDoesNotDisableDownloadedModels(string kind)
     {
         var host = new TestPluginHostServices { SecretReadError = kind switch
         {
             "io" => new IOException(), "access" => new UnauthorizedAccessException(),
             "unsupported" => new NotSupportedException(),
+            "invalid-operation" => new InvalidOperationException(),
             "security" => new System.Security.SecurityException(),
             _ => new System.Security.Cryptography.CryptographicException()
         } };
