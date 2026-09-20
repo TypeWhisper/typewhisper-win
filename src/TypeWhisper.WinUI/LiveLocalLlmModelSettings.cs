@@ -116,7 +116,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         _operation = operation;
         void CancelForRecording() => operation.Cancel();
-        _session.RecordingStarting += CancelForRecording;
+        if (action == "remove") _session.RecordingStarting += CancelForRecording;
         _busy = true;
         foreach (var item in _rows) foreach (var button in item.Actions.Children.OfType<Control>()) button.IsEnabled = false;
         try
@@ -158,7 +158,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         { if (Current(lifetime)) _status.Text = "Model operation failed: " + ex.Message; }
         finally
         {
-            _session.RecordingStarting -= CancelForRecording;
+            if (action == "remove") _session.RecordingStarting -= CancelForRecording;
             _operation = null;
             _busy = false;
             if (IsLoaded) await RefreshAsync();
