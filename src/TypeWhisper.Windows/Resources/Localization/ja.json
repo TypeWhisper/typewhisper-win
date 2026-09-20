@@ -163,6 +163,7 @@
   "License.DiscordHelperUnavailable": "ローカルDiscordヘルパーを利用できません",
   "License.DiscordOperationFailedFormat": "Discord操作に失敗しました: {0}",
   "License.DiscordEntitlementNotFound": "サポーター資格が見つかりませんでした。サポーターライセンスを更新して、Discordを再接続してください。",
+  "License.ApiCompatibilityError": "ライセンスサービスはこのリクエストを処理できませんでした。保存済みのライセンスは保持されています。TypeWhisperを更新して、もう一度お試しください。問題が解決しない場合は、サポートにお問い合わせください。",
   "License.ActivationMissingId": "有効化に失敗しました: PolarからアクティベーションIDが返されませんでした。",
   "License.EntitlementInactive": "このライセンス資格は有効ではありません。",
   "License.UnknownEntitlement": "このキーを既知のTypeWhisperライセンス資格に対応付けられませんでした。",

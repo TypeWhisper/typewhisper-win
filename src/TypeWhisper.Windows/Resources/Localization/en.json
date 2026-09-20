@@ -163,6 +163,7 @@
   "License.DiscordHelperUnavailable": "Local Discord helper unavailable",
   "License.DiscordOperationFailedFormat": "Discord operation failed: {0}",
   "License.DiscordEntitlementNotFound": "The supporter entitlement could not be found. Refresh the supporter license and reconnect Discord.",
+  "License.ApiCompatibilityError": "The licensing service could not process this request. Your saved license has been kept. Update TypeWhisper and try again. If the problem persists, contact support.",
   "License.ActivationMissingId": "Activation failed: Polar did not return an activation ID.",
   "License.EntitlementInactive": "This entitlement is not active.",
   "License.UnknownEntitlement": "This key could not be matched to a known TypeWhisper entitlement.",
