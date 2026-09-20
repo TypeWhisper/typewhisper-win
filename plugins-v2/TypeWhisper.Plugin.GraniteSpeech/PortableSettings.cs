@@ -20,8 +20,8 @@ public sealed partial class GraniteSpeechPlugin
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
         new("device", L("Processing device", "Verarbeitungsgerät"),
-            L("Transcription and live preview run locally. Choose the processor used when the model next loads.",
-              "Transkription und Live-Vorschau laufen lokal. Wähle den Prozessor für das nächste Laden des Modells."), _device)
+            L("Choose the processor for the next model load. Switching a CPU-only runtime to CUDA requires downloading the updated runtime; cached model files are reused.",
+              "Wähle den Prozessor für das nächste Laden. Beim Wechsel einer reinen CPU-Laufzeit zu CUDA muss die Laufzeit erneut heruntergeladen werden; vorhandene Modelldateien werden weiterverwendet."), _device)
         {
             Section = PluginSettingsSection.Transcription,
             Choices = [new("Auto", L("Automatic", "Automatisch")), new("Cpu", "CPU"), new("NvidiaCuda", "NVIDIA CUDA")]
@@ -35,10 +35,29 @@ public sealed partial class GraniteSpeechPlugin
         if (id != "device" || !TextSettings[0].Choices.Any(choice => choice.Value == value))
             throw new ArgumentException("Invalid processing device.");
         var host = _host ?? throw new InvalidOperationException("Activate the plugin first.");
-        host.SetSetting("device", value);
-        _device = value;
-        await UnloadModelAsync();
+        await _sidecarLock.WaitAsync(cancellationToken);
+        try
+        {
+            host.SetSetting("device", value);
+            _device = value;
+            StopSidecar();
+        }
+        finally { _sidecarLock.Release(); }
         host.NotifyCapabilitiesChanged();
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<PluginSettingsAction> SettingsActions =>
+    [new("remove-assets", L("Remove model and runtime", "Modell und Laufzeit entfernen"),
+        L("Unloads the model and deletes its local model files and managed runtime. Settings are preserved.",
+          "Entlädt das Modell und löscht seine lokalen Modelldateien und die verwaltete Laufzeit. Einstellungen bleiben erhalten."))];
+
+    /// <inheritdoc />
+    public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
+    {
+        if (id != "remove-assets") throw new ArgumentException("Unknown action.", nameof(id));
+        await RemoveModelAsync(ModelId, cancellationToken);
+        return L("Model and runtime removed.", "Modell und Laufzeit entfernt.");
     }
 
     /// <inheritdoc />

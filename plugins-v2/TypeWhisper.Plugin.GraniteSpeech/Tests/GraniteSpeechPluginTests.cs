@@ -97,6 +97,53 @@ public sealed class GraniteSpeechPluginTests
         Assert.Equal("Model not loaded", sut.AccelerationStatus.DisplayText);
     }
 
+    [Fact]
+    public async Task RuntimeReadinessRequiresPatchedPackagesAndSupportsDeviceChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "granite-runtime-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "managed-runtime"));
+            var marker = Path.Combine(root, "managed-runtime", ".setup-complete");
+            var cachedModel = Path.Combine(root, "managed-runtime", "cached-model");
+            await File.WriteAllTextAsync(cachedModel, "keep");
+            await File.WriteAllTextAsync(marker, "old-runtime");
+            using var sut = new GraniteSpeechPlugin();
+            await sut.ActivateAsync(new FakePluginHostServices(root));
+            Assert.False(sut.IsConfigured);
+            await sut.SaveTextSettingAsync("device", "Cpu", default);
+            await File.WriteAllTextAsync(marker, GraniteSpeechPlugin.RuntimeRevision + "|cpu");
+            Assert.True(sut.IsConfigured);
+            await sut.SaveTextSettingAsync("device", "NvidiaCuda", default);
+            Assert.False(sut.IsConfigured);
+            Assert.Equal("keep", await File.ReadAllTextAsync(cachedModel));
+            await File.WriteAllTextAsync(marker, GraniteSpeechPlugin.RuntimeRevision + "|cuda");
+            Assert.True(sut.IsConfigured);
+            await sut.SaveTextSettingAsync("device", "Cpu", default);
+            Assert.True(sut.IsConfigured);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task SettingsActionCanRemoveTheOnlySelectedModelAndPreservesSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "granite-action-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "managed-runtime"));
+            await File.WriteAllTextAsync(Path.Combine(root, "settings.json"), "preserve");
+            using var sut = new GraniteSpeechPlugin();
+            await sut.ActivateAsync(new FakePluginHostServices(root));
+            Assert.NotNull(sut.SelectedModelId);
+            await sut.ExecuteSettingsActionAsync("remove-assets", default);
+            Assert.Null(sut.SelectedModelId);
+            Assert.False(Directory.Exists(Path.Combine(root, "managed-runtime")));
+            Assert.Equal("preserve", await File.ReadAllTextAsync(Path.Combine(root, "settings.json")));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private static PluginManifest? ReadManifest() =>
         JsonSerializer.Deserialize<PluginManifest>(
             TestFile.ReadProjectFile("plugins-v2", "TypeWhisper.Plugin.GraniteSpeech", "manifest.json"),

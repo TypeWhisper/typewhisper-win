@@ -13,9 +13,10 @@ namespace TypeWhisper.Plugin.GraniteSpeech;
 /// <summary>
 /// Provides granite speech plugin behavior.
 /// </summary>
-public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTranscriptionEnginePlugin, IPluginTextSettings
+public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTranscriptionEnginePlugin, IPluginTextSettings, IPluginSettingsActions
 {
     private const string ModelId = "granite-4.0-1b-speech";
+    internal const string RuntimeRevision = "torch-2.13.0-v1";
     private const string PythonVersion = "3.12.10";
     private const string PythonEmbedUrl =
         $"https://www.python.org/ftp/python/{PythonVersion}/python-{PythonVersion}-embed-amd64.zip";
@@ -46,7 +47,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.3";
+    public string PluginVersion => "1.2.4";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -130,8 +131,14 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets whether the requested model is available locally.
     /// </summary>
-    public bool IsModelDownloaded(string modelId) =>
-        modelId == ModelId && _host is not null && File.Exists(Path.Combine(GetDataDirectory(), ".setup-complete"));
+    public bool IsModelDownloaded(string modelId)
+    {
+        if (modelId != ModelId || _host is null) return false;
+        var marker = Path.Combine(GetDataDirectory(), ".setup-complete");
+        if (!File.Exists(marker)) return false;
+        var runtime = File.ReadAllText(marker);
+        return runtime == RuntimeRevision + "|cuda" || _device == "Cpu" && runtime == RuntimeRevision + "|cpu";
+    }
 
     /// <summary>
     /// Downloads the requested model and reports progress when available.
@@ -205,6 +212,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         }
 
         // Step 3: Install packages (torch CPU ~300 MB, transformers, soundfile)
+        File.Delete(Path.Combine(dataDir, ".setup-complete"));
         progress?.Report(0.10);
         Log(PluginLogLevel.Info, "Step 3: Installing Python packages (this may take a while)...");
 
@@ -282,7 +290,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 
         await File.WriteAllTextAsync(
             Path.Combine(dataDir, ".setup-complete"),
-            DateTime.UtcNow.ToString("O"), ct);
+            RuntimeRevision + (_device == "Cpu" ? "|cpu" : "|cuda"), ct);
 
         Log(PluginLogLevel.Info, "Setup complete");
         progress?.Report(1.0);
@@ -309,6 +317,8 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             var dataDirectory = GetDataDirectory();
             if (Directory.Exists(dataDirectory))
                 Directory.Delete(dataDirectory, recursive: true);
+            _selectedModelId = null;
+            host.NotifyCapabilitiesChanged();
         }
         finally
         {

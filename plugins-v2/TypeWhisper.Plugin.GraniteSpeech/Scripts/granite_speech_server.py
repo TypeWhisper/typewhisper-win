@@ -9,12 +9,32 @@ Modes:
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
 
 MODEL_NAME = "ibm-granite/granite-4.0-1b-speech"
 MODEL_REVISION = "bd87ab862416353633ea431fe49b1614003623c5"
+
+
+def inference_dtype(torch, device):
+    return torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else torch.float32
+
+
+def generation_budget(duration, available_context):
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("Audio must have a positive, finite duration.")
+    budget = min(32768, max(512, math.ceil(duration * 16) + 128), available_context)
+    if budget <= 0:
+        raise ValueError("Recording exceeds the model context. Split it into shorter recordings.")
+    return budget
+
+
+def check_generation_complete(token_ids, budget, eos_token_id):
+    eos_ids = eos_token_id if isinstance(eos_token_id, (list, tuple)) else [eos_token_id]
+    if len(token_ids) >= budget and (not token_ids or token_ids[-1] not in eos_ids):
+        raise RuntimeError("Transcription reached the output limit. Split the recording into shorter parts; partial text was not accepted.")
 
 
 def respond(data):
@@ -167,7 +187,7 @@ def cmd_serve():
                 tokenizer = processor.tokenizer
                 model = AutoModelForSpeechSeq2Seq.from_pretrained(
                     MODEL_NAME, revision=MODEL_REVISION, local_files_only=True,
-                    torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32
+                    torch_dtype=inference_dtype(torch, device)
                 )
                 model = model.to(device).eval()
                 respond({"status": "ok", "device": device, "req_id": req_id})
@@ -214,16 +234,19 @@ def cmd_serve():
                     prompt, wav, device=device, return_tensors="pt"
                 )
                 model_inputs = model_inputs.to(device)
+                num_input_tokens = model_inputs["input_ids"].shape[-1]
+                text_config = model.config.get_text_config()
+                budget = generation_budget(duration, text_config.max_position_embeddings - num_input_tokens - 16)
                 with torch.inference_mode():
                     outputs = model.generate(
                         **model_inputs,
-                        max_new_tokens=500,
+                        max_new_tokens=budget,
                         do_sample=False,
                         num_beams=1,
                     )
 
-                num_input_tokens = model_inputs["input_ids"].shape[-1]
                 new_tokens = outputs[0, num_input_tokens:].unsqueeze(0)
+                check_generation_complete(new_tokens[0].tolist(), budget, model.generation_config.eos_token_id)
                 text = tokenizer.batch_decode(
                     new_tokens,
                     add_special_tokens=False,

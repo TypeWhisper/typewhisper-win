@@ -11,6 +11,26 @@ spec.loader.exec_module(server)
 
 
 class SetupTests(unittest.TestCase):
+    def test_cuda_precision_falls_back_on_older_gpus(self):
+        torch = types.SimpleNamespace(bfloat16="bf16", float32="fp32", cuda=types.SimpleNamespace(is_bf16_supported=lambda: False))
+        self.assertEqual(server.inference_dtype(torch, "cuda"), "fp32")
+        torch.cuda.is_bf16_supported = lambda: True
+        self.assertEqual(server.inference_dtype(torch, "cuda"), "bf16")
+        self.assertEqual(server.inference_dtype(torch, "cpu"), "fp32")
+
+    def test_long_recording_budget_and_limit_detection(self):
+        self.assertGreater(server.generation_budget(180, 10000), 500)
+        self.assertEqual(server.generation_budget(180, 700), 700)
+        with self.assertRaises(ValueError):
+            server.generation_budget(180, 0)
+        with self.assertRaises(ValueError):
+            server.generation_budget(float('nan'), 10000)
+        with self.assertRaises(RuntimeError):
+            server.check_generation_complete([1, 2, 3], 3, [4, 5])
+        server.check_generation_complete([1, 2, 4], 3, [4, 5])
+        server.check_generation_complete([1, 2, 4], 3, 4)
+        server.check_generation_complete([1, 2], 3, None)
+
     def test_setup_downloads_chat_template_and_reports_byte_progress(self):
         files = {"model.safetensors": 1000, "chat_template.jinja": 10, "config.json": 5, "README.md": 200}
         calls, progress = [], []
