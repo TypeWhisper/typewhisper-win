@@ -265,42 +265,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start model download");
 
-        using var setupCancellation = ct.Register(() => { try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } });
-        var setupErrors = proc.StandardError.ReadToEndAsync(ct);
-        string? line;
-        while ((line = await proc.StandardOutput.ReadLineAsync(ct)) is not null)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                using var doc = JsonDocument.Parse(line);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("progress", out var prog))
-                {
-                    // Scale Python's 0–1 into our 0.30–1.0 range
-                    progress?.Report(0.30 + prog.GetDouble() * 0.70);
-                }
-
-                if (root.TryGetProperty("warning", out var warn))
-                    Log(PluginLogLevel.Warning, $"Model download: {warn.GetString()}");
-
-                if (root.TryGetProperty("error", out var err))
-                    throw new InvalidOperationException($"Model download failed: {err.GetString()}");
-            }
-            catch (JsonException)
-            {
-                Debug.WriteLine($"[GraniteSpeech] Setup: {line}");
-            }
-        }
-
-        await proc.WaitForExitAsync(ct);
-        if (proc.ExitCode != 0)
-        {
-            var stderr = await setupErrors;
-            throw new InvalidOperationException(
-                $"Model download failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 1000)..]}");
-        }
+        await ReadSetupProcessAsync(proc, progress, ct);
 
         await File.WriteAllTextAsync(
             Path.Combine(dataDir, ".setup-complete"),
@@ -602,6 +567,56 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         if (Directory.GetFiles(pythonDir, "python*._pth").Length == 0)
             return false;
         return true;
+    }
+
+    internal async Task ReadSetupProcessAsync(Process proc, IProgress<double>? progress, CancellationToken ct)
+    {
+        var setupErrors = proc.StandardError.ReadToEndAsync();
+        try
+        {
+            string? line;
+            while ((line = await proc.StandardOutput.ReadLineAsync(ct)) is not null)
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("progress", out var prog))
+                    {
+                        // Scale Python's 0–1 into our 0.30–1.0 range
+                        progress?.Report(0.30 + prog.GetDouble() * 0.70);
+                    }
+
+                    if (root.TryGetProperty("warning", out var warn))
+                        Log(PluginLogLevel.Warning, $"Model download: {warn.GetString()}");
+
+                    if (root.TryGetProperty("error", out var err))
+                        throw new InvalidOperationException($"Model download failed: {err.GetString()}");
+                }
+                catch (JsonException)
+                {
+                    Debug.WriteLine($"[GraniteSpeech] Setup: {line}");
+                }
+            }
+
+            await proc.WaitForExitAsync(ct);
+            if (proc.ExitCode != 0)
+            {
+                var stderr = await setupErrors;
+                throw new InvalidOperationException(
+                    $"Model download failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 1000)..]}");
+            }
+
+        }
+        finally
+        {
+            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) when (proc.HasExited) { }
+            await proc.WaitForExitAsync(CancellationToken.None);
+            await setupErrors;
+        }
     }
 
     // --- General helpers ---

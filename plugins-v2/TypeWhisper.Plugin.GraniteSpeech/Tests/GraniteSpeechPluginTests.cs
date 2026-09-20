@@ -176,6 +176,27 @@ public sealed class GraniteSpeechPluginTests
     }
 
     [Fact]
+    public async Task CancelingSetupWaitsForProcessExit()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var start = new System.Diagnostics.ProcessStartInfo(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 30" }
+        };
+        using var child = System.Diagnostics.Process.Start(start)!;
+        using var sut = new GraniteSpeechPlugin();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.ReadSetupProcessAsync(child, null, cancellation.Token));
+            Assert.True(child.HasExited);
+        }
+        finally { if (!child.HasExited) { child.Kill(true); child.WaitForExit(5000); } }
+    }
+
+    [Fact]
     public async Task CancelingAnInFlightCommandTerminatesTheSidecar()
     {
         // Native Windows process behavior; the portable validation suite also runs on Linux.
