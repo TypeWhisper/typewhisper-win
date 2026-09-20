@@ -69,6 +69,15 @@ internal sealed partial class LivePluginTextSettings : UserControl
         var generation = ++_generation;
         try
         {
+            if (_session.LocalLlmDownload.State.IsBusy && _session.LocalLlmDownloadPluginId == _id)
+            {
+                DetachHostControls();
+                _content.Children.Clear();
+                _content.Children.Add(new LiveLocalLlmModelSettings(_session, _id));
+                await _session.LocalLlmDownload.Completion.WaitAsync(_lifetime.Token);
+                if (!IsLoaded || generation != _generation) return;
+                _content.Children.Clear();
+            }
             var snapshot = await _session.PluginRuntime.UseConfigurationAsync(_id, (plugin, _) =>
                 Task.FromResult((Fields: plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : [],
                     Actions: plugin is IPluginSettingsActions actions ? actions.SettingsActions.ToArray() : [],

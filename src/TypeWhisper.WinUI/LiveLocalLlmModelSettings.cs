@@ -14,6 +14,8 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private readonly StackPanel _content = new() { Spacing = 12 };
     private readonly TextBlock _status = Label("");
     private readonly List<Row> _rows = [];
+    private readonly ProgressBar _downloadProgress = new() { Minimum = 0, Maximum = 100, Height = 6 };
+    private readonly HandCursorButton _cancelDownload = Button("Cancel download");
     private CancellationTokenSource? _lifetime;
     private CancellationTokenSource? _operation;
     private bool _busy;
@@ -24,13 +26,24 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         Content = _content;
         _content.Children.Add(_status);
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        Loaded += async (_, _) => { _lifetime = new(); await RefreshAsync(); };
-        Unloaded += (_, _) => { _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = null; };
+        _cancelDownload.Click += async (_, _) => await _session.LocalLlmDownload.CancelAndDrainAsync();
+        Loaded += async (_, _) =>
+        {
+            _lifetime = new();
+            _session.LocalLlmDownload.Changed += DownloadChanged;
+            await RefreshAsync();
+        };
+        Unloaded += (_, _) =>
+        {
+            _session.LocalLlmDownload.Changed -= DownloadChanged;
+            _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = null;
+        };
     }
 
     private async Task RefreshAsync()
     {
         if (_lifetime is not { } lifetime || _busy) return;
+        if (ShowActiveDownload()) return;
         _busy = true;
         try
         {
@@ -63,16 +76,47 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         finally { _busy = false; }
     }
 
+    private void DownloadChanged() => DispatcherQueue.TryEnqueue(async () =>
+    {
+        if (!IsLoaded) return;
+        if (!ShowActiveDownload())
+        {
+            if (_session.LocalLlmDownloadPluginId == _pluginId)
+                _status.Text = _session.LocalLlmDownload.State.Message ?? "";
+            await RefreshAsync();
+        }
+    });
+
+    private bool ShowActiveDownload()
+    {
+        var state = _session.LocalLlmDownload.State;
+        if (!state.IsBusy) return false;
+        _content.Children.Clear(); _rows.Clear();
+        _status.Text = "Downloading " + _session.LocalLlmDownloadModelName +
+            (state.Progress is { } fraction ? $" · {fraction:P0}" : "…");
+        _downloadProgress.IsIndeterminate = state.Progress is null;
+        _downloadProgress.Value = (state.Progress ?? 0) * 100;
+        _content.Children.Add(_status); _content.Children.Add(_downloadProgress); _content.Children.Add(_cancelDownload);
+        return true;
+    }
+
     private bool Current(CancellationTokenSource lifetime) => IsLoaded && ReferenceEquals(_lifetime, lifetime) && !lifetime.IsCancellationRequested;
 
     private async Task RunAsync(Row row, string action)
     {
         if (_busy || _lifetime is not { } lifetime || !_session.CanStartPluginSettingsAction) return;
+        if (action == "download")
+        {
+            try { await _session.DownloadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, row.Model.Model.DisplayName); }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            { if (Current(lifetime)) _status.Text = "Model download could not start: " + ex.Message; }
+            if (IsLoaded) await RefreshAsync();
+            return;
+        }
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         _operation = operation;
         void CancelForRecording() => operation.Cancel();
         _session.RecordingStarting += CancelForRecording;
-        _session.LlmProcessingStarting += CancelForRecording;
         _busy = true;
         foreach (var item in _rows) foreach (var button in item.Actions.Children.OfType<Control>()) button.IsEnabled = false;
         try
@@ -89,12 +133,6 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             row.Progress.Visibility = Visibility.Visible; row.Progress.IsIndeterminate = true;
             row.State.Text = action switch { "download" => "Downloading…", "load" => "Loading model into memory…", "unload" => "Releasing model memory…", _ => "Removing downloaded file…" };
             row.Cancel.Visibility = Visibility.Visible; row.Cancel.IsEnabled = true;
-            var progress = new Progress<double>(value =>
-            {
-                if (!Current(lifetime) || !ReferenceEquals(_operation, operation) || operation.IsCancellationRequested || !double.IsFinite(value)) return;
-                row.Progress.IsIndeterminate = false; row.Progress.Value = Math.Clamp(value, 0, 1) * 100;
-                row.State.Text = $"Downloading · {Math.Clamp(value, 0, 1):P0}";
-            });
             try
             {
                 await _session.PluginRuntime.UseConfigurationAsync(_pluginId, async (plugin, ct) =>
@@ -103,7 +141,6 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                         throw new InvalidOperationException("The local model provider changed.");
                     switch (action)
                     {
-                        case "download": await local.DownloadModelAsync(row.Model.Model.Id, progress, ct); break;
                         case "load": await local.LoadModelAsync(row.Model.Model.Id, ct); break;
                         case "unload":
                             if (local.LocalModels.Any(m => m.Model.Id == row.Model.Model.Id && m.Loaded)) await local.UnloadModelAsync(ct);
@@ -122,7 +159,6 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         finally
         {
             _session.RecordingStarting -= CancelForRecording;
-            _session.LlmProcessingStarting -= CancelForRecording;
             _operation = null;
             _busy = false;
             if (IsLoaded) await RefreshAsync();
