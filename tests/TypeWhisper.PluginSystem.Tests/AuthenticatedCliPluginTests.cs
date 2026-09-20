@@ -65,6 +65,13 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Contains("--no-session-persistence", arguments, StringComparison.Ordinal);
         Assert.Contains("--disallowedTools", arguments, StringComparison.Ordinal);
         Assert.Contains("--system-prompt", arguments, StringComparison.Ordinal);
+        var argumentList = capture.RootElement.GetProperty("arguments")
+            .EnumerateArray()
+            .Select(value => value.GetString())
+            .ToList();
+        Assert.Equal("", argumentList[argumentList.IndexOf("--tools") + 1]);
+        Assert.Equal("mcp__*", argumentList[argumentList.IndexOf("--disallowedTools") + 1]);
+        Assert.DoesNotContain("*", argumentList);
         await plugin.DeactivateAsync();
     }
 

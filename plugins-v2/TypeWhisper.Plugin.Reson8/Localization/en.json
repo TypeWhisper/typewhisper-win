@@ -1,0 +1,23 @@
+{
+  "Settings.ApiKeyLabel": "API Key",
+  "Settings.Test": "Test",
+  "Settings.Save": "Save",
+  "Settings.Remove": "Remove",
+  "Settings.Saved": "Saved",
+  "Settings.EnterApiKey": "Please enter an API key first",
+  "Settings.ApiKeyHint": "Stored securely and used for Reson8 transcription.",
+  "Settings.Testing": "Testing...",
+  "Settings.ApiKeyValid": "API key valid!",
+  "Settings.ApiKeyInvalid": "Invalid API key",
+  "Settings.Model": "Model",
+  "Settings.Refresh": "Refresh",
+  "Settings.Refreshing": "Refreshing...",
+  "Settings.ModelsFetched": "{0} custom model(s) loaded",
+  "Settings.ModelsRefreshFailed": "Could not load custom models",
+  "Settings.NoCustomModels": "No custom models yet - using the default model",
+  "Settings.Advanced": "Advanced",
+  "Settings.CustomBaseUrl": "Custom Base URL",
+  "Settings.CustomAuthHeader": "Custom Auth Header",
+  "Settings.AdvancedHint": "For a LiveKit gateway or custom proxy.",
+  "Settings.Error": "Error: {0}"
+}
