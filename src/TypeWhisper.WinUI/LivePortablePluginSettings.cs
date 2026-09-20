@@ -33,9 +33,8 @@ internal sealed class LivePortablePluginSettings : UserControl
     {
         _connectionTitle = title;
         _keyLabel.Content = SettingsHelp.Label("API key",
-            title is null ? "The key is stored through encrypted Windows user storage. Leave empty to keep the saved key."
-                : "Saved together with these settings. Leave empty to keep the saved key.");
-        _save.Visibility = title is null ? Visibility.Visible : Visibility.Collapsed;
+            "Saved together with these settings in encrypted Windows user storage. Leave empty to keep the saved key.");
+        _save.Visibility = Visibility.Collapsed;
         _check.Visibility = title is null ? Visibility.Visible : Visibility.Collapsed;
         if (_connectionIdentity == identity) return;
         _connectionIdentity = identity;
@@ -104,7 +103,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _key.PlaceholderText = state?.ApiKeyConfigured == true ? "Key saved - enter a replacement" : "Enter an API key";
         _remove.Visibility = state?.ApiKeyConfigured == true ? Visibility.Visible : Visibility.Collapsed;
         _credentials.Visibility = state?.HasApiKeySettings == true ? Visibility.Visible : Visibility.Collapsed;
-        if (state?.Enabled == true && state.HasTextSettings)
+        if (state?.Enabled == true)
         {
             if (_textSettings.Content is not LivePluginTextSettings)
             {
@@ -131,7 +130,8 @@ internal sealed class LivePortablePluginSettings : UserControl
     private void UpdateButtons()
     {
         var available = !_working && _session.CanChangeProvider;
-        _enable.IsEnabled = _key.IsEnabled = _remove.IsEnabled = _check.IsEnabled = available;
+        _enable.IsEnabled = _key.IsEnabled = _remove.IsEnabled = available;
+        _check.IsEnabled = available && string.IsNullOrWhiteSpace(_key.Password);
         _save.IsEnabled = available && !string.IsNullOrWhiteSpace(_key.Password);
         _textSettings.IsEnabled = !_working;
     }

@@ -4,6 +4,25 @@ using TypeWhisper.PluginSDK.PortableFixture;
 
 public sealed partial class PortablePluginRuntimeRegistryTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CompletedConfigurationMetadataSurvivesLateCancellationOnlyWhenRequested(bool preserve)
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        using var cancellation = new CancellationTokenSource();
+        var completed = new PortablePluginSettingsSaveResult(["model"], true, null);
+        var save = registry.UseConfigurationAsync(Id, (_, _) =>
+        {
+            cancellation.Cancel();
+            return Task.FromResult(completed);
+        }, cancellation.Token, preserveCompletedResult: preserve);
+        if (preserve) Assert.Same(completed, await save);
+        else await Assert.ThrowsAnyAsync<OperationCanceledException>(() => save);
+    }
+
     [Fact]
     public async Task CancelingInteractiveConfigurationReleasesUnrelatedTranscription()
     {

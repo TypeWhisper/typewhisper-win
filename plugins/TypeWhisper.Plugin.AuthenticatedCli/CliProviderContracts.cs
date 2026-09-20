@@ -226,7 +226,9 @@ internal sealed class CliProviderDescriptor
                 "--safe-mode",
                 "--disable-slash-commands",
                 "--tools", "",
-                "--disallowedTools", "*", "mcp__*",
+                // No "*" wildcard: it also denies the StructuredOutput tool that --json-schema depends on.
+                // --tools "" already removes every built-in tool.
+                "--disallowedTools", "mcp__*",
                 "--strict-mcp-config",
                 "--no-chrome",
                 "--no-session-persistence",

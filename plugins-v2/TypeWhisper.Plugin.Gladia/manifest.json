@@ -1,0 +1,17 @@
+{
+  "id": "com.typewhisper.gladia",
+  "name": "Gladia",
+  "version": "1.2.2",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Transcribes recorded audio and provides live dictation with Gladia.",
+  "categories": [
+    "transcription"
+  ],
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Gladia.dll",
+  "pluginClass": "TypeWhisper.Plugin.Gladia.GladiaPlugin",
+  "descriptions": {
+    "de": "Transkribiert Aufnahmen und ermöglicht Live-Diktieren mit Gladia."
+  }
+}

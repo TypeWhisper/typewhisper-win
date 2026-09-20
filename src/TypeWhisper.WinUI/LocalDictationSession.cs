@@ -144,7 +144,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _ => SelectRegistryModelAsync(providerId, modelId)
     };
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
-    internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
+    internal string Language => SupportedLanguages.Count == 0 ? "auto" : UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
     private bool CanStartSessionOperation => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel);
     internal bool CanChangeProvider => CanStartSessionOperation && !PluginRuntime.IsBusy;
