@@ -559,10 +559,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
-                await LocalLlmDownload.CancelAndDrainAsync();
-                RecordingStarting?.Invoke();
-                await CorrectionLearning.Cancel();
-                _operationCancellation.Begin();
                 if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)
                 {
                     SetStatus("This model cannot translate to English. Choose Transcribe or a translation-capable model in Dictation.");
@@ -580,6 +576,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     SetStatus($"Focus a text field in another app, then press {Shortcut}.");
                     return;
                 }
+                // Invalid recording attempts must not discard a settings download.
+                _operationCancellation.Begin();
+                await LocalLlmDownload.CancelAndDrainAsync();
+                RecordingStarting?.Invoke();
+                await CorrectionLearning.Cancel();
+                _operationCancellation.Token.ThrowIfCancellationRequested();
+                if (_disposed) return;
                 _targetProcessId = processId;
                 PasteDiagnostics.Write("dictation.start");
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)

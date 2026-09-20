@@ -189,24 +189,23 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
                 }
 
                 var decoder = new StreamingTokenDecoder(context);
-                var antiprompts = new AntipromptProcessor(["<end_of_turn>", "<eos>"]);
-                var result = new System.Text.StringBuilder();
+                var result = new GemmaOutputBuffer();
+                var endOfGeneration = false;
                 for (var generated = 0; generated < maxOutputTokens; generated++)
                 {
                     ct.ThrowIfCancellationRequested();
                     var token = sampling.Sample(context.NativeHandle, batch.TokenCount - 1);
-                    if (token.IsEndOfGeneration(_weights.Vocab)) break;
+                    if (token.IsEndOfGeneration(_weights.Vocab)) { endOfGeneration = true; break; }
                     decoder.Add(token);
                     var text = decoder.Read();
-                    result.Append(text);
-                    if (antiprompts.Add(text)) break;
+                    if (result.Append(text)) break;
                     batch.Clear();
                     batch.Add(token, promptTokens.Length + generated, LLamaSeqId.Zero, true);
                     await DecodeBatchAsync(context, batch, ct);
                 }
 
                 ct.ThrowIfCancellationRequested();
-                return result.ToString().Trim();
+                return result.Finish(endOfGeneration);
             }, ct).ConfigureAwait(false);
         }
         finally
