@@ -4,6 +4,8 @@ using System.Net.Http;
 
 using LLama;
 using LLama.Common;
+using LLama.Exceptions;
+using LLama.Native;
 using LLama.Sampling;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
@@ -166,23 +168,41 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
 
                 // Build Gemma chat prompt
                 var prompt = FormatGemmaPrompt(systemPrompt, userText);
-                var promptTokenCount = _context.Tokenize(prompt, addBos: true, special: true).Length;
+                var promptTokens = _context.Tokenize(prompt, addBos: true, special: true);
                 var maxOutputTokens = RequireOutputBudget(
-                    LlmOutputTokenBudget.Calculate(systemPrompt, userText), promptTokenCount, checked((int)_context.ContextSize));
+                    LlmOutputTokenBudget.Calculate(systemPrompt, userText), promptTokens.Length, checked((int)_context.ContextSize));
 
-                var executor = new StatelessExecutor(_weights, _context.Params);
-                var inferenceParams = new InferenceParams
-                {
-                    MaxTokens = maxOutputTokens,
-                    AntiPrompts = ["<end_of_turn>", "<eos>"],
-                    SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.3f },
-                };
-
-                var result = new System.Text.StringBuilder();
-                await foreach (var token in executor.InferAsync(prompt, inferenceParams, ct))
+                // StatelessExecutor 0.26 does not forward cancellation to prompt prefill.
+                // Use bounded batches so cancellation waits for at most one small native decode.
+                using var context = _weights.CreateContext(_context.Params);
+                using var sampling = new DefaultSamplingPipeline { Temperature = 0.3f };
+                var batch = new LLamaBatch();
+                var batchSize = Math.Min(32, checked((int)context.BatchSize));
+                for (var offset = 0; offset < promptTokens.Length; offset += batchSize)
                 {
                     ct.ThrowIfCancellationRequested();
-                    result.Append(token);
+                    batch.Clear();
+                    var end = Math.Min(offset + batchSize, promptTokens.Length);
+                    for (var position = offset; position < end; position++)
+                        batch.Add(promptTokens[position], position, LLamaSeqId.Zero, position == end - 1);
+                    await DecodeBatchAsync(context, batch, ct);
+                }
+
+                var decoder = new StreamingTokenDecoder(context);
+                var antiprompts = new AntipromptProcessor(["<end_of_turn>", "<eos>"]);
+                var result = new System.Text.StringBuilder();
+                for (var generated = 0; generated < maxOutputTokens; generated++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var token = sampling.Sample(context.NativeHandle, batch.TokenCount - 1);
+                    if (token.IsEndOfGeneration(_weights.Vocab)) break;
+                    decoder.Add(token);
+                    var text = decoder.Read();
+                    result.Append(text);
+                    if (antiprompts.Add(text)) break;
+                    batch.Clear();
+                    batch.Add(token, promptTokens.Length + generated, LLamaSeqId.Zero, true);
+                    await DecodeBatchAsync(context, batch, ct);
                 }
 
                 ct.ThrowIfCancellationRequested();
@@ -227,6 +247,13 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <inheritdoc />
     public IReadOnlyList<LocalLlmModelState> LocalModels => ModelCatalog.Select(model =>
         new LocalLlmModelState(model, IsModelDownloaded(model.Id), _loadedModelId == model.Id)).ToArray();
+
+    private static async Task DecodeBatchAsync(LLamaContext context, LLamaBatch batch, CancellationToken ct)
+    {
+        var status = await context.DecodeAsync(batch, ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        if (status != DecodeResult.Ok) throw new LLamaDecodeError(status);
+    }
 
     /// <inheritdoc />
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
