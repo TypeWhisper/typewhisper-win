@@ -30,6 +30,7 @@ public sealed class PortablePackageTests
         var project = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..",".."));
         var manifest = PortablePluginPackage.ReadManifest(project);
         var source = Path.Combine(project,"bin",new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,"portable-host","Plugins",manifest.Id);
+        Assert.True(File.Exists(Path.Combine(source, "THIRD-PARTY-NOTICES.md")));
         var archive = Path.Combine(fixture.Root,"package.zip");
         ZipFile.CreateFromDirectory(source,archive,CompressionLevel.Fastest,false);
         var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archive)));

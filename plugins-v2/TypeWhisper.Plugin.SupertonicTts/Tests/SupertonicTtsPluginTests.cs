@@ -409,6 +409,51 @@ public class SupertonicTtsPluginTests
         await plugin.DeactivateAsync();
     }
 
+    [Fact]
+    public async Task SpeakAsync_RejectsExplicitUnknownVoiceBeforeSynthesis()
+    {
+        var synth = new FakeSupertonicSynthesizer();
+        using var plugin = new SupertonicTtsPlugin(new FakeSupertonicAssets { AreAssetsReadyValue = true }, _ => synth);
+        await plugin.ActivateAsync(new TestPluginHostServices());
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SpeakAsync(new TtsSpeakRequest("Hello", "en") { VoiceId = "missing" }, default));
+        Assert.Null(synth.LastRequest);
+    }
+
+    [Theory]
+    [InlineData(120, 1, true)]
+    [InlineData(121, 1, false)]
+    [InlineData(1, 0, false)]
+    [InlineData(3145729, 48000, false)]
+    public async Task SpeakAsync_ChecksAudioBoundsBeforePlayback(int samples, int rate, bool valid)
+    {
+        var synth = new FakeSupertonicSynthesizer { Result = new(new float[samples], rate) };
+        var played = false;
+        using var plugin = new SupertonicTtsPlugin(new FakeSupertonicAssets { AreAssetsReadyValue = true }, _ => synth,
+            (_, _) => { played = true; return new FakeTtsPlaybackSession(); });
+        await plugin.ActivateAsync(new TestPluginHostServices());
+        var speak = () => plugin.SpeakAsync(new TtsSpeakRequest("Hello", "en"), default);
+        if (valid) await speak(); else await Assert.ThrowsAsync<InvalidOperationException>(speak);
+        Assert.Equal(valid, played);
+    }
+
+    [Fact]
+    public async Task AssetManager_ReplacesCorruptedSameLengthFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "supertonic-repair-" + Guid.NewGuid().ToString("N"));
+        var payload = Encoding.UTF8.GetBytes("good");
+        using var http = new HttpClient(new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) }));
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload));
+        using var assets = new SupertonicAssetManager(root, http, [new("model.onnx", "https://fixture.invalid/model", payload.Length, hash)], "https://fixture.invalid/license");
+        try
+        {
+            Directory.CreateDirectory(root);
+            await File.WriteAllTextAsync(Path.Combine(root, "model.onnx"), "bad!");
+            await assets.DownloadMissingAssetsAsync(null, null, default);
+            Assert.Equal(payload, await File.ReadAllBytesAsync(Path.Combine(root, "model.onnx")));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     private sealed class InlineProgress(Action<double> report) : IProgress<double>
     { public void Report(double value) => report(value); }
 
@@ -452,12 +497,13 @@ public class SupertonicTtsPluginTests
     {
         public SupertonicSynthesisRequest? LastRequest { get; private set; }
         public bool Disposed { get; private set; }
+        public SupertonicSynthesisResult Result { get; set; } = new([0.1f, -0.1f], 24_000);
 
         public SupertonicSynthesisResult Synthesize(SupertonicSynthesisRequest request, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             LastRequest = request;
-            return new SupertonicSynthesisResult([0.1f, -0.1f], 24_000);
+            return Result;
         }
 
         public void Dispose() => Disposed = true;

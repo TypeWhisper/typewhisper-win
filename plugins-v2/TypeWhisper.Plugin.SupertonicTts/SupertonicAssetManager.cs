@@ -76,7 +76,12 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
         ct.ThrowIfCancellationRequested();
         Directory.CreateDirectory(AssetRoot);
         progress?.Report(0);
-        var work = _files.Where(file => !IsFileReady(file)).ToList();
+        var work = new List<SupertonicAssetFile>();
+        foreach (var file in _files)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!await IsFileVerifiedAsync(file, ct)) work.Add(file);
+        }
         var totalBytes = Math.Max(1, work.Sum(file => Math.Max(1, file.EstimatedSizeBytes)));
         long completedBytes = 0;
 
@@ -218,6 +223,15 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
     {
         var info = new FileInfo(GetPath(file.RelativePath));
         return info.Exists && info.Length > 0 && (file.Sha256 is null || info.Length == file.EstimatedSizeBytes);
+    }
+
+    private async Task<bool> IsFileVerifiedAsync(SupertonicAssetFile file, CancellationToken ct)
+    {
+        if (!IsFileReady(file)) return false;
+        if (file.Sha256 is null) return true;
+        await using var stream = File.OpenRead(GetPath(file.RelativePath));
+        var actualHash = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
+        return actualHash.Equals(file.Sha256, StringComparison.OrdinalIgnoreCase);
     }
 
     private string GetPath(string relativePath) =>

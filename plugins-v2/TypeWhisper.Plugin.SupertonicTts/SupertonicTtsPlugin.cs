@@ -175,7 +175,7 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
             IsRequired: true,
             IsSatisfied: HasAcceptedModelLicense)
         {
-            MoreInfoUri = new Uri("https://huggingface.co/Supertone/supertonic-3/blob/main/LICENSE"),
+            MoreInfoUri = new Uri("https://huggingface.co/Supertone/supertonic-3/blob/3cadd1ee6394adea1bd021217a0e650ede09a323/LICENSE"),
             Revision = ModelLicenseRevision
         },
         new PluginModelDownloadRequirement(
@@ -297,6 +297,9 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
     /// </summary>
     public async Task<ITtsPlaybackSession> SpeakAsync(TtsSpeakRequest request, CancellationToken ct)
     {
+        var voiceId = request.VoiceId is null ? _selectedVoiceId : Voices.FirstOrDefault(
+            voice => string.Equals(voice.Id, request.VoiceId.Trim(), StringComparison.OrdinalIgnoreCase))?.Id
+            ?? throw new ArgumentException("The requested Supertonic voice is unavailable.", nameof(request));
         var text = request.Text.Trim();
         if (string.IsNullOrWhiteSpace(text))
             return SupertonicInactiveTtsPlaybackSession.Instance;
@@ -312,11 +315,15 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
                 new SupertonicSynthesisRequest(
                     text,
                     NormalizeLanguage(request.Language),
-                    SupertonicPaths.VoiceStylePath(_assetManager.AssetRoot, NormalizeVoiceId(request.VoiceId ?? _selectedVoiceId)),
+                    SupertonicPaths.VoiceStylePath(_assetManager.AssetRoot, voiceId),
                     DenoisingSteps,
                     Speed),
                 ct);
             ct.ThrowIfCancellationRequested();
+
+            if (synthesis.SampleRate <= 0 || synthesis.Samples.LongLength > (long)synthesis.SampleRate * 120
+                || synthesis.Samples.LongLength * sizeof(float) > 12L * 1024 * 1024)
+                throw new InvalidOperationException("The generated speech exceeds the two-minute audio limit.");
 
             return synthesis.Samples.Length == 0
                 ? SupertonicInactiveTtsPlaybackSession.Instance

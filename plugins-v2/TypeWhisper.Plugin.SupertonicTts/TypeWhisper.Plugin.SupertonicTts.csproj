@@ -14,7 +14,7 @@
   <Target Name="StagePortablePackage" AfterTargets="Build">
     <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.supertonic-tts/</PackageDirectory></PropertyGroup>
     <ItemGroup>
-      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" />
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(ProjectDir)THIRD-PARTY-NOTICES.md" />
       <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
       <PackageTree Include="$(TargetDir)**/*" Exclude="$(TargetDir)*;$(TargetDir)**/*.pdb;$(TargetDir)**/*.xml" />
     </ItemGroup>

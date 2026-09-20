@@ -104,6 +104,28 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
                 };
                 _licenses.Children.Add(check);
             }
+            foreach (var requirement in state.Item4.Where(r => r.Kind == PluginModelDownloadRequirementKind.Credential))
+            {
+                _licenses.Children.Add(Note(requirement.Title + (requirement.IsRequired ? "" : " (optional)")));
+                _licenses.Children.Add(Note(requirement.Description));
+                var credential = new PasswordBox { PlaceholderText = requirement.IsSatisfied ? "Token saved securely" : "Hugging Face token" };
+                AutomationProperties.SetName(credential, requirement.Title);
+                var save = Button("Save token");
+                var clear = Button("Remove saved token");
+                clear.Visibility = requirement.IsSatisfied ? Visibility.Visible : Visibility.Collapsed;
+                save.Click += async (_, _) =>
+                {
+                    var value = credential.Password;
+                    credential.Password = "";
+                    await RunAsync(async (model, ct) =>
+                    {
+                        var result = await model.SaveModelDownloadCredentialAsync(info.Id, requirement.Id, value, ct);
+                        if (!result.Succeeded) throw new InvalidOperationException(result.Message ?? "The token could not be saved.");
+                    });
+                };
+                clear.Click += async (_, _) => await RunAsync((model, ct) => model.ClearModelDownloadCredentialAsync(info.Id, requirement.Id, ct));
+                _licenses.Children.Add(credential); _licenses.Children.Add(save); _licenses.Children.Add(clear);
+            }
             _progress.Visibility = _downloaded ? Visibility.Visible : Visibility.Collapsed;
             _progress.Value = _downloaded ? 100 : 0;
             _state.Text = _loaded ? "Ready · Model loaded" : _downloaded ? "Downloaded · 100%" : "Download required";
@@ -135,7 +157,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
             {
                 if (plugin is not ILocalTtsModelManagement model) throw new NotSupportedException();
                 await action(model, ct); return true;
-            }, operation.Token);
+            }, operation.Token, preserveCompletedResult: true);
         }
         catch (OperationCanceledException)
         { if (IsLoaded) _message.Text = "Operation cancelled. Downloaded files are kept for the next attempt."; }
