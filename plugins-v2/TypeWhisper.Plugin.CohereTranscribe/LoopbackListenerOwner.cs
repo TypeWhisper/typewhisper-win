@@ -26,7 +26,7 @@ internal static class LoopbackListenerOwner
                     var localPort = (Marshal.ReadByte(row, 8) << 8) | Marshal.ReadByte(row, 9);
                     var state = Marshal.ReadInt32(row);
                     var peerPort = (Marshal.ReadByte(row, 16) << 8) | Marshal.ReadByte(row, 17);
-                    if ((address == 0x0100007f || address == 0) && localPort == port
+                    if (address == 0x0100007f && localPort == port
                         && (remotePort is { } peer ? state == 5 && peerPort == peer : state == 2))
                         return Marshal.ReadInt32(row, 20);
                 }

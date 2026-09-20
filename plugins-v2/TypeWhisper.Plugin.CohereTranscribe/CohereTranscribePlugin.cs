@@ -251,12 +251,14 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     }
 
     /// <summary>
-    /// Gets whether all pinned model, VAD, and language-ID files are present.
+    /// Gets whether all pinned model files and a compatible runtime are present.
     /// </summary>
     public bool IsModelDownloaded(string modelId)
     {
         ValidateModelId(modelId);
-        return _assets?.IsModelInstalled(modelId) == true;
+        if (_assets?.IsModelInstalled(modelId) != true) return false;
+        try { return _resolveBackends(_accelerationPreference).Any(_assets.IsRuntimeInstalled); }
+        catch (Exception error) when (error is not OutOfMemoryException) { return false; }
     }
 
     /// <summary>
