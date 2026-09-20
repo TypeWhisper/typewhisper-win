@@ -45,6 +45,37 @@ public sealed partial class PortablePluginRuntimeRegistry
         }, cancellationToken);
     }
 
+    /// <summary>Updates a model download credential under the captured activation lease. Null clears it.</summary>
+    public Task<PluginModelDownloadRequirementResult> UpdateModelDownloadCredentialAsync(
+        PortableDownloadableModel expected, string requirementId, string? credential, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        Slot owner;
+        lock (_sync)
+        {
+            if (!_index.Transcription.TryGetValue(expected.SelectionId, out var role) || !MatchesModelOwner(role, expected))
+                throw new InvalidOperationException("The captured model provider is no longer available.");
+            owner = role.Owner;
+        }
+        return UseAsync(owner, async token =>
+        {
+            if (!_index.Transcription.TryGetValue(expected.SelectionId, out var role) || role.Owner != owner
+                || !MatchesModelOwner(role, expected) || role.Engine.PluginVersion != expected.Version
+                || !role.Engine.TranscriptionModels.Any(model => model.Id == expected.ModelId))
+                throw new InvalidOperationException("The captured model provider changed.");
+            var providers = new[] { owner.Package!.Plugin as IModelDownloadRequirementsProvider, role.Engine as IModelDownloadRequirementsProvider }
+                .Where(provider => provider is not null).Distinct().Where(provider => provider!.ModelDownloadRequirements.Any(requirement =>
+                    requirement.ModelId == expected.ModelId && requirement.Id == requirementId
+                    && requirement.Kind == PluginModelDownloadRequirementKind.Credential)).ToArray();
+            if (providers.Length != 1) throw new InvalidOperationException("The download credential requirement changed.");
+            token.ThrowIfCancellationRequested();
+            if (credential is not null)
+                return await providers[0]!.SaveModelDownloadCredentialAsync(expected.ModelId, requirementId, credential, token).ConfigureAwait(false);
+            await providers[0]!.ClearModelDownloadCredentialAsync(expected.ModelId, requirementId, token).ConfigureAwait(false);
+            return new PluginModelDownloadRequirementResult(true, "Download credential removed.");
+        }, cancellationToken, preserveCompletedResult: true);
+    }
+
     private IReadOnlyList<PortableDownloadableModel> CaptureModelStates(Slot owner, string selectionId, ITranscriptionEnginePlugin engine)
     {
         var requirements = ReadModelRequirements(owner, engine);

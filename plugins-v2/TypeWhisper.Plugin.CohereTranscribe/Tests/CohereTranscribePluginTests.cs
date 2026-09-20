@@ -995,6 +995,7 @@ public sealed class CohereTranscribePluginTests
                 var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
                 typeof(CrispAsrServer).GetField("_processJob", flags)!.SetValue(server, job);
                 var http = (HttpClient)typeof(CrispAsrServer).GetField("_httpClient", flags)!.GetValue(server)!;
+                Assert.Equal(Timeout.InfiniteTimeSpan, http.Timeout);
                 var request = http.GetAsync($"http://127.0.0.1:{port}/health");
                 using var unrelatedConnection = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(5));
                 await Assert.ThrowsAsync<HttpRequestException>(() => request);
@@ -1057,6 +1058,19 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal(selected, sut.SelectedModelId);
         await sut.TranscribeAsync([1,2,3], "de", false, null, default);
         Assert.Equal(selected, server.LastConfiguration?.ModelId);
+    }
+
+    [WindowsFact]
+    public async Task MissingBackendReportsUnavailableInsteadOfPending()
+    {
+        using var temp = new TempDirectory();
+        using var sut = new CohereTranscribePlugin(new FakeAssetManager(), new FakeCrispAsrServer(),
+            resolveBackends: _ => throw new InvalidOperationException("fixture backend unavailable"));
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default));
+        Assert.Contains("fixture backend unavailable", sut.AccelerationStatus.Detail);
     }
 
     [WindowsFact]

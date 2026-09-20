@@ -84,8 +84,17 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     public event EventHandler? ModelDownloadRequirementsChanged { add { } remove { } }
     /// <inheritdoc />
     public IReadOnlyList<PluginModelDownloadRequirement> ModelDownloadRequirements =>
-        [new("transcription", "Fixture", "license", PluginModelDownloadRequirementKind.License,
+        _host?.GetSetting<bool>("CredentialRequirement") == true
+        ? [new("transcription", "Fixture", "token", PluginModelDownloadRequirementKind.Credential,
+            "Token", "Optional fixture credential", false, _host.GetSetting<string>("downloadCredential") is not null)]
+        : [new("transcription", "Fixture", "license", PluginModelDownloadRequirementKind.License,
             "Fixture license", "Explicit agreement required", true, _host?.GetSetting<bool>("BlockedRequirement") != true)];
+    /// <inheritdoc />
+    public Task<PluginModelDownloadRequirementResult> SaveModelDownloadCredentialAsync(string modelId, string requirementId, string credential, CancellationToken ct)
+    { ct.ThrowIfCancellationRequested(); _host!.SetSetting("downloadCredential", credential); return Task.FromResult(new PluginModelDownloadRequirementResult(true)); }
+    /// <inheritdoc />
+    public Task ClearModelDownloadCredentialAsync(string modelId, string requirementId, CancellationToken ct)
+    { ct.ThrowIfCancellationRequested(); _host!.SetSetting<string?>("downloadCredential", null); return Task.CompletedTask; }
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />

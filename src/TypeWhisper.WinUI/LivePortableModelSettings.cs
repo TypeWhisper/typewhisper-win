@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using TypeWhisper.PluginHost;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.WinUI;
 
@@ -58,6 +59,7 @@ internal sealed class LivePortableModelSettings : UserControl
         };
         Unloaded += (_, _) =>
         {
+            foreach (var row in _items.Values) foreach (var credential in row.Credentials.Values) credential.Input.Password = "";
             session.Changed -= Changed;
             session.RegistryModelDownload.Changed -= Changed;
             try { _lifetime?.Cancel(); }
@@ -160,7 +162,24 @@ internal sealed class LivePortableModelSettings : UserControl
             row.Remove.Click += async (_, _) => await RemoveAsync(captured);
             row.Cancel.Click += async (_, _) => await CancelAsync(captured);
         }
+        if (!SameOwner(row.Model, model)) foreach (var credential in row.Credentials.Values) credential.Input.Password = "";
         row.Model = model;
+        var requirements = model.Requirements.Where(r => r.Kind == PluginModelDownloadRequirementKind.Credential).ToArray();
+        foreach (var old in row.Credentials.Keys.Where(id => !requirements.Any(r => r.Id == id)).ToArray())
+        { row.CredentialPanel.Children.Remove(row.Credentials[old].Panel); row.Credentials.Remove(old); }
+        foreach (var requirement in requirements)
+        {
+            if (!row.Credentials.TryGetValue(requirement.Id, out var credential))
+            {
+                credential = new CredentialRow(requirement.Title);
+                row.Credentials.Add(requirement.Id, credential); row.CredentialPanel.Children.Add(credential.Panel);
+                var capturedRow = row; var capturedCredential = credential; var id = requirement.Id;
+                credential.Save.Click += async (_, _) => await SaveCredentialAsync(capturedRow, id, capturedCredential, clear: false);
+                credential.Clear.Click += async (_, _) => await SaveCredentialAsync(capturedRow, id, capturedCredential, clear: true);
+            }
+            credential.Input.PlaceholderText = requirement.IsSatisfied ? "Saved securely; enter a replacement" : "Enter download token";
+            credential.Clear.Visibility = requirement.IsSatisfied ? Visibility.Visible : Visibility.Collapsed;
+        }
         row.Title.Text = model.DisplayName + (string.IsNullOrWhiteSpace(model.SizeDescription) ? "" : " · " + model.SizeDescription);
         row.Requirements.Text = string.Join("\n", model.Requirements.Select(r =>
             $"{r.Title} · {(r.IsRequired ? "Required" : "Optional")} · {(r.IsSatisfied ? "Satisfied" : "Not satisfied")}\n{r.Description}"));
@@ -174,6 +193,28 @@ internal sealed class LivePortableModelSettings : UserControl
     private static bool SameOwner(PortableDownloadableModel left, PortableDownloadableModel right) =>
         left.PluginId == right.PluginId && left.SelectionId == right.SelectionId && left.ModelId == right.ModelId &&
         left.Generation == right.Generation && left.Version == right.Version && left.EngineIdentity == right.EngineIdentity;
+
+    private async Task SaveCredentialAsync(Row row, string id, CredentialRow credential, bool clear)
+    {
+        if (_working || _reading || _lifetime is not { } lifetime || !_session.CanStartPluginSettingsAction
+            || _session.RegistryModelDownload.State.IsBusy) return;
+        var expected = row.Model;
+        var value = clear ? null : credential.Input.Password;
+        credential.Input.Password = "";
+        _working = true; UpdateButtons();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        void CancelForRecording() => cancellation.Cancel();
+        _session.RecordingStarting += CancelForRecording;
+        try
+        {
+            var result = await _session.PluginRuntime.UpdateModelDownloadCredentialAsync(expected, id, value, cancellation.Token);
+            if (Current(lifetime)) _status.Text = result.Message ?? (result.Succeeded ? "Download credential saved." : "The credential could not be saved.");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        { if (Current(lifetime)) _status.Text = "The download credential could not be updated. Refresh and try again."; }
+        finally { _session.RecordingStarting -= CancelForRecording; _working = false; if (IsLoaded) RequestRefresh(); }
+    }
 
     private async Task UseAsync(Row row)
     {
@@ -259,6 +300,8 @@ internal sealed class LivePortableModelSettings : UserControl
         _refresh.IsEnabled = available;
         foreach (var row in _items.Values)
         {
+            row.CredentialPanel.IsHitTestVisible = available;
+            foreach (var credential in row.Credentials.Values) foreach (var control in credential.Panel.Children.OfType<Control>()) control.IsEnabled = available;
             var model = row.Model;
             var provider = _session.PluginRuntime.TranscriptionProviders.FirstOrDefault(p => p.PluginId == _pluginId && p.SelectionId == model.SelectionId);
             var active = IsActive(model);
@@ -306,10 +349,25 @@ internal sealed class LivePortableModelSettings : UserControl
         }
     }
 
+    private sealed class CredentialRow
+    {
+        internal readonly StackPanel Panel = new() { Spacing = 6 };
+        internal readonly PasswordBox Input = new();
+        internal readonly HandCursorButton Save = Button("Save token");
+        internal readonly HandCursorButton Clear = Button("Remove saved token");
+        internal CredentialRow(string title)
+        {
+            AutomationProperties.SetName(Input, title);
+            Panel.Children.Add(Label(title)); Panel.Children.Add(Input); Panel.Children.Add(Save); Panel.Children.Add(Clear);
+        }
+    }
+
     private sealed class Row
     {
         internal PortableDownloadableModel Model;
         internal readonly StackPanel Panel = new() { Spacing = 6 };
+        internal readonly StackPanel CredentialPanel = new() { Spacing = 8 };
+        internal readonly Dictionary<string, CredentialRow> Credentials = [];
         internal readonly TextBlock Title = Label("");
         internal readonly TextBlock Requirements = Label("");
         internal readonly TextBlock State = Label("");
@@ -325,7 +383,7 @@ internal sealed class LivePortableModelSettings : UserControl
             var actions = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
             Panel.SizeChanged += (_, e) => actions.Orientation = e.NewSize.Width < 440 ? Orientation.Vertical : Orientation.Horizontal;
             actions.Children.Add(Download); actions.Children.Add(Use); actions.Children.Add(Remove); actions.Children.Add(Cancel);
-            Panel.Children.Add(Title); Panel.Children.Add(Requirements); Panel.Children.Add(State); Panel.Children.Add(RemovalNote); Panel.Children.Add(Progress); Panel.Children.Add(actions);
+            Panel.Children.Add(Title); Panel.Children.Add(Requirements); Panel.Children.Add(CredentialPanel); Panel.Children.Add(State); Panel.Children.Add(RemovalNote); Panel.Children.Add(Progress); Panel.Children.Add(actions);
             AutomationProperties.SetName(Progress, model.DisplayName + " model operation progress");
             AutomationProperties.SetName(Remove, "Remove " + model.DisplayName);
         }

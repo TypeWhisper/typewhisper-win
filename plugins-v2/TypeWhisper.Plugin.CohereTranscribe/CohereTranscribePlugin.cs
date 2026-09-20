@@ -22,6 +22,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly HttpClient? _huggingFaceTokenValidationClient;
+    private readonly Func<TranscriptionAccelerationPreference, IReadOnlyList<CrispAsrBackend>> _resolveBackends = GetBackendCandidatesForCurrentMachine;
     private ICohereLocalAssetManager? _assets;
     private ICrispAsrServer? _server;
     private IPluginHostServices? _host;
@@ -49,11 +50,13 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     internal CohereTranscribePlugin(
         ICohereLocalAssetManager assets,
         ICrispAsrServer server,
-        HttpClient? huggingFaceTokenValidationClient = null)
+        HttpClient? huggingFaceTokenValidationClient = null,
+        Func<TranscriptionAccelerationPreference, IReadOnlyList<CrispAsrBackend>>? resolveBackends = null)
     {
         _assets = assets;
         _server = server;
         _huggingFaceTokenValidationClient = huggingFaceTokenValidationClient;
+        _resolveBackends = resolveBackends ?? GetBackendCandidatesForCurrentMachine;
     }
 
     /// <summary>
@@ -381,7 +384,10 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         try
         {
             var server = GetServer();
-            var candidates = GetBackendCandidatesForCurrentMachine(_accelerationPreference);
+            IReadOnlyList<CrispAsrBackend> candidates;
+            try { candidates = _resolveBackends(_accelerationPreference); }
+            catch (Exception error) when (error is not OperationCanceledException)
+            { _accelerationStatus = CreateUnavailableStatus(_accelerationPreference, error.Message); throw; }
             Exception? lastError = null;
 
             foreach (var backend in candidates)

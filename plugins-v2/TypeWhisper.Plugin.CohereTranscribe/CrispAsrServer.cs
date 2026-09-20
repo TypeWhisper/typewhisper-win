@@ -59,7 +59,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
         {
             UseProxy = false, AllowAutoRedirect = false,
             ConnectCallback = ConnectToOwnedProcessAsync
-        }) { Timeout = TimeSpan.FromMinutes(10) };
+        }) { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     private async ValueTask<Stream> ConnectToOwnedProcessAsync(SocketsHttpConnectionContext context, CancellationToken ct)
