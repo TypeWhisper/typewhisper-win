@@ -142,7 +142,8 @@ internal sealed class LivePortableModelSettings : UserControl
                 choices.SetEquals(models.Select(model => model.ModelId)));
             _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
             _rows.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
-            _refresh.Visibility = _cloudMode || localTts || HasLocalLlmModels ? Visibility.Collapsed : Visibility.Visible;
+            _refresh.Visibility = _cloudMode || !_session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)
+                ? Visibility.Collapsed : Visibility.Visible;
             _localLlm.Visibility = HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             _settingCloudModel = true;
             try
@@ -152,9 +153,9 @@ internal sealed class LivePortableModelSettings : UserControl
                 _cloudModel.SelectedItem = models.FirstOrDefault(m => m.ModelId == selectedId);
             }
             finally { _settingCloudModel = false; }
-            _llm.Visibility = ShowLlmSummary && !localTts && !HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
+            _llm.Visibility = ShowLlmSummary && !HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             var llms = _session.LlmProviders.Where(p => p.PluginId == _pluginId).ToArray();
-            _llm.Text = models.Count == 0 && llms.Length == 0 ? "No model providers are currently enabled." :
+            _llm.Text = models.Count == 0 && llms.Length == 0 && !localTts && !HasLocalLlmModels ? "No model providers are currently enabled." :
                 string.Join("\n", llms.Select(p => p.Name + " · Text processing: " + string.Join(", ", p.Models.Select(m => m.DisplayName))));
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

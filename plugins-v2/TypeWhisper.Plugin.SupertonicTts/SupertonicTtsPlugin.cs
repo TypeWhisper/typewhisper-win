@@ -215,6 +215,8 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
         if (string.IsNullOrWhiteSpace(modelDirectoryName) || modelDirectoryName is "." or "..")
             throw new InvalidOperationException("Supertonic model directory name must not be empty.");
 
+        if (_injectedAssetManager is null && _assetManager is IDisposable previousAssets)
+            previousAssets.Dispose();
         _assetManager = _injectedAssetManager
             ?? new SupertonicAssetManager(Path.Join(host.PluginAssetDirectory, "Models", modelDirectoryName));
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
@@ -325,9 +327,8 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
             }, ct);
             ct.ThrowIfCancellationRequested();
 
-            if (synthesis.SampleRate <= 0 || synthesis.Samples.LongLength > (long)synthesis.SampleRate * 120
-                || synthesis.Samples.LongLength * sizeof(short) > 12L * 1024 * 1024)
-                throw new InvalidOperationException("The generated speech exceeds the two-minute audio limit.");
+            SupertonicAudioLimits.ValidateSampleCount(synthesis.Samples.LongLength,
+                SupertonicAudioLimits.MaximumSamples(synthesis.SampleRate));
 
             return synthesis.Samples.Length == 0
                 ? SupertonicInactiveTtsPlaybackSession.Instance
@@ -406,7 +407,15 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
         if (_host is null)
             return new PluginModelDownloadRequirementResult(false, "Plugin is not activated.");
 
-        _huggingFaceToken = await PluginHuggingFaceTokenHelper.SaveTokenAsync(_host, credential);
+        try
+        {
+            _huggingFaceToken = await PluginHuggingFaceTokenHelper.SaveTokenAsync(_host, credential);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException or System.Security.Cryptography.CryptographicException)
+        {
+            _host.Log(PluginLogLevel.Warning, "Optional download token could not be stored: " + error.GetType().Name);
+            return new PluginModelDownloadRequirementResult(false, "The token could not be stored securely.");
+        }
         _host.NotifyCapabilitiesChanged();
         ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
         return new PluginModelDownloadRequirementResult(

@@ -12,6 +12,71 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class SupertonicTtsPluginTests
 {
     [Theory]
+    [InlineData("en", "Hello", "<en>Hello.</en>")]
+    [InlineData("de", "Hallo!", "<de>Hallo!</de>")]
+    public void TextFeaturesIncludeBothLanguageTags(string language, string input, string expected)
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(file, JsonSerializer.Serialize(Enumerable.Range(0, 128).ToArray()));
+            var features = new SupertonicTextProcessor(file).Process([input], [language]);
+            Assert.Equal(expected.Select(c => (long)c), features.TextIds.ToArray());
+            Assert.All(features.TextMask.ToArray(), value => Assert.Equal(1f, value));
+        }
+        finally { File.Delete(file); }
+    }
+
+    [Theory]
+    [InlineData(24000, 2880000)]
+    [InlineData(44100, 5292000)]
+    [InlineData(96000, 6291456)]
+    public void AudioLimitEnforcesDurationAndPcmSize(int rate, long expectedLimit)
+    {
+        var limit = SupertonicAudioLimits.MaximumSamples(rate);
+        Assert.Equal(expectedLimit, limit);
+        SupertonicAudioLimits.ValidateSampleCount(limit, limit);
+        Assert.Throws<InvalidOperationException>(() => SupertonicAudioLimits.ValidateSampleCount(limit + 1, limit));
+        Assert.Throws<InvalidOperationException>(() => SupertonicAudioLimits.ValidateSampleCount(double.NaN, limit));
+        Assert.Throws<InvalidOperationException>(() => SupertonicAudioLimits.ValidateSampleCount(double.PositiveInfinity, limit));
+        Assert.Throws<InvalidOperationException>(() => SupertonicAudioLimits.ValidateSampleCount(-1, limit));
+    }
+
+    [Theory]
+    [InlineData("io")]
+    [InlineData("access")]
+    [InlineData("crypto")]
+    [InlineData("unsupported")]
+    [InlineData("security")]
+    [InlineData("invalid-operation")]
+    public async Task FailedSecretSaveReturnsFailureAndPreservesExistingToken(string kind)
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["hugging-face-token"] = "hf_previous";
+        var assets = new FakeSupertonicAssets();
+        using var client = new HttpClient(new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        { Content = new StringContent("{}") }));
+        using var plugin = new SupertonicTtsPlugin(assets, _ => new FakeSupertonicSynthesizer(), huggingFaceTokenValidationClient: client);
+        await plugin.ActivateAsync(host);
+        host.SecretWriteError = kind switch
+        {
+            "io" => new IOException(), "access" => new UnauthorizedAccessException(),
+            "unsupported" => new NotSupportedException(), "security" => new System.Security.SecurityException(),
+            "invalid-operation" => new InvalidOperationException(),
+            _ => new System.Security.Cryptography.CryptographicException()
+        };
+        var notifications = host.NotifyCapabilitiesChangedCount;
+        var result = await plugin.SaveModelDownloadCredentialAsync(SupertonicTtsPlugin.ModelId,
+            SupertonicTtsPlugin.HuggingFaceTokenRequirementId, "hf_replacement", default);
+        Assert.False(result.Succeeded);
+        Assert.Equal(notifications, host.NotifyCapabilitiesChangedCount);
+        Assert.Equal("hf_previous", host.Secrets["hugging-face-token"]);
+        plugin.SetLicenseAccepted(true);
+        await plugin.DownloadAssetsAsync(null, default);
+        Assert.Equal("hf_previous", assets.LastHuggingFaceToken);
+    }
+
+    [Theory]
     [InlineData("io")]
     [InlineData("access")]
     [InlineData("crypto")]
@@ -632,10 +697,12 @@ public class SupertonicTtsPluginTests
         private readonly Dictionary<string, JsonElement> _settings = [];
         public Dictionary<string, string> Secrets { get; } = [];
         public Exception? SecretReadError { get; set; }
+        public Exception? SecretWriteError { get; set; }
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
         public Task StoreSecretAsync(string key, string value)
         {
+            if (SecretWriteError is { } error) return Task.FromException(error);
             Secrets[key] = value;
             return Task.CompletedTask;
         }

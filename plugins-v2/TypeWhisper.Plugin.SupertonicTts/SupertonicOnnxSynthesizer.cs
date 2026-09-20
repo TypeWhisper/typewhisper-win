@@ -53,14 +53,19 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
     {
         var style = GetVoiceStyle(request.VoiceStylePath);
         var samples = new List<float>();
+        var maximumSamples = SupertonicAudioLimits.MaximumSamples(_config.SampleRate);
         var chunks = ChunkText(request.Text, request.Language == "ko" || request.Language == "ja" ? 120 : 300);
 
         foreach (var chunk in chunks)
         {
             ct.ThrowIfCancellationRequested();
-            var result = InferSingle(chunk, request.Language, style, request.DenoisingSteps, (float)request.Speed, ct);
-            if (samples.Count > 0)
-                samples.AddRange(new float[(int)(0.3 * _config.SampleRate)]);
+            var separatorLength = samples.Count > 0 ? (int)(0.3 * _config.SampleRate) : 0;
+            var remainingSamples = maximumSamples - samples.Count - separatorLength;
+            SupertonicAudioLimits.ValidateSampleCount(1, remainingSamples);
+            var result = InferSingle(chunk, request.Language, style, request.DenoisingSteps, (float)request.Speed, remainingSamples, ct);
+            SupertonicAudioLimits.ValidateSampleCount((long)samples.Count + separatorLength + result.Length, maximumSamples);
+            if (separatorLength > 0)
+                samples.AddRange(new float[separatorLength]);
             samples.AddRange(result);
         }
 
@@ -84,6 +89,7 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
         SupertonicVoiceStyle style,
         int totalSteps,
         float speed,
+        long maximumSamples,
         CancellationToken ct)
     {
         var features = _textProcessor.Process([text], [language]);
@@ -103,6 +109,9 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
         for (var i = 0; i < duration.Length; i++)
             duration[i] /= speed;
 
+        var predictedSamples = Math.Ceiling((double)duration.Max() * _config.SampleRate);
+        SupertonicAudioLimits.ValidateSampleCount(predictedSamples, maximumSamples);
+
         using (var textEncoderOutputs = _textEncoder.Run(
         [
             NamedOnnxValue.CreateFromTensor("text_ids", features.TextIds),
@@ -115,7 +124,7 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
 
         var latentDim = _config.LatentDim * _config.ChunkCompressFactor;
         var chunkSize = _config.BaseChunkSize * _config.ChunkCompressFactor;
-        var wavLength = Math.Max(1, (long)Math.Ceiling(duration.Max() * _config.SampleRate));
+        var wavLength = Math.Max(1, (long)predictedSamples);
         var latentLength = Math.Max(1, (int)((wavLength + chunkSize - 1) / chunkSize));
         var latent = SampleNoisyLatent(latentDim, latentLength);
         var latentMask = BuildLatentMask(wavLength, chunkSize, latentLength);

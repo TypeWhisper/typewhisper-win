@@ -89,7 +89,7 @@ internal sealed class SupertonicTextProcessor
         if (!Regex.IsMatch(text, "[.!?;:,'\"')\\]}…。」』〗〉》›»]$"))
             text += ".";
 
-        return $"<{language}>{text}";
+        return $"<{language}>{text}</{language}>";
     }
 
     private static string RemoveEmojiCodePoints(string text)
