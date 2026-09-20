@@ -584,7 +584,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 progress,
                 cancellationToken);
             File.Move(temporaryPath, destinationPath, overwrite: true);
-            File.WriteAllText(GetArtifactMarkerPath(destinationPath), artifact.Sha256);
+            WriteArtifactMarker(artifact, destinationPath);
         }
         catch (InvalidDataException)
         {
@@ -853,8 +853,12 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         try
         {
             var file = new FileInfo(destinationPath);
-            return file.Exists && file.Length == artifact.SizeBytes
-                && MarkerMatches(GetArtifactMarkerPath(destinationPath), artifact.Sha256);
+            if (!file.Exists || file.Length != artifact.SizeBytes) return false;
+            var markerPath = GetArtifactMarkerPath(destinationPath);
+            if (new FileInfo(markerPath).Length > 256) return false;
+            var marker = File.ReadAllLines(markerPath);
+            return marker.Length == 2 && string.Equals(marker[0], artifact.Sha256, StringComparison.OrdinalIgnoreCase)
+                && long.TryParse(marker[1], out var modified) && modified == file.LastWriteTimeUtc.Ticks;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
@@ -874,6 +878,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         if (!file.Exists || file.Length != artifact.SizeBytes)
             return false;
 
+        var modified = file.LastWriteTimeUtc;
         var actualHash = await ComputeSha256Async(destinationPath, cancellationToken);
         if (!string.Equals(actualHash, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
         {
@@ -881,9 +886,15 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             return false;
         }
 
-        File.WriteAllText(GetArtifactMarkerPath(destinationPath), artifact.Sha256);
+        if (File.GetLastWriteTimeUtc(destinationPath) != modified)
+            throw new IOException("The cached model changed during verification. Retry the download.");
+        WriteArtifactMarker(artifact, destinationPath);
         return true;
     }
+
+    internal static void WriteArtifactMarker(RemoteArtifact artifact, string path) =>
+        File.WriteAllLines(GetArtifactMarkerPath(path), [artifact.Sha256,
+            File.GetLastWriteTimeUtc(path).Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
 
     private static async Task<string> ComputeSha256Async(
         string path,

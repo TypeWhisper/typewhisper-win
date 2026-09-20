@@ -1266,10 +1266,13 @@ public sealed class CohereTranscribePluginTests
         var path = Path.Join(temp.Path, "model.bin");
         File.WriteAllBytes(path, [1,2,3]); File.WriteAllText(path + ".sha256", "hash");
         var artifact = new RemoteArtifact("model.bin", "https://example.invalid/model", 3, "hash");
+        CohereLocalAssetManager.WriteArtifactMarker(artifact, path);
         var method = typeof(CohereLocalAssetManager).GetMethod("IsArtifactReady", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         using (var locked = new FileStream(path + ".sha256", FileMode.Open, FileAccess.Read, FileShare.None))
             Assert.False((bool)method.Invoke(null, [artifact, path])!);
         Assert.True((bool)method.Invoke(null, [artifact, path])!);
+        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
+        Assert.False((bool)method.Invoke(null, [artifact, path])!);
     }
 
     [WindowsTheory]
@@ -1418,6 +1421,23 @@ public sealed class CohereTranscribePluginTests
         await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
         Assert.True(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
         Assert.Equal(new byte[] { 1, 2 }, await File.ReadAllBytesAsync(executable));
+    }
+
+    [WindowsFact]
+    public async Task ExitedSidecarOnOccupiedPortIsClassifiedAsRetryableCollision()
+    {
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c exit 1")
+        { UseShellExecute = false, CreateNoWindow = true })!;
+        await process.WaitForExitAsync();
+        using var sut = new CrispAsrServer((_, _) => { });
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var wait = typeof(CrispAsrServer).GetMethod("WaitUntilReadyAsync",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        Task Startup() => (Task)wait.Invoke(sut, [process, "http://127.0.0.1:" + port, CancellationToken.None])!;
+        await Assert.ThrowsAnyAsync<IOException>(Startup);
+        listener.Stop();
+        await Assert.ThrowsAsync<InvalidOperationException>(Startup);
     }
 
     private sealed class FakeAssetManager : ICohereLocalAssetManager

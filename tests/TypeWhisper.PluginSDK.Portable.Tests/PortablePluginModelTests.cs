@@ -13,6 +13,19 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
+    public async Task CredentialClearCannotReportSuccessWhileProviderStillHasIt()
+    {
+        await using var registry = await LocalModelRegistry();
+        Host(Id).SetSetting("CredentialRequirement", true);
+        Host(Id).SetSetting("downloadCredential", "fixture-only");
+        Host(Id).SetSetting("IgnoreCredentialClear", true);
+        var model = Assert.Single(await registry.GetModelStatesAsync(Id));
+        var result = await registry.UpdateModelDownloadCredentialAsync(model, "token", null);
+        Assert.False(result.Succeeded);
+        Assert.Equal("fixture-only", Host(Id).GetSetting<string>("downloadCredential"));
+    }
+
+    [Fact]
     public async Task DownloadCredentialUpdatesRequireTheCurrentModelAndCredentialRequirement()
     {
         await using var registry = await LocalModelRegistry();
