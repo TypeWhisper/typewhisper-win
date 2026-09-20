@@ -30,6 +30,8 @@ public sealed class PortablePackageTests
         var project = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..",".."));
         var manifest = PortablePluginPackage.ReadManifest(project);
         var source = Path.Combine(project,"bin",new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,"portable-host","Plugins",manifest.Id);
+        foreach (var license in new[] { "LLamaSharp-LICENSE.txt", "llama.cpp-LICENSE.txt", "CommunityToolkit-LICENSE.md", "DotNet-LICENSE.txt", "DotNetExtensions-LICENSE.txt" })
+            Assert.Contains("Permission is hereby granted", File.ReadAllText(Path.Combine(source, "Licenses", license)));
         var archive = Path.Combine(fixture.Root,"package.zip");
         ZipFile.CreateFromDirectory(source,archive,CompressionLevel.Fastest,false);
         var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archive)));
