@@ -8,7 +8,7 @@ public sealed class GemmaSettingsTests
         using var f=new PortableFixture();using var p=new GemmaLocalPlugin();await p.ActivateAsync(f.Host);
         Assert.All(p.SupportedModels,m=>Assert.StartsWith("gemma3-",m.Id));
         await p.SaveTextSettingAsync("model","gemma3-12b-q4",default);Assert.False(p.IsAvailable);await p.DeactivateAsync();await p.ActivateAsync(f.Host);
-        Assert.Equal("gemma3-12b-q4",p.TextSettings.Single().Value);Assert.False(p.IsAvailable);
+        Assert.Equal("gemma3-12b-q4",p.SelectedModelId);Assert.False(p.IsAvailable);
         await Assert.ThrowsAsync<FileNotFoundException>(()=>p.ExecuteSettingsActionAsync("load",default));await p.DeactivateAsync();
     }
     [Theory]

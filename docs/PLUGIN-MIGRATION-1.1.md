@@ -50,7 +50,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | FillerWords | Existing portable build |
 | Fireworks | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Fireworks`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; scope differences and pending live acceptance are documented in the plugin README. |
 | Gemini | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gemini`; 95 provider/package/loopback tests pass. Includes language mapping, dictionary terms, LLM selection/temperature and confirmed streaming completion. Authenticated text/audio/streaming, package upgrade and manual live-preview acceptance passed; public package publication pending. |
-| GemmaLocal | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.GemmaLocal`; 6 plugin tests pass. Portable settings and package lifecycle covered; native/live acceptance and publication pending. See the plugin README for platform differences. |
+| GemmaLocal | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.GemmaLocal`; 15 plugin tests and 266 portable host tests pass. Model cards, verified downloads and CPU settings included; native 4B German correction/translation passed. Manual workflow acceptance and publication pending. |
 | Gladia | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gladia`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; recorded-audio and live microphone dictation, including explicit German selection, passed manual acceptance. ARM64 execution and publication remain pending. |
 | GoogleCloudStt | Separate v2 port pending |
 | GraniteSpeech | Separate v2 port pending |

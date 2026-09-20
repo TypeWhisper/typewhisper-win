@@ -14,19 +14,19 @@ namespace TypeWhisper.Plugin.GemmaLocal;
 /// <summary>
 /// Provides gemma local plugin behavior.
 /// </summary>
-public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
+public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmModelManagement
 {
     private static readonly IReadOnlyList<GemmaModelDefinition> Models =
     [
         new("gemma3-4b-q4", "Gemma 3 4B (Q4_K_M)", "~3 GB", 3000, true,
-            "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
-            "gemma-3-4b-it-Q4_K_M.gguf"),
+            "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/5a3566e716d80f709ed7b79817eaf7733d2a1fce/gemma-3-4b-it-Q4_K_M.gguf",
+            "gemma-3-4b-it-Q4_K_M.gguf", 2489894016, "04a43a22e8d2003deda5acc262f68ec1005fa76c735a9962a8c77042a74a7d19"),
         new("gemma3-12b-q4", "Gemma 3 12B (Q4_K_M)", "~8 GB", 8000, false,
-            "https://huggingface.co/unsloth/gemma-3-12b-it-GGUF/resolve/main/gemma-3-12b-it-Q4_K_M.gguf",
-            "gemma-3-12b-it-Q4_K_M.gguf"),
+            "https://huggingface.co/unsloth/gemma-3-12b-it-GGUF/resolve/d15e4c7dc21dc55d56bf8549db57a71ad8a2a35d/gemma-3-12b-it-Q4_K_M.gguf",
+            "gemma-3-12b-it-Q4_K_M.gguf", 7300778336, "15b8fd9d8672cd4240c178c217ca781409291f34e353d2e913b29c7602ceb3ff"),
         new("gemma3-27b-q4", "Gemma 3 27B (Q4_K_M)", "~17 GB", 17000, false,
-            "https://huggingface.co/unsloth/gemma-3-27b-it-GGUF/resolve/main/gemma-3-27b-it-Q4_K_M.gguf",
-            "gemma-3-27b-it-Q4_K_M.gguf"),
+            "https://huggingface.co/unsloth/gemma-3-27b-it-GGUF/resolve/7cd0121f2530b00e42c4df952d4cad4418c0b3c1/gemma-3-27b-it-Q4_K_M.gguf",
+            "gemma-3-27b-it-Q4_K_M.gguf", 16546688736, "f1b699659942c777bd3ec0bcb527d6ebf34ae14ca76e3af103d58d0c9cbdadee"),
     ];
 
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromHours(2) };
@@ -50,7 +50,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -67,11 +67,10 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
     /// <summary>
     /// Deactivates the plugin and releases provider resources.
     /// </summary>
-    public Task DeactivateAsync()
+    public async Task DeactivateAsync()
     {
-        UnloadModel();
+        await UnloadModelAsync(CancellationToken.None);
         _host = null;
-        return Task.CompletedTask;
     }
 
 
@@ -130,9 +129,11 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
             var result = new System.Text.StringBuilder();
             await foreach (var token in executor.InferAsync(prompt, inferenceParams, ct))
             {
+                ct.ThrowIfCancellationRequested();
                 result.Append(token);
             }
 
+            ct.ThrowIfCancellationRequested();
             return result.ToString().Trim();
         }
         finally
@@ -160,86 +161,114 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
     {
         var model = GetModelDefinition(modelId);
         var path = GetModelFilePath(modelId, model.FileName);
-        return File.Exists(path);
+        return File.Exists(path) && new FileInfo(path).Length == model.SizeBytes;
     }
 
-    internal async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
+    /// <inheritdoc />
+    public IReadOnlyList<LocalLlmModelState> LocalModels => SupportedModels.Select(model =>
+        new LocalLlmModelState(model, IsModelDownloaded(model.Id), _loadedModelId == model.Id)).ToArray();
+
+    /// <inheritdoc />
+    public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
-        var model = GetModelDefinition(modelId);
-        var dir = GetModelDirectory(modelId);
-        Directory.CreateDirectory(dir);
-
-        var filePath = Path.Combine(dir, model.FileName);
-        if (File.Exists(filePath))
+        await _inferenceLock.WaitAsync(ct);
+        try
         {
-            progress?.Report(1.0);
-            return;
-        }
-
-        Log(PluginLogLevel.Info, $"Downloading {model.DisplayName} from Hugging Face...");
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, model.DownloadUrl);
-        using var response = await _httpClient.SendAsync(request,
-            HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength ?? model.EstimatedSizeMB * 1024L * 1024;
-        long bytesRead = 0;
-        var lastReport = DateTime.UtcNow;
-
-        var buffer = new byte[81920];
-        await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-        await using (var fileStream = new FileStream(filePath + ".tmp", FileMode.Create,
-            FileAccess.Write, FileShare.None, 81920, true))
-        {
-            int read;
-            while ((read = await contentStream.ReadAsync(buffer, ct)) > 0)
+            var model = GetModelDefinition(modelId);
+            var dir = GetModelDirectory(modelId);
+            Directory.CreateDirectory(dir);
+            var filePath = Path.Combine(dir, model.FileName);
+            if (IsModelDownloaded(modelId)) { progress?.Report(1); return; }
+            var pending = filePath + ".download";
+            try
             {
-                await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
-                bytesRead += read;
-
-                var now = DateTime.UtcNow;
-                if ((now - lastReport).TotalMilliseconds > 250)
-                {
-                    progress?.Report((double)bytesRead / totalBytes);
-                    lastReport = now;
-                }
+                await ModelFileDownloader.DownloadAsync(_httpClient, model.DownloadUrl, pending, new DownloadProgress(progress), ct);
+                await VerifyModelFileAsync(pending, model.SizeBytes, model.Sha256, ct);
+                ct.ThrowIfCancellationRequested();
+                File.Move(pending, filePath, overwrite: true);
+                progress?.Report(1);
             }
+            finally { if (File.Exists(pending)) File.Delete(pending); }
+            _host?.NotifyCapabilitiesChanged();
         }
-
-        File.Move(filePath + ".tmp", filePath, overwrite: true);
-        progress?.Report(1.0);
-        Log(PluginLogLevel.Info, $"Download complete: {model.FileName}");
+        finally { _inferenceLock.Release(); }
     }
 
-    internal Task LoadModelAsync(string modelId, CancellationToken ct)
+    internal static async Task VerifyModelFileAsync(string path, long size, string sha256, CancellationToken ct)
     {
-        var model = GetModelDefinition(modelId);
-        var filePath = GetModelFilePath(modelId, model.FileName);
+        if (new FileInfo(path).Length != size) throw new IOException("The downloaded model has an unexpected size.");
+        await using var stream = File.OpenRead(path);
+        var hash = await System.Security.Cryptography.SHA256.HashDataAsync(stream, ct);
+        if (!Convert.ToHexString(hash).Equals(sha256, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("The downloaded model failed its integrity check. Please retry the download.");
+    }
 
-        if (!File.Exists(filePath))
-            throw new FileNotFoundException($"Model file not found: {filePath}");
+    private sealed class DownloadProgress(IProgress<double>? target) : IProgress<double>
+    {
+        public void Report(double value) => target?.Report(Math.Min(0.99, value));
+    }
 
-        return Task.Run(() =>
+    /// <inheritdoc />
+    public async Task LoadModelAsync(string modelId, CancellationToken ct)
+    {
+        await _inferenceLock.WaitAsync(ct);
+        try
         {
-            UnloadModel();
-
-            var modelParams = new ModelParams(filePath)
+            var model = GetModelDefinition(modelId);
+            var filePath = GetModelFilePath(modelId, model.FileName);
+            if (!IsModelDownloaded(modelId)) throw new FileNotFoundException("Download the model before loading it.");
+            if (_loadedModelId == modelId) return;
+            await Task.Run(() =>
             {
-                ContextSize = 4096,
-                GpuLayerCount = 0,  // CPU only (Backend.Cpu)
-                Threads = (int)Math.Max(1, Environment.ProcessorCount / 2),
-            };
-
-            _weights = LLamaWeights.LoadFromFile(modelParams);
-            _context = _weights.CreateContext(modelParams);
-            _loadedModelId = modelId;
-            _selectedModelId = modelId;
-            _host?.SetSetting("selectedModel", modelId);
+                UnloadModel();
+                var modelParams = new ModelParams(filePath)
+                {
+                    ContextSize = 4096,
+                    GpuLayerCount = 0,
+                    Threads = _host!.GetSetting<int?>("threads") is > 0 and var threads ? Math.Min(threads, Environment.ProcessorCount) : Math.Max(1, Environment.ProcessorCount / 2),
+                };
+                LLamaWeights? weights = null;
+                LLamaContext? context = null;
+                try
+                {
+                    weights = LLamaWeights.LoadFromFile(modelParams);
+                    ct.ThrowIfCancellationRequested();
+                    context = weights.CreateContext(modelParams);
+                    ct.ThrowIfCancellationRequested();
+                    _host!.SetSetting("selectedModel", modelId);
+                    _weights = weights; _context = context;
+                    weights = null; context = null;
+                    _loadedModelId = _selectedModelId = modelId;
+                }
+                finally { context?.Dispose(); weights?.Dispose(); }
+            }, ct);
             _host?.NotifyCapabilitiesChanged();
+        }
+        finally { _inferenceLock.Release(); }
+    }
 
-            Log(PluginLogLevel.Info, $"Model loaded: {model.DisplayName}");
-        }, ct);
+    /// <inheritdoc />
+    public async Task UnloadModelAsync(CancellationToken ct)
+    {
+        await _inferenceLock.WaitAsync(ct);
+        try { UnloadModel(); _host?.NotifyCapabilitiesChanged(); }
+        finally { _inferenceLock.Release(); }
+    }
+
+    /// <inheritdoc />
+    public async Task RemoveModelAsync(string modelId, CancellationToken ct)
+    {
+        await _inferenceLock.WaitAsync(ct);
+        try
+        {
+            var model = GetModelDefinition(modelId);
+            var path = GetModelFilePath(modelId, model.FileName);
+            ct.ThrowIfCancellationRequested();
+            if (_loadedModelId == modelId) UnloadModel();
+            File.Delete(path);
+            _host?.NotifyCapabilitiesChanged();
+        }
+        finally { _inferenceLock.Release(); }
     }
 
     internal void UnloadModel()
@@ -253,24 +282,12 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
 
     // Helpers
 
-    private static string FormatGemmaPrompt(string systemPrompt, string userText)
+    internal static string FormatGemmaPrompt(string systemPrompt, string userText)
     {
-        // Gemma 3 instruction-tuned chat format with proper system turn
-        var sb = new System.Text.StringBuilder();
-
-        if (!string.IsNullOrWhiteSpace(systemPrompt))
-        {
-            sb.Append("<start_of_turn>system\n");
-            sb.Append(systemPrompt).Append('\n');
-            sb.Append("IMPORTANT: Follow the requested output language exactly. Output ONLY the requested result, nothing else. No explanations, no extra text.");
-            sb.Append("<end_of_turn>\n");
-        }
-
-        sb.Append("<start_of_turn>user\n");
-        sb.Append(userText);
-        sb.Append("<end_of_turn>\n");
-        sb.Append("<start_of_turn>model\n");
-        return sb.ToString();
+        // Gemma 3 supports user/model turns. Instructions belong in the first user turn.
+        var instructions = string.IsNullOrWhiteSpace(systemPrompt) ? "" : systemPrompt.Trim() + "\n\n";
+        return "<start_of_turn>user\n" + instructions + userText.Trim() +
+            "<end_of_turn>\n<start_of_turn>model\n";
     }
 
     private string GetModelDirectory(string modelId)
@@ -279,7 +296,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
         if (string.IsNullOrWhiteSpace(safeModelId) || safeModelId is "." or "..")
             throw new ArgumentException("Model ID must not be empty.", nameof(modelId));
 
-        return Path.Join(_host?.PluginAssetDirectory ?? ".", "Models", safeModelId);
+        return Path.Join((_host ?? throw new InvalidOperationException("Activate the plugin first.")).PluginAssetDirectory, "Models", safeModelId);
     }
 
     private string GetModelFilePath(string modelId, string fileName) =>
@@ -300,7 +317,9 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin
     /// </summary>
     public void Dispose()
     {
-        UnloadModel();
+        _inferenceLock.Wait();
+        try { UnloadModel(); }
+        finally { _inferenceLock.Release(); }
         _inferenceLock.Dispose();
         _httpClient.Dispose();
     }
@@ -313,4 +332,6 @@ internal sealed record GemmaModelDefinition(
     int EstimatedSizeMB,
     bool IsRecommended,
     string DownloadUrl,
-    string FileName);
+    string FileName,
+    long SizeBytes,
+    string Sha256);

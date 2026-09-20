@@ -19,3 +19,5 @@ Explicit fill colors support native SVG rendering. Monochrome marks include ligh
 - Reson8: existing TypeWhisper website brand asset, reused for the portable provider.
 - Speechmatics: standalone symbol path from the [official header SVG](https://www.speechmatics.com/_next/static/media/SM-Logo-main.b945b6cd.svg), with its original dark fill and a white variant for dark backgrounds. Symbol geometry is unchanged.
 - Mistral: reuses the TypeWhisper website brand asset for the Mistral provider.
+
+Gemma: `gemma-color.svg` from [Lobe Icons](https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/gemma-color.svg), MIT; see `Lobe-Icons-LICENSE.txt`.

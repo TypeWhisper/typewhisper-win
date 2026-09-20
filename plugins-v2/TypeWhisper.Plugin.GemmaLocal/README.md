@@ -1,13 +1,15 @@
 # Gemma 3 (Local) portable plugin
 
-Local Gemma 3 GGUF completion through LLamaSharp with portable model selection and download/load/unload/remove actions.
+Local Gemma 3 GGUF text processing through LLamaSharp. Host-rendered model cards show download progress, cancellation, download completion and loaded state. CPU settings use one Save settings button. Gemma is a workflow text provider, not a speech recognition engine.
 
-Version `1.2.0`; plugin ID `com.typewhisper.gemma-local`; minimum host `1.1.2`.
+Version `1.2.2`; plugin ID `com.typewhisper.gemma-local`; minimum host `1.1.3`.
 Independent branch: `seofood/gemmalocal-portable`, based on `4db8f6ac`.
 
 ## Setup
 
-Choose a model, download it explicitly, then load it before selecting it in a workflow. No model is downloaded or loaded automatically on activation.
+Download a model from its card, then choose Load model before selecting it in a workflow. No model is downloaded or loaded automatically on activation. Unload releases memory; Remove unloads the chosen model before deleting its GGUF file.
+
+The model URLs are pinned to immutable Hugging Face revisions. Downloads are checked against the expected length and SHA-256 before publication, and partial files are removed on cancellation. Gemma 3 instructions are included in the initial user turn, matching Google's [prompt format](https://ai.google.dev/gemma/docs/core/prompt-structure). The bundled backend is CPU-only; the shared CPU-thread preference takes effect at the next model load.
 
 This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
 
@@ -28,8 +30,10 @@ dotnet test plugins-v2/TypeWhisper.Plugin.GemmaLocal/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.gemma-local` inside the plugin project. Package that directory as the ZIP root.
 
-6 plugin tests pass. Model identity, portable settings, requested-model validation and package lifecycle. Native libraries are packaged; model download, native inference and hardware performance remain untested. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+15 plugin tests and 266 portable SDK/host tests pass. Coverage includes settings persistence, model identity, prompt formatting, integrity checks, cancellation before setup, incomplete-model detection, selective removal and immutable package lifecycle.
+
+On Windows x64, the actual 4B Q4_K_M download (2,489,894,016 bytes) passed SHA-256 verification. Native CPU loading took approximately 4.8 seconds. German spelling/capitalization correction and German-to-English translation returned the expected text in approximately 1.5 and 1.2 seconds respectively. Unloading released provider availability. In-flight cancellation rejected partial output, and a subsequent request returned the expected translation. These are two short acceptance examples, not a quality benchmark. The 12B/27B models and non-Windows native execution remain untested.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
-The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+The shared portable SDK/host suite passed 266 tests on this branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
