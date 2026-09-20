@@ -32,7 +32,10 @@ public partial class App : Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
-        var request = activation.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocol
+        var share = activation.Data as global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs;
+        var request = share is not null
+            ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse(["--files"])
+            : activation.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocol
             ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocol.Uri.AbsoluteUri])
             : TypeWhisper.Presentation.ApplicationActivationRequest.Parse(Environment.GetCommandLineArgs().Skip(1),
             activation.Kind == ExtendedActivationKind.StartupTask);
@@ -56,6 +59,15 @@ public partial class App : Application
 
         _mainInstance.Activated += (_, redirected) =>
         {
+            if (redirected.Data is global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs shared)
+            {
+                dispatcher.TryEnqueue(async () =>
+                {
+                    await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(new WindowsSharedFileOperation(shared.ShareOperation), _activations);
+                    DrainActivations();
+                });
+                return;
+            }
             var incoming = redirected.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs
                 ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocolArgs.Uri.AbsoluteUri])
                 : redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
@@ -88,6 +100,8 @@ public partial class App : Application
         var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
+        if (share is not null)
+            await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(new WindowsSharedFileOperation(share.ShareOperation), _activations);
         _window = new MainWindow();
         _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
         _window.InstallApplicationUpdateAsync = apply => ExitOrRestartAsync(restart: true, applyUpdate: apply);

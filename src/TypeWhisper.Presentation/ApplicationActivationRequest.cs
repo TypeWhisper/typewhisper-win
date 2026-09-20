@@ -103,13 +103,16 @@ public sealed class ActivationInbox
     private bool _closed;
     private bool _overflow;
     /// <summary>Admits at most eight pending activations; overflow becomes a visible error on drain.</summary>
-    public void Add(ApplicationActivationRequest request)
+    public void Add(ApplicationActivationRequest request) => TryAdd(request);
+    /// <summary>Reports whether a request was admitted, so external senders are not acknowledged after rejection.</summary>
+    public bool TryAdd(ApplicationActivationRequest request)
     {
         lock (_requests)
         {
-            if (_closed) return;
-            if (_requests.Count >= 8) { _overflow = true; return; }
+            if (_closed) return false;
+            if (_requests.Count >= 8) { _overflow = true; return false; }
             _requests.Enqueue(request);
+            return true;
         }
     }
     /// <summary>Removes pending requests without executing them.</summary>
