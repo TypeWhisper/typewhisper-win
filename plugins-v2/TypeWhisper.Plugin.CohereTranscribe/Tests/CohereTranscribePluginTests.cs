@@ -1270,7 +1270,7 @@ public sealed class CohereTranscribePluginTests
         Assert.True((bool)method.Invoke(null, [artifact, path])!);
     }
 
-    [Theory]
+    [WindowsTheory]
     [InlineData("success")]
     [InlineData("cancel")]
     [InlineData("failure")]
