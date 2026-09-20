@@ -46,7 +46,7 @@ internal sealed class SystemVoiceSettingsControl : UserControl
         }
         if (voices.Count == 0) content.Children.Add(Label("No installed Windows voice is available. Install a voice through Windows settings before testing."));
         var options = new List<Choice> { new("", "Windows default voice", "Uses the Windows voice; no automatic language switch") };
-        options.AddRange(voices.Select(voice => new Choice(voice.Id, voice.DisplayName, voice.Language ?? (voice.Id.StartsWith("plugin:", StringComparison.Ordinal) ? "Cloud provider voice" : "Installed Windows voice"))));
+        options.AddRange(voices.Select(voice => new Choice(voice.Id, voice.DisplayName, voice.Language ?? (voice.Id.StartsWith("plugin:", StringComparison.Ordinal) ? (voice.IsLocal ? "Local provider voice" : "Cloud provider voice") : "Installed Windows voice"))));
         var savedVoice = session.AudioPreferences.SpokenFeedbackVoiceId ?? "";
         if (!options.Any(option => option.Id == savedVoice))
             options.Add(new(savedVoice, "Saved voice · unavailable", "Choose an available voice; unavailable voices never fall back silently"));
