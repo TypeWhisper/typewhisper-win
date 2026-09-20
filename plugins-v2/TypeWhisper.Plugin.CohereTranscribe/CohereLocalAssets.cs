@@ -526,12 +526,6 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         IProgress<ArtifactTransferProgress>? progress,
         CancellationToken cancellationToken)
     {
-        if (IsArtifactReady(artifact, destinationPath))
-        {
-            progress?.Report(new ArtifactTransferProgress(artifact.SizeBytes, artifact.SizeBytes));
-            return;
-        }
-
         if (await TryAdoptExistingArtifactAsync(artifact, destinationPath, cancellationToken))
         {
             progress?.Report(new ArtifactTransferProgress(artifact.SizeBytes, artifact.SizeBytes));
@@ -776,7 +770,10 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
 
         var actualHash = await ComputeSha256Async(destinationPath, cancellationToken);
         if (!string.Equals(actualHash, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            TryDeleteFile(GetArtifactMarkerPath(destinationPath));
             return false;
+        }
 
         File.WriteAllText(GetArtifactMarkerPath(destinationPath), artifact.Sha256);
         return true;

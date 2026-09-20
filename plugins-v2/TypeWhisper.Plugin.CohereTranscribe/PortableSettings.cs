@@ -9,6 +9,22 @@ public sealed partial class CohereTranscribePlugin
     private string L(string en, string de) => PortableLocalization.TryGet(_host)?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
 
     /// <inheritdoc />
+    public IReadOnlyList<PluginSettingsAction> SettingsActions => _selectedModelId is null ? [] :
+    [new("remove-selected-model", L("Unload and remove selected model", "Ausgewähltes Modell entladen und entfernen"),
+        L("Stops the selected model and deletes its downloaded weights. Download it again to use it later.",
+          "Stoppt das ausgewählte Modell und löscht seine heruntergeladenen Gewichte. Für eine spätere Nutzung erneut herunterladen."))
+        { Section = PluginSettingsSection.Transcription }];
+
+    /// <inheritdoc />
+    public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
+    {
+        if (id != "remove-selected-model" || _selectedModelId is not { } selected)
+            throw new InvalidOperationException("No selected model is available to remove.");
+        await RemoveModelAsync(selected, cancellationToken);
+        return L("Selected model removed. Shared runtime files were kept.", "Ausgewähltes Modell entfernt. Gemeinsame Laufzeitdateien wurden beibehalten.");
+    }
+
+    /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
         new("acceleration", L("Processing device", "Verarbeitungsgerät"),
