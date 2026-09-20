@@ -847,7 +847,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     {
         var candidates = _resolveBackends(_accelerationPreference);
         return _accelerationPreference == TranscriptionAccelerationPreference.Auto
-            ? candidates.OrderByDescending(assets.IsRuntimeInstalled).ToArray()
+            ? candidates.OrderByDescending(assets.IsRuntimeInstalled).ThenByDescending(assets.CanVerifyRuntimeCache).ToArray()
             : candidates;
     }
 
