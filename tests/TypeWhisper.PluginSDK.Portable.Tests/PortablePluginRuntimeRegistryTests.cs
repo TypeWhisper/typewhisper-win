@@ -43,8 +43,18 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     {
         var store = await Store();
         await using var registry = Registry(store);
+        var activated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var activationChanges = 0;
+        void OnActivationChanged()
+        {
+            // Enabling publishes once directly and once through the probe's queued
+            // activation notification. Wait for both before observing read-only work.
+            if (Interlocked.Increment(ref activationChanges) == 2) activated.TrySetResult();
+        }
+        registry.Changed += OnActivationChanged;
         Assert.Null(await registry.SetEnabledAsync(Id, true));
-        await registry.RefreshCapabilitiesAsync();
+        await activated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        registry.Changed -= OnActivationChanged;
         var changes = 0;
         registry.Changed += () => Interlocked.Increment(ref changes);
         Assert.Equal(Id, await registry.UseConfigurationAsync(Id,

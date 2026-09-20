@@ -194,6 +194,8 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
                 for (var generated = 0; generated < maxOutputTokens; generated++)
                 {
                     ct.ThrowIfCancellationRequested();
+                    // LLamaSharp 0.26 Sample calls llama_sampler_sample, which also accepts
+                    // the token. Calling Accept again would update sampler history twice.
                     var token = sampling.Sample(context.NativeHandle, batch.TokenCount - 1);
                     if (token.IsEndOfGeneration(_weights.Vocab)) { endOfGeneration = true; break; }
                     decoder.Add(token);
