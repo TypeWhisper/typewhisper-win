@@ -89,7 +89,9 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <summary>
     /// Gets the supported models.
     /// </summary>
-    public IReadOnlyList<PluginModelInfo> SupportedModels { get; } = Models.Select(m =>
+    public IReadOnlyList<PluginModelInfo> SupportedModels => ModelCatalog.Where(model => model.Id == _loadedModelId).ToArray();
+
+    private static readonly IReadOnlyList<PluginModelInfo> ModelCatalog = Models.Select(m =>
         new PluginModelInfo(m.Id, m.DisplayName)
         {
             SizeDescription = m.SizeDescription,
@@ -165,7 +167,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<LocalLlmModelState> LocalModels => SupportedModels.Select(model =>
+    public IReadOnlyList<LocalLlmModelState> LocalModels => ModelCatalog.Select(model =>
         new LocalLlmModelState(model, IsModelDownloaded(model.Id), _loadedModelId == model.Id)).ToArray();
 
     /// <inheritdoc />
@@ -285,10 +287,15 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     internal static string FormatGemmaPrompt(string systemPrompt, string userText)
     {
         // Gemma 3 supports user/model turns. Instructions belong in the first user turn.
-        var instructions = string.IsNullOrWhiteSpace(systemPrompt) ? "" : systemPrompt.Trim() + "\n\n";
-        return "<start_of_turn>user\n" + instructions + userText.Trim() +
+        var instructions = string.IsNullOrWhiteSpace(systemPrompt) ? "" : EscapePromptContent(systemPrompt.Trim()) + "\n\n";
+        return "<start_of_turn>user\n" + instructions + EscapePromptContent(userText.Trim()) +
             "<end_of_turn>\n<start_of_turn>model\n";
     }
+
+    // The executor parses special tokens in the full prompt. Escape content before adding
+    // the trusted template so literal sentinels cannot create extra conversation turns.
+    private static string EscapePromptContent(string content) =>
+        content.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal);
 
     private string GetModelDirectory(string modelId)
     {

@@ -104,7 +104,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                         case "remove": await local.RemoveModelAsync(row.Model.Model.Id, ct); break;
                     }
                     return true;
-                }, operation.Token);
+                }, operation.Token, preserveCompletedResult: true);
                 if (Current(lifetime)) _status.Text = action == "load" ? "Model loaded. Select it in a text-processing workflow." : "Completed.";
             }
             finally { _session.RecordingStarting -= CancelForRecording; _operation = null; }

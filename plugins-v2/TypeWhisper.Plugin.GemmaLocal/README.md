@@ -31,7 +31,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.GemmaLocal/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.gemma-local` inside the plugin project. Package that directory as the ZIP root.
 
-15 plugin tests and 266 portable SDK/host tests pass. Coverage includes settings persistence, model identity, prompt formatting, integrity checks, cancellation before setup, incomplete-model detection, selective removal and immutable package lifecycle.
+17 plugin tests and 266 portable SDK/host tests pass. Coverage includes settings persistence, model identity, prompt formatting, integrity checks, cancellation before setup, incomplete-model detection, selective removal and immutable package lifecycle.
 
 On Windows x64, the actual 4B Q4_K_M download (2,489,894,016 bytes) passed SHA-256 verification. Native CPU loading took approximately 4.8 seconds. German spelling/capitalization correction and German-to-English translation returned the expected text in approximately 1.5 and 1.2 seconds respectively. Unloading released provider availability. In-flight cancellation rejected partial output, and a subsequent request returned the expected translation. These are two short acceptance examples, not a quality benchmark. The 12B/27B models and non-Windows native execution remain untested.
 
