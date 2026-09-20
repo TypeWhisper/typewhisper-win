@@ -42,6 +42,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.claude" => "claude",
             "com.typewhisper.voxtral" => "mistral",
             "com.typewhisper.cohere" => "cohere",
+            "com.typewhisper.cohere-transcribe" => "cohere",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
             "com.typewhisper.fireworks" => "fireworks",
