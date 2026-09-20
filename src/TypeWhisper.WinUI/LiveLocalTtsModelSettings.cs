@@ -165,17 +165,17 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
             }, operation.Token, preserveCompletedResult: true);
         }
         catch (CredentialValidationException error)
-        { refresh = false; if (IsLoaded) _message.Text = error.Message; }
+        { refresh = false; if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = error.Message; }
         catch (OperationCanceledException)
-        { if (IsLoaded) _message.Text = "Operation cancelled. Downloaded files are kept for the next attempt."; }
+        { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = "Operation cancelled. Downloaded files are kept for the next attempt."; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded) _message.Text = "The model operation failed. Check the connection and available disk space, then retry."; }
+        { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = "The model operation failed. Check the connection and available disk space, then retry."; }
         finally
         {
             _session.RecordingStarting -= CancelForRecording;
             _operation = null; _busy = false;
-            if (IsLoaded && ReferenceEquals(_lifetime, lifetime))
-            { if (refresh) await ReadAsync(); else UpdateButtons(); }
+            if (IsLoaded)
+            { if (refresh || !ReferenceEquals(_lifetime, lifetime)) await ReadAsync(); else UpdateButtons(); }
         }
     }
 

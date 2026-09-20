@@ -320,7 +320,7 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
             ct.ThrowIfCancellationRequested();
 
             if (synthesis.SampleRate <= 0 || synthesis.Samples.LongLength > (long)synthesis.SampleRate * 120
-                || synthesis.Samples.LongLength * sizeof(float) > 12L * 1024 * 1024)
+                || synthesis.Samples.LongLength * sizeof(short) > 12L * 1024 * 1024)
                 throw new InvalidOperationException("The generated speech exceeds the two-minute audio limit.");
 
             return synthesis.Samples.Length == 0

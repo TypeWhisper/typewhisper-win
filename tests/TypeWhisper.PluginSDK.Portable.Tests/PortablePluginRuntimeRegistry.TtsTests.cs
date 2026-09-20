@@ -26,10 +26,26 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         local.Verify(voice => voice.SpeakAsync(Moq.It.IsAny<SpokenFeedbackRequest>(), Moq.It.IsAny<CancellationToken>()), Moq.Times.Never);
     }
 
-    private async Task<PortablePluginStore> SpeechStore()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VoiceOriginFollowsManifestAcrossRefresh(bool isLocal)
+    {
+        var store = await SpeechStore(isLocal); await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var windows = new Moq.Mock<ISpokenFeedbackBackend>();
+        windows.Setup(backend => backend.GetVoices()).Returns(Array.Empty<SpokenFeedbackVoice>());
+        var backend = new PluginSpokenFeedbackBackend(registry, windows.Object);
+        await registry.RefreshCapabilitiesAsync();
+        var voice = Assert.Single(backend.GetVoices());
+        Assert.Equal(isLocal, voice.IsLocal);
+        Assert.EndsWith(isLocal ? " (local)" : " (cloud)", voice.DisplayName);
+    }
+
+    private async Task<PortablePluginStore> SpeechStore(bool isLocal = false)
     {
         var bundles = Path.Combine(_root, "speech-bundles");
-        Package(bundles, Id, typeof(TtsProbePlugin));
+        Package(bundles, Id, typeof(TtsProbePlugin), isLocal: isLocal);
         var store = new PortablePluginStore(Path.Combine(_root, "speech-store"), Version, _http);
         await store.InitializeAsync(bundles); return store;
     }

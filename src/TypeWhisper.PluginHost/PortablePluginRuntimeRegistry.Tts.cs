@@ -4,7 +4,11 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginHost;
 
 /// <summary>Voices from an enabled package supporting request-specific playback selection.</summary>
-public sealed record PortableTtsProvider(string PluginId, string Name, bool Ready, IReadOnlyList<PluginVoiceInfo> Voices);
+public sealed record PortableTtsProvider(string PluginId, string Name, bool Ready, IReadOnlyList<PluginVoiceInfo> Voices)
+{
+    /// <summary>Whether synthesis runs locally, as declared by the package manifest.</summary>
+    public bool IsLocal { get; init; }
+}
 
 public sealed partial class PortablePluginRuntimeRegistry
 {

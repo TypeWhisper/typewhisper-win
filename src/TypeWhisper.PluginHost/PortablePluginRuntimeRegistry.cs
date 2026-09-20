@@ -55,6 +55,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal readonly IPluginHostServices Services = services;
         internal PortablePluginPackage? Package;
         internal bool Accepting;
+        internal bool IsLocal;
         internal long Generation;
         internal string? Error;
         internal bool CapabilityError;
@@ -201,6 +202,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             var loadedHere = slot.Package is null;
             var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, slot.Services, hostVersion);
             slot.Package = package;
+            slot.IsLocal = inspection.Manifest.IsLocal;
             try
             {
                 var next = BuildIndex();
@@ -417,7 +419,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         {
             var plugin = slot.Package!.Plugin;
             if (plugin is ITtsProviderPlugin tts && tts.SupportsPlaybackSelection)
-                ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())));
+                ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())) { IsLocal = slot.IsLocal });
             if (plugin is IActionPlugin action)
             {
                 if (action.PluginId != slot.Id || string.IsNullOrWhiteSpace(action.ActionId))

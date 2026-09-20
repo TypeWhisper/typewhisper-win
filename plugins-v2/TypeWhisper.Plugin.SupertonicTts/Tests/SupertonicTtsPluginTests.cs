@@ -457,7 +457,8 @@ public class SupertonicTtsPluginTests
     [InlineData(120, 1, true)]
     [InlineData(121, 1, false)]
     [InlineData(1, 0, false)]
-    [InlineData(3145729, 48000, false)]
+    [InlineData(6291457, 96000, false)]
+    [InlineData(5292000, 44100, true)]
     public async Task SpeakAsync_ChecksAudioBoundsBeforePlayback(int samples, int rate, bool valid)
     {
         var synth = new FakeSupertonicSynthesizer { Result = new(new float[samples], rate) };
