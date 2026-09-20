@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK.Models;
 
@@ -26,6 +27,7 @@ internal sealed class LivePortableModelSettings : UserControl
     private CancellationTokenSource? _lifetime;
     private bool _reading;
     private bool _working;
+    private Row? _loadingRow;
     private bool _canceling;
     private int _queued;
     private bool _reloadRequested;
@@ -34,6 +36,8 @@ internal sealed class LivePortableModelSettings : UserControl
     {
         _session = session; _pluginId = pluginId;
         _refresh = Button("Refresh models");
+        _status.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => _status.Visibility = string.IsNullOrWhiteSpace(_status.Text) ? Visibility.Collapsed : Visibility.Visible);
+        _status.Visibility = Visibility.Collapsed;
         var content = new StackPanel { Spacing = 10 };
         _cloudPanel.Children.Add(new TextBlock { Text = "Transcription model", FontSize = 16 });
         _cloudPanel.Children.Add(_cloudModel); _cloudPanel.Children.Add(_cloudStatus); _cloudPanel.Children.Add(_cloudUse);
@@ -171,7 +175,7 @@ internal sealed class LivePortableModelSettings : UserControl
         {
             if (!row.Credentials.TryGetValue(requirement.Id, out var credential))
             {
-                credential = new CredentialRow(requirement.Title);
+                credential = new CredentialRow(requirement.Title + (requirement.IsRequired ? "" : " (optional)"));
                 row.Credentials.Add(requirement.Id, credential); row.CredentialPanel.Children.Add(credential.Panel);
                 var capturedRow = row; var capturedCredential = credential; var id = requirement.Id;
                 credential.Save.Click += async (_, _) => await SaveCredentialAsync(capturedRow, id, capturedCredential, clear: false);
@@ -180,10 +184,11 @@ internal sealed class LivePortableModelSettings : UserControl
             credential.Input.PlaceholderText = requirement.IsSatisfied ? "Saved securely; enter a replacement" : "Enter download token";
             credential.Clear.Visibility = requirement.IsSatisfied ? Visibility.Visible : Visibility.Collapsed;
         }
-        row.Title.Text = model.DisplayName + (string.IsNullOrWhiteSpace(model.SizeDescription) ? "" : " · " + model.SizeDescription);
-        row.Requirements.Text = string.Join("\n", model.Requirements.Select(r =>
-            $"{r.Title} · {(r.IsRequired ? "Required" : "Optional")} · {(r.IsSatisfied ? "Satisfied" : "Not satisfied")}\n{r.Description}"));
-        row.Requirements.Visibility = model.Requirements.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        row.Title.Text = model.DisplayName;
+        row.Size.Text = model.SizeDescription ?? "Local model";
+        row.Requirements.Text = string.Join("\n", model.Requirements.Where(r => r.IsRequired && !r.IsSatisfied).Select(r =>
+            $"{r.Title} required · {r.Description}"));
+        row.Requirements.Visibility = string.IsNullOrEmpty(row.Requirements.Text) ? Visibility.Collapsed : Visibility.Visible;
         row.RemovalNote.Text = model.RemovalBlockedReason ?? "";
         row.RemovalNote.Visibility = model.SupportsRemoval && model.Downloaded && model.RemovalBlockedReason is not null
             ? Visibility.Visible : Visibility.Collapsed;
@@ -200,7 +205,6 @@ internal sealed class LivePortableModelSettings : UserControl
             || _session.RegistryModelDownload.State.IsBusy) return;
         var expected = row.Model;
         var value = clear ? null : credential.Input.Password;
-        credential.Input.Password = "";
         _working = true; UpdateButtons();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         void CancelForRecording() => cancellation.Cancel();
@@ -208,7 +212,11 @@ internal sealed class LivePortableModelSettings : UserControl
         try
         {
             var result = await _session.PluginRuntime.UpdateModelDownloadCredentialAsync(expected, id, value, cancellation.Token);
-            if (Current(lifetime)) _status.Text = result.Message ?? (result.Succeeded ? "Download credential saved." : "The credential could not be saved.");
+            if (Current(lifetime))
+            {
+                if (result.Succeeded) credential.Input.Password = "";
+                _status.Text = result.Message ?? (result.Succeeded ? "Download credential saved." : "The credential could not be saved.");
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception error) when (error is not OutOfMemoryException)
@@ -220,6 +228,7 @@ internal sealed class LivePortableModelSettings : UserControl
     {
         if (_working || _reading || _lifetime is not { } lifetime || !row.Use.IsEnabled) return;
         var expected = row.Model;
+        _loadingRow = row;
         _working = true; UpdateButtons();
         try
         {
@@ -230,7 +239,7 @@ internal sealed class LivePortableModelSettings : UserControl
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (Current(lifetime)) _status.Text = "The model could not be selected. Refresh its status and try again."; }
-        finally { _working = false; if (IsLoaded) RequestRefresh(); }
+        finally { _loadingRow = null; _working = false; if (IsLoaded) RequestRefresh(); }
     }
 
     private async Task DownloadAsync(Row row)
@@ -307,9 +316,14 @@ internal sealed class LivePortableModelSettings : UserControl
             var active = IsActive(model);
             var selected = _session.IsRegistryModelSelected(model) && provider?.Ready == true;
             var required = model.Requirements.Any(r => r.IsRequired && !r.IsSatisfied);
-            row.Download.Visibility = model.SupportsDownload && !model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
+            row.Download.Visibility = model.SupportsDownload && !model.Downloaded && !(active && state.IsBusy) ? Visibility.Visible : Visibility.Collapsed;
             row.Download.IsEnabled = available && provider is not null && !required;
             row.Use.Content = selected ? "Active model" : "Use model";
+            row.Use.Visibility = model.SupportsDownload && !model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
+            var loading = ReferenceEquals(_loadingRow, row);
+            var recommended = provider?.Models.FirstOrDefault(m => m.Id == model.ModelId)?.IsRecommended == true;
+            row.Badge.Text = loading ? "Loading…" : active && state.IsBusy ? state.IsRemoval ? "Removing…" : "Downloading…" : selected ? "Active" : model.Downloaded ? "Downloaded" : recommended ? "Recommended" : "Available";
+            row.SetActive(selected);
             row.Use.IsEnabled = available && provider is not null && !selected &&
                 (model.SupportsDownload ? model.Downloaded : provider.Ready);
             row.Remove.Visibility = model.SupportsRemoval && model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
@@ -319,12 +333,14 @@ internal sealed class LivePortableModelSettings : UserControl
             row.Cancel.Visibility = active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
             row.Cancel.Content = state.IsRemoval ? "Cancel removal" : "Cancel download";
             row.Cancel.IsEnabled = !_canceling && active && state.IsBusy && !state.IsClosing;
-            row.Progress.Visibility = active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
-            row.Progress.IsIndeterminate = state.Progress is null;
+            row.Progress.Visibility = loading || active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+            row.Percent.Text = active && state.IsBusy && state.Progress is { } fraction ? $"{fraction:P0}" : "";
+            row.Percent.Visibility = row.Progress.Visibility;
+            row.Progress.IsIndeterminate = loading || state.Progress is null;
             row.Progress.Value = (state.Progress ?? 0) * 100;
-            row.State.Text = active && state.Message is not null ? state.Message : provider is null
+            row.State.Text = loading ? "Loading model into memory…" : active && state.Message is not null ? state.Message : provider is null
                 ? "Provider unavailable. Refresh after enabling the plugin." : model.SupportsDownload
-                    ? selected ? "Loaded · active for dictation." : model.Downloaded ? "Downloaded · choose Use model to load it." : "Not downloaded."
+                    ? selected ? "Downloaded · 100%. Selected for dictation." : model.Downloaded ? "Downloaded · 100%. Choose Use model to load it." : "Not downloaded."
                     : provider.Ready ? "Provider ready." : "Complete provider configuration before selecting a model.";
         }
         if (_cloudMode)
@@ -365,25 +381,58 @@ internal sealed class LivePortableModelSettings : UserControl
     private sealed class Row
     {
         internal PortableDownloadableModel Model;
-        internal readonly StackPanel Panel = new() { Spacing = 6 };
+        internal readonly Border Panel = new() { Padding = new Thickness(18), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Stretch };
         internal readonly StackPanel CredentialPanel = new() { Spacing = 8 };
         internal readonly Dictionary<string, CredentialRow> Credentials = [];
         internal readonly TextBlock Title = Label("");
+        internal readonly TextBlock Size = Label("");
+        internal readonly TextBlock Badge = Label("");
+        internal readonly TextBlock Percent = Label("");
         internal readonly TextBlock Requirements = Label("");
         internal readonly TextBlock State = Label("");
         internal readonly TextBlock RemovalNote = Label("");
-        internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100 };
+        internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100, Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
         internal readonly HandCursorButton Download = Button("Download model");
         internal readonly HandCursorButton Use = Button("Use model");
         internal readonly HandCursorButton Remove = Button("Remove model");
         internal readonly HandCursorButton Cancel = Button("Cancel operation");
+        private bool _active;
+        internal void SetActive(bool active) {
+            _active = active;
+            Panel.BorderBrush = (Brush)Application.Current.Resources[active ? "AccentBrush" : "HairlineBrush"];
+        }
         internal Row(PortableDownloadableModel model)
         {
             Model = model;
+            Download.Style = Use.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
+            Title.FontSize = 16; Title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            Size.FontSize = 12; Badge.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            var body = new StackPanel { Spacing = 12 };
+            var heading = new Grid { ColumnSpacing = 12 };
+            heading.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+            heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            var identity = new StackPanel { Spacing = 4 };
+            identity.Children.Add(Title); identity.Children.Add(Size); heading.Children.Add(identity);
+            var badge = new Border { Child = Badge, Padding = new Thickness(9, 4, 9, 4), CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Top };
+            Grid.SetColumn(badge, 1); heading.Children.Add(badge);
+            var progressLine = new Grid { ColumnSpacing = 12 };
+            progressLine.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+            progressLine.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            progressLine.Children.Add(Progress); Grid.SetColumn(Percent, 1); progressLine.Children.Add(Percent);
+            body.Children.Add(heading); body.Children.Add(Requirements); body.Children.Add(CredentialPanel); body.Children.Add(State); body.Children.Add(RemovalNote); body.Children.Add(progressLine);
+            Panel.Child = body;
+            void Theme() {
+                Panel.Background = (Brush)Application.Current.Resources["SurfaceBrush"];
+                Size.Foreground = State.Foreground = RemovalNote.Foreground = (Brush)Application.Current.Resources["MutedBrush"];
+                badge.Background = (Brush)Application.Current.Resources["ElevatedBrush"];
+                Badge.Foreground = Progress.Foreground = (Brush)Application.Current.Resources["AccentBrush"];
+                SetActive(_active);
+            }
+            Panel.ActualThemeChanged += (_, _) => Theme(); Theme();
             var actions = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
             Panel.SizeChanged += (_, e) => actions.Orientation = e.NewSize.Width < 440 ? Orientation.Vertical : Orientation.Horizontal;
             actions.Children.Add(Download); actions.Children.Add(Use); actions.Children.Add(Remove); actions.Children.Add(Cancel);
-            Panel.Children.Add(Title); Panel.Children.Add(Requirements); Panel.Children.Add(CredentialPanel); Panel.Children.Add(State); Panel.Children.Add(RemovalNote); Panel.Children.Add(Progress); Panel.Children.Add(actions);
+            body.Children.Add(actions);
             AutomationProperties.SetName(Progress, model.DisplayName + " model operation progress");
             AutomationProperties.SetName(Remove, "Remove " + model.DisplayName);
         }

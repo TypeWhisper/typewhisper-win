@@ -103,7 +103,8 @@ internal sealed partial class LivePluginTextSettings
         modelHeader.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         modelHeader.Children.Add(new TextBlock { Text = "Models", FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        content.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });
+        var divider = new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] };
+        content.Children.Add(divider);
         content.Children.Add(modelHeader); content.Children.Add(modelsPanel);
         if (generic)
         {
@@ -254,6 +255,8 @@ internal sealed partial class LivePluginTextSettings
             }
             else { Grid.SetColumn(button, 1); modelHeader.Children.Add(button); }
         }
+        if (generic && connectionPanel.Children.Count == 0)
+        { connectionPanel.Visibility = Visibility.Collapsed; divider.Visibility = Visibility.Collapsed; }
         var footerContent = new Grid { ColumnSpacing = 12, RowSpacing = 4 };
         footerContent.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         footerContent.ColumnDefinitions.Add(new() { Width = GridLength.Auto });

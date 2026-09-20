@@ -136,7 +136,18 @@ Run the automated suites without a desktop, microphone, downloaded models or pro
 ./eng/Test-WinUIHeadless.ps1 -Configuration Release
 ```
 
-`WinUI Daily` is the release workflow. `Package Dry Run` validates WinUI installers for both architectures without publishing, and `Store Package` creates WinUI MSIX packages. Legacy application and plugin release workflows are retired; existing public packages are unchanged.
+GitHub Actions contains six workflows for the WinUI application and its portable plugins:
+
+| Workflow | Purpose |
+|----------|---------|
+| CI | Build the WinUI solution on Windows and run headless tests on Windows and Linux for pull requests and main pushes. |
+| Candidate | Validate x64 and ARM64 candidates; publish Daily prereleases on the daily schedule or an explicit main dispatch with `publish_daily=true`. |
+| Packaging | Validate x64 and ARM64 installers and portable packages without publishing. |
+| Plugins | Validate plugin metadata and build changed portable plugins; manual runs check all plugins. |
+| Security | Review dependencies and audit NuGet and Python packages. |
+| Store | Build WinUI MSIX packages manually for x64 and ARM64. |
+
+Workflow filenames remain stable to preserve their Actions history and the Candidate version counter. Legacy application and plugin release workflows are retired; existing public packages are unchanged.
 
 ## HTTP API
 

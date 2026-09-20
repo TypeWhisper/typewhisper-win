@@ -1,6 +1,6 @@
 # WinUI 1.1 Daily candidate
 
-The `WinUI Daily` workflow creates validation artifacts for x64 and ARM64 on pull requests and release-branch pushes. Scheduled main runs and explicit main dispatches with `publish_daily=true` publish a GitHub prerelease after both architectures pass. The legacy application release workflow has been removed. Candidate versions are `1.1.0-daily.YYYYMMDD.RUN`.
+The `Candidate` workflow creates validation artifacts for x64 and ARM64 on pull requests that change its workflow or candidate validation scripts, and on manual dispatches. Scheduled main runs and explicit main dispatches with `publish_daily=true` publish a GitHub prerelease after both architectures pass. The legacy application release workflow has been removed. Candidate versions are `1.1.0-daily.YYYYMMDD.RUN`; the workflow filename remains unchanged to preserve its run counter.
 
 The candidate bundles the Windows App SDK runtime and CLI, uses the installed .NET 10 runtime, and installs portable plugins through the marketplace. It currently targets Windows build 26100 or newer. CI runs the headless suites, checks package contents, verifies application/CLI versions and executable architecture, rejects development/user state, and records the commit plus ZIP SHA-256. Cross-building ARM64 does not count as testing on ARM64 hardware.
 

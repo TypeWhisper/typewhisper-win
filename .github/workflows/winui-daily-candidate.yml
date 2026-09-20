@@ -1,6 +1,6 @@
-name: WinUI Daily
+name: Candidate
 
-# PR/branch runs only validate. Publishing is restricted to scheduled or explicit main runs.
+# PR runs only validate. Publishing is restricted to scheduled or explicit main runs.
 on:
   workflow_dispatch:
     inputs:
@@ -10,11 +10,6 @@ on:
         default: false
   schedule:
     - cron: '0 4 * * *'
-  push:
-    branches: ['seofood/release-1.1']
-    paths:
-      - '.github/workflows/winui-daily-candidate.yml'
-      - 'eng/Test-WinUIDailyCandidate*.ps1'
   pull_request:
     paths:
       - '.github/workflows/winui-daily-candidate.yml'

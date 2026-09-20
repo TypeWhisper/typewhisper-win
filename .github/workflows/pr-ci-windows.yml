@@ -1,4 +1,4 @@
-name: PR CI (Windows)
+name: CI
 
 on:
   pull_request:
@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   build-and-test:
+    name: Build WinUI
     runs-on: windows-latest
 
     steps:
@@ -29,38 +30,45 @@ jobs:
             **/*.csproj
             Directory.Build.props
 
-      - name: Create artifact directories
+      - name: Create build log directory
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
-          New-Item -ItemType Directory -Force -Path artifacts/test-results | Out-Null
+        run: New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
 
       - name: Restore solution
         run: dotnet restore TypeWhisper.slnx
 
-      - name: Restore CLI
-        run: dotnet restore src/TypeWhisper.Cli/TypeWhisper.Cli.csproj
-
       - name: Build solution
         run: dotnet build TypeWhisper.slnx -c Release --no-restore -bl:artifacts/logs/typewhisper-solution.binlog
-
-      - name: Build CLI
-        run: dotnet build src/TypeWhisper.Cli/TypeWhisper.Cli.csproj -c Release --no-restore -bl:artifacts/logs/typewhisper-cli.binlog
-
-      - name: Test TypeWhisper.Core
-        run: dotnet test tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj -c Release --no-build --logger "trx;LogFileName=TypeWhisper.Core.Tests.trx" --results-directory artifacts/test-results
-
-      - name: Test WinUI application logic
-        run: dotnet test tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj -c Release --no-build --logger "trx;LogFileName=TypeWhisper.Presentation.Tests.trx" --results-directory artifacts/test-results
-
-      - name: Test Windows platform services
-        run: dotnet test tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj -c Release --no-build --logger "trx;LogFileName=TypeWhisper.Platform.Tests.trx" --results-directory artifacts/test-results
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: pr-ci-windows-artifacts
-          path: |
-            artifacts/logs/*.binlog
-            artifacts/test-results/*.trx
+          name: winui-build-logs
+          path: artifacts/logs/*.binlog
           if-no-files-found: ignore
+
+  headless:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run without desktop, microphone, models or provider credentials
+        shell: pwsh
+        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release
+      - name: Verify audio test orchestration with fake endpoints
+        shell: pwsh
+        run: ./eng/Test-WinUILocalAudio.Tests.ps1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: winui-headless-${{ matrix.os }}
+          path: artifacts/test-results/winui-headless/
+          if-no-files-found: warn
