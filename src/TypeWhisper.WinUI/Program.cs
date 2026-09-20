@@ -5,11 +5,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-#if !DEBUG
+#if !DEBUG && !TYPEWHISPER_STORE
         // Installer callbacks must run before XAML, single-instance activation or profile access.
         // Candidate builds do not contact an update feed or automatically apply an update.
         Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false)
-            .OnBeforeUninstallFastCallback(_ => WindowsStartupRegistration.Create().SetEnabled(false))
+            .OnBeforeUninstallFastCallback(_ => WindowsStartupRegistration.Create().SetEnabledAsync(false).GetAwaiter().GetResult())
             .Run();
 #endif
         WinRT.ComWrappersSupport.InitializeComWrappers();

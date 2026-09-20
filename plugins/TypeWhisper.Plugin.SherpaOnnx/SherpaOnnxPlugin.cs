@@ -5,9 +5,6 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-#if WINDOWS
-using System.Windows.Controls;
-#endif
 using SherpaOnnx;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -114,11 +111,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-#if WINDOWS
-    public string PluginVersion => "1.0.6";
-#else
     public string PluginVersion => "1.1.1";
-#endif
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -217,12 +210,6 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         return Task.CompletedTask;
     }
 
-#if WINDOWS
-    /// <summary>
-    /// Creates the settings view shown by the host, or null when no UI is required.
-    /// </summary>
-    public UserControl? CreateSettingsView() => null;
-#endif
 
     /// <summary>
     /// Sets acceleration preference.
