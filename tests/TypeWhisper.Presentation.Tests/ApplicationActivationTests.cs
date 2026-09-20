@@ -5,6 +5,28 @@ namespace TypeWhisper.Presentation.Tests;
 public sealed class ApplicationActivationTests
 {
     [Theory]
+    [InlineData("")]
+    [InlineData("\"C:\\Program Files\\TypeWhisper.WinUI.exe\" ")]
+    [InlineData("TypeWhisper.WinUI.exe ")]
+    public void PackagedAndUnpackagedLaunchArgumentsPreserveFileSwitch(string prefix)
+    {
+        var request = ApplicationActivationRequest.ParseLaunchArguments(
+            prefix + "--transcribe-file \"C:\\My audio\\Übung.wav\"", @"C:\Program Files\TypeWhisper.WinUI.exe");
+        Assert.Null(request.Error);
+        Assert.Equal("--files", request.Route);
+        Assert.Equal(@"C:\My audio\Übung.wav", Assert.Single(request.Files));
+    }
+
+    [Fact]
+    public void ArgumentOnlyLaunchDoesNotDropNavigationOrUnknownFirstToken()
+    {
+        Assert.Equal("--settings", ApplicationActivationRequest.ParseLaunchArguments("--settings", @"C:\TypeWhisper.WinUI.exe").Route);
+        Assert.NotNull(ApplicationActivationRequest.ParseLaunchArguments("unexpected --settings", @"C:\TypeWhisper.WinUI.exe").Error);
+        Assert.NotNull(ApplicationActivationRequest.ParseLaunchArguments("other.exe --settings", @"C:\TypeWhisper.WinUI.exe").Error);
+        Assert.False(ApplicationActivationRequest.ParseLaunchArguments("", @"C:\TypeWhisper.WinUI.exe", true).ShowWindow);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void FailedRequestIsConsumedAndLaterRequestsContinueEvenIfReportingFails(bool reportingFails)

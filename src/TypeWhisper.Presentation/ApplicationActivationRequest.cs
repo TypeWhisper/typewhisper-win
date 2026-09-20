@@ -66,6 +66,23 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
     public static ApplicationActivationRequest ParseCommandLine(string commandLine, bool startup = false)
     {
         if (commandLine.Length > 32767) return Failure("The activation command line is too long.");
+        return Parse(TokenizeCommandLine(commandLine).Skip(1), startup);
+    }
+
+    /// <summary>Accepts native activation arguments with or without this host's executable token.</summary>
+    public static ApplicationActivationRequest ParseLaunchArguments(string arguments, string? executable, bool startup = false)
+    {
+        if (arguments.Length > 32767) return Failure("The activation command line is too long.");
+        var tokens = TokenizeCommandLine(arguments);
+        // App SDK's unpackaged fallback includes the executable; native packaged arguments do not.
+        var includesExecutable = tokens.Count > 0 && !string.IsNullOrEmpty(executable) &&
+            (string.Equals(tokens[0], executable, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(tokens[0], executable.Split(['\\', '/'])[^1], StringComparison.OrdinalIgnoreCase));
+        return Parse(includesExecutable ? tokens.Skip(1) : tokens, startup);
+    }
+
+    private static List<string> TokenizeCommandLine(string commandLine)
+    {
         var tokens = new List<string>();
         int i = 0;
         while (i < commandLine.Length)
@@ -92,7 +109,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
             }
             tokens.Add(value.ToString());
         }
-        return Parse(tokens.Skip(1), startup);
+        return tokens;
     }
 }
 

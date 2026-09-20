@@ -93,7 +93,9 @@ if (Test-Path $layoutPluginsPath) {
     Remove-Item -LiteralPath $layoutPluginsPath -Recurse -Force
 }
 
-Copy-Item -Path $assetsPath -Destination (Join-Path $layoutDir "Assets") -Recurse -Force
+$layoutAssetsPath = Join-Path $layoutDir "Assets"
+New-Item -ItemType Directory -Force -Path $layoutAssetsPath | Out-Null
+Copy-Item -Path (Join-Path $assetsPath "*") -Destination $layoutAssetsPath -Recurse -Force
 
 $manifest = Get-Content -Raw $templatePath
 $manifest = $manifest.Replace("__VERSION__", $msixVersion).Replace("__ARCHITECTURE__", $architecture)

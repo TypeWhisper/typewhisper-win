@@ -33,12 +33,7 @@ public partial class App : Application
     {
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
         var share = activation.Data as global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs;
-        var request = share is not null
-            ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse(["--files"])
-            : activation.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocol
-            ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocol.Uri.AbsoluteUri])
-            : TypeWhisper.Presentation.ApplicationActivationRequest.Parse(Environment.GetCommandLineArgs().Skip(1),
-            activation.Kind == ExtendedActivationKind.StartupTask);
+        var request = WindowsActivationRequest.Parse(activation, initial: true);
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         _mainInstance = AppInstance.FindOrRegisterForKey(WinUIProfile.InstanceKey);
         if (!_mainInstance.IsCurrent)
@@ -68,11 +63,7 @@ public partial class App : Application
                 });
                 return;
             }
-            var incoming = redirected.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs
-                ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocolArgs.Uri.AbsoluteUri])
-                : redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
-                ? TypeWhisper.Presentation.ApplicationActivationRequest.ParseCommandLine(launchArgs.Arguments)
-                : TypeWhisper.Presentation.ApplicationActivationRequest.Parse([], redirected.Kind == ExtendedActivationKind.StartupTask);
+            var incoming = WindowsActivationRequest.Parse(redirected);
             if (!incoming.ShowWindow) return;
             _activations.Add(incoming);
             dispatcher.TryEnqueue(DrainActivations);
