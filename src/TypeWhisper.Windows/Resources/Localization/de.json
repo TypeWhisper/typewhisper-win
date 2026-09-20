@@ -163,6 +163,7 @@
   "License.DiscordHelperUnavailable": "Lokaler Discord-Hilfsdienst nicht verfügbar",
   "License.DiscordOperationFailedFormat": "Discord-Vorgang fehlgeschlagen: {0}",
   "License.DiscordEntitlementNotFound": "Die Supporter-Berechtigung wurde nicht gefunden. Aktualisiere die Supporter-Lizenz und verbinde Discord erneut.",
+  "License.ApiCompatibilityError": "Der Lizenzdienst konnte diese Anfrage nicht verarbeiten. Deine gespeicherte Lizenz wurde beibehalten. Aktualisiere TypeWhisper und versuche es erneut. Falls das Problem weiterhin besteht, kontaktiere den Support.",
   "License.ActivationMissingId": "Aktivierung fehlgeschlagen: Polar hat keine Aktivierungs-ID zurückgegeben.",
   "License.EntitlementInactive": "Diese Berechtigung ist nicht aktiv.",
   "License.UnknownEntitlement": "Dieser Schlüssel konnte keiner bekannten TypeWhisper-Berechtigung zugeordnet werden.",

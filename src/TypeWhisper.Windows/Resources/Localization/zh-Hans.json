@@ -163,6 +163,7 @@
   "License.DiscordHelperUnavailable": "本地 Discord 辅助服务不可用",
   "License.DiscordOperationFailedFormat": "Discord 操作失败：{0}",
   "License.DiscordEntitlementNotFound": "找不到支持者许可权益。请刷新支持者许可证，然后重新连接 Discord。",
+  "License.ApiCompatibilityError": "许可服务无法处理此请求。已保留您保存的许可证。请更新 TypeWhisper 后重试。如果问题仍然存在，请联系支持团队。",
   "License.ActivationMissingId": "激活失败：Polar 未返回激活 ID。",
   "License.EntitlementInactive": "此许可权益未处于有效状态。",
   "License.UnknownEntitlement": "无法将此密钥匹配到已知的 TypeWhisper 许可权益。",

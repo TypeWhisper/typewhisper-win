@@ -163,6 +163,7 @@
   "License.DiscordHelperUnavailable": "Локальный помощник Discord недоступен",
   "License.DiscordOperationFailedFormat": "Ошибка операции Discord: {0}",
   "License.DiscordEntitlementNotFound": "Лицензия спонсора не найдена. Обновите её статус и повторно подключите Discord.",
+  "License.ApiCompatibilityError": "Сервис лицензирования не смог обработать запрос. Сохранённая лицензия не удалена. Обновите TypeWhisper и повторите попытку. Если проблема сохранится, обратитесь в службу поддержки.",
   "License.ActivationMissingId": "Ошибка активации: Polar не вернул ID активации.",
   "License.EntitlementInactive": "Эта лицензия не активна.",
   "License.UnknownEntitlement": "Не удалось сопоставить этот ключ с известной лицензией TypeWhisper.",
