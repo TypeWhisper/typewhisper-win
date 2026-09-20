@@ -84,11 +84,41 @@ public sealed class LocalModelTests
         var path = Path.Combine(directory, model.FileName);
         await File.WriteAllBytesAsync(path, corrupt ? [4, 3, 2, 1] : expected);
         using var plugin = new GemmaLocalPlugin([model]);
+        var notifications = 0;
+        fixture.Host.CapabilitiesChanged += () => Interlocked.Increment(ref notifications);
         await plugin.ActivateAsync(fixture.Host);
         await plugin.CacheVerification;
         Assert.Equal(!corrupt, plugin.LocalModels[0].Downloaded);
+        Assert.Equal(corrupt ? 0 : 1, notifications);
         File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
         Assert.False(plugin.LocalModels[0].Downloaded);
+    }
+
+    [Fact]
+    public async Task InterruptedScanResumesAfterFailedLoadOrCancelledOperation()
+    {
+        using var fixture = new PortableFixture();
+        byte[] expected = [1, 2, 3, 4];
+        var first = new GemmaModelDefinition("first", "First", "4 bytes", 0, false,
+            "https://fixture.invalid/model", "model.gguf", 4, Convert.ToHexString(SHA256.HashData(expected)));
+        var second = first with { Id = "second" };
+        using var plugin = new GemmaLocalPlugin([first, second]);
+        await plugin.ActivateAsync(fixture.Host);
+        await plugin.CacheVerification;
+        var directory = Path.Combine(fixture.Host.PluginAssetDirectory, "Models", second.Id);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, second.FileName);
+        await File.WriteAllBytesAsync(path, expected);
+        Assert.False(plugin.LocalModels[1].Downloaded);
+        await Assert.ThrowsAsync<FileNotFoundException>(() => plugin.LoadModelAsync(first.Id, default));
+        await plugin.CacheVerification;
+        Assert.True(plugin.LocalModels[1].Downloaded);
+
+        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.LoadModelAsync(first.Id, cancelled.Token));
+        await plugin.CacheVerification;
+        Assert.True(plugin.LocalModels[1].Downloaded);
     }
 
     [Fact]

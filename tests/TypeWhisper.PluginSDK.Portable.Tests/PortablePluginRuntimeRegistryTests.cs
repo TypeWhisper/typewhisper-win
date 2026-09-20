@@ -39,6 +39,23 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     private PortablePluginRuntimeRegistry Registry(PortablePluginStore store) => new(store, Version, id => Host(id));
 
     [Fact]
+    public async Task ReadOnlyConfigurationSnapshotDoesNotScheduleAnotherChangeNotification()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        await registry.RefreshCapabilitiesAsync();
+        var changes = 0;
+        registry.Changed += () => Interlocked.Increment(ref changes);
+        Assert.Equal(Id, await registry.UseConfigurationAsync(Id,
+            (plugin, _) => Task.FromResult(plugin.PluginId), refreshCapabilities: false));
+        await Task.Delay(100);
+        Assert.Equal(0, changes);
+        await registry.RefreshCapabilitiesAsync();
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
     public async Task DisableStillDisposesItsPackageWhenAnotherPackageHasDynamicCollisions()
     {
         var store = await Store(second: true);

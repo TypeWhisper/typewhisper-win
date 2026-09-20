@@ -19,6 +19,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private CancellationTokenSource? _lifetime;
     private CancellationTokenSource? _operation;
     private bool _busy;
+    private bool _refreshPending;
 
     internal LiveLocalLlmModelSettings(LocalDictationSession session, string pluginId)
     {
@@ -31,11 +32,13 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         {
             _lifetime = new();
             _session.LocalLlmDownload.Changed += DownloadChanged;
+            _session.PluginRuntime.Changed += ModelStateChanged;
             await RefreshAsync();
         };
         Unloaded += (_, _) =>
         {
             _session.LocalLlmDownload.Changed -= DownloadChanged;
+            _session.PluginRuntime.Changed -= ModelStateChanged;
             _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = null;
         };
     }
@@ -48,7 +51,8 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         try
         {
             var models = await _session.PluginRuntime.UseConfigurationAsync(_pluginId, (plugin, _) =>
-                Task.FromResult((plugin as ILocalLlmModelManagement)?.LocalModels.ToArray() ?? []), lifetime.Token);
+                Task.FromResult((plugin as ILocalLlmModelManagement)?.LocalModels.ToArray() ?? []), lifetime.Token,
+                refreshCapabilities: false);
             if (!Current(lifetime)) return;
             _rows.Clear(); _content.Children.Clear();
             if (models.Length == 0)
@@ -73,8 +77,19 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (Current(lifetime)) _status.Text = "Model status could not be read. Reopen these settings to retry."; }
-        finally { _busy = false; }
+        finally
+        {
+            _busy = false;
+            if (_refreshPending) { _refreshPending = false; ModelStateChanged(); }
+        }
     }
+
+    private void ModelStateChanged() => DispatcherQueue.TryEnqueue(async () =>
+    {
+        if (!IsLoaded) return;
+        if (_busy) { _refreshPending = true; return; }
+        await RefreshAsync();
+    });
 
     private void DownloadChanged() => DispatcherQueue.TryEnqueue(async () =>
     {
@@ -116,7 +131,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         _operation = operation;
         void CancelForRecording() => operation.Cancel();
-        if (action == "remove") _session.RecordingStarting += CancelForRecording;
+        if (action is "remove" or "load") _session.RecordingStarting += CancelForRecording;
         _busy = true;
         foreach (var item in _rows) foreach (var button in item.Actions.Children.OfType<Control>()) button.IsEnabled = false;
         try
@@ -158,7 +173,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         { if (Current(lifetime)) _status.Text = "Model operation failed: " + ex.Message; }
         finally
         {
-            if (action == "remove") _session.RecordingStarting -= CancelForRecording;
+            if (action is "remove" or "load") _session.RecordingStarting -= CancelForRecording;
             _operation = null;
             _busy = false;
             if (IsLoaded) await RefreshAsync();
