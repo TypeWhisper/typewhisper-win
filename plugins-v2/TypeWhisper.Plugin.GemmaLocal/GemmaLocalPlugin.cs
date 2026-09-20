@@ -174,7 +174,11 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
 
                 // StatelessExecutor 0.26 does not forward cancellation to prompt prefill.
                 // Use bounded batches so cancellation waits for at most one small native decode.
-                using var context = _weights.CreateContext(_context.Params);
+                // Inference is serialized: reset the loaded context instead of allocating
+                // a second native KV/cache alongside the already resident context.
+                var context = _context;
+                ct.ThrowIfCancellationRequested();
+                context.NativeHandle.MemoryClear(true);
                 using var sampling = new DefaultSamplingPipeline { Temperature = 0.3f };
                 var batch = new LLamaBatch();
                 var batchSize = Math.Min(32, checked((int)context.BatchSize));
