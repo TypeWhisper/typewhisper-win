@@ -11,6 +11,18 @@ spec.loader.exec_module(server)
 
 
 class SetupTests(unittest.TestCase):
+    def test_readiness_checks_the_pinned_cache_revision_and_missing_sentinel(self):
+        for cached in ('/cache/config.json', None, object()):
+            responses = []
+            def lookup(name, filename, *, revision):
+                self.assertEqual((name, filename, revision), (server.MODEL_NAME, 'config.json', server.MODEL_REVISION))
+                return cached
+            modules = {name: types.SimpleNamespace() for name in ('torch', 'transformers', 'soundfile')}
+            modules['huggingface_hub'] = types.SimpleNamespace(try_to_load_from_cache=lookup)
+            with patch.dict(sys.modules, modules), patch.object(server, 'respond', responses.append):
+                server.cmd_check()
+            self.assertEqual(responses[-1]['ready'], isinstance(cached, str))
+
     def test_translation_preserves_the_selected_source_language(self):
         self.assertEqual(server.transcription_question(True, "de"), "Translate the speech into English. The spoken language is German.")
         self.assertIn("Japanese", server.transcription_question(False, "ja"))

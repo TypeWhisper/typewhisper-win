@@ -53,7 +53,7 @@ The repository contains 39 top-level manifests: five existing portable builds, o
 | GemmaLocal | Separate v2 port pending |
 | Gladia | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.Gladia`; provider, settings and immutable-package lifecycle tests included. Compared with macOS; recorded-audio and live microphone dictation, including explicit German selection, passed manual acceptance. ARM64 execution and publication remain pending. |
 | GoogleCloudStt | Separate v2 port pending |
-| GraniteSpeech | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.GraniteSpeech`; 8 .NET tests and one Python setup test pass. Managed CUDA model download, native inference and local PCM preview verified. Shared device settings and IBM branding included; microphone/UI acceptance and publication pending. |
+| GraniteSpeech | Independent v2 implementation in `plugins-v2/TypeWhisper.Plugin.GraniteSpeech`; 15 .NET tests and five Python tests pass. Managed runtime setup, native inference and local PCM preview verified on CPU and CUDA. Microphone/UI checks passed on 1.2.3, but German recognition quality was poor. Updated runtime and UI verified on 1.2.5; post-upgrade microphone retest and publication remain pending. |
 | Groq | Existing portable build |
 | Linear | Separate v2 port pending |
 | LiveTranscript | Separate v2 port pending |

@@ -2,7 +2,7 @@
 
 Local Granite Speech transcription with the Windows Python/PyTorch sidecar, model management and packaged scripts.
 
-Version `1.2.5`; plugin ID `com.typewhisper.granite-speech`; minimum host `1.1.2`.
+Version `1.2.6`; plugin ID `com.typewhisper.granite-speech`; minimum host `1.1.2`.
 Independent branch: `seofood/granitespeech-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -34,7 +34,7 @@ The complete package is staged under `bin/Release/portable-host/Plugins/com.type
 
 8 .NET plugin tests and one Python setup test pass. Coverage includes saved device selection, invalid/canceled PCM, managed asset removal that preserves settings, packaged scripts, and pinned chat-template downloads with byte-based progress. Native acceptance installed matching PyTorch/torchaudio 2.11.0 CUDA packages, downloaded the pinned IBM model, and correctly transcribed synthetic English audio. Cold load plus transcription took 8.81 seconds; warm two- and five-second PCM previews took 0.44 and 1.08 seconds on the development machine. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
-After review fixes, 13 .NET tests and four Python tests pass. An isolated runtime upgrade to PyTorch 2.13.0 with TorchAudio 2.11.0 passed import, feature-extraction and pip dependency checks. Actual Granite inference produced the expected full English result and two-second preview on both CUDA and CPU. CPU-to-CUDA readiness, explicit wheel-flavor selection, removal of the only selected model, dtype fallback, output-limit handling, translation language hints and termination of canceled native processes have regression coverage. The patched runtime was also installed and used through the actual plugin in the development profile; full transcription and warm PCM previews passed.
+After review fixes, 15 .NET tests and five Python tests pass. Bootstrap downloads require pinned SHA-256 hashes before extraction or execution, and the pip bootstrap script is pinned to a PyPA commit. Readiness checks use the same pinned model revision as setup. An isolated runtime upgrade to PyTorch 2.13.0 with TorchAudio 2.11.0 passed import, feature-extraction and pip dependency checks. Actual Granite inference produced the expected full English result and two-second preview on both CUDA and CPU. CPU-to-CUDA readiness, explicit wheel-flavor selection, removal of the only selected model, dtype fallback, output-limit handling, translation language hints and termination of canceled native processes have regression coverage. The patched runtime was also installed and used through the actual plugin in the development profile; full transcription and warm PCM previews passed.
 
 Manual microphone testing of version 1.2.3 confirmed that live preview and final transcription after stopping both work. The tester nevertheless reported poor recognition quality in the final text. German was selected and the language hint is passed through the host and sidecar. The cause has not been established; this is functional acceptance, not a transcription-quality pass. Visual checks confirmed the provider icon, shared Save button, CUDA selection, enabled live preview, and completed download status. The shared model-card design is maintained on the separate `seofood/local-model-settings-ui` branch. The subsequent dependency upgrade has automated native validation; a new manual microphone test has not been performed.
 

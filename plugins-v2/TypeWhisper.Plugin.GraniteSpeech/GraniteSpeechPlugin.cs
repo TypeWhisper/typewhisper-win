@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 using TypeWhisper.PluginSDK;
@@ -16,14 +17,22 @@ namespace TypeWhisper.Plugin.GraniteSpeech;
 public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTranscriptionEnginePlugin, IPluginTextSettings, IPluginSettingsActions
 {
     private const string ModelId = "granite-4.0-1b-speech";
-    internal const string RuntimeRevision = "torch-2.13.0-v1";
-    internal static string RuntimeWheels(string device) => device == "Cpu"
-        ? "torch==2.13.0+cpu torchaudio==2.11.0+cpu"
-        : "torch==2.13.0+cu130 torchaudio==2.11.0+cu130";
+    private static readonly string TorchRequirement = ReadRequirement("torch");
+    private static readonly string TorchAudioRequirement = ReadRequirement("torchaudio");
+    internal static string RuntimeRevision => TorchRequirement.Replace("==", "-", StringComparison.Ordinal) + "-v1";
+    internal static string RuntimeWheels(string device)
+    {
+        var flavor = device == "Cpu" ? "+cpu" : "+cu130";
+        return TorchRequirement + flavor + " " + TorchAudioRequirement + flavor;
+    }
+    private static string ReadRequirement(string package) => File.ReadLines(GetScriptPath("requirements.txt"))
+        .Select(line => line.Trim()).Single(line => line.StartsWith(package + "==", StringComparison.Ordinal));
     private const string PythonVersion = "3.12.10";
     private const string PythonEmbedUrl =
         $"https://www.python.org/ftp/python/{PythonVersion}/python-{PythonVersion}-embed-amd64.zip";
-    private const string GetPipUrl = "https://bootstrap.pypa.io/get-pip.py";
+    private const string PythonEmbedSha256 = "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3";
+    private const string GetPipUrl = "https://raw.githubusercontent.com/pypa/get-pip/af54dfe793b24685f8dc4ebba0630d9f2d77653c/public/get-pip.py";
+    private const string GetPipSha256 = "fb24e693bab954209a063d90953621412ccad4a500905a726286e038f508ddf6";
 
     private static readonly IReadOnlyList<string> GraniteSupportedLanguages =
         ["en", "fr", "de", "es", "pt", "ja"];
@@ -50,7 +59,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.5";
+    public string PluginVersion => "1.2.6";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -176,7 +185,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
                     Directory.Delete(pythonDir, recursive: true);
 
                 var zipPath = Path.Combine(dataDir, "python-embed.zip");
-                await DownloadFileAsync(PythonEmbedUrl, zipPath, ct);
+                await DownloadFileAsync(_httpClient, PythonEmbedUrl, zipPath, PythonEmbedSha256, ct);
                 Directory.CreateDirectory(pythonDir);
                 ZipFile.ExtractToDirectory(zipPath, pythonDir, overwriteFiles: true);
                 File.Delete(zipPath);
@@ -203,7 +212,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             await RetryAsync(async () =>
             {
                 var getPipPath = Path.Combine(pythonDir, "get-pip.py");
-                await DownloadFileAsync(GetPipUrl, getPipPath, ct);
+                await DownloadFileAsync(_httpClient, GetPipUrl, getPipPath, GetPipSha256, ct);
                 await RunProcessAsync(pythonExe, $"\"{getPipPath}\"", ct, timeoutMs: 300_000);
                 File.Delete(getPipPath);
 
@@ -530,20 +539,31 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
 
     // --- Setup helpers ---
 
-    private async Task DownloadFileAsync(string url, string destPath, CancellationToken ct)
+    internal static async Task DownloadFileAsync(HttpClient httpClient, string url, string destPath, string expectedSha256, CancellationToken ct)
     {
+        var temporaryPath = destPath + ".tmp";
+        try
+        {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        using var response = await _httpClient.SendAsync(request,
+        using var response = await httpClient.SendAsync(request,
             HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
         await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-        await using var fileStream = new FileStream(destPath + ".tmp", FileMode.Create,
+        await using var fileStream = new FileStream(temporaryPath, FileMode.Create,
             FileAccess.Write, FileShare.None, 81920, true);
         await contentStream.CopyToAsync(fileStream, ct);
         fileStream.Close();
 
-        File.Move(destPath + ".tmp", destPath, overwrite: true);
+        await using (var verification = File.OpenRead(temporaryPath))
+        {
+            var actualHash = await SHA256.HashDataAsync(verification, ct);
+            if (!Convert.ToHexString(actualHash).Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Runtime download failed SHA-256 verification.");
+        }
+        File.Move(temporaryPath, destPath, overwrite: true);
+        }
+        finally { File.Delete(temporaryPath); }
     }
 
     internal static string ExtendedPythonPath(string path)

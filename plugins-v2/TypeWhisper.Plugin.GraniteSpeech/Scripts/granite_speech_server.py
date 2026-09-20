@@ -70,8 +70,8 @@ def cmd_check():
         try:
             from huggingface_hub import try_to_load_from_cache
 
-            result = try_to_load_from_cache(MODEL_NAME, "config.json")
-            if result is None:
+            result = try_to_load_from_cache(MODEL_NAME, "config.json", revision=MODEL_REVISION)
+            if not isinstance(result, str):
                 issues.append("model not downloaded")
         except Exception:
             issues.append("model not downloaded")

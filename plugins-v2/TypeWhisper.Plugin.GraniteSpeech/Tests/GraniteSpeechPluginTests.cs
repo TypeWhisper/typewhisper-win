@@ -194,6 +194,42 @@ public sealed class GraniteSpeechPluginTests
         finally { if (!observer.HasExited) observer.Kill(entireProcessTree: true); }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RuntimeDownloadsRequireTheExpectedHashBeforeReplacingFiles(bool valid)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "granite-integrity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var destination = Path.Combine(root, "artifact.zip");
+        byte[] payload = [1, 2, 3];
+        using var http = new System.Net.Http.HttpClient(new PayloadHandler(payload));
+        try
+        {
+            await File.WriteAllTextAsync(destination, "previous");
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(valid ? payload : [4, 5, 6]));
+            var download = GraniteSpeechPlugin.DownloadFileAsync(http, "https://fixture.invalid/runtime", destination, hash, default);
+            if (valid)
+            {
+                await download;
+                Assert.Equal(payload, await File.ReadAllBytesAsync(destination));
+            }
+            else
+            {
+                await Assert.ThrowsAsync<InvalidDataException>(() => download);
+                Assert.Equal("previous", await File.ReadAllTextAsync(destination));
+            }
+            Assert.False(File.Exists(destination + ".tmp"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    private sealed class PayloadHandler(byte[] payload) : System.Net.Http.HttpMessageHandler
+    {
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new System.Net.Http.ByteArrayContent(payload) });
+    }
+
     private static PluginManifest? ReadManifest() =>
         JsonSerializer.Deserialize<PluginManifest>(
             TestFile.ReadProjectFile("plugins-v2", "TypeWhisper.Plugin.GraniteSpeech", "manifest.json"),
