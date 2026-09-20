@@ -3,12 +3,14 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using TypeWhisper.PluginHost;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.WinUI;
 
 internal sealed class LivePortableModelSettings : UserControl
 {
+    private readonly LiveLocalTtsModelSettings _localTts;
     internal event Action? ConfigurationChanged;
     private readonly LocalDictationSession _session;
     private readonly string _pluginId;
@@ -24,6 +26,7 @@ internal sealed class LivePortableModelSettings : UserControl
     internal bool HasLocalLlmModels { get; set; }
     private bool _cloudMode;
     private bool _settingCloudModel;
+    internal bool HasLocalTtsModels { get; set; }
     internal bool ShowLlmSummary { get; set; } = true;
     internal IReadOnlyList<HashSet<string>> TranscriptionModelSettingChoices { get; set; } = [];
     private readonly Dictionary<(string Provider, string Model), Row> _items = [];
@@ -53,6 +56,8 @@ internal sealed class LivePortableModelSettings : UserControl
             if (_settingCloudModel || !_cloudModel.IsLoaded || _cloudModel.SelectedItem is not PortableDownloadableModel model) return;
             if (_items.TryGetValue((model.SelectionId, model.ModelId), out var row)) await UseAsync(row);
         };
+        _localTts = new(session, pluginId);
+        content.Children.Add(_localTts);
         _localLlm = new(session, pluginId) { Visibility = Visibility.Collapsed };
         content.Children.Add(_localLlm);
         content.Children.Add(_refresh); content.Children.Add(_status); content.Children.Add(_cloudPanel); content.Children.Add(_rows); content.Children.Add(_llm);
@@ -109,6 +114,10 @@ internal sealed class LivePortableModelSettings : UserControl
         _reading = true; UpdateButtons();
         try
         {
+            var localTts = await _session.PluginRuntime.UseConfigurationAsync(_pluginId,
+                (plugin, _) => Task.FromResult(plugin is ILocalTtsModelManagement), token);
+            if (!Current(lifetime)) return;
+            _localTts.Visibility = localTts ? Visibility.Visible : Visibility.Collapsed;
             var models = new List<PortableDownloadableModel>();
             foreach (var provider in _session.PluginRuntime.TranscriptionProviders.Where(p => p.PluginId == _pluginId).ToArray())
                 models.AddRange(await _session.PluginRuntime.GetModelStatesAsync(provider.SelectionId, token));
@@ -133,7 +142,8 @@ internal sealed class LivePortableModelSettings : UserControl
                 choices.SetEquals(models.Select(model => model.ModelId)));
             _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
             _rows.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
-            _refresh.Visibility = _cloudMode || HasLocalLlmModels ? Visibility.Collapsed : Visibility.Visible;
+            _refresh.Visibility = _cloudMode || !_session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)
+                ? Visibility.Collapsed : Visibility.Visible;
             _localLlm.Visibility = HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             _settingCloudModel = true;
             try
@@ -145,7 +155,7 @@ internal sealed class LivePortableModelSettings : UserControl
             finally { _settingCloudModel = false; }
             _llm.Visibility = ShowLlmSummary && !HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             var llms = _session.LlmProviders.Where(p => p.PluginId == _pluginId).ToArray();
-            _llm.Text = models.Count == 0 && llms.Length == 0 ? "No model providers are currently enabled." :
+            _llm.Text = models.Count == 0 && llms.Length == 0 && !localTts && !HasLocalLlmModels ? "No model providers are currently enabled." :
                 string.Join("\n", llms.Select(p => p.Name + " · Text processing: " + string.Join(", ", p.Models.Select(m => m.DisplayName))));
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

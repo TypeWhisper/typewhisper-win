@@ -1,0 +1,22 @@
+{
+  "Settings.Title": "Supertonic-3-Assets",
+  "Settings.Description": "Supertonic laeuft lokal, sobald die Modellassets heruntergeladen sind. Die Modellgewichte sind separat unter OpenRAIL-M lizenziert.",
+  "Settings.AcceptLicense": "Ich verstehe, dass die Supertonic-3-Modellgewichte unter OpenRAIL-M lizenziert sind.",
+  "Settings.Download": "Supertonic 3 herunterladen",
+  "Settings.Downloading": "Wird heruntergeladen...",
+  "Settings.Ready": "Assets heruntergeladen und bereit.",
+  "Settings.NotReady": "Assets nicht heruntergeladen.",
+  "Settings.DownloadComplete": "Download abgeschlossen. Supertonic TTS ist bereit.",
+  "Settings.DownloadCancelled": "Download abgebrochen.",
+  "Settings.Error": "Fehler: {0}",
+  "Settings.Speed": "Sprechgeschwindigkeit",
+  "Settings.Quality": "Qualitaetsstufen",
+  "Settings.Source": "Quelle: https://huggingface.co/Supertone/supertonic-3",
+  "Settings.License": "Lizenz: OpenRAIL-M",
+  "Settings.LicenseTitle": "Modelllizenz: OpenRAIL-M",
+  "Settings.LicenseDescription": "Die Supertonic-3-Modellassets stehen unter OpenRAIL-M und enthalten Nutzungsbeschränkungen. Lies vor dem Download die vollständige Lizenz.",
+  "Settings.HuggingFaceToken": "Hugging-Face-Token (optional)",
+  "Settings.HuggingFaceTokenHint": "Wird sicher mit Windows DPAPI gespeichert und nur für Modelldownloads an huggingface.co gesendet. Öffentliche Downloads funktionieren auch ohne Token.",
+  "Settings.InvalidToken": "Der Hugging-Face-Token ist ungültig.",
+  "Settings.TokenSaved": "Token sicher gespeichert."
+}
