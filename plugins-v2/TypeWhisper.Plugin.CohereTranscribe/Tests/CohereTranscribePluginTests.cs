@@ -750,9 +750,12 @@ public sealed class CohereTranscribePluginTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, cancellation.Token));
         Assert.True(assets.IsModelInstalled(CohereTranscribePlugin.ModelId));
         Assert.False(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
+        sut.SelectModel(CohereTranscribePlugin.ModelId);
+        Assert.False(sut.IsConfigured);
         assets.BeforeEnsureRuntime = null;
         await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
         Assert.True(sut.IsModelDownloaded(CohereTranscribePlugin.ModelId));
+        Assert.True(sut.IsConfigured);
     }
 
     [WindowsFact]
