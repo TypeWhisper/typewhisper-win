@@ -109,13 +109,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal LocalTranscriptionPlugin Models => _transcriptionPlugin;
     internal PortablePluginRuntimeRegistry PluginRuntime { get; }
     internal IReadOnlyList<PortableLlmProvider> LlmProviders => PluginRuntime.LlmProviders;
-    internal event Action? LlmProcessingStarting;
-    internal Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct)
+    internal async Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         // Give foreground workflows priority over cancellable settings downloads.
-        LlmProcessingStarting?.Invoke();
-        return PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
+        await LocalLlmDownload.CancelAndDrainAsync();
+        return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
     }
     private string _providerId = "local";
     internal bool UsesRegistryProvider => _providerId != "local";
@@ -494,7 +493,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
     // hotkey while one is active so it can reach that cancellation before using a provider.
     internal bool CanStartFromShortcut => CanStartSessionOperation
-        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy) && (IsReady
+        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (IsReady
 #if DEBUG
         || CorrectionProbeEnabled
 #endif
@@ -560,6 +559,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
+                await LocalLlmDownload.CancelAndDrainAsync();
                 RecordingStarting?.Invoke();
                 await CorrectionLearning.Cancel();
                 _operationCancellation.Begin();

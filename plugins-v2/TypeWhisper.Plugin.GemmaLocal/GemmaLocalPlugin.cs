@@ -41,6 +41,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     private LLamaWeights? _weights;
     private LLamaContext? _context;
     private string? _loadedModelId;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long Size, DateTime Modified)> _verifiedModels = new();
 
     // ITypeWhisperPlugin
 
@@ -60,13 +61,21 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
     /// </summary>
-    public Task ActivateAsync(IPluginHostServices host)
+    public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
         _selectedModelId = host.GetSetting<string>("selectedModel");
         host.Log(PluginLogLevel.Info, $"Activated (model={_selectedModelId})");
 
-        return Task.CompletedTask;
+        _verifiedModels.Clear();
+        foreach (var model in Models)
+        {
+            var path = GetModelFilePath(model.Id, model.FileName);
+            if (!File.Exists(path)) continue;
+            try { await VerifyCachedModelAsync(model, path, CancellationToken.None); }
+            catch (IOException) { /* Keep Download available for missing or corrupt files. */ }
+            catch (UnauthorizedAccessException) { /* Loading will report the access failure. */ }
+        }
     }
 
     /// <summary>
@@ -119,11 +128,8 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             // Build Gemma chat prompt
             var prompt = FormatGemmaPrompt(systemPrompt, userText);
             var promptTokenCount = _context.Tokenize(prompt, addBos: true, special: true).Length;
-            var maxOutputTokens = LlmOutputTokenBudget.FitToContext(
-                LlmOutputTokenBudget.Calculate(systemPrompt, userText),
-                promptTokenCount,
-                checked((int)_context.ContextSize),
-                ProviderName);
+            var maxOutputTokens = RequireOutputBudget(
+                LlmOutputTokenBudget.Calculate(systemPrompt, userText), promptTokenCount, checked((int)_context.ContextSize));
 
             var executor = new StatelessExecutor(_weights, _context.Params);
             var inferenceParams = new InferenceParams
@@ -168,7 +174,14 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     {
         var model = GetModelDefinition(modelId);
         var path = GetModelFilePath(modelId, model.FileName);
-        return File.Exists(path) && new FileInfo(path).Length == model.SizeBytes;
+        if (!_verifiedModels.TryGetValue(modelId, out var verified)) return false;
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists && file.Length == verified.Size && file.LastWriteTimeUtc == verified.Modified;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
     /// <inheritdoc />
@@ -185,11 +198,11 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             var dir = GetModelDirectory(modelId);
             Directory.CreateDirectory(dir);
             var filePath = Path.Combine(dir, model.FileName);
-            if (IsModelDownloaded(modelId))
+            if (File.Exists(filePath) && new FileInfo(filePath).Length == model.SizeBytes)
             {
                 try
                 {
-                    await VerifyModelFileAsync(filePath, model.SizeBytes, model.Sha256, ct);
+                    await VerifyCachedModelAsync(model, filePath, ct);
                     progress?.Report(1); return;
                 }
                 catch (IOException)
@@ -205,12 +218,38 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
                 await VerifyModelFileAsync(pending, model.SizeBytes, model.Sha256, ct);
                 ct.ThrowIfCancellationRequested();
                 File.Move(pending, filePath, overwrite: true);
+                RememberVerified(model, filePath);
                 progress?.Report(1);
             }
             finally { if (File.Exists(pending)) File.Delete(pending); }
             _host?.NotifyCapabilitiesChanged();
         }
         finally { _inferenceLock.Release(); }
+    }
+
+    private async Task VerifyCachedModelAsync(GemmaModelDefinition model, string path, CancellationToken ct)
+    {
+        _verifiedModels.TryRemove(model.Id, out _);
+        var before = new FileInfo(path);
+        var stamp = (before.Length, before.LastWriteTimeUtc);
+        await VerifyModelFileAsync(path, model.SizeBytes, model.Sha256, ct);
+        var after = new FileInfo(path);
+        if ((after.Length, after.LastWriteTimeUtc) != stamp) throw new IOException("The model changed during verification. Retry the download.");
+        _verifiedModels[model.Id] = stamp;
+    }
+
+    private void RememberVerified(GemmaModelDefinition model, string path)
+    {
+        var file = new FileInfo(path);
+        _verifiedModels[model.Id] = (file.Length, file.LastWriteTimeUtc);
+    }
+
+    internal static int RequireOutputBudget(int requested, int promptTokens, int contextSize)
+    {
+        if (LlmOutputTokenBudget.FitToContext(requested, promptTokens, contextSize, "Gemma 3") < requested)
+            throw new PluginRequestException("This text is too long for the local model to return a complete result. Split it into smaller sections.",
+                PluginRequestFailureKind.RequestTooLarge, isTransient: false);
+        return requested;
     }
 
     internal static async Task VerifyModelFileAsync(string path, long size, string sha256, CancellationToken ct)
@@ -235,9 +274,10 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
         {
             var model = GetModelDefinition(modelId);
             var filePath = GetModelFilePath(modelId, model.FileName);
-            if (!IsModelDownloaded(modelId)) throw new FileNotFoundException("Download the model before loading it.");
+            if (!File.Exists(filePath) || new FileInfo(filePath).Length != model.SizeBytes)
+                throw new FileNotFoundException("Download the model before loading it.");
             if (_loadedModelId == modelId) return;
-            await VerifyModelFileAsync(filePath, model.SizeBytes, model.Sha256, ct);
+            await VerifyCachedModelAsync(model, filePath, ct);
             await Task.Run(() =>
             {
                 UnloadModel();
@@ -286,6 +326,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             ct.ThrowIfCancellationRequested();
             if (_loadedModelId == modelId) UnloadModel();
             File.Delete(path);
+            _verifiedModels.TryRemove(modelId, out _);
             _host?.NotifyCapabilitiesChanged();
         }
         finally { _inferenceLock.Release(); }
@@ -312,8 +353,12 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
 
     // The executor parses special tokens in the full prompt. Escape content before adding
     // the trusted template so literal sentinels cannot create extra conversation turns.
-    private static string EscapePromptContent(string content) =>
-        content.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal);
+    private static string EscapePromptContent(string content)
+    {
+        foreach (var sentinel in new[] { "<start_of_turn>", "<end_of_turn>", "<bos>", "<eos>", "<pad>" })
+            content = content.Replace(sentinel, "<\u200B" + sentinel[1..], StringComparison.Ordinal);
+        return content;
+    }
 
     private string GetModelDirectory(string modelId)
     {

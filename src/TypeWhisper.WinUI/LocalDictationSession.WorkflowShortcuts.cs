@@ -5,7 +5,7 @@ internal sealed partial class LocalDictationSession
     private bool _workflowReserved;
     internal IDisposable ReserveWorkflowShortcut()
     {
-        if (!CanChangeProvider || Models.Busy || !_gate.Wait(0))
+        if (!CanStartSessionOperation || (PluginRuntime.IsBusy && !LocalLlmDownload.State.IsBusy) || Models.Busy || !_gate.Wait(0))
             throw new InvalidOperationException("Finish the current recording, transcription or model operation before running a workflow shortcut.");
         _workflowReserved = true;
         try
