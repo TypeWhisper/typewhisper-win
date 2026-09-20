@@ -5,6 +5,17 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class SharedFileActivationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProfileFailureRejectsShareWithoutReadingOrAcknowledgingFiles(bool reportingFails)
+    {
+        var operation = new SharedOperation([@"C:\audio\one.wav"]) { ReportingFails = reportingFails };
+        SharedFileActivation.Reject(operation, "Profile recovery failed; files were not received.");
+        Assert.Equal("Profile recovery failed; files were not received.", operation.Error);
+        Assert.Equal(["error"], operation.Events);
+    }
+
     [Fact]
     public async Task SharedPathsAreQueuedBeforeCompletionAndDispatchedOnce()
     {
@@ -80,6 +91,7 @@ public sealed class SharedFileActivationTests
         public string? Error { get; private set; }
         public Exception? ReadError { get; init; }
         public Action? OnCompleted { get; init; }
+        public bool ReportingFails { get; init; }
         public void ReportStarted() => Events.Add("started");
         public Task<IReadOnlyList<string>> ReadPathsAsync()
         {
@@ -88,6 +100,10 @@ public sealed class SharedFileActivationTests
         }
         public void ReportDataRetrieved() => Events.Add("retrieved");
         public void ReportCompleted() { OnCompleted?.Invoke(); Events.Add("completed"); }
-        public void ReportError(string message) { Error = message; Events.Add("error"); }
+        public void ReportError(string message)
+        {
+            Error = message; Events.Add("error");
+            if (ReportingFails) throw new InvalidOperationException("Share UI already closed");
+        }
     }
 }

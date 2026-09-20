@@ -79,12 +79,16 @@ public partial class App : Application
             var recovery = new TypeWhisper.Core.Services.PersistedProfileBackup(WinUIProfile.Root).RecoverPending();
             if (!recovery.CanOpenProfile)
             {
+                if (share is not null)
+                    TypeWhisper.Presentation.SharedFileActivation.Reject(new WindowsSharedFileOperation(share.ShareOperation), "TypeWhisper could not recover its profile. The shared files were not received. Open TypeWhisper to resolve the recovery error, then share them again.");
                 ShowProfileFailure("A previous restore could not be recovered. Your files are preserved and the profile has not been opened. Close TypeWhisper before resolving this recovery error.", recovery.Error);
                 return;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            if (share is not null)
+                TypeWhisper.Presentation.SharedFileActivation.Reject(new WindowsSharedFileOperation(share.ShareOperation), "TypeWhisper could not open its profile. The shared files were not received. Open TypeWhisper to resolve the error, then share them again.");
             ShowProfileFailure("Profile recovery could not complete. Your profile has not been opened. Close TypeWhisper before resolving this recovery error.", ex.Message);
             return;
         }

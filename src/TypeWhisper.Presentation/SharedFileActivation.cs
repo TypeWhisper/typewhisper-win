@@ -18,6 +18,14 @@ public interface ISharedFileOperation
 /// <summary>Queues shared files for explicit processing using the ordinary bounded activation path.</summary>
 public static class SharedFileActivation
 {
+    /// <summary>Rejects a share when the host cannot open its profile, without acknowledging receipt.</summary>
+    public static void Reject(ISharedFileOperation operation, string message)
+    {
+        try { operation.ReportError(message); }
+        catch (Exception reportError) when (reportError is not OutOfMemoryException)
+        { System.Diagnostics.Trace.TraceError("Share error reporting failed: {0}", reportError); }
+    }
+
     /// <summary>Completes the Windows share operation only after valid files have entered the activation inbox.</summary>
     public static async Task ReceiveAsync(ISharedFileOperation operation, ActivationInbox inbox)
     {
@@ -38,9 +46,7 @@ public static class SharedFileActivation
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("Shared file activation failed: {0}", ex);
-            try { operation.ReportError("TypeWhisper could not receive the shared files. Please try again."); }
-            catch (Exception reportError) when (reportError is not OutOfMemoryException)
-            { System.Diagnostics.Trace.TraceError("Share error reporting failed: {0}", reportError); }
+            Reject(operation, "TypeWhisper could not receive the shared files. Please try again.");
         }
     }
 }
