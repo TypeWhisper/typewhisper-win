@@ -39,6 +39,7 @@ public sealed class PortablePackageTests
             DownloadUrl="https://fixture.invalid/package.zip",Size=new FileInfo(archive).Length,Sha256=hash,SupportedArchitectures=[PortablePluginCatalog.Architecture] };
         var store=Store(); await store.InitializeAsync(); await store.InstallAsync(entry);
         var path=store.Resolve(entry.Id);
+        await Assert.ThrowsAsync<InvalidDataException>(() => PortablePluginPackage.LoadAsync(path, fixture.Host, new(1,1,2)));
         await using (var runtime=new PortablePluginRuntimeRegistry(store,new(1,1,3),_ => fixture.Host))
         {
             await runtime.InitializeAsync();
@@ -47,6 +48,7 @@ public sealed class PortablePackageTests
             await runtime.UseConfigurationAsync(entry.Id,async (plugin,ct) =>
             {
                 Assert.Equal(manifest.Version,plugin.PluginVersion);
+                Assert.Equal(3, Assert.IsAssignableFrom<ILocalLlmModelManagement>(plugin).LocalModels.Count);
                 if (plugin is IApiKeyPlugin key) { await key.SetApiKeyAsync("fixture-only"); Assert.True(key.IsConfigured); await key.SetApiKeyAsync(""); Assert.False(key.IsConfigured); }
                 if (plugin is IPluginTextSettings settings) Assert.NotNull(settings.TextSettings);
                 if (plugin is IPluginSettingsActions actions) Assert.NotNull(actions.SettingsActions);
