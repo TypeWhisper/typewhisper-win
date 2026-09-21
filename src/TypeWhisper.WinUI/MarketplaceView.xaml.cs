@@ -195,10 +195,11 @@ public sealed partial class MarketplaceView : UserControl
             ShowList(true);
             LauncherRequested?.Invoke(this, EventArgs.Empty);
         }, _settingsLayout ? "Marketplace breadcrumb Settings" : "Marketplace breadcrumb Quick Launch") };
-        if (!IsDetail) crumbs.Add(new("Integrations"));
+        var catalogTitle = _settingsLayout ? "Discover plugins" : "Integrations";
+        if (!IsDetail) crumbs.Add(new(catalogTitle));
         else
         {
-            crumbs.Add(new("Integrations", () => ShowList(true), "Marketplace breadcrumb catalog"));
+            crumbs.Add(new(catalogTitle, () => ShowList(true), "Marketplace breadcrumb catalog"));
             if (_reviewing)
             {
                 crumbs.Add(new(_opened?.Title ?? "Plugin", CancelInstall, "Marketplace breadcrumb detail"));
