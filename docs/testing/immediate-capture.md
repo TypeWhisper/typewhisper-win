@@ -4,7 +4,10 @@ The host starts microphone capture before accessibility inspection, workflow loo
 dictionary loading and provider setup. Streaming audio is retained until the consumer
 exists, then handed over in capture order. Overflow rejects the partial streaming
 path so final transcription can use the complete recording. No microphone audio is
-captured before an explicit recording request.
+captured before an explicit recording request. An existing spoken-feedback operation
+is canceled and drained before opening the microphone, so its audible tail cannot
+enter the new recording. With no active feedback this wait is already complete;
+provider/model initialization and other cleanup still happen after capture starts.
 
 ## Automated checks
 

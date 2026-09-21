@@ -594,7 +594,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return;
                 }
                 // Capture the microphone before field inspection, workflow lookup or provider setup.
-                // Signal prior work to stop now; drain it after capture has started.
+                // Signal prior work to stop now; only audible feedback must drain before capture.
                 _operationCancellation.Begin();
                 var downloadStopped = LocalLlmDownload.CancelAndDrainAsync();
                 RecordingStarting?.Invoke();
@@ -604,6 +604,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 var previewStopped = _livePreview.StopAsync();
                 var streamStopped = StopCloudStreamAsync();
                 previousRecordingWork = Task.WhenAll(downloadStopped, correctionStopped, speechStopped, previewStopped, streamStopped);
+                // A canceled TTS backend can still be playing until its drain completes.
+                // Avoid recording its tail; model, provider and other cleanup remain deferred.
+                await speechStopped;
+                _operationCancellation.Token.ThrowIfCancellationRequested();
+                if (_disposed) return;
                 var preferences = AudioPreferences;
                 _spokenFeedbackAtStart = preferences;
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
