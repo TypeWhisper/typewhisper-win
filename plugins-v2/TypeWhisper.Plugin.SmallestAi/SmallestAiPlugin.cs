@@ -58,11 +58,11 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin display name shown by the host.
     /// </summary>
-    public string PluginName => "Smallest AI Pulse";
+    public string PluginName => "Smallest AI";
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -72,6 +72,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
         _host = host;
         _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
         _selectedModelId = DefaultModelId;
+        RestoreSpeechSettings(host);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
@@ -81,6 +82,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     public Task DeactivateAsync()
     {
         _host = null;
+        _apiKey = null;
         return Task.CompletedTask;
     }
 
@@ -100,7 +102,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     /// Gets whether the provider has the configuration required to run.
     /// </summary>
     /// <inheritdoc />
-    public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
+    public bool IsConfigured => _host is not null && !string.IsNullOrEmpty(_apiKey);
     /// <summary>
     /// Gets the transcription models exposed by this provider.
     /// </summary>
@@ -194,16 +196,17 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
             var wasConfigured = IsConfigured;
             var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
-            _apiKey = normalized;
-            if (_host is not null)
+            var host = _host ?? throw new InvalidOperationException("Plugin is not active.");
             {
                 if (normalized is null)
-                    await _host.DeleteSecretAsync(ApiKeySecretName);
+                    await host.DeleteSecretAsync(ApiKeySecretName);
                 else
-                    await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+                    await host.StoreSecretAsync(ApiKeySecretName, normalized);
+
+                _apiKey = normalized;
 
                 if (changed && wasConfigured != IsConfigured)
-                    hostToNotify = _host;
+                    hostToNotify = host;
             }
         }
         finally
@@ -212,40 +215,6 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
         }
 
         hostToNotify?.NotifyCapabilitiesChanged();
-    }
-
-    internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
-    {
-        var normalized = NormalizeApiKey(apiKey);
-        if (normalized is null)
-            return false;
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, PulseEndpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", normalized);
-        request.Content = CreateWavContent([0]);
-
-        try
-        {
-            using var response = await _httpClient.SendAsync(request, ct);
-            if (response.IsSuccessStatusCode)
-                return true;
-
-            var statusCode = (int)response.StatusCode;
-            return statusCode is 400 or 415 or 422;
-        }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return false;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (HttpRequestException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
     }
 
     internal static PluginTranscriptionResult ParseTranscriptionResponse(string json, string? fallbackLanguage)

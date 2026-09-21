@@ -26,9 +26,9 @@ public class SmallestAiPluginTests
         var manifest = LoadManifest();
 
         Assert.Equal("com.typewhisper.smallest-ai", manifest.GetProperty("id").GetString());
-        Assert.Equal("Smallest AI Pulse", manifest.GetProperty("name").GetString());
+        Assert.Equal("Smallest AI", manifest.GetProperty("name").GetString());
         Assert.Equal("transcription", manifest.GetProperty("category").GetString());
-        Assert.Equal(["transcription"], manifest.GetProperty("categories").EnumerateArray().Select(e => e.GetString()!).ToArray());
+        Assert.Equal(["transcription", "tts"], manifest.GetProperty("categories").EnumerateArray().Select(e => e.GetString()!).ToArray());
         Assert.True(manifest.GetProperty("requiresApiKey").GetBoolean());
     }
 
@@ -54,7 +54,7 @@ public class SmallestAiPluginTests
         await sut.ActivateAsync(host);
 
         Assert.Equal("com.typewhisper.smallest-ai", sut.PluginId);
-        Assert.Equal("Smallest AI Pulse", sut.PluginName);
+        Assert.Equal("Smallest AI", sut.PluginName);
         Assert.Equal("smallest-ai", sut.ProviderId);
         Assert.Equal("Smallest AI", sut.ProviderDisplayName);
         Assert.True(sut.IsConfigured);
@@ -97,30 +97,6 @@ public class SmallestAiPluginTests
         Assert.Equal(1, host.MaxConcurrentSecretWrites);
     }
 
-
-    [Fact]
-    public async Task ValidateApiKeyAsync_TreatsUnauthorizedAsInvalidAndBadAudioAsAuthenticated()
-    {
-        var seenStatuses = new Queue<HttpStatusCode>(
-            [HttpStatusCode.BadRequest, HttpStatusCode.Unauthorized, HttpStatusCode.InternalServerError]);
-        var handler = new CapturingHandler((request, body) =>
-        {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://api.smallest.ai/waves/v1/pulse/get_text", request.RequestUri?.GetLeftPart(UriPartial.Path));
-            Assert.Equal("Bearer probe-key", request.Headers.Authorization?.ToString());
-            Assert.Equal("audio/wav", request.Content?.Headers.ContentType?.MediaType);
-            Assert.NotNull(body);
-
-            return JsonResponse("""{ "error": "probe" }""", seenStatuses.Dequeue());
-        });
-
-        using var httpClient = new HttpClient(handler);
-        var sut = new SmallestAiPlugin(httpClient);
-
-        Assert.True(await sut.ValidateApiKeyAsync("probe-key"));
-        Assert.False(await sut.ValidateApiKeyAsync("probe-key"));
-        Assert.False(await sut.ValidateApiKeyAsync("probe-key"));
-    }
 
     [Fact]
     public async Task TranscribeAsync_PostsWavToPulseWithLanguageAndTimestampFlags()

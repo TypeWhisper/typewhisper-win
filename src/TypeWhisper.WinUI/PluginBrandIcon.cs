@@ -56,6 +56,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.openai" => "openai",
             "com.typewhisper.openrouter" => "openrouter",
             "com.typewhisper.soniox" => "soniox",
+            "com.typewhisper.smallest-ai" => "smallest",
             "com.typewhisper.supertonic-tts" => "supertone",
             "com.typewhisper.reson8" => "reson8",
             "com.typewhisper.speechmatics" => "speechmatics",

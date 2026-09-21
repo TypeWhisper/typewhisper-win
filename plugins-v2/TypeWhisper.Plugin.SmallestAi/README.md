@@ -1,35 +1,33 @@
-# Smallest AI Pulse portable plugin
+# Smallest AI portable plugin
 
-Smallest.ai Pulse batch and realtime transcription with portable API-key configuration.
+Pulse batch and realtime transcription, plus Lightning and Lightning Pro text-to-speech using the same API key.
 
-Version `1.2.0`; plugin ID `com.typewhisper.smallest-ai`; minimum host `1.1.2`.
-Independent branch: `seofood/smallestai-portable`, based on `4db8f6ac`.
+Version `1.2.1`; plugin ID `com.typewhisper.smallest-ai`; minimum host `1.1.4`.
 
 ## Setup
 
-Enter the API key, select Pulse as the transcription engine and run a recording after account setup.
+Enter the API key in Smallest AI settings and use the shared Save settings button. Select Pulse under Dictation. Live transcription includes the final text after stopping.
 
-This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
+Use Test connection or Refresh voices to fetch the current Standard and Pro catalogs. The catalog is cached for subsequent app starts. Choose a voice under Audio → Spoken feedback and click Test voice. Voice labels include the model pool and recommended language. Speech speed uses the shared save button; the selected audio output and Stop speaking are honored.
 
-## Source and platform scope
-
-Protocol/runtime sources and applicable fixtures were snapshotted from `plugins/TypeWhisper.Plugin.SmallestAi` at `4db8f6ac`, then adapted under `plugins-v2`. The package does not reference the legacy provider DLL or compile WPF settings views. Legacy sources, catalogs and published packages remain unchanged.
-
-The macOS repository was compared at `ac00e39ea63e4789de8427d034d2085b3d898159`; it was not modified. The existing Windows Pulse protocol was compared with macOS; the portable version keeps the Windows language/audio conventions.
+Connection validation retrieves the voice catalogs without uploading audio. A failed refresh retains the previous catalog. Plugin activation does not make network requests.
 
 ## Build and verification
-
-From this branch's repository root:
 
 ```powershell
 dotnet msbuild plugins-v2/TypeWhisper.Plugin.SmallestAi/portable.proj /t:Build /p:Configuration=Release
 dotnet test plugins-v2/TypeWhisper.Plugin.SmallestAi/Tests -c Release
 ```
 
-The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.smallest-ai` inside the plugin project. Package that directory as the ZIP root.
+Package `bin/Release/portable-host/Plugins/com.typewhisper.smallest-ai` as the ZIP root. The plugin uses the framework-independent SDK without WPF; Windows audio playback uses NAudio/WASAPI.
 
-18 plugin tests pass. Fake HTTP and actual local WebSocket tests including an empty final terminal message, premature close and package lifecycle. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+26 tests cover transcription, WebSocket finalization, package lifecycle, voice catalog parsing and persistence, model/voice pairing, language and speed, output-device forwarding, cancellation, invalid audio, and failed catalog refreshes.
 
-The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
+Authenticated tests retrieved 483 voices and exercised German synthesis, playback, and stopping. The user confirmed dictation, live transcription, and the in-app Test voice action using Ben from the Lightning Pro German catalog. The development package update preserves the API key and unrelated receipts. In-app acceptance is complete; public package publication is pending.
 
-The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+## API references
+
+- [Voice catalogs](https://docs.smallest.ai/models/api-reference/text-to-speech/get-waves-voices)
+- [Speech synthesis](https://docs.smallest.ai/models/api-reference/text-to-speech/synthesize-speech)
+
+Standard and Pro voice identifiers are paired with their respective model pools. Requests use binary WAV output and `Accept: audio/wav`. Maximum speech text length is 8,000 characters per request.
