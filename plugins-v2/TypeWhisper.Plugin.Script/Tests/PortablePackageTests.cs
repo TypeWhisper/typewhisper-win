@@ -29,6 +29,7 @@ public sealed class PortablePackageTests
         using var fixture = new PortableFixture();
         var project = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..",".."));
         var manifest = PortablePluginPackage.ReadManifest(project);
+        Assert.Contains("post-processing", manifest.Categories!);
         var source = Path.Combine(project,"bin",new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,"portable-host","Plugins",manifest.Id);
         var archive = Path.Combine(fixture.Root,"package.zip");
         ZipFile.CreateFromDirectory(source,archive,CompressionLevel.Fastest,false);

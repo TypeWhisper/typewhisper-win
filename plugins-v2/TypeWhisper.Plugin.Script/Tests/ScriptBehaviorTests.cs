@@ -163,6 +163,28 @@ public sealed class ScriptBehaviorTests
     }
 
     [Fact]
+    public async Task DuplicateIdsDisableConfigurationWithoutOverwritingIt()
+    {
+        using var fixture = new PortableFixture();
+        Directory.CreateDirectory(fixture.Host.PluginDataDirectory);
+        var path = Path.Combine(fixture.Host.PluginDataDirectory, "scripts.json");
+        var id = Guid.NewGuid();
+        var json = System.Text.Json.JsonSerializer.Serialize(new[] {
+            new { id, name = "first", command = "echo changed", isEnabled = true },
+            new { id, name = "copy", command = "echo changed", isEnabled = true }
+        });
+        await File.WriteAllTextAsync(path, json);
+        using var plugin = new ScriptPlugin(); await plugin.ActivateAsync(fixture.Host);
+        Assert.True(plugin.Service!.IsReadOnly);
+        Assert.Empty(plugin.Service.Scripts);
+        Assert.Contains("Duplicate", plugin.Service.LoadError);
+        Assert.Null(plugin.AddProfileActionId);
+        Assert.Contains(plugin.TextSettings, field => field.Id == "configuration_error");
+        Assert.Equal("original dictation", await plugin.ProcessAsync("original dictation", new(), default));
+        Assert.Equal(json, await File.ReadAllTextAsync(path));
+    }
+
+    [Fact]
     public async Task CorruptConfiguration_BlocksMutation()
     {
         using var f=new PortableFixture();Directory.CreateDirectory(f.Host.PluginDataDirectory);var path=Path.Combine(f.Host.PluginDataDirectory,"scripts.json");await File.WriteAllTextAsync(path,"broken");

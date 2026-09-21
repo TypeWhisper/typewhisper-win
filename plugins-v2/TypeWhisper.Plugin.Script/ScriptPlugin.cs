@@ -14,7 +14,7 @@ public sealed partial class ScriptPlugin : IPostProcessorPlugin
     public string PluginName => "Script Runner";
 
     /// <summary>Gets the plugin version.</summary>
-    public string PluginVersion => "1.3.4";
+    public string PluginVersion => "1.3.5";
 
     /// <summary>Gets the processor name.</summary>
     public string ProcessorName => "Script Runner";

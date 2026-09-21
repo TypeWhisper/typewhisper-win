@@ -42,7 +42,10 @@ internal sealed class ScriptConfigurationStore : IScriptConfigurationStore
         {
             var json = File.ReadAllText(_configPath, Encoding.UTF8);
             var scripts = JsonSerializer.Deserialize<List<ScriptEntry?>>(json, s_jsonOptions) ?? [];
-            return new ScriptConfigurationLoadResult(scripts.OfType<ScriptEntry>().Select(Normalize).ToList());
+            var entries = scripts.OfType<ScriptEntry>().Select(Normalize).ToList();
+            if (entries.Select(script => script.Id).Distinct().Count() != entries.Count)
+                return new ScriptConfigurationLoadResult([], "Duplicate script IDs. Each script must have a unique ID.");
+            return new ScriptConfigurationLoadResult(entries);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
