@@ -52,6 +52,7 @@ public sealed partial class SettingsWindow : Window
     private readonly List<HandCursorButton> _searchButtons = [];
     internal event Action<OverlayPreferences>? PreferencesChanged;
     internal event EventHandler? PreviewRequested;
+    internal event EventHandler? PausePreviewRequested;
 
     private readonly Dictionary<string, string> _values;
     private readonly List<ChoicePicker> _catalogPickers = [];
@@ -104,6 +105,10 @@ public sealed partial class SettingsWindow : Window
             {
                 if (!_updating && double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var size))
                     Publish(_preferences with { LiveTranscriptionFontSize = size });
+            };
+            else if (picker.Tag is "LiveTextPlacement") picker.SelectionChanged += value =>
+            {
+                if (!_updating) Publish(_preferences with { FloatingLiveText = value == "Floating window" });
             };
             else if (picker.Tag is "PreviewBubbleAutoHideMilliseconds") picker.SelectionChanged += value =>
             {
@@ -175,6 +180,10 @@ public sealed partial class SettingsWindow : Window
         _preferences = preferences;
         var size = preferences.LiveTranscriptionFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         _values["LiveTranscriptionFontSize"] = size;
+        var placement = preferences.FloatingLiveText ? "Floating window" : "Attached to recording";
+        _values["LiveTextPlacement"] = placement;
+        _appearancePickers.FirstOrDefault(p => p.Tag is "LiveTextPlacement")?.SetOptions(
+            new[] { "Attached to recording", "Floating window" }.Select(label => new Choice(label, label, "Saved on this device")).ToArray(), placement, placement);
         var duration = DurationChoices.FirstOrDefault(c => c.Milliseconds == preferences.PreviewBubbleAutoHideMilliseconds).Label
             ?? $"{preferences.PreviewBubbleAutoHideMilliseconds} milliseconds";
         _values["PreviewBubbleAutoHideMilliseconds"] = duration;
@@ -199,6 +208,8 @@ public sealed partial class SettingsWindow : Window
             ? "Unavailable for the selected provider or task. Text arrives after recording stops. Your live-text preference is kept for supported models."
             : minimal
             ? "Hidden in Minimal. Your preference is kept for Standard and Compact."
+            : preferences.FloatingLiveText
+            ? "Show live text in a floating window. Drag its header to move it. Longer text scrolls."
             : "Show streaming text beside the recording block. Longer text scrolls.";
         DetailsDescription.Text = standard
             ? "Show the audio level in dBFS and measured render frequency. Off by default."
@@ -206,7 +217,15 @@ public sealed partial class SettingsWindow : Window
         _updating = false;
     }
 
-    internal void SetPreviewVisible(bool visible) => PreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
+    internal void SetPreviewVisible(bool visible, bool paused = false)
+    {
+        PreviewButton.Content = visible ? "Stop preview" : "Preview live text";
+        EditorPreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
+        PausePreviewButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        PausePreviewButton.Content = paused ? "Resume preview" : "Pause preview";
+    }
+
+    private void PausePreview_Click(object sender, RoutedEventArgs e) => PausePreviewRequested?.Invoke(this, EventArgs.Empty);
 
     private void Mode_Click(object sender, RoutedEventArgs e)
     {
@@ -246,7 +265,7 @@ public sealed partial class SettingsWindow : Window
     internal void ShowSelectComparison()
     {
         ShowCategory("Appearance");
-        SettingsScroll.Visibility = PreviewButton.Visibility = Visibility.Collapsed;
+        SettingsScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
         ComparisonScroll.Visibility = Visibility.Visible;
         SessionHint.Text = "Design comparison only · tell me 1–4";
     }
@@ -347,7 +366,7 @@ public sealed partial class SettingsWindow : Window
         IntegrationsHost.Visibility = integration ? Visibility.Visible : Visibility.Collapsed;
         var catalog = category != "Appearance" && category != "Overlay editor" && !integration;
         CatalogScroll.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;
-        PreviewButton.Visibility = catalog || integration ? Visibility.Collapsed : Visibility.Visible;
+        EditorPreviewButton.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
         SessionHint.Text = catalog ? "UI preview only · no system changes" : "Overlay preferences are saved on this device";
         if (integration)
         {
@@ -464,7 +483,7 @@ public sealed partial class SettingsWindow : Window
         }
         _searchActive = true;
         IntegrationsHost.Visibility = Visibility.Collapsed;
-        SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = PreviewButton.Visibility = Visibility.Collapsed;
+        SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
         CatalogScroll.Visibility = Visibility.Visible;
         _catalogPickers.Clear();
         _searchButtons.Clear();

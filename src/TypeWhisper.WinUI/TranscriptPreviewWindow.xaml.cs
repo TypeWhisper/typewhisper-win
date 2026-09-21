@@ -5,6 +5,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Xaml.Input;
 using global::Windows.Graphics;
 
 namespace TypeWhisper.WinUI;
@@ -43,6 +44,14 @@ public sealed partial class TranscriptPreviewWindow : Window
     private readonly Func<string>? _liveText;
     private bool _opensDown;
     private int _recordingHeight;
+    private bool _floating;
+    private bool _headerHovered;
+    private bool _hasAnchor;
+    private LiveTextPosition? _floatingPosition;
+    private PointInt32? _dragStart;
+    private PointInt32 _dragWindowStart;
+    private int ExpandedHeight => _floating ? 220 : FullHeight;
+    private static string PositionPath => WinUIProfile.DataPath("live-text-position.json");
 
     internal event EventHandler? Collapsed;
 
@@ -91,13 +100,86 @@ public sealed partial class TranscriptPreviewWindow : Window
 
     internal void SetAnchor(PointInt32 recordingPosition, int pixelWidth, double scale, bool opensDown = false, int recordingHeight = 0)
     {
+        _hasAnchor = true;
         _opensDown = opensDown;
         _recordingHeight = recordingHeight;
-        TranscriptRoot.CornerRadius = opensDown ? new CornerRadius(0, 0, 14, 14) : new CornerRadius(14, 14, 0, 0);
+        TranscriptRoot.CornerRadius = _floating ? new CornerRadius(14) : opensDown ? new CornerRadius(0, 0, 14, 14) : new CornerRadius(14, 14, 0, 0);
         _recordingPosition = recordingPosition;
         _pixelWidth = pixelWidth;
         _scale = scale;
-        ApplyWindowBounds(Math.Max(1, (int)Math.Round(FullHeight * _expansion)));
+        ApplyWindowBounds(Math.Max(1, (int)Math.Round(ExpandedHeight * _expansion)));
+    }
+
+    internal void SetFloating(bool floating)
+    {
+        if (_floating == floating) return;
+        _floating = floating;
+        _dragStart = null;
+        TranscriptHeader.ReleasePointerCaptures();
+        if (floating) _floatingPosition = LiveTextPlacement.Read(PositionPath);
+        TranscriptHeader.SetDraggable(floating);
+        UpdateDragAppearance();
+        DragHint.Visibility = floating ? Visibility.Visible : Visibility.Collapsed;
+        ToolTipService.SetToolTip(TranscriptHeader, floating ? "Drag to move live text" : null);
+        if (_hasAnchor) SetAnchor(_recordingPosition, _pixelWidth, _scale, _opensDown, _recordingHeight);
+    }
+
+    private void TranscriptHeader_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _headerHovered = true;
+        UpdateDragAppearance();
+    }
+
+    private void TranscriptHeader_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _headerHovered = false;
+        UpdateDragAppearance();
+    }
+
+    private void UpdateDragAppearance()
+    {
+        var highlighted = _floating && (_headerHovered || _dragStart is not null);
+        TranscriptHeader.Background = highlighted
+            ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ElevatedBrush"]
+            : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        DragHint.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[highlighted ? "AccentBrush" : "MutedBrush"];
+    }
+
+    private void TranscriptHeader_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_floating || !e.GetCurrentPoint(TranscriptHeader).Properties.IsLeftButtonPressed
+            || !GetCursorPos(out var point) || !TranscriptHeader.CapturePointer(e.Pointer)) return;
+        _dragStart = point;
+        _dragWindowStart = AppWindow.Position;
+        UpdateDragAppearance();
+        e.Handled = true;
+    }
+
+    private void TranscriptHeader_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_dragStart is not { } start || !GetCursorPos(out var point)) return;
+        _floatingPosition = new(_dragWindowStart.X + point.X - start.X, _dragWindowStart.Y + point.Y - start.Y);
+        ApplyWindowBounds(Math.Max(1, (int)Math.Round(ExpandedHeight * _expansion)));
+        e.Handled = true;
+    }
+
+    private void TranscriptHeader_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        FinishDragging();
+        TranscriptHeader.ReleasePointerCaptures();
+    }
+
+    private void TranscriptHeader_PointerCaptureLost(object sender, PointerRoutedEventArgs e) => FinishDragging();
+
+    private void FinishDragging()
+    {
+        if (_dragStart is null) return;
+        _dragStart = null;
+        UpdateDragAppearance();
+        if (_floatingPosition is null) return;
+        try { LiveTextPlacement.Save(PositionPath, _floatingPosition); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { Debug.WriteLine($"Could not save live-text position: {ex.GetType().Name}"); }
     }
 
     internal void SetPaused(bool paused)
@@ -138,6 +220,7 @@ public sealed partial class TranscriptPreviewWindow : Window
 
         if (expanded)
         {
+            if (_floating) _floatingPosition = LiveTextPlacement.Read(PositionPath) ?? _floatingPosition;
             AppWindow.Show(activateWindow: false);
             _streamClock.Restart();
             if (_paused) _streamClock.Stop();
@@ -173,7 +256,7 @@ public sealed partial class TranscriptPreviewWindow : Window
         var eased = 1 - Math.Pow(1 - linear, 3);
         _expansion = _animationFrom + (_animationTarget - _animationFrom) * eased;
 
-        var height = Math.Max(1, (int)Math.Round(FullHeight * _expansion));
+        var height = Math.Max(1, (int)Math.Round(ExpandedHeight * _expansion));
         ApplyWindowBounds(height);
 
         var visual = ElementCompositionPreview.GetElementVisual(TranscriptRoot);
@@ -185,7 +268,7 @@ public sealed partial class TranscriptPreviewWindow : Window
 
         _expansion = _animationTarget;
         _animationClock.Stop();
-        ApplyWindowBounds(_expansion > 0 ? FullHeight : 1);
+        ApplyWindowBounds(_expansion > 0 ? ExpandedHeight : 1);
 
         if (_expansion <= 0)
         {
@@ -198,6 +281,22 @@ public sealed partial class TranscriptPreviewWindow : Window
 
     private void ApplyWindowBounds(int height)
     {
+        if (_floating)
+        {
+            var desired = _floatingPosition ?? new LiveTextPosition(_recordingPosition.X,
+                _opensDown ? _recordingPosition.Y + _recordingHeight + 12 : _recordingPosition.Y - (int)(220 * _scale) - 12);
+            var area = DisplayArea.GetFromPoint(new PointInt32(desired.X, desired.Y), DisplayAreaFallback.Nearest);
+            var work = area.WorkArea;
+            var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96d;
+            if (scale <= 0) scale = _scale;
+            var width = Math.Min((int)Math.Round(420 * scale), work.Width);
+            var fullHeight = Math.Min((int)Math.Round(220 * scale), work.Height);
+            var position = LiveTextPlacement.Clamp(desired, width, fullHeight, work.X, work.Y, work.Width, work.Height);
+            _floatingPosition = position;
+            AppWindow.MoveAndResize(new RectInt32(position.X, position.Y, width, Math.Min(fullHeight, Math.Max(1, (int)Math.Round(height * scale)))));
+            NativeWindowAppearance.RemoveOverlayFrame(this);
+            return;
+        }
         var pixelHeight = Math.Max(1, (int)Math.Round(height * _scale));
         AppWindow.MoveAndResize(new RectInt32(
             _recordingPosition.X,
@@ -268,6 +367,13 @@ public sealed partial class TranscriptPreviewWindow : Window
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out PointInt32 point);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);

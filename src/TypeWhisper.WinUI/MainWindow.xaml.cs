@@ -908,7 +908,6 @@ public sealed partial class MainWindow : Window
             _overlay.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
             _overlay.SetTechnicalDetailsEnabled(_technicalDetailsEnabled);
             _overlay.ActivateWithoutTakingFocus();
-            OverlayPreviewPanel.Visibility = _historyOpen || _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen ? Visibility.Collapsed : Visibility.Visible;
             UpdateOverlayControls();
             MetricsText.Text = _overlayMode == OverlayMode.Minimal
                 ? "Overlay active · minimal indicator"
@@ -1145,12 +1144,11 @@ public sealed partial class MainWindow : Window
             {
                 LexiconHost.Visibility = Visibility.Collapsed;
                 SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-                OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
                 SearchBox.Focus(FocusState.Programmatic);
             };
             LexiconHost.Child = _lexicon;
         }
-        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
+        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Collapsed;
         LexiconHost.Visibility = Visibility.Visible;
         _lexicon.Present(snippets, section);
     }
@@ -1165,7 +1163,6 @@ public sealed partial class MainWindow : Window
             {
                 FileTranscriptionHost.Visibility = Visibility.Collapsed;
                 SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-                OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
                 SearchBox.Focus(FocusState.Programmatic);
             };
             FileTranscriptionHost.Child = _fileTranscription;
@@ -1175,7 +1172,7 @@ public sealed partial class MainWindow : Window
     internal void OpenFileTranscription()
     {
         EnsureFileTranscription();
-        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
+        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Collapsed;
         FileTranscriptionHost.Visibility = Visibility.Visible;
         _fileTranscription!.Present();
     }
@@ -1284,6 +1281,7 @@ public sealed partial class MainWindow : Window
                 }
                 UpdateOverlayControls();
             };
+            _settingsWindow.PausePreviewRequested += PausePreview_Click;
             _settingsWindow.PreviewRequested += (_, _) =>
             {
                 if (_overlay?.IsPreviewVisible == true) EndPreview_Click(this, new RoutedEventArgs());
@@ -1291,7 +1289,7 @@ public sealed partial class MainWindow : Window
             };
         }
         _settingsWindow.SetPreferences(OverlayPreferences);
-        _settingsWindow.SetPreviewVisible(_overlay?.IsPreviewVisible == true);
+        _settingsWindow.SetPreviewVisible(_overlay?.IsPreviewVisible == true, _overlay?.IsPaused == true);
         _settingsWindow.ShowOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
     }
 
@@ -1334,7 +1332,6 @@ public sealed partial class MainWindow : Window
         SearchBox.IsEnabled = SearchSurface.IsHitTestVisible = true;
         SearchSurface.Opacity = 1;
         CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-        OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
         SearchBox.Text = _launcherQuery;
@@ -1355,7 +1352,6 @@ public sealed partial class MainWindow : Window
         SearchBox.IsEnabled = SearchSurface.IsHitTestVisible = true;
         SearchSurface.Opacity = 1;
         CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-        OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
         SearchBox.Text = _launcherQuery;
@@ -1370,7 +1366,7 @@ public sealed partial class MainWindow : Window
     {
         _launcherQuery = SearchBox.Text;
         _workflowsOpen = true;
-        CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
+        CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Collapsed;
         WorkflowsView.Visibility = Visibility.Visible;
         SearchPlaceholder.Text = "Search workflows by name or purpose…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Workflow search");
@@ -1386,7 +1382,6 @@ public sealed partial class MainWindow : Window
         _workflowsOpen = false;
         WorkflowsView.Visibility = Visibility.Collapsed;
         CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-        OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
         SearchBox.Text = _launcherQuery;
@@ -1418,7 +1413,6 @@ public sealed partial class MainWindow : Window
         CommandSurface.Visibility = Visibility.Collapsed;
         QuickLaunchFooter.Visibility = Visibility.Collapsed;
         HistoryView.Visibility = Visibility.Visible;
-        OverlayPreviewPanel.Visibility = Visibility.Collapsed;
         SearchPlaceholder.Text = "Search history by title or transcript…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "History search");
         SearchBox.Text = string.Empty;
@@ -1438,7 +1432,6 @@ public sealed partial class MainWindow : Window
         HistoryView.Visibility = Visibility.Collapsed;
         CommandSurface.Visibility = Visibility.Visible;
         QuickLaunchFooter.Visibility = Visibility.Visible;
-        OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
         SearchBox.Text = _launcherQuery;
@@ -1461,7 +1454,6 @@ public sealed partial class MainWindow : Window
         _recorderOpen = true;
         CommandSurface.Visibility = Visibility.Collapsed;
         QuickLaunchFooter.Visibility = Visibility.Collapsed;
-        OverlayPreviewPanel.Visibility = Visibility.Collapsed;
         RecorderView.Visibility = Visibility.Visible;
         RecorderView.SetPresented(true);
         SearchSurface.Visibility = Visibility.Collapsed;
@@ -1478,7 +1470,6 @@ public sealed partial class MainWindow : Window
         RecorderView.Visibility = Visibility.Collapsed;
         CommandSurface.Visibility = Visibility.Visible;
         QuickLaunchFooter.Visibility = Visibility.Visible;
-        OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         SearchGlyph.Kind = "search";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
@@ -1504,17 +1495,7 @@ public sealed partial class MainWindow : Window
 #endif
         ShowWaveformOverlay();
     }
-    private void OverlayMode_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string mode } && Enum.TryParse<OverlayMode>(mode, out var selected))
-        {
-            _overlayMode = selected;
-            SaveOverlayPreferences();
-            ShowWaveformOverlay();
-        }
-    }
-
-    private void PausePreview_Click(object sender, RoutedEventArgs e)
+    private void PausePreview_Click(object? sender, EventArgs e)
     {
         _overlay?.TogglePaused();
         UpdateOverlayControls();
@@ -1523,7 +1504,6 @@ public sealed partial class MainWindow : Window
     private void EndPreview_Click(object sender, RoutedEventArgs e)
     {
         _overlay?.HidePreview();
-        OverlayPreviewPanel.Visibility = Visibility.Collapsed;
         MetricsText.Text = "Overlay preview ended";
         UpdateOverlayControls();
     }
@@ -1531,19 +1511,8 @@ public sealed partial class MainWindow : Window
     private void UpdateOverlayControls()
     {
         _settingsWindow?.SetPreferences(OverlayPreferences);
-        _settingsWindow?.SetPreviewVisible(_overlay?.IsPreviewVisible == true);
-        foreach (var button in new[] { StandardOverlayButton, CompactOverlayButton, MinimalOverlayButton })
-        {
-            var selected = (string)button.Tag == _overlayMode.ToString();
-            button.Style = (Style)Application.Current.Resources[selected
-                ? "PrimaryButtonStyle" : "SecondaryButtonStyle"];
-        }
-        PausePreviewButton.Content = _overlay?.IsPaused == true ? "Resume" : "Pause";
-        var minimal = _overlayMode == OverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
+        _settingsWindow?.SetPreviewVisible(_overlay?.IsPreviewVisible == true, _overlay?.IsPaused == true);
         UpdateTranscriptToggle();
-        OverlayPreviewHint.Text = minimal
-            ? "Minimal: indicator only at the screen edge · live-text preference remembered"
-            : "Microphone level only · transcript is sample text · no audio saved";
     }
     private void UpdateTranscriptToggle()
     {

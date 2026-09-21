@@ -64,7 +64,7 @@ public sealed partial class MainWindow
         var shell = new Grid(); shell.RowDefinitions.Add(new() { Height = GridLength.Auto }); shell.RowDefinitions.Add(new());
         shell.Children.Add(navigation); Grid.SetRow(root, 1); shell.Children.Add(root);
         UtilityHost.Child = shell;
-        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
+        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Collapsed;
         UtilityHost.Visibility = Visibility.Visible;
         back.Focus(FocusState.Programmatic);
     }
@@ -75,7 +75,6 @@ public sealed partial class MainWindow
         UtilityHost.Visibility = Visibility.Collapsed;
         UtilityHost.Child = null; _utilityActivity = null; _utilityBackup = null;
         SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-        OverlayPreviewPanel.Visibility = _overlay?.IsPreviewVisible == true ? Visibility.Visible : Visibility.Collapsed;
         SearchBox.Text = _launcherQuery;
         _isSearchEditing = false;
         UpdateSearchPresentation();

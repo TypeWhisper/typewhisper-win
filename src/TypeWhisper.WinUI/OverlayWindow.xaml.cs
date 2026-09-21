@@ -56,6 +56,8 @@ public sealed partial class OverlayWindow : Window
     {
         _layout = preferences;
         _transcriptWindow?.SetTextSize(preferences.LiveTranscriptionFontSize);
+        _transcriptWindow?.SetFloating(preferences.FloatingLiveText);
+        SetJoinedShape(_transcriptPreviewEnabled && _mode != OverlayMode.Minimal);
     }
 
     private readonly Stopwatch _feedbackClock = new();
@@ -314,6 +316,7 @@ public sealed partial class OverlayWindow : Window
         {
             _transcriptWindow = new TranscriptPreviewWindow(_liveText);
             _transcriptWindow.SetTextSize(_layout.LiveTranscriptionFontSize);
+            _transcriptWindow.SetFloating(_layout.FloatingLiveText);
             _transcriptWindow.Collapsed += (_, _) => SetJoinedShape(false);
             _transcriptWindow.Closed += (_, _) =>
             {
@@ -331,6 +334,7 @@ public sealed partial class OverlayWindow : Window
 
     private void SetJoinedShape(bool joined)
     {
+        joined &= !_layout.FloatingLiveText;
         OverlayRoot.CornerRadius = _mode == OverlayMode.Minimal
             ? (_layout.AtTop ? new CornerRadius(0, 0, 9, 9) : new CornerRadius(9, 9, 0, 0)) : joined
             ? (_layout.AtTop ? new CornerRadius(14, 14, 0, 0) : new CornerRadius(0, 0, 14, 14))

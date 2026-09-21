@@ -2,6 +2,7 @@
     x:Class="TypeWhisper.WinUI.TranscriptPreviewWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TypeWhisper.WinUI"
     Title="TypeWhisper Live Transcript">
 
     <Border x:Name="TranscriptRoot"
@@ -16,12 +17,21 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Grid>
+            <local:DragHandleGrid x:Name="TranscriptHeader" Background="Transparent" MinHeight="28"
+                  CornerRadius="6" Padding="5,2" Margin="-5,0,-5,0"
+                  PointerEntered="TranscriptHeader_PointerEntered"
+                  PointerExited="TranscriptHeader_PointerExited"
+                  PointerPressed="TranscriptHeader_PointerPressed"
+                  PointerMoved="TranscriptHeader_PointerMoved"
+                  PointerReleased="TranscriptHeader_PointerReleased"
+                  PointerCaptureLost="TranscriptHeader_PointerCaptureLost"
+                  AutomationProperties.Name="Live text window drag handle">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" Spacing="7">
+                    <TextBlock x:Name="DragHint" Text="⠿" FontSize="16" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
                     <Ellipse Width="6" Height="6" Fill="{ThemeResource AccentBrush}"
                              VerticalAlignment="Center" />
                     <TextBlock Text="LIVE TRANSCRIPT" FontSize="9" FontWeight="SemiBold"
@@ -29,7 +39,7 @@
                 </StackPanel>
                 <TextBlock x:Name="TranscriptSourceLabel" Grid.Column="1" Text="DEMO TEXT" FontFamily="Cascadia Mono"
                            FontSize="8" Foreground="{ThemeResource MutedBrush}" />
-            </Grid>
+            </local:DragHandleGrid>
 
             <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="TranscriptScrollViewer"
                           Grid.Row="1"
