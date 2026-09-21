@@ -48,6 +48,8 @@
     <Content Include="Assets/PluginLogos/*.svg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Remove="Assets/PluginLogos/supertone.png" />
     <Content Include="Assets/PluginLogos/supertone.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Assets/PluginLogos/meta.png" />
+    <Content Include="Assets/PluginLogos/meta.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Remove="Assets/PluginLogos/soniox.png" />
     <Content Include="Assets/PluginLogos/soniox.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Remove="Assets/PluginLogos/reson8.png" />

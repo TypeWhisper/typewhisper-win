@@ -51,7 +51,7 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
                 CreateHandshakeJson(apiKey, modelId, mode, languageBias, keywords),
                 ct);
             var acknowledgement = await ReceiveTextMessageAsync(webSocket, ct);
-            ValidateHandshakeAcknowledgement(acknowledgement);
+            ValidateHandshakeAcknowledgement(acknowledgement ?? throw new WebSocketException("Meta closed before acknowledging the session."));
             session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
             connected = true;
             return session;
@@ -225,12 +225,19 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             while (!ct.IsCancellationRequested && _webSocket.State == WebSocketState.Open)
             {
                 var json = await ReceiveTextMessageAsync(_webSocket, ct);
+                if (json is null)
+                {
+                    if (!FinalizationRequested || !_collector.HasCompletedTranscript)
+                        throw new WebSocketException("Meta closed before completing the transcript.");
+                    await _sendLock.WaitAsync(ct);
+                    try { await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, ct); }
+                    finally { _sendLock.Release(); }
+                    PublishTranscript(new StreamingTranscriptEvent(_collector.CompletedText, IsFinal: true), isTerminal: true);
+                    return;
+                }
                 var update = _collector.Apply(json);
-                var isTerminal = ShouldCompleteFinalization(update.IsFinalEvent);
-                var transcript = update.Transcript is { } snapshot
-                    ? snapshot with { IsFinal = isTerminal }
-                    : null;
-                PublishTranscript(transcript, isTerminal);
+                // speechComplete finalizes one turn, not the stream. Keep receiving until clean closure.
+                PublishTranscript(update.Transcript is { } snapshot ? snapshot with { IsFinal = false } : null, isTerminal: false);
             }
         }
         catch (OperationCanceledException ex)
@@ -277,15 +284,12 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             _terminalTranscript.TrySetResult(true);
     }
 
-    internal bool ShouldCompleteFinalization(bool isFinalEvent) =>
-        FinalizationRequested && isFinalEvent;
-
     internal void RequestFinalization() =>
         Volatile.Write(ref _finalizationRequested, 1);
 
     private bool FinalizationRequested => Volatile.Read(ref _finalizationRequested) != 0;
 
-    private static async Task<string> ReceiveTextMessageAsync(
+    private static async Task<string?> ReceiveTextMessageAsync(
         ClientWebSocket webSocket,
         CancellationToken ct)
     {
@@ -296,7 +300,11 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         {
             result = await webSocket.ReceiveAsync(buffer, ct);
             if (result.MessageType == WebSocketMessageType.Close)
-                throw new WebSocketException("Meta closed the realtime session.");
+            {
+                if (result.CloseStatus == WebSocketCloseStatus.NormalClosure && message.Length == 0)
+                    return null;
+                throw new WebSocketException("Meta closed the realtime session unexpectedly.");
+            }
             if (result.MessageType != WebSocketMessageType.Text)
                 throw new WebSocketException("Meta returned an unexpected binary realtime message.");
             message.Write(buffer, 0, result.Count);
@@ -330,6 +338,7 @@ internal sealed class MetaRealtimeTranscriptCollector
         public int Id { get; } = id;
         public string Transcript { get; set; } = "";
         public string? Speaker { get; set; }
+        public bool Completed { get; set; }
     }
 
     private readonly bool _usesDiarization;
@@ -337,6 +346,11 @@ internal sealed class MetaRealtimeTranscriptCollector
     private int? _activeTurnId;
     private string _interim = "";
     private string _finalSingleTurnText = "";
+    private bool _hasFinalSingleTurn;
+
+    internal bool HasCompletedTranscript => _hasFinalSingleTurn ||
+        (_turns.Count > 0 && _turns.Values.All(turn => turn.Completed) && string.IsNullOrEmpty(_interim));
+    internal string CompletedText => BuildSnapshot();
 
     internal MetaRealtimeTranscriptCollector(string mode)
     {
@@ -389,6 +403,7 @@ internal sealed class MetaRealtimeTranscriptCollector
                 {
                     var turn = GetOrCreateTurn(completedTurnId);
                     turn.Transcript = GetTranscript(root);
+                    turn.Completed = true;
                     if (_activeTurnId == completedTurnId)
                     {
                         _activeTurnId = null;
@@ -406,6 +421,7 @@ internal sealed class MetaRealtimeTranscriptCollector
                 if (isFinal && !_usesDiarization)
                 {
                     _finalSingleTurnText = transcript;
+                    _hasFinalSingleTurn = true;
                     _interim = "";
                     isFinalEvent = true;
                 }

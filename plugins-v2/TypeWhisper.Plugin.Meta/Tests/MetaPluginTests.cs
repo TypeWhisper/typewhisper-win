@@ -207,7 +207,7 @@ public sealed class MetaPluginTests
         Assert.Equal("Meta", sut.PluginName);
         Assert.Equal("Meta", sut.ProviderDisplayName);
         Assert.Equal("Meta", sut.ProviderName);
-        Assert.Equal("1.2.1", sut.PluginVersion);
+        Assert.Equal("1.2.2", sut.PluginVersion);
         Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
     }
 
@@ -364,27 +364,6 @@ public sealed class MetaPluginTests
     }
 
     [Fact]
-    public async Task FinalizationRequest_AllowsImmediateFinalEventToComplete()
-    {
-        using var socket = new System.Net.WebSockets.ClientWebSocket();
-        await using var session = new MetaRealtimeStreamingSession(socket);
-
-        Assert.False(session.ShouldCompleteFinalization(isFinalEvent: true));
-
-        session.RequestFinalization();
-
-        var isTerminal = session.ShouldCompleteFinalization(isFinalEvent: true);
-        Assert.True(isTerminal);
-        Assert.False(session.ShouldCompleteFinalization(isFinalEvent: false));
-
-        session.PublishTranscript(
-            new StreamingTranscriptEvent("Done", IsFinal: true),
-            isTerminal);
-
-        await session.TerminalTranscriptTask;
-    }
-
-    [Fact]
     public void ParseTranscriptionResponse_MapsTurnTimestampsToSeconds()
     {
         var result = MetaPlugin.ParseTranscriptionResponse(
@@ -440,7 +419,7 @@ public sealed class MetaPluginTests
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
         Assert.Equal("Meta", root.GetProperty("name").GetString());
-        Assert.Equal("1.2.1", root.GetProperty("version").GetString());
+        Assert.Equal("1.2.2", root.GetProperty("version").GetString());
         Assert.Equal("1.1.2", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(

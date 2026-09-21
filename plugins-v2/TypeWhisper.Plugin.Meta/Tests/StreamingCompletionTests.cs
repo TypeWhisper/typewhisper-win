@@ -13,7 +13,7 @@ public sealed class StreamingCompletionTests
     public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(15));var ct=timeout.Token;
-        var tcp=new TcpListener(IPAddress.Loopback,0);tcp.Start();var port=((IPEndPoint)tcp.LocalEndpoint).Port;tcp.Stop();
+        using var tcp=new TcpListener(IPAddress.Loopback,0);tcp.Start();var port=((IPEndPoint)tcp.LocalEndpoint).Port;tcp.Stop();
         using var listener=new HttpListener();listener.Prefixes.Add($"http://127.0.0.1:{port}/");listener.Start();
         var uri=new Uri($"ws://127.0.0.1:{port}/");
         var endReceived=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -28,7 +28,7 @@ public sealed class StreamingCompletionTests
             var end=await Receive(socket,ct);Assert.Contains("endStream",Encoding.UTF8.GetString(end));endReceived.TrySetResult();
             await release.Task.WaitAsync(ct);
             if(!prematureClose) { await Send(socket,"""{"type":"transcript","transcript":"Hallo Welt","final":true}""",ct);  }
-            if(prematureClose) await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
+            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
             await clientFinished.Task.WaitAsync(ct);
         },ct);
         await using var session=await MetaRealtimeStreamingSession.ConnectAsync("fixture","model","PUSH_TO_TALK",[],[],ct,uri);var events=new ConcurrentQueue<StreamingTranscriptEvent>();session.TranscriptReceived+=events.Enqueue;
@@ -38,6 +38,67 @@ public sealed class StreamingCompletionTests
         else {await finish;Assert.Equal("Hallo Welt",string.Join(" ",events.Where(e=>e.IsFinal).Select(e=>e.Text)));}
         clientFinished.TrySetResult(); await server.WaitAsync(ct);
     }
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Diarization_DrainsAllTurnsBeforeCleanClosure(bool abnormalClose, bool missingLastTurn)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var ct = timeout.Token;
+        using var tcp = new TcpListener(IPAddress.Loopback, 0);
+        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var firstObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseLast = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var clientFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync().WaitAsync(ct);
+            using var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
+            await Receive(socket, ct); await Send(socket, """{"sessionId":"fixture"}""", ct);
+            await Receive(socket, ct);
+            await Send(socket, """{"type":"speechStart","turnId":1}""", ct);
+            await Send(socket, """{"type":"speaker","label":"A"}""", ct);
+            await Send(socket, """{"type":"speechStart","turnId":2}""", ct);
+            await Send(socket, """{"type":"speaker","label":"B"}""", ct);
+            Assert.Contains("endStream", Encoding.UTF8.GetString(await Receive(socket, ct)));
+            await Send(socket, """{"type":"speechComplete","turnId":1,"transcript":"First sentence."}""", ct);
+            await releaseLast.Task.WaitAsync(ct);
+            if (!missingLastTurn)
+                await Send(socket, """{"type":"speechComplete","turnId":2,"transcript":"Last sentence."}""", ct);
+            await socket.CloseOutputAsync(abnormalClose ? WebSocketCloseStatus.InternalServerError : WebSocketCloseStatus.NormalClosure, null, ct);
+            await clientFinished.Task.WaitAsync(ct);
+        }, ct);
+        await using var session = await MetaRealtimeStreamingSession.ConnectAsync("fixture", "model", "DIARIZATION", [], [], ct, new Uri($"ws://127.0.0.1:{port}/"));
+        var events = new ConcurrentQueue<StreamingTranscriptEvent>();
+        session.TranscriptReceived += e => { events.Enqueue(e); if (e.Text.Contains("First sentence.")) firstObserved.TrySetResult(); };
+        await session.SendAudioAsync(new byte[] { 1, 2, 3, 4 }, ct);
+        var finish = session.FinalizeAsync(ct);
+        try
+        {
+            await firstObserved.Task.WaitAsync(ct);
+            await Task.WhenAny(finish, Task.Delay(100, ct));
+            Assert.False(finish.IsCompleted);
+            releaseLast.TrySetResult();
+            if (abnormalClose || missingLastTurn)
+            {
+                await Assert.ThrowsAnyAsync<WebSocketException>(() => finish);
+                Assert.DoesNotContain(events, e => e.IsFinal);
+            }
+            else
+            {
+                await finish;
+                var final = Assert.Single(events, e => e.IsFinal);
+                Assert.Contains("First sentence.", final.Text);
+                Assert.Contains("Last sentence.", final.Text);
+            }
+        }
+        finally { releaseLast.TrySetResult(); clientFinished.TrySetResult(); }
+        await server.WaitAsync(ct);
+    }
+
     private static async Task<byte[]> Receive(WebSocket socket,CancellationToken ct)
     {
         using var message=new MemoryStream();var buffer=new byte[4096];WebSocketReceiveResult frame;

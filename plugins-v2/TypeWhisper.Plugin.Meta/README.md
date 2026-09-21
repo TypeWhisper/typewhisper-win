@@ -2,7 +2,7 @@
 
 Meta transcription, realtime transcription, LLM completion, model refresh, language/dictionary/diarization and reasoning settings.
 
-Version `1.2.1`; plugin ID `com.typewhisper.meta`; minimum host `1.1.2`.
+Version `1.2.2`; plugin ID `com.typewhisper.meta`; minimum host `1.1.2`.
 Independent branch: `seofood/meta-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -28,7 +28,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Meta/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.meta` inside the plugin project. Package that directory as the ZIP root.
 
-36 plugin tests pass. Fake HTTP protocol, key storage failure, real local WebSocket finalization/premature close and package lifecycle. Realtime completion emits one terminal final result. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+38 plugin tests pass. Fake HTTP protocol, key storage failure, real local WebSocket finalization/premature close and package lifecycle. Realtime completion emits one terminal final result. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
@@ -38,4 +38,8 @@ The shared portable SDK/host suite passed 259 tests on the Live Transcript host 
 
 The settings page groups speaker labels under transcription and model/reasoning choices under text processing. Model choices come from the account API catalog; settings use the host’s shared save action. The host displays the Meta brand icon in navigation and provider selectors.
 
-Authenticated validation on September 21, 2026 passed connection validation, model discovery (one transcription and five text models), German batch transcription, Muse Spark 1.3 Contributor text processing, and realtime transcription. The realtime fixture produced ten partial updates and one complete final transcript. Microphone and settings acceptance in the development app are pending.
+Authenticated validation on September 21, 2026 passed connection validation, model discovery (one transcription and five text models), German batch transcription, Muse Spark 1.3 Contributor text processing, and realtime transcription. The realtime fixture produced ten partial updates and one complete final transcript. Marco confirmed dictation and accepted the settings in the development app.
+
+Realtime finalization drains all completed speaker turns and requires a clean WebSocket close after endStream. Loopback tests cover delayed final turns, abnormal closure, and missing turn completion.
+
+Version 1.2.2 was additionally validated against the live API with speaker labels enabled: 13 interim updates, one complete final transcript, and clean stream closure.
