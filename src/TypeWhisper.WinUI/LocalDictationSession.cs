@@ -501,6 +501,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 #if DEBUG
     internal static bool CorrectionProbeEnabled => WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_CORRECTION_PROBE") == "1";
 #endif
+    internal nint TrayMenuHandle { get; set; }
+    internal Task StartForApiAsync(AutomaticWorkflowSnapshot? workflow, Action<long> captureStarted) => SetRecordingAsync(true, workflow, captureStarted);
     internal Task StartAsync() => SetRecordingAsync(true);
     internal Task StartAsync(AutomaticWorkflowSnapshot workflow) => SetRecordingAsync(true, workflow);
     private bool _stopPending;
@@ -532,7 +534,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         finally { _effects.End(); _gate.Release(); }
     }
 
-    private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null)
+    private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null)
     {
         if (_disposed) return;
         // An API-started capture can bypass the input coordinator. Preserve explicit
@@ -641,6 +643,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { _targetApp = "Target app"; }
                 BeginApiDictationGeneration();
+                captureStarted?.Invoke(ApiDictationGeneration);
                 _started = DateTime.UtcNow;
                 _lastDuration = TimeSpan.Zero;
                 _sounds.IsEnabled = preferences.SoundFeedbackEnabled;
@@ -661,7 +664,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 GetWindowThreadProcessId(_target, out var currentTargetProcessId);
-                if (GetForegroundWindow() != _target || currentTargetProcessId != processId)
+                if (!DictationStartupTarget.IsValid(_target, GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
                 {
                     SetStatus("The target changed during recording setup. Focus your text field and try again.", DictationPhase.Idle);
                     return;
@@ -671,7 +674,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 GetWindowThreadProcessId(_target, out currentTargetProcessId);
-                if (GetForegroundWindow() != _target || currentTargetProcessId != processId)
+                if (!DictationStartupTarget.IsValid(_target, GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
                 {
                     await StopCloudStreamAsync();
                     SetStatus("The target changed during recording setup. Focus your text field and try again.", DictationPhase.Idle);

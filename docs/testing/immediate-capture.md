@@ -77,3 +77,9 @@ the real shortcut, OS microphone driver, UI dispatcher and target-field inspecti
   is insufficient to detect missing audio.
 - Marco confirmed immediate-speaking microphone tests with local Whisper and Soniox
   in the development app.
+
+### Startup controls and API identity
+
+The original target remains locked during setup. The exact native handle of TypeWhisper's tray menu is an allowed temporary foreground window, so finishing from the tray does not discard early audio. Other foreground changes, exited processes and changed process IDs remain rejected. Seven policy cases cover these boundaries.
+
+API starts register their generation immediately after microphone capture begins, before provider setup or a queued silence stop can complete. A successful start response returns that session ID and its current status, which may already be processing, completed or failed after a slow startup. Requests where the microphone never started still return 409. Existing API generation/result correlation tests cover stable identity and isolation from subsequent recordings.

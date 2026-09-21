@@ -127,6 +127,7 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.ToggleDictationHotkeyPause),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenRecoveryFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowApplicationUpdates));
+        _window.TrayMenuHandle = _tray.WindowHandle;
         void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,
             _window.CanChangeDictationHotkeyPause, _window.DictationHotkeyPauseError);
         _window.TrayActionsChanged += UpdateTrayActions;

@@ -14,6 +14,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow : Window
 {
+    internal nint TrayMenuHandle { set => _dictation.TrayMenuHandle = value; }
     private readonly WinUIHttpApi _httpApi;
     private const int CompactWidth = 780;
     private const int CompactHeight = 520;

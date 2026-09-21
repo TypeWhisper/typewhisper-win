@@ -12,6 +12,7 @@ internal sealed class TrayIconService : IDisposable
 {
     private readonly TaskbarIcon _icon;
     private readonly TrayMenuWindow _menuWindow;
+    internal nint WindowHandle => WinRT.Interop.WindowNative.GetWindowHandle(_menuWindow);
     private readonly MenuFlyoutItem _status;
     private readonly MenuFlyoutItem _recordingAction;
     private readonly MenuFlyoutItem _cancelProcessing;
