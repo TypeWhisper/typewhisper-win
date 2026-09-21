@@ -50,3 +50,11 @@ Runtime sources originated from `plugins/TypeWhisper.Plugin.Script` at `4db8f6ac
 ## Development acceptance
 
 Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Ten focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 20 portable plugin tests cover execution and settings.
+
+## Windows screenshots
+
+Captured from the running development app on September 21, 2026. The editor image shows syntax highlighting and the Format/Expand controls; the second image shows the checklist test result, including German umlauts, in the settings status area. Unsaved draft indicators are visible.
+
+![Script Runner command editor](../../docs/screenshots/script-runner-editor.jpg)
+
+![Script Runner checklist test output](../../docs/screenshots/script-runner-test-result.jpg)
