@@ -46,3 +46,5 @@ The ZIP was installed and loaded in the WinUI development profile, preserving ex
 Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
 
 On the WinUI-only acceptance host, model cards rendered correctly and the downloaded 4B model loaded through the settings button. A settings screenshot is included under docs/screenshots/gemma. End-to-end workflow acceptance remains separate from this model-loading check.
+
+The user confirmed the resume flow in the WinUI development app: canceling a model download and starting it again continued from the previously downloaded position.
