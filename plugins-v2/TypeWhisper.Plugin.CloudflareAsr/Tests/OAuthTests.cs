@@ -159,7 +159,7 @@ public sealed partial class ProviderTests
         using var http = new HttpClient(new Handler((_,_) => throw new TaskCanceledException("token exchange timed out")));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         Task? callback = null;
-        var failure = await Assert.ThrowsAsync<TaskCanceledException>(() => new CloudflareOAuth(http).SignInAsync(timeout.Token,uri =>
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(() => new CloudflareOAuth(http).SignInAsync(timeout.Token,uri =>
         {
             var query = Query(uri.Query);
             callback = Task.Run(async () =>
@@ -171,7 +171,8 @@ public sealed partial class ProviderTests
             return Task.CompletedTask;
         },port:0));
         await callback!;
-        Assert.Equal("token exchange timed out",failure.Message);
+        Assert.Equal(PluginRequestFailureKind.Timeout,failure.FailureKind);
+        Assert.IsType<TaskCanceledException>(failure.InnerException);
         Assert.False(timeout.IsCancellationRequested);
     }
 
@@ -200,6 +201,58 @@ public sealed partial class ProviderTests
         Assert.DoesNotContain("private-provider-details",failure.Message);
         Assert.Equal("old-access",connection.Key);
         Assert.Single(host.Secrets);
+    }
+
+    [Theory]
+    [InlineData(429, PluginRequestFailureKind.RateLimit)]
+    [InlineData(503, PluginRequestFailureKind.ServerError)]
+    public async Task AccountDiscoveryPreservesTransientFailures(int status, PluginRequestFailureKind expected)
+    {
+        using var http = new HttpClient(new Handler((_,_) => new HttpResponseMessage((HttpStatusCode)status)));
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(() => new CloudflareOAuth(http).AccountsAsync("access",default));
+        Assert.Equal(expected,failure.FailureKind);
+        Assert.True(failure.IsTransient);
+        Assert.DoesNotContain("permission",failure.Message,StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task OAuthTransportFailuresAreClassified(bool timeout, bool discovery)
+    {
+        using var http = new HttpClient(new Handler((_,_) => timeout
+            ? throw new TaskCanceledException("private endpoint details")
+            : throw new HttpRequestException("private endpoint details")));
+        var oauth = new CloudflareOAuth(http);
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(async () =>
+        {
+            if(discovery) await oauth.AccountsAsync("access",default);
+            else await oauth.RefreshAsync(new("access","refresh",DateTimeOffset.UtcNow),default);
+        });
+        Assert.Equal(timeout ? PluginRequestFailureKind.Timeout : PluginRequestFailureKind.Network,failure.FailureKind);
+        Assert.True(failure.IsTransient);
+        Assert.DoesNotContain("private endpoint details",failure.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OAuthCallerCancellationIsNotConvertedToProviderFailure(bool discovery)
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var http = new HttpClient(new Handler((_,_) =>
+        {
+            cancellation.Cancel();
+            throw new OperationCanceledException(cancellation.Token);
+        }));
+        var oauth = new CloudflareOAuth(http);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            if(discovery) await oauth.AccountsAsync("access",cancellation.Token);
+            else await oauth.RefreshAsync(new("access","refresh",DateTimeOffset.UtcNow),cancellation.Token);
+        });
     }
 
 }

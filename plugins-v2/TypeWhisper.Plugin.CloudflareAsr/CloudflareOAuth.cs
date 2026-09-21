@@ -120,17 +120,7 @@ internal sealed class CloudflareOAuth(HttpClient http)
     {
         fields["client_id"] = ClientId;
         using var request = new HttpRequestMessage(HttpMethod.Post,"https://dash.cloudflare.com/oauth2/token") { Content = new FormUrlEncodedContent(fields) };
-        using var response = await http.SendAsync(request, ct);
-        var status = (int)response.StatusCode;
-        if (status is 408 or 429 or >= 500 and <= 599)
-        {
-            var kind = status == 429 ? PluginRequestFailureKind.RateLimit
-                : status == 408 ? PluginRequestFailureKind.Timeout : PluginRequestFailureKind.ServerError;
-            var retry = response.Headers.RetryAfter?.Delta;
-            if (retry is null && response.Headers.RetryAfter?.Date is { } retryAt)
-                retry = retryAt > DateTimeOffset.UtcNow ? retryAt - DateTimeOffset.UtcNow : TimeSpan.Zero;
-            throw new PluginRequestException("Cloudflare sign-in is temporarily unavailable. Please retry.", kind, status, retry);
-        }
+        using var response = await SendOAuthAsync(request, ct);
         if (!response.IsSuccessStatusCode) throw new CloudflareSignInException($"Cloudflare sign-in could not be completed (HTTP {(int)response.StatusCode}). Connect again.");
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)); var root = doc.RootElement;
         var access = ProviderConnection.RequiredText(root,"access_token");
@@ -143,6 +133,33 @@ internal sealed class CloudflareOAuth(HttpClient http)
         return new(access,refresh,DateTimeOffset.UtcNow.AddSeconds(seconds));
     }
 
+    private async Task<HttpResponseMessage> SendOAuthAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        HttpResponseMessage response;
+        try { response = await http.SendAsync(request, ct); }
+        catch (HttpRequestException ex)
+        {
+            ct.ThrowIfCancellationRequested();
+            throw new PluginRequestException("Cloudflare could not be reached. Please retry.", PluginRequestFailureKind.Network, innerException: ex);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new PluginRequestException("Cloudflare sign-in request timed out. Please retry.", PluginRequestFailureKind.Timeout, innerException: ex);
+        }
+        var status = (int)response.StatusCode;
+        if (status is 408 or 429 or >= 500 and <= 599)
+        {
+            var kind = status == 429 ? PluginRequestFailureKind.RateLimit
+                : status == 408 ? PluginRequestFailureKind.Timeout : PluginRequestFailureKind.ServerError;
+            var retry = response.Headers.RetryAfter?.Delta;
+            if (retry is null && response.Headers.RetryAfter?.Date is { } retryAt)
+                retry = retryAt > DateTimeOffset.UtcNow ? retryAt - DateTimeOffset.UtcNow : TimeSpan.Zero;
+            response.Dispose();
+            throw new PluginRequestException("Cloudflare sign-in is temporarily unavailable. Please retry.", kind, status, retry);
+        }
+        return response;
+    }
+
     internal async Task<IReadOnlyList<CloudflareAccount>> AccountsAsync(string token, CancellationToken ct)
     {
         var accounts = new List<CloudflareAccount>();
@@ -150,7 +167,7 @@ internal sealed class CloudflareOAuth(HttpClient http)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get,$"https://api.cloudflare.com/client/v4/accounts?per_page=50&page={page}");
             request.Headers.Authorization = new("Bearer",token);
-            using var response = await http.SendAsync(request,ct);
+            using var response = await SendOAuthAsync(request,ct);
             if (!response.IsSuccessStatusCode) throw new CloudflareSignInException("Cloudflare account discovery failed. Check the Account Settings Read permission.");
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
             _ = ProviderConnection.Required(doc.RootElement,"success",JsonValueKind.True);

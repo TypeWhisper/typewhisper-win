@@ -22,6 +22,8 @@ public sealed partial class CloudflareAsrPlugin
     /// <inheritdoc />
     public bool SupportsDictionaryTerms => IsTurbo;
     /// <inheritdoc />
+    public DictionaryTermsBudget DictionaryTermsBudget => ProviderConnection.DictionaryBudget;
+    /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [Field("accountId",
         Connection.UsesOAuth ? "Cloudflare account" : "Cloudflare account ID",
         Connection.UsesOAuth ? "Cloudflare-Konto" : "Cloudflare-Konto-ID", "", PluginSettingsSection.Connection,

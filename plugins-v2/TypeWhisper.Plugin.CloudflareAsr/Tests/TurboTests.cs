@@ -38,6 +38,9 @@ public sealed partial class ProviderTests
         Assert.Empty(plugin.SupportedLanguages); Assert.False(plugin.SupportsDictionaryTerms);
         plugin.SelectModel("whisper-large-v3-turbo");
         Assert.Contains("de", plugin.SupportedLanguages); Assert.True(plugin.SupportsDictionaryTerms);
+        var engine = (ITranscriptionEnginePlugin)plugin;
+        Assert.Equal(100,engine.DictionaryTermsBudget.MaxTerms);
+        Assert.Equal(4000,engine.DictionaryTermsBudget.MaxTotalChars);
         Assert.Equal(74_000_000, plugin.MaximumAudioUploadBytes);
         await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
         Assert.Equal("whisper-large-v3-turbo", plugin.SelectedModelId);
