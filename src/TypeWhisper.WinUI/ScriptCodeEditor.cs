@@ -137,7 +137,8 @@ internal sealed class ScriptCodeEditor : RichEditBox
     {
         if (IsReadOnly || _composing) return;
         var control = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
-        if (!control) return;
+        var alt = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
+        if (!control || alt) return; // AltGr produces Ctrl+Alt on several keyboard layouts.
         if (e.Key is VirtualKey.B or VirtualKey.I or VirtualKey.U) { e.Handled = true; return; }
         var shift = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
         if (e.Key == VirtualKey.Z) { e.Handled = true; if (shift) RedoText(); else UndoText(); }

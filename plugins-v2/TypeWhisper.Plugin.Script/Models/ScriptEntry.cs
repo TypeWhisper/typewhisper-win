@@ -16,7 +16,7 @@ public sealed record ScriptEntry
     public string Shell { get; init; } = ScriptShells.CommandPrompt;
 
     /// <summary>Gets whether this command participates in post-processing.</summary>
-    public bool IsEnabled { get; init; } = true;
+    public bool IsEnabled { get; init; }
 
     /// <summary>Gets the execution timeout in seconds.</summary>
     public int TimeoutSeconds { get; init; } = ScriptDefaults.TimeoutSeconds;
@@ -24,6 +24,8 @@ public sealed record ScriptEntry
 
 internal static class ScriptDefaults
 {
+    // Reserve space for the cmd startup wrapper below its 8191-character shell limit.
+    internal const int MaximumCmdCommandLength = 7900;
     internal const int TimeoutSeconds = 5;
     internal const int MinimumTimeoutSeconds = 1;
     internal const int MaximumTimeoutSeconds = 300;

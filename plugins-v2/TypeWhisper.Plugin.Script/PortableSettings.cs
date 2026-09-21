@@ -48,7 +48,7 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
                         Field(script, "name", L("Name", "Name"), "", script.Name, 200),
                         Field(script, "command", L("Command", "Befehl"), L("Text arrives on stdin; write the replacement to stdout. Enable only commands you trust.", "Text kommt über stdin; den Ersatztext auf stdout ausgeben. Nur vertrauenswürdige Befehle aktivieren."), script.Command) with { IsMultiline = true },
                         Field(script, "shell", L("Shell", "Shell"), "", script.Shell) with { Choices = ScriptShells.Supported.Select(s => new PluginSettingChoice(s, s)).ToArray() },
-                        Field(script, "timeout", L("Timeout in seconds", "Zeitlimit in Sekunden"), "1–300", script.TimeoutSeconds.ToString(CultureInfo.InvariantCulture), 3),
+                        Field(script, "timeout", L("Timeout (seconds)", "Zeitlimit in Sekunden"), "1–300", script.TimeoutSeconds.ToString(CultureInfo.InvariantCulture), 3),
                         Field(script, "enabled", L("Run after dictation", "Nach dem Diktieren ausführen"), L("This saved command runs after each transcription while the plugin is enabled.", "Dieser gespeicherte Befehl wird bei aktiviertem Plugin nach jedem Diktat ausgeführt."), script.IsEnabled ? "true" : "false") with
                         { Choices = [new("false", L("Off", "Aus")), new("true", L("On", "An"))] }
                     });
@@ -100,6 +100,8 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
                 _ => throw new ArgumentException("Invalid script setting.")
             };
         }
+        if (ScriptProcessRunner.UsesCommandPrompt(ScriptShells.Normalize(result.Shell)) && result.Command.Length > ScriptDefaults.MaximumCmdCommandLength)
+            throw new ArgumentException(L("cmd commands are limited to 7900 characters. Use PowerShell for longer scripts.", "cmd-Befehle sind auf 7900 Zeichen begrenzt. Verwende PowerShell für längere Skripte."));
         if (result.IsEnabled && string.IsNullOrWhiteSpace(result.Command)) throw new ArgumentException("Enter a command before enabling the script.");
         return result;
     }
@@ -136,10 +138,10 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
                 };
                 if (Selected is { } s)
                 {
-                    actions.Add(Action("test:" + s.Id, L("Test script", "Skript testen"), L("Run the entered command with sample text without saving or enabling it.", "Den eingegebenen Befehl mit Beispieltext ausführen, ohne ihn zu speichern oder zu aktivieren.")));
-                    actions.Add(Action("remove:" + s.Id, L("Remove script…", "Skript entfernen…"), L("Remove this script.", "Dieses Skript entfernen.")));
-                    if (ActiveService.Scripts.IndexOf(s) > 0) actions.Add(Action("up:" + s.Id, L("Move earlier", "Früher ausführen"), ""));
-                    if (ActiveService.Scripts.IndexOf(s) < ActiveService.Scripts.Count - 1) actions.Add(Action("down:" + s.Id, L("Move later", "Später ausführen"), ""));
+                    actions.Add(Action("test:" + s.Id, L("Run test", "Skript testen"), L("Run the entered command with sample text without saving or enabling it.", "Den eingegebenen Befehl mit Beispieltext ausführen, ohne ihn zu speichern oder zu aktivieren.")));
+                    actions.Add(Action("remove:" + s.Id, L("Remove", "Skript entfernen…"), L("Remove this script.", "Dieses Skript entfernen.")));
+                    if (ActiveService.Scripts.IndexOf(s) > 0) actions.Add(Action("up:" + s.Id, L("Move up", "Früher ausführen"), ""));
+                    if (ActiveService.Scripts.IndexOf(s) < ActiveService.Scripts.Count - 1) actions.Add(Action("down:" + s.Id, L("Move down", "Später ausführen"), ""));
                 }
                 return actions;
             }

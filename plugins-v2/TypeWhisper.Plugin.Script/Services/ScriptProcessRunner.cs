@@ -19,6 +19,11 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         PostProcessingContext context,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(script.Command))
+            return new(ScriptExecutionStatus.Failed, "", "Enter a command before running the script.", null, TimeSpan.Zero);
+        if (UsesCommandPrompt(ScriptShells.Normalize(script.Shell)) && script.Command.Length > ScriptDefaults.MaximumCmdCommandLength)
+            return new(ScriptExecutionStatus.Failed, "", "cmd commands are limited to 7900 characters. Use PowerShell for longer scripts.", null, TimeSpan.Zero);
         var stopwatch = Stopwatch.StartNew();
         var readyMarker = "TypeWhisperReady" + Guid.NewGuid().ToString("N");
         using var process = new Process { StartInfo = CreateStartInfo(script, context, readyMarker) };
@@ -107,6 +112,9 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         }
     }
 
+    internal static bool UsesCommandPrompt(string shell) =>
+        shell is not (ScriptShells.WindowsPowerShell or ScriptShells.PowerShell);
+
     private static ProcessStartInfo CreateStartInfo(ScriptEntry script, PostProcessingContext context, string readyMarker)
     {
         var shell = ScriptShells.Normalize(script.Shell);
@@ -128,7 +136,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             StandardErrorEncoding = s_utf8WithoutBom
         };
 
-        if (shell == ScriptShells.CommandPrompt || !ScriptShells.IsSupported(shell))
+        if (UsesCommandPrompt(shell))
         {
             startInfo.ArgumentList.Add("/d");
             startInfo.ArgumentList.Add("/s");
@@ -143,7 +151,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             startInfo.ArgumentList.Add("-Command");
         }
 
-        var command = shell == ScriptShells.CommandPrompt
+        var command = UsesCommandPrompt(shell)
             ? ">nul set /p \"__TYPEWHISPER_START=\" & >&2 echo " + readyMarker + " & " + script.Command
             : "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); " +
               "$encodedScript = [Console]::In.ReadLine(); [Console]::Error.WriteLine('" + readyMarker + "'); & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedScript))))";
@@ -162,7 +170,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
     private static async Task StartContainedScriptAsync(Process process, ScriptEntry script, string marker, CancellationToken cancellationToken)
     {
         // Transport PowerShell source over stdin, keeping Unicode scripts within the Windows command-line limit.
-        var payload = ScriptShells.Normalize(script.Shell) == ScriptShells.CommandPrompt ? "start"
+        var payload = UsesCommandPrompt(ScriptShells.Normalize(script.Shell)) ? "start"
             : Convert.ToBase64String(Encoding.UTF8.GetBytes(script.Command));
         await process.StandardInput.WriteLineAsync(payload.AsMemory(), cancellationToken).ConfigureAwait(false);
         await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);

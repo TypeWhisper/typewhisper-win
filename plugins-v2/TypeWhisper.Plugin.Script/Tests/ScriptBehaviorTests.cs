@@ -57,10 +57,12 @@ public sealed class ScriptBehaviorTests
         Assert.Equal("Äpfel & Öl.", result.Output);
     }
 
-    [WindowsFact]
-    public async Task CmdHandshakePreservesScriptInput()
+    [WindowsTheory]
+    [InlineData("cmd")]
+    [InlineData("legacy-unknown-shell")]
+    public async Task CmdHandshakePreservesScriptInput(string shell)
     {
-        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd", Command="findstr .", TimeoutSeconds=30 }, "first line\r\nsecond line\r\n", new(), default);
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell=shell, Command="findstr .", TimeoutSeconds=30 }, "first line\r\nsecond line\r\n", new(), default);
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal("first line\r\nsecond line\r\n", result.Output);
     }
@@ -97,8 +99,52 @@ public sealed class ScriptBehaviorTests
             using var fixture = new PortableFixture(); using var plugin = new ScriptPlugin();
             await plugin.ActivateAsync(fixture.Host);
             Assert.Equal(expected, plugin.TextSettings[0].Title);
+            if (culture == "ja-JP")
+            {
+                await plugin.ExecuteSettingsActionAsync("add", default);
+                Assert.Contains(plugin.TextSettings, field => field.Id.EndsWith(":timeout") && field.Title == "タイムアウト（秒）");
+            }
         }
         finally { System.Globalization.CultureInfo.CurrentUICulture = previous; }
+    }
+
+    [WindowsFact]
+    public async Task CmdBoundaryLeavesRoomForItsStartupWrapper()
+    {
+        const string prefix = "echo OK & rem ";
+        var command = prefix + new string('x', ScriptDefaults.MaximumCmdCommandLength - prefix.Length);
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd", Command=command, TimeoutSeconds=30 }, "", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("OK", result.Output.Trim());
+    }
+
+    [Fact]
+    public async Task OversizedCmdDraftIsRejectedBeforeSaveOrLaunch()
+    {
+        using var fixture = new PortableFixture(); using var plugin = new ScriptPlugin();
+        await plugin.ActivateAsync(fixture.Host);
+        await plugin.ExecuteSettingsActionAsync("add", default);
+        var script = Assert.Single(plugin.Service!.Scripts);
+        var command = "rem " + new string('x', 32764);
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveProfileSettingsAsync(script.Id.ToString(),
+            new Dictionary<string,string> { [script.Id + ":shell"] = "cmd", [script.Id + ":command"] = command }, null, default));
+        Assert.Equal(script, Assert.Single(plugin.Service.Scripts));
+        var result = await new ScriptProcessRunner().RunAsync(script with { Shell="cmd", Command=command }, "keep", new(), default);
+        Assert.Equal(ScriptExecutionStatus.Failed, result.Status);
+        Assert.Contains("7900", result.Error);
+    }
+
+    [Fact]
+    public async Task IncompleteOrExplicitlyEnabledBlankEntriesCannotEraseDictation()
+    {
+        using var fixture = new PortableFixture();
+        Directory.CreateDirectory(fixture.Host.PluginDataDirectory);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Host.PluginDataDirectory, "scripts.json"),
+            "[{\"name\":\"incomplete\"},{\"name\":\"blank\",\"isEnabled\":true,\"command\":\" \"}]");
+        using var plugin = new ScriptPlugin(); await plugin.ActivateAsync(fixture.Host);
+        Assert.Equal(2, plugin.Service!.Scripts.Count);
+        Assert.All(plugin.Service.Scripts, script => Assert.False(script.IsEnabled));
+        Assert.Equal("keep this dictation", await plugin.ProcessAsync("keep this dictation", new(), default));
     }
 
     [Fact]

@@ -95,6 +95,7 @@ internal sealed class ScriptConfigurationStore : IScriptConfigurationStore
 
     private static ScriptEntry Normalize(ScriptEntry script) => script with
     {
+        IsEnabled = script.IsEnabled && !string.IsNullOrWhiteSpace(script.Command),
         Name = script.Name ?? "",
         Command = script.Command ?? "",
         Shell = string.IsNullOrWhiteSpace(script.Shell) ? ScriptShells.CommandPrompt : script.Shell,

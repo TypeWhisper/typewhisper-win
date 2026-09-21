@@ -1,6 +1,6 @@
 # Script Runner
 
-Local text post-processing with an ordered list of scripts. Version `1.3.2`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
+Local text post-processing with an ordered list of scripts. Version `1.3.3`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
 
 ## Setup
 
@@ -10,7 +10,7 @@ Use the **Scripts** sidebar to add or select a script. Edit its name, shell, com
 
 **Command editor:** PowerShell, pwsh and cmd receive syntax highlighting, a line/column indicator, an expandable editing area and text-only undo/redo. **Format** adds readable line breaks to PowerShell statement separators without evaluating the command. The test result opens in a read-only, copyable preview with Markdown/JSON highlighting.
 
-Transcription text arrives on stdin; stdout becomes the replacement text. Scripts run locally with your Windows user permissions. A failed or timed-out script keeps its input and the chain continues. Cancellation stops execution. Shells and their descendants are contained in a Windows job and stopped when execution finishes, including when a parent exits first. Timeouts are configurable from 1 to 300 seconds.
+Transcription text arrives on stdin; stdout becomes the replacement text. Scripts run locally with your Windows user permissions. A failed or timed-out script keeps its input and the chain continues. Cancellation stops execution. Shells and their descendants are contained in a Windows job and stopped when execution finishes, including when a parent exits first. Timeouts are configurable from 1 to 300 seconds. Commands can contain up to 32,768 characters in PowerShell/pwsh; cmd commands are validated at 7,900 characters to leave room for the startup wrapper. Incomplete and blank persisted entries remain disabled.
 
 ## Built-in templates
 
@@ -49,7 +49,7 @@ Runtime sources originated from `plugins/TypeWhisper.Plugin.Script` at `4db8f6ac
 
 ## Development acceptance
 
-Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Eleven focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 27 portable plugin tests cover execution and settings.
+Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Eleven focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 31 portable plugin tests cover execution and settings.
 
 ## Windows screenshots
 
