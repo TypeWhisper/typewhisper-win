@@ -5,6 +5,20 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class LiveTextPlacementTests
 {
+    [Theory]
+    [InlineData((int)LiveTextResizeEdge.Right)]
+    [InlineData((int)LiveTextResizeEdge.Left)]
+    [InlineData((int)LiveTextResizeEdge.Top)]
+    [InlineData((int)LiveTextResizeEdge.Bottom)]
+    [InlineData((int)(LiveTextResizeEdge.Right | LiveTextResizeEdge.Bottom))]
+    public void Resize_AfterWorkAreaShrinksNormalizesWindowAndMinimums(int edge)
+    {
+        var work = new LiveTextBounds(-200, -100, 200, 100);
+        var result = LiveTextPlacement.Resize(new(-200, -100, 400, 300), (LiveTextResizeEdge)edge,
+            80, 60, 280, 140, work);
+        Assert.Equal(work, result);
+    }
+
     [Fact]
     public void ScreenMap_UsesTargetMonitorOriginAndUniformScale()
     {

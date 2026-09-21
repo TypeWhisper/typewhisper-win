@@ -38,6 +38,11 @@ internal static class LiveTextPlacement
     internal static LiveTextBounds Resize(LiveTextBounds start, LiveTextResizeEdge edge,
         int dx, int dy, int minimumWidth, int minimumHeight, LiveTextBounds work)
     {
+        // Display changes can leave the native window larger than, or outside, its new work area.
+        var width = Math.Clamp(start.Width, 0, Math.Max(0, work.Width));
+        var height = Math.Clamp(start.Height, 0, Math.Max(0, work.Height));
+        start = new(Math.Clamp(start.X, work.X, work.X + Math.Max(0, work.Width - width)),
+            Math.Clamp(start.Y, work.Y, work.Y + Math.Max(0, work.Height - height)), width, height);
         var left = start.X;
         var top = start.Y;
         var right = start.X + start.Width;
