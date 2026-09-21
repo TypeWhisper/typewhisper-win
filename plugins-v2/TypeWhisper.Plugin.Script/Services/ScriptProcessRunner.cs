@@ -49,7 +49,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         {
             // Wait for acknowledgement before sending input: cmd set /p can otherwise
             // prefetch and discard text intended for the user command.
-            await StartContainedScriptAsync(process, readyMarker, timeout.Token).ConfigureAwait(false);
+            await StartContainedScriptAsync(process, script, readyMarker, timeout.Token).ConfigureAwait(false);
             var inputTask = WriteInputAsync(process, input, timeout.Token);
             var outputTask = ReadLimitedAsync(
                 process.StandardOutput.BaseStream, MaximumStandardOutputBytes, "stdout", timeout.Token);
@@ -63,6 +63,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
                 throw streamFailure;
 
             await exitTask.ConfigureAwait(false);
+            job.Dispose(); // Close inherited pipes held by descendants before awaiting EOF.
             await inputTask.ConfigureAwait(false);
             var output = Encoding.UTF8.GetString(await outputTask.ConfigureAwait(false));
             var error = Encoding.UTF8.GetString(await errorTask.ConfigureAwait(false));
@@ -142,11 +143,10 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             startInfo.ArgumentList.Add("-Command");
         }
 
-        var encodedScript = Convert.ToBase64String(Encoding.UTF8.GetBytes(script.Command));
         var command = shell == ScriptShells.CommandPrompt
             ? ">nul set /p \"__TYPEWHISPER_START=\" & >&2 echo " + readyMarker + " & " + script.Command
             : "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); " +
-              "$null = [Console]::In.ReadLine(); [Console]::Error.WriteLine('" + readyMarker + "'); & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + encodedScript + "'))))";
+              "$encodedScript = [Console]::In.ReadLine(); [Console]::Error.WriteLine('" + readyMarker + "'); & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedScript))))";
         startInfo.ArgumentList.Add(command);
         startInfo.Environment["TYPEWHISPER_APP_NAME"] = context.ActiveAppName ?? "";
         startInfo.Environment["TYPEWHISPER_LANGUAGE"] = context.SourceLanguage ?? "";
@@ -159,9 +159,12 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             ? timeoutSeconds
             : ScriptDefaults.TimeoutSeconds;
 
-    private static async Task StartContainedScriptAsync(Process process, string marker, CancellationToken cancellationToken)
+    private static async Task StartContainedScriptAsync(Process process, ScriptEntry script, string marker, CancellationToken cancellationToken)
     {
-        await process.StandardInput.WriteLineAsync("start".AsMemory(), cancellationToken).ConfigureAwait(false);
+        // Transport PowerShell source over stdin, keeping Unicode scripts within the Windows command-line limit.
+        var payload = ScriptShells.Normalize(script.Shell) == ScriptShells.CommandPrompt ? "start"
+            : Convert.ToBase64String(Encoding.UTF8.GetBytes(script.Command));
+        await process.StandardInput.WriteLineAsync(payload.AsMemory(), cancellationToken).ConfigureAwait(false);
         await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
         var response = new StringBuilder();
         var singleByte = new byte[1];

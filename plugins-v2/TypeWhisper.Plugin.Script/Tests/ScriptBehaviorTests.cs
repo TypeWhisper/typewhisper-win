@@ -49,6 +49,15 @@ public sealed class ScriptBehaviorTests
     }
 
     [WindowsFact]
+    public async Task LargeUnicodePowerShellSourceDoesNotExpandTheCommandLine()
+    {
+        var command = "#" + new string('界', 24000) + "\n[Console]::Out.Write([Console]::In.ReadToEnd())";
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command, TimeoutSeconds=30 }, "Äpfel & Öl.", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("Äpfel & Öl.", result.Output);
+    }
+
+    [WindowsFact]
     public async Task CmdHandshakePreservesScriptInput()
     {
         var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd", Command="findstr .", TimeoutSeconds=30 }, "first line\r\nsecond line\r\n", new(), default);
@@ -62,8 +71,9 @@ public sealed class ScriptBehaviorTests
         using var fixture = new PortableFixture();
         var marker = Path.Combine(fixture.Root, "child-pid.txt");
         var escaped = marker.Replace("'", "''");
-        var command = "$p = [Diagnostics.Process]::Start('ping.exe', '-n 40 127.0.0.1'); [IO.File]::WriteAllText('" + escaped + "', [string]$p.Id)";
-        await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command, TimeoutSeconds=30 }, "", new(), default);
+        var command = "$p = Start-Process cmd.exe -ArgumentList '/d /c ping -n 40 127.0.0.1 >nul' -NoNewWindow -PassThru; [IO.File]::WriteAllText('" + escaped + "', [string]$p.Id)";
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command, TimeoutSeconds=30 }, "", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
         Assert.True(File.Exists(marker));
         var id = int.Parse(File.ReadAllText(marker));
         try
