@@ -268,7 +268,7 @@ public sealed class MetaPluginTests
         Assert.Equal("Meta", sut.PluginName);
         Assert.Equal("Meta", sut.ProviderDisplayName);
         Assert.Equal("Meta", sut.ProviderName);
-        Assert.Equal("1.2.9", sut.PluginVersion);
+        Assert.Equal("1.2.10", sut.PluginVersion);
         Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
     }
 
@@ -480,7 +480,7 @@ public sealed class MetaPluginTests
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
         Assert.Equal("Meta", root.GetProperty("name").GetString());
-        Assert.Equal("1.2.9", root.GetProperty("version").GetString());
+        Assert.Equal("1.2.10", root.GetProperty("version").GetString());
         Assert.Equal("1.1.2", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(
@@ -592,6 +592,18 @@ public sealed class MetaPluginTests
         Assert.Equal("muse-spark-9", Assert.Single(restarted.SupportedModels).Id);
         Assert.Equal("muse-voice-transcribe-9", Assert.Single(restarted.TranscriptionModels).Id);
         Assert.Equal("muse-spark-9", restarted.SelectedLlmModelId);
+    }
+
+    [Fact]
+    public void TerminalSilenceReplacesEarlierCompletedPushToTalkTurn()
+    {
+        var collector = new MetaRealtimeTranscriptCollector("PUSH_TO_TALK");
+        collector.Apply("""{"type":"speechComplete","turnId":1,"transcript":"Stale text."}""");
+        var update = collector.Apply("""{"type":"transcript","final":true,"transcript":""}""");
+        Assert.True(update.IsFinalEvent);
+        Assert.True(collector.HasFinalSingleTurn);
+        Assert.Equal("", collector.CompletedText);
+        Assert.Null(update.Transcript);
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

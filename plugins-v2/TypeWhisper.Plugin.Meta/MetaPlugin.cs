@@ -123,7 +123,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.9";
+    public string PluginVersion => "1.2.10";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
