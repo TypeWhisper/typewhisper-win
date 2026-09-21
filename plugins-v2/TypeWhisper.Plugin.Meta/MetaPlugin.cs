@@ -123,7 +123,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.9";
+    public string PluginVersion => "1.2.10";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -489,13 +489,20 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
                 return ModelRefreshFailed(new JsonException("Model response must contain a data array."));
             }
 
-            var models = data.EnumerateArray()
-                .Where(element => element.ValueKind == JsonValueKind.Object)
-                .Select(element => new MetaFetchedModel(
-                    element.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
-                    element.TryGetProperty("owned_by", out var owner) ? owner.GetString() : null))
-                .Where(model => !string.IsNullOrWhiteSpace(model.Id))
-                .ToList();
+            var models = new List<MetaFetchedModel>();
+            foreach (var element in data.EnumerateArray())
+            {
+                if (element.ValueKind != JsonValueKind.Object
+                    || !element.TryGetProperty("id", out var id)
+                    || id.ValueKind != JsonValueKind.String
+                    || string.IsNullOrWhiteSpace(id.GetString()))
+                {
+                    return ModelRefreshFailed(new JsonException("Model entries must contain a nonblank string id."));
+                }
+
+                models.Add(new MetaFetchedModel(id.GetString()!,
+                    element.TryGetProperty("owned_by", out var owner) ? owner.GetString() : null));
+            }
             var llmModels = NormalizeModels(models, IsLlmModel);
             var transcriptionModels = NormalizeModels(models, IsTranscriptionModel);
             await CommitCatalogAsync(llmModels, transcriptionModels);
