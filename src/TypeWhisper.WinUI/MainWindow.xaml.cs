@@ -1284,6 +1284,7 @@ public sealed partial class MainWindow : Window
                 }
                 UpdateOverlayControls();
             };
+            _settingsWindow.PreviewDismissed += HideOverlayPreview;
             _settingsWindow.PausePreviewRequested += PausePreview_Click;
             _settingsWindow.PreviewRequested += (_, _) =>
             {

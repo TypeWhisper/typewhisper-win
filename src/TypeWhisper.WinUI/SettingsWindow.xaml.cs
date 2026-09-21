@@ -53,6 +53,7 @@ public sealed partial class SettingsWindow : Window
     internal event Action<OverlayPreferences>? PreferencesChanged;
     internal event EventHandler? PreviewRequested;
     internal event EventHandler? PausePreviewRequested;
+    internal event Action? PreviewDismissed;
 
     private readonly Dictionary<string, string> _values;
     private readonly List<ChoicePicker> _catalogPickers = [];
@@ -265,6 +266,7 @@ public sealed partial class SettingsWindow : Window
     internal void ShowSelectComparison()
     {
         ShowCategory("Appearance");
+        PreviewDismissed?.Invoke();
         SettingsScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
         ComparisonScroll.Visibility = Visibility.Visible;
         SessionHint.Text = "Design comparison only · tell me 1–4";
@@ -342,6 +344,7 @@ public sealed partial class SettingsWindow : Window
     private void ShowCategoryCore(string category)
     {
         if (category is "Statistics" or "Sync & backup") { WorkspaceRequested?.Invoke(category); return; }
+        if (category is not ("Appearance" or "Overlay editor")) PreviewDismissed?.Invoke();
         // TextChanged can arrive after the programmatic clear. It must not rebuild
         // this page again and remove the control focused by OpenSearchResult.
         _searchActive = false;
@@ -428,6 +431,7 @@ public sealed partial class SettingsWindow : Window
     internal void ShowSetup(bool returnToTray = false)
     {
         if (CreateSetupWizard is null) return;
+        PreviewDismissed?.Invoke();
         _returnToTrayAfterSetup = returnToTray;
         foreach (var picker in _catalogPickers.Concat(_appearancePickers)) if (picker.IsPopupOpen) picker.ClosePopup();
         CatalogContent.Children.Clear(); _catalogPickers.Clear();
@@ -481,6 +485,7 @@ public sealed partial class SettingsWindow : Window
             if (_searchActive) ShowCategory(_currentCategory);
             return;
         }
+        PreviewDismissed?.Invoke();
         _searchActive = true;
         IntegrationsHost.Visibility = Visibility.Collapsed;
         SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;

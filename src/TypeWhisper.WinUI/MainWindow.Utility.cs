@@ -19,6 +19,7 @@ public sealed partial class MainWindow
             CloseUtility();
             if (UtilityOpen) return;
         }
+        HideOverlayPreview();
         _settingsWindow?.AppWindow.Hide();
         ShowFromActivation();
         _launcherQuery = SearchBox.Text;
