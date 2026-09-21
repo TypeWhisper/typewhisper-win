@@ -639,7 +639,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 PasteDiagnostics.Write("dictation.capture.active");
                 _targetProcessId = processId;
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
-                catch (ArgumentException) { _targetApp = "Target app"; }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { _targetApp = "Target app"; }
                 BeginApiDictationGeneration();
                 _started = DateTime.UtcNow;
                 _lastDuration = TimeSpan.Zero;
