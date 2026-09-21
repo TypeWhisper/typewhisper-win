@@ -11,7 +11,8 @@ internal sealed record OverlayPreferences(OverlayMode Mode, bool LiveText, bool 
     OverlayWidget Right = OverlayWidget.Timer,
     double LiveTranscriptionFontSize = TypeWhisper.Core.Models.AppSettings.DefaultLiveTranscriptionFontSize,
     int PreviewBubbleAutoHideMilliseconds = TypeWhisper.Core.Models.AppSettings.DefaultPreviewBubbleAutoHideMilliseconds,
-    OverlayScreen Screen = OverlayScreen.ActiveScreen)
+    OverlayScreen Screen = OverlayScreen.ActiveScreen,
+    bool FloatingLiveText = false)
 {
     internal bool IsValid => Enum.IsDefined(Screen) && Enum.IsDefined(Mode) && Enum.IsDefined(Anchor) && Enum.IsDefined(Left) && Enum.IsDefined(Right)
         && double.IsFinite(LiveTranscriptionFontSize) && LiveTranscriptionFontSize is >= 10 and <= 18
