@@ -52,6 +52,12 @@ public sealed partial class SettingsWindow : Window
     private readonly List<HandCursorButton> _searchButtons = [];
     internal event Action<OverlayPreferences>? PreferencesChanged;
     internal event EventHandler? PreviewRequested;
+    internal event EventHandler? PausePreviewRequested;
+    internal event Action? PreviewDismissed;
+    internal event Action<double, double>? PreviewSizeRequested;
+    private bool _previewVisible;
+    private bool _updatingPreviewSize;
+    private LiveTextPreviewFrame? _floatingPreviewFrame;
 
     private readonly Dictionary<string, string> _values;
     private readonly List<ChoicePicker> _catalogPickers = [];
@@ -104,6 +110,10 @@ public sealed partial class SettingsWindow : Window
             {
                 if (!_updating && double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var size))
                     Publish(_preferences with { LiveTranscriptionFontSize = size });
+            };
+            else if (picker.Tag is "LiveTextPlacement") picker.SelectionChanged += value =>
+            {
+                if (!_updating) Publish(_preferences with { FloatingLiveText = value == "Floating window" });
             };
             else if (picker.Tag is "PreviewBubbleAutoHideMilliseconds") picker.SelectionChanged += value =>
             {
@@ -175,6 +185,10 @@ public sealed partial class SettingsWindow : Window
         _preferences = preferences;
         var size = preferences.LiveTranscriptionFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         _values["LiveTranscriptionFontSize"] = size;
+        var placement = preferences.FloatingLiveText ? "Floating window" : "Attached to recording";
+        _values["LiveTextPlacement"] = placement;
+        _appearancePickers.FirstOrDefault(p => p.Tag is "LiveTextPlacement")?.SetOptions(
+            new[] { "Attached to recording", "Floating window" }.Select(label => new Choice(label, label, "Saved on this device")).ToArray(), placement, placement);
         var duration = DurationChoices.FirstOrDefault(c => c.Milliseconds == preferences.PreviewBubbleAutoHideMilliseconds).Label
             ?? $"{preferences.PreviewBubbleAutoHideMilliseconds} milliseconds";
         _values["PreviewBubbleAutoHideMilliseconds"] = duration;
@@ -199,14 +213,99 @@ public sealed partial class SettingsWindow : Window
             ? "Unavailable for the selected provider or task. Text arrives after recording stops. Your live-text preference is kept for supported models."
             : minimal
             ? "Hidden in Minimal. Your preference is kept for Standard and Compact."
+            : preferences.FloatingLiveText
+            ? "Show live text in a floating window. Drag its header to move it or its edges to resize it. Longer text scrolls."
             : "Show streaming text beside the recording block. Longer text scrolls.";
         DetailsDescription.Text = standard
             ? "Show the audio level in dBFS and measured render frequency. Off by default."
             : "Available in Standard only. Your preference is kept when switching layouts.";
+        UpdatePreviewSizeControls();
         _updating = false;
     }
 
-    internal void SetPreviewVisible(bool visible) => PreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
+    internal void SetPreviewVisible(bool visible, bool paused = false)
+    {
+        if (visible && !_previewVisible) RefreshPreviewSize();
+        _previewVisible = visible;
+        UpdatePreviewSizeControls();
+        PreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
+        EditorPreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
+        PausePreviewButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        PausePreviewButton.Content = paused ? "Resume preview" : "Pause preview";
+    }
+
+    private void UpdatePreviewSizeControls()
+    {
+        PreviewSizeSection.Visibility = _preferences.FloatingLiveText ? Visibility.Visible : Visibility.Collapsed;
+        PreviewWidth.IsEnabled = PreviewHeight.IsEnabled = _previewVisible && _preferences.LiveText && _preferences.Mode != OverlayMode.Minimal;
+        FloatingPositionLabel.Text = _previewVisible ? "POSITION ON SCREEN" : "LAST PREVIEW POSITION";
+        PreviewSizeHint.Text = PreviewWidth.IsEnabled
+            ? "Changes are saved automatically. Size uses display-independent pixels and is limited to your screen's work area."
+            : "Start the preview with live text enabled in Standard or Compact to adjust its width and height.";
+    }
+
+    internal void SetFloatingPlacement(LiveTextPreviewFrame? frame)
+    {
+        _floatingPreviewFrame = frame;
+        if (frame is not null) SetPreviewSizeValues(frame.Width, frame.Height);
+        FloatingPositionPreview.Visibility = frame is null ? Visibility.Collapsed : Visibility.Visible;
+        RenderFloatingPosition();
+    }
+
+    private void FloatingScreen_SizeChanged(object sender, SizeChangedEventArgs e) => RenderFloatingPosition();
+
+    private void RenderFloatingPosition()
+    {
+        if (_floatingPreviewFrame is not { } frame) return;
+        var map = LiveTextPlacement.Project(frame, FloatingScreenCanvas.ActualWidth, FloatingScreenCanvas.Height);
+        Place(FloatingScreenBounds, map.Screen);
+        Place(FloatingWindowThumb, map.Window);
+        var horizontal = 100d * (frame.Window.X - frame.WorkArea.X) / Math.Max(1, frame.WorkArea.Width);
+        var vertical = 100d * (frame.Window.Y - frame.WorkArea.Y) / Math.Max(1, frame.WorkArea.Height);
+        FloatingPositionSummary.Text = $"Live text · {horizontal:0}% from left · {vertical:0}% from top";
+        AutomationProperties.SetName(FloatingPositionPreview, FloatingPositionSummary.Text);
+
+        static void Place(FrameworkElement element, LiveTextMapRect rect)
+        {
+            Canvas.SetLeft(element, rect.X);
+            Canvas.SetTop(element, rect.Y);
+            element.Width = rect.Width;
+            element.Height = rect.Height;
+        }
+    }
+
+    private void RefreshPreviewSize()
+    {
+        var saved = LiveTextPlacement.Read(WinUIProfile.DataPath("live-text-position.json"));
+        SetPreviewSizeValues(_floatingPreviewFrame?.Width ?? saved?.Width ?? 420,
+            _floatingPreviewFrame?.Height ?? saved?.Height ?? 220);
+    }
+
+    private void SetPreviewSizeValues(double width, double height)
+    {
+        var wasUpdating = _updatingPreviewSize;
+        _updatingPreviewSize = true;
+        try
+        {
+            PreviewWidth.Value = Math.Round(width);
+            PreviewHeight.Value = Math.Round(height);
+        }
+        finally { _updatingPreviewSize = wasUpdating; }
+    }
+
+    private void PreviewSize_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_updating || _updatingPreviewSize || !PreviewWidth.IsEnabled || !double.IsFinite(args.NewValue)) return;
+        // Preserve the other dimension if the window was resized with the pointer since this page opened.
+        var saved = LiveTextPlacement.Read(WinUIProfile.DataPath("live-text-position.json"));
+        var width = ReferenceEquals(sender, PreviewWidth) ? args.NewValue : _floatingPreviewFrame?.Width ?? saved?.Width ?? PreviewWidth.Value;
+        var height = ReferenceEquals(sender, PreviewHeight) ? args.NewValue : _floatingPreviewFrame?.Height ?? saved?.Height ?? PreviewHeight.Value;
+        if (!double.IsFinite(width) || !double.IsFinite(height)) return;
+        PreviewSizeRequested?.Invoke(width, height);
+        RefreshPreviewSize();
+    }
+
+    private void PausePreview_Click(object sender, RoutedEventArgs e) => PausePreviewRequested?.Invoke(this, EventArgs.Empty);
 
     private void Mode_Click(object sender, RoutedEventArgs e)
     {
@@ -246,7 +345,8 @@ public sealed partial class SettingsWindow : Window
     internal void ShowSelectComparison()
     {
         ShowCategory("Appearance");
-        SettingsScroll.Visibility = PreviewButton.Visibility = Visibility.Collapsed;
+        PreviewDismissed?.Invoke();
+        SettingsScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
         ComparisonScroll.Visibility = Visibility.Visible;
         SessionHint.Text = "Design comparison only · tell me 1–4";
     }
@@ -323,6 +423,7 @@ public sealed partial class SettingsWindow : Window
     private void ShowCategoryCore(string category)
     {
         if (category is "Statistics" or "Sync & backup") { WorkspaceRequested?.Invoke(category); return; }
+        if (category is not ("Appearance" or "Overlay editor")) PreviewDismissed?.Invoke();
         // TextChanged can arrive after the programmatic clear. It must not rebuild
         // this page again and remove the control focused by OpenSearchResult.
         _searchActive = false;
@@ -342,12 +443,13 @@ public sealed partial class SettingsWindow : Window
         }
         SettingsScroll.Visibility = category == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         EditorScroll.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
+        if (category == "Overlay editor") RefreshPreviewSize();
         var integration = category == "Integrations" || category.StartsWith("plugin:", StringComparison.Ordinal);
         if (!integration) IntegrationDismissed?.Invoke();
         IntegrationsHost.Visibility = integration ? Visibility.Visible : Visibility.Collapsed;
         var catalog = category != "Appearance" && category != "Overlay editor" && !integration;
         CatalogScroll.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;
-        PreviewButton.Visibility = catalog || integration ? Visibility.Collapsed : Visibility.Visible;
+        EditorPreviewButton.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
         SessionHint.Text = catalog ? "UI preview only · no system changes" : "Overlay preferences are saved on this device";
         if (integration)
         {
@@ -409,6 +511,7 @@ public sealed partial class SettingsWindow : Window
     internal void ShowSetup(bool returnToTray = false)
     {
         if (CreateSetupWizard is null) return;
+        PreviewDismissed?.Invoke();
         _returnToTrayAfterSetup = returnToTray;
         foreach (var picker in _catalogPickers.Concat(_appearancePickers)) if (picker.IsPopupOpen) picker.ClosePopup();
         CatalogContent.Children.Clear(); _catalogPickers.Clear();
@@ -462,9 +565,10 @@ public sealed partial class SettingsWindow : Window
             if (_searchActive) ShowCategory(_currentCategory);
             return;
         }
+        PreviewDismissed?.Invoke();
         _searchActive = true;
         IntegrationsHost.Visibility = Visibility.Collapsed;
-        SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = PreviewButton.Visibility = Visibility.Collapsed;
+        SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
         CatalogScroll.Visibility = Visibility.Visible;
         _catalogPickers.Clear();
         _searchButtons.Clear();

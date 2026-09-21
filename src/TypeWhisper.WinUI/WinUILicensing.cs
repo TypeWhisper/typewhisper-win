@@ -1,12 +1,13 @@
 using TypeWhisper.Presentation;
-using TypeWhisper.Windows.Services;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
 // One service and one operation for the whole profile, independent of settings view lifetime.
 internal static class WinUILicensing
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false })
+        { Timeout = TimeSpan.FromSeconds(15) };
     internal static LicenseService Service { get; } = new(Http, Path.GetDirectoryName(WinUIProfile.DataPath("licenses.dat"))!);
     internal static PremiumAccess Current => new(Commercial: Service.HasCommercialLicense, Supporter: Service.HasSupporterLicense,
         SignedIn: WinUIPremiumAccount.SignedIn, PremiumAccount: WinUIPremiumAccount.Premium);

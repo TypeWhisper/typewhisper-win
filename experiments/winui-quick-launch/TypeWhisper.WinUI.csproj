@@ -7,7 +7,7 @@
     <RootNamespace>TypeWhisper.WinUI</RootNamespace>
     <AssemblyName>TypeWhisper.WinUI</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\..\src\TypeWhisper.Windows\Resources\Icons\app.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\src\TypeWhisper.WinUI\Assets\app.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>

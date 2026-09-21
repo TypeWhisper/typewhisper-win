@@ -1,0 +1,17 @@
+{
+  "id": "com.typewhisper.smallest-ai",
+  "name": "Smallest AI",
+  "version": "1.2.1",
+  "author": "TypeWhisper",
+  "description": "Pulse transcription and Lightning text-to-speech",
+  "category": "transcription",
+  "categories": [
+    "transcription",
+    "tts"
+  ],
+  "isLocal": false,
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.SmallestAi.dll",
+  "pluginClass": "TypeWhisper.Plugin.SmallestAi.SmallestAiPlugin",
+  "minHostVersion": "1.1.4"
+}

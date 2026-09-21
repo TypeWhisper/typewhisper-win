@@ -6,13 +6,13 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveStartupSettings
 {
-    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers, StartupRegistration registration)
+    internal static async void Configure(string category, StackPanel content, List<ChoicePicker> pickers, IStartupRegistration registration)
     {
         if (category != "General") return;
         var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "AutostartEnabled"));
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear(); row.IsHitTestVisible = true;
-        var toggle = new ToggleSwitch { Header = "Start this development build with Windows" };
+        var toggle = new ToggleSwitch { Header = "Start TypeWhisper with Windows", IsEnabled = false };
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var updating = false;
         void Show(StartupRegistrationState state)
@@ -20,12 +20,17 @@ internal static class LiveStartupSettings
             updating = true;
             toggle.IsOn = state.IsEnabled; toggle.IsEnabled = state.CanChange;
             status.Text = state.Error ?? (state.IsEnabled
-                ? "Registered for sign-in. Starts in the tray from this published output. Windows can also disable it in Startup apps."
-                : "Off. Enabling registers this development build only; your installed TypeWhisper registration stays unchanged.");
+                ? "Starts in the tray when you sign in. Windows can also disable it in Startup apps."
+                : "Off. Enable to start TypeWhisper in the tray when you sign in.");
             updating = false;
         }
-        toggle.Toggled += (_, _) => { if (!updating) Show(registration.SetEnabled(toggle.IsOn)); };
+        toggle.Toggled += async (_, _) =>
+        {
+            if (updating) return;
+            toggle.IsEnabled = false;
+            Show(await registration.SetEnabledAsync(toggle.IsOn));
+        };
         row.Children.Add(toggle); row.Children.Add(status);
-        Show(registration.Read());
+        Show(await registration.ReadAsync());
     }
 }

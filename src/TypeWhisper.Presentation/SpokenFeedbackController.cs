@@ -4,7 +4,11 @@ namespace TypeWhisper.Presentation;
 /// <param name="Id">Stable voice identifier.</param>
 /// <param name="DisplayName">User-facing installed voice name.</param>
 /// <param name="Language">Optional language tag reported by the system.</param>
-public sealed record SpokenFeedbackVoice(string Id, string DisplayName, string? Language = null);
+public sealed record SpokenFeedbackVoice(string Id, string DisplayName, string? Language = null)
+{
+    /// <summary>Whether this voice synthesizes audio on this device.</summary>
+    public bool IsLocal { get; init; } = true;
+}
 
 /// <summary>One bounded speech request. Null voice and output IDs select system defaults.</summary>
 /// <param name="Text">Complete text to speak; never silently truncated.</param>

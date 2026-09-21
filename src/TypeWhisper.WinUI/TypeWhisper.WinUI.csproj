@@ -7,7 +7,7 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>../TypeWhisper.Windows/Resources/Icons/app.ico</ApplicationIcon>
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <!-- Solution builds do not pass a RID; WinUI's native runtime cannot use AnyCPU. -->
@@ -16,8 +16,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <DefineConstants>$(DefineConstants);TYPEWHISPER_WINUI;DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TypeWhisperStoreBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);TYPEWHISPER_STORE</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
@@ -40,32 +43,25 @@
     </Reference>
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
-    <ProjectReference Include="../TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <ProjectReference Include="../TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/PluginLogos/*.svg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../TypeWhisper.Windows/Resources/PluginLogos/claude.png" Link="Assets/PluginLogos/claude.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Assets/PluginLogos/supertone.png" />
+    <Content Include="Assets/PluginLogos/supertone.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Assets/PluginLogos/soniox.png" />
+    <Content Include="Assets/PluginLogos/soniox.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Assets/PluginLogos/reson8.png" />
+    <Content Include="Assets/PluginLogos/reson8.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Assets/PluginLogos/claude.png" />
+    <Content Include="Assets/PluginLogos/claude.png" Link="Assets/PluginLogos/claude.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Assets/PluginLogos/gemini.png" />
+    <Content Include="Assets/PluginLogos/gemini.png" Link="Assets/PluginLogos/gemini.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets/PluginLogos/*LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../TypeWhisper.Windows/Resources/Localization/en.json" LogicalName="TypeWhisper.LicenseStrings.json" />
-    <Compile Include="../TypeWhisper.Windows/Services/LicenseService.cs" Link="Platform/LicenseService.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/AppDistribution.cs" Link="Platform/AppDistribution.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/AppReleaseGithubSource.cs" Link="Platform/AppReleaseGithubSource.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="Platform/AudioRecordingService.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/SoundService.cs" Link="Platform/SoundService.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/AudioDuckingService.cs" Link="Platform/AudioDuckingService.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/MediaPauseService.cs" Link="Platform/MediaPauseService.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/WindowsClipboardTransaction.cs" Link="Platform/WindowsClipboardTransaction.cs" />
-    <Compile Include="../TypeWhisper.Windows/Native/NativeMethods.Clipboard.cs" Link="Platform/NativeMethods.Clipboard.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="Platform/WasapiAudioInputCapture.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingResult.cs" Link="Platform/AudioRecordingResult.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/RecorderCaptureModels.cs" Link="Platform/RecorderCaptureModels.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/RecorderTranscriptionBuffer.cs" Link="Platform/RecorderTranscriptionBuffer.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/SystemAudioCaptureService.cs" Link="Platform/SystemAudioCaptureService.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/AudioCaptureDiagnostics.cs" Link="Platform/AudioCaptureDiagnostics.cs" />
-    <Compile Include="../TypeWhisper.Windows/Services/NonFatalExceptionFilter.cs" Link="Platform/NonFatalExceptionFilter.cs" />
+    <EmbeddedResource Include="Resources/LicenseStrings.json" LogicalName="TypeWhisper.LicenseStrings.json" />
   </ItemGroup>
   <Target Name="PublishWinUIResources" AfterTargets="Publish">
     <ItemGroup>
