@@ -17,6 +17,7 @@ public sealed class OverlayPreferencesTests : IDisposable
         var loaded = OverlayPreferencesStore.Read(FilePath);
         Assert.Equal(OverlayScreen.ActiveScreen, loaded.Screen);
         Assert.Equal(12, loaded.LiveTranscriptionFontSize);
+        Assert.False(loaded.FloatingLiveText);
         Assert.Equal(1500, loaded.PreviewBubbleAutoHideMilliseconds);
         Assert.Equal(OverlayMode.Compact, loaded.Mode);
         Assert.Equal(OverlayAnchor.TopRight, loaded.Anchor);
