@@ -1,0 +1,19 @@
+{
+  "id": "com.typewhisper.meta",
+  "name": "Meta",
+  "version": "1.2.12",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark.",
+  "descriptions": {
+    "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechertrennung und Prompt-Verarbeitung mit Muse Spark."
+  },
+  "category": "transcription",
+  "categories": [
+    "transcription",
+    "llm"
+  ],
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Meta.dll",
+  "pluginClass": "TypeWhisper.Plugin.Meta.MetaPlugin"
+}

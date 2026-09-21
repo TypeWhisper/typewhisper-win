@@ -49,6 +49,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.gemini" => "gemini",
             "com.typewhisper.gemma-local" => "gemma",
             "com.typewhisper.gladia" => "gladia",
+            "com.typewhisper.meta" => "meta",
             "com.typewhisper.groq" => "groq",
             "com.typewhisper.granite-speech" => "ibm",
             "com.typewhisper.github-copilot" => "github-copilot",
@@ -77,7 +78,7 @@ public sealed class PluginBrandIcon : UserControl
         var logo = new Image { Stretch = Stretch.Uniform };
         logo.ImageFailed += (_, _) => { if (ReferenceEquals(Content, logo)) ShowFallback(); };
         Content = logo;
-        var raster = brand is "claude" or "gemini" or "soniox" or "reson8" or "supertone";
+        var raster = brand is "claude" or "gemini" or "soniox" or "reson8" or "supertone" or "meta";
         var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (raster ? ".png" : ".svg")));
         logo.Source = raster ? new BitmapImage(uri) : new SvgImageSource(uri);
     }
