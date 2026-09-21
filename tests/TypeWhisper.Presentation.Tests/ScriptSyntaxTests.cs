@@ -56,6 +56,14 @@ public sealed class ScriptSyntaxTests
     }
 
     [Fact]
+    public void FormatterPreservesBacktickContinuedQuotedStrings()
+    {
+        const string code = "$text = \"first`\nsecond;third\"; Write-Output $text";
+        Assert.Equal("$text = \"first`\nsecond;third\";\nWrite-Output $text", ScriptSyntax.FormatPowerShell(code));
+        Assert.Contains(ScriptSyntax.Tokenize(code, "powershell"), t => t.Kind == ScriptTokenKind.String && code.Substring(t.Start, t.Length) == "\"first`\nsecond;third\"");
+    }
+
+    [Fact]
     public void UndoMemoryIsBounded()
     {
         var history = new ScriptEditHistory("");

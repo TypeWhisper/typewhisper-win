@@ -20,32 +20,44 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-        using var process = new Process { StartInfo = CreateStartInfo(script, context) };
+        var readyMarker = "TypeWhisperReady" + Guid.NewGuid().ToString("N");
+        using var process = new Process { StartInfo = CreateStartInfo(script, context, readyMarker) };
 
+        WindowsProcessJob? job = null;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             process.Start();
+            // The shell waits for a stdin handshake before executing user code.
+            // Assign containment first so even an immediately exiting parent cannot orphan children.
+            job = WindowsProcessJob.CreateAndAssign(process);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
+            await StopProcessAsync(process, job).ConfigureAwait(false);
+            job?.Dispose();
             stopwatch.Stop();
             return new ScriptExecutionResult(
                 ScriptExecutionStatus.StartFailed, "", ex.Message, null, stopwatch.Elapsed);
         }
 
+        using var jobLifetime = job;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(NormalizeTimeout(script.TimeoutSeconds)));
 
-        var inputTask = WriteInputAsync(process, input, timeout.Token);
-        var outputTask = ReadLimitedAsync(
-            process.StandardOutput.BaseStream, MaximumStandardOutputBytes, "stdout", timeout.Token);
-        var errorTask = ReadLimitedAsync(
-            process.StandardError.BaseStream, MaximumStandardErrorBytes, "stderr", timeout.Token);
-        var exitTask = process.WaitForExitAsync(timeout.Token);
-        var failureTask = WatchForFailureAsync(inputTask, outputTask, errorTask);
-
         try
         {
+            // Wait for acknowledgement before sending input: cmd set /p can otherwise
+            // prefetch and discard text intended for the user command.
+            await StartContainedScriptAsync(process, readyMarker, timeout.Token).ConfigureAwait(false);
+            var inputTask = WriteInputAsync(process, input, timeout.Token);
+            var outputTask = ReadLimitedAsync(
+                process.StandardOutput.BaseStream, MaximumStandardOutputBytes, "stdout", timeout.Token);
+            var errorTask = ReadLimitedAsync(
+                process.StandardError.BaseStream, MaximumStandardErrorBytes, "stderr", timeout.Token);
+            var exitTask = process.WaitForExitAsync(timeout.Token);
+            var failureTask = WatchForFailureAsync(inputTask, outputTask, errorTask);
+
             var first = await Task.WhenAny(exitTask, failureTask).ConfigureAwait(false);
             if (first == failureTask && await failureTask.ConfigureAwait(false) is { } streamFailure)
                 throw streamFailure;
@@ -64,19 +76,19 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         }
         catch (OutputLimitExceededException ex)
         {
-            await StopProcessAsync(process).ConfigureAwait(false);
+            await StopProcessAsync(process, job).ConfigureAwait(false);
             stopwatch.Stop();
             return new ScriptExecutionResult(
                 ScriptExecutionStatus.OutputLimitExceeded, "", ex.Message, null, stopwatch.Elapsed);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await StopProcessAsync(process).ConfigureAwait(false);
+            await StopProcessAsync(process, job).ConfigureAwait(false);
             throw;
         }
         catch (OperationCanceledException)
         {
-            await StopProcessAsync(process).ConfigureAwait(false);
+            await StopProcessAsync(process, job).ConfigureAwait(false);
             stopwatch.Stop();
             return new ScriptExecutionResult(
                 ScriptExecutionStatus.TimedOut,
@@ -87,14 +99,14 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException)
         {
-            await StopProcessAsync(process).ConfigureAwait(false);
+            await StopProcessAsync(process, job).ConfigureAwait(false);
             stopwatch.Stop();
             return new ScriptExecutionResult(
                 ScriptExecutionStatus.Failed, "", ex.Message, null, stopwatch.Elapsed);
         }
     }
 
-    private static ProcessStartInfo CreateStartInfo(ScriptEntry script, PostProcessingContext context)
+    private static ProcessStartInfo CreateStartInfo(ScriptEntry script, PostProcessingContext context, string readyMarker)
     {
         var shell = ScriptShells.Normalize(script.Shell);
         var startInfo = new ProcessStartInfo
@@ -130,8 +142,11 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             startInfo.ArgumentList.Add("-Command");
         }
 
-        var command = shell == ScriptShells.CommandPrompt ? script.Command :
-            "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false);\n" + script.Command;
+        var encodedScript = Convert.ToBase64String(Encoding.UTF8.GetBytes(script.Command));
+        var command = shell == ScriptShells.CommandPrompt
+            ? ">nul set /p \"__TYPEWHISPER_START=\" & >&2 echo " + readyMarker + " & " + script.Command
+            : "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); " +
+              "$null = [Console]::In.ReadLine(); [Console]::Error.WriteLine('" + readyMarker + "'); & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + encodedScript + "'))))";
         startInfo.ArgumentList.Add(command);
         startInfo.Environment["TYPEWHISPER_APP_NAME"] = context.ActiveAppName ?? "";
         startInfo.Environment["TYPEWHISPER_LANGUAGE"] = context.SourceLanguage ?? "";
@@ -143,6 +158,26 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         timeoutSeconds is >= ScriptDefaults.MinimumTimeoutSeconds and <= ScriptDefaults.MaximumTimeoutSeconds
             ? timeoutSeconds
             : ScriptDefaults.TimeoutSeconds;
+
+    private static async Task StartContainedScriptAsync(Process process, string marker, CancellationToken cancellationToken)
+    {
+        await process.StandardInput.WriteLineAsync("start".AsMemory(), cancellationToken).ConfigureAwait(false);
+        await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+        var response = new StringBuilder();
+        var singleByte = new byte[1];
+        while (response.Length <= marker.Length + 4)
+        {
+            if (await process.StandardError.BaseStream.ReadAsync(singleByte, cancellationToken).ConfigureAwait(false) == 0)
+                throw new IOException("The script shell exited before acknowledging startup.");
+            if (singleByte[0] == (byte)'\n')
+            {
+                if (response.ToString().Trim() == marker) return;
+                break;
+            }
+            response.Append((char)singleByte[0]);
+        }
+        throw new IOException("The script shell did not acknowledge startup.");
+    }
 
     private static async Task WriteInputAsync(Process process, string input, CancellationToken cancellationToken)
     {
@@ -206,8 +241,9 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         return null;
     }
 
-    private static async Task StopProcessAsync(Process process)
+    private static async Task StopProcessAsync(Process process, WindowsProcessJob? job)
     {
+        job?.Dispose(); // Closes descendants even if the shell has already exited.
         try
         {
             if (!process.HasExited)

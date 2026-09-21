@@ -37,6 +37,59 @@ public sealed class ScriptBehaviorTests
         var runner=new ScriptProcessRunner();var result=await runner.RunAsync(new(){Name="wait",Shell="powershell",Command="Start-Sleep -Seconds 30",TimeoutSeconds=1},"input",new(),default);
         Assert.False(result.IsSuccess);
     }
+    [WindowsTheory]
+    [InlineData("param([string]$Prefix = 'prefix:'); [Console]::Out.Write($Prefix + [Console]::In.ReadToEnd())", "prefix:Äpfel & Öl.")]
+    [InlineData("using namespace System\n[Console]::Out.Write([Console]::In.ReadToEnd())", "Äpfel & Öl.")]
+    public async Task PowerShellLeadingDeclarationsRemainValid(string command, string expected)
+    {
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command }, "Äpfel & Öl.", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(expected, result.Output);
+    }
+
+    [WindowsFact]
+    public async Task CmdHandshakePreservesScriptInput()
+    {
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd", Command="findstr ." }, "first line\r\nsecond line\r\n", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("first line\r\nsecond line\r\n", result.Output);
+    }
+
+    [WindowsFact]
+    public async Task DescendantCannotOutliveExitedShell()
+    {
+        using var fixture = new PortableFixture();
+        var marker = Path.Combine(fixture.Root, "child-pid.txt");
+        var escaped = marker.Replace("'", "''");
+        var command = "$p = [Diagnostics.Process]::Start('ping.exe', '-n 40 127.0.0.1'); [IO.File]::WriteAllText('" + escaped + "', [string]$p.Id)";
+        await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command, TimeoutSeconds=2 }, "", new(), default);
+        Assert.True(File.Exists(marker));
+        var id = int.Parse(File.ReadAllText(marker));
+        try
+        {
+            using var child = System.Diagnostics.Process.GetProcessById(id);
+            await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.True(child.HasExited);
+        }
+        catch (ArgumentException) { /* The terminated child has already been reaped. */ }
+    }
+
+    [Theory]
+    [InlineData("de-DE", "Skripte")]
+    [InlineData("ja-JP", "スクリプト")]
+    public async Task PortableHostWithoutLocalizationUsesPackagedCulture(string culture, string expected)
+    {
+        var previous = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = new(culture);
+            using var fixture = new PortableFixture(); using var plugin = new ScriptPlugin();
+            await plugin.ActivateAsync(fixture.Host);
+            Assert.Equal(expected, plugin.TextSettings[0].Title);
+        }
+        finally { System.Globalization.CultureInfo.CurrentUICulture = previous; }
+    }
+
     [Fact]
     public async Task CorruptConfiguration_BlocksMutation()
     {

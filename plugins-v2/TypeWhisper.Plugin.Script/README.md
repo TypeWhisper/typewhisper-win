@@ -1,6 +1,6 @@
 # Script Runner
 
-Local text post-processing with an ordered list of scripts. Version `1.3.0`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
+Local text post-processing with an ordered list of scripts. Version `1.3.1`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
 
 ## Setup
 
@@ -10,7 +10,7 @@ Use the **Scripts** sidebar to add or select a script. Edit its name, shell, com
 
 **Command editor:** PowerShell, pwsh and cmd receive syntax highlighting, a line/column indicator, an expandable editing area and text-only undo/redo. **Format** adds readable line breaks to PowerShell statement separators without evaluating the command. The test result opens in a read-only, copyable preview with Markdown/JSON highlighting.
 
-Transcription text arrives on stdin; stdout becomes the replacement text. Scripts run locally with your Windows user permissions. A failed or timed-out script keeps its input and the chain continues. Cancellation stops execution. Timeouts are configurable from 1 to 300 seconds.
+Transcription text arrives on stdin; stdout becomes the replacement text. Scripts run locally with your Windows user permissions. A failed or timed-out script keeps its input and the chain continues. Cancellation stops execution. Shells and their descendants are contained in a Windows job and stopped when execution finishes, including when a parent exits first. Timeouts are configurable from 1 to 300 seconds.
 
 ## Built-in templates
 
@@ -41,7 +41,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Script/Tests -c Release
 
 The package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.script` inside the plugin project. Package that directory as the ZIP root.
 
-Tests cover every template through real PowerShell, Unicode, draft tests without persistence, batch validation, stale selection rejection, disabled defaults, restart persistence, timeout, cancellation, fail-open chaining, corrupt-store protection and portable package lifecycle. Shell execution tests require Windows; configuration and package tests also run headlessly on other platforms. Automated tests do not replace visual and dictation acceptance in the app.
+Tests cover every template through real PowerShell, Unicode, draft tests without persistence, batch validation, stale selection rejection, disabled defaults, restart persistence, timeout, cancellation, fail-open chaining, corrupt-store protection and portable package lifecycle. Regression coverage also includes leading PowerShell declarations, descendant cleanup, multiline quoted strings and packaged localization without a host localization service. Shell execution tests require Windows; configuration and package tests also run headlessly on other platforms. Automated tests do not replace visual and dictation acceptance in the app.
 
 ## Migration scope
 
@@ -49,7 +49,7 @@ Runtime sources originated from `plugins/TypeWhisper.Plugin.Script` at `4db8f6ac
 
 ## Development acceptance
 
-Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Ten focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 20 portable plugin tests cover execution and settings.
+Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Eleven focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 26 portable plugin tests cover execution and settings.
 
 ## Windows screenshots
 

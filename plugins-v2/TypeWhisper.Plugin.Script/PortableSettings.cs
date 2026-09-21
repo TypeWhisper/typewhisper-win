@@ -11,7 +11,11 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
     private string _template = "uppercase";
     private ScriptService ActiveService => Service ?? throw new InvalidOperationException("Plugin is not active.");
     private bool German => ActiveService.Localization?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true;
-    private string L(string english, string german) => German ? german : english;
+    private string L(string english, string german)
+    {
+        var translated = ActiveService.Localization?.GetString(english);
+        return translated is not null && translated != english ? translated : German ? german : english;
+    }
     private ScriptEntry? Selected => ActiveService.Scripts.FirstOrDefault(s => s.Id == _editing) ?? ActiveService.Scripts.FirstOrDefault();
     /// <inheritdoc />
     public string ProfileSelectorId => "script";

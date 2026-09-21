@@ -387,7 +387,7 @@ internal sealed partial class LivePluginTextSettings
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-            timeout.CancelAfter(TimeSpan.FromMinutes(3));
+            timeout.CancelAfter(TimeSpan.FromMinutes(_id == "com.typewhisper.script" && action.Id.StartsWith("test:", StringComparison.Ordinal) ? 6 : 3));
             void CancelForRecording() => timeout.Cancel();
             _session.RecordingStarting += CancelForRecording;
             string? result;
