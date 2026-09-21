@@ -9,6 +9,7 @@ namespace TypeWhisper.Plugin.Meta;
 
 internal sealed class MetaRealtimeStreamingSession : IStreamingSession
 {
+    internal const int MaximumMessageBytes = 1024 * 1024;
     private readonly ClientWebSocket _webSocket;
     private readonly MetaRealtimeTranscriptCollector _collector;
     private readonly CancellationTokenSource _receiveCts = new();
@@ -156,6 +157,8 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         await _sendLock.WaitAsync(ct);
         try
         {
+            if (_terminalTranscript.Task.IsFaulted || _terminalTranscript.Task.IsCanceled)
+                await _terminalTranscript.Task;
             if (_disposed || _webSocket.State != WebSocketState.Open)
                 throw new WebSocketException("The realtime session is no longer open.");
 
@@ -277,6 +280,12 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"Meta realtime transcription error: {ex.Message}");
         }
+        catch (Exception ex)
+        {
+            // Subscriber failures must also stop audio input and fail finalization promptly.
+            _terminalTranscript.TrySetException(ex);
+            Debug.WriteLine($"Meta realtime receiver failed: {ex.GetType().Name}");
+        }
         finally
         {
             if (FinalizationRequested && !_terminalTranscript.Task.IsCompleted)
@@ -324,6 +333,8 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             }
             if (result.MessageType != WebSocketMessageType.Text)
                 throw new WebSocketException("Meta returned an unexpected binary realtime message.");
+            if (message.Length + result.Count > MaximumMessageBytes)
+                throw new WebSocketException("Meta realtime message exceeds the 1 MiB limit.");
             message.Write(buffer, 0, result.Count);
         } while (!result.EndOfMessage);
 

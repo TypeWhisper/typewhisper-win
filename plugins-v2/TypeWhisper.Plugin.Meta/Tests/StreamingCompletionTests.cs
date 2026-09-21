@@ -187,6 +187,47 @@ public sealed class StreamingCompletionTests
         await server.WaitAsync(ct);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SubscriberAndOversizedFragmentFailuresStopTheSession(bool oversized)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); var ct = timeout.Token;
+        using var tcp = new TcpListener(IPAddress.Loopback, 0);
+        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
+        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync().WaitAsync(ct);
+            using var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
+            await Receive(socket, ct); await Send(socket, """{"sessionId":"fixture"}""", ct);
+            await Receive(socket, ct); // Subscriber is registered before the first audio frame.
+            if (oversized)
+            {
+                await socket.SendAsync(new byte[MetaRealtimeStreamingSession.MaximumMessageBytes], WebSocketMessageType.Text, false, ct);
+                await socket.SendAsync(new byte[1], WebSocketMessageType.Text, false, ct);
+                // Deliberately leave the message incomplete: size rejection must not await EndOfMessage.
+            }
+            else await Send(socket, """{"type":"transcript","transcript":"partial","final":false}""", ct);
+            await done.Task.WaitAsync(ct);
+        }, ct);
+        await using var session = await MetaRealtimeStreamingSession.ConnectAsync("fixture", "model", "PUSH_TO_TALK", [], [], ct, new Uri($"ws://127.0.0.1:{port}/"));
+        var subscriberFailure = new ArgumentException("fixture subscriber failure");
+        session.TranscriptReceived += _ => throw subscriberFailure;
+        try
+        {
+            await session.SendAudioAsync(new byte[] { 1, 2 }, ct);
+            var failure = await Assert.ThrowsAnyAsync<Exception>(() => session.TerminalTranscriptTask.WaitAsync(ct));
+            if (oversized) { Assert.IsType<WebSocketException>(failure); Assert.Contains("1 MiB", failure.Message); }
+            else Assert.Same(subscriberFailure, failure);
+            Assert.Same(failure, await Assert.ThrowsAnyAsync<Exception>(() => session.SendAudioAsync(new byte[] { 1, 2 }, ct)));
+            Assert.Same(failure, await Assert.ThrowsAnyAsync<Exception>(() => session.FinalizeAsync(ct)));
+        }
+        finally { done.TrySetResult(); }
+        await server.WaitAsync(ct);
+    }
+
     [Fact]
     public async Task FaultedReceiverStillDisposesResourcesAndPreservesItsError()
     {
