@@ -268,7 +268,7 @@ public sealed class MetaPluginTests
         Assert.Equal("Meta", sut.PluginName);
         Assert.Equal("Meta", sut.ProviderDisplayName);
         Assert.Equal("Meta", sut.ProviderName);
-        Assert.Equal("1.2.8", sut.PluginVersion);
+        Assert.Equal("1.2.9", sut.PluginVersion);
         Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
     }
 
@@ -480,7 +480,7 @@ public sealed class MetaPluginTests
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
         Assert.Equal("Meta", root.GetProperty("name").GetString());
-        Assert.Equal("1.2.8", root.GetProperty("version").GetString());
+        Assert.Equal("1.2.9", root.GetProperty("version").GetString());
         Assert.Equal("1.1.2", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(
@@ -561,6 +561,38 @@ public sealed class MetaPluginTests
     [Fact]
     public void BatchAcceptsExplicitSilence() =>
         Assert.Equal("", MetaPlugin.ParseTranscriptionResponse("""{"transcript":""}""", null).Text);
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("{\"id\":null}")]
+    [InlineData("{\"id\":123}")]
+    [InlineData("{\"id\":\" \"}")]
+    public async Task MalformedCatalogEntryPreservesLiveAndStoredModels(string entry)
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK,
+            """{"data":[{"id":"muse-spark-9"},{"id":"muse-voice-transcribe-9"}]}""");
+        handler.EnqueueResponse(HttpStatusCode.OK,
+            "{\"data\":[{\"id\":\"muse-spark-8\"}," + entry + "]}");
+        using var client = new HttpClient(handler);
+        using var plugin = new MetaPlugin(client);
+        var host = new FakePluginHostServices();
+        await plugin.ActivateAsync(host);
+        await plugin.SetApiKeyAsync("key");
+        Assert.NotNull(await plugin.RefreshAvailableModelsAsync());
+        var notifications = host.NotifyCapabilitiesChangedCount;
+
+        Assert.Null(await plugin.RefreshAvailableModelsAsync());
+        Assert.Single(host.Warnings);
+        Assert.Equal(notifications, host.NotifyCapabilitiesChangedCount);
+        Assert.Equal("muse-spark-9", Assert.Single(plugin.SupportedModels).Id);
+        Assert.Equal("muse-voice-transcribe-9", Assert.Single(plugin.TranscriptionModels).Id);
+        using var restarted = new MetaPlugin();
+        await restarted.ActivateAsync(host);
+        Assert.Equal("muse-spark-9", Assert.Single(restarted.SupportedModels).Id);
+        Assert.Equal("muse-voice-transcribe-9", Assert.Single(restarted.TranscriptionModels).Id);
+        Assert.Equal("muse-spark-9", restarted.SelectedLlmModelId);
+    }
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
