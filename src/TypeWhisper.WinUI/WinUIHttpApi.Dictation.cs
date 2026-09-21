@@ -67,7 +67,9 @@ internal sealed partial class WinUIHttpApi
             }
             finally { _startingDictation = false; }
         }
-        if (!session.IsRecording || _startingDictation || !_dictationCompletion.IsCompleted) return Error(409, "No dictation is recording.");
+        // Capture is already registered while provider setup is still awaiting.
+        // StopAsync preserves stop intent until startup releases the session gate.
+        if (!session.IsRecording || !_dictationCompletion.IsCompleted) return Error(409, "No dictation is recording.");
         var stopped = _dictations.Register(session.ApiDictationGeneration);
         _dictations.MarkProcessing(stopped.Id);
         _dictationCompletion = CompleteApiDictationAsync(stopped);
