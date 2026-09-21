@@ -219,7 +219,7 @@ public sealed partial class SettingsWindow : Window
 
     internal void SetPreviewVisible(bool visible, bool paused = false)
     {
-        PreviewButton.Content = visible ? "Stop preview" : "Preview live text";
+        PreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
         EditorPreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
         PausePreviewButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         PausePreviewButton.Content = paused ? "Resume preview" : "Pause preview";

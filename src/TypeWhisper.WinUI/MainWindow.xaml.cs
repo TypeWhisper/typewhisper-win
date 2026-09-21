@@ -1253,6 +1253,9 @@ public sealed partial class MainWindow : Window
                 _settingsWindow?.DetachIntegrationsContent();
                 CloseRecoveryView(recoveryView);
                 _settingsWindow = null;
+                // Closing the preview controls must release the demo microphone source.
+                // The recording overlay is separate and continues to follow dictation.
+                if (_overlay?.IsPreviewVisible == true) EndPreview_Click(this, new RoutedEventArgs());
             };
             _settingsWindow.PreferencesChanged += preferences =>
             {

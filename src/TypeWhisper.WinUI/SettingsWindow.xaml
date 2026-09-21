@@ -86,7 +86,7 @@
                 <local:HandCursorButton Content="Customize layout" Click="CustomizeLayout_Click" Style="{StaticResource SecondaryButtonStyle}" AutomationProperties.Name="Customize overlay layout" />
                 <StackPanel x:Name="LiveTextOptions" Spacing="16" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <local:HandCursorButton x:Name="PreviewButton" Content="Preview live text" Click="Preview_Click" Style="{StaticResource PrimaryButtonStyle}" AutomationProperties.Name="Preview live text" />
+                    <local:HandCursorButton x:Name="PreviewButton" Content="Preview overlay" Click="Preview_Click" Style="{StaticResource PrimaryButtonStyle}" AutomationProperties.Name="Preview overlay" />
                     <local:HandCursorButton x:Name="PausePreviewButton" Content="Pause preview" Click="PausePreview_Click" Style="{StaticResource SecondaryButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Pause or resume preview" />
                 </StackPanel>
                 <TextBlock x:Name="PreviewExplanation" Text="Preview uses your microphone level when available, otherwise a simulated signal. Transcript text is a sample; no audio is saved." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
