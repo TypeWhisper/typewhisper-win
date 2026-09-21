@@ -16,6 +16,10 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     internal IPluginHostServices? Host { get; private set; }
     internal string? Key { get; private set; }
+    private CloudflareTokens? _oauth;
+    internal bool UsesOAuth => _configuration.Values.GetValueOrDefault("authMode") == "oauth";
+    internal IReadOnlyList<CloudflareAccount> Accounts => UsesOAuth
+        ? JsonSerializer.Deserialize<CloudflareAccount[]>(Get("oauthAccounts", "[]")) ?? [] : [];
     internal HttpClient Http => http;
     internal bool Configured => Host is not null && Key is not null;
     internal string Get(string id, string fallback = "") => _configuration.Values.GetValueOrDefault(id, fallback);
@@ -28,10 +32,12 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     internal async Task ActivateAsync(IPluginHostServices host)
     {
         var saved = host.GetSetting<Configuration>("configuration") ?? new(null, []);
-        var key = saved.SecretName is null ? null : NormalizeKey(await host.LoadSecretAsync(saved.SecretName));
-        _configuration = saved with { Values = saved.Values ?? [] }; Key = key; Host = host;
+        var secret = saved.SecretName is null ? null : await host.LoadSecretAsync(saved.SecretName);
+        _configuration = saved with { Values = saved.Values ?? [] };
+        _oauth = UsesOAuth && secret is not null ? JsonSerializer.Deserialize<CloudflareTokens>(secret) : null;
+        Key = UsesOAuth ? _oauth?.AccessToken : NormalizeKey(secret); Host = host;
     }
-    internal void Deactivate() { Host = null; Key = null; _configuration = new(null, []); }
+    internal void Deactivate() { Host = null; Key = null; _oauth = null; _configuration = new(null, []); }
     internal async Task SetKeyAsync(string value)
     {
         var key = NormalizeKey(value);
@@ -44,9 +50,11 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
             try
             {
                 if (staged is not null) await host.StoreSecretAsync(staged, key!);
-                var next = previous with { SecretName = staged };
+                var values = new Dictionary<string,string>(previous.Values);
+                values.Remove("authMode"); values.Remove("oauthAccounts");
+                var next = previous with { SecretName = staged, Values = values };
                 host.SetSetting("configuration", next);
-                _configuration = next; Key = key;
+                _configuration = next; Key = key; _oauth = null;
             }
             catch
             {
@@ -55,6 +63,59 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
             }
             if (previous.SecretName is not null) await CleanupAsync(host, previous.SecretName);
             host.NotifyCapabilitiesChanged();
+        }
+        finally { _gate.Release(); }
+    }
+    internal async Task SaveOAuthAsync(CloudflareTokens tokens, IReadOnlyList<CloudflareAccount> accounts, CancellationToken ct)
+    {
+        if (accounts.Count == 0) throw new CloudflareSignInException("No Cloudflare accounts were granted. Check Account Settings Read and connect again.");
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var selected = Get("accountId");
+            var account = accounts.Any(a => a.Id == selected) ? selected : accounts.Count == 1 ? accounts[0].Id : "";
+            var values = new Dictionary<string,string>(_configuration.Values) {
+                ["authMode"] = "oauth", ["accountId"] = account, ["oauthAccounts"] = JsonSerializer.Serialize(accounts)
+            };
+            await CommitOAuthAsync(tokens, values, ct);
+        }
+        finally { _gate.Release(); }
+    }
+    private async Task CommitOAuthAsync(CloudflareTokens tokens, Dictionary<string,string> values, CancellationToken ct)
+    {
+        var host = Host ?? throw new InvalidOperationException("Activate the plugin first.");
+        var previous = _configuration; var staged = "oauth-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await host.StoreSecretAsync(staged, JsonSerializer.Serialize(tokens)); ct.ThrowIfCancellationRequested();
+            var next = new Configuration(staged, values);
+            host.SetSetting("configuration", next);
+            _configuration = next; _oauth = tokens; Key = tokens.AccessToken;
+        }
+        catch { await CleanupAsync(host, staged); throw; }
+        if (previous.SecretName is not null) await CleanupAsync(host, previous.SecretName);
+        host.NotifyCapabilitiesChanged();
+    }
+    internal async Task EnsureAccessTokenAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (_oauth is null || _oauth.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return;
+            ct.ThrowIfCancellationRequested();
+            // A refresh token may be consumed server-side: finish rotation even if the caller stops dictation.
+            using var refreshTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            CloudflareTokens renewed;
+            try { renewed = await new CloudflareOAuth(http).RefreshAsync(_oauth, refreshTimeout.Token); }
+            catch (CloudflareSignInException ex)
+            { throw new PluginRequestException(ex.Message, PluginRequestFailureKind.Authentication, innerException: ex); }
+            catch (OperationCanceledException ex) when (refreshTimeout.IsCancellationRequested)
+            {
+                ct.ThrowIfCancellationRequested();
+                throw new PluginRequestException("Cloudflare token renewal timed out. Please retry.", PluginRequestFailureKind.Timeout, innerException: ex);
+            }
+            await CommitOAuthAsync(renewed, new(_configuration.Values), CancellationToken.None);
+            ct.ThrowIfCancellationRequested();
         }
         finally { _gate.Release(); }
     }
@@ -113,8 +174,7 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value)
         && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number) && number >= 0 ? number : fallback;
     internal static string? Language(string? language) => string.IsNullOrWhiteSpace(language) || language.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : language.Trim();
-    internal static string[] Terms(string? prompt) => PluginDictionaryTerms.Clip(
-        prompt?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [], new(MaxTerms: 100, MaxTotalChars: 4000)).ToArray();
+    internal static readonly DictionaryTermsBudget DictionaryBudget = new(MaxTerms: 100, MaxTotalChars: 4000);
     internal static void Audio(byte[] audio, bool translate, bool supportsTranslation, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
