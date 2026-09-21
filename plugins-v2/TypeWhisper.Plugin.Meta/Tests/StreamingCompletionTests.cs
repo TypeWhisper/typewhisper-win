@@ -187,6 +187,26 @@ public sealed class StreamingCompletionTests
         await server.WaitAsync(ct);
     }
 
+    [Fact]
+    public async Task FaultedReceiverStillDisposesResourcesAndPreservesItsError()
+    {
+        // Inject an unexpected receiver fault, such as a transcript subscriber throwing.
+        using var socket = new ClientWebSocket();
+        var session = new MetaRealtimeStreamingSession(socket);
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var failure = new ArgumentException("fixture subscriber failure");
+        typeof(MetaRealtimeStreamingSession).GetField("_receiveTask", flags)!
+            .SetValue(session, Task.FromException(failure));
+        var cancellation = (CancellationTokenSource)typeof(MetaRealtimeStreamingSession)
+            .GetField("_receiveCts", flags)!.GetValue(session)!;
+        var sendLock = (SemaphoreSlim)typeof(MetaRealtimeStreamingSession)
+            .GetField("_sendLock", flags)!.GetValue(session)!;
+        Assert.Same(failure, await Assert.ThrowsAsync<ArgumentException>(() => session.DisposeAsync().AsTask()));
+        Assert.Throws<ObjectDisposedException>(() => { _ = cancellation.Token; });
+        Assert.Throws<ObjectDisposedException>(() => sendLock.Wait(0));
+        await session.DisposeAsync(); // Repeated disposal remains harmless after the fault.
+    }
+
     private static async Task<byte[]> Receive(WebSocket socket,CancellationToken ct)
     {
         using var message=new MemoryStream();var buffer=new byte[4096];WebSocketReceiveResult frame;

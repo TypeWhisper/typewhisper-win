@@ -215,12 +215,17 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             _sendLock.Release();
         }
 
-        if (_receiveTask is not null)
-            await _receiveTask;
-
-        _sendLock.Dispose();
-        _receiveCts.Dispose();
-        _webSocket.Dispose();
+        try
+        {
+            if (_receiveTask is not null)
+                await _receiveTask;
+        }
+        finally
+        {
+            _sendLock.Dispose();
+            _receiveCts.Dispose();
+            _webSocket.Dispose();
+        }
     }
 
     private async Task ReceiveLoopAsync(CancellationToken ct)
