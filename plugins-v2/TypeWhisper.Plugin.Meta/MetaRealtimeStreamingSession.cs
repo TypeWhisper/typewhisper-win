@@ -475,7 +475,7 @@ internal sealed class MetaRealtimeTranscriptCollector
 
     private string BuildSnapshot()
     {
-        if (!_usesDiarization && !string.IsNullOrWhiteSpace(_finalSingleTurnText))
+        if (!_usesDiarization && _hasFinalSingleTurn)
             return _finalSingleTurnText;
 
         var parts = _turns.Values
