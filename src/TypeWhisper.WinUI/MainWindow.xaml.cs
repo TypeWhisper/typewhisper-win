@@ -479,7 +479,7 @@ public sealed partial class MainWindow : Window
         PluginsView.MarketplaceRequested += (_, _) => SwitchIntegrationTab(discover: true);
         MarketplaceView.InstalledRequested += (_, _) => SwitchIntegrationTab(discover: false);
         MarketplaceView.ExitRequested += (_, _) => SwitchIntegrationTab(discover: false);
-        MarketplaceView.LauncherRequested += (_, _) => SwitchIntegrationTab(discover: false);
+        MarketplaceView.LauncherRequested += (_, _) => { OpenSettings(); _settingsWindow?.ShowCategory("General"); };
         MarketplaceView.ManageRequested += id => OpenProviderSettings(id);
         MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
         PluginsView.RestartRequested = RestartForPluginUpdateAsync;
