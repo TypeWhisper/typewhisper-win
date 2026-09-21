@@ -60,6 +60,11 @@ public sealed partial class OverlayWindow : Window
         SetJoinedShape(_transcriptPreviewEnabled && _mode != OverlayMode.Minimal);
     }
 
+    internal void SetFloatingTextSize(double width, double height)
+    {
+        if (_previewVisible) _transcriptWindow?.SetFloatingSize(width, height);
+    }
+
     private readonly Stopwatch _feedbackClock = new();
     internal bool IsCorrectionFeedbackVisible { get; private set; }
     internal void ShowCorrectionFeedback(IReadOnlyList<TypeWhisper.Core.Models.LearnedDictionaryCorrection> corrections, DisplayArea area)

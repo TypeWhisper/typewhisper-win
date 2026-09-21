@@ -136,6 +136,20 @@ public sealed partial class TranscriptPreviewWindow : Window
         if (_hasAnchor) SetAnchor(_recordingPosition, _pixelWidth, _scale, _opensDown, _recordingHeight);
     }
 
+    internal void SetFloatingSize(double width, double height)
+    {
+        if (!_floating || _floatingPosition is null || !double.IsFinite(width) || !double.IsFinite(height)) return;
+        FinishDragging();
+        FinishResizing();
+        _floatingPosition = _floatingPosition with
+        {
+            Width = Math.Clamp(width, LiveTextPlacement.MinimumWidth, 8192),
+            Height = Math.Clamp(height, LiveTextPlacement.MinimumHeight, 8192)
+        };
+        ApplyWindowBounds(Math.Max(1, (int)Math.Round(ExpandedHeight * _expansion)));
+        SaveFloatingPlacement();
+    }
+
     private void TranscriptHeader_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _headerHovered = true;

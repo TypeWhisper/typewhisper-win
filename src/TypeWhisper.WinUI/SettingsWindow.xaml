@@ -89,6 +89,7 @@
                     <local:HandCursorButton x:Name="PreviewButton" Content="Preview overlay" Click="Preview_Click" Style="{StaticResource PrimaryButtonStyle}" AutomationProperties.Name="Preview overlay" />
                     <local:HandCursorButton x:Name="PausePreviewButton" Content="Pause preview" Click="PausePreview_Click" Style="{StaticResource SecondaryButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Pause or resume preview" />
                 </StackPanel>
+                <local:HandCursorButton x:Name="PreviewSizeButton" Content="Adjust preview size…" Click="PreviewSize_Click" Style="{StaticResource SecondaryButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Adjust floating live-text size" />
                 <TextBlock x:Name="PreviewExplanation" Text="Preview uses your microphone level when available, otherwise a simulated signal. Transcript text is a sample; no audio is saved." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>

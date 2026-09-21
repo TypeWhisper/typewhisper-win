@@ -54,6 +54,8 @@ public sealed partial class SettingsWindow : Window
     internal event EventHandler? PreviewRequested;
     internal event EventHandler? PausePreviewRequested;
     internal event Action? PreviewDismissed;
+    internal event Action<double, double>? PreviewSizeRequested;
+    private bool _previewVisible;
 
     private readonly Dictionary<string, string> _values;
     private readonly List<ChoicePicker> _catalogPickers = [];
@@ -215,15 +217,51 @@ public sealed partial class SettingsWindow : Window
         DetailsDescription.Text = standard
             ? "Show the audio level in dBFS and measured render frequency. Off by default."
             : "Available in Standard only. Your preference is kept when switching layouts.";
+        UpdatePreviewSizeButton();
         _updating = false;
     }
 
     internal void SetPreviewVisible(bool visible, bool paused = false)
     {
+        _previewVisible = visible;
+        UpdatePreviewSizeButton();
         PreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
         EditorPreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
         PausePreviewButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         PausePreviewButton.Content = paused ? "Resume preview" : "Pause preview";
+    }
+
+    private void UpdatePreviewSizeButton()
+    {
+        PreviewSizeButton.Visibility = _preferences.FloatingLiveText ? Visibility.Visible : Visibility.Collapsed;
+        PreviewSizeButton.IsEnabled = _previewVisible && _preferences.LiveText && _preferences.Mode != OverlayMode.Minimal;
+        ToolTipService.SetToolTip(PreviewSizeButton, "Start the preview to adjust its width and height using the keyboard.");
+    }
+
+    private async void PreviewSize_Click(object sender, RoutedEventArgs e)
+    {
+        var saved = LiveTextPlacement.Read(WinUIProfile.DataPath("live-text-position.json"));
+        var width = new NumberBox { Header = "Width", Value = saved?.Width ?? 420,
+            Minimum = LiveTextPlacement.MinimumWidth, Maximum = 8192,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, SmallChange = 10, LargeChange = 50 };
+        var height = new NumberBox { Header = "Height", Value = saved?.Height ?? 220,
+            Minimum = LiveTextPlacement.MinimumHeight, Maximum = 8192,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, SmallChange = 10, LargeChange = 50 };
+        AutomationProperties.SetName(width, "Floating live-text width");
+        AutomationProperties.SetName(height, "Floating live-text height");
+        var panel = new StackPanel { Spacing = 12 };
+        panel.Children.Add(new TextBlock { Text = "Size uses display-independent pixels and is limited to your screen's work area.", TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(width);
+        panel.Children.Add(height);
+        var dialog = new ContentDialog { XamlRoot = SettingsRoot.XamlRoot, RequestedTheme = SettingsRoot.ActualTheme,
+            Title = "Floating live-text size", Content = panel, PrimaryButtonText = "Apply", CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary };
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            if (!double.IsFinite(width.Value) || !double.IsFinite(height.Value)) { args.Cancel = true; return; }
+            if (PreviewSizeButton.IsEnabled) PreviewSizeRequested?.Invoke(width.Value, height.Value);
+        };
+        await dialog.ShowAsync();
     }
 
     private void PausePreview_Click(object sender, RoutedEventArgs e) => PausePreviewRequested?.Invoke(this, EventArgs.Empty);
