@@ -8,6 +8,8 @@ Use the **Scripts** sidebar to add or select a script. Edit its name, shell, com
 
 **Test script** executes the current draft with harmless sample text, including German umlauts, without saving it or enabling it for dictation. New scripts and template copies are disabled. Review their commands before enabling them.
 
+**Command editor:** PowerShell, pwsh and cmd receive syntax highlighting, a line/column indicator, an expandable editing area and text-only undo/redo. **Format** adds readable line breaks to PowerShell statement separators without evaluating the command. The test result opens in a read-only, copyable preview with Markdown/JSON highlighting.
+
 Transcription text arrives on stdin; stdout becomes the replacement text. Scripts run locally with your Windows user permissions. A failed or timed-out script keeps its input and the chain continues. Cancellation stops execution. Timeouts are configurable from 1 to 300 seconds.
 
 ## Built-in templates
@@ -44,3 +46,7 @@ Tests cover every template through real PowerShell, Unicode, draft tests without
 ## Migration scope
 
 Runtime sources originated from `plugins/TypeWhisper.Plugin.Script` at `4db8f6ac`, adapted under `plugins-v2` without WPF. The macOS implementation at `ac00e39ea63e4789de8427d034d2085b3d898159` was compared but not modified. macOS commands and paths require manual adaptation. Legacy settings and scripts are not imported automatically; configuration remains in the portable plugin data directory. Public catalog publication remains separate.
+
+## Development acceptance
+
+Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Ten focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 20 portable plugin tests cover execution and settings.

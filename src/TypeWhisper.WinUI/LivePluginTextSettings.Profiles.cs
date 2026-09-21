@@ -181,6 +181,8 @@ internal sealed partial class LivePluginTextSettings
             if (others > 0) saveState.Text += " · Unsaved edits in " + others + (others == 1 ? " other profile" : " other profiles");
         }
         _profileDirtyChanged = UpdateDirty;
+        ScriptCodeEditor? scriptEditor = null;
+        var scriptLanguage = editable.FirstOrDefault(f => f.Id.EndsWith(":shell", StringComparison.Ordinal));
         PluginSettingsSection? previousSection = null;
         foreach (var field in editable)
         {
@@ -202,6 +204,7 @@ internal sealed partial class LivePluginTextSettings
                 {
                     if (choice.SelectedValue is not string value) return;
                     values[field.Id] = value; _drafts[field.Id] = value; UpdateDirty();
+                    if (field.Id == scriptLanguage?.Id && scriptEditor is not null) scriptEditor.SyntaxLanguage = value;
                 };
                 input = choice;
             }
@@ -216,6 +219,33 @@ internal sealed partial class LivePluginTextSettings
                 };
                 suggested.SuggestionChosen += (_, e) => suggested.Text = (string)e.SelectedItem;
                 input = suggested;
+            }
+            else if (_id == "com.typewhisper.script" && field.Id.EndsWith(":command", StringComparison.Ordinal))
+            {
+                var language = scriptLanguage is null ? "powershell" : values[scriptLanguage.Id];
+                var editor = new ScriptCodeEditor(values[field.Id], language, field.MaxLength);
+                scriptEditor = editor;
+                editor.CodeChanged += value => { values[field.Id] = value; _drafts[field.Id] = value; UpdateDirty(); };
+                var position = ProfileNote("Ln 1, Col 1 · Ctrl+Z undo · Ctrl+Y redo");
+                editor.PositionChanged += (line, column) => position.Text = $"Ln {line}, Col {column} · Ctrl+Z undo · Ctrl+Y redo";
+                editor.EditorNotice += message => position.Text = message;
+                AutomationProperties.SetLiveSetting(position, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+                var toolbar = new Grid { Margin = new(0, 2, 0, 2) };
+                toolbar.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+                toolbar.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+                toolbar.Children.Add(ProfileNote("SCRIPT · syntax highlighting"));
+                var expand = ProfileButton("Expand", () => { editor.Height = editor.Height == 240 ? 440 : 240; return Task.CompletedTask; });
+                expand.Click += (_, _) => expand.Content = editor.Height == 240 ? "Expand" : "Collapse";
+                var format = ProfileButton("Format", () => { editor.FormatCode(); return Task.CompletedTask; });
+                format.IsEnabled = language is "powershell" or "pwsh";
+                editor.SyntaxLanguageChanged += () => format.IsEnabled = editor.SyntaxLanguage is "powershell" or "pwsh";
+                ToolTipService.SetToolTip(format, "Add line breaks between PowerShell statements. Changes remain unsaved.");
+                var editorActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                editorActions.Children.Add(format); editorActions.Children.Add(expand);
+                Grid.SetColumn(editorActions, 1); toolbar.Children.Add(editorActions);
+                group.Children.Add(toolbar);
+                editor.Tag = position;
+                input = editor;
             }
             else
             {
@@ -233,7 +263,9 @@ internal sealed partial class LivePluginTextSettings
                 BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] };
             input.GotFocus += (_, _) => border.BorderBrush = (Brush)Application.Current.Resources["AccentBrush"];
             input.LostFocus += (_, _) => border.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
-            group.Children.Add(border); panel.Children.Add(group);
+            group.Children.Add(border);
+            if (input is ScriptCodeEditor { Tag: TextBlock positionNote }) group.Children.Add(positionNote);
+            panel.Children.Add(group);
         }
         if (showKey) connectionPanel.Children.Add(_credentials);
         foreach (var action in actions.Where(a => a.Id != addId && a.Id != removeId))
@@ -388,6 +420,19 @@ internal sealed partial class LivePluginTextSettings
             if (leaveProfile) _profileScrollOffset = 0;
             await ReloadAsync();
             SetStatus(leaveProfile ? result ?? "Profile added." : "“" + name + "”: " + (result ?? "Completed."));
+            if (_id == "com.typewhisper.script" && action.Id.StartsWith("test:", StringComparison.Ordinal) &&
+                result is not null && (result.StartsWith("Result: ", StringComparison.Ordinal) || result.StartsWith("Ergebnis: ", StringComparison.Ordinal)))
+            {
+                var output = result[(result.IndexOf(": ", StringComparison.Ordinal) + 2)..];
+                var language = output.TrimStart().StartsWith('"') || output.TrimStart().StartsWith('{') ? "json" : "markdown";
+                var preview = new ScriptCodeEditor(output, language, 32768, readOnly: true);
+                AutomationProperties.SetName(preview, "Script test output");
+                var panel = new StackPanel { Spacing = 10 };
+                panel.Children.Add(ProfileNote("Sample output · up to 2,000 characters · draft not saved"));
+                panel.Children.Add(preview);
+                await new ContentDialog { XamlRoot = XamlRoot, Title = "Test result", Content = panel,
+                    CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close }.ShowAsync();
+            }
         }
         catch (OperationCanceledException)
         { if (IsLoaded && generation == _generation) SetStatus("The action was cancelled or timed out. You can retry."); }
