@@ -287,6 +287,9 @@ public sealed partial class TranscriptPreviewWindow : Window
                 _opensDown ? _recordingPosition.Y + _recordingHeight + 12 : _recordingPosition.Y - (int)(220 * _scale) - 12);
             var area = DisplayArea.GetFromPoint(new PointInt32(desired.X, desired.Y), DisplayAreaFallback.Nearest);
             var work = area.WorkArea;
+            var currentArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+            if (currentArea?.DisplayId != area.DisplayId)
+                AppWindow.Move(new PointInt32(work.X + work.Width / 2, work.Y + work.Height / 2));
             var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96d;
             if (scale <= 0) scale = _scale;
             var width = Math.Min((int)Math.Round(420 * scale), work.Width);
