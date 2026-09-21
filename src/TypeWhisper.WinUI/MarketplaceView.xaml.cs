@@ -190,16 +190,18 @@ public sealed partial class MarketplaceView : UserControl
 
     private void UpdateBreadcrumbs()
     {
+        // Settings already provide navigation through their persistent sidebar.
+        MarketBreadcrumbs.Visibility = _settingsLayout ? Visibility.Collapsed : Visibility.Visible;
+        if (_settingsLayout) return;
         var crumbs = new List<Crumb> { new(_settingsLayout ? "Settings" : "Quick Launch", () =>
         {
             ShowList(true);
             LauncherRequested?.Invoke(this, EventArgs.Empty);
         }, _settingsLayout ? "Marketplace breadcrumb Settings" : "Marketplace breadcrumb Quick Launch") };
-        var catalogTitle = _settingsLayout ? "Discover plugins" : "Integrations";
-        if (!IsDetail) crumbs.Add(new(catalogTitle));
+        if (!IsDetail) crumbs.Add(new("Integrations"));
         else
         {
-            crumbs.Add(new(catalogTitle, () => ShowList(true), "Marketplace breadcrumb catalog"));
+            crumbs.Add(new("Integrations", () => ShowList(true), "Marketplace breadcrumb catalog"));
             if (_reviewing)
             {
                 crumbs.Add(new(_opened?.Title ?? "Plugin", CancelInstall, "Marketplace breadcrumb detail"));
