@@ -255,4 +255,65 @@ public sealed partial class ProviderTests
         });
     }
 
+    [Theory]
+    [InlineData(false, "{\"access_token\":")]
+    [InlineData(false, "<html>private-response</html>")]
+    [InlineData(false, "[]")]
+    [InlineData(false, "{\"access_token\":\"access\",\"token_type\":\"Bearer\",\"expires_in\":\"3600\"}")]
+    [InlineData(false, "{\"access_token\":\"access\",\"token_type\":\"Bearer\",\"expires_in\":3600,\"refresh_token\":\"\"}")]
+    [InlineData(true, "{\"result\":")]
+    [InlineData(true, "<html>private-response</html>")]
+    [InlineData(true, "[]")]
+    public async Task InvalidOAuthJsonIsSanitized(bool discovery, string json)
+    {
+        using var http = new HttpClient(new Handler((_,_) => Json(json)));
+        var oauth = new CloudflareOAuth(http);
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(async () =>
+        {
+            if(discovery) await oauth.AccountsAsync("access",default);
+            else await oauth.RefreshAsync(new("access","refresh",DateTimeOffset.UtcNow),default);
+        });
+        Assert.Equal(PluginRequestFailureKind.OutputIncomplete,failure.FailureKind);
+        Assert.DoesNotContain("private-response",failure.Message);
+        Assert.Null(failure.InnerException);
+    }
+
+    [Fact]
+    public async Task CallerCancellationAfterRefreshStartsStillPersistsRotatedTokens()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var calls=0;
+        using var connection = new ProviderConnection(new HttpClient(new Handler((_,_) =>
+        {
+            calls++;
+            cancellation.Cancel();
+            return Json("""{"access_token":"renewed","refresh_token":"rotated","token_type":"Bearer","expires_in":3600}""");
+        })));
+        var host=new Host();
+        await connection.ActivateAsync(host);
+        await connection.SaveOAuthAsync(new("old-access","old-refresh",DateTimeOffset.UtcNow.AddMinutes(-1)),
+            [new(new string('a',32),"Example")],default);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connection.EnsureAccessTokenAsync(cancellation.Token));
+        Assert.Equal("renewed",connection.Key);
+        Assert.Single(host.Secrets);
+        using var saved=JsonDocument.Parse(host.Secrets.Values.Single());
+        Assert.Equal("rotated",saved.RootElement.GetProperty("RefreshToken").GetString());
+        connection.Deactivate();
+        await connection.ActivateAsync(host);
+        await connection.EnsureAccessTokenAsync(default);
+        Assert.Equal(1,calls);
+        Assert.Equal("renewed",connection.Key);
+    }
+
+    [Fact]
+    public async Task CancellationBeforeRefreshDoesNotSendRequest()
+    {
+        using var connection = new ProviderConnection(new HttpClient(new Handler((_,_) => throw new Exception("Unexpected request"))));
+        await connection.ActivateAsync(new Host());
+        await connection.SaveOAuthAsync(new("access","refresh",DateTimeOffset.UtcNow.AddMinutes(-1)),
+            [new(new string('a',32),"Example")],default);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connection.EnsureAccessTokenAsync(new CancellationToken(true)));
+        Assert.Equal("access",connection.Key);
+    }
+
 }

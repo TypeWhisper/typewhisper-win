@@ -122,15 +122,27 @@ internal sealed class CloudflareOAuth(HttpClient http)
         using var request = new HttpRequestMessage(HttpMethod.Post,"https://dash.cloudflare.com/oauth2/token") { Content = new FormUrlEncodedContent(fields) };
         using var response = await SendOAuthAsync(request, ct);
         if (!response.IsSuccessStatusCode) throw new CloudflareSignInException($"Cloudflare sign-in could not be completed (HTTP {(int)response.StatusCode}). Connect again.");
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)); var root = doc.RootElement;
+        using var doc = ParseResponse(await response.Content.ReadAsStringAsync(ct)); var root = doc.RootElement;
         var access = ProviderConnection.RequiredText(root,"access_token");
         if (!string.Equals(ProviderConnection.Text(root,"token_type"),"Bearer",StringComparison.OrdinalIgnoreCase)
             || access.Length > 65536 || access.Any(char.IsControl)
-            || !root.TryGetProperty("expires_in",out var expires) || !expires.TryGetInt32(out var seconds) || seconds <= 0 || seconds > 31536000)
-            throw new InvalidDataException("Cloudflare returned an invalid sign-in response.");
+            || !root.TryGetProperty("expires_in",out var expires) || expires.ValueKind != JsonValueKind.Number || !expires.TryGetInt32(out var seconds) || seconds <= 0 || seconds > 31536000)
+            throw ProviderConnection.InvalidResponse();
         var refresh = ProviderConnection.Text(root,"refresh_token") ?? previousRefresh;
-        if (refresh is not null && (refresh.Length is 0 or > 65536 || refresh.Any(char.IsControl))) throw new InvalidDataException("Cloudflare returned an invalid refresh token.");
+        if (refresh is not null && (refresh.Length is 0 or > 65536 || refresh.Any(char.IsControl))) throw ProviderConnection.InvalidResponse();
         return new(access,refresh,DateTimeOffset.UtcNow.AddSeconds(seconds));
+    }
+
+    private static JsonDocument ParseResponse(string json)
+    {
+        try
+        {
+            var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Object) return document;
+            document.Dispose();
+            throw ProviderConnection.InvalidResponse();
+        }
+        catch (JsonException) { throw ProviderConnection.InvalidResponse(); }
     }
 
     private async Task<HttpResponseMessage> SendOAuthAsync(HttpRequestMessage request, CancellationToken ct)
@@ -169,7 +181,7 @@ internal sealed class CloudflareOAuth(HttpClient http)
             request.Headers.Authorization = new("Bearer",token);
             using var response = await SendOAuthAsync(request,ct);
             if (!response.IsSuccessStatusCode) throw new CloudflareSignInException("Cloudflare account discovery failed. Check the Account Settings Read permission.");
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            using var doc = ParseResponse(await response.Content.ReadAsStringAsync(ct));
             _ = ProviderConnection.Required(doc.RootElement,"success",JsonValueKind.True);
             var rows = ProviderConnection.Required(doc.RootElement,"result",JsonValueKind.Array);
             foreach (var row in rows.EnumerateArray())

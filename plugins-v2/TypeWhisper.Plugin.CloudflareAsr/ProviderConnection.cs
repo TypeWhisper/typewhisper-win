@@ -102,11 +102,20 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         try
         {
             if (_oauth is null || _oauth.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return;
+            ct.ThrowIfCancellationRequested();
+            // A refresh token may be consumed server-side: finish rotation even if the caller stops dictation.
+            using var refreshTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             CloudflareTokens renewed;
-            try { renewed = await new CloudflareOAuth(http).RefreshAsync(_oauth, ct); }
+            try { renewed = await new CloudflareOAuth(http).RefreshAsync(_oauth, refreshTimeout.Token); }
             catch (CloudflareSignInException ex)
             { throw new PluginRequestException(ex.Message, PluginRequestFailureKind.Authentication, innerException: ex); }
-            await CommitOAuthAsync(renewed, new(_configuration.Values), ct);
+            catch (OperationCanceledException ex) when (refreshTimeout.IsCancellationRequested)
+            {
+                ct.ThrowIfCancellationRequested();
+                throw new PluginRequestException("Cloudflare token renewal timed out. Please retry.", PluginRequestFailureKind.Timeout, innerException: ex);
+            }
+            await CommitOAuthAsync(renewed, new(_configuration.Values), CancellationToken.None);
+            ct.ThrowIfCancellationRequested();
         }
         finally { _gate.Release(); }
     }
