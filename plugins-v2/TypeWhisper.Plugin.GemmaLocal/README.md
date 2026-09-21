@@ -4,7 +4,7 @@ Local Gemma 3 GGUF text processing through LLamaSharp. Host-rendered model cards
 
 Version `1.2.4`; plugin ID `com.typewhisper.gemma-local`; minimum host `1.1.3`.
 Host 1.1.3 adds `ILocalLlmModelManagement`; older hosts reject this package before loading its types.
-Independent branch: `seofood/gemmalocal-portable`, based on `4db8f6ac`.
+Resume follow-up branch: `seofood/gemma-resumable-downloads`; original portable migration based on `4db8f6ac`.
 
 ## Setup
 
@@ -36,6 +36,8 @@ dotnet test plugins-v2/TypeWhisper.Plugin.GemmaLocal/Tests -c Release
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.gemma-local` inside the plugin project. Package that directory as the ZIP root.
 
 50 plugin tests pass. Coverage includes settings persistence, model identity, prompt formatting, integrity checks, cancellation before setup, incomplete-model detection, selective removal, immutable package lifecycle, fragmented stop markers, rejection of truncated output, and range-based resume after network failures or cancellation. Resume-specific tests also cover ignored ranges, invalid response headers, complete saved files, hash failures, oversized responses, and partial-file cleanup. The merged base passed 271 portable SDK/host tests.
+
+A live resume check against the pinned Hugging Face URL used an isolated copy of the existing 4B model with its final 65,536 bytes removed. The downloader requested `bytes=2489828480-`, received HTTP 206, fetched only the missing tail, and verified the complete 2,489,894,016-byte model against its expected SHA-256 before publication. The original cached model was preserved.
 
 On Windows x64, the actual 4B Q4_K_M download (2,489,894,016 bytes) passed SHA-256 verification. Native CPU loading took approximately 4.8 seconds. German spelling/capitalization correction and German-to-English translation returned the expected text in approximately 1.5 and 1.2 seconds respectively. Unloading released provider availability. In-flight cancellation rejected partial output, and a subsequent request returned the expected translation. These are two short acceptance examples, not a quality benchmark. The 12B/27B models and non-Windows native execution remain untested.
 
