@@ -236,6 +236,13 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
                     return;
                 }
                 var update = _collector.Apply(json);
+                // PUSH_TO_TALK has an explicit stream-final transcript. Meta can close the
+                // transport without a close frame afterwards; that does not invalidate this result.
+                if (FinalizationRequested && _collector.HasFinalSingleTurn)
+                {
+                    PublishTranscript(new StreamingTranscriptEvent(_collector.CompletedText, IsFinal: true), isTerminal: true);
+                    return;
+                }
                 // speechComplete finalizes one turn, not the stream. Keep receiving until clean closure.
                 PublishTranscript(update.Transcript is { } snapshot ? snapshot with { IsFinal = false } : null, isTerminal: false);
             }
@@ -348,6 +355,7 @@ internal sealed class MetaRealtimeTranscriptCollector
     private string _finalSingleTurnText = "";
     private bool _hasFinalSingleTurn;
 
+    internal bool HasFinalSingleTurn => _hasFinalSingleTurn;
     internal bool HasCompletedTranscript => _hasFinalSingleTurn ||
         (_turns.Count > 0 && _turns.Values.All(turn => turn.Completed) && string.IsNullOrEmpty(_interim));
     internal string CompletedText => BuildSnapshot();

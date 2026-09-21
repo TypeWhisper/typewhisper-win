@@ -9,8 +9,9 @@ namespace PortableMigration.Tests;
 public sealed class StreamingCompletionTests
 {
     [Theory]
-    [InlineData(false)][InlineData(true)]
-    public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose)
+    [InlineData(false, false)][InlineData(true, false)]
+    [InlineData(false, true)][InlineData(true, true)]
+    public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose, bool abruptClose)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(15));var ct=timeout.Token;
         using var tcp=new TcpListener(IPAddress.Loopback,0);tcp.Start();var port=((IPEndPoint)tcp.LocalEndpoint).Port;tcp.Stop();
@@ -28,7 +29,13 @@ public sealed class StreamingCompletionTests
             var end=await Receive(socket,ct);Assert.Contains("endStream",Encoding.UTF8.GetString(end));endReceived.TrySetResult();
             await release.Task.WaitAsync(ct);
             if(!prematureClose) { await Send(socket,"""{"type":"transcript","transcript":"Hallo Welt","final":true}""",ct);  }
-            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
+            if (abruptClose)
+            {
+                // The explicit final response must complete the client even when no close frame follows.
+                if (!prematureClose) await clientFinished.Task.WaitAsync(ct);
+                socket.Abort();
+            }
+            else await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
             await clientFinished.Task.WaitAsync(ct);
         },ct);
         await using var session=await MetaRealtimeStreamingSession.ConnectAsync("fixture","model","PUSH_TO_TALK",[],[],ct,uri);var events=new ConcurrentQueue<StreamingTranscriptEvent>();session.TranscriptReceived+=events.Enqueue;
