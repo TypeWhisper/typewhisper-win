@@ -123,7 +123,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.11";
+    public string PluginVersion => "1.2.12";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -601,9 +601,13 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         {
             foreach (var turn in turnsElement.EnumerateArray())
             {
-                var text = turn.TryGetProperty("transcript", out var textElement)
-                    ? textElement.GetString()?.Trim() ?? ""
-                    : "";
+                if (turn.ValueKind != JsonValueKind.Object
+                    || !turn.TryGetProperty("transcript", out var textElement)
+                    || textElement.ValueKind != JsonValueKind.String)
+                {
+                    throw new JsonException("Meta returned no string transcript in a diarization turn.");
+                }
+                var text = textElement.GetString()!.Trim();
                 if (string.IsNullOrWhiteSpace(text))
                     continue;
 
