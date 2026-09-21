@@ -130,7 +130,9 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             startInfo.ArgumentList.Add("-Command");
         }
 
-        startInfo.ArgumentList.Add(script.Command);
+        var command = shell == ScriptShells.CommandPrompt ? script.Command :
+            "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false);\n" + script.Command;
+        startInfo.ArgumentList.Add(command);
         startInfo.Environment["TYPEWHISPER_APP_NAME"] = context.ActiveAppName ?? "";
         startInfo.Environment["TYPEWHISPER_LANGUAGE"] = context.SourceLanguage ?? "";
         startInfo.Environment["TYPEWHISPER_PROFILE"] = context.ProfileName ?? "";

@@ -57,7 +57,7 @@ internal sealed partial class LivePluginTextSettings
         var sidebarHeader = new Grid();
         sidebarHeader.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         sidebarHeader.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        sidebarHeader.Children.Add(new TextBlock { Text = "Profiles", FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
+        sidebarHeader.Children.Add(new TextBlock { Text = selector.Title, FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         sidebar.Children.Add(sidebarHeader);
         var picker = new HandCursorListView { SelectionMode = ListViewSelectionMode.Single,
@@ -73,15 +73,15 @@ internal sealed partial class LivePluginTextSettings
         }
         picker.SelectedItem = profileItems.GetValueOrDefault(selector.Value);
         _profilePicker = picker;
-        AutomationProperties.SetName(picker, "Profile to edit");
-        AutomationProperties.SetHelpText(picker, "Choose which server profile to edit. This does not change the active dictation provider.");
+        AutomationProperties.SetName(picker, selector.Title);
+        AutomationProperties.SetHelpText(picker, selector.Description);
         Grid.SetRow(picker, 1); sidebar.Children.Add(picker);
         var add = actions.FirstOrDefault(a => a.Id == addId);
         if (add is not null)
         {
             var button = ProfileButton("+", () => RunProfileActionAsync(add, name, leaveProfile: true));
-            AutomationProperties.SetName(button, "Add profile");
-            ToolTipService.SetToolTip(button, "Add profile");
+            AutomationProperties.SetName(button, add.Title);
+            ToolTipService.SetToolTip(button, add.Title);
             button.MinWidth = 32; button.Padding = new(8, 4, 8, 4);
             Grid.SetColumn(button, 1); sidebarHeader.Children.Add(button);
         }
@@ -106,6 +106,12 @@ internal sealed partial class LivePluginTextSettings
         var divider = new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] };
         content.Children.Add(divider);
         content.Children.Add(modelHeader); content.Children.Add(modelsPanel);
+        if (!generic && editable.All(field => field.Section == PluginSettingsSection.Connection) &&
+            actions.All(action => action.Section == PluginSettingsSection.Connection))
+        {
+            modelHeader.Visibility = Visibility.Collapsed;
+            divider.Visibility = Visibility.Collapsed;
+        }
         if (generic)
         {
             modelHeader.Visibility = Visibility.Collapsed;
@@ -273,13 +279,13 @@ internal sealed partial class LivePluginTextSettings
         var remove = actions.FirstOrDefault(a => a.Id == removeId);
         if (remove is not null)
         {
-            var removeButton = ProfileButton("Remove profile…", async () =>
+            var removeButton = ProfileButton(remove.Title, async () =>
             {
                 var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Remove “" + name + "”?",
-                    Content = "This removes this server profile, its saved API key and any unsaved edits. Workflows using it will need another provider.",
-                    PrimaryButtonText = "Remove profile", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+                    Content = showKey ? "This removes this configuration, its saved API key and any unsaved edits. Workflows using it will need another provider." : "This removes this configuration and any unsaved edits.",
+                    PrimaryButtonText = "Remove", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-                    await RunProfileActionAsync(remove, name, removedFields: editable.Select(f => f.Id).ToArray());
+                    await RunProfileActionAsync(remove, name, removedFields: editable.Select(f => f.Id).ToArray(), removedProfileId: selector.Value);
             });
             Grid.SetRow(removeButton, 2); sidebar.Children.Add(removeButton);
         }
@@ -334,7 +340,7 @@ internal sealed partial class LivePluginTextSettings
     }
 
     private async Task RunProfileActionAsync(PluginSettingsAction action, string name,
-        bool leaveProfile = false, string[]? removedFields = null, string? profileId = null, IReadOnlyDictionary<string, string>? values = null)
+        bool leaveProfile = false, string[]? removedFields = null, string? profileId = null, IReadOnlyDictionary<string, string>? values = null, string? removedProfileId = null)
     {
         if (_busy || !IsLoaded) return;
         if (!_session.CanStartPluginSettingsAction)
@@ -373,9 +379,11 @@ internal sealed partial class LivePluginTextSettings
             if (removedFields is not null)
             {
                 foreach (var field in removedFields) _drafts.Remove(field);
-                var removedId = action.Id[..action.Id.LastIndexOf('/')];
-                _dirtyProfiles.Remove(removedId);
-                _profileActionDrafts.Remove(removedId);
+                if (removedProfileId is not null)
+                {
+                    _dirtyProfiles.Remove(removedProfileId);
+                    _profileActionDrafts.Remove(removedProfileId);
+                }
             }
             if (leaveProfile) _profileScrollOffset = 0;
             await ReloadAsync();
@@ -386,7 +394,7 @@ internal sealed partial class LivePluginTextSettings
         catch (ArgumentException ex)
         { if (IsLoaded && generation == _generation) SetStatus(ex.Message); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded && generation == _generation) SetStatus("Could not complete “" + action.Title + "” for “" + name + "”. Check the server URL and API key, then retry."); }
+        { if (IsLoaded && generation == _generation) SetStatus("Could not complete “" + action.Title + "” for “" + name + "”. Check the plugin settings, then retry."); }
         finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
     }
 

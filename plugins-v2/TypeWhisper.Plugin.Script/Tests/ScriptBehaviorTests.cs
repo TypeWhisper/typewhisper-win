@@ -3,7 +3,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace PortableMigration.Tests;
 public sealed class ScriptBehaviorTests
 {
-    [Fact]
+    [WindowsFact]
     public async Task HostSettings_CreateDisabledScriptThenExecuteConfiguredChain()
     {
         using var f=new PortableFixture();using var p=new ScriptPlugin();await p.ActivateAsync(f.Host);
@@ -17,7 +17,7 @@ public sealed class ScriptBehaviorTests
         await p.DeactivateAsync();await p.ActivateAsync(f.Host);Assert.True(Assert.Single(p.Service!.Scripts).IsEnabled);
         await p.ExecuteSettingsActionAsync("remove:"+script.Id,default);Assert.Empty(p.Service.Scripts);await p.DeactivateAsync();
     }
-    [Fact]
+    [WindowsFact]
     public async Task FailedScript_PreservesInputAndContinues()
     {
         using var f=new PortableFixture();using var p=new ScriptPlugin();await p.ActivateAsync(f.Host);
@@ -25,13 +25,13 @@ public sealed class ScriptBehaviorTests
         p.Service.AddScript(new(){Name="uppercase",Shell="powershell",Command="[Console]::Out.Write([Console]::In.ReadToEnd().ToUpperInvariant())",IsEnabled=true});
         Assert.Equal("HELLO",await p.ProcessAsync("hello",new(),default));await p.DeactivateAsync();
     }
-    [Fact]
+    [WindowsFact]
     public async Task Cancellation_StopsProcess()
     {
         var runner=new ScriptProcessRunner();using var cancel=new CancellationTokenSource(150);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>runner.RunAsync(new(){Name="wait",Shell="powershell",Command="Start-Sleep -Seconds 30",TimeoutSeconds=40},"input",new(),cancel.Token));
     }
-    [Fact]
+    [WindowsFact]
     public async Task Timeout_IsBoundedAndDoesNotReplaceInput()
     {
         var runner=new ScriptProcessRunner();var result=await runner.RunAsync(new(){Name="wait",Shell="powershell",Command="Start-Sleep -Seconds 30",TimeoutSeconds=1},"input",new(),default);

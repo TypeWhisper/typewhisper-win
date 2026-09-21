@@ -14,7 +14,7 @@ public sealed partial class ScriptPlugin : IPostProcessorPlugin
     public string PluginName => "Script Runner";
 
     /// <summary>Gets the plugin version.</summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.3.0";
 
     /// <summary>Gets the processor name.</summary>
     public string ProcessorName => "Script Runner";
@@ -41,8 +41,11 @@ public sealed partial class ScriptPlugin : IPostProcessorPlugin
     }
 
     /// <summary>Runs the enabled script chain.</summary>
-    public Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct) =>
-        Service is null ? Task.FromResult(text) : Service.RunScriptsAsync(text, context, ct);
+    public Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct)
+    {
+        lock (_settingsLock)
+            return Service is null ? Task.FromResult(text) : Service.RunScriptsAsync(text, context, ct);
+    }
 
     /// <summary>Creates the settings view.</summary>
 
