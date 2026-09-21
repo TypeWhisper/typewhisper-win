@@ -190,6 +190,9 @@ public sealed partial class MarketplaceView : UserControl
 
     private void UpdateBreadcrumbs()
     {
+        // Settings already provide navigation through their persistent sidebar.
+        MarketBreadcrumbs.Visibility = _settingsLayout ? Visibility.Collapsed : Visibility.Visible;
+        if (_settingsLayout) return;
         var crumbs = new List<Crumb> { new(_settingsLayout ? "Settings" : "Quick Launch", () =>
         {
             ShowList(true);
