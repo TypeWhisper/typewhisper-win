@@ -210,7 +210,7 @@ public sealed partial class SettingsWindow : Window
             : minimal
             ? "Hidden in Minimal. Your preference is kept for Standard and Compact."
             : preferences.FloatingLiveText
-            ? "Show live text in a floating window. Drag its header to move it. Longer text scrolls."
+            ? "Show live text in a floating window. Drag its header to move it or its edges to resize it. Longer text scrolls."
             : "Show streaming text beside the recording block. Longer text scrolls.";
         DetailsDescription.Text = standard
             ? "Show the audio level in dBFS and measured render frequency. Off by default."

@@ -39,4 +39,60 @@ public sealed class LiveTextPlacementTests
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
+    [Theory]
+    [InlineData((int)(LiveTextResizeEdge.Left), 150, 100, 350, 220)]
+    [InlineData((int)(LiveTextResizeEdge.Right), 100, 100, 450, 220)]
+    [InlineData((int)(LiveTextResizeEdge.Top), 100, 130, 400, 190)]
+    [InlineData((int)(LiveTextResizeEdge.Bottom), 100, 100, 400, 250)]
+    [InlineData((int)(LiveTextResizeEdge.Top | LiveTextResizeEdge.Left), 150, 130, 350, 190)]
+    [InlineData((int)(LiveTextResizeEdge.Top | LiveTextResizeEdge.Right), 100, 130, 450, 190)]
+    [InlineData((int)(LiveTextResizeEdge.Bottom | LiveTextResizeEdge.Left), 150, 100, 350, 250)]
+    [InlineData((int)(LiveTextResizeEdge.Bottom | LiveTextResizeEdge.Right), 100, 100, 450, 250)]
+    public void Resize_MovesOnlySelectedEdges(int edge, int x, int y, int width, int height)
+    {
+        var result = LiveTextPlacement.Resize(new(100, 100, 400, 220), (LiveTextResizeEdge)edge, 50, 30, 280, 140, new(0, 0, 1920, 1040));
+        Assert.Equal(new(x, y, width, height), result);
+    }
+
+    [Fact]
+    public void Resize_ClampsToMinimumWithoutMovingOppositeCorner()
+    {
+        var result = LiveTextPlacement.Resize(new(100, 100, 400, 220),
+            LiveTextResizeEdge.Left | LiveTextResizeEdge.Top, 10000, 10000, 280, 140, new(0, 0, 1920, 1040));
+        Assert.Equal(new(220, 180, 280, 140), result);
+        result = LiveTextPlacement.Resize(new(100, 100, 400, 220),
+            LiveTextResizeEdge.Right | LiveTextResizeEdge.Bottom, -10000, -10000, 280, 140, new(0, 0, 1920, 1040));
+        Assert.Equal(new(100, 100, 280, 140), result);
+    }
+
+    [Fact]
+    public void Resize_StaysOnNegativeCoordinateDisplayAndFitsSmallWorkArea()
+    {
+        var result = LiveTextPlacement.Resize(new(-1600, -900, 600, 400),
+            LiveTextResizeEdge.Left | LiveTextResizeEdge.Top, -10000, -10000, 420, 210, new(-1920, -1080, 1920, 1040));
+        Assert.Equal(new(-1920, -1080, 920, 580), result);
+        result = LiveTextPlacement.Resize(new(0, 0, 200, 100),
+            LiveTextResizeEdge.Right | LiveTextResizeEdge.Bottom, 1000, 1000, 280, 140, new(0, 0, 200, 100));
+        Assert.Equal(new(0, 0, 200, 100), result);
+    }
+
+    [Fact]
+    public void SavedSize_PreservesLogicalDimensionsAndAcceptsLegacyPosition()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "live-text-size-test-" + Guid.NewGuid());
+        var path = Path.Combine(directory, "position.json");
+        try
+        {
+            LiveTextPlacement.Save(path, new(-1200, 200, 640, 360));
+            Assert.Equal(new(-1200, 200, 640, 360), LiveTextPlacement.Read(path));
+            Assert.Equal(new(0, 0, 640, 360), LiveTextPlacement.Clamp(new(-1200, -100, 640, 360), 960, 540, 0, 0, 1920, 1040));
+            File.WriteAllText(path, """{"X":20,"Y":30}""");
+            Assert.Equal(new(20, 30, 420, 220), LiveTextPlacement.Read(path));
+            File.WriteAllText(path, """{"X":20,"Y":30,"Width":-1,"Height":0}""");
+            Assert.Equal(new(20, 30, 420, 220), LiveTextPlacement.Read(path));
+            File.WriteAllText(path, """{"X":20,"Y":30,"Width":10,"Height":10000000}""");
+            Assert.Equal(new(20, 30, 280, 8192), LiveTextPlacement.Read(path));
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
 }

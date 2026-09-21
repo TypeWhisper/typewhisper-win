@@ -5,6 +5,7 @@
     xmlns:local="using:TypeWhisper.WinUI"
     Title="TypeWhisper Live Transcript">
 
+    <Grid x:Name="WindowSurface">
     <Border x:Name="TranscriptRoot"
             Background="{ThemeResource SurfaceBrush}"
             BorderBrush="Transparent"
@@ -59,4 +60,11 @@
             </ScrollViewer>
         </Grid>
     </Border>
+    <Grid x:Name="ResizeHandles" Visibility="Collapsed">
+        <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="14" Height="14" Margin="0,0,7,7" IsHitTestVisible="False">
+            <Line X1="3" Y1="12" X2="12" Y2="3" Stroke="{ThemeResource MutedBrush}" StrokeThickness="1" />
+            <Line X1="8" Y1="12" X2="12" Y2="8" Stroke="{ThemeResource MutedBrush}" StrokeThickness="1" />
+        </Grid>
+    </Grid>
+    </Grid>
 </Window>

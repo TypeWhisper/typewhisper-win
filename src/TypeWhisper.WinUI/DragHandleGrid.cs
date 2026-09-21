@@ -10,3 +10,8 @@ public sealed class DragHandleGrid : Grid
 
     internal void SetDraggable(bool draggable) => ProtectedCursor = draggable ? _moveCursor : _arrowCursor;
 }
+
+public sealed class ResizeHandleGrid : Grid
+{
+    internal ResizeHandleGrid(InputSystemCursorShape shape) => ProtectedCursor = InputSystemCursor.Create(shape);
+}
