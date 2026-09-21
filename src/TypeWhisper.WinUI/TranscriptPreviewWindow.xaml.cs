@@ -136,6 +136,9 @@ public sealed partial class TranscriptPreviewWindow : Window
         if (_hasAnchor) SetAnchor(_recordingPosition, _pixelWidth, _scale, _opensDown, _recordingHeight);
     }
 
+    internal LiveTextPreviewFrame? FloatingPlacement { get; private set; }
+    internal event Action<LiveTextPreviewFrame>? FloatingPlacementChanged;
+
     internal void SetFloatingSize(double width, double height)
     {
         if (!_floating || _floatingPosition is null || !double.IsFinite(width) || !double.IsFinite(height)) return;
@@ -409,6 +412,12 @@ public sealed partial class TranscriptPreviewWindow : Window
             _floatingPosition = position;
             AppWindow.MoveAndResize(new RectInt32(position.X, position.Y, width, Math.Min(fullHeight, Math.Max(1, (int)Math.Round(height * scale)))));
             NativeWindowAppearance.RemoveOverlayFrame(this);
+            var frame = new LiveTextPreviewFrame(new(position.X, position.Y, width, fullHeight), new(work.X, work.Y, work.Width, work.Height), position.Width, position.Height);
+            if (frame != FloatingPlacement)
+            {
+                FloatingPlacement = frame;
+                FloatingPlacementChanged?.Invoke(frame);
+            }
             return;
         }
         var pixelHeight = Math.Max(1, (int)Math.Round(height * _scale));

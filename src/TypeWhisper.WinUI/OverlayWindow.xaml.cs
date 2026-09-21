@@ -60,6 +60,9 @@ public sealed partial class OverlayWindow : Window
         SetJoinedShape(_transcriptPreviewEnabled && _mode != OverlayMode.Minimal);
     }
 
+    internal LiveTextPreviewFrame? FloatingPlacement => _transcriptWindow?.FloatingPlacement;
+    internal event Action<LiveTextPreviewFrame>? FloatingPlacementChanged;
+
     internal void SetFloatingTextSize(double width, double height)
     {
         if (_previewVisible) _transcriptWindow?.SetFloatingSize(width, height);
@@ -320,6 +323,7 @@ public sealed partial class OverlayWindow : Window
         if (_transcriptWindow is null)
         {
             _transcriptWindow = new TranscriptPreviewWindow(_liveText);
+            _transcriptWindow.FloatingPlacementChanged += frame => FloatingPlacementChanged?.Invoke(frame);
             _transcriptWindow.SetTextSize(_layout.LiveTranscriptionFontSize);
             _transcriptWindow.SetFloating(_layout.FloatingLiveText);
             _transcriptWindow.Collapsed += (_, _) => SetJoinedShape(false);

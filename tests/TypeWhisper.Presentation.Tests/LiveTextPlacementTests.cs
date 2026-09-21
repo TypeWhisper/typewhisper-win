@@ -5,6 +5,35 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class LiveTextPlacementTests
 {
+    [Fact]
+    public void ScreenMap_UsesTargetMonitorOriginAndUniformScale()
+    {
+        var frame = new LiveTextPreviewFrame(new(-1440, 270, 480, 270), new(-1920, 0, 1920, 1080));
+        var map = LiveTextPlacement.Project(frame, 640, 180);
+        Assert.Equal(new(160, 0, 320, 180), map.Screen);
+        Assert.Equal(new(240, 45, 80, 45), map.Window);
+    }
+
+    [Fact]
+    public void ScreenMap_PortraitMonitorAndWindowFillingWorkAreaStayAligned()
+    {
+        var work = new LiveTextBounds(2560, -1920, 1080, 1920);
+        var map = LiveTextPlacement.Project(new(work, work), 200, 400);
+        Assert.Equal(map.Screen, map.Window);
+        Assert.Equal(200, map.Screen.Width);
+        Assert.InRange(map.Screen.Y, 22, 23);
+        Assert.InRange(map.Screen.Height, 355, 356);
+    }
+
+    [Theory]
+    [InlineData(0, 100)]
+    [InlineData(100, 0)]
+    [InlineData(double.NaN, 100)]
+    public void ScreenMap_BeforeLayoutHasNoInvalidDimensions(double width, double height)
+    {
+        Assert.Equal(default, LiveTextPlacement.Project(new(new(0, 0, 420, 220), new(0, 0, 1920, 1080)), width, height));
+    }
+
     [Theory]
     [InlineData(-2500, -900, -1920, 0)]
     [InlineData(-10, 1000, -420, 820)]

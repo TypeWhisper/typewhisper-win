@@ -899,6 +899,7 @@ public sealed partial class MainWindow : Window
             if (_overlay is null)
             {
                 _overlay = new OverlayWindow(_transcriptPreviewEnabled);
+                _overlay.FloatingPlacementChanged += frame => _settingsWindow?.SetFloatingPlacement(frame);
                 _overlay.Closed += (_, _) => _overlay = null;
             }
             var area = ResolveOverlayDisplayArea();
@@ -1293,6 +1294,7 @@ public sealed partial class MainWindow : Window
                 else ShowWaveformOverlay();
             };
         }
+        _settingsWindow.SetFloatingPlacement(_overlay?.FloatingPlacement);
         _settingsWindow.SetPreferences(OverlayPreferences);
         _settingsWindow.SetPreviewVisible(_overlay?.IsPreviewVisible == true, _overlay?.IsPaused == true);
         _settingsWindow.ShowOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));

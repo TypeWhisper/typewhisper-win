@@ -4,6 +4,9 @@ namespace TypeWhisper.WinUI;
 
 internal sealed record LiveTextPosition(int X, int Y, double Width = 420, double Height = 220);
 internal readonly record struct LiveTextBounds(int X, int Y, int Width, int Height);
+internal sealed record LiveTextPreviewFrame(LiveTextBounds Window, LiveTextBounds WorkArea, double Width = 420, double Height = 220);
+internal readonly record struct LiveTextMapRect(double X, double Y, double Width, double Height);
+internal readonly record struct LiveTextMapLayout(LiveTextMapRect Screen, LiveTextMapRect Window);
 [Flags]
 internal enum LiveTextResizeEdge { Left = 1, Right = 2, Top = 4, Bottom = 8 }
 
@@ -15,6 +18,19 @@ internal static class LiveTextPlacement
             X = Math.Clamp(position.X, left, left + Math.Max(0, workWidth - width)),
             Y = Math.Clamp(position.Y, top, top + Math.Max(0, workHeight - height))
         };
+
+    internal static LiveTextMapLayout Project(LiveTextPreviewFrame frame, double width, double height)
+    {
+        var work = frame.WorkArea;
+        if (work.Width <= 0 || work.Height <= 0 || !double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0)
+            return default;
+        var scale = Math.Min(width / work.Width, height / work.Height);
+        var x = (width - work.Width * scale) / 2;
+        var y = (height - work.Height * scale) / 2;
+        return new(new(x, y, work.Width * scale, work.Height * scale),
+            new(x + (frame.Window.X - work.X) * scale, y + (frame.Window.Y - work.Y) * scale,
+                frame.Window.Width * scale, frame.Window.Height * scale));
+    }
 
     internal const int MinimumWidth = 280;
     internal const int MinimumHeight = 140;

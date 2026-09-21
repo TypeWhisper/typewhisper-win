@@ -89,7 +89,6 @@
                     <local:HandCursorButton x:Name="PreviewButton" Content="Preview overlay" Click="Preview_Click" Style="{StaticResource PrimaryButtonStyle}" AutomationProperties.Name="Preview overlay" />
                     <local:HandCursorButton x:Name="PausePreviewButton" Content="Pause preview" Click="PausePreview_Click" Style="{StaticResource SecondaryButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Pause or resume preview" />
                 </StackPanel>
-                <local:HandCursorButton x:Name="PreviewSizeButton" Content="Adjust preview size…" Click="PreviewSize_Click" Style="{StaticResource SecondaryButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Adjust floating live-text size" />
                 <TextBlock x:Name="PreviewExplanation" Text="Preview uses your microphone level when available, otherwise a simulated signal. Transcript text is a sample; no audio is saved." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
@@ -97,6 +96,26 @@
             <StackPanel Margin="24,16,24,20" Spacing="12">
                 <local:HandCursorButton Content="← Appearance" Click="BackToAppearance_Click" Style="{StaticResource IconButtonStyle}" HorizontalAlignment="Left" AutomationProperties.Name="Back to appearance" />
                 <local:OverlayEditor x:Name="OverlayEditor" />
+                <StackPanel x:Name="PreviewSizeSection" Spacing="12" Visibility="Collapsed">
+                    <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                    <TextBlock Text="FLOATING LIVE TEXT" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                    <TextBlock x:Name="PreviewSizeHint" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                    <Border x:Name="FloatingPositionPreview" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="12" Background="{ThemeResource SurfaceBrush}" Padding="12" Visibility="Collapsed">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Name="FloatingPositionLabel" Text="POSITION ON SCREEN" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                            <Canvas x:Name="FloatingScreenCanvas" Height="156" SizeChanged="FloatingScreen_SizeChanged" IsHitTestVisible="False">
+                                <Border x:Name="FloatingScreenBounds" Background="{ThemeResource InkBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="4" />
+                                <Border x:Name="FloatingWindowThumb" Background="#FF12304A" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1" CornerRadius="3" />
+                            </Canvas>
+                            <TextBlock x:Name="FloatingPositionSummary" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                    </Border>
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <NumberBox x:Name="PreviewWidth" Header="Width" Value="420" Minimum="280" Maximum="8192" SmallChange="10" LargeChange="50" SpinButtonPlacementMode="Inline" ValueChanged="PreviewSize_Changed" AutomationProperties.Name="Floating live-text width" />
+                        <NumberBox x:Name="PreviewHeight" Grid.Column="1" Header="Height" Value="220" Minimum="140" Maximum="8192" SmallChange="10" LargeChange="50" SpinButtonPlacementMode="Inline" ValueChanged="PreviewSize_Changed" AutomationProperties.Name="Floating live-text height" />
+                    </Grid>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="CatalogScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

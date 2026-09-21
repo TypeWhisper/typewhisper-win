@@ -56,6 +56,8 @@ public sealed partial class SettingsWindow : Window
     internal event Action? PreviewDismissed;
     internal event Action<double, double>? PreviewSizeRequested;
     private bool _previewVisible;
+    private bool _updatingPreviewSize;
+    private LiveTextPreviewFrame? _floatingPreviewFrame;
 
     private readonly Dictionary<string, string> _values;
     private readonly List<ChoicePicker> _catalogPickers = [];
@@ -217,51 +219,90 @@ public sealed partial class SettingsWindow : Window
         DetailsDescription.Text = standard
             ? "Show the audio level in dBFS and measured render frequency. Off by default."
             : "Available in Standard only. Your preference is kept when switching layouts.";
-        UpdatePreviewSizeButton();
+        UpdatePreviewSizeControls();
         _updating = false;
     }
 
     internal void SetPreviewVisible(bool visible, bool paused = false)
     {
+        if (visible && !_previewVisible) RefreshPreviewSize();
         _previewVisible = visible;
-        UpdatePreviewSizeButton();
+        UpdatePreviewSizeControls();
         PreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
         EditorPreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
         PausePreviewButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         PausePreviewButton.Content = paused ? "Resume preview" : "Pause preview";
     }
 
-    private void UpdatePreviewSizeButton()
+    private void UpdatePreviewSizeControls()
     {
-        PreviewSizeButton.Visibility = _preferences.FloatingLiveText ? Visibility.Visible : Visibility.Collapsed;
-        PreviewSizeButton.IsEnabled = _previewVisible && _preferences.LiveText && _preferences.Mode != OverlayMode.Minimal;
-        ToolTipService.SetToolTip(PreviewSizeButton, "Start the preview to adjust its width and height using the keyboard.");
+        PreviewSizeSection.Visibility = _preferences.FloatingLiveText ? Visibility.Visible : Visibility.Collapsed;
+        PreviewWidth.IsEnabled = PreviewHeight.IsEnabled = _previewVisible && _preferences.LiveText && _preferences.Mode != OverlayMode.Minimal;
+        FloatingPositionLabel.Text = _previewVisible ? "POSITION ON SCREEN" : "LAST PREVIEW POSITION";
+        PreviewSizeHint.Text = PreviewWidth.IsEnabled
+            ? "Changes are saved automatically. Size uses display-independent pixels and is limited to your screen's work area."
+            : "Start the preview with live text enabled in Standard or Compact to adjust its width and height.";
     }
 
-    private async void PreviewSize_Click(object sender, RoutedEventArgs e)
+    internal void SetFloatingPlacement(LiveTextPreviewFrame? frame)
+    {
+        _floatingPreviewFrame = frame;
+        if (frame is not null) SetPreviewSizeValues(frame.Width, frame.Height);
+        FloatingPositionPreview.Visibility = frame is null ? Visibility.Collapsed : Visibility.Visible;
+        RenderFloatingPosition();
+    }
+
+    private void FloatingScreen_SizeChanged(object sender, SizeChangedEventArgs e) => RenderFloatingPosition();
+
+    private void RenderFloatingPosition()
+    {
+        if (_floatingPreviewFrame is not { } frame) return;
+        var map = LiveTextPlacement.Project(frame, FloatingScreenCanvas.ActualWidth, FloatingScreenCanvas.Height);
+        Place(FloatingScreenBounds, map.Screen);
+        Place(FloatingWindowThumb, map.Window);
+        var horizontal = 100d * (frame.Window.X - frame.WorkArea.X) / Math.Max(1, frame.WorkArea.Width);
+        var vertical = 100d * (frame.Window.Y - frame.WorkArea.Y) / Math.Max(1, frame.WorkArea.Height);
+        FloatingPositionSummary.Text = $"Live text · {horizontal:0}% from left · {vertical:0}% from top";
+        AutomationProperties.SetName(FloatingPositionPreview, FloatingPositionSummary.Text);
+
+        static void Place(FrameworkElement element, LiveTextMapRect rect)
+        {
+            Canvas.SetLeft(element, rect.X);
+            Canvas.SetTop(element, rect.Y);
+            element.Width = rect.Width;
+            element.Height = rect.Height;
+        }
+    }
+
+    private void RefreshPreviewSize()
     {
         var saved = LiveTextPlacement.Read(WinUIProfile.DataPath("live-text-position.json"));
-        var width = new NumberBox { Header = "Width", Value = saved?.Width ?? 420,
-            Minimum = LiveTextPlacement.MinimumWidth, Maximum = 8192,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, SmallChange = 10, LargeChange = 50 };
-        var height = new NumberBox { Header = "Height", Value = saved?.Height ?? 220,
-            Minimum = LiveTextPlacement.MinimumHeight, Maximum = 8192,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, SmallChange = 10, LargeChange = 50 };
-        AutomationProperties.SetName(width, "Floating live-text width");
-        AutomationProperties.SetName(height, "Floating live-text height");
-        var panel = new StackPanel { Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = "Size uses display-independent pixels and is limited to your screen's work area.", TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(width);
-        panel.Children.Add(height);
-        var dialog = new ContentDialog { XamlRoot = SettingsRoot.XamlRoot, RequestedTheme = SettingsRoot.ActualTheme,
-            Title = "Floating live-text size", Content = panel, PrimaryButtonText = "Apply", CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary };
-        dialog.PrimaryButtonClick += (_, args) =>
+        SetPreviewSizeValues(_floatingPreviewFrame?.Width ?? saved?.Width ?? 420,
+            _floatingPreviewFrame?.Height ?? saved?.Height ?? 220);
+    }
+
+    private void SetPreviewSizeValues(double width, double height)
+    {
+        var wasUpdating = _updatingPreviewSize;
+        _updatingPreviewSize = true;
+        try
         {
-            if (!double.IsFinite(width.Value) || !double.IsFinite(height.Value)) { args.Cancel = true; return; }
-            if (PreviewSizeButton.IsEnabled) PreviewSizeRequested?.Invoke(width.Value, height.Value);
-        };
-        await dialog.ShowAsync();
+            PreviewWidth.Value = Math.Round(width);
+            PreviewHeight.Value = Math.Round(height);
+        }
+        finally { _updatingPreviewSize = wasUpdating; }
+    }
+
+    private void PreviewSize_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_updating || _updatingPreviewSize || !PreviewWidth.IsEnabled || !double.IsFinite(args.NewValue)) return;
+        // Preserve the other dimension if the window was resized with the pointer since this page opened.
+        var saved = LiveTextPlacement.Read(WinUIProfile.DataPath("live-text-position.json"));
+        var width = ReferenceEquals(sender, PreviewWidth) ? args.NewValue : _floatingPreviewFrame?.Width ?? saved?.Width ?? PreviewWidth.Value;
+        var height = ReferenceEquals(sender, PreviewHeight) ? args.NewValue : _floatingPreviewFrame?.Height ?? saved?.Height ?? PreviewHeight.Value;
+        if (!double.IsFinite(width) || !double.IsFinite(height)) return;
+        PreviewSizeRequested?.Invoke(width, height);
+        RefreshPreviewSize();
     }
 
     private void PausePreview_Click(object sender, RoutedEventArgs e) => PausePreviewRequested?.Invoke(this, EventArgs.Empty);
@@ -402,6 +443,7 @@ public sealed partial class SettingsWindow : Window
         }
         SettingsScroll.Visibility = category == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         EditorScroll.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
+        if (category == "Overlay editor") RefreshPreviewSize();
         var integration = category == "Integrations" || category.StartsWith("plugin:", StringComparison.Ordinal);
         if (!integration) IntegrationDismissed?.Invoke();
         IntegrationsHost.Visibility = integration ? Visibility.Visible : Visibility.Collapsed;
