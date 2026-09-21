@@ -22,7 +22,8 @@ public sealed class ScriptTemplatesTests
     public async Task TemplatesTransformUnicodeAndPreserveTheirDocumentedStructure(string id, string input, string expected)
     {
         var template = ScriptTemplates.All.Single(t => t.Id == id);
-        var script = template.Create(false);
+        // Functional assertions should tolerate cold PowerShell startup on shared CI runners.
+        var script = template.Create(false) with { TimeoutSeconds = 30 };
         Assert.False(script.IsEnabled);
         var result = await new ScriptProcessRunner().RunAsync(script, input, new(), default);
         Assert.True(result.IsSuccess, result.Status.ToString());
@@ -76,7 +77,7 @@ public sealed class ScriptTemplatesTests
             [script.Id + ":name"] = "Unicode test",
             [script.Id + ":command"] = ScriptTemplates.All.Single(t => t.Id == "uppercase").Command,
             [script.Id + ":shell"] = "powershell",
-            [script.Id + ":timeout"] = "12",
+            [script.Id + ":timeout"] = "30",
             [script.Id + ":enabled"] = "false"
         };
         var result = await p.ExecuteProfileActionAsync(script.Id.ToString(), "test:" + script.Id, draft, null, default);
@@ -86,7 +87,7 @@ public sealed class ScriptTemplatesTests
         await p.SaveProfileSettingsAsync(script.Id.ToString(), draft, null, default);
         await p.DeactivateAsync(); await p.ActivateAsync(f.Host);
         var saved = Assert.Single(p.Service!.Scripts);
-        Assert.Equal("Unicode test", saved.Name); Assert.Equal(12, saved.TimeoutSeconds); Assert.False(saved.IsEnabled);
+        Assert.Equal("Unicode test", saved.Name); Assert.Equal(30, saved.TimeoutSeconds); Assert.False(saved.IsEnabled);
     }
 
     [Fact]

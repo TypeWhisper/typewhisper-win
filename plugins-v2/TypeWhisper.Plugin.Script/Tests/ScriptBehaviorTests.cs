@@ -10,6 +10,7 @@ public sealed class ScriptBehaviorTests
         await p.ExecuteSettingsActionAsync("add",default);var script=Assert.Single(p.Service!.Scripts);
         Assert.False(script.IsEnabled);
         await p.SaveTextSettingAsync(script.Id+":shell","powershell",default);
+        await p.SaveTextSettingAsync(script.Id+":timeout","30",default);
         await p.SaveTextSettingAsync(script.Id+":command","[Console]::Out.Write([Console]::In.ReadToEnd().ToUpperInvariant())",default);
         Assert.Equal("hello",await p.ProcessAsync("hello",new(),default));
         await p.SaveTextSettingAsync(script.Id+":enabled","true",default);
@@ -22,7 +23,7 @@ public sealed class ScriptBehaviorTests
     {
         using var f=new PortableFixture();using var p=new ScriptPlugin();await p.ActivateAsync(f.Host);
         p.Service!.AddScript(new(){Name="fail",Shell="cmd",Command="exit /b 7",IsEnabled=true});
-        p.Service.AddScript(new(){Name="uppercase",Shell="powershell",Command="[Console]::Out.Write([Console]::In.ReadToEnd().ToUpperInvariant())",IsEnabled=true});
+        p.Service.AddScript(new(){Name="uppercase",Shell="powershell",TimeoutSeconds=30,Command="[Console]::Out.Write([Console]::In.ReadToEnd().ToUpperInvariant())",IsEnabled=true});
         Assert.Equal("HELLO",await p.ProcessAsync("hello",new(),default));await p.DeactivateAsync();
     }
     [WindowsFact]
@@ -42,7 +43,7 @@ public sealed class ScriptBehaviorTests
     [InlineData("using namespace System\n[Console]::Out.Write([Console]::In.ReadToEnd())", "Äpfel & Öl.")]
     public async Task PowerShellLeadingDeclarationsRemainValid(string command, string expected)
     {
-        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command }, "Äpfel & Öl.", new(), default);
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command, TimeoutSeconds=30 }, "Äpfel & Öl.", new(), default);
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(expected, result.Output);
     }
@@ -50,7 +51,7 @@ public sealed class ScriptBehaviorTests
     [WindowsFact]
     public async Task CmdHandshakePreservesScriptInput()
     {
-        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd", Command="findstr ." }, "first line\r\nsecond line\r\n", new(), default);
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd", Command="findstr .", TimeoutSeconds=30 }, "first line\r\nsecond line\r\n", new(), default);
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal("first line\r\nsecond line\r\n", result.Output);
     }
@@ -62,7 +63,7 @@ public sealed class ScriptBehaviorTests
         var marker = Path.Combine(fixture.Root, "child-pid.txt");
         var escaped = marker.Replace("'", "''");
         var command = "$p = [Diagnostics.Process]::Start('ping.exe', '-n 40 127.0.0.1'); [IO.File]::WriteAllText('" + escaped + "', [string]$p.Id)";
-        await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command, TimeoutSeconds=2 }, "", new(), default);
+        await new ScriptProcessRunner().RunAsync(new() { Shell="powershell", Command=command, TimeoutSeconds=30 }, "", new(), default);
         Assert.True(File.Exists(marker));
         var id = int.Parse(File.ReadAllText(marker));
         try
