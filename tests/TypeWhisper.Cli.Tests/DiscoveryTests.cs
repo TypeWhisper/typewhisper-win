@@ -20,13 +20,25 @@ public sealed class DiscoveryTests : IDisposable
         Assert.Equal(18979, value.Port); Assert.Equal("synthetic-discovery-token", value.ApiToken);
     }
     [Fact]
-    public void LegacyProductionTakesPrecedenceOverDevelopment()
+    public void IgnoresRemovedHostAndDiscoversWinUiDevelopment()
     {
         Discovery("TypeWhisper", 18981, false);
         Discovery("TypeWhisper-WinUI-DevUserData", 18982, true);
         var result = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root));
-        Assert.Equal(18981, result.Port);
-        Assert.Null(result.ApiToken);
+        Assert.Equal(18982, result.Port);
+        Assert.Equal("synthetic-discovery-token", result.ApiToken);
+    }
+
+    [Fact]
+    public void RemovedHostDiscoveryNeverSuppliesItsPortOrCredentials()
+    {
+        Discovery("TypeWhisper", 18981, true);
+        var automatic = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root));
+        Assert.Equal(8978, automatic.Port);
+        Assert.Null(automatic.ApiToken);
+        var explicitPort = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root, PortOverride: 18981));
+        Assert.Equal(18981, explicitPort.Port);
+        Assert.Null(explicitPort.ApiToken);
     }
 
     [Fact]
@@ -46,7 +58,7 @@ public sealed class DiscoveryTests : IDisposable
     [Fact]
     public void MatchingPortSelectsMatchingProfileToken()
     {
-        Discovery("TypeWhisper-WinUI-DevUserData", 18979, false); Discovery("TypeWhisper", 8978, true);
+        Discovery("TypeWhisper-WinUI-DevUserData", 18979, false); Discovery("TypeWhisper-WinUI", 8978, true);
         var value = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root, PortOverride: 8978));
         Assert.Equal("synthetic-discovery-token", value.ApiToken);
     }
@@ -63,7 +75,7 @@ public sealed class DiscoveryTests : IDisposable
     [InlineData("{\"version\":2,\"port\":18979,\"token\":\"secret\"}")]
     public void InvalidDiscoveryFallsBackWithoutToken(string json)
     {
-        var profile = Profile("TypeWhisper"); File.WriteAllText(Path.Combine(profile, "api-discovery.json"), json);
+        var profile = Profile("TypeWhisper-WinUI"); File.WriteAllText(Path.Combine(profile, "api-discovery.json"), json);
         File.WriteAllText(Path.Combine(profile, "api-port"), "8979");
         var value = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root));
         Assert.Equal(8979, value.Port); Assert.Null(value.ApiToken);
@@ -81,7 +93,7 @@ public sealed class DiscoveryTests : IDisposable
     [Fact]
     public void DevModeDoesNotFallBackToProductionDiscovery()
     {
-        Discovery("TypeWhisper", 18981, true);
+        Discovery("TypeWhisper-WinUI", 18981, true);
         var missing = CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root, DevMode: true));
         Assert.Equal(8978, missing.Port);
         Assert.Null(missing.ApiToken);

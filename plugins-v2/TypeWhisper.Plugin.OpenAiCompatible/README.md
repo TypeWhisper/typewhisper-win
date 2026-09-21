@@ -18,7 +18,7 @@ Connection tests and model discovery use the current editor values, including an
 
 ## Isolation
 
-The project references the portable SDK and contains no WPF references. It neither links legacy provider source nor reads historical profile directories. Fresh profiles do not import the legacy flat settings. The legacy project, manifest, feed and packages remain unchanged. Credentials are stored only through the host secret store, scoped by profile.
+The project references the portable .NET 10 SDK at `src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj` and contains no WPF references. It neither links legacy provider source nor reads historical profile directories. Fresh profiles do not import the legacy flat settings. Previously published legacy manifests, feed entries and packages remain unchanged. Credentials are stored only through the host secret store, scoped by profile.
 
 ## Verification
 
@@ -38,6 +38,6 @@ The English WinUI settings page was manually exercised on 2026-09-12: create a p
 - Extend the native settings checks to switching profiles with an unsaved key, complete keyboard navigation, and the German layout.
 - Run transcription and text processing against a selected compatible server, then verify an actual package update in an isolated profile.
 - Ship the host connection-identity guard, profile editor and `IPluginProfileSettings` SDK capability before making this package available; set the published minimum host version to the release containing those changes.
-- Complete the remaining side-by-side legacy regression and release checks in `docs/PLUGIN-MIGRATION-1.1.md` before publication.
+- Complete the remaining portable package lifecycle and release checks in `docs/PLUGIN-MIGRATION-1.1.md` before publication.
 
 The package has not been published and user settings have not been migrated.

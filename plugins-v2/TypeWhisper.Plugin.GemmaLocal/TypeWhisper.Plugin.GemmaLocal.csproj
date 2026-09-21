@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <Version>1.2.3</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.GemmaLocal.Portable.Tests" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+    <PackageReference Include="LLamaSharp" Version="0.26.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.26.0" />
+    <Content Include="manifest.json;Localization/*.json;Scripts/**/*;Licenses/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.gemma-local/</PackageDirectory></PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" />
+      <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+      <PackageTree Include="$(TargetDir)**/*" Exclude="$(TargetDir)*;$(TargetDir)**/*.pdb;$(TargetDir)**/*.xml" />
+    </ItemGroup>
+    <PropertyGroup>
+      <ExpectedPackageDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.gemma-local/'))</ExpectedPackageDirectory>
+      <ResolvedPackageDirectory>$([System.IO.Path]::GetFullPath('$(PackageDirectory)'))</ResolvedPackageDirectory>
+    </PropertyGroup>
+    <Error Condition="'$(ResolvedPackageDirectory)' != '$(ExpectedPackageDirectory)'" Text="Refusing to clean an unexpected package staging path." />
+    <RemoveDir Directories="$(PackageDirectory)" />
+    <MakeDir Directories="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageFile);@(PackageDependency)" DestinationFolder="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageTree)" DestinationFiles="@(PackageTree->'$(PackageDirectory)%(RecursiveDir)%(Filename)%(Extension)')" Condition="'@(PackageTree)' != ''" />
+  </Target>
+</Project>

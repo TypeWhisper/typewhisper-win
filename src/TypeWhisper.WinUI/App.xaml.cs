@@ -11,6 +11,7 @@ public partial class App : Application
     private ProfileOperationWindow? _profileOperation;
     private readonly TypeWhisper.Presentation.ActivationInbox _activations = new();
     private bool _activationReady;
+    private readonly TaskCompletionSource<bool> _shareStartupReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public App()
     {
@@ -31,11 +32,18 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        try { await LaunchAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ShowProfileFailure("TypeWhisper could not finish starting. Close and reopen the app before trying again.", ex.Message);
+        }
+    }
+
+    private async Task LaunchAsync()
+    {
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
-        var request = activation.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocol
-            ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocol.Uri.AbsoluteUri])
-            : TypeWhisper.Presentation.ApplicationActivationRequest.Parse(Environment.GetCommandLineArgs().Skip(1),
-            activation.Kind == ExtendedActivationKind.StartupTask);
+        var share = activation.Data as global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs;
+        var request = WindowsActivationRequest.Parse(activation, initial: true);
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         _mainInstance = AppInstance.FindOrRegisterForKey(WinUIProfile.InstanceKey);
         if (!_mainInstance.IsCurrent)
@@ -49,6 +57,9 @@ public partial class App : Application
                 // This secondary instance owns no profile stores or UI. Always exit after logging;
                 // do not offer recovery actions against the primary instance's profile.
                 System.Diagnostics.Trace.TraceError("Activation redirection failed: {0}", ex);
+                if (share is not null)
+                    TypeWhisper.Presentation.SharedFileActivation.Reject(new WindowsSharedFileOperation(share.ShareOperation),
+                        "TypeWhisper could not hand the shared files to the running app. Please share them again.");
             }
             finally { Exit(); }
             return;
@@ -56,15 +67,27 @@ public partial class App : Application
 
         _mainInstance.Activated += (_, redirected) =>
         {
-            var incoming = redirected.Data is global::Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs
-                ? TypeWhisper.Presentation.ApplicationActivationRequest.Parse([protocolArgs.Uri.AbsoluteUri])
-                : redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
-                ? TypeWhisper.Presentation.ApplicationActivationRequest.ParseCommandLine(launchArgs.Arguments)
-                : TypeWhisper.Presentation.ApplicationActivationRequest.Parse([], redirected.Kind == ExtendedActivationKind.StartupTask);
+            if (redirected.Data is global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs shared)
+            {
+                var operation = new WindowsSharedFileOperation(shared.ShareOperation);
+                if (!dispatcher.TryEnqueue(async () =>
+                {
+                    await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(operation, _activations, CanReceiveSharedActivation, _shareStartupReady.Task);
+                    DrainActivations();
+                }))
+                    TypeWhisper.Presentation.SharedFileActivation.Reject(operation, "TypeWhisper is shutting down. Reopen the app and share the files again.");
+                return;
+            }
+            var incoming = WindowsActivationRequest.Parse(redirected);
             if (!incoming.ShowWindow) return;
             _activations.Add(incoming);
             dispatcher.TryEnqueue(DrainActivations);
         };
+        // Report reception promptly, but do not retrieve or acknowledge files until the
+        // profile and host have initialized. Redirected shares use the same readiness task.
+        var initialShare = share is null ? Task.CompletedTask :
+            TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(new WindowsSharedFileOperation(share.ShareOperation),
+                _activations, CanReceiveSharedActivation, _shareStartupReady.Task);
         try
         {
 #if !DEBUG
@@ -136,8 +159,12 @@ public partial class App : Application
                 }, false, true, "UI test sample. Nothing was recorded or pasted.")));
 #endif
         _activationReady = true;
+        _shareStartupReady.TrySetResult(true);
+        await initialShare;
         DrainActivations();
     }
+
+    private bool CanReceiveSharedActivation() => _activationReady && !_exiting && _profileOperation is null;
 
     private void DrainActivations()
     {
@@ -159,6 +186,7 @@ public partial class App : Application
 
     private void ShowProfileFailure(string message, string? details = null)
     {
+        _shareStartupReady.TrySetResult(false);
         if (_profileOperation is null) _profileOperation = new(message, false, CloseProfileOperation);
         else _profileOperation.SetMessage(message, false);
         _profileOperation.SetDetails(details);
@@ -172,6 +200,7 @@ public partial class App : Application
         if (_exiting || _window is null) return;
         _exiting = true;
         _restartAfterProfileRestore = restart;
+        _shareStartupReady.TrySetResult(false);
         _profileOperation = new("Finishing active work before restoring your reviewed backup…", true, CloseProfileOperation);
         _profileOperation.Activate();
         try
@@ -246,6 +275,7 @@ public partial class App : Application
         if (_exiting) return "The app is already shutting down.";
         _exiting = true;
         _tray?.SetShutdownState("Finishing shutdown…");
+        _shareStartupReady.TrySetResult(false);
         try
         {
             if (_window is not null) await _window.ShutdownDictationAsync();

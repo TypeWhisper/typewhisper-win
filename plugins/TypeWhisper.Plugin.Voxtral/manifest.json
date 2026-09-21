@@ -1,9 +1,0 @@
-{
-  "id": "com.typewhisper.voxtral",
-  "name": "Voxtral",
-  "version": "1.0.0",
-  "author": "TypeWhisper",
-  "description": "Voxtral (Mistral) audio transcription and translation",
-  "assemblyName": "TypeWhisper.Plugin.Voxtral.dll",
-  "pluginClass": "TypeWhisper.Plugin.Voxtral.VoxtralPlugin"
-}

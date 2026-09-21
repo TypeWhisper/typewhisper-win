@@ -1,0 +1,17 @@
+{
+  "id": "com.typewhisper.speechmatics",
+  "name": "Speechmatics",
+  "version": "1.2.4",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Speechmatics batch and live transcription with regional processing, spoken languages and custom vocabulary.",
+  "categories": [
+    "transcription"
+  ],
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Speechmatics.dll",
+  "pluginClass": "TypeWhisper.Plugin.Speechmatics.SpeechmaticsPlugin",
+  "descriptions": {
+    "de": "Speechmatics für normale und Live-Transkription mit regionaler Verarbeitung, Sprachauswahl und Wörterbuch."
+  }
+}
