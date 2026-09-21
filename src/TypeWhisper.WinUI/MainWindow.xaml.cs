@@ -262,7 +262,7 @@ public sealed partial class MainWindow : Window
         ++_overlayRevision;
         _completedRecordingId = Guid.Empty;
         _completedPreviewExpired = true;
-        _overlay?.HidePreview();
+        HideOverlayPreview();
         _liveOverlay ??= new OverlayWindow(false, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0,
             () => _dictation.OverlayState, () => _dictation.LivePreviewText);
         _liveOverlay.SetLayout(OverlayPreferences);
@@ -292,7 +292,7 @@ public sealed partial class MainWindow : Window
         }
         if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel)
         {
-            _overlay?.HidePreview();
+            HideOverlayPreview();
             var showTranscript = _dictation.OverlayState.ShouldShowTranscript(_transcriptPreviewEnabled, _dictation.SupportsLiveTranscription);
             if (_liveOverlay is null)
                 _liveOverlay = new OverlayWindow(showTranscript, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0, () => _dictation.OverlayState, () => _dictation.LivePreviewText);
@@ -1504,9 +1504,15 @@ public sealed partial class MainWindow : Window
         UpdateOverlayControls();
     }
 
-    private void EndPreview_Click(object sender, RoutedEventArgs e)
+    private void HideOverlayPreview()
     {
         _overlay?.HidePreview();
+        _settingsWindow?.SetPreviewVisible(false);
+    }
+
+    private void EndPreview_Click(object sender, RoutedEventArgs e)
+    {
+        HideOverlayPreview();
         MetricsText.Text = "Overlay preview ended";
         UpdateOverlayControls();
     }
