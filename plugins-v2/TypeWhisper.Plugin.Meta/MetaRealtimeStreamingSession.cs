@@ -196,14 +196,15 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
             return;
 
+        // Abort before waiting: a send or close acknowledgement may hold the lock.
+        _disposed = true;
+        _receiveCts.Cancel();
+        _webSocket.Abort();
         await _sendLock.WaitAsync(CancellationToken.None);
         try
         {
-            _disposed = true;
             _terminalTranscript.TrySetException(
                 new ObjectDisposedException(nameof(MetaRealtimeStreamingSession)));
-            _receiveCts.Cancel();
-            _webSocket.Abort();
         }
         finally
         {
@@ -357,7 +358,7 @@ internal sealed class MetaRealtimeTranscriptCollector
 
     internal bool HasFinalSingleTurn => _hasFinalSingleTurn;
     internal bool HasCompletedTranscript => _hasFinalSingleTurn ||
-        (_turns.Count > 0 && _turns.Values.All(turn => turn.Completed) && string.IsNullOrEmpty(_interim));
+        (_usesDiarization && _turns.Values.All(turn => turn.Completed) && string.IsNullOrEmpty(_interim));
     internal string CompletedText => BuildSnapshot();
 
     internal MetaRealtimeTranscriptCollector(string mode)

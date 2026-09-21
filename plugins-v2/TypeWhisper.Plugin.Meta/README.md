@@ -2,7 +2,7 @@
 
 Meta transcription, realtime transcription, LLM completion, model refresh, language/dictionary/diarization and reasoning settings.
 
-Version `1.2.3`; plugin ID `com.typewhisper.meta`; minimum host `1.1.2`.
+Version `1.2.4`; plugin ID `com.typewhisper.meta`; minimum host `1.1.2`.
 Independent branch: `seofood/meta-portable`, based on `4db8f6ac`.
 
 ## Setup

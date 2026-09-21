@@ -123,7 +123,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.3";
+    public string PluginVersion => "1.2.4";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -275,7 +275,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseTranscriptionResponse(
             json,
-            FirstLanguageCode(languageHints),
+            null, // Language bias is not detected-language evidence.
             _speakerDiarizationEnabled);
     }
 
@@ -374,22 +374,59 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
             return;
         }
 
-        if (normalized is null)
+        if (changed)
+            await CommitCatalogAsync([], [], normalized, changeCredential: true);
+        else if (normalized is null)
             await _host.DeleteSecretAsync(ApiKeySecretName);
         else
             await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+    }
 
-        _apiKey = normalized;
-
-        if (changed)
+    private async Task CommitCatalogAsync(List<MetaFetchedModel> llm, List<MetaFetchedModel> transcription,
+        string? credential = null, bool changeCredential = false)
+    {
+        var selectedLlm = NormalizeSelection(_selectedLlmModelId,
+            llm.Count == 0 ? FallbackLlmModels : llm.Select(m => new PluginModelInfo(m.Id, DisplayName(m.Id))).ToArray(), DefaultLlmModelId);
+        var selectedTranscription = NormalizeSelection(_selectedModelId,
+            transcription.Count == 0 ? FallbackTranscriptionModels : transcription.Select(m => new PluginModelInfo(m.Id, DisplayName(m.Id))).ToArray(), DefaultTranscriptionModelId);
+        if (_host is { } host)
         {
-            _fetchedLlmModels = [];
-            _fetchedTranscriptionModels = [];
-            _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
-            _host.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
-            NormalizeSelections(persist: true);
-            _host.NotifyCapabilitiesChanged();
+            var undo = new Stack<Action>();
+            void Write<T>(string key, T value)
+            {
+                var previous = host.GetSetting<T>(key);
+                undo.Push(() => host.SetSetting(key, previous));
+                host.SetSetting(key, value);
+            }
+            try
+            {
+                Write(FetchedLlmModelsSettingName, llm);
+                Write(FetchedTranscriptionModelsSettingName, transcription);
+                Write(SelectedLlmModelSettingName, selectedLlm);
+                Write(SelectedTranscriptionModelSettingName, selectedTranscription);
+                // Persist dependent settings first. A failed reset must never replace the secret.
+                if (changeCredential)
+                {
+                    if (credential is null) await host.DeleteSecretAsync(ApiKeySecretName);
+                    else await host.StoreSecretAsync(ApiKeySecretName, credential);
+                }
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                var failures = new List<Exception> { error };
+                while (undo.TryPop(out var rollback))
+                    try { rollback(); }
+                    catch (Exception failure) when (failure is not OutOfMemoryException) { failures.Add(failure); }
+                if (failures.Count > 1) throw new AggregateException("Meta settings rollback failed.", failures);
+                throw;
+            }
         }
+        _fetchedLlmModels = llm;
+        _fetchedTranscriptionModels = transcription;
+        _selectedLlmModelId = selectedLlm;
+        _selectedModelId = selectedTranscription;
+        if (changeCredential) _apiKey = credential;
+        _host?.NotifyCapabilitiesChanged();
     }
 
     internal void SelectLlmModel(string modelId)
@@ -456,17 +493,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
                 .ToList();
             var llmModels = NormalizeModels(models, IsLlmModel);
             var transcriptionModels = NormalizeModels(models, IsTranscriptionModel);
-            _fetchedLlmModels = llmModels;
-            _fetchedTranscriptionModels = transcriptionModels;
-
-            if (_host is not null)
-            {
-                _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
-                _host.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
-            }
-
-            NormalizeSelections(persist: true);
-            _host?.NotifyCapabilitiesChanged();
+            await CommitCatalogAsync(llmModels, transcriptionModels);
             return new MetaModelCatalog(_fetchedLlmModels, _fetchedTranscriptionModels);
         }
         catch (OperationCanceledException)
@@ -546,9 +573,10 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
-        var transcript = root.TryGetProperty("transcript", out var transcriptElement)
-            ? transcriptElement.GetString()?.Trim() ?? ""
-            : "";
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("transcript", out var transcriptElement)
+            || transcriptElement.ValueKind != JsonValueKind.String)
+            throw new JsonException("Meta returned no string transcript.");
+        var transcript = transcriptElement.GetString()!.Trim();
         var durationSeconds = root.TryGetProperty("audioDurationMs", out var durationElement)
             && durationElement.ValueKind == JsonValueKind.Number
             ? durationElement.GetDouble() / 1000d

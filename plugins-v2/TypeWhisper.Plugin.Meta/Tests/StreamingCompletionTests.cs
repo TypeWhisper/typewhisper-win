@@ -34,6 +34,9 @@ public sealed class StreamingCompletionTests
                 // The explicit final response must complete the client even when no close frame follows.
                 if (!prematureClose) await clientFinished.Task.WaitAsync(ct);
                 socket.Abort();
+                // HttpListener's managed transport on Linux releases the TCP connection
+                // when the listener is closed, rather than on WebSocket.Abort alone.
+                if (prematureClose) listener.Close();
             }
             else await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
             await clientFinished.Task.WaitAsync(ct);
@@ -103,6 +106,41 @@ public sealed class StreamingCompletionTests
             }
         }
         finally { releaseLast.TrySetResult(); clientFinished.TrySetResult(); }
+        await server.WaitAsync(ct);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SilentDiarizationCompletesAndPendingReceiveDisposes(bool disposeWithoutFinalizing)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var ct = timeout.Token;
+        using var tcp = new TcpListener(IPAddress.Loopback, 0);
+        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync().WaitAsync(ct);
+            using var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
+            await Receive(socket, ct); await Send(socket, """{"sessionId":"fixture"}""", ct);
+            if (!disposeWithoutFinalizing)
+            {
+                Assert.Contains("endStream", Encoding.UTF8.GetString(await Receive(socket, ct)));
+                await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, ct);
+            }
+            await done.Task.WaitAsync(ct);
+        }, ct);
+        await using var session = await MetaRealtimeStreamingSession.ConnectAsync("fixture", "model", "DIARIZATION", [], [], ct, new Uri($"ws://127.0.0.1:{port}/"));
+        var events = new ConcurrentQueue<StreamingTranscriptEvent>(); session.TranscriptReceived += events.Enqueue;
+        try
+        {
+            if (disposeWithoutFinalizing) await session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+            else { await session.FinalizeAsync(ct); Assert.Equal("", Assert.Single(events, e => e.IsFinal).Text); }
+        }
+        finally { done.TrySetResult(); }
         await server.WaitAsync(ct);
     }
 

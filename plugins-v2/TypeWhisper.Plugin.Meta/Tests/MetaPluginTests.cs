@@ -143,7 +143,7 @@ public sealed class MetaPluginTests
             CancellationToken.None);
 
         Assert.Equal("Hallo TypeWhisper.", result.Text);
-        Assert.Equal("de", result.DetectedLanguage);
+        Assert.Null(result.DetectedLanguage);
         Assert.Equal(1.25, result.DurationSeconds);
         Assert.Equal("https://api.meta.ai/v1/asr/transcribe", handler.RequestUri?.AbsoluteUri);
         Assert.Equal("application/json", handler.Accept);
@@ -207,7 +207,7 @@ public sealed class MetaPluginTests
         Assert.Equal("Meta", sut.PluginName);
         Assert.Equal("Meta", sut.ProviderDisplayName);
         Assert.Equal("Meta", sut.ProviderName);
-        Assert.Equal("1.2.3", sut.PluginVersion);
+        Assert.Equal("1.2.4", sut.PluginVersion);
         Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
     }
 
@@ -419,7 +419,7 @@ public sealed class MetaPluginTests
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
         Assert.Equal("Meta", root.GetProperty("name").GetString());
-        Assert.Equal("1.2.3", root.GetProperty("version").GetString());
+        Assert.Equal("1.2.4", root.GetProperty("version").GetString());
         Assert.Equal("1.1.2", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(
@@ -451,6 +451,55 @@ public sealed class MetaPluginTests
         writer.Flush();
         return stream.ToArray();
     }
+
+    [Theory]
+    [InlineData("fetchedLlmModels")]
+    [InlineData("fetchedTranscriptionModels")]
+    [InlineData("selectedLlmModel")]
+    [InlineData("selectedModel")]
+    public async Task CatalogWriteFailureRetainsCredentialAndBothCatalogs(string failKey)
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK,
+            """{"data":[{"id":"muse-spark-9"},{"id":"muse-voice-transcribe-9"}]}""");
+        handler.EnqueueResponse(HttpStatusCode.OK,
+            """{"data":[{"id":"muse-spark-8"},{"id":"muse-voice-transcribe-8"}]}""");
+        using var client = new HttpClient(handler);
+        using var plugin = new MetaPlugin(client);
+        var host = new FakePluginHostServices();
+        await plugin.ActivateAsync(host);
+        await plugin.SetApiKeyAsync("previous");
+        Assert.NotNull(await plugin.RefreshAvailableModelsAsync());
+        host.FailSettingOnce = failKey;
+        Assert.Null(await plugin.RefreshAvailableModelsAsync());
+        Assert.Equal("muse-spark-9", Assert.Single(plugin.SupportedModels).Id);
+        Assert.Equal("muse-voice-transcribe-9", Assert.Single(plugin.TranscriptionModels).Id);
+        host.FailSettingOnce = failKey;
+        await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync("replacement"));
+        Assert.Equal("previous", plugin.ApiKey);
+        Assert.Equal("previous", await host.LoadSecretAsync("api-key"));
+        using var restarted = new MetaPlugin();
+        await restarted.ActivateAsync(host);
+        Assert.Equal("muse-spark-9", Assert.Single(restarted.SupportedModels).Id);
+        Assert.Equal("muse-voice-transcribe-9", Assert.Single(restarted.TranscriptionModels).Id);
+        Assert.Equal("muse-spark-9", restarted.SelectedLlmModelId);
+        await plugin.SetApiKeyAsync("replacement");
+        Assert.Equal("replacement", plugin.ApiKey);
+        Assert.Equal(0, plugin.FetchedLlmModelCount);
+        Assert.Equal(0, plugin.FetchedTranscriptionModelCount);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("{\"error\":\"failed\"}")]
+    [InlineData("{\"transcript\":null}")]
+    [InlineData("{\"transcript\":123}")]
+    public void BatchRejectsMissingOrNonStringTranscript(string json) =>
+        Assert.Throws<JsonException>(() => MetaPlugin.ParseTranscriptionResponse(json, null));
+
+    [Fact]
+    public void BatchAcceptsExplicitSilence() =>
+        Assert.Equal("", MetaPlugin.ParseTranscriptionResponse("""{"transcript":""}""", null).Text);
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
@@ -521,7 +570,12 @@ public sealed class MetaPluginTests
         public T? GetSetting<T>(string key) =>
             _settings.TryGetValue(key, out var value) && value is T typed ? typed : default;
 
-        public void SetSetting<T>(string key, T value) => _settings[key] = value;
+        internal string? FailSettingOnce { get; set; }
+        public void SetSetting<T>(string key, T value)
+        {
+            if (key == FailSettingOnce) { FailSettingOnce = null; throw new IOException("Fixture write failure."); }
+            _settings[key] = value;
+        }
         public void Log(PluginLogLevel level, string message) { }
         public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
     }
