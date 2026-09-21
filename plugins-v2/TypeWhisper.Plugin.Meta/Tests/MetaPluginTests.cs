@@ -90,6 +90,67 @@ public sealed class MetaPluginTests
     }
 
     [Fact]
+    public async Task ValidateApiKeyAsync_NormalizesWhitespaceAndRejectsBlankKeys()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{}");
+        using var client = new HttpClient(handler);
+        using var sut = new MetaPlugin(client);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => sut.ValidateApiKeyAsync("   "));
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+        Assert.Null(handler.RequestUri);
+        Assert.True(await sut.ValidateApiKeyAsync("  meta-key  "));
+        Assert.Equal("meta-key", handler.AuthorizationParameter);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, "{}", "403")]
+    [InlineData(HttpStatusCode.OK, "{}", "data array")]
+    [InlineData(HttpStatusCode.OK, "[]", "data array")]
+    [InlineData(HttpStatusCode.OK, "{\"data\":null}", "data array")]
+    public async Task ModelRefreshReportsInvalidResponses(HttpStatusCode status, string body, string diagnostic)
+    {
+        using var client = new HttpClient(new RecordingHandler(status, body));
+        using var sut = new MetaPlugin(client);
+        var host = new FakePluginHostServices();
+        await sut.ActivateAsync(host);
+        await sut.SetApiKeyAsync("meta-key");
+        Assert.Null(await sut.RefreshAvailableModelsAsync());
+        Assert.Contains(diagnostic, Assert.Single(host.Warnings));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ModelRefreshDistinguishesTimeoutFromCallerCancellation(bool callerCancels)
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var client = new HttpClient(new CancelingHandler(callerCancels ? cancellation : null));
+        using var sut = new MetaPlugin(client);
+        var host = new FakePluginHostServices();
+        await sut.ActivateAsync(host);
+        await sut.SetApiKeyAsync("meta-key");
+        if (callerCancels)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.RefreshAvailableModelsAsync(cancellation.Token));
+            Assert.Empty(host.Warnings);
+        }
+        else
+        {
+            Assert.Null(await sut.RefreshAvailableModelsAsync(cancellation.Token));
+            Assert.Contains("timed out", Assert.Single(host.Warnings));
+        }
+    }
+
+    private sealed class CancelingHandler(CancellationTokenSource? cancellation) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            cancellation?.Cancel();
+            throw new OperationCanceledException("Request timed out.", ct);
+        }
+    }
+
+    [Fact]
     public async Task ProcessAsync_UsesMetaChatCompletionsParameters()
     {
         var handler = new RecordingHandler(
@@ -207,7 +268,7 @@ public sealed class MetaPluginTests
         Assert.Equal("Meta", sut.PluginName);
         Assert.Equal("Meta", sut.ProviderDisplayName);
         Assert.Equal("Meta", sut.ProviderName);
-        Assert.Equal("1.2.6", sut.PluginVersion);
+        Assert.Equal("1.2.7", sut.PluginVersion);
         Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
     }
 
@@ -419,7 +480,7 @@ public sealed class MetaPluginTests
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
         Assert.Equal("Meta", root.GetProperty("name").GetString());
-        Assert.Equal("1.2.6", root.GetProperty("version").GetString());
+        Assert.Equal("1.2.7", root.GetProperty("version").GetString());
         Assert.Equal("1.1.2", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(
@@ -576,7 +637,11 @@ public sealed class MetaPluginTests
             if (key == FailSettingOnce) { FailSettingOnce = null; throw new IOException("Fixture write failure."); }
             _settings[key] = value;
         }
-        public void Log(PluginLogLevel level, string message) { }
+        public List<string> Warnings { get; } = [];
+        public void Log(PluginLogLevel level, string message)
+        {
+            if (level == PluginLogLevel.Warning) Warnings.Add(message);
+        }
         public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
     }
 

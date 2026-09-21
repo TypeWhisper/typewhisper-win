@@ -123,7 +123,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.6";
+    public string PluginVersion => "1.2.7";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -459,7 +459,9 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
 
     internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
     {
-        using var request = CreateModelsRequest(apiKey);
+        var normalized = NormalizeApiKey(apiKey)
+            ?? throw new PluginRequestException("API key is required", PluginRequestFailureKind.Configuration);
+        using var request = CreateModelsRequest(normalized);
         using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         return true;
     }
@@ -474,14 +476,15 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         {
             using var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
-                return null;
+                return ModelRefreshFailed(new HttpRequestException($"HTTP {(int)response.StatusCode}."));
 
             var json = await response.Content.ReadAsStringAsync(ct);
             using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("data", out var data)
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("data", out var data)
                 || data.ValueKind != JsonValueKind.Array)
             {
-                return null;
+                return ModelRefreshFailed(new JsonException("Model response must contain a data array."));
             }
 
             var models = data.EnumerateArray()
@@ -496,9 +499,13 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
             await CommitCatalogAsync(llmModels, transcriptionModels);
             return new MetaModelCatalog(_fetchedLlmModels, _fetchedTranscriptionModels);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            return ModelRefreshFailed(ex);
         }
         catch (HttpRequestException ex)
         {
