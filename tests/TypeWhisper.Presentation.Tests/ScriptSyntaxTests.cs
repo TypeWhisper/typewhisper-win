@@ -59,6 +59,10 @@ public sealed class ScriptSyntaxTests
     [InlineData("cmd /c --% echo one;two", "cmd /c --% echo one;two")]
     [InlineData("cmd /c --% echo one;two\nWrite-Output 1;Write-Output 2", "cmd /c --% echo one;two\nWrite-Output 1;\nWrite-Output 2")]
     [InlineData("cmd /c --% echo one;two | Write-Output 1;Write-Output 2", "cmd /c --% echo one;two | Write-Output 1;\nWrite-Output 2")]
+    [InlineData("cmd /c --% echo \"a|b;c\"", "cmd /c --% echo \"a|b;c\"")]
+    [InlineData("cmd /c --% echo \"a|b;c\" | Write-Output 1;Write-Output 2", "cmd /c --% echo \"a|b;c\" | Write-Output 1;\nWrite-Output 2")]
+    [InlineData("cmd /c --% echo \"a|b;c\"\nWrite-Output 1;Write-Output 2", "cmd /c --% echo \"a|b;c\"\nWrite-Output 1;\nWrite-Output 2")]
+    [InlineData("cmd /c --% echo \"a|b;c", "cmd /c --% echo \"a|b;c")]
     public void FormatterPreservesStopParsingArguments(string source, string expected) =>
         Assert.Equal(expected, ScriptSyntax.FormatPowerShell(source));
 

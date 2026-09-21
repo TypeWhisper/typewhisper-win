@@ -49,7 +49,7 @@ Runtime sources originated from `plugins/TypeWhisper.Plugin.Script` at `4db8f6ac
 
 ## Development acceptance
 
-Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Fourteen focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 32 portable plugin tests cover execution and settings.
+Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Eighteen focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 37 portable plugin tests cover execution and settings.
 
 ## Windows screenshots
 
