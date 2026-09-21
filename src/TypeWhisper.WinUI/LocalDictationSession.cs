@@ -503,7 +503,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 #endif
     internal Task StartAsync() => SetRecordingAsync(true);
     internal Task StartAsync(AutomaticWorkflowSnapshot workflow) => SetRecordingAsync(true, workflow);
-    internal Task StopAsync() => SetRecordingAsync(false);
+    private bool _stopPending;
+    internal async Task StopAsync()
+    {
+        if (_disposed || !_audio.IsRecording || _stopPending) return;
+        _stopPending = true;
+        try { await SetRecordingAsync(false); }
+        finally { _stopPending = false; }
+    }
     internal async Task CancelAsync()
     {
         RequestCancel();
@@ -527,7 +534,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null)
     {
-        if (_disposed || !await _gate.WaitAsync(0)) return;
+        if (_disposed) return;
+        // An API-started capture can bypass the input coordinator. Preserve explicit
+        // stop intent while its setup holds the gate; never queue a new start.
+        if (recording == false)
+        {
+            await _gate.WaitAsync();
+            if (_disposed) { _gate.Release(); return; }
+        }
+        else if (!await _gate.WaitAsync(0)) return;
 #if DEBUG
         if (CorrectionProbeEnabled && !_audio.IsRecording)
         {
@@ -602,6 +617,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 preparingRecording = true;
                 if (LivePreviewEnabled && SupportsLiveTranscription && UsesRegistryProvider &&
                     ActiveRegistryProvider is { SupportsStreaming: true }) _streamAudio.Begin();
+                if (preferences.SilenceAutoStopEnabled)
+                {
+                    _silenceClock.Restart();
+                    _silence = new(TimeSpan.FromSeconds(preferences.SilenceAutoStopSeconds));
+                    _silenceTimer.Start();
+                }
                 PasteDiagnostics.Write("dictation.capture.start");
                 _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
                 if (!_audio.IsRecording)
@@ -611,6 +632,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return;
                 }
                 PasteDiagnostics.Write("dictation.capture.active");
+                _targetProcessId = processId;
+                try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
+                catch (ArgumentException) { _targetApp = "Target app"; }
                 BeginApiDictationGeneration();
                 _started = DateTime.UtcNow;
                 _lastDuration = TimeSpan.Zero;
@@ -623,12 +647,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 await previousRecordingWork;
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
-                _targetProcessId = processId;
                 PasteDiagnostics.Write("dictation.start");
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
                     _originalField = OriginalDictationField.Capture(_target, processId);
-                try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
-                catch (ArgumentException) { _targetApp = "Target app"; }
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
                 else if (workflow is null) await CaptureWorkflowAtStartAsync();
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
@@ -660,12 +681,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         DecodeAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
                         error => { LivePreviewText = "Live preview unavailable · final transcription will continue."; LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
-                if (preferences.SilenceAutoStopEnabled)
-                {
-                    _silenceClock.Restart();
-                    _silence = new(TimeSpan.FromSeconds(preferences.SilenceAutoStopSeconds));
-                    _silenceTimer.Start();
-                }
                 PasteDiagnostics.Write("dictation.startup.complete");
                 preparingRecording = false;
                 return;
