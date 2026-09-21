@@ -268,7 +268,7 @@ public sealed class MetaPluginTests
         Assert.Equal("Meta", sut.PluginName);
         Assert.Equal("Meta", sut.ProviderDisplayName);
         Assert.Equal("Meta", sut.ProviderName);
-        Assert.Equal("1.2.11", sut.PluginVersion);
+        Assert.Equal("1.2.13", sut.PluginVersion);
         Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
     }
 
@@ -480,7 +480,7 @@ public sealed class MetaPluginTests
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
         Assert.Equal("Meta", root.GetProperty("name").GetString());
-        Assert.Equal("1.2.11", root.GetProperty("version").GetString());
+        Assert.Equal("1.2.13", root.GetProperty("version").GetString());
         Assert.Equal("1.1.5", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(
@@ -604,6 +604,17 @@ public sealed class MetaPluginTests
         Assert.True(collector.HasFinalSingleTurn);
         Assert.Equal("", collector.CompletedText);
         Assert.Null(update.Transcript);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"transcript\":null}")]
+    [InlineData("{\"transcript\":123}")]
+    [InlineData("null")]
+    public void MalformedDiarizationTurnCannotPublishPartialTranscript(string turn)
+    {
+        var json = "{\"transcript\":\"First. Second.\",\"turns\":[{\"transcript\":\"First.\"}," + turn + "]}";
+        Assert.Throws<JsonException>(() => MetaPlugin.ParseTranscriptionResponse(json, null, true));
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

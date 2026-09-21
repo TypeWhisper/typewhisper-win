@@ -157,6 +157,19 @@ public sealed class StreamingCompletionTests
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData(",\"turnId\":null")]
+    [InlineData(",\"turnId\":\"1\"")]
+    [InlineData(",\"turnId\":1.5")]
+    [InlineData(",\"turnId\":2147483648")]
+    public void DiarizationCompletionRequiresValidTurnId(string property)
+    {
+        var collector = new MetaRealtimeTranscriptCollector("DIARIZATION");
+        Assert.Throws<System.Text.Json.JsonException>(() => collector.Apply(
+            "{\"type\":\"speechComplete\",\"transcript\":\"Actual speech.\"" + property + "}"));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task FailedReceiverIsObservedByNextAudioSend(bool closeSocket)

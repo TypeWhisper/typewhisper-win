@@ -440,6 +440,10 @@ internal sealed class MetaRealtimeTranscriptCollector
                     }
                     isFinalEvent = true;
                 }
+                else if (_usesDiarization)
+                {
+                    throw new JsonException("Meta returned no valid turnId in a diarization completion.");
+                }
                 break;
 
             case "transcript":

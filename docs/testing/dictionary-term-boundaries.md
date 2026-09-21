@@ -8,4 +8,4 @@ Meta, AssemblyAI, ElevenLabs, Gemini, OpenAI, Gladia, Speechmatics and Fireworks
 
 Validation covers both WAV routing paths, streaming eligibility and connection, legacy routing, punctuation, quotes, newlines, Unicode, de-duplication, ordering, provider limits and malformed envelopes. Each migrated provider has a focused parser regression test. Full provider suites and the portable SDK/host suite are run locally. No real provider API call or microphone acceptance test is claimed for this follow-up yet.
 
-Local validation: 609 provider tests passed across the eight affected packages, plus 282 portable SDK/host tests. Package compatibility cases were rerun after raising the minimum host contract to 1.1.5.
+Local validation: 618 provider tests passed across the eight affected packages, plus 282 portable SDK/host tests. Package compatibility cases were rerun after raising the minimum host contract to 1.1.5.
