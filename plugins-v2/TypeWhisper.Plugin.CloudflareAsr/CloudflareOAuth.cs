@@ -68,8 +68,16 @@ internal sealed class CloudflareOAuth(HttpClient http)
                 return await ExchangeAsync(new() { ["grant_type"] = "authorization_code", ["code"] = code,
                     ["redirect_uri"] = redirect, ["code_verifier"] = verifier }, null, ct);
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
-            catch (IOException) when (acceptedCode is null && !ct.IsCancellationRequested) { }
+            catch (OperationCanceledException) when (acceptedCode is null && !ct.IsCancellationRequested)
+            {
+                // A stalled, unvalidated local request must not prevent the real browser callback.
+                continue;
+            }
+            catch (IOException) when (acceptedCode is null && !ct.IsCancellationRequested)
+            {
+                // Ignore disconnected probes only; failures after accepting a code must reach the caller.
+                continue;
+            }
         }
     }
 

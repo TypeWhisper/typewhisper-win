@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using TypeWhisper.Plugin.CloudflareAsr;
+using TypeWhisper.PluginSDK;
 
 public sealed partial class ProviderTests
 {
@@ -132,4 +133,45 @@ public sealed partial class ProviderTests
         await connection.SaveOAuthAsync(token,[new(new string('a',32),"One"),new(new string('b',32),"Two")],default);
         Assert.Empty(connection.Get("accountId")); Assert.Equal(2,connection.Accounts.Count);
     }
+    [Theory]
+    [InlineData(null)]
+    [InlineData("revoked-refresh")]
+    public async Task ExpiredSignInIsReportedAsAuthenticationFailure(string? refresh)
+    {
+        using var connection = new ProviderConnection(new HttpClient(new Handler((_,_) =>
+            new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("private-provider-details") })));
+        var host = new Host();
+        await connection.ActivateAsync(host);
+        await connection.SaveOAuthAsync(new("old-access",refresh,DateTimeOffset.UtcNow.AddMinutes(-1)),
+            [new(new string('a',32),"Example")],default);
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(() => connection.EnsureAccessTokenAsync(default));
+        Assert.Equal(PluginRequestFailureKind.Authentication,failure.FailureKind);
+        Assert.IsType<CloudflareSignInException>(failure.InnerException);
+        Assert.DoesNotContain("private-provider-details",failure.Message);
+        Assert.Equal("old-access",connection.Key);
+        Assert.Single(host.Secrets);
+    }
+
+    [Fact]
+    public async Task TokenExchangeTimeoutDoesNotWaitForAnotherCallback()
+    {
+        using var http = new HttpClient(new Handler((_,_) => throw new TaskCanceledException("token exchange timed out")));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Task? callback = null;
+        var failure = await Assert.ThrowsAsync<TaskCanceledException>(() => new CloudflareOAuth(http).SignInAsync(timeout.Token,uri =>
+        {
+            var query = Query(uri.Query);
+            callback = Task.Run(async () =>
+            {
+                using var client = new HttpClient();
+                using var response = await client.GetAsync(query["redirect_uri"]+"?state="+query["state"]+"&code=fixture",timeout.Token);
+                Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+            });
+            return Task.CompletedTask;
+        },port:0));
+        await callback!;
+        Assert.Equal("token exchange timed out",failure.Message);
+        Assert.False(timeout.IsCancellationRequested);
+    }
+
 }

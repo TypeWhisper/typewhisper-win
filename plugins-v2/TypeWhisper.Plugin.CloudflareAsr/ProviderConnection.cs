@@ -102,7 +102,10 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         try
         {
             if (_oauth is null || _oauth.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return;
-            var renewed = await new CloudflareOAuth(http).RefreshAsync(_oauth, ct);
+            CloudflareTokens renewed;
+            try { renewed = await new CloudflareOAuth(http).RefreshAsync(_oauth, ct); }
+            catch (CloudflareSignInException ex)
+            { throw new PluginRequestException(ex.Message, PluginRequestFailureKind.Authentication, innerException: ex); }
             await CommitOAuthAsync(renewed, new(_configuration.Values), ct);
         }
         finally { _gate.Release(); }
