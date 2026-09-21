@@ -32,3 +32,13 @@ Connection validation uses the account-scoped [Workers AI model search endpoint]
 Whisper uses automatic language detection. Explicit language requests are rejected before audio is uploaded; the host exposes no fixed-language choices for this provider. Protocol fixtures assert the complete model URL, POST method, bearer authentication, content type and unchanged WAV bytes.
 
 The plugin uses a conservative 100,000,000-byte WAV upload limit, including headers, based on Cloudflare's [documented Free/Pro request-body ceiling](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/4xx-client-error/error-413/). The host rejects oversized recordings before WAV allocation; direct plugin calls reject oversized byte arrays before HTTP. This baseline does not promise that all smaller inputs will be accepted by the model.
+
+## Whisper Large V3 Turbo and language selection
+
+Version 1.1.8 adds `@cf/openai/whisper-large-v3-turbo` alongside the existing Whisper model. Select Turbo under Dictation to choose a spoken language such as German. Requests explicitly use `task: transcribe`; dictionary terms are passed as a bounded initial prompt. Existing Whisper selections keep their automatic-language behavior. Live streaming and audio translation are not exposed.
+
+Turbo sends base64 audio in JSON and advertises a 74 MB WAV limit to allow for encoding overhead below the 100 MB request ceiling. Language and duration are read from `transcription_info`.
+
+On 2026-09-21, authenticated account validation and a short German recording succeeded with both Cloudflare models. Marco confirmed that the existing model returns dictation in the app but reported inaccurate recognition in spontaneous German speech. A successful fixed sample does not establish the quality of free dictation; Marco subsequently tested Whisper Large V3 Turbo with German selected in the running app and confirmed substantially better recognition.
+
+References: [Whisper](https://developers.cloudflare.com/workers-ai/models/whisper/), [Whisper Large V3 Turbo](https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/).

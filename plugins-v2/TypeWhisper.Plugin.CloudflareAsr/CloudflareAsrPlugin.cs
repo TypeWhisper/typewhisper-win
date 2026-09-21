@@ -20,7 +20,7 @@ public sealed partial class CloudflareAsrPlugin : ITranscriptionEnginePlugin, IA
     /// <inheritdoc />
     public string PluginName => "Cloudflare Workers AI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.7";
+    public string PluginVersion => "1.1.8";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
@@ -70,7 +70,7 @@ public sealed partial class CloudflareAsrPlugin : ITranscriptionEnginePlugin, IA
     /// <inheritdoc />
     public string ProviderDisplayName => PluginName;
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("whisper", "Whisper")];
+    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("whisper", "Whisper"), new("whisper-large-v3-turbo", "Whisper Large V3 Turbo") { IsRecommended = true }];
     /// <inheritdoc />
     public string? SelectedModelId => TranscriptionModels.Any(m => m.Id == Connection.Get("model")) ? Connection.Get("model") : TranscriptionModels[0].Id;
     /// <inheritdoc />
