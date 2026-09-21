@@ -9,8 +9,8 @@ namespace PortableMigration.Tests;
 public sealed class StreamingCompletionTests
 {
     [Theory]
-    [InlineData(false)][InlineData(true)]
-    public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose)
+    [InlineData(false, false)][InlineData(true, false)][InlineData(false, true)]
+    public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose, bool subscriberThrows)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(15));var ct=timeout.Token;
         var tcp=new TcpListener(IPAddress.Loopback,0);tcp.Start();var port=((IPEndPoint)tcp.LocalEndpoint).Port;tcp.Stop();
@@ -32,9 +32,11 @@ public sealed class StreamingCompletionTests
             await clientFinished.Task.WaitAsync(ct);
         },ct);
         await using var session=await SmallestAiStreamingSession.ConnectAsync("fixture","de",ct,uri);var events=new ConcurrentQueue<StreamingTranscriptEvent>();session.TranscriptReceived+=events.Enqueue;
+        if(subscriberThrows) session.TranscriptReceived += e => { if(e.Text == "Welt") throw new ApplicationException("Subscriber failed."); };
         await session.SendAudioAsync(new byte[]{1,2,3,4},ct);
         var finish=session.FinalizeAsync(ct);await endReceived.Task.WaitAsync(ct);Assert.False(finish.IsCompleted);release.TrySetResult();
-        if(prematureClose) await Assert.ThrowsAnyAsync<WebSocketException>(()=>finish);
+        if(subscriberThrows) await Assert.ThrowsAsync<ApplicationException>(()=>finish);
+        else if(prematureClose) await Assert.ThrowsAnyAsync<WebSocketException>(()=>finish);
         else {await finish;Assert.Equal("Hallo Welt",string.Join(" ",events.Where(e=>e.IsFinal).Select(e=>e.Text)));}
         clientFinished.TrySetResult(); await server.WaitAsync(ct);
     }

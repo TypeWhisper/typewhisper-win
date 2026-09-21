@@ -63,7 +63,11 @@ internal sealed class SmallestAiStreamingSession : IStreamingSession
         if (wordTimestamps)
             query.Add("word_timestamps=true");
 
-        return new Uri("wss://api.smallest.ai/waves/v1/pulse/get_text?" + string.Join("&", query));
+        // East Asian live recognition is served only by the US endpoint.
+        var endpoint = normalizedLanguage is "zh" or "ja" or "ko" or "multi-asian"
+            ? "wss://api.us.smallest.ai/waves/v1/stt/live?model=pulse&"
+            : "wss://api.smallest.ai/waves/v1/pulse/get_text?";
+        return new Uri(endpoint + string.Join("&", query));
     }
 
     /// <summary>
@@ -179,7 +183,6 @@ internal sealed class SmallestAiStreamingSession : IStreamingSession
         {
             _lastResponseReceived.TrySetException(ex);
             Debug.WriteLine($"Smallest AI Pulse WebSocket error: {ex.Message}");
-            _lastResponseReceived.TrySetException(ex);
         }
         catch (JsonException ex)
         {
@@ -190,7 +193,11 @@ internal sealed class SmallestAiStreamingSession : IStreamingSession
         {
             _lastResponseReceived.TrySetException(ex);
             Debug.WriteLine($"Smallest AI Pulse stream error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
             _lastResponseReceived.TrySetException(ex);
+            Debug.WriteLine($"Smallest AI Pulse receive loop failed: {ex.GetType().Name}");
         }
     }
 
@@ -303,7 +310,7 @@ internal sealed class SmallestAiTranscriptCollector
             DetectedLanguage = language;
         }
 
-        return new StreamingTranscriptEvent(transcript, isFinal || isLast);
+        return new StreamingTranscriptEvent(transcript, isFinal || isLast) { DetectedLanguage = DetectedLanguage };
     }
 
     private static bool IsError(JsonElement root)

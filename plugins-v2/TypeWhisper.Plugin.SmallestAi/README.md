@@ -21,7 +21,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.SmallestAi/Tests -c Release
 
 Package `bin/Release/portable-host/Plugins/com.typewhisper.smallest-ai` as the ZIP root. The plugin uses the framework-independent SDK without WPF; Windows audio playback uses NAudio/WASAPI.
 
-26 tests cover transcription, WebSocket finalization, package lifecycle, voice catalog parsing and persistence, model/voice pairing, language and speed, output-device forwarding, cancellation, invalid audio, and failed catalog refreshes.
+39 tests cover transcription, WebSocket finalization, package lifecycle, voice catalog parsing and persistence, model/voice pairing, language and speed, output-device forwarding, cancellation, invalid audio, and failed catalog refreshes.
 
 Authenticated tests retrieved 483 voices and exercised German synthesis, playback, and stopping. The user confirmed dictation, live transcription, and the in-app Test voice action using Ben from the Lightning Pro German catalog. The development package update preserves the API key and unrelated receipts. In-app acceptance is complete; public package publication is pending.
 
@@ -30,4 +30,6 @@ Authenticated tests retrieved 483 voices and exercised German synthesis, playbac
 - [Voice catalogs](https://docs.smallest.ai/models/api-reference/text-to-speech/get-waves-voices)
 - [Speech synthesis](https://docs.smallest.ai/models/api-reference/text-to-speech/synthesize-speech)
 
-Standard and Pro voice identifiers are paired with their respective model pools. Requests use binary WAV output and `Accept: audio/wav`. Maximum speech text length is 8,000 characters per request.
+Standard and Pro voice identifiers are paired with their respective model pools. Requests use binary WAV output and `Accept: audio/wav`. Maximum speech text length is 8,000 characters per request; returned audio is limited to 12 MiB and two minutes before playback.
+
+The single host language selector advertises the recorded/live intersection. East Asian live transcription uses the provider's US endpoint. Streaming events forward the detected language, and recorded results accept both root-level and metadata duration fields.

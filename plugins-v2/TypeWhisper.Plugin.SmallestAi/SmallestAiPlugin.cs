@@ -25,9 +25,9 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
 
     private static readonly IReadOnlyList<string> Languages =
     [
-        "ar", "bn", "de", "en", "es", "fr", "gu", "hi", "it", "ja",
-        "ka", "ko", "ml", "mr", "nl", "or", "pa", "pt", "ru", "ta",
-        "te", "yue", "zh", "multi-eu", "multi-indic", "multi-asian", "multi"
+        // The host exposes one language list for recorded and streaming audio.
+        "en", "hi", "de", "es", "ru", "it", "fr", "nl", "pt",
+        "zh", "ja", "ko", "multi-asian"
     ];
 
     private readonly HttpClient _httpClient;
@@ -232,7 +232,9 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
             ?? GetFirstString(root, "languages")
             ?? fallbackLanguage;
 
-        var duration = TryGetDouble(root, "duration", out var durationValue) ? durationValue : 0;
+        var duration = TryGetDouble(root, "duration", out var durationValue) && durationValue >= 0 ? durationValue
+            : root.TryGetProperty("metadata", out var metadata) && metadata.ValueKind == JsonValueKind.Object
+              && TryGetDouble(metadata, "duration", out var metadataDuration) && metadataDuration >= 0 ? metadataDuration : 0;
         var segments = ParseUtteranceSegments(root, ref duration);
         if (segments.Count == 0)
             segments = ParseWordSegments(root, ref duration);
@@ -399,7 +401,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     {
         if (element.TryGetProperty(propertyName, out var property)
             && property.ValueKind == JsonValueKind.Number
-            && property.TryGetDouble(out value))
+            && property.TryGetDouble(out value) && double.IsFinite(value))
         {
             return true;
         }
@@ -408,7 +410,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
         return false;
     }
 
-    private static HttpClient CreateHttpClient() => new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(120) };
+    private static HttpClient CreateHttpClient() => new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(120), MaxResponseContentBufferSize = MaximumSpeechAudioBytes };
 
     /// <summary>
     /// Releases resources held by the instance.

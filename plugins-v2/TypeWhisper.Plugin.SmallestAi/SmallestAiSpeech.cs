@@ -10,6 +10,9 @@ namespace TypeWhisper.Plugin.SmallestAi;
 
 public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSettings, IPluginSettingsActions
 {
+    // Keep aligned with the host spoken-feedback audio contract.
+    internal const int MaximumSpeechAudioBytes = 12 * 1024 * 1024;
+    internal const int MaximumSpeechAudioSeconds = 120;
     internal sealed record SpeechVoice(string Id, string Name, string Model, string? Language);
     private SpeechVoice[] _voices = [new("magnus", "Magnus", "lightning_v3.1", "en")];
     private string? _selectedVoiceId;
@@ -123,6 +126,19 @@ public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSe
         { Length: 2 } code => code, _ => null
     };
 
+    internal static void ValidateSpeechAudio(byte[] audio)
+    {
+        if (audio.Length > MaximumSpeechAudioBytes)
+            throw new InvalidDataException("Speech audio exceeds the 12 MiB playback limit.");
+        if (audio.Length < 44 || !audio.AsSpan(0, 4).SequenceEqual("RIFF"u8) || !audio.AsSpan(8, 4).SequenceEqual("WAVE"u8))
+            throw new InvalidDataException("Smallest AI returned no playable WAV audio.");
+        using var stream = new MemoryStream(audio, writable: false);
+        using var wave = new NAudio.Wave.WaveFileReader(stream);
+        var seconds = wave.TotalTime.TotalSeconds;
+        if (!double.IsFinite(seconds) || seconds <= 0 || seconds > MaximumSpeechAudioSeconds)
+            throw new InvalidDataException("Speech audio must be no longer than two minutes.");
+    }
+
     internal Func<byte[], string?, ITtsPlaybackSession> PlaybackFactory { get; set; } = (audio, device) => new SmallestAiPlaybackSession(audio, device);
 
     /// <inheritdoc />
@@ -140,9 +156,10 @@ public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSe
         message.Content = JsonContent.Create(new { text, voice_id = voice.Id, model = voice.Model, sample_rate = 24000, output_format = "wav", speed = _speed,
             language = NormalizeLanguage(request.Language)?.Split('-', '_')[0].ToLowerInvariant() ?? "auto" });
         using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, message, ct);
+        if (response.Content.Headers.ContentLength > MaximumSpeechAudioBytes)
+            throw new InvalidDataException("Speech audio exceeds the 12 MiB playback limit.");
         var audio = await response.Content.ReadAsByteArrayAsync(ct);
-        if (audio.Length < 44 || !audio.AsSpan(0, 4).SequenceEqual("RIFF"u8) || !audio.AsSpan(8, 4).SequenceEqual("WAVE"u8))
-            throw new InvalidDataException("Smallest AI returned no playable WAV audio.");
+        ValidateSpeechAudio(audio);
         ct.ThrowIfCancellationRequested();
         return PlaybackFactory(audio, request.OutputDeviceId);
     }

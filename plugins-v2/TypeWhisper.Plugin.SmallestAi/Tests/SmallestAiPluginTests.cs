@@ -63,7 +63,10 @@ public class SmallestAiPluginTests
         Assert.Equal("pulse", sut.SelectedModelId);
         Assert.Equal(["pulse"], sut.TranscriptionModels.Select(m => m.Id).ToArray());
         Assert.Contains("de", sut.SupportedLanguages);
-        Assert.Contains("multi", sut.SupportedLanguages);
+        Assert.Contains("multi-asian", sut.SupportedLanguages);
+        Assert.DoesNotContain("multi", sut.SupportedLanguages);
+        Assert.DoesNotContain("multi-eu", sut.SupportedLanguages);
+        Assert.DoesNotContain("ar", sut.SupportedLanguages);
     }
 
     [Fact]

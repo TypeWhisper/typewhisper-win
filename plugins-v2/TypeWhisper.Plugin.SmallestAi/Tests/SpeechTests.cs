@@ -65,7 +65,7 @@ public sealed class SpeechTests
     public async Task Speech_UsesSelectedModelLanguageSpeedAndOutputDevice()
     {
         using var fixture = new PortableFixture();
-        var wav = new byte[44]; "RIFF"u8.CopyTo(wav); "WAVE"u8.CopyTo(wav.AsSpan(8));
+        var wav = CreateWav(1);
         using var client = new HttpClient(new Transport(async (r, ct) =>
         {
             if (r.Method == HttpMethod.Get) return Json(Catalog);
@@ -118,6 +118,23 @@ public sealed class SpeechTests
         await Assert.ThrowsAsync<InvalidDataException>(() => plugin.SpeakAsync(new("Hello"), default));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.SpeakAsync(new("Hello"), new(true)));
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SpeakAsync(new(new string('x', 8001)), default));
+    }
+
+    [Fact]
+    public void SpeechAudio_EnforcesSizeAndDurationBeforePlayback()
+    {
+        SmallestAiPlugin.ValidateSpeechAudio(CreateWav(120));
+        Assert.Throws<InvalidDataException>(() => SmallestAiPlugin.ValidateSpeechAudio(CreateWav(121)));
+        Assert.Throws<InvalidDataException>(() => SmallestAiPlugin.ValidateSpeechAudio(new byte[12 * 1024 * 1024 + 1]));
+        Assert.Throws<InvalidDataException>(() => SmallestAiPlugin.ValidateSpeechAudio(CreateWav(0)));
+    }
+
+    private static byte[] CreateWav(int seconds)
+    {
+        using var memory = new MemoryStream();
+        using (var writer = new NAudio.Wave.WaveFileWriter(new NAudio.Utils.IgnoreDisposeStream(memory), new NAudio.Wave.WaveFormat(8000, 16, 1)))
+            writer.Write(new byte[seconds * 16000], 0, seconds * 16000);
+        return memory.ToArray();
     }
 
     private static HttpResponseMessage Json(string value, HttpStatusCode code = HttpStatusCode.OK) => new(code) { Content = new StringContent(value, Encoding.UTF8, "application/json") };
