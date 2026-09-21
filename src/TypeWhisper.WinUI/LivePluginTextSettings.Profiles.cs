@@ -57,7 +57,7 @@ internal sealed partial class LivePluginTextSettings
         var sidebarHeader = new Grid();
         sidebarHeader.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         sidebarHeader.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        sidebarHeader.Children.Add(new TextBlock { Text = "Profiles", FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
+        sidebarHeader.Children.Add(new TextBlock { Text = selector.Title, FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         sidebar.Children.Add(sidebarHeader);
         var picker = new HandCursorListView { SelectionMode = ListViewSelectionMode.Single,
@@ -73,15 +73,15 @@ internal sealed partial class LivePluginTextSettings
         }
         picker.SelectedItem = profileItems.GetValueOrDefault(selector.Value);
         _profilePicker = picker;
-        AutomationProperties.SetName(picker, "Profile to edit");
-        AutomationProperties.SetHelpText(picker, "Choose which server profile to edit. This does not change the active dictation provider.");
+        AutomationProperties.SetName(picker, selector.Title);
+        AutomationProperties.SetHelpText(picker, selector.Description);
         Grid.SetRow(picker, 1); sidebar.Children.Add(picker);
         var add = actions.FirstOrDefault(a => a.Id == addId);
         if (add is not null)
         {
             var button = ProfileButton("+", () => RunProfileActionAsync(add, name, leaveProfile: true));
-            AutomationProperties.SetName(button, "Add profile");
-            ToolTipService.SetToolTip(button, "Add profile");
+            AutomationProperties.SetName(button, add.Title);
+            ToolTipService.SetToolTip(button, add.Title);
             button.MinWidth = 32; button.Padding = new(8, 4, 8, 4);
             Grid.SetColumn(button, 1); sidebarHeader.Children.Add(button);
         }
@@ -106,6 +106,12 @@ internal sealed partial class LivePluginTextSettings
         var divider = new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] };
         content.Children.Add(divider);
         content.Children.Add(modelHeader); content.Children.Add(modelsPanel);
+        if (!generic && editable.All(field => field.Section == PluginSettingsSection.Connection) &&
+            actions.All(action => action.Section == PluginSettingsSection.Connection))
+        {
+            modelHeader.Visibility = Visibility.Collapsed;
+            divider.Visibility = Visibility.Collapsed;
+        }
         if (generic)
         {
             modelHeader.Visibility = Visibility.Collapsed;
@@ -175,6 +181,8 @@ internal sealed partial class LivePluginTextSettings
             if (others > 0) saveState.Text += " · Unsaved edits in " + others + (others == 1 ? " other profile" : " other profiles");
         }
         _profileDirtyChanged = UpdateDirty;
+        ScriptCodeEditor? scriptEditor = null;
+        var scriptLanguage = editable.FirstOrDefault(f => f.Id.EndsWith(":shell", StringComparison.Ordinal));
         PluginSettingsSection? previousSection = null;
         foreach (var field in editable)
         {
@@ -196,6 +204,7 @@ internal sealed partial class LivePluginTextSettings
                 {
                     if (choice.SelectedValue is not string value) return;
                     values[field.Id] = value; _drafts[field.Id] = value; UpdateDirty();
+                    if (field.Id == scriptLanguage?.Id && scriptEditor is not null) scriptEditor.SyntaxLanguage = value;
                 };
                 input = choice;
             }
@@ -210,6 +219,33 @@ internal sealed partial class LivePluginTextSettings
                 };
                 suggested.SuggestionChosen += (_, e) => suggested.Text = (string)e.SelectedItem;
                 input = suggested;
+            }
+            else if (_id == "com.typewhisper.script" && field.Id.EndsWith(":command", StringComparison.Ordinal))
+            {
+                var language = scriptLanguage is null ? "powershell" : values[scriptLanguage.Id];
+                var editor = new ScriptCodeEditor(values[field.Id], language, field.MaxLength);
+                scriptEditor = editor;
+                editor.CodeChanged += value => { values[field.Id] = value; _drafts[field.Id] = value; UpdateDirty(); };
+                var position = ProfileNote("Ln 1, Col 1 · Ctrl+Z undo · Ctrl+Y redo");
+                editor.PositionChanged += (line, column) => position.Text = $"Ln {line}, Col {column} · Ctrl+Z undo · Ctrl+Y redo";
+                editor.EditorNotice += message => position.Text = message;
+                AutomationProperties.SetLiveSetting(position, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+                var toolbar = new Grid { Margin = new(0, 2, 0, 2) };
+                toolbar.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+                toolbar.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+                toolbar.Children.Add(ProfileNote("SCRIPT · syntax highlighting"));
+                var expand = ProfileButton("Expand", () => { editor.Height = editor.Height == 240 ? 440 : 240; return Task.CompletedTask; });
+                expand.Click += (_, _) => expand.Content = editor.Height == 240 ? "Expand" : "Collapse";
+                var format = ProfileButton("Format", () => { editor.FormatCode(); return Task.CompletedTask; });
+                format.IsEnabled = language is "powershell" or "pwsh";
+                editor.SyntaxLanguageChanged += () => format.IsEnabled = editor.SyntaxLanguage is "powershell" or "pwsh";
+                ToolTipService.SetToolTip(format, "Add line breaks between PowerShell statements. Changes remain unsaved.");
+                var editorActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                editorActions.Children.Add(format); editorActions.Children.Add(expand);
+                Grid.SetColumn(editorActions, 1); toolbar.Children.Add(editorActions);
+                group.Children.Add(toolbar);
+                editor.Tag = position;
+                input = editor;
             }
             else
             {
@@ -227,7 +263,9 @@ internal sealed partial class LivePluginTextSettings
                 BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] };
             input.GotFocus += (_, _) => border.BorderBrush = (Brush)Application.Current.Resources["AccentBrush"];
             input.LostFocus += (_, _) => border.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
-            group.Children.Add(border); panel.Children.Add(group);
+            group.Children.Add(border);
+            if (input is ScriptCodeEditor { Tag: TextBlock positionNote }) group.Children.Add(positionNote);
+            panel.Children.Add(group);
         }
         if (showKey) connectionPanel.Children.Add(_credentials);
         foreach (var action in actions.Where(a => a.Id != addId && a.Id != removeId))
@@ -273,13 +311,13 @@ internal sealed partial class LivePluginTextSettings
         var remove = actions.FirstOrDefault(a => a.Id == removeId);
         if (remove is not null)
         {
-            var removeButton = ProfileButton("Remove profile…", async () =>
+            var removeButton = ProfileButton(remove.Title, async () =>
             {
                 var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Remove “" + name + "”?",
-                    Content = "This removes this server profile, its saved API key and any unsaved edits. Workflows using it will need another provider.",
-                    PrimaryButtonText = "Remove profile", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+                    Content = showKey ? "This removes this configuration, its saved API key and any unsaved edits. Workflows using it will need another provider." : "This removes this configuration and any unsaved edits.",
+                    PrimaryButtonText = "Remove", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-                    await RunProfileActionAsync(remove, name, removedFields: editable.Select(f => f.Id).ToArray());
+                    await RunProfileActionAsync(remove, name, removedFields: editable.Select(f => f.Id).ToArray(), removedProfileId: selector.Value);
             });
             Grid.SetRow(removeButton, 2); sidebar.Children.Add(removeButton);
         }
@@ -334,7 +372,7 @@ internal sealed partial class LivePluginTextSettings
     }
 
     private async Task RunProfileActionAsync(PluginSettingsAction action, string name,
-        bool leaveProfile = false, string[]? removedFields = null, string? profileId = null, IReadOnlyDictionary<string, string>? values = null)
+        bool leaveProfile = false, string[]? removedFields = null, string? profileId = null, IReadOnlyDictionary<string, string>? values = null, string? removedProfileId = null)
     {
         if (_busy || !IsLoaded) return;
         if (!_session.CanStartPluginSettingsAction)
@@ -349,7 +387,7 @@ internal sealed partial class LivePluginTextSettings
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-            timeout.CancelAfter(TimeSpan.FromMinutes(3));
+            timeout.CancelAfter(TimeSpan.FromMinutes(_id == "com.typewhisper.script" && action.Id.StartsWith("test:", StringComparison.Ordinal) ? 6 : 3));
             void CancelForRecording() => timeout.Cancel();
             _session.RecordingStarting += CancelForRecording;
             string? result;
@@ -373,20 +411,35 @@ internal sealed partial class LivePluginTextSettings
             if (removedFields is not null)
             {
                 foreach (var field in removedFields) _drafts.Remove(field);
-                var removedId = action.Id[..action.Id.LastIndexOf('/')];
-                _dirtyProfiles.Remove(removedId);
-                _profileActionDrafts.Remove(removedId);
+                if (removedProfileId is not null)
+                {
+                    _dirtyProfiles.Remove(removedProfileId);
+                    _profileActionDrafts.Remove(removedProfileId);
+                }
             }
             if (leaveProfile) _profileScrollOffset = 0;
             await ReloadAsync();
             SetStatus(leaveProfile ? result ?? "Profile added." : "“" + name + "”: " + (result ?? "Completed."));
+            if (_id == "com.typewhisper.script" && action.Id.StartsWith("test:", StringComparison.Ordinal) &&
+                result is not null && (result.StartsWith("Result: ", StringComparison.Ordinal) || result.StartsWith("Ergebnis: ", StringComparison.Ordinal)))
+            {
+                var output = result[(result.IndexOf(": ", StringComparison.Ordinal) + 2)..];
+                var language = output.TrimStart().StartsWith('"') || output.TrimStart().StartsWith('{') ? "json" : "markdown";
+                var preview = new ScriptCodeEditor(output, language, 32768, readOnly: true);
+                AutomationProperties.SetName(preview, "Script test output");
+                var panel = new StackPanel { Spacing = 10 };
+                panel.Children.Add(ProfileNote("Sample output · up to 2,000 characters · draft not saved"));
+                panel.Children.Add(preview);
+                await new ContentDialog { XamlRoot = XamlRoot, Title = "Test result", Content = panel,
+                    CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close }.ShowAsync();
+            }
         }
         catch (OperationCanceledException)
         { if (IsLoaded && generation == _generation) SetStatus("The action was cancelled or timed out. You can retry."); }
         catch (ArgumentException ex)
         { if (IsLoaded && generation == _generation) SetStatus(ex.Message); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded && generation == _generation) SetStatus("Could not complete “" + action.Title + "” for “" + name + "”. Check the server URL and API key, then retry."); }
+        { if (IsLoaded && generation == _generation) SetStatus("Could not complete “" + action.Title + "” for “" + name + "”. Check the plugin settings, then retry."); }
         finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
     }
 

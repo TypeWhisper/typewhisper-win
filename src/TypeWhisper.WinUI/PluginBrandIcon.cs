@@ -85,6 +85,6 @@ public sealed class PluginBrandIcon : UserControl
 
     private void ShowFallback() => Content = new TypeWhisperGlyph
     {
-        Kind = PluginId == "com.typewhisper.whisper-cpp" ? "chip" : "plugin"
+        Kind = PluginId switch { "com.typewhisper.whisper-cpp" => "chip", "com.typewhisper.script" => "terminal", _ => "plugin" }
     };
 }
