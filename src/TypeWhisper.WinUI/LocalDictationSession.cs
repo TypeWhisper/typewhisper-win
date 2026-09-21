@@ -801,19 +801,19 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && _operationCancellation.Token.IsCancellationRequested)
         {
-            preserveRecovery = _disposed;
+            preserveRecovery = _disposed && !preparingRecording;
             StopSilenceMonitoring();
-            await StopRecoveryCaptureAsync(preserve: _disposed);
+            await StopRecoveryCaptureAsync(preserve: preserveRecovery);
             _effects.End();
             await _livePreview.StopAsync();
             if (!_disposed) SetStatus("Dictation canceled. Ready to try again.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            preserveRecovery = true;
+            preserveRecovery = !preparingRecording;
             StopSilenceMonitoring();
             _livePreview.Cancel();
-            try { await StopRecoveryCaptureAsync(preserve: true); }
+            try { await StopRecoveryCaptureAsync(preserve: preserveRecovery); }
             catch (Exception stopError) when (stopError is not OutOfMemoryException)
             { System.Diagnostics.Debug.WriteLine(stopError); }
             finally { _effects.End(); await _livePreview.StopAsync(); }
@@ -831,6 +831,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _effects.End();
                     try { await previousRecordingWork; }
                     catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
+                    // Status may have been published while early capture was still active.
+                    // Refresh the tray and overlay after discarding an aborted startup.
+                    if (!_disposed) Changed?.Invoke();
                 }
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
                 if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }

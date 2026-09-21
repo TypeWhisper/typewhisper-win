@@ -177,7 +177,11 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
     }
 
-    internal void FinishDictationFromTray() { if (_dictation.IsRecording) _ = _dictation.ToggleAsync(); }
+    internal void FinishDictationFromTray()
+    {
+        if (_dictationInput is { IsRecordingOrStarting: true } input)
+            _ = input.SubmitAsync(TypeWhisper.Presentation.DictationInputAction.Stop);
+    }
     internal bool CanCancelProcessing => !_closing && (_dictation.CanCancelProcessing || _workflowCancellation is not null);
     internal async Task CancelProcessingAsync()
     {
