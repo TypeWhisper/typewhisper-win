@@ -1,6 +1,6 @@
 # Speechmatics for the portable host
 
-Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.4`, requiring host `1.1.2`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
+Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.5`, requiring host `1.1.5`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
 
 ## Behavior
 
@@ -34,3 +34,5 @@ Native UI verification passed: provider logos, Europe, Enhanced, German, live te
 References: [regions and authentication](https://docs.speechmatics.com/get-started/authentication), [realtime protocol](https://docs.speechmatics.com/api-ref/realtime-transcription-websocket), [supported languages](https://docs.speechmatics.com/speech-to-text/languages).
 
 Protocol references: [current model selection](https://docs.speechmatics.com/speech-to-text/models#operating-points), [automatic language output](https://docs.speechmatics.com/speech-to-text/batch/language-identification#transcription-result).
+
+Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.

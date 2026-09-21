@@ -23,16 +23,16 @@ public sealed partial class GeminiPluginTests
             using var http = new HttpClient(new CapturingHandler((request, _) => new(System.Net.HttpStatusCode.OK)
                 { RequestMessage = request, Content = new ByteArrayContent(bytes) }));
             var host = new TestPluginHostServices();
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 2), http, _ => host);
+            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 5), http, _ => host);
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.gemini", Name = "Google Gemini", Version = PortablePluginPackage.ReadManifest(source).Version, MinHostVersion = "1.1.2",
+                Id = "com.typewhisper.gemini", Name = "Google Gemini", Version = PortablePluginPackage.ReadManifest(source).Version, MinHostVersion = "1.1.5",
                 DownloadUrl = "https://fixture.invalid/gemini.zip", Size = bytes.Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(bytes)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(entry);
             var firstPath = store.Resolve(entry.Id);
-            await using (var runtime = new PortablePluginRuntimeRegistry(store, new(1, 1, 2), _ => host))
+            await using (var runtime = new PortablePluginRuntimeRegistry(store, new(1, 1, 5), _ => host))
             {
                 await runtime.InitializeAsync(); Assert.Empty(runtime.LlmProviders);
                 Assert.Null(await runtime.SetEnabledAsync(entry.Id, true));
@@ -50,7 +50,7 @@ public sealed partial class GeminiPluginTests
                 await Assert.ThrowsAsync<InvalidOperationException>(() => store.InstallAsync(entry));
             }
             var restart = Store(); await restart.InitializeAsync(); Assert.Equal(firstPath, restart.Resolve(entry.Id));
-            await using (var runtime = new PortablePluginRuntimeRegistry(restart, new(1, 1, 2), _ => host))
+            await using (var runtime = new PortablePluginRuntimeRegistry(restart, new(1, 1, 5), _ => host))
             {
                 await runtime.InitializeAsync(); Assert.True(Assert.Single(runtime.LlmProviders).Ready);
                 Assert.Equal("gemini-pro-latest", await runtime.UseConfigurationAsync(entry.Id, (plugin, _) =>
@@ -58,11 +58,11 @@ public sealed partial class GeminiPluginTests
                 Assert.Null(await runtime.SetEnabledAsync(entry.Id, false)); await restart.UninstallAsync(entry.Id);
             }
             var reinstall = Store(); await reinstall.InitializeAsync(); await reinstall.InstallAsync(entry);
-            await using var final = new PortablePluginRuntimeRegistry(reinstall, new(1, 1, 2), _ => host);
+            await using var final = new PortablePluginRuntimeRegistry(reinstall, new(1, 1, 5), _ => host);
             Assert.Null(await final.SetEnabledAsync(entry.Id, true)); Assert.True(Assert.Single(final.LlmProviders).Ready);
             Assert.Equal("verbatim", await final.UseConfigurationAsync(entry.Id, (plugin, _) =>
                 Task.FromResult(((IPluginTextSettings)plugin).TextSettings.Single(s => s.Id == "transcriptionMode").Value)));
-            await Assert.ThrowsAsync<InvalidDataException>(() => PortablePluginPackage.LoadAsync(reinstall.Resolve(entry.Id), host, new(1, 1, 1)));
+            await Assert.ThrowsAsync<InvalidDataException>(() => PortablePluginPackage.LoadAsync(reinstall.Resolve(entry.Id), host, new(1, 1, 4)));
         }
         finally
         {

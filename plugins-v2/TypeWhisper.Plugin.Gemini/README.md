@@ -1,6 +1,6 @@
 # Gemini for the portable host
 
-Independent .NET 10 package `com.typewhisper.gemini` version `1.3.8`, requiring host `1.1.2`. Source and protocol fixtures were ported from Windows `4db8f6ac` with cross-platform behavior checked. Legacy sources, profiles and catalogs are unchanged.
+Independent .NET 10 package `com.typewhisper.gemini` version `1.3.9`, requiring host `1.1.5`. Source and protocol fixtures were ported from Windows `4db8f6ac` with cross-platform behavior checked. Legacy sources, profiles and catalogs are unchanged.
 
 ## Features and macOS comparison
 
@@ -29,3 +29,5 @@ On 2026-09-18, the ZIP was installed in the Windows development profile and load
 Authenticated model discovery, text completion, recorded-audio transcription and WebSocket transcription passed on 2026-09-18 using synthetic English audio and a user-configured key. Version 1.3.1 additionally passed live transcription through the actual `StreamingDictation` host pipeline without a recorded-audio fallback, both staged and after the development-profile upgrade from 1.3.0. See [live acceptance](LIVE-ACCEPTANCE.md) for evidence and scope. Physical microphone/workflow acceptance, native settings inspection, German audio and ARM64 execution remain pending. No public release or catalog was changed.
 
 Provider references: [transcription](https://ai.google.dev/gemini-api/docs/transcribe), [OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai).
+
+Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.

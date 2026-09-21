@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.8";
+    private const string PluginVersionValue = "1.3.9";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -205,6 +205,9 @@ public sealed partial class GeminiPlugin :
 
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => SupportsStreaming;
+
+    /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
 
     /// <inheritdoc />
     public bool SupportsDictionaryTerms => true;
@@ -803,7 +806,7 @@ public sealed partial class GeminiPlugin :
         PluginDictionaryTerms.Clip(
             string.IsNullOrWhiteSpace(prompt)
                 ? []
-                : prompt.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+                : PluginDictionaryTerms.ParsePrompt(prompt),
             DictionaryBudget);
 
     private async Task<string> SendChatCompletionAsync(

@@ -1,8 +1,8 @@
 {
   "id": "com.typewhisper.gladia",
   "name": "Gladia",
-  "version": "1.2.2",
-  "minHostVersion": "1.1.2",
+  "version": "1.2.3",
+  "minHostVersion": "1.1.5",
   "author": "TypeWhisper",
   "description": "Transcribes recorded audio and provides live dictation with Gladia.",
   "categories": [
