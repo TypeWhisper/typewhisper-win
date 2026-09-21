@@ -45,8 +45,8 @@ public sealed partial class CloudflareAsrPlugin
         {
             if (selectedLanguage is not null && !WhisperLanguages.Contains(selectedLanguage))
                 throw new ArgumentException("Choose a supported spoken language.", nameof(language));
-            var terms = ProviderConnection.Terms(prompt);
-            request.Content = new TurboAudioContent(wavAudio, selectedLanguage, terms.Length > 0 ? string.Join(", ", terms) : null);
+            // The host already applies the structured dictionary budget. Commas may belong to a term.
+            request.Content = new TurboAudioContent(wavAudio, selectedLanguage, string.IsNullOrWhiteSpace(prompt) ? null : prompt);
         }
         else
         {

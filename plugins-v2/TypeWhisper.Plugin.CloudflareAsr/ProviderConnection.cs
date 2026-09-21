@@ -175,8 +175,6 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number) && number >= 0 ? number : fallback;
     internal static string? Language(string? language) => string.IsNullOrWhiteSpace(language) || language.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : language.Trim();
     internal static readonly DictionaryTermsBudget DictionaryBudget = new(MaxTerms: 100, MaxTotalChars: 4000);
-    internal static string[] Terms(string? prompt) => PluginDictionaryTerms.Clip(
-        prompt?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [], DictionaryBudget).ToArray();
     internal static void Audio(byte[] audio, bool translate, bool supportsTranslation, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();

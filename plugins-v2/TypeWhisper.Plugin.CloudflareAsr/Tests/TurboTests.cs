@@ -30,6 +30,22 @@ public sealed partial class ProviderTests
     }
 
     [Fact]
+    public async Task TurboPreservesBudgetedDictionaryTermsContainingCommas()
+    {
+        var prompt = string.Join(", ", new[] { "ACME,Inc." }.Concat(Enumerable.Range(1, 99).Select(i => "Term" + i)));
+        using var http = new HttpClient(new Handler((_, body) =>
+        {
+            using var payload = JsonDocument.Parse(body!);
+            Assert.Equal(prompt, payload.RootElement.GetProperty("initial_prompt").GetString());
+            return Json("""{"success":true,"result":{"text":"ok"}}""");
+        }));
+        using var plugin = new CloudflareAsrPlugin(http);
+        await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        plugin.SelectModel("whisper-large-v3-turbo");
+        await plugin.TranscribeAsync(Audio(), "de", false, prompt, default);
+    }
+
+    [Fact]
     public async Task ModelCapabilitiesAndSelectionSurviveRestart()
     {
         var host = new Host();
