@@ -42,3 +42,17 @@ Turbo sends base64 audio in JSON and advertises a 74 MB WAV limit to allow for e
 On 2026-09-21, authenticated account validation and a short German recording succeeded with both Cloudflare models. Marco confirmed that the existing model returns dictation in the app but reported inaccurate recognition in spontaneous German speech. A successful fixed sample does not establish the quality of free dictation; Marco subsequently tested Whisper Large V3 Turbo with German selected in the running app and confirmed substantially better recognition.
 
 References: [Whisper](https://developers.cloudflare.com/workers-ai/models/whisper/), [Whisper Large V3 Turbo](https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/).
+
+## Browser sign-in (1.1.10)
+
+Connect with Cloudflare uses Authorization Code with S256 PKCE and a loopback callback at `http://127.0.0.1:47831/callback/`. The public client ID is `f3792faca0b8263152f5581e9ff28e2c`; no client secret is embedded. The registered client must allow `authorization_code` and `refresh_token`, token authentication `none`, and scopes `ai.read`, `ai.write`, `account-settings.read`, and `offline_access` (the latter is enabled by the refresh grant).
+
+The current client is private and can only be authorized by members of its Cloudflare account. Public distribution of browser sign-in requires the publisher to complete Cloudflare's client URL/domain verification and deliberately promote the client. API-token configuration continues to work independently.
+
+The callback listener binds only to IPv4 loopback, checks the Host header, callback path and one-time state, and closes on completion or cancellation. The browser receives a static response without authorization codes or tokens. Token errors do not include provider response bodies. A three-minute sign-in timeout applies.
+
+Access and refresh tokens are stored together in the host's encrypted secret store, with one atomic configuration reference update. Existing credentials remain active until sign-in and account discovery succeed. One account is selected automatically; multiple accounts require an explicit selection unless the existing selected account remains authorized. Refreshes are serialized and preserve a rotated refresh token. Disconnect removes the local sign-in; users can revoke the Cloudflare grant under Connected Applications.
+
+Validation: 59 automated tests cover the callback, cancellation, PKCE, rejected state and duplicate parameters, credential persistence failures, concurrent refresh and account selection. On 2026-09-21, Marco confirmed browser consent and the automatic connection in version 1.1.10. A subsequent test explicitly verified OAuth mode, authenticated account/model access, and German Turbo transcription with the saved OAuth credentials. Automatic refresh is covered by fixtures, not a forced live token rotation. No live token values are included in fixtures or logs.
+
+References: [OAuth client registration](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/), [OAuth endpoints](https://developers.cloudflare.com/fundamentals/oauth/integrate-with-cloudflare/).

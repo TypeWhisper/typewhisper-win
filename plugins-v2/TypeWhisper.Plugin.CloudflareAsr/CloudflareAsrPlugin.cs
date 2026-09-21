@@ -20,7 +20,7 @@ public sealed partial class CloudflareAsrPlugin : ITranscriptionEnginePlugin, IA
     /// <inheritdoc />
     public string PluginName => "Cloudflare Workers AI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.8";
+    public string PluginVersion => "1.1.10";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
