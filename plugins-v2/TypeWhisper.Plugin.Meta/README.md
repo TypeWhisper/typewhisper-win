@@ -28,11 +28,11 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Meta/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.meta` inside the plugin project. Package that directory as the ZIP root.
 
-38 plugin tests pass. Fake HTTP protocol, key storage failure, real local WebSocket finalization/premature close and package lifecycle. Realtime completion emits one terminal final result. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+82 plugin tests pass. Fake HTTP protocol, key storage failure, real local WebSocket finalization/premature close and package lifecycle. Realtime completion emits one terminal final result. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
-The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+The shared portable SDK/host suite passed 282 tests for this follow-up. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
 
 ## Current development validation
 
@@ -45,7 +45,5 @@ Diarization finalization drains all completed speaker turns and requires a clean
 Version 1.2.2 was additionally validated against the live API with speaker labels enabled: 13 interim updates, one complete final transcript, and clean stream closure.
 
 Push-to-talk accepts the explicit final transcript after stop even when the server later closes the transport without a close frame. Diarization still drains all completed turns through clean stream closure; incomplete or prematurely closed responses remain errors.
-
-Dictionary prompts follow the current shared SDK comma-separated contract. A phrase containing a literal comma cannot retain that internal boundary; lossless structured dictionary terms require a separate host/SDK change for all keyword-based providers.
 
 Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.
