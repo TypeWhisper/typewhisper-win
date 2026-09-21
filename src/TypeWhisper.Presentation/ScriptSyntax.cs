@@ -46,7 +46,14 @@ public static class ScriptSyntax
         ScriptToken[] protectedSpans;
         try
         {
-            protectedSpans = PowerShell.Matches(text)
+            var matches = PowerShell.Matches(text).ToArray();
+            // The lightweight lexer does not parse nested PowerShell subexpressions.
+            // Preserve their source rather than risk changing a quoted literal.
+            if (matches.Any(match => match.Groups["String"].Success
+                && (match.Value.StartsWith("\"", StringComparison.Ordinal) || match.Value.StartsWith("@\"", StringComparison.Ordinal))
+                && match.Value.Contains("$(", StringComparison.Ordinal)))
+                return text;
+            protectedSpans = matches
                 .Where(match => match.Groups["String"].Success || match.Groups["Comment"].Success || match.Groups["Variable"].Success)
                 .Select(match => new ScriptToken(match.Index, match.Length, ScriptTokenKind.Plain)).ToArray();
         }

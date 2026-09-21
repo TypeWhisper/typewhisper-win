@@ -56,5 +56,14 @@
   "Settings.UnsavedMessage": "是否在继续前保存对 '{0}' 的更改？",
   "Settings.Discard": "放弃",
   "Settings.RemoveTitle": "删除脚本",
-  "Settings.RemoveMessage": "删除 '{0}'？对此脚本的未保存更改也将被放弃。"
+  "Settings.RemoveMessage": "删除 '{0}'？对此脚本的未保存更改也将被放弃。",
+  "Templates.uppercase.Name": "转换为大写",
+  "Templates.lowercase.Name": "转换为小写",
+  "Templates.trim.Name": "删除首尾空白",
+  "Templates.clean-spacing.Name": "清理多余空格",
+  "Templates.bullets.Name": "Markdown 项目列表",
+  "Templates.checklist.Name": "Markdown 任务列表",
+  "Templates.quote.Name": "Markdown 引用",
+  "Templates.json.Name": "JSON 字符串",
+  "Templates.url.Name": "对文本进行 URL 编码"
 }

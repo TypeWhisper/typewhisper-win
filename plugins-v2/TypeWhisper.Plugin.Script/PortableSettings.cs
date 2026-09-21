@@ -65,7 +65,7 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
                     });
                 }
                 fields.Add(new("template", L("Script template", "Skriptvorlage"), L("Add a separate disabled script. Existing commands stay intact.", "Ein separates, deaktiviertes Skript hinzufügen. Vorhandene Befehle bleiben erhalten."), _template)
-                { Section = PluginSettingsSection.Connection, Choices = ScriptTemplates.All.Select(t => new PluginSettingChoice(t.Id, German ? t.GermanName : t.EnglishName)).ToArray() });
+                { Section = PluginSettingsSection.Connection, Choices = ScriptTemplates.All.Select(t => new PluginSettingChoice(t.Id, L(t.EnglishName, t.GermanName))).ToArray() });
                 return fields;
             }
         }
@@ -160,6 +160,7 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
         }
     }
     private static PluginSettingsAction Action(string id, string title, string description) => new(id, title, description) { Section = PluginSettingsSection.Connection };
+    private ScriptEntry CreateTemplate(ScriptTemplate template) => template.Create(German) with { Name = L(template.EnglishName, template.GermanName) };
     private static ScriptTemplate Template(string id) => ScriptTemplates.All.SingleOrDefault(t => t.Id == id) ?? throw new ArgumentException("Unknown template.");
 
     /// <inheritdoc />
@@ -170,7 +171,7 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
             ct.ThrowIfCancellationRequested();
             if (id is "add" or "add-template")
             {
-                var entry = id == "add" ? new ScriptEntry { Name = L("New script", "Neues Skript"), Shell = ScriptShells.WindowsPowerShell, IsEnabled = false } : Template(_template).Create(German);
+                var entry = id == "add" ? new ScriptEntry { Name = L("New script", "Neues Skript"), Shell = ScriptShells.WindowsPowerShell, IsEnabled = false } : CreateTemplate(Template(_template));
                 ActiveService.AddScript(entry); _editing = entry.Id;
             }
             else if (Selected is { } s && id == "remove:" + s.Id) { ActiveService.RemoveScript(s.Id); _editing = null; }
@@ -192,7 +193,7 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
             if (actionId == "add-template")
             {
                 var template = Template(values.GetValueOrDefault("template", _template));
-                var entry = template.Create(German);
+                var entry = CreateTemplate(template);
                 ActiveService.AddScript(entry); _editing = entry.Id; _template = template.Id;
                 return new(L("Template added; enable it after reviewing the command.", "Vorlage hinzugefügt; nach Prüfung des Befehls aktivieren."));
             }

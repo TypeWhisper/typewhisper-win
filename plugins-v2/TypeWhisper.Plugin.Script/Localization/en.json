@@ -56,5 +56,14 @@
   "Settings.UnsavedMessage": "Save the changes to '{0}' before continuing?",
   "Settings.Discard": "Discard",
   "Settings.RemoveTitle": "Remove script",
-  "Settings.RemoveMessage": "Remove '{0}'? Unsaved changes to this script will also be discarded."
+  "Settings.RemoveMessage": "Remove '{0}'? Unsaved changes to this script will also be discarded.",
+  "Templates.uppercase.Name": "UPPERCASE",
+  "Templates.lowercase.Name": "lowercase",
+  "Templates.trim.Name": "Trim whitespace",
+  "Templates.clean-spacing.Name": "Clean up spacing",
+  "Templates.bullets.Name": "Markdown bullet list",
+  "Templates.checklist.Name": "Markdown checklist",
+  "Templates.quote.Name": "Markdown quotation",
+  "Templates.json.Name": "JSON string",
+  "Templates.url.Name": "URL-encode text"
 }

@@ -1,6 +1,6 @@
 # Script Runner
 
-Local text post-processing with an ordered list of scripts. Version `1.3.6`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
+Local text post-processing with an ordered list of scripts. Version `1.3.7`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
 
 ## Setup
 
@@ -49,7 +49,7 @@ Runtime sources originated from `plugins/TypeWhisper.Plugin.Script` at `4db8f6ac
 
 ## Development acceptance
 
-Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Eighteen focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 37 portable plugin tests cover execution and settings.
+Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Twenty focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 41 portable plugin tests cover execution and settings.
 
 ## Windows screenshots
 
@@ -58,3 +58,5 @@ Captured from the running development app on September 21, 2026. The editor imag
 ![Script Runner command editor](../../docs/screenshots/script-runner-editor.jpg)
 
 ![Script Runner checklist test output](../../docs/screenshots/script-runner-test-result.jpg)
+
+The conservative formatter leaves expandable strings with nested subexpressions unchanged.

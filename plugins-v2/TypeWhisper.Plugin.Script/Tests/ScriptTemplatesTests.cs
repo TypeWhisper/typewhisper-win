@@ -90,6 +90,31 @@ public sealed class ScriptTemplatesTests
         Assert.Equal("Unicode test", saved.Name); Assert.Equal(30, saved.TimeoutSeconds); Assert.False(saved.IsEnabled);
     }
 
+    [Theory]
+    [InlineData("ja-JP", "Markdown\u30c1\u30a7\u30c3\u30af\u30ea\u30b9\u30c8")]
+    [InlineData("ru-RU", "\u0421\u043f\u0438\u0441\u043e\u043a \u0437\u0430\u0434\u0430\u0447 Markdown")]
+    [InlineData("zh-CN", "Markdown \u4efb\u52a1\u5217\u8868")]
+    public async Task TemplatesUsePackagedNamesForChoicesAndBothAddActions(string locale, string expected)
+    {
+        var previous = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = new(locale);
+            using var fixture = new PortableFixture(); using var plugin = new ScriptPlugin();
+            await plugin.ActivateAsync(fixture.Host);
+            var choices = plugin.TextSettings.Single(f => f.Id == "template").Choices;
+            Assert.All(choices, choice => Assert.NotEqual(ScriptTemplates.All.Single(t => t.Id == choice.Value).EnglishName, choice.Title));
+            Assert.Equal(expected, choices.Single(c => c.Value == "checklist").Title);
+            await plugin.SaveProfileSettingsAsync("none", new Dictionary<string,string> { ["template"] = "checklist" }, null, default);
+            await plugin.ExecuteSettingsActionAsync("add-template", default);
+            Assert.Equal(expected, Assert.Single(plugin.Service!.Scripts).Name);
+            await plugin.ExecuteProfileActionAsync(plugin.ConnectionIdentity, "add-template", new Dictionary<string,string> { ["template"] = "checklist" }, null, default);
+            Assert.Equal(2, plugin.Service.Scripts.Count);
+            Assert.All(plugin.Service.Scripts, s => Assert.Equal(expected, s.Name));
+        }
+        finally { System.Globalization.CultureInfo.CurrentUICulture = previous; }
+    }
+
     [Fact]
     public async Task TemplateSelectionWithoutScriptsCanBeSavedAndAdded()
     {

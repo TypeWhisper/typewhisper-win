@@ -175,6 +175,15 @@ public sealed class ScriptBehaviorTests
     }
 
     [WindowsFact]
+    public async Task WindowsPowerShellNativePipelinePreservesUnicode()
+    {
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="powershell",
+            Command="[Console]::In.ReadToEnd() | findstr .", TimeoutSeconds=30 }, "\u00c4pfel & \u00d6l", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("\u00c4pfel & \u00d6l", result.Output.Trim());
+    }
+
+    [WindowsFact]
     public async Task CommandPromptPreservesQuotedOperatorsAndLiteralExclamationMarks()
     {
         var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd",

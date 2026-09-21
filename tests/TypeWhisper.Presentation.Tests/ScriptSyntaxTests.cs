@@ -74,6 +74,12 @@ public sealed class ScriptSyntaxTests
         Assert.Contains(ScriptSyntax.Tokenize(code, "powershell"), t => t.Kind == ScriptTokenKind.String && code.Substring(t.Start, t.Length) == "\"first`\nsecond;third\"");
     }
 
+    [Theory]
+    [InlineData("$x = \"prefix $(\"one;two\") suffix\"; Write-Output $x")]
+    [InlineData("$x = \"$(if ($true) { \"nested $(\"one;two\")\" })\"")]
+    public void FormatterLeavesExpandableSubexpressionsUntouched(string source) =>
+        Assert.Equal(source, ScriptSyntax.FormatPowerShell(source));
+
     [Fact]
     public void UndoMemoryIsBounded()
     {

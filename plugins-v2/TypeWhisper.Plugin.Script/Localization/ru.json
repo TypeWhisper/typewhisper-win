@@ -56,5 +56,14 @@
   "Settings.UnsavedMessage": "Сохранить изменения '{0}' перед продолжением?",
   "Settings.Discard": "Отбросить",
   "Settings.RemoveTitle": "Удалить сценарий",
-  "Settings.RemoveMessage": "Удалить '{0}'? Несохранённые изменения этого сценария также будут отброшены."
+  "Settings.RemoveMessage": "Удалить '{0}'? Несохранённые изменения этого сценария также будут отброшены.",
+  "Templates.uppercase.Name": "ПРОПИСНЫЕ БУКВЫ",
+  "Templates.lowercase.Name": "строчные буквы",
+  "Templates.trim.Name": "Удалить пробелы по краям",
+  "Templates.clean-spacing.Name": "Убрать лишние пробелы",
+  "Templates.bullets.Name": "Маркированный список Markdown",
+  "Templates.checklist.Name": "Список задач Markdown",
+  "Templates.quote.Name": "Цитата Markdown",
+  "Templates.json.Name": "Строка JSON",
+  "Templates.url.Name": "URL-кодирование текста"
 }

@@ -56,5 +56,14 @@
   "Settings.UnsavedMessage": "Änderungen an '{0}' vor dem Fortfahren speichern?",
   "Settings.Discard": "Verwerfen",
   "Settings.RemoveTitle": "Skript entfernen",
-  "Settings.RemoveMessage": "'{0}' entfernen? Ungespeicherte Änderungen an diesem Skript werden ebenfalls verworfen."
+  "Settings.RemoveMessage": "'{0}' entfernen? Ungespeicherte Änderungen an diesem Skript werden ebenfalls verworfen.",
+  "Templates.uppercase.Name": "GROSSBUCHSTABEN",
+  "Templates.lowercase.Name": "kleinbuchstaben",
+  "Templates.trim.Name": "Leerraum am Rand entfernen",
+  "Templates.clean-spacing.Name": "Leerzeichen bereinigen",
+  "Templates.bullets.Name": "Markdown-Aufzählung",
+  "Templates.checklist.Name": "Markdown-Checkliste",
+  "Templates.quote.Name": "Markdown-Zitat",
+  "Templates.json.Name": "JSON-Zeichenfolge",
+  "Templates.url.Name": "Text für URLs kodieren"
 }

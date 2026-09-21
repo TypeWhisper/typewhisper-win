@@ -56,5 +56,14 @@
   "Settings.UnsavedMessage": "続行する前に '{0}' の変更を保存しますか？",
   "Settings.Discard": "破棄",
   "Settings.RemoveTitle": "スクリプトを削除",
-  "Settings.RemoveMessage": "'{0}' を削除しますか？このスクリプトの未保存の変更も破棄されます。"
+  "Settings.RemoveMessage": "'{0}' を削除しますか？このスクリプトの未保存の変更も破棄されます。",
+  "Templates.uppercase.Name": "大文字に変換",
+  "Templates.lowercase.Name": "小文字に変換",
+  "Templates.trim.Name": "前後の空白を削除",
+  "Templates.clean-spacing.Name": "余分な空白を整理",
+  "Templates.bullets.Name": "Markdown箇条書き",
+  "Templates.checklist.Name": "Markdownチェックリスト",
+  "Templates.quote.Name": "Markdown引用",
+  "Templates.json.Name": "JSON文字列",
+  "Templates.url.Name": "テキストをURLエンコード"
 }

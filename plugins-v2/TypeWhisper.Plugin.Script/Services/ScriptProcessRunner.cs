@@ -153,7 +153,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
 
         var command = UsesCommandPrompt(shell)
             ? ">nul set /p \"__TYPEWHISPER_START=\" & chcp 65001 >nul & cmd.exe /d /a /s /v:off /c !__TYPEWHISPER_COMMAND!"
-            : "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); " +
+            : "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; " +
               "$encodedScript = [Console]::In.ReadLine(); [Console]::Error.WriteLine('" + readyMarker + "'); & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedScript))))";
         if (UsesCommandPrompt(shell))
         {
