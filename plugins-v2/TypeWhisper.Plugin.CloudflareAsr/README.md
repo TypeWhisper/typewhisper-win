@@ -37,7 +37,7 @@ The plugin uses a conservative 100,000,000-byte WAV upload limit, including head
 
 Version 1.1.8 adds `@cf/openai/whisper-large-v3-turbo` alongside the existing Whisper model. Select Turbo under Dictation to choose a spoken language such as German. Requests explicitly use `task: transcribe`; dictionary terms are passed as a bounded initial prompt. Existing Whisper selections keep their automatic-language behavior. Live streaming and audio translation are not exposed.
 
-Turbo sends base64 audio in JSON and advertises a 74 MB WAV limit to allow for encoding overhead below the 100 MB request ceiling. Language and duration are read from `transcription_info`.
+Turbo streams base64 audio into JSON using a bounded encoding buffer and advertises a 74 MB WAV limit to allow for encoding overhead below the 100 MB request ceiling. Language and duration are read from `transcription_info`.
 
 On 2026-09-21, authenticated account validation and a short German recording succeeded with both Cloudflare models. Marco confirmed that the existing model returns dictation in the app but reported inaccurate recognition in spontaneous German speech. A successful fixed sample does not establish the quality of free dictation; Marco subsequently tested Whisper Large V3 Turbo with German selected in the running app and confirmed substantially better recognition.
 
@@ -53,6 +53,8 @@ The callback listener binds only to IPv4 loopback, checks the Host header, callb
 
 Access and refresh tokens are stored together in the host's encrypted secret store, with one atomic configuration reference update. Existing credentials remain active until sign-in and account discovery succeed. One account is selected automatically; multiple accounts require an explicit selection unless the existing selected account remains authorized. Refreshes are serialized and preserve a rotated refresh token. Disconnect removes the local sign-in; users can revoke the Cloudflare grant under Connected Applications.
 
-Validation: 59 automated tests cover the callback, cancellation, PKCE, rejected state and duplicate parameters, credential persistence failures, concurrent refresh and account selection. On 2026-09-21, Marco confirmed browser consent and the automatic connection in version 1.1.10. A subsequent test explicitly verified OAuth mode, authenticated account/model access, and German Turbo transcription with the saved OAuth credentials. Automatic refresh is covered by fixtures, not a forced live token rotation. No live token values are included in fixtures or logs.
+Validation: 71 automated tests cover the callback, cancellation, PKCE, rejected state and duplicate parameters, credential persistence failures, concurrent refresh and account selection. On 2026-09-21, Marco confirmed browser consent and the automatic connection in version 1.1.10. A subsequent test explicitly verified OAuth mode, authenticated account/model access, and German Turbo transcription with the saved OAuth credentials. Automatic refresh is covered by fixtures, not a forced live token rotation. No live token values are included in fixtures or logs.
 
 References: [OAuth client registration](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/), [OAuth endpoints](https://developers.cloudflare.com/fundamentals/oauth/integrate-with-cloudflare/).
+
+Review validation: missing accounts retain an actionable sign-in message; expired credentials are distinguished from transient token-endpoint failures. Streaming upload fixtures verify exact base64 across chunk boundaries and cancellation. The reviewed upload implementation also passed authenticated OAuth account validation and German Turbo transcription against the live service.

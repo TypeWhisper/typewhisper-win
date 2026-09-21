@@ -43,12 +43,8 @@ public sealed partial class CloudflareAsrPlugin
         {
             if (selectedLanguage is not null && !WhisperLanguages.Contains(selectedLanguage))
                 throw new ArgumentException("Choose a supported spoken language.", nameof(language));
-            var payload = new Dictionary<string, object> { ["audio"] = Convert.ToBase64String(wavAudio), ["task"] = "transcribe" };
-            if (selectedLanguage is not null) payload["language"] = selectedLanguage;
             var terms = ProviderConnection.Terms(prompt);
-            if (terms.Length > 0) payload["initial_prompt"] = string.Join(", ", terms);
-            request.Content = new StringContent(JsonSerializer.Serialize(payload, new JsonSerializerOptions
-                { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }), Encoding.UTF8, "application/json");
+            request.Content = new TurboAudioContent(wavAudio, selectedLanguage, terms.Length > 0 ? string.Join(", ", terms) : null);
         }
         else
         {

@@ -68,7 +68,7 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     }
     internal async Task SaveOAuthAsync(CloudflareTokens tokens, IReadOnlyList<CloudflareAccount> accounts, CancellationToken ct)
     {
-        if (accounts.Count == 0) throw new InvalidOperationException("No Cloudflare accounts were granted. Check Account Settings Read and connect again.");
+        if (accounts.Count == 0) throw new CloudflareSignInException("No Cloudflare accounts were granted. Check Account Settings Read and connect again.");
         await _gate.WaitAsync(ct);
         try
         {

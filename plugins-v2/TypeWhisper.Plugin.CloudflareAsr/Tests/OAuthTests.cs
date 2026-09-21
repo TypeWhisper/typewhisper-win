@@ -128,7 +128,8 @@ public sealed partial class ProviderTests
         using var connection = new ProviderConnection(new HttpClient()); var host=new Host();
         await connection.ActivateAsync(host); await connection.SetKeyAsync("manual-key");
         var token = new CloudflareTokens("access",null,DateTimeOffset.UtcNow.AddHours(1));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => connection.SaveOAuthAsync(token,[],default));
+        var failure = await Assert.ThrowsAsync<CloudflareSignInException>(() => connection.SaveOAuthAsync(token,[],default));
+        Assert.Contains("Account Settings Read", failure.Message);
         Assert.Equal("manual-key",connection.Key);
         await connection.SaveOAuthAsync(token,[new(new string('a',32),"One"),new(new string('b',32),"Two")],default);
         Assert.Empty(connection.Get("accountId")); Assert.Equal(2,connection.Accounts.Count);
@@ -172,6 +173,33 @@ public sealed partial class ProviderTests
         await callback!;
         Assert.Equal("token exchange timed out",failure.Message);
         Assert.False(timeout.IsCancellationRequested);
+    }
+
+    [Theory]
+    [InlineData(408, PluginRequestFailureKind.Timeout)]
+    [InlineData(429, PluginRequestFailureKind.RateLimit)]
+    [InlineData(500, PluginRequestFailureKind.ServerError)]
+    [InlineData(503, PluginRequestFailureKind.ServerError)]
+    public async Task RefreshPreservesTransientStatusAndSavedCredentials(int status, PluginRequestFailureKind expected)
+    {
+        using var connection = new ProviderConnection(new HttpClient(new Handler((_,_) =>
+        {
+            var response = new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent("private-provider-details") };
+            response.Headers.RetryAfter = new(TimeSpan.FromSeconds(30));
+            return response;
+        })));
+        var host = new Host();
+        await connection.ActivateAsync(host);
+        await connection.SaveOAuthAsync(new("old-access","valid-refresh",DateTimeOffset.UtcNow.AddMinutes(-1)),
+            [new(new string('a',32),"Example")],default);
+        var failure = await Assert.ThrowsAsync<PluginRequestException>(() => connection.EnsureAccessTokenAsync(default));
+        Assert.Equal(expected,failure.FailureKind);
+        Assert.True(failure.IsTransient);
+        Assert.Equal(status,failure.HttpStatusCode);
+        Assert.Equal(TimeSpan.FromSeconds(30),failure.RetryAfter);
+        Assert.DoesNotContain("private-provider-details",failure.Message);
+        Assert.Equal("old-access",connection.Key);
+        Assert.Single(host.Secrets);
     }
 
 }

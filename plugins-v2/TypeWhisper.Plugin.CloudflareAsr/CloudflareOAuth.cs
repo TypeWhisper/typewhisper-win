@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.Plugin.CloudflareAsr;
 
@@ -120,6 +121,16 @@ internal sealed class CloudflareOAuth(HttpClient http)
         fields["client_id"] = ClientId;
         using var request = new HttpRequestMessage(HttpMethod.Post,"https://dash.cloudflare.com/oauth2/token") { Content = new FormUrlEncodedContent(fields) };
         using var response = await http.SendAsync(request, ct);
+        var status = (int)response.StatusCode;
+        if (status is 408 or 429 or >= 500 and <= 599)
+        {
+            var kind = status == 429 ? PluginRequestFailureKind.RateLimit
+                : status == 408 ? PluginRequestFailureKind.Timeout : PluginRequestFailureKind.ServerError;
+            var retry = response.Headers.RetryAfter?.Delta;
+            if (retry is null && response.Headers.RetryAfter?.Date is { } retryAt)
+                retry = retryAt > DateTimeOffset.UtcNow ? retryAt - DateTimeOffset.UtcNow : TimeSpan.Zero;
+            throw new PluginRequestException("Cloudflare sign-in is temporarily unavailable. Please retry.", kind, status, retry);
+        }
         if (!response.IsSuccessStatusCode) throw new CloudflareSignInException($"Cloudflare sign-in could not be completed (HTTP {(int)response.StatusCode}). Connect again.");
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)); var root = doc.RootElement;
         var access = ProviderConnection.RequiredText(root,"access_token");

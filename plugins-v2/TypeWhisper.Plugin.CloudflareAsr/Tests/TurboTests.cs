@@ -55,4 +55,47 @@ public sealed partial class ProviderTests
         await Assert.ThrowsAsync<NotSupportedException>(() => plugin.TranscribeAsync(Audio(), "de", true, null, default));
         Assert.Equal(0,calls);
     }
+    [Theory]
+    [InlineData(12287)]
+    [InlineData(12288)]
+    [InlineData(12289)]
+    [InlineData(36866)]
+    public async Task TurboUploadStreamsExactBase64AcrossChunkBoundaries(int length)
+    {
+        var audio = new byte[length];
+        new Random(42).NextBytes(audio);
+        using var content = new TurboAudioContent(audio, "de", "Grüße, \"quoted\"");
+        using var stream = new BoundedWriteStream();
+        await content.CopyToAsync(stream);
+        Assert.Equal(stream.Length,content.Headers.ContentLength);
+        Assert.InRange(stream.LargestWrite,1,16384);
+        using var document = JsonDocument.Parse(stream.ToArray());
+        Assert.Equal(audio,document.RootElement.GetProperty("audio").GetBytesFromBase64());
+        Assert.Equal("Grüße, \"quoted\"",document.RootElement.GetProperty("initial_prompt").GetString());
+        Assert.Equal("de",document.RootElement.GetProperty("language").GetString());
+        Assert.Equal("transcribe",document.RootElement.GetProperty("task").GetString());
+    }
+
+    [Fact]
+    public async Task TurboUploadHonorsCancellation()
+    {
+        using var content = new TurboAudioContent(new byte[50000],null,null);
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new BoundedWriteStream { AfterWrite = cancellation.Cancel };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => content.CopyToAsync(stream,cancellation.Token));
+        Assert.True(stream.Length < content.Headers.ContentLength);
+    }
+
+    private sealed class BoundedWriteStream : MemoryStream
+    {
+        internal int LargestWrite { get; private set; }
+        internal Action? AfterWrite { get; init; }
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            LargestWrite = Math.Max(LargestWrite,buffer.Length);
+            await base.WriteAsync(buffer,cancellationToken);
+            AfterWrite?.Invoke();
+        }
+    }
+
 }

@@ -34,9 +34,9 @@ public sealed partial class CloudflareAsrPlugin : IPluginSettingsActions
         {
             tokens = await oauth.SignInAsync(timeout.Token);
             accounts = await oauth.AccountsAsync(tokens.AccessToken, timeout.Token);
+            await Connection.SaveOAuthAsync(tokens, accounts, timeout.Token);
         }
         catch (CloudflareSignInException ex) { return ex.Message; }
-        await Connection.SaveOAuthAsync(tokens, accounts, timeout.Token);
         return IsConfigured ? Connection.L("Connected to Cloudflare.", "Mit Cloudflare verbunden.")
             : Connection.L("Signed in. Choose a Cloudflare account and save settings.", "Angemeldet. Wähle ein Cloudflare-Konto und speichere die Einstellungen.");
     }
