@@ -55,6 +55,13 @@ public sealed class ScriptSyntaxTests
         Assert.Equal(expected, ScriptSyntax.FormatPowerShell(expected));
     }
 
+    [Theory]
+    [InlineData("cmd /c --% echo one;two", "cmd /c --% echo one;two")]
+    [InlineData("cmd /c --% echo one;two\nWrite-Output 1;Write-Output 2", "cmd /c --% echo one;two\nWrite-Output 1;\nWrite-Output 2")]
+    [InlineData("cmd /c --% echo one;two | Write-Output 1;Write-Output 2", "cmd /c --% echo one;two | Write-Output 1;\nWrite-Output 2")]
+    public void FormatterPreservesStopParsingArguments(string source, string expected) =>
+        Assert.Equal(expected, ScriptSyntax.FormatPowerShell(source));
+
     [Fact]
     public void FormatterPreservesBacktickContinuedQuotedStrings()
     {

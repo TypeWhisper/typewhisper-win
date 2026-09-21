@@ -20,9 +20,9 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
     /// <inheritdoc />
     public string ProfileSelectorId => "script";
     /// <inheritdoc />
-    public string AddProfileActionId => "add";
+    public string? AddProfileActionId => ActiveService.IsReadOnly ? null : "add";
     /// <inheritdoc />
-    public string? RemoveProfileActionId => Selected is { } s ? "remove:" + s.Id : null;
+    public string? RemoveProfileActionId => !ActiveService.IsReadOnly && Selected is { } s ? "remove:" + s.Id : null;
     /// <inheritdoc />
     public bool ShowApiKeySettings => false;
     /// <inheritdoc />
@@ -35,6 +35,17 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
         {
             lock (_settingsLock)
             {
+                if (ActiveService.IsReadOnly)
+                {
+                    var details = ActiveService.LoadError ?? "";
+                    if (details.Length > 500) details = details[..500] + "…";
+                    return [
+                        new(ProfileSelectorId, L("Scripts", "Skripte"), "", ConnectionIdentity),
+                        new("configuration_error", L("Configuration could not be loaded: ", "Konfiguration konnte nicht geladen werden: ") + details,
+                            L("Repair scripts.json or restore a backup, then reload the plugin. The existing file is preserved.", "Repariere scripts.json oder stelle eine Sicherung wieder her und lade das Plugin erneut. Die vorhandene Datei bleibt erhalten."), "readonly")
+                        { Section = PluginSettingsSection.Connection, Choices = [new("readonly", L("Read-only — editing is disabled", "Schreibgeschützt — Bearbeiten ist deaktiviert"))] }
+                    ];
+                }
                 var script = Selected;
                 var fields = new List<PluginTextSetting>
                 {
@@ -131,6 +142,7 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
         {
             lock (_settingsLock)
             {
+                if (ActiveService.IsReadOnly) return [];
                 var actions = new List<PluginSettingsAction>
                 {
                     Action("add", L("Add script", "Skript hinzufügen"), L("Add a blank disabled script.", "Ein leeres, deaktiviertes Skript anlegen.")),
@@ -190,7 +202,14 @@ public sealed partial class ScriptPlugin : IPluginProfileSettings, IPluginSettin
         if (test is null) return new((await ExecuteSettingsActionAsync(actionId, ct))!);
         if (string.IsNullOrWhiteSpace(test.Command)) throw new ArgumentException(L("Enter a command before testing.", "Gib vor dem Test einen Befehl ein."));
         var result = await ActiveService.Runner.RunAsync(test, "Hallo TypeWhisper!\nZweite Zeile: Äpfel & Öl.", new PostProcessingContext(), ct);
-        if (!result.IsSuccess) return new(L("Test failed: ", "Test fehlgeschlagen: ") + result.Status);
+        if (!result.IsSuccess)
+        {
+            var diagnostics = result.Error.Trim();
+            if (diagnostics.Length > 2000) diagnostics = diagnostics[..2000] + "…";
+            var exit = result.ExitCode is { } code ? L(" · exit code ", " · Exitcode ") + code.ToString(CultureInfo.InvariantCulture) : "";
+            return new(L("Test failed: ", "Test fehlgeschlagen: ") + result.Status + exit +
+                (diagnostics.Length > 0 ? "\n" + diagnostics : ""));
+        }
         var preview = result.Output.Length > 2000 ? result.Output[..2000] + "…" : result.Output;
         return new(L("Result: ", "Ergebnis: ") + preview);
     }

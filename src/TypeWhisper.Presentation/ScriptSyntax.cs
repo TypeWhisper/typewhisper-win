@@ -27,7 +27,7 @@ public readonly record struct ScriptToken(int Start, int Length, ScriptTokenKind
 public static class ScriptSyntax
 {
     private static readonly Regex PowerShell = new(
-        """(?<Comment><#[\s\S]*?(?:#>|\z)|\#[^\r\n]*)|(?<String>@'\r?\n[\s\S]*?(?:\r?\n'@|\z)|@"\r?\n[\s\S]*?(?:\r?\n"@|\z)|'(?:''|[^'])*(?:'|\z)|"(?:`[\s\S]|[^"`])*(?:"|\z))|(?<Variable>\$(?:\{[^}]*\}|[\w:?]+))|(?<Type>\[[\w.\[\],]+\])|(?<Keyword>\b(?:if|else|elseif|foreach|for|while|do|switch|return|function|param|try|catch|finally|throw|in|begin|process|end)\b|\b[A-Za-z]+-[A-Za-z]+\b|-(?:match|replace|split|join|notmatch|eq|ne|gt|lt|and|or|not)\b)|(?<Number>\b\d+(?:\.\d+)?\b)""",
+        """(?<Comment><#[\s\S]*?(?:#>|\z)|\#[^\r\n]*)|(?<String>--%[^\r\n|]*|@'\r?\n[\s\S]*?(?:\r?\n'@|\z)|@"\r?\n[\s\S]*?(?:\r?\n"@|\z)|'(?:''|[^'])*(?:'|\z)|"(?:`[\s\S]|[^"`])*(?:"|\z))|(?<Variable>\$(?:\{[^}]*\}|[\w:?]+))|(?<Type>\[[\w.\[\],]+\])|(?<Keyword>\b(?:if|else|elseif|foreach|for|while|do|switch|return|function|param|try|catch|finally|throw|in|begin|process|end)\b|\b[A-Za-z]+-[A-Za-z]+\b|-(?:match|replace|split|join|notmatch|eq|ne|gt|lt|and|or|not)\b)|(?<Number>\b\d+(?:\.\d+)?\b)""",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
     private static readonly Regex Cmd = new(
         """(?<Comment>(?:^|[\r\n])\s*(?:rem\b|::)[^\r\n]*)|(?<String>"[^"\r\n]*(?:"|$))|(?<Variable>%[^%\r\n]+%|![^!\r\n]+!)|(?<Keyword>\b(?:echo|set|if|else|for|in|do|call|exit|goto|type|findstr|sort|endlocal|setlocal)\b)|(?<Number>\b\d+\b)""",

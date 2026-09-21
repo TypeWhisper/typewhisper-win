@@ -147,11 +147,28 @@ public sealed class ScriptBehaviorTests
         Assert.Equal("keep this dictation", await plugin.ProcessAsync("keep this dictation", new(), default));
     }
 
+    [WindowsFact]
+    public async Task FailedDraftTestIncludesBoundedDiagnosticsAndExitCode()
+    {
+        using var fixture = new PortableFixture(); using var plugin = new ScriptPlugin();
+        await plugin.ActivateAsync(fixture.Host); await plugin.ExecuteSettingsActionAsync("add", default);
+        var script = Assert.Single(plugin.Service!.Scripts);
+        var result = await plugin.ExecuteProfileActionAsync(script.Id.ToString(), "test:" + script.Id,
+            new Dictionary<string,string> { [script.Id + ":shell"] = "powershell", [script.Id + ":timeout"] = "30",
+                [script.Id + ":command"] = "[Console]::Error.Write(('diagnostic' * 300)); exit 7" }, null, default);
+        Assert.Contains("7", result.Message);
+        Assert.Contains("diagnostic", result.Message);
+        Assert.InRange(result.Message.Length, 2000, 2150);
+        Assert.Equal(script, Assert.Single(plugin.Service.Scripts));
+    }
+
     [Fact]
     public async Task CorruptConfiguration_BlocksMutation()
     {
         using var f=new PortableFixture();Directory.CreateDirectory(f.Host.PluginDataDirectory);var path=Path.Combine(f.Host.PluginDataDirectory,"scripts.json");await File.WriteAllTextAsync(path,"broken");
         using var p=new ScriptPlugin();await p.ActivateAsync(f.Host);
+        Assert.Null(p.AddProfileActionId); Assert.Null(p.RemoveProfileActionId); Assert.Empty(p.SettingsActions);
+        Assert.Contains(p.TextSettings, field => field.Id == "configuration_error" && field.Value == "readonly");
         await Assert.ThrowsAnyAsync<Exception>(()=>p.ExecuteSettingsActionAsync("add",default));Assert.Equal("broken",await File.ReadAllTextAsync(path));await p.DeactivateAsync();
     }
 }
