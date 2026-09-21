@@ -144,6 +144,49 @@ public sealed class StreamingCompletionTests
         await server.WaitAsync(ct);
     }
 
+    [Theory]
+    [InlineData("transcript")]
+    [InlineData("speechComplete")]
+    public void RealtimeCompletionRequiresExplicitTranscript(string type)
+    {
+        var collector = new MetaRealtimeTranscriptCollector(type == "transcript" ? "PUSH_TO_TALK" : "DIARIZATION");
+        Assert.Throws<System.Text.Json.JsonException>(() => collector.Apply($"{{\"type\":\"{type}\",\"turnId\":1,\"final\":true}}"));
+        Assert.Throws<System.Text.Json.JsonException>(() => collector.Apply($"{{\"type\":\"{type}\",\"turnId\":1,\"final\":true,\"transcript\":null}}"));
+        collector.Apply($"{{\"type\":\"{type}\",\"turnId\":1,\"final\":true,\"transcript\":\"\"}}");
+        Assert.True(collector.HasCompletedTranscript);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedReceiverIsObservedByNextAudioSend(bool closeSocket)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10)); var ct = timeout.Token;
+        using var tcp = new TcpListener(IPAddress.Loopback, 0);
+        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
+        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync().WaitAsync(ct);
+            using var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
+            await Receive(socket, ct); await Send(socket, """{"sessionId":"fixture"}""", ct);
+            if (closeSocket) await socket.CloseOutputAsync(WebSocketCloseStatus.InternalServerError, "fixture", ct);
+            else await Send(socket, """{"type":"error","message":"fixture failure"}""", ct);
+            await done.Task.WaitAsync(ct);
+        }, ct);
+        await using var session = await MetaRealtimeStreamingSession.ConnectAsync("fixture", "model", "PUSH_TO_TALK", [], [], ct, new Uri($"ws://127.0.0.1:{port}/"));
+        try
+        {
+            var failure = await Assert.ThrowsAnyAsync<Exception>(() => session.TerminalTranscriptTask.WaitAsync(ct));
+            Assert.IsNotAssignableFrom<OperationCanceledException>(failure);
+            var sendFailure = await Assert.ThrowsAnyAsync<Exception>(() => session.SendAudioAsync(new byte[] { 1, 2 }, ct));
+            Assert.Same(failure, sendFailure);
+        }
+        finally { done.TrySetResult(); }
+        await server.WaitAsync(ct);
+    }
+
     private static async Task<byte[]> Receive(WebSocket socket,CancellationToken ct)
     {
         using var message=new MemoryStream();var buffer=new byte[4096];WebSocketReceiveResult frame;

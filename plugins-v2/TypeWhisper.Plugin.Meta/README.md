@@ -2,7 +2,7 @@
 
 Meta transcription, realtime transcription, LLM completion, model refresh, language/dictionary/diarization and reasoning settings.
 
-Version `1.2.4`; plugin ID `com.typewhisper.meta`; minimum host `1.1.2`.
+Version `1.2.5`; plugin ID `com.typewhisper.meta`; minimum host `1.1.2`.
 Independent branch: `seofood/meta-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -45,3 +45,5 @@ Diarization finalization drains all completed speaker turns and requires a clean
 Version 1.2.2 was additionally validated against the live API with speaker labels enabled: 13 interim updates, one complete final transcript, and clean stream closure.
 
 Push-to-talk accepts the explicit final transcript after stop even when the server later closes the transport without a close frame. Diarization still drains all completed turns through clean stream closure; incomplete or prematurely closed responses remain errors.
+
+Dictionary prompts follow the current shared SDK comma-separated contract. A phrase containing a literal comma cannot retain that internal boundary; lossless structured dictionary terms require a separate host/SDK change for all keyword-based providers.

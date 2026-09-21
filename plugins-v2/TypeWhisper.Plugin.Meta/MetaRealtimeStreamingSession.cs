@@ -135,8 +135,12 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (_disposed || FinalizationRequested || _webSocket.State != WebSocketState.Open)
-                return;
+            if (_terminalTranscript.Task.IsFaulted || _terminalTranscript.Task.IsCanceled)
+                await _terminalTranscript.Task;
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (FinalizationRequested) return;
+            if (_webSocket.State != WebSocketState.Open)
+                throw new WebSocketException("The realtime session is no longer open.");
             await _webSocket.SendAsync(pcm16Audio, WebSocketMessageType.Binary, true, ct);
         }
         finally
@@ -508,10 +512,12 @@ internal sealed class MetaRealtimeTranscriptCollector
         return turn;
     }
 
-    private static string GetTranscript(JsonElement root) =>
-        root.TryGetProperty("transcript", out var transcriptElement)
-            ? transcriptElement.GetString()?.Trim() ?? ""
-            : "";
+    private static string GetTranscript(JsonElement root)
+    {
+        if (!root.TryGetProperty("transcript", out var transcriptElement) || transcriptElement.ValueKind != JsonValueKind.String)
+            throw new JsonException("Meta returned no string transcript in a realtime event.");
+        return transcriptElement.GetString()!.Trim();
+    }
 
     private static bool TryGetInt(JsonElement root, string propertyName, out int value)
     {
