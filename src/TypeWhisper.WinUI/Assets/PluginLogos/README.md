@@ -22,3 +22,5 @@ Explicit fill colors support native SVG rendering. Monochrome marks include ligh
 
 - Supertonic TTS: unchanged [Supertone 256 px website icon](https://cdn.prod.website-files.com/666c1f308f1a1e34efc9c61a/666fd445621fa9795b5d37b8_SPT_Sym_256px.png), linked by the official Supertone homepage; retrieved September 20, 2026.
 Gemma: `gemma-color.svg` from [Lobe Icons](https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/gemma-color.svg), MIT; see `Lobe-Icons-LICENSE.txt`.
+
+- Meta: reuses the existing TypeWhisper Windows Meta brand asset unchanged.
