@@ -4,6 +4,8 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
+    private readonly TypeWhisper.Presentation.BufferedAudioHandoff _streamAudio = new();
+
     private async Task StartCloudStreamAsync()
     {
         if (!LivePreviewEnabled || !SupportsLiveTranscription || !UsesRegistryProvider ||
@@ -32,10 +34,16 @@ internal sealed partial class LocalDictationSession
                 LivePreviewChanged?.Invoke();
             }), _operationCancellation.Token, dictionary?.EnabledTerms);
         _cloudStream = stream;
+        if (!_streamAudio.Attach(samples => stream.Append(samples)))
+        {
+            // A bounded startup-buffer overflow falls back to the complete captured recording.
+            await StopCloudStreamAsync();
+        }
     }
 
     private async Task StopCloudStreamAsync()
     {
+        _streamAudio.Reset();
         var previous = _cloudStream;
         _cloudStream = null;
         if (previous is not null) await previous.DisposeAsync();

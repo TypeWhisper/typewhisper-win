@@ -104,7 +104,7 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
         return audio.StopRecording() ?? [];
     }
 
-    private sealed class ReplayDevice : IAudioInputDeviceProvider
+    internal sealed class ReplayDevice : IAudioInputDeviceProvider
     {
         public int DeviceCount => 1;
         public string GetDeviceName(int index) => "Synthetic replay";
@@ -112,7 +112,7 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
         public AudioInputDeviceInfo GetDeviceInfo(int index) => new(0, "replay", "Synthetic replay", true);
         public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos() => [GetDeviceInfo(0)];
     }
-    private sealed class ReplayInput : IAudioInputCaptureFactory, IAudioInputCapture
+    internal sealed class ReplayInput : IAudioInputCaptureFactory, IAudioInputCapture
     {
         public bool Running;
         public bool CanRestartAfterStop => true;

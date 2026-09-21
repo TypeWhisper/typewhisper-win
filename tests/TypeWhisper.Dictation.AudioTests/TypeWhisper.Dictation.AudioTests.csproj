@@ -13,6 +13,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="10.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
@@ -25,6 +26,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioCaptureDiagnostics.cs" Link="AudioCaptureDiagnostics.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/NonFatalExceptionFilter.cs" Link="NonFatalExceptionFilter.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
   </ItemGroup>
 </Project>
