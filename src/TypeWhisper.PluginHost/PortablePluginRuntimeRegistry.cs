@@ -55,6 +55,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal readonly IPluginHostServices Services = services;
         internal PortablePluginPackage? Package;
         internal bool Accepting;
+        internal bool IsLocal;
         internal long Generation;
         internal string? Error;
         internal bool CapabilityError;
@@ -201,6 +202,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             var loadedHere = slot.Package is null;
             var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, slot.Services, hostVersion);
             slot.Package = package;
+            slot.IsLocal = inspection.Manifest.IsLocal;
             try
             {
                 var next = BuildIndex();
@@ -323,9 +325,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>
     /// Serializes host-rendered configuration with requests, including IApiKeyPlugin operations.
     /// The callback must not retain the plugin reference or activate/dispose the plugin itself.
+    /// Set preserveCompletedResult for write operations whose completion metadata must survive late cancellation.
+    /// Read-only snapshots may suppress the completion refresh to avoid notification feedback loops.
     /// </summary>
     public Task<T> UseConfigurationAsync<T>(string pluginId,
-        Func<ITypeWhisperPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default)
+        Func<ITypeWhisperPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default,
+        bool preserveCompletedResult = false, bool refreshCapabilities = true)
     {
         Slot owner;
         lock (_sync)
@@ -333,10 +338,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_slots.TryGetValue(pluginId, out var slot) || slot.Package is null) throw new InvalidOperationException("Enable this plugin first.");
             owner = slot;
         }
-        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken);
+        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken, preserveCompletedResult, refreshCapabilities);
     }
 
-    private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false)
+    private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false, bool refreshCapabilities = true)
     {
         long generation;
         lock (_sync)
@@ -370,7 +375,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             await callbacks.ConfigureAwait(false);
             request?.Dispose();
             _gate.Release();
-            QueueRefresh();
+            if (refreshCapabilities) QueueRefresh();
         }
     }
 
@@ -415,7 +420,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         {
             var plugin = slot.Package!.Plugin;
             if (plugin is ITtsProviderPlugin tts && tts.SupportsPlaybackSelection)
-                ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())));
+                ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())) { IsLocal = slot.IsLocal });
             if (plugin is IActionPlugin action)
             {
                 if (action.PluginId != slot.Id || string.IsNullOrWhiteSpace(action.ActionId))

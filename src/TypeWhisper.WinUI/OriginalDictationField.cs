@@ -26,6 +26,8 @@ internal sealed class OriginalDictationField : IDisposable
             target = new(window, process);
             target._element = target._automation.GetFocusedElement();
             PasteDiagnostics.Write(target._element is null ? "field.capture.no-element" : $"field.capture.type={target._element.CurrentControlType}");
+            if (target._element?.CurrentControlType is 50025 or 50026)
+                PasteDiagnostics.Write($"field.capture.custom focusable={target._element.CurrentIsKeyboardFocusable != 0} writable={target.HasWritableTextPattern()}");
             if (target.IsCurrent())
             {
                 target._automation.ConnectionTimeout = 200;
@@ -44,7 +46,8 @@ internal sealed class OriginalDictationField : IDisposable
         GetWindowThreadProcessId(_window, out var process);
         if (process != _process || _element is null || _element.CurrentProcessId != _process ||
             _element.CurrentIsEnabled == 0 || _element.CurrentIsPassword != 0 ||
-            _element.CurrentControlType is not (50004 or 50030)) return false;
+            !OriginalFieldFocus.IsEditableControl(_element.CurrentControlType,
+                _element.CurrentIsKeyboardFocusable != 0, HasWritableTextPattern)) return false;
         var walker = _automation.RawViewWalker;
         IUIAutomationElement? parent = null;
         try
@@ -78,6 +81,26 @@ internal sealed class OriginalDictationField : IDisposable
             finally { Release(focused); }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { PasteDiagnostics.Write("field.verify.exception", ex); return false; }
+    }
+
+    private bool HasWritableTextPattern()
+    {
+        object? pattern = null;
+        IUIAutomationTextRange? range = null;
+        try
+        {
+            try { pattern = _element!.GetCurrentPattern(10002); } // UIA_ValuePatternId
+            catch (COMException) { }
+            if (pattern is IUIAutomationValuePattern value) return value.CurrentIsReadOnly == 0;
+            Release(pattern); pattern = null;
+            try { pattern = _element!.GetCurrentPattern(10014); } // UIA_TextPatternId
+            catch (COMException) { }
+            if (pattern is not IUIAutomationTextPattern text) return false;
+            range = text.DocumentRange;
+            // UIA_IsReadOnlyAttributeId. Query editability only, never the text itself.
+            return range.GetAttributeValue(40015) is false;
+        }
+        finally { Release(range); Release(pattern); }
     }
 
     internal async Task<bool> RestoreAsync(CancellationToken cancellation)

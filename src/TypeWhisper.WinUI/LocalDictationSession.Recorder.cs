@@ -3,9 +3,9 @@ namespace TypeWhisper.WinUI;
 internal sealed partial class LocalDictationSession
 {
     internal TypeWhisper.Presentation.RecorderPreferencesStore RecorderPreferences { get; } = new(WinUIProfile.DataPath("recorder.json"));
-    internal IReadOnlyList<TypeWhisper.Windows.Services.SystemAudioOutputDevice> GetRecorderOutputDevices()
+    internal IReadOnlyList<TypeWhisper.WinUI.Platform.SystemAudioOutputDevice> GetRecorderOutputDevices()
     {
-        using var systemAudio = new TypeWhisper.Windows.Services.SystemAudioCaptureService();
+        using var systemAudio = new TypeWhisper.WinUI.Platform.SystemAudioCaptureService();
         return systemAudio.GetAvailableOutputDevices();
     }
     private bool _recorderReserved;

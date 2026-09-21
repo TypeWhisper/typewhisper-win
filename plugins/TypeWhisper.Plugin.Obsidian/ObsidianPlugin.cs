@@ -2,9 +2,6 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-#if WINDOWS
-using System.Windows.Controls;
-#endif
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -59,12 +56,6 @@ public sealed partial class ObsidianPlugin : IActionPlugin, IPluginTextSettings
     /// </summary>
     public Task DeactivateAsync() { _host = null; return Task.CompletedTask; }
 
-#if WINDOWS
-    /// <summary>
-    /// Creates the settings view shown by the host, or null when no UI is required.
-    /// </summary>
-    public UserControl? CreateSettingsView() => new ObsidianSettingsView(this);
-#endif
 
     /// <summary>
     /// Performs execute asynchronously.
@@ -88,7 +79,6 @@ public sealed partial class ObsidianPlugin : IActionPlugin, IPluginTextSettings
         if (string.IsNullOrWhiteSpace(filenameTemplate))
             filenameTemplate = "{{date}} {{time}} Transcription";
 
-#if !WINDOWS
         if (dailyNoteMode)
             return new(false, "Daily-note append is not available in this host. Set Note mode to new-note in plugin settings.");
         var now = DateTime.Now;
@@ -101,50 +91,6 @@ public sealed partial class ObsidianPlugin : IActionPlugin, IPluginTextSettings
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
         { return new(false, "The note could not be saved. Check the vault path, note folder and write access. Your review text is unchanged."); }
-#else
-        var now = DateTime.Now;
-        var targetDir = Path.Combine(vaultPath, subfolder);
-        Directory.CreateDirectory(targetDir);
-
-        string filePath;
-        string filename;
-        string content;
-
-        if (dailyNoteMode)
-        {
-            filename = $"{now:yyyy-MM-dd}.md";
-            filePath = Path.Combine(targetDir, filename);
-
-            var entry = BuildDailyNoteEntry(input, context, now);
-
-            if (File.Exists(filePath))
-            {
-                // Append to existing daily note
-                await File.AppendAllTextAsync(filePath, entry, Encoding.UTF8, ct);
-            }
-            else
-            {
-                // Create new daily note with header
-                var header = $"# {now:yyyy-MM-dd}\n\n";
-                await File.WriteAllTextAsync(filePath, header + entry, Encoding.UTF8, ct);
-            }
-        }
-        else
-        {
-            filename = BuildFilename(filenameTemplate, context, now) + ".md";
-            filePath = Path.Combine(targetDir, filename);
-
-            // Ensure unique filename
-            filePath = EnsureUniqueFilePath(filePath);
-            filename = Path.GetFileName(filePath);
-
-            content = BuildNoteContent(input, context, now);
-            await File.WriteAllTextAsync(filePath, content, Encoding.UTF8, ct);
-        }
-
-        _host.Log(PluginLogLevel.Info, $"Saved transcription to {filePath}");
-        return new ActionResult(true, $"Saved to {filename}");
-#endif
     }
 
     private static string BuildNoteContent(string input, ActionContext context, DateTime now)

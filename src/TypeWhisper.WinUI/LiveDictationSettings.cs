@@ -59,7 +59,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 var providers = session.DictationProviders;
                 var selected = providers.FirstOrDefault(item => item.Id == selectedProviderId);
                 provider.SetOptions(providers.Select(item => new Choice(item.Id, item.Name,
-                    (item.Cloud ? "Cloud" : "On-device") + " · " + item.Status)).ToArray(), selectedProviderId, "Choose a provider");
+                    (item.Cloud ? "Cloud" : "On-device") + " · " + item.Status) { PluginId = item.PluginId }).ToArray(), selectedProviderId, "Choose a provider");
                 var canChange = session.CanChangeProvider && !session.Models.Busy && !selecting;
                 provider.IsEnabled = canChange;
                 modelSection.Visibility = selected?.Models.Count > 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
@@ -108,7 +108,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 if (!languageRow.IsLoaded) return;
                 var options = session.SupportedLanguages.Select(code => new Choice(code,
                     LanguageName(code), "Supported by the active model")).ToArray();
-                language.SetOptions(options.Length == 0 || session.UsesRegistryProvider ? new Choice[] { new("auto", "Automatic", "Language detection by the model") }.Concat(options).ToArray() : options, session.Language);
+                language.SetOptions(options.Length == 0 || session.UsesRegistryProvider ? new Choice[] { new("auto", "Automatic", "Language detection by the model") }.Concat(options).ToArray() : options, options.Length == 0 ? "auto" : session.Language);
                 language.IsEnabled = selectedProviderId == session.ActiveProviderId && session.CanChangeProvider && (session.UsesRegistryProvider ? session.IsReady : session.CanSelectModel) && options.Length > 0;
             });
             languageRow.Loaded += (_, _) => { session.Models.Changed += RefreshLanguage; session.Changed += RefreshLanguage; RefreshLanguage(); };

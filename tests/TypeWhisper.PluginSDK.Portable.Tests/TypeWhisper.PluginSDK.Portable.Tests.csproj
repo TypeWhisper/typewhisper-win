@@ -35,6 +35,7 @@
   </ItemGroup>
   <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
     <Compile Remove="MediaFoundationFileDecoderTests.cs" />
+    <Compile Remove="PortablePluginAudioInteropTests.cs" />
     <Compile Remove="WindowsPluginSecretStoreTests.cs" />
   </ItemGroup>
 </Project>

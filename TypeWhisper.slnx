@@ -9,7 +9,6 @@
     <Project Path="src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj" />
     <Project Path="src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <Project Path="src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
-    <Project Path="src/TypeWhisper.Windows/TypeWhisper.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TypeWhisper.Cli.Tests/TypeWhisper.Cli.Tests.csproj" />
@@ -17,9 +16,6 @@
     <Project Path="tests/TypeWhisper.PluginSDK.PortableFixture/TypeWhisper.PluginSDK.PortableFixture.csproj" />
     <Project Path="tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj" />
     <Project Path="tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj" />
-    <Project Path="tests/TypeWhisper.PluginSystem.Tests/TypeWhisper.PluginSystem.Tests.csproj" />
-  </Folder>
-  <Folder Name="/tools/">
-    <Project Path="tools/TypeWhisper.UiAutomation/TypeWhisper.UiAutomation.csproj" />
+    <Project Path="tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj" />
   </Folder>
 </Solution>
