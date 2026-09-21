@@ -101,7 +101,7 @@ internal sealed class ScriptConfigurationStore : IScriptConfigurationStore
         IsEnabled = script.IsEnabled && !string.IsNullOrWhiteSpace(script.Command),
         Name = script.Name ?? "",
         Command = script.Command ?? "",
-        Shell = string.IsNullOrWhiteSpace(script.Shell) ? ScriptShells.CommandPrompt : script.Shell,
+        Shell = string.IsNullOrWhiteSpace(script.Shell) ? ScriptShells.CommandPrompt : ScriptShells.Normalize(script.Shell),
         TimeoutSeconds = script.TimeoutSeconds is >= ScriptDefaults.MinimumTimeoutSeconds
             and <= ScriptDefaults.MaximumTimeoutSeconds
                 ? script.TimeoutSeconds

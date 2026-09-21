@@ -72,7 +72,7 @@ internal sealed class ScriptCodeEditor : RichEditBox
         if (_updating || _composing) return;
         var text = ReadText();
         if (text == _text) return;
-        if (text.Length > _maximum) { ReplaceText(_text); EditorNotice?.Invoke($"The command is limited to {_maximum:N0} characters."); return; }
+        if (text.Length > _maximum && text.Length >= _text.Length) { ReplaceText(_text); EditorNotice?.Invoke($"The command is limited to {_maximum:N0} characters."); return; }
         _text = text;
         _history.Record(text);
         Highlight();
@@ -149,7 +149,7 @@ internal sealed class ScriptCodeEditor : RichEditBox
     {
         if (_language is not ("powershell" or "pwsh")) return;
         var formatted = ScriptSyntax.FormatPowerShell(_text);
-        if (formatted.Length > _maximum || formatted == _text) return;
+        if ((formatted.Length > _maximum && formatted.Length >= _text.Length) || formatted == _text) return;
         _history.Record(formatted); ReplaceText(formatted);
     }
 
@@ -173,7 +173,7 @@ internal sealed class ScriptCodeEditor : RichEditBox
             if (!clipboard.Contains(StandardDataFormats.Text)) return;
             var pasted = Normalize(await clipboard.GetTextAsync());
             if (!IsLoaded || _text != original || Document.Selection.StartPosition != start || Document.Selection.EndPosition != end) return;
-            if (_text.Length - (end - start) + pasted.Length > _maximum) { EditorNotice?.Invoke($"The command is limited to {_maximum:N0} characters."); return; }
+            if (_text.Length - (end - start) + pasted.Length > _maximum && pasted.Length >= end - start) { EditorNotice?.Invoke($"The command is limited to {_maximum:N0} characters."); return; }
             Document.Selection.SetText(TextSetOptions.None, pasted);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { EditorNotice?.Invoke("The clipboard is unavailable. Try again."); }

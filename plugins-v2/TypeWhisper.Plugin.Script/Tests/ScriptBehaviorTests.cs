@@ -162,6 +162,38 @@ public sealed class ScriptBehaviorTests
         Assert.Equal(script, Assert.Single(plugin.Service.Scripts));
     }
 
+    [WindowsTheory]
+    [InlineData("cmd")]
+    [InlineData("legacy-unknown-shell")]
+    public async Task CommandPromptPreservesUnicodeOutputAndDiagnostics(string shell)
+    {
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell=shell,
+            Command="echo Äpfel ^& Öl & >&2 echo Grüße", TimeoutSeconds=30 }, "", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("Äpfel & Öl", result.Output.Trim());
+        Assert.Equal("Grüße", result.Error.Trim());
+    }
+
+    [WindowsFact]
+    public async Task CommandPromptPreservesQuotedOperatorsAndLiteralExclamationMarks()
+    {
+        var result = await new ScriptProcessRunner().RunAsync(new() { Shell="cmd",
+            Command="echo \"Äpfel & Öl\" & echo !literal!", TimeoutSeconds=30 }, "", new(), default);
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(new[] { "\"Äpfel & Öl\"", "!literal!" }, result.Output.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim()));
+    }
+
+    [Fact]
+    public async Task RecognizedPersistedShellNamesAreCanonicalized()
+    {
+        using var fixture = new PortableFixture();
+        Directory.CreateDirectory(fixture.Host.PluginDataDirectory);
+        var path = Path.Combine(fixture.Host.PluginDataDirectory, "scripts.json");
+        await File.WriteAllTextAsync(path, """[{"shell":"PowerShell","command":"echo test"},{"shell":"CMD","command":"echo test"},{"shell":"PwSh","command":"echo test"}]""");
+        using var plugin = new ScriptPlugin(); await plugin.ActivateAsync(fixture.Host);
+        Assert.Equal(new[] { "powershell", "cmd", "pwsh" }, plugin.Service!.Scripts.Select(script => script.Shell));
+    }
+
     [Fact]
     public async Task DuplicateIdsDisableConfigurationWithoutOverwritingIt()
     {

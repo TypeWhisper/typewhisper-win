@@ -140,7 +140,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         {
             startInfo.ArgumentList.Add("/d");
             startInfo.ArgumentList.Add("/s");
-            startInfo.ArgumentList.Add("/v:off");
+            startInfo.ArgumentList.Add("/v:on");
             startInfo.ArgumentList.Add("/c");
         }
         else
@@ -152,9 +152,16 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         }
 
         var command = UsesCommandPrompt(shell)
-            ? ">nul set /p \"__TYPEWHISPER_START=\" & >&2 echo " + readyMarker + " & " + script.Command
+            ? ">nul set /p \"__TYPEWHISPER_START=\" & chcp 65001 >nul & cmd.exe /d /a /s /v:off /c !__TYPEWHISPER_COMMAND!"
             : "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); " +
               "$encodedScript = [Console]::In.ReadLine(); [Console]::Error.WriteLine('" + readyMarker + "'); & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedScript))))";
+        if (UsesCommandPrompt(shell))
+        {
+            // cmd caches its output code page at startup. Start the contained child after
+            // selecting UTF-8; delayed expansion transports its command without the outer
+            // shell reinterpreting quotes, operators or literal exclamation marks.
+            startInfo.Environment["__TYPEWHISPER_COMMAND"] = ">&2 echo " + readyMarker + " & " + script.Command;
+        }
         startInfo.ArgumentList.Add(command);
         startInfo.Environment["TYPEWHISPER_APP_NAME"] = context.ActiveAppName ?? "";
         startInfo.Environment["TYPEWHISPER_LANGUAGE"] = context.SourceLanguage ?? "";

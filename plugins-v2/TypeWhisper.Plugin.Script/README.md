@@ -1,6 +1,6 @@
 # Script Runner
 
-Local text post-processing with an ordered list of scripts. Version `1.3.5`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
+Local text post-processing with an ordered list of scripts. Version `1.3.6`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
 
 ## Setup
 
