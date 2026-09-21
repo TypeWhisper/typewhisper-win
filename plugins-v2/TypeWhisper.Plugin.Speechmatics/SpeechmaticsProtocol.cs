@@ -16,6 +16,8 @@ public sealed partial class SpeechmaticsPlugin
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
+    /// <inheritdoc />
     public bool SupportsDictionaryTerms => true;
     /// <inheritdoc />
     public DictionaryTermsBudget DictionaryTermsBudget => new(MaxTerms: 100, MaxTotalChars: 4000);

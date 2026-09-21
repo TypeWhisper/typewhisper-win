@@ -20,7 +20,7 @@ public sealed partial class FireworksPlugin : ITranscriptionEnginePlugin, ILlmPr
     /// <inheritdoc />
     public string PluginName => "Fireworks AI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.6";
+    public string PluginVersion => "1.1.7";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />

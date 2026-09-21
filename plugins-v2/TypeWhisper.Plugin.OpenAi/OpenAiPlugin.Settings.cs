@@ -1,5 +1,6 @@
 using System.Globalization;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenAi;
 
@@ -126,5 +127,5 @@ public sealed partial class OpenAiPlugin
         && GermanStrings.Value.TryGetValue(text, out var translated) ? translated : text;
 
     internal static string[] DictionaryKeywords(string? prompt) => string.IsNullOrWhiteSpace(prompt) ? [] :
-        prompt.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.OrdinalIgnoreCase).Take(100).ToArray();
+        PluginDictionaryTerms.ParsePrompt(prompt).Distinct(StringComparer.OrdinalIgnoreCase).Take(100).ToArray();
 }

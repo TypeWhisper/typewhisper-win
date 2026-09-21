@@ -14,6 +14,8 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
     /// <inheritdoc />
     public bool SupportsTranslation => true;
     /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
+    /// <inheritdoc />
     public bool SupportsDictionaryTerms => true;
     /// <inheritdoc />
     public DictionaryTermsBudget DictionaryTermsBudget => new(MaxTerms: 100, MaxTotalChars: 4000);

@@ -1,6 +1,6 @@
 # Gladia for the portable host
 
-Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.2`, requiring host `1.1.2`. Implemented on its own `seofood/gladia-portable` branch, originally based on Windows `4db8f6ac` and updated with current main before review. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.3`, requiring host `1.1.5`. Implemented on its own `seofood/gladia-portable` branch, originally based on Windows `4db8f6ac` and updated with current main before review. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -40,3 +40,5 @@ Streaming tests cover authenticated session initialization, PCM format/chunk ord
 ![Gladia with German selected](../../docs/screenshots/gladia/dictation-german.png)
 
 References: [live quickstart](https://docs.gladia.io/chapters/live-stt/quickstart), [session configuration](https://docs.gladia.io/api-reference/v2/live/init), [WebSocket protocol](https://docs.gladia.io/api-reference/v2/live/websocket).
+
+Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.

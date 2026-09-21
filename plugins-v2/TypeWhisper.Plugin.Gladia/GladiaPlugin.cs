@@ -20,7 +20,7 @@ public sealed partial class GladiaPlugin : ITranscriptionEnginePlugin, IApiKeyPl
     /// <inheritdoc />
     public string PluginName => "Gladia";
     /// <inheritdoc />
-    public string PluginVersion => "1.2.2";
+    public string PluginVersion => "1.2.3";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />

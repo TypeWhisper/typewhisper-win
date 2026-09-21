@@ -1,6 +1,6 @@
 # Fireworks AI for the portable host
 
-Independent .NET 10 package `com.typewhisper.fireworks`, version `1.1.6`, requiring host `1.1.2`. Implemented on its own `seofood/fireworks-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.fireworks`, version `1.1.7`, requiring host `1.1.5`. Implemented on its own `seofood/fireworks-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 
@@ -28,3 +28,5 @@ Reference: [provider documentation](https://docs.fireworks.ai/).
 ## Provider availability
 
 Fireworks [deprecated audio inference on June 10, 2026](https://docs.fireworks.ai/updates/changelog#audio-inference-and-image-generation-deprecation). On September 18, the standard Whisper V3 endpoint returned HTTP 401 with the same valid key accepted by model discovery, text completion and the Turbo endpoint. Whisper V3 Turbo still worked in both automated live and manual dictation tests, but should not be interpreted as a renewed provider support commitment. The settings explain this limitation and recorded-audio-only behavior. Fresh configurations default to the tested Turbo and `gpt-oss-120b` models; explicit saved selections remain intact. The old DeepSeek V3.1 default returned HTTP 404 and was replaced.
+
+Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.

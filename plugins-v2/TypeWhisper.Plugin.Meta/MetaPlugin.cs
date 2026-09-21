@@ -123,7 +123,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.12";
+    public string PluginVersion => "1.2.13";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -195,6 +195,8 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     /// <inheritdoc />
     public bool SupportsStreaming => IsConfigured && _selectedModelId is not null;
 
+    /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
     /// <inheritdoc />
     public bool SupportsDictionaryTerms => IsConfigured;
 
@@ -555,7 +557,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     internal static IReadOnlyList<string> ParseKeywords(string? prompt) =>
         string.IsNullOrWhiteSpace(prompt)
             ? []
-            : prompt.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : PluginDictionaryTerms.ParsePrompt(prompt)
                 .Where(keyword => !string.IsNullOrWhiteSpace(keyword))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();

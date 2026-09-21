@@ -94,7 +94,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -161,6 +161,9 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     public bool SupportsStreaming => _transcriptionMode == ElevenLabsTranscriptionMode.Automatic && !_tagAudioEvents && _speakerCount == 1;
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => true;
+    /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
+
     /// <summary>
     /// Gets whether TypeWhisper may add active dictionary terms to transcription prompts.
     /// </summary>
@@ -425,9 +428,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var terms = new List<string>();
-        foreach (var part in prompt.Split(
-            KeytermSeparators,
-            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        foreach (var part in PluginDictionaryTerms.ParsePrompt(prompt, KeytermSeparators))
         {
             var term = part.Trim();
             if (term.Length == 0

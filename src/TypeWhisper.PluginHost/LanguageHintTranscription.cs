@@ -24,5 +24,8 @@ public static class LanguageHintTranscription
     }
     /// <summary>Applies the selected provider's dictionary budget before batch or streaming routing.</summary>
     public static string? CreateDictionaryPrompt(ITranscriptionEnginePlugin engine, IReadOnlyList<string>? terms) =>
-        engine.SupportsDictionaryTerms ? PluginDictionaryTerms.CreatePrompt(terms, engine.DictionaryTermsBudget) : null;
+        !engine.SupportsDictionaryTerms ? null
+            : engine.SupportsStructuredDictionaryTerms
+                ? PluginDictionaryTerms.CreateStructuredPrompt(terms, engine.DictionaryTermsBudget)
+                : PluginDictionaryTerms.CreatePrompt(terms, engine.DictionaryTermsBudget);
 }

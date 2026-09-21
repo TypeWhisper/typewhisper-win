@@ -115,25 +115,25 @@ public sealed partial class ProviderTests
             var archive=Path.Combine(root,"package.zip");ZipFile.CreateFromDirectory(source,archive);var bytes=await File.ReadAllBytesAsync(archive);
             Assert.Equal(3,Directory.GetFiles(source).Length);
             using var http=new HttpClient(new Handler((r,_)=>new(HttpStatusCode.OK){RequestMessage=r,Content=new ByteArrayContent(bytes)}));var host=new Host();
-            PortablePluginStore Store()=>new(Path.Combine(root,"store"),new(1,1,2),http,_=>host);
-            var entry=new PortableCatalogEntry{Id=Id,Name="Fireworks",Version=new FireworksPlugin().PluginVersion,MinHostVersion="1.1.2",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
+            PortablePluginStore Store()=>new(Path.Combine(root,"store"),new(1, 1, 5),http,_=>host);
+            var entry=new PortableCatalogEntry{Id=Id,Name="Fireworks",Version=new FireworksPlugin().PluginVersion,MinHostVersion="1.1.5",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
             var store=Store();await store.InitializeAsync();await store.InstallAsync(entry);
-            await using(var runtime=new PortablePluginRuntimeRegistry(store,new(1,1,2),_=>host))
+            await using(var runtime=new PortablePluginRuntimeRegistry(store,new(1, 1, 5),_=>host))
             {
                 await runtime.InitializeAsync();Assert.Null(await runtime.SetEnabledAsync(Id,true));
                 await runtime.UseConfigurationAsync(Id,async(p,ct)=>{await Configure(p,ct);Assert.DoesNotContain(p.GetType().Assembly.GetReferencedAssemblies(),a=>a.Name is "PresentationFramework" or "WindowsBase");return true;});
                 await Assert.ThrowsAsync<InvalidOperationException>(()=>store.InstallAsync(entry));
             }
             var restart=Store();await restart.InitializeAsync();
-            await using(var runtime=new PortablePluginRuntimeRegistry(restart,new(1,1,2),_=>host))
+            await using(var runtime=new PortablePluginRuntimeRegistry(restart,new(1, 1, 5),_=>host))
             {
                 await runtime.InitializeAsync();Assert.True(await runtime.UseConfigurationAsync(Id,(p,_)=>Task.FromResult(((IApiKeyPlugin)p).IsConfigured)));
                 Assert.Null(await runtime.SetEnabledAsync(Id,false));await restart.UninstallAsync(Id);
             }
             var reinstall=Store();await reinstall.InitializeAsync();await reinstall.InstallAsync(entry);
-            await using var final=new PortablePluginRuntimeRegistry(reinstall,new(1,1,2),_=>host);Assert.Null(await final.SetEnabledAsync(Id,true));
+            await using var final=new PortablePluginRuntimeRegistry(reinstall,new(1, 1, 5),_=>host);Assert.Null(await final.SetEnabledAsync(Id,true));
             Assert.True(await final.UseConfigurationAsync(Id,(p,_)=>Task.FromResult(((IApiKeyPlugin)p).IsConfigured)));
-            await Assert.ThrowsAsync<InvalidDataException>(()=>PortablePluginPackage.LoadAsync(reinstall.Resolve(Id),host,new(1,1,1)));
+            await Assert.ThrowsAsync<InvalidDataException>(()=>PortablePluginPackage.LoadAsync(reinstall.Resolve(Id),host,new(1, 1, 4)));
         }
         finally {GC.Collect();GC.WaitForPendingFinalizers();GC.Collect();try{Directory.Delete(root,true);}catch(Exception ex)when(ex is IOException or UnauthorizedAccessException){} }
     }
