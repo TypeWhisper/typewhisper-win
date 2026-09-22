@@ -90,6 +90,13 @@ def main() -> None:
             raise SystemExit(f"Package output escapes the source checkout: {release_output}")
         if release_output.exists():
             shutil.rmtree(release_output)
+        if portable.parent.name == "TypeWhisper.Plugin.SherpaOnnx":
+            dependency_dir = (source / "plugins" / "TypeWhisper.Plugin.ParakeetCtc").resolve()
+            dependency_output = (dependency_dir / "bin" / "Release").resolve()
+            if not dependency_dir.is_relative_to(source) or not dependency_output.is_relative_to(dependency_dir):
+                raise SystemExit(f"Package output escapes the source checkout: {dependency_output}")
+            if dependency_output.exists():
+                shutil.rmtree(dependency_output)
         print(f"BUILD {plugin_id} {version}", flush=True)
         run = subprocess.run(
             ["dotnet", "build", str(project), "-c", "Release", "-v", "quiet"],
