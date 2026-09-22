@@ -8,6 +8,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+import sys
 import zipfile
 
 
@@ -48,8 +49,9 @@ def main() -> None:
     logs = output / "logs"
     logs.mkdir()
     existing = json.loads(args.existing_feed.read_text(encoding="utf-8"))
+    existing_entries = existing["plugins"] if isinstance(existing, dict) else existing
     excluded = set(args.exclude_id)
-    entries = {entry["id"]: entry for entry in existing["plugins"] if entry["id"] not in excluded}
+    entries = {entry["id"]: entry for entry in existing_entries if entry["id"] not in excluded}
     projects = sorted(source.glob("plugins/*/portable.proj")) + sorted(source.glob("plugins-v2/*/portable.proj"))
     for portable in projects:
         manifest_path = portable.parent / "manifest.json"
@@ -67,6 +69,8 @@ def main() -> None:
         project_files = [p for p in portable.parent.glob("*.csproj") if not p.name.endswith("Tests.csproj")]
         if len(project_files) != 1:
             raise SystemExit(f"Expected one main project in {portable.parent}")
+        if sys.platform != "win32":
+            raise SystemExit(f"Windows x64 package staging requires Windows: {portable.parent}")
         project = project_files[0]
         print(f"BUILD {plugin_id} {version}", flush=True)
         run = subprocess.run(

@@ -180,9 +180,11 @@ and four retained versioned archives. The public feed, every ZIP URL, exact size
 and package identity were checked. xAI's automated tests passed; live inference was not
 tested because the connected xAI team lacks API credits.
 
-Use `eng/Build-PortablePluginCatalog.py` in a clean checkout to build changed portable
-projects and stage ZIP archives plus catalog JSON. Pass the downloaded current feed as
-`--existing-feed`, a new release tag as `--tag`, and a new output directory as `--output`.
+Use `eng/Build-PortablePluginCatalog.py` in a clean Windows checkout to build changed portable
+projects and stage ZIP archives plus catalog JSON. For example, run
+`python eng/Build-PortablePluginCatalog.py --source . --existing-feed current-plugins-v2.json --tag plugins-winui-YYYYMMDD --output staged-catalog`.
+The current feed can use either supported top-level shape: a plugin array or an object
+containing a `plugins` array. Choose a new release tag and output directory for each update.
 The `--exclude-id` option leaves an intentionally deferred plugin out of the feed. A plugin
 whose version already exists in the current feed is retained unchanged; bump its manifest
 version before publishing changed binaries.
