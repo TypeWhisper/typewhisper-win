@@ -1,10 +1,12 @@
 """Stage portable plugin archives and a feed from a clean source checkout."""
 
 import argparse
+import datetime
 import hashlib
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 import zipfile
 
@@ -27,6 +29,17 @@ def main() -> None:
     args = parser.parse_args()
     source = args.source.resolve(strict=True)
     output = args.output.resolve()
+    status = subprocess.check_output(
+        ["git", "status", "--porcelain", "--untracked-files=all"], cwd=source, text=True,
+    )
+    if status.strip():
+        raise SystemExit(f"Source checkout has uncommitted or untracked files: {source}")
+    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+    commit_epoch = int(subprocess.check_output(
+        ["git", "show", "-s", "--format=%ct", "HEAD"], cwd=source, text=True,
+    ).strip())
+    zip_time = datetime.datetime.fromtimestamp(commit_epoch, datetime.timezone.utc).timetuple()[:6]
+    zip_time = max(zip_time, (1980, 1, 1, 0, 0, 0))
     if output.exists():
         raise SystemExit(f"Output already exists: {output}")
     output.mkdir(parents=True)
@@ -37,7 +50,6 @@ def main() -> None:
     existing = json.loads(args.existing_feed.read_text(encoding="utf-8"))
     excluded = set(args.exclude_id)
     entries = {entry["id"]: entry for entry in existing["plugins"] if entry["id"] not in excluded}
-    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
     projects = sorted(source.glob("plugins/*/portable.proj")) + sorted(source.glob("plugins-v2/*/portable.proj"))
     for portable in projects:
         manifest_path = portable.parent / "manifest.json"
@@ -78,7 +90,11 @@ def main() -> None:
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target:
             for item in sorted(package.rglob("*")):
                 if item.is_file():
-                    target.write(item, item.relative_to(package).as_posix())
+                    entry = zipfile.ZipInfo(item.relative_to(package).as_posix(), zip_time)
+                    entry.compress_type = zipfile.ZIP_DEFLATED
+                    entry.external_attr = 0o644 << 16
+                    with item.open("rb") as source_file, target.open(entry, "w") as archive_file:
+                        shutil.copyfileobj(source_file, archive_file)
         with zipfile.ZipFile(archive) as check:
             if check.testzip() is not None or "manifest.json" not in check.namelist():
                 raise SystemExit(f"Archive integrity failed: {archive}")
