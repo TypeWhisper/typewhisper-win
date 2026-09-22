@@ -2,12 +2,14 @@
 
 Configurable POST/PUT post-processing webhooks with workflow filters, secret headers and a sanitized recent-delivery log.
 
-Version `1.2.0`; plugin ID `com.typewhisper.webhook`; minimum host `1.1.2`.
-Independent branch: `seofood/webhook-portable`, based on `4db8f6ac`.
+Version `1.3.0`; plugin ID `com.typewhisper.webhook`; minimum host `1.1.2`.
+Independent branch: `seofood/webhook-portable`, updated to the current WinUI-only host.
 
 ## Setup
 
-Add an endpoint, configure its HTTPS URL (HTTP only for loopback), optional replacement headers JSON and workflow filter, then enable it. New endpoints are disabled. Blank headers keep the existing secret; {} clears it.
+Add a destination with the plus button, enter its HTTPS URL (HTTP only for loopback), and use **Send test message** before enabling automatic delivery. Save the destination's name, URL, method, workflow filter, enable switch and optional authentication headers together with **Save profile**. New destinations are disabled. Blank headers keep the existing secret; `{}` clears it. Test messages use the draft fields without saving or enabling the destination; saved credentials are never implicitly sent to a changed draft URL.
+
+Each enabled destination receives dictations as JSON. **Recent deliveries** reports HTTP status without exposing transcript text, response bodies, URLs or headers. A failed request preserves the dictation. Requests have a ten-second timeout per destination and do not follow redirects. Delivery runs before text insertion, so a slow endpoint can delay insertion.
 
 This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
 
@@ -28,8 +30,8 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Webhook/Tests -c Release
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.webhook` inside the plugin project. Package that directory as the ZIP root.
 
-7 plugin tests pass. Fake HTTP payload/headers/filter handling, cancellation, error pass-through, secret settings and package lifecycle. No real endpoint was contacted. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+15 plugin tests pass: payload, headers and workflow filters; cancellation; disabled destinations; HTTP failure and log redaction; draft test isolation; atomic saves when settings or secret storage fails; header validation; header retention/clearing; restart and package lifecycle. A synthetic message was sent through the actual plugin to an explicitly supplied Webhook.site endpoint and independently verified through its request API (HTTP 200, JSON text, language, workflow and timestamp). The running WinUI app's **Send test message** button was also exercised with Computer Use: the UI displayed HTTP 200 and the second request was independently found in Webhook.site. No real dictation or credentials were sent.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
-The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+The WinUI development host builds and launches through the shared development script. Current settings screenshots are in [`docs/screenshots/webhook/`](../../docs/screenshots/webhook/). Public catalog publication and production-profile migration are pending.

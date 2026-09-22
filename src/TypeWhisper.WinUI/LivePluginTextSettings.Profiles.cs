@@ -95,6 +95,8 @@ internal sealed partial class LivePluginTextSettings
         scroll.ViewChanged += (_, _) => { if (generation == _generation) _profileScrollOffset = scroll.VerticalOffset; };
         AutomationProperties.SetName(scroll, "Settings for “" + name + "”");
         Grid.SetColumn(scroll, 1); layout.Children.Add(scroll);
+        if (!generic && !string.IsNullOrWhiteSpace(selector.Description))
+            content.Children.Add(ProfileNote(selector.Description));
         var connectionPanel = new StackPanel { Spacing = 12 };
         var modelsPanel = new StackPanel { Spacing = 12 };
         content.Children.Add(connectionPanel);

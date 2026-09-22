@@ -8,7 +8,7 @@ public sealed class WebhookBehaviorTests
     public async Task Delivery_UsesSecretHeadersAndWorkflowFilterWithoutChangingText()
     {
         using var f=new PortableFixture();var transport=new Transport();using var p=new WebhookPlugin(new HttpClient(transport));await p.ActivateAsync(f.Host);
-        await p.ExecuteSettingsActionAsync("add",default);var id=p.TextSettings[0].Id.Split(':')[0];
+        await p.ExecuteSettingsActionAsync("add",default);var id=p.ConnectionIdentity;
         await p.SaveTextSettingAsync(id+":url","https://fixture.invalid/hook",default);
         await p.SaveTextSettingAsync(id+":headers","{\"Authorization\":\"Bearer fixture\"}",default);
         await p.SaveTextSettingAsync(id+":workflows","Work",default);await p.SaveTextSettingAsync(id+":enabled","true",default);
@@ -22,14 +22,14 @@ public sealed class WebhookBehaviorTests
     public async Task InvalidEndpoint_IsRejectedBeforeEnable(string url)
     {
         using var f=new PortableFixture();using var p=new WebhookPlugin();await p.ActivateAsync(f.Host);await p.ExecuteSettingsActionAsync("add",default);
-        var id=p.TextSettings[0].Id.Split(':')[0];await Assert.ThrowsAsync<ArgumentException>(()=>p.SaveTextSettingAsync(id+":url",url,default));
+        var id=p.ConnectionIdentity;await Assert.ThrowsAsync<ArgumentException>(()=>p.SaveTextSettingAsync(id+":url",url,default));
         await Assert.ThrowsAsync<ArgumentException>(()=>p.SaveTextSettingAsync(id+":enabled","true",default));await p.DeactivateAsync();
     }
     [Fact]
     public async Task Cancellation_DoesNotSend()
     {
         using var f=new PortableFixture();var transport=new Transport();using var p=new WebhookPlugin(new HttpClient(transport));await p.ActivateAsync(f.Host);
-        await p.ExecuteSettingsActionAsync("add",default);var id=p.TextSettings[0].Id.Split(':')[0];await p.SaveTextSettingAsync(id+":url","http://localhost:8000/hook",default);await p.SaveTextSettingAsync(id+":enabled","true",default);
+        await p.ExecuteSettingsActionAsync("add",default);var id=p.ConnectionIdentity;await p.SaveTextSettingAsync(id+":url","http://localhost:8000/hook",default);await p.SaveTextSettingAsync(id+":enabled","true",default);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>p.ProcessAsync("hello",new(),new CancellationToken(true)));Assert.Equal(0,transport.Calls);await p.DeactivateAsync();
     }
     private sealed class Transport:HttpMessageHandler
