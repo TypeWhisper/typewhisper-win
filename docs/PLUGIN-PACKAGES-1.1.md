@@ -1,6 +1,9 @@
 # Plugin packages for TypeWhisper 1.1
 
-The only WinUI catalog is `https://typewhisper.github.io/typewhisper-win/plugins-v2.json`.
+The WinUI catalog is shown to users as **Plugins**. Its current feed URL remains
+`https://typewhisper.github.io/typewhisper-win/plugins-v2.json` so existing Daily builds
+continue to receive updates. The older `plugins.json` URL serves historical clients and
+must not be overwritten with portable packages.
 There is no community feed or fallback to the legacy catalog in the 1.1 host.
 The WPF host and its legacy plugin release workflow have been removed. Previously published legacy packages and feeds are unchanged.
 
@@ -164,24 +167,39 @@ removed. Previously published legacy manifests and packages remain immutable;
 portable packages, including Deepgram, evolve independently without replacing
 those historical release assets.
 
-Publishing v2 requires separate portable ZIP assets and entries containing their actual
+Publishing portable plugins requires separate ZIP assets and entries containing their actual
 URLs, sizes and SHA-256 hashes. Do not replace existing release assets or edit `plugins.json`
 when publishing `plugins-v2.json`. Local development installation is not publication.
 
-## Published preview and manual catalog updates
+## Published catalog and updates
 
-The initial v2 catalog is live with NVIDIA Parakeet, Groq and Deepgram 1.1.0 for Windows x64.
-Edit only `plugins-v2.json` on `gh-pages` for manual v2 catalog changes. Upload new, separately
-versioned portable release assets first; then add their public HTTPS URLs, exact byte sizes,
-SHA-256 hashes, minimum host version and supported architectures. Verify the public downloads
-before changing the catalog. Keep old assets available; do not overwrite legacy packages or
-`plugins.json`. Publish new plugin releases as prereleases with `latest=false` while 1.1 is in preview.
+The catalog published on 23 September 2026 contains 34 Windows x64 plugins: 29 archives in
+[the Windows Daily plugin release](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-winui-20260923)
+plus [xAI / Grok 1.3.2](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugin-xai-1.3.2-20260923),
+and four retained versioned archives. The public feed, every ZIP URL, exact size, SHA-256,
+and package identity were checked. xAI's automated tests passed; live inference was not
+tested because the connected xAI team lacks API credits.
 
-Current assets: https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-preview-20260908
+Use `eng/Build-PortablePluginCatalog.py` in a clean Windows checkout to build changed portable
+projects and stage ZIP archives plus catalog JSON. For example, run
+`python eng/Build-PortablePluginCatalog.py --source . --existing-feed ../current-plugins-v2.json --tag plugins-winui-YYYYMMDD --output ../staged-catalog`.
+The current feed can use either supported top-level shape: a plugin array or an object
+containing a `plugins` array. Keep the downloaded feed and staging output outside the
+source checkout, which must have no uncommitted or untracked files. Choose a new release
+tag and output directory for each update. A changed plugin must have a higher three-part
+numeric version than the published entry.
+The `--exclude-id` option leaves an intentionally deferred plugin out of the feed. A plugin
+whose version already exists in the current feed is retained unchanged; bump its manifest
+version before publishing changed binaries.
 
-The 1.1 catalog and portable manifests use only `categories`, an array of capability IDs.
-For example, Groq declares `["transcription", "llm"]`. There is no singular-field migration.
-The legacy Windows target retains its existing manifest contract.
+Upload the staged archives to a new prerelease with `latest=false`. Verify every public
+download against its staged size and SHA-256, then update only `plugins-v2.json` on
+`gh-pages`. Check the GitHub Pages build and fetch the exact WinUI feed URL afterward.
+Keep previous release assets and the legacy `plugins.json` intact.
+
+The 1.1 feed uses `categories`, an array of capability IDs. For example, Groq declares
+`["transcription", "llm"]`. The staging script normalizes older singular `category`
+metadata into this feed field. The legacy Windows target retains its existing manifest contract.
 
 ## Live cloud transcription
 
@@ -200,7 +218,7 @@ Its portable transport is separate from the unchanged legacy Windows transport.
 Protocol references: [CloseStream](https://developers.deepgram.com/docs/close-stream),
 [multilingual streaming](https://developers.deepgram.com/docs/language-detection).
 
-The live v2 catalog now publishes NVIDIA/Groq 1.1.1 and Deepgram 1.1.2. All three public
+The initial portable catalog published NVIDIA/Groq 1.1.1 and Deepgram 1.1.2. All three public
 archives were installed and activated in an isolated profile through the actual portable host.
 Deepgram's release is at https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-streaming-20260908.
 The native Restart now action and live microphone transcription remain manual acceptance checks.
