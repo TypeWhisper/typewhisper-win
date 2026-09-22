@@ -1,244 +1,174 @@
-using System.IO;
 using System.Text.Json;
-
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.FileMemory;
 
-/// <summary>
-/// Provides file memory plugin behavior.
-/// </summary>
+/// <summary>Stores explicitly saved memories in an atomic local JSON file.</summary>
 public sealed partial class FileMemoryPlugin : IMemoryStoragePlugin
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-    };
-
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private readonly SemaphoreSlim _lock = new(1, 1);
     private IPluginHostServices? _host;
     private string? _filePath;
-    private List<MemoryEntry>? _entries;
-    private readonly SemaphoreSlim _lock = new(1, 1);
+    private MemoryEntry[] _entries = [];
+    private string? _loadError;
+    private string? _editing;
+    private string? _draftId;
+    private string _query = "";
 
-    // ITypeWhisperPlugin
-
-    /// <summary>
-    /// Gets the stable plugin identifier used by the host.
-    /// </summary>
+    /// <inheritdoc />
     public string PluginId => "com.typewhisper.file-memory";
-    /// <summary>
-    /// Gets the plugin display name shown by the host.
-    /// </summary>
+    /// <inheritdoc />
     public string PluginName => "File Memory";
-    /// <summary>
-    /// Gets the plugin version reported to the host.
-    /// </summary>
-    public string PluginVersion => "1.2.0";
+    /// <inheritdoc />
+    public string PluginVersion => "1.3.0";
 
-    /// <summary>
-    /// Activates the plugin and loads any persisted configuration.
-    /// </summary>
-    public Task ActivateAsync(IPluginHostServices host)
+    /// <inheritdoc />
+    public async Task ActivateAsync(IPluginHostServices host)
     {
-        _host = host;
-        _filePath = Path.Combine(host.PluginDataDirectory, "memories.json");
-        _host.Log(PluginLogLevel.Info, "Activated");
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Deactivates the plugin and releases provider resources.
-    /// </summary>
-    public Task DeactivateAsync()
-    {
-        _host = null;
-        _entries = null;
-        return Task.CompletedTask;
-    }
-
-
-
-    // IMemoryStoragePlugin
-
-    /// <summary>
-    /// Performs store asynchronously.
-    /// </summary>
-    public async Task StoreAsync(string content, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(content) || content.Length > 32768) throw new ArgumentException("Enter between 1 and 32768 characters.", nameof(content));
-        await _lock.WaitAsync(ct);
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
-            var entries = await LoadEntriesAsync(ct);
-
-            if (entries.Any(e => e.Content == content))
-            {
-                _host?.Log(PluginLogLevel.Debug, "Duplicate memory skipped");
-                return;
-            }
-
-            entries.Add(new MemoryEntry(content, DateTime.UtcNow));
-            await SaveEntriesAsync(ct);
-            _host?.Log(PluginLogLevel.Debug, $"Stored memory (total={entries.Count})");
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Performs search asynchronously.
-    /// </summary>
-    public async Task<IReadOnlyList<string>> SearchAsync(string query, int maxResults = 5, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct);
-        try
-        {
-            var entries = await LoadEntriesAsync(ct);
-
-            return entries
-                .Where(e => e.Content.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(e => e.CreatedAt)
-                .Take(maxResults)
-                .Select(e => e.Content)
-                .ToList();
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Returns all asynchronously.
-    /// </summary>
-    public async Task<IReadOnlyList<string>> GetAllAsync(CancellationToken ct)
-    {
-        await _lock.WaitAsync(ct);
-        try
-        {
-            var entries = await LoadEntriesAsync(ct);
-            return entries.Select(e => e.Content).ToList();
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Performs delete asynchronously.
-    /// </summary>
-    public async Task DeleteAsync(string content, CancellationToken ct)
-    {
-        await _lock.WaitAsync(ct);
-        try
-        {
-            var entries = await LoadEntriesAsync(ct);
-            var removed = entries.RemoveAll(e => e.Content == content);
-
-            if (removed > 0)
-                await SaveEntriesAsync(ct);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Clears all asynchronously.
-    /// </summary>
-    public async Task ClearAllAsync(CancellationToken ct)
-    {
-        await _lock.WaitAsync(ct);
-        try
-        {
-            var entries = await LoadEntriesAsync(ct);
-            entries.Clear();
-            await SaveEntriesAsync(ct);
-            _host?.Log(PluginLogLevel.Info, "All memories cleared");
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Counts asynchronously..
-    /// </summary>
-    public async Task<int> CountAsync(CancellationToken ct)
-    {
-        await _lock.WaitAsync(ct);
-        try
-        {
-            var entries = await LoadEntriesAsync(ct);
-            return entries.Count;
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    // Private helpers
-
-    private async Task<List<MemoryEntry>> LoadEntriesAsync(CancellationToken ct)
-    {
-        if (_entries is not null)
-            return _entries;
-
-        if (_filePath is null)
-            throw new InvalidOperationException("Plugin not activated");
-
-        if (File.Exists(_filePath))
-        {
+            _host = host;
+            _filePath = Path.Combine(host.PluginDataDirectory, "memories.json");
+            _entries = [];
+            _editing = _draftId = null;
+            _loadError = null;
+            _query = "";
             try
             {
-                var json = await File.ReadAllTextAsync(_filePath, ct);
-                _entries = JsonSerializer.Deserialize<List<MemoryEntry>>(json, JsonOptions) ?? [];
+                if (File.Exists(_filePath))
+                {
+                    var json = await File.ReadAllTextAsync(_filePath).ConfigureAwait(false);
+                    var entries = JsonSerializer.Deserialize<MemoryEntry[]>(json, JsonOptions)
+                        ?? throw new JsonException("Expected a memory list.");
+                    if (entries.Any(e => e is null || string.IsNullOrWhiteSpace(e.Content) || e.Content.Length > 32768))
+                        throw new JsonException("Invalid memory entry.");
+                    entries = entries.Select(e => e.Id == Guid.Empty ? e with { Id = Guid.NewGuid() } : e).ToArray();
+                    if (entries.Select(e => e.Id).Distinct().Count() != entries.Length)
+                        throw new JsonException("Duplicate memory identity.");
+                    _entries = entries;
+                }
+                if (_entries.Length == 0) _editing = _draftId = Guid.NewGuid().ToString();
+                else _editing = _entries[0].Id.ToString();
             }
-            catch { _entries = null; throw; }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+            {
+                _loadError = "The memory file could not be read. Restore or repair memories.json, then reload the plugin. The existing file has been preserved.";
+                host.Log(PluginLogLevel.Warning, "Memory file could not be loaded: " + ex.GetType().Name);
+            }
         }
-        else
-        {
-            _entries = [];
-        }
-
-        return _entries;
+        finally { _lock.Release(); }
     }
 
-    private async Task SaveEntriesAsync(CancellationToken ct)
+    /// <inheritdoc />
+    public async Task DeactivateAsync()
     {
-        if (_filePath is null || _entries is null)
-            return;
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try { _host = null; _filePath = null; _entries = []; _editing = _draftId = null; _loadError = null; }
+        finally { _lock.Release(); }
+    }
 
-        var dir = Path.GetDirectoryName(_filePath);
-        if (dir is not null && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
+    private void RequireWritable()
+    {
+        if (_host is null || _filePath is null) throw new InvalidOperationException("Plugin is not active.");
+        if (_loadError is not null) throw new InvalidOperationException(L(_loadError,
+            "Die Erinnerungsdatei konnte nicht geladen werden. Stelle memories.json wieder her oder repariere sie und lade das Plugin erneut. Die vorhandene Datei bleibt erhalten."));
+    }
 
-        var json = JsonSerializer.Serialize(_entries, JsonOptions);
+    private static string ValidateContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content) || content.Length > 32768)
+            throw new ArgumentException("Enter between 1 and 32768 characters.", nameof(content));
+        return content.Trim();
+    }
+
+    // Callers hold the gate. Publish the replacement only after its atomic disk write succeeds.
+    private async Task PersistAsync(MemoryEntry[] replacement, CancellationToken ct)
+    {
+        RequireWritable();
+        Directory.CreateDirectory(Path.GetDirectoryName(_filePath!)!);
         var temporary = _filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            await File.WriteAllTextAsync(temporary, json, ct);
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(replacement, JsonOptions), ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
-            File.Move(temporary, _filePath, overwrite: true);
+            File.Move(temporary, _filePath!, overwrite: true);
+            _entries = replacement;
         }
-        catch { _entries = null; throw; }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        finally
+        {
+            try { File.Delete(temporary); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { _host?.Log(PluginLogLevel.Warning, "Could not remove temporary memory file."); }
+        }
     }
 
-    /// <summary>
-    /// Releases resources held by the instance.
-    /// </summary>
-    public void Dispose()
+    /// <inheritdoc />
+    public async Task StoreAsync(string content, CancellationToken ct = default)
     {
-        _lock.Dispose();
+        content = ValidateContent(content);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireWritable();
+            if (_entries.Any(e => e.Content == content)) return;
+            await PersistAsync([.. _entries, new(content, DateTime.UtcNow) { Id = Guid.NewGuid() }], ct).ConfigureAwait(false);
+        }
+        finally { _lock.Release(); }
     }
 
-    private sealed record MemoryEntry(string Content, DateTime CreatedAt);
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> SearchAsync(string query, int maxResults = 5, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireWritable();
+            return _entries.Where(e => e.Content.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(e => e.CreatedAt).Take(Math.Clamp(maxResults, 0, 1000)).Select(e => e.Content).ToArray();
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetAllAsync(CancellationToken ct = default)
+    {
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try { RequireWritable(); return _entries.OrderByDescending(e => e.CreatedAt).Select(e => e.Content).ToArray(); }
+        finally { _lock.Release(); }
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteAsync(string content, CancellationToken ct = default)
+    {
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireWritable();
+            var replacement = _entries.Where(e => e.Content != content).ToArray();
+            if (replacement.Length != _entries.Length) await PersistAsync(replacement, ct).ConfigureAwait(false);
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <inheritdoc />
+    public async Task ClearAllAsync(CancellationToken ct = default)
+    {
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try { await PersistAsync([], ct).ConfigureAwait(false); }
+        finally { _lock.Release(); }
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountAsync(CancellationToken ct = default) => (await GetAllAsync(ct).ConfigureAwait(false)).Count;
+    /// <inheritdoc />
+    public void Dispose() => _lock.Dispose();
+
+    private sealed record MemoryEntry(string Content, DateTime CreatedAt)
+    {
+        public Guid Id { get; init; }
+    }
 }

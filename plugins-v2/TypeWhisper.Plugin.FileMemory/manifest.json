@@ -1,9 +1,9 @@
 {
   "id": "com.typewhisper.file-memory",
   "name": "File Memory",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "TypeWhisper",
-  "description": "File-based memory storage for extracted facts",
+  "description": "Save, edit and search local memories manually or through a workflow action. No API key required.",
   "assemblyName": "TypeWhisper.Plugin.FileMemory.dll",
   "pluginClass": "TypeWhisper.Plugin.FileMemory.FileMemoryPlugin",
   "minHostVersion": "1.1.2",
