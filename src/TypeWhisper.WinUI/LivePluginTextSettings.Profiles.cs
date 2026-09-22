@@ -95,6 +95,8 @@ internal sealed partial class LivePluginTextSettings
         scroll.ViewChanged += (_, _) => { if (generation == _generation) _profileScrollOffset = scroll.VerticalOffset; };
         AutomationProperties.SetName(scroll, "Settings for “" + name + "”");
         Grid.SetColumn(scroll, 1); layout.Children.Add(scroll);
+        if (!generic && !string.IsNullOrWhiteSpace(selector.Description))
+            content.Children.Add(ProfileNote(selector.Description));
         var connectionPanel = new StackPanel { Spacing = 12 };
         var modelsPanel = new StackPanel { Spacing = 12 };
         content.Children.Add(connectionPanel);
@@ -195,7 +197,12 @@ internal sealed partial class LivePluginTextSettings
             fieldGroups.Add(field.Id, group);
             group.Children.Add(SettingsHelp.Label(field.Title, field.Description));
             Control input;
-            if (field.Choices.Count > 0)
+            if (_id == "com.typewhisper.webhook" && field.Id.EndsWith(":workflows", StringComparison.Ordinal))
+            {
+                input = new WebhookWorkflowPicker(values[field.Id], field.MaxLength, value =>
+                { values[field.Id] = value; _drafts[field.Id] = value; UpdateDirty(); });
+            }
+            else if (field.Choices.Count > 0)
             {
                 var choice = new ComboBox { ItemsSource = field.Choices,
                     DisplayMemberPath = nameof(PluginSettingChoice.Title), SelectedValuePath = nameof(PluginSettingChoice.Value),
@@ -251,6 +258,7 @@ internal sealed partial class LivePluginTextSettings
             {
                 var text = new TextBox { Text = values[field.Id], MaxLength = Math.Clamp(field.MaxLength, 1, 32768),
                     MinHeight = 40, AcceptsReturn = field.IsMultiline,
+                    Padding = field.IsMultiline ? new Thickness(10, 10, 4, 10) : new Thickness(10, 0, 4, 0),
                     TextWrapping = field.IsMultiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
                     Style = (Style)Application.Current.Resources[field.IsMultiline ? "LexiconMultilineStyle" : "SearchTextBoxStyle"] };
                 text.TextChanged += (_, _) => { values[field.Id] = text.Text; _drafts[field.Id] = text.Text; UpdateDirty(); };
