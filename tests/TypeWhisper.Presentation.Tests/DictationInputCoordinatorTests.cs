@@ -31,6 +31,28 @@ public sealed class DictationInputCoordinatorTests
     }
 
     [Fact]
+    public async Task StopDuringEarlyCaptureWaitsForStartupAndStopsExactlyOnce()
+    {
+        var setup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recording = false;
+        var stops = 0;
+        using var input = new DictationInputCoordinator(
+            async () => { recording = true; await setup.Task; },
+            () => { stops++; recording = false; return Task.CompletedTask; },
+            () => { recording = false; return Task.CompletedTask; },
+            () => recording, () => true, () => RecordingMode.Toggle);
+        var starting = input.SubmitAsync(DictationInputAction.Start);
+        Assert.True(recording);
+        var finish = input.SubmitAsync(DictationInputAction.Stop);
+        Assert.Same(starting, finish);
+        Assert.Equal(0, stops);
+        setup.SetResult();
+        await finish.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, stops);
+        Assert.False(recording);
+    }
+
+    [Fact]
     public async Task HoldReleaseWaitsForActualStartAndThenStopsExactlyOnce()
     {
         var session = new Session(); using var input = session.Coordinator();

@@ -10,7 +10,7 @@ Independent portable implementation of `com.typewhisper.openai`. The protocol im
 - Cloud speech synthesis with 13 voices, instructions and request-specific voice/output-device selection. The WinUI spoken-feedback consumer holds the plugin lease through playback and cancellation. Selecting a cloud voice is explicit.
 - Connection method and credentials appear first, followed by the transcription model selectbox and context, speech settings, then text model selection and generation settings. Transcription model selection activates the chosen dictation model. Local providers retain their download and removal controls.
 
-Dictation and speech require an OpenAI API key even when ChatGPT login is selected for text processing. This package requires host contract `1.1.2`; that contract revision is separate from the application's release version. The macOS buffered preview for file-based GPT Transcribe is not implemented here; live preview uses the realtime models.
+Dictation and speech require an OpenAI API key even when ChatGPT login is selected for text processing. This package requires host contract `1.1.5`; that contract revision is separate from the application's release version. The macOS buffered preview for file-based GPT Transcribe is not implemented here; live preview uses the realtime models.
 
 ## Validation status
 
@@ -22,3 +22,5 @@ Dictation and speech require an OpenAI API key even when ChatGPT login is select
 - Real provider acceptance is recorded in [the live-test notes](../../docs/releases/1.1-openai-validation.md). An OpenAI package version-to-version update and side-by-side installed-generation acceptance remain open. No package or catalog publication is implied by this development staging.
 
 Run the provider tests with `dotnet test plugins-v2/TypeWhisper.Plugin.OpenAi/Tests/TypeWhisper.Plugin.OpenAi.Portable.Tests.csproj -c Release`. `portable.proj` supplies the standard package build/copy contract; package the staged plugin directory, excluding host SDK assemblies and credentials.
+
+Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.

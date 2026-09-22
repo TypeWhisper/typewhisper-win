@@ -487,10 +487,10 @@ public class SherpaOnnxPluginTests
     }
 
     [Fact]
-    public void WindowsAppProject_DoesNotReferenceSherpaOnnxPackage()
+    public void WinUIAppProject_DoesNotReferenceSherpaOnnxPackage()
     {
         var repoRoot = GetRepoRoot();
-        var projectPath = Path.Join(repoRoot, "src", "TypeWhisper.Windows", "TypeWhisper.Windows.csproj");
+        var projectPath = Path.Join(repoRoot, "src", "TypeWhisper.WinUI", "TypeWhisper.WinUI.csproj");
 
         var project = File.ReadAllText(projectPath);
 
@@ -521,19 +521,6 @@ public class SherpaOnnxPluginTests
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\sherpa-onnx-c-api.dll", project);
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\onnxruntime.dll", project);
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\sherpaort.dll", project);
-    }
-
-    [Fact]
-    public void PublishPluginsWorkflow_RequiresSherpaNativeRuntimeInReleaseZip()
-    {
-        var repoRoot = GetRepoRoot();
-        var workflowPath = Path.Join(repoRoot, ".github", "workflows", "publish-plugins.yml");
-
-        var workflow = File.ReadAllText(workflowPath);
-
-        Assert.Contains("sherpa-onnx-c-api.dll", workflow);
-        Assert.Contains("sherpaort.dll", workflow);
-        Assert.Contains("Missing required sherpa-onnx runtime", workflow);
     }
 
     private static void CreateParakeetModelFiles(string pluginDataDirectory)

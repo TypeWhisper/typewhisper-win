@@ -11,6 +11,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/RecorderView.Api.cs" Link="RecorderView.Api.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayLayout.cs" Link="OverlayLayout.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/WorkflowDraft.cs" Link="WorkflowDraft.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LiveTextPlacement.cs" Link="LiveTextPlacement.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="xunit" Version="2.*" />

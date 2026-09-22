@@ -9,7 +9,7 @@ Independent portable implementation of `com.typewhisper.elevenlabs`, based on th
 - A failed connection or missing acknowledgement fails the streaming operation, allowing the host to retry the complete recording. Plain and timestamped versions of a final event are not both appended. Repeated confirmed provider segments are appended without text-based deduplication.
 - Automatic mode uses recorded-audio transcription when dictionary terms, audio events or speaker-count settings require the batch path. Speaker labels are not exposed by the host; speaker count is sent as a provider hint.
 - API-key storage through the host secret store. When `user_read` is disabled, configuration checks report that speech access could not be verified; the saved key can still be tested with a dictation. A missing profile permission does not prove Speech-to-Text access.
-- Host-rendered selection fields for settings, with English and German labels. This package requires portable host contract version `1.1.1`, introduced with the accompanying SDK choice-setting support. Older 1.1 Daily hosts report contract `1.1.0` and reject the package. The contract revision is separate from the application release version.
+- Host-rendered settings with English and German labels. This package requires portable host contract `1.1.5` for structured dictionary terms. Older hosts reject it before loading; existing plugin packages remain compatible. The contract revision is separate from the application release version.
 
 Dictionary keyterms are limited to 1,000 entries, fewer than 50 characters and at most five words per term. ElevenLabs charges an additional 20% for keyterms; more than 100 terms also impose a minimum billable duration of 20 seconds per request. See the [provider reference](https://elevenlabs.io/docs/api-reference/speech-to-text/convert).
 
@@ -28,3 +28,5 @@ Protocol references:
 - [Realtime events](https://elevenlabs.io/docs/eleven-api/guides/how-to/speech-to-text/realtime/event-reference)
 
 No package or catalog is published by building or staging this development port.
+
+Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.

@@ -1,9 +1,0 @@
-{
-  "id": "com.typewhisper.google-cloud-stt",
-  "name": "Google Cloud STT",
-  "version": "1.0.0",
-  "author": "TypeWhisper",
-  "description": "Google Cloud Speech-to-Text v2 transcription",
-  "assemblyName": "TypeWhisper.Plugin.GoogleCloudStt.dll",
-  "pluginClass": "TypeWhisper.Plugin.GoogleCloudStt.GoogleCloudSttPlugin"
-}

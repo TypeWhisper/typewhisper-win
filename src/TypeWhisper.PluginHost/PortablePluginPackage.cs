@@ -98,6 +98,13 @@ public sealed class PortablePluginPackage : IAsyncDisposable
         {
             if (name.Name == typeof(ITypeWhisperPlugin).Assembly.GetName().Name)
                 return typeof(ITypeWhisperPlugin).Assembly;
+            // Windows COM caches NAudio coclasses process-wide. A private second copy can
+            // make an RCW fail a cast to the identically named type in another context.
+            if (name.Name is "NAudio" or "NAudio.Core" or "NAudio.Wasapi" or "NAudio.WinMM" or "NAudio.Asio" or "NAudio.Midi")
+            {
+                try { return Default.LoadFromAssemblyName(name); }
+                catch (FileNotFoundException) { /* Hosts without NAudio retain package-owned resolution. */ }
+            }
             // Dependencies must not silently pull the legacy UI framework into WinUI.
             if (name.Name is "PresentationFramework" or "PresentationCore" or "WindowsBase")
                 throw new NotSupportedException("WPF dependencies are not supported by the portable host.");

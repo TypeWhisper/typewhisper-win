@@ -1,0 +1,12 @@
+{
+  "id": "com.typewhisper.whisper-cpp",
+  "name": "Whisper (Local)",
+  "version": "1.2.19",
+  "minHostVersion": "1.1.2",
+  "author": "TypeWhisper",
+  "description": "Local transcription with whisper.cpp",
+  "category": "transcription",
+  "isLocal": true,
+  "assemblyName": "TypeWhisper.Plugin.WhisperCpp.dll",
+  "pluginClass": "TypeWhisper.Plugin.WhisperCpp.WhisperCppPlugin"
+}

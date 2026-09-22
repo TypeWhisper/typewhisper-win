@@ -38,14 +38,29 @@ public sealed class PluginBrandIcon : UserControl
         {
             "com.typewhisper.assemblyai" => "assemblyai",
             "com.typewhisper.cerebras" => "cerebras",
+            "com.typewhisper.cloudflare-asr" => "cloudflare",
             "com.typewhisper.claude" => "claude",
+            "com.typewhisper.voxtral" => "mistral",
+            "com.typewhisper.cohere" => "cohere",
+            "com.typewhisper.cohere-transcribe" => "cohere",
             "com.typewhisper.deepgram" => "deepgram",
             "com.typewhisper.elevenlabs" => "elevenlabs",
+            "com.typewhisper.fireworks" => "fireworks",
+            "com.typewhisper.gemini" => "gemini",
+            "com.typewhisper.gemma-local" => "gemma",
+            "com.typewhisper.gladia" => "gladia",
+            "com.typewhisper.meta" => "meta",
             "com.typewhisper.groq" => "groq",
+            "com.typewhisper.granite-speech" => "ibm",
             "com.typewhisper.github-copilot" => "github-copilot",
             LocalTranscriptionPlugin.PluginId => "nvidia",
             "com.typewhisper.openai" => "openai",
             "com.typewhisper.openrouter" => "openrouter",
+            "com.typewhisper.soniox" => "soniox",
+            "com.typewhisper.smallest-ai" => "smallest",
+            "com.typewhisper.supertonic-tts" => "supertone",
+            "com.typewhisper.reson8" => "reson8",
+            "com.typewhisper.speechmatics" => "speechmatics",
             _ => null
         };
         if (brand is null) { ShowFallback(); return; }
@@ -56,15 +71,20 @@ public sealed class PluginBrandIcon : UserControl
             "openai" => light ? "openai-light" : "openai-dark",
             "github-copilot" => light ? "github-copilot-light" : "github-copilot-dark",
             "openrouter" => light ? "openrouter-light" : "openrouter-dark",
+            "speechmatics" => light ? "speechmatics-light" : "speechmatics-dark",
             "elevenlabs" when light => "elevenlabs-light",
             _ => brand
         };
         var logo = new Image { Stretch = Stretch.Uniform };
         logo.ImageFailed += (_, _) => { if (ReferenceEquals(Content, logo)) ShowFallback(); };
         Content = logo;
-        var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (brand == "claude" ? ".png" : ".svg")));
-        logo.Source = brand == "claude" ? new BitmapImage(uri) : new SvgImageSource(uri);
+        var raster = brand is "claude" or "gemini" or "soniox" or "reson8" or "supertone" or "meta";
+        var uri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "PluginLogos", file + (raster ? ".png" : ".svg")));
+        logo.Source = raster ? new BitmapImage(uri) : new SvgImageSource(uri);
     }
 
-    private void ShowFallback() => Content = new TypeWhisperGlyph { Kind = "plugin" };
+    private void ShowFallback() => Content = new TypeWhisperGlyph
+    {
+        Kind = PluginId switch { "com.typewhisper.whisper-cpp" => "chip", "com.typewhisper.script" => "terminal", _ => "plugin" }
+    };
 }

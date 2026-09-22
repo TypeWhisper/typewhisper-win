@@ -1,8 +1,0 @@
-{
-  "Settings.Test": "Validieren",
-  "Settings.Saved": "Gespeichert",
-  "Settings.EnterApiKey": "Bitte zuerst einen API-Key eingeben",
-  "Settings.ApiKeyValid": "API-Key-Format g\u00fcltig (sk-ant-...)",
-  "Settings.ApiKeyInvalid": "Ung\u00fcltiges Format \u2014 Key sollte mit sk-ant- beginnen",
-  "Settings.Error": "Fehler: {0}"
-}
