@@ -25,7 +25,7 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
     /// <inheritdoc />
     public string PluginName => "Webhook";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.0";
+    public string PluginVersion => "1.3.1";
     /// <inheritdoc />
     public string ProcessorName => "Webhook delivery";
     /// <inheritdoc />
@@ -73,7 +73,7 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
                 Field(e, "enabled", L("Send after dictation", "Nach dem Diktieren senden"), L("Off keeps the destination saved without sending dictations.", "Aus behält das Ziel gespeichert, ohne Diktate zu senden."), e.Enabled ? "true" : "false")
                     with { Choices = [new("false", L("Off", "Aus")), new("true", L("On", "An"))] },
                 Field(e, "method", L("HTTP method", "HTTP-Methode"), "", e.Method) with { Choices = [new("POST", "POST"), new("PUT", "PUT")] },
-                Field(e, "workflows", L("Only these workflows (optional)", "Nur diese Workflows (optional)"), L("One exact workflow name per line. Empty sends all dictations.", "Ein exakter Workflow-Name pro Zeile. Leer sendet alle Diktate."), e.Workflows, 4000) with { IsMultiline = true },
+                Field(e, "workflows", L("Only these workflows (optional)", "Nur diese Workflows (optional)"), L("Choose one or more workflows. All workflows also includes dictation without a workflow.", "Wähle einen oder mehrere Workflows. Alle Workflows schließt Diktate ohne Workflow ein."), e.Workflows, 4000) with { IsMultiline = true },
                 Field(e, "headers", L("Authentication headers (optional)", "Authentifizierungs-Header (optional)"),
                     L("JSON object, for example {\"Authorization\":\"Bearer ...\"}. Encrypted after saving. Blank keeps saved headers; {} removes them. Content-Type is automatic.",
                         "JSON-Objekt, z. B. {\"Authorization\":\"Bearer ...\"}. Nach dem Speichern verschlüsselt. Leer behält vorhandene Header, {} entfernt sie. Content-Type wird automatisch gesetzt."), "", 8192) with { IsMultiline = true }

@@ -2,12 +2,12 @@
 
 Configurable POST/PUT post-processing webhooks with workflow filters, secret headers and a sanitized recent-delivery log.
 
-Version `1.3.0`; plugin ID `com.typewhisper.webhook`; minimum host `1.1.2`.
+Version `1.3.1`; plugin ID `com.typewhisper.webhook`; minimum host `1.1.2`.
 Independent branch: `seofood/webhook-portable`, updated to the current WinUI-only host.
 
 ## Setup
 
-Add a destination with the plus button, enter its HTTPS URL (HTTP only for loopback), and use **Send test message** before enabling automatic delivery. Save the destination's name, URL, method, workflow filter, enable switch and optional authentication headers together with **Save profile**. New destinations are disabled. Blank headers keep the existing secret; `{}` clears it. Test messages use the draft fields without saving or enabling the destination; saved credentials are never implicitly sent to a changed draft URL.
+Add a destination with the plus button, enter its HTTPS URL (HTTP only for loopback), and use **Send test message** before enabling automatic delivery. Save the destination's name, URL, method, workflow filter, enable switch and optional authentication headers together with **Save profile**. The WinUI workflow field offers checkboxes for existing workflows instead of free text, with an explicit **All workflows** choice (including dictation without a workflow). Missing saved workflow names remain visible as unavailable. Clearing the last selected workflow never implicitly broadens delivery to all. New destinations are disabled. Blank headers keep the existing secret; `{}` clears it. Test messages use the draft fields without saving or enabling the destination; saved credentials are never implicitly sent to a changed draft URL.
 
 Each enabled destination receives dictations as JSON. **Recent deliveries** reports HTTP status without exposing transcript text, response bodies, URLs or headers. A failed request preserves the dictation. Requests have a ten-second timeout per destination and do not follow redirects. Delivery runs before text insertion, so a slow endpoint can delay insertion.
 
@@ -35,3 +35,5 @@ The complete package is staged under `bin/Release/portable-host/Plugins/com.type
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
 The WinUI development host builds and launches through the shared development script. Current settings screenshots are in [`docs/screenshots/webhook/`](../../docs/screenshots/webhook/). Public catalog publication and production-profile migration are pending.
+
+WinUI acceptance for 1.3.1: selected and saved two real workflows, reopened their checked state, verified that removing the final selected item does not broaden delivery, restored the initial All workflows setting, and visually checked the vertically balanced caret in the header field. Automatic delivery stayed off throughout. Profile multiline fields now have symmetric vertical padding.
