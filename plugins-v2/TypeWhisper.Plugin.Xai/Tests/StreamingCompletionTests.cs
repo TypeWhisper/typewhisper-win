@@ -9,11 +9,11 @@ namespace PortableMigration.Tests;
 public sealed class StreamingCompletionTests
 {
     [Theory]
-    [InlineData(false)][InlineData(true)]
-    public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose)
+    [InlineData(false, false)][InlineData(true, false)][InlineData(false, true)]
+    public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose, bool throwingSubscriber)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(15));var ct=timeout.Token;
-        var tcp=new TcpListener(IPAddress.Loopback,0);tcp.Start();var port=((IPEndPoint)tcp.LocalEndpoint).Port;tcp.Stop();
+        using var tcp=new TcpListener(IPAddress.Loopback,0);tcp.Start();var port=((IPEndPoint)tcp.LocalEndpoint).Port;tcp.Stop();
         using var listener=new HttpListener();listener.Prefixes.Add($"http://127.0.0.1:{port}/");listener.Start();
         var uri=new Uri($"ws://127.0.0.1:{port}/");
         var endReceived=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -32,7 +32,7 @@ public sealed class StreamingCompletionTests
             if(prematureClose) await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
             await clientFinished.Task.WaitAsync(ct);
         },ct);
-        await using var session=await XaiStreamingSession.ConnectAsync("fixture","de",ct,uri);var events=new ConcurrentQueue<StreamingTranscriptEvent>();session.TranscriptReceived+=events.Enqueue;
+        await using var session=await XaiStreamingSession.ConnectAsync("fixture","de",ct,uri);var events=new ConcurrentQueue<StreamingTranscriptEvent>();if(throwingSubscriber)session.TranscriptReceived+=_=>throw new ApplicationException("Fixture subscriber failure.");session.TranscriptReceived+=events.Enqueue;
         await session.SendAudioAsync(new byte[]{1,2,3,4},ct);
         var finish=session.FinalizeAsync(ct);await endReceived.Task.WaitAsync(ct);Assert.False(finish.IsCompleted);release.TrySetResult();
         if(prematureClose) await Assert.ThrowsAnyAsync<WebSocketException>(()=>finish);
@@ -46,7 +46,7 @@ public sealed class StreamingCompletionTests
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var connectCancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
-        var tcp = new TcpListener(IPAddress.Loopback, 0); tcp.Start();
+        using var tcp = new TcpListener(IPAddress.Loopback, 0); tcp.Start();
         var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
         using var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();

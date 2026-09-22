@@ -2,7 +2,7 @@
 
 xAI batch/realtime transcription, Responses LLM completion and TTS with voice/output-device selection.
 
-Version `1.3.0`; plugin ID `com.typewhisper.xai`; minimum host `1.1.5`.
+Version `1.3.1`; plugin ID `com.typewhisper.xai`; minimum host `1.1.5`.
 Independent branch: `seofood/xai-portable`, integrated with the current WinUI-only main.
 
 ## Setup
@@ -15,7 +15,7 @@ This package uses host-rendered portable settings and an independent WinUI data 
 
 Protocol/runtime sources and applicable fixtures were snapshotted from `plugins/TypeWhisper.Plugin.Xai` at `4db8f6ac`, then adapted under `plugins-v2`. The package does not reference the legacy provider DLL or compile WPF settings views. Legacy sources, catalogs and published packages remain unchanged.
 
-The macOS repository was compared at `ac00e39ea63e4789de8427d034d2085b3d898159`; it was not modified. Compared with the macOS provider. The Windows package retains the existing cloud protocols and replaces legacy playback with WASAPI. Streaming completion waits for transcript.done and reports one final result.
+The macOS repository was compared at `ac00e39ea63e4789de8427d034d2085b3d898159`; it was not modified. Compared with the macOS provider, the Windows package retains the existing cloud protocols and replaces legacy playback with WASAPI. Streaming completion waits for transcript.done and reports one final result.
 
 ## Build and verification
 
@@ -28,7 +28,7 @@ dotnet test plugins-v2/TypeWhisper.Plugin.Xai/Tests/TypeWhisper.Plugin.Xai.Porta
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.xai` inside the plugin project. Package that directory as the ZIP root.
 
-28 plugin tests cover the current API contracts. Fake HTTP, voice/model contracts, real local WebSocket finalization/premature close and package lifecycle. An authenticated catalog request returned HTTP 403 because the configured team has no credits or licenses. At the user's request, paid/live audio, text and playback acceptance is deferred until credits are available. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+30 plugin tests cover the current API contracts. Fake HTTP, voice/model contracts, real local WebSocket finalization/premature close and package lifecycle. An authenticated catalog request returned HTTP 403 because the configured team has no credits or licenses. At the user's request, paid/live audio, text and playback acceptance is deferred until credits are available. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 

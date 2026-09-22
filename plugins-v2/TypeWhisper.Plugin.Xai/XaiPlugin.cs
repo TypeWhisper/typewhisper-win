@@ -49,6 +49,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     ];
 
     private readonly HttpClient _httpClient;
+    private readonly Func<string, string?, string, IReadOnlyList<string>, CancellationToken, Task<IStreamingSession>> _connectStreaming;
     private readonly bool _usePortablePlayback;
     private readonly Func<byte[], ITtsPlaybackSession> _ttsPlaybackFactory;
     private IPluginHostServices? _host;
@@ -70,9 +71,12 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     {
     }
 
-    internal XaiPlugin(HttpClient httpClient, Func<byte[], ITtsPlaybackSession>? ttsPlaybackFactory = null)
+    internal XaiPlugin(HttpClient httpClient, Func<byte[], ITtsPlaybackSession>? ttsPlaybackFactory = null,
+        Func<string, string?, string, IReadOnlyList<string>, CancellationToken, Task<IStreamingSession>>? connectStreaming = null)
     {
         _httpClient = httpClient;
+        _connectStreaming = connectStreaming ?? (async (key, language, model, terms, ct) =>
+            await XaiStreamingSession.ConnectAsync(key, language, ct, model: model, terms: terms));
         _usePortablePlayback = ttsPlaybackFactory is null;
         _ttsPlaybackFactory = ttsPlaybackFactory
             ?? (pcm => new XaiPcmTtsPlaybackSession(pcm, XaiTtsConfiguration.SampleRate));
@@ -91,7 +95,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.0";
+    public string PluginVersion => "1.3.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -232,14 +236,18 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         StartStreamingAsync(language, null, ct);
 
     /// <inheritdoc />
-    public async Task<IStreamingSession> StartStreamingAsync(string? language, string? prompt, CancellationToken ct)
+    public Task<IStreamingSession> StartStreamingWithLanguageHintsAndPromptAsync(
+        IReadOnlyList<string> languageHints, string? prompt, CancellationToken ct) =>
+        StartStreamingAsync(languageHints.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h))?.Trim(), prompt, ct);
+
+    internal async Task<IStreamingSession> StartStreamingAsync(string? language, string? prompt, CancellationToken ct)
     {
         if (!IsConfigured)
             throw new PluginRequestException(
                 "API key not configured",
                 PluginRequestFailureKind.Configuration);
 
-        return await XaiStreamingSession.ConnectAsync(_apiKey!, NormalizeLanguage(language), ct, model: _selectedModelId ?? DefaultSttModelId, terms: ParseTerms(prompt));
+        return await _connectStreaming(_apiKey!, NormalizeLanguage(language), _selectedModelId ?? DefaultSttModelId, ParseTerms(prompt), ct);
     }
 
     // ILlmProviderPlugin

@@ -170,7 +170,7 @@ internal sealed class XaiStreamingSession : IStreamingSession
                         _ready.TrySetResult();
                 var transcriptEvent = _collector.ApplyEvent(json);
                 if (transcriptEvent is not null)
-                    TranscriptReceived?.Invoke(transcriptEvent with { IsFinal = _collector.IsDoneReceived });
+                    PublishTranscript(transcriptEvent with { IsFinal = _collector.IsDoneReceived });
                 if (_collector.IsDoneReceived) { _terminalTranscript.TrySetResult(); return; }
             }
         }
@@ -197,6 +197,19 @@ internal sealed class XaiStreamingSession : IStreamingSession
             _ready.TrySetException(ex);
             _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"xAI STT stream error: {ex.Message}");
+        }
+    }
+
+    private void PublishTranscript(StreamingTranscriptEvent transcript)
+    {
+        foreach (var subscriber in TranscriptReceived?.GetInvocationList() ?? [])
+        {
+            try { ((Action<StreamingTranscriptEvent>)subscriber)(transcript); }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A presentation callback must not interrupt final protocol acknowledgement.
+                Debug.WriteLine($"xAI transcript subscriber failed: {ex.GetType().Name}");
+            }
         }
     }
 
