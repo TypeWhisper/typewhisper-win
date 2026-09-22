@@ -173,11 +173,12 @@ when publishing `plugins-v2.json`. Local development installation is not publica
 
 ## Published catalog and updates
 
-The catalog published on 23 September 2026 contains 33 Windows x64 plugins: 29 archives in
+The catalog published on 23 September 2026 contains 34 Windows x64 plugins: 29 archives in
 [the Windows Daily plugin release](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-winui-20260923)
+plus [xAI / Grok 1.3.2](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugin-xai-1.3.2-20260923),
 and four retained versioned archives. The public feed, every ZIP URL, exact size, SHA-256,
-and package identity were checked. xAI / Grok was deliberately left out of this catalog
-publication and can be added in a later release without delaying the Daily.
+and package identity were checked. xAI's automated tests passed; live inference was not
+tested because the connected xAI team lacks API credits.
 
 Use `eng/Build-PortablePluginCatalog.py` in a clean checkout to build changed portable
 projects and stage ZIP archives plus catalog JSON. Pass the downloaded current feed as
