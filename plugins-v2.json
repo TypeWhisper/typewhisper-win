@@ -1,24 +1,307 @@
 {
   "plugins": [
     {
-      "id": "com.typewhisper.sherpa-onnx",
-      "name": "NVIDIA Parakeet",
+      "id": "com.typewhisper.assemblyai",
+      "name": "AssemblyAI",
       "version": "1.1.1",
-      "minHostVersion": "1.1.0",
+      "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
-      "description": "Offline transcription with NVIDIA Parakeet and Canary. Audio is processed on your device.",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-categories-20260908/com.typewhisper.sherpa-onnx-1.1.1-win-x64.zip",
-      "sha256": "d07958a26061e18b7e01c30c4f48953c700954ca15adc3995d66fc6532b51a8a",
-      "size": 50968743,
+      "description": "Universal-3.5 Pro and Universal-2 transcription with live streaming, dictionary terms and speaker diarization.",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.assemblyai-1.1.1-win-x64.zip",
+      "sha256": "7464e032c8c810b887a4db1ce81454dd7bf7ca2855585eee08368fc911335ddb",
+      "size": 26908,
       "platforms": [
         "windows"
       ],
       "supportedArchitectures": [
-        "x64",
-        "arm64"
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.authenticated-cli",
+      "name": "Authenticated Provider CLIs",
+      "version": "1.3.3",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Use authenticated Codex, Claude, Antigravity, and OpenCode Zen CLI sessions for prompt processing",
+      "categories": [
+        "llm",
+        "integrations"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.authenticated-cli-1.3.3-win-x64.zip",
+      "sha256": "1e7edf1339dc6360f0cacb331a50efc7dd38ac6e730c4c74e9b76f8ab138f498",
+      "size": 76929,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.cerebras",
+      "name": "Cerebras",
+      "version": "1.1.1",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Fast text processing via Cerebras, with model discovery and optional sampling temperature.",
+      "categories": [
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.cerebras-1.1.1-win-x64.zip",
+      "sha256": "6f7fa501f1c84419e6946f141b5ca76428ae9b96171060012ac28bcccf944b88",
+      "size": 19145,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.claude",
+      "name": "Claude",
+      "version": "1.1.0",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Anthropic Claude text processing with model discovery and secure API-key settings.",
+      "categories": [
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.claude-1.1.0-win-x64.zip",
+      "sha256": "e57caa728b15996139123217f016cedd892425d5ebcdd6af8e3b2eaddc247bb5",
+      "size": 19817,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.cloudflare-asr",
+      "name": "Cloudflare Workers AI",
+      "version": "1.1.10",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Preserves direct Cloudflare Workers AI Whisper requests and adds portable account/token configuration, token validation, response failure checks and validated account IDs.",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.cloudflare-asr-1.1.10-win-x64.zip",
+      "sha256": "f0ba4df77c0f4561bb0ce3f8bd895cf01b229ffdbaf4f6d88808b33c6df96015",
+      "size": 30226,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.cohere",
+      "name": "Cohere",
+      "version": "1.1.3",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Preserves Windows Command text processing and adds the cloud Cohere Transcribe capability present in the Mac plugin.",
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.cohere-1.1.3-win-x64.zip",
+      "sha256": "929386681d9729da6e89b11f41bf707dafcdd97de350a8c6103f52874d7263e7",
+      "size": 18860,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.cohere-transcribe",
+      "name": "Cohere Transcribe (Local)",
+      "version": "1.2.2",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Offline Cohere Transcribe inference via a managed local CrispASR runtime",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.cohere-transcribe-1.2.2-win-x64.zip",
+      "sha256": "27cb9f3404dde4a75cd1d7d7b59ff01b6ff76a90629145df474d550d18fb08dd",
+      "size": 6374009,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.deepgram",
+      "name": "Deepgram",
+      "version": "1.1.3",
+      "minHostVersion": "1.1.0",
+      "author": "TypeWhisper",
+      "description": "Live and recorded-audio transcription with Deepgram Nova models.",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-deepgram-1.1.3-20260910/com.typewhisper.deepgram-1.1.3-win-x64.zip",
+      "sha256": "dc38d5c01da29dac4cc9d66b5993c5b736cd5cb5cf7ef7ddc04002190a57c15c",
+      "size": 15850,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
       ],
       "categories": [
         "transcription"
+      ]
+    },
+    {
+      "id": "com.typewhisper.elevenlabs",
+      "name": "ElevenLabs",
+      "version": "1.1.1",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Scribe v2 transcription with live text and dictionary terms",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.elevenlabs-1.1.1-win-x64.zip",
+      "sha256": "c69ccbe2339db8194593e6df7ae938aa2a28abedf33de21a70234ea563d38ce7",
+      "size": 24228,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.filler-words",
+      "name": "Filler Words",
+      "version": "1.0.0",
+      "minHostVersion": "1.0.0",
+      "author": "TypeWhisper",
+      "description": "Removes filler words like \"um\" and \"uh\" from transcribed text",
+      "categories": [
+        "post-processing"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.filler-words-1.0.0-win-x64.zip",
+      "sha256": "237b4fb47a7b723ecd7b74bf9f9c48f863d0e896f6e98668ba9a37c8810d195c",
+      "size": 10738,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.fireworks",
+      "name": "Fireworks AI",
+      "version": "1.1.7",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Portable Fireworks AI transcription and text processing. Whisper V3 Turbo currently works; live transcription is unavailable.",
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.fireworks-1.1.7-win-x64.zip",
+      "sha256": "e299c7954f251d03dd6533a5214d394a5a45172bb97f36b4c5e35dbabccfd703",
+      "size": 20310,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.gemma-local",
+      "name": "Gemma 3 (Local)",
+      "version": "1.2.4",
+      "minHostVersion": "1.1.3",
+      "author": "TypeWhisper",
+      "description": "Run Gemma 3 GGUF models locally with the bundled llama.cpp CPU runtime.",
+      "categories": [
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.gemma-local-1.2.4-win-x64.zip",
+      "sha256": "6be13fd3f2ca54c57049a935ea20eb6bceded445b57542cead2762b4313a3fdf",
+      "size": 31836041,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.github-copilot",
+      "name": "GitHub Copilot",
+      "version": "1.1.0",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Clean up, translate and rewrite workflow text using your own GitHub Copilot sign-in. Copilot plan limits and model availability apply.",
+      "categories": [
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.github-copilot-1.1.0-win-x64.zip",
+      "sha256": "891f3130ef74caad244f3b9f2e30d4f713863bfc528ac38e169754371d901468",
+      "size": 78806180,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.gladia",
+      "name": "Gladia",
+      "version": "1.2.3",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Transcribes recorded audio and provides live dictation with Gladia.",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.gladia-1.2.3-win-x64.zip",
+      "sha256": "1e0115736a1ab3d8be308c2efe08b09f9f2f392073aafc98b682ac2b914717b0",
+      "size": 25243,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.gemini",
+      "name": "Google Gemini",
+      "version": "1.3.9",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Gemini transcription, live text and LLM processing with model discovery and dictionary support.",
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.gemini-1.3.9-win-x64.zip",
+      "sha256": "f4ca72706b1d2ff65abe91c3bb97a1d78f8ed90cd5b535310f6fefe0e8085de4",
+      "size": 47503,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
       ]
     },
     {
@@ -43,23 +326,170 @@
       ]
     },
     {
-      "id": "com.typewhisper.deepgram",
-      "name": "Deepgram",
-      "version": "1.1.3",
-      "minHostVersion": "1.1.0",
+      "id": "com.typewhisper.granite-speech",
+      "name": "IBM Granite Speech (Local)",
+      "version": "1.2.6",
+      "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
-      "description": "Live and recorded-audio transcription with Deepgram Nova models.",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-deepgram-1.1.3-20260910/com.typewhisper.deepgram-1.1.3-win-x64.zip",
-      "sha256": "dc38d5c01da29dac4cc9d66b5993c5b736cd5cb5cf7ef7ddc04002190a57c15c",
-      "size": 15850,
+      "description": "Local IBM Granite 4.0 1B Speech transcription and live preview with managed PyTorch runtime",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.granite-speech-1.2.6-win-x64.zip",
+      "sha256": "e8090f71f9e7237abed533ed2c89e2c8236c3453760208947bad5c502d311bb6",
+      "size": 28695,
       "platforms": [
         "windows"
       ],
       "supportedArchitectures": [
         "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.meta",
+      "name": "Meta",
+      "version": "1.2.13",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark.",
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.meta-1.2.13-win-x64.zip",
+      "sha256": "5c319306c7b53fdb4f82ea0b118e5ead75ef21aaee1180b88827c582f6bc7bde",
+      "size": 33473,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.voxtral",
+      "name": "Mistral",
+      "version": "1.3.2",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Mistral cloud transcription, Voxtral Realtime and text processing with account model discovery.",
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.voxtral-1.3.2-win-x64.zip",
+      "sha256": "ba242c304ed92f43184b8b2d9c431b2f9c1fb927bb6581460507b11b731d8a75",
+      "size": 31567,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.sherpa-onnx",
+      "name": "NVIDIA Parakeet",
+      "version": "1.1.1",
+      "minHostVersion": "1.1.0",
+      "author": "TypeWhisper",
+      "description": "Offline transcription with NVIDIA Parakeet and Canary. Audio is processed on your device.",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-categories-20260908/com.typewhisper.sherpa-onnx-1.1.1-win-x64.zip",
+      "sha256": "d07958a26061e18b7e01c30c4f48953c700954ca15adc3995d66fc6532b51a8a",
+      "size": 50968743,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64",
+        "arm64"
       ],
       "categories": [
         "transcription"
+      ]
+    },
+    {
+      "id": "com.typewhisper.obsidian",
+      "name": "Obsidian",
+      "version": "1.0.0",
+      "minHostVersion": "1.1.0",
+      "author": "TypeWhisper",
+      "description": "Save transcriptions as notes in Obsidian",
+      "categories": [
+        "integrations"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.obsidian-1.0.0-win-x64.zip",
+      "sha256": "4a79e443f902d346d58e48351564121e52237ef638bba8dfd52437c68663fefc",
+      "size": 12938,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.openai",
+      "name": "OpenAI / ChatGPT",
+      "version": "1.1.5",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "OpenAI transcription, prompt processing, and text-to-speech with dynamic API and ChatGPT model catalogs. STT/TTS require an API key; prompts can use ChatGPT login.",
+      "categories": [
+        "transcription",
+        "llm",
+        "tts"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.openai-1.1.5-win-x64.zip",
+      "sha256": "7b1e7794dcad757d68f57c6b03ea143b992376326580102e062949079330d911",
+      "size": 257815,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.openai-compatible",
+      "name": "OpenAI Compatible",
+      "version": "1.1.0",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.openai-compatible-1.1.0-win-x64.zip",
+      "sha256": "f02802c0213ffe7ee4b20c0568d2e4c1cd259bbddcbdf16bf21327e72ddff274",
+      "size": 48526,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.openrouter",
+      "name": "OpenRouter",
+      "version": "1.1.2",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Text processing and speech-to-text via OpenRouter, with model discovery, text model pricing and API key budget checks.",
+      "categories": [
+        "llm",
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.openrouter-1.1.2-win-x64.zip",
+      "sha256": "719ca89e607f08faf1bbe581b10871a78126052add795676a792a88e3b262d39",
+      "size": 31682,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
       ]
     },
     {
@@ -84,18 +514,160 @@
       ]
     },
     {
-      "id": "com.typewhisper.cloudflare-asr",
-      "name": "Cloudflare Workers AI",
-      "version": "1.1.7",
+      "id": "com.typewhisper.reson8",
+      "name": "Reson8",
+      "version": "1.2.9",
       "minHostVersion": "1.1.2",
-      "author": "TypeWhisper",
-      "description": "Transcribe recorded audio with Whisper on Cloudflare Workers AI. Requires a Cloudflare account and API token.",
+      "author": "Y. Vos",
+      "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-cloudflare-asr-1.1.7-20260918/com.typewhisper.cloudflare-asr-1.1.7-win-x64.zip",
-      "sha256": "8c6beaf18c7faa2311fff29f29e018c59eafd13c811734743510170034f0b686",
-      "size": 15276,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.reson8-1.2.9-win-x64.zip",
+      "sha256": "a6596551b1a16ec6f883f6d7c8f39456c7c50eaabfd1ffe93403893cc8b89937",
+      "size": 26907,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.script",
+      "name": "Script Runner",
+      "version": "1.3.7",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Process transcriptions through custom shell scripts",
+      "categories": [
+        "post-processing"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.script-1.3.7-win-x64.zip",
+      "sha256": "5292dbce6b550021d753c6836d49498fe1440db834ef95ffeadb1324a6975057",
+      "size": 39004,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.smallest-ai",
+      "name": "Smallest AI",
+      "version": "1.2.1",
+      "minHostVersion": "1.1.4",
+      "author": "TypeWhisper",
+      "description": "Pulse transcription and Lightning text-to-speech",
+      "categories": [
+        "transcription",
+        "tts"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.smallest-ai-1.2.1-win-x64.zip",
+      "sha256": "ec9d622ec8e9c61b48917c7cebba39f369115639b13d90f288f0e742e20657b4",
+      "size": 250075,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.soniox",
+      "name": "Soniox",
+      "version": "1.3.2",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Soniox speech-to-text transcription engine",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.soniox-1.3.2-win-x64.zip",
+      "sha256": "86a057d317c1c1928ec7d13893137069a43796921138d22931a403aa1df48526",
+      "size": 255822,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.speechmatics",
+      "name": "Speechmatics",
+      "version": "1.2.5",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Speechmatics batch and live transcription with regional processing, spoken languages and custom vocabulary.",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.speechmatics-1.2.5-win-x64.zip",
+      "sha256": "e1563a807b8c27f183905350fd480eafcfa3ab8c2cc38fbdbd1ec84036c6094b",
+      "size": 27730,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.supertonic-tts",
+      "name": "Supertonic TTS",
+      "version": "1.2.1",
+      "minHostVersion": "1.1.4",
+      "author": "TypeWhisper",
+      "description": "Local Supertonic 3 text-to-speech provider. Downloads OpenRAIL-M model assets on demand and runs synthesis on-device with ONNX Runtime.",
+      "categories": [
+        "tts"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.supertonic-tts-1.2.1-win-x64.zip",
+      "sha256": "8aa336d9c1dc7d5f24354a28de1fa093a0bf78ba57db4dccf9438692e7887f50",
+      "size": 124711110,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.webhook",
+      "name": "Webhook",
+      "version": "1.3.2",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Send dictation as JSON to your automations. Test destinations before enabling delivery.",
+      "categories": [
+        "post-processing",
+        "integrations"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.webhook-1.3.2-win-x64.zip",
+      "sha256": "a7b4d7fde6b361cd0f0b9bab8036205a9bc2edc67ace1182c06cc9e7921fde46",
+      "size": 19156,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
+      "id": "com.typewhisper.whisper-cpp",
+      "name": "Whisper (Local)",
+      "version": "1.2.19",
+      "minHostVersion": "1.1.2",
+      "author": "TypeWhisper",
+      "description": "Local transcription with whisper.cpp",
+      "categories": [
+        "transcription"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.whisper-cpp-1.2.19-win-x64.zip",
+      "sha256": "eb544ccf0600184757c031501c0a3fb97379fee34a34905ff55350f229488365",
+      "size": 82525124,
       "platforms": [
         "windows"
       ],
