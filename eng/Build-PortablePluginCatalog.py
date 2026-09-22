@@ -20,6 +20,12 @@ def sha256(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+def numeric_version(value: str) -> tuple[int, int, int]:
+    if not re.fullmatch(r"\d+\.\d+\.\d+", value):
+        raise SystemExit(f"Unsupported catalog version: {value}")
+    return tuple(map(int, value.split(".")))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=pathlib.Path, required=True)
@@ -63,15 +69,27 @@ def main() -> None:
             continue
         if not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)+", plugin_id):
             raise SystemExit(f"Invalid plugin ID in {manifest_path}: {plugin_id}")
-        if plugin_id in entries and entries[plugin_id]["version"] == version:
-            print(f"KEEP  {plugin_id} {version}", flush=True)
-            continue
+        if plugin_id in entries:
+            published_version = entries[plugin_id]["version"]
+            if published_version == version:
+                print(f"KEEP  {plugin_id} {version}", flush=True)
+                continue
+            if numeric_version(version) <= numeric_version(published_version):
+                raise SystemExit(
+                    f"Refusing catalog downgrade for {plugin_id}: {published_version} -> {version}"
+                )
         project_files = [p for p in portable.parent.glob("*.csproj") if not p.name.endswith("Tests.csproj")]
         if len(project_files) != 1:
             raise SystemExit(f"Expected one main project in {portable.parent}")
         if sys.platform != "win32":
             raise SystemExit(f"Windows x64 package staging requires Windows: {portable.parent}")
         project = project_files[0]
+        project_dir = portable.parent.resolve()
+        release_output = (project_dir / "bin" / "Release").resolve()
+        if not project_dir.is_relative_to(source) or not release_output.is_relative_to(project_dir):
+            raise SystemExit(f"Package output escapes the source checkout: {release_output}")
+        if release_output.exists():
+            shutil.rmtree(release_output)
         print(f"BUILD {plugin_id} {version}", flush=True)
         run = subprocess.run(
             ["dotnet", "build", str(project), "-c", "Release", "-v", "quiet"],
