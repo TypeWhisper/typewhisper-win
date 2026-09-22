@@ -1,9 +1,0 @@
-{
-  "id": "com.typewhisper.qwen3-stt",
-  "name": "Qwen3 STT",
-  "version": "1.0.0",
-  "author": "TypeWhisper",
-  "description": "Qwen3 ASR transcription via OpenAI-compatible endpoint",
-  "assemblyName": "TypeWhisper.Plugin.Qwen3Stt.dll",
-  "pluginClass": "TypeWhisper.Plugin.Qwen3Stt.Qwen3SttPlugin"
-}

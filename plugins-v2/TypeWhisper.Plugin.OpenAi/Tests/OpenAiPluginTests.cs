@@ -28,7 +28,7 @@ public partial class OpenAiPluginTests
 
         Assert.NotNull(manifest);
         Assert.Equal(manifest.Version, sut.PluginVersion);
-        Assert.Equal("1.1.2", manifest.MinHostVersion);
+        Assert.Equal("1.1.5", manifest.MinHostVersion);
         Assert.Contains("text-to-speech", manifest.Description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("API key", manifest.Description, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(["transcription", "llm", "tts"], manifest.Categories);
@@ -936,7 +936,7 @@ public partial class OpenAiPluginTests
         Assert.Equal("gpt-5.6-sol", sut.SelectedLlmModelId);
         Assert.Equal("gpt-5.6-sol", host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection")?.ModelId);
         Assert.Equal(
-            "https://chatgpt.com/backend-api/codex/models?client_version=1.1.4",
+            "https://chatgpt.com/backend-api/codex/models?client_version=1.1.5",
             capturedRequest?.RequestUri?.ToString());
         Assert.Equal("Bearer access-token", capturedRequest?.Headers.Authorization?.ToString());
         Assert.Equal(
@@ -1001,7 +1001,7 @@ public partial class OpenAiPluginTests
         Assert.Equal(
             [
                 "https://auth.openai.com/oauth/token",
-                "https://chatgpt.com/backend-api/codex/models?client_version=1.1.4",
+                "https://chatgpt.com/backend-api/codex/models?client_version=1.1.5",
             ],
             requestedUris);
         Assert.Equal(["gpt-5.6-sol"], models.Select(model => model.Id).ToArray());

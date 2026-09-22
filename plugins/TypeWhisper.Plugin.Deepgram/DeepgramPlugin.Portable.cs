@@ -1,9 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
-#if WINDOWS
-using System.Windows.Controls;
-#endif
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -74,12 +71,6 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin
         return Task.CompletedTask;
     }
 
-#if WINDOWS
-    /// <summary>
-    /// Creates the settings view shown by the host, or null when no UI is required.
-    /// </summary>
-    public UserControl? CreateSettingsView() => new DeepgramSettingsView(this);
-#endif
 
     // ITranscriptionEnginePlugin
 

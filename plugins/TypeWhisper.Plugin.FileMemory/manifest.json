@@ -1,9 +1,0 @@
-{
-  "id": "com.typewhisper.file-memory",
-  "name": "File Memory",
-  "version": "1.0.0",
-  "author": "TypeWhisper",
-  "description": "File-based memory storage for extracted facts",
-  "assemblyName": "TypeWhisper.Plugin.FileMemory.dll",
-  "pluginClass": "TypeWhisper.Plugin.FileMemory.FileMemoryPlugin"
-}

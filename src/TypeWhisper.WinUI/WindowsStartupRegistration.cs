@@ -5,23 +5,37 @@ namespace TypeWhisper.WinUI;
 
 internal static class WindowsStartupRegistration
 {
-    internal static StartupRegistration Create()
+    internal static IStartupRegistration Create()
     {
         var backend = new RegistryBackend();
         if (WinUIProfile.IsTestProfile)
-            return new(backend, StartupPublication.DevelopmentIdentity, null, "Windows startup is unavailable in isolated test profiles. No registry values are accessed.");
-#if DEBUG
+            return new StartupRegistration(backend, StartupPublication.DevelopmentIdentity, null, "Windows startup is unavailable in isolated test profiles. No startup registrations are accessed.");
+#if TYPEWHISPER_STORE
+        const string taskId = "TypeWhisperStartup";
+        return new PackagedStartupRegistration(
+            async () => (await global::Windows.ApplicationModel.StartupTask.GetAsync(taskId)).State switch
+            {
+                global::Windows.ApplicationModel.StartupTaskState.Disabled => PackagedStartupState.Disabled,
+                global::Windows.ApplicationModel.StartupTaskState.DisabledByUser => PackagedStartupState.DisabledByUser,
+                global::Windows.ApplicationModel.StartupTaskState.Enabled => PackagedStartupState.Enabled,
+                global::Windows.ApplicationModel.StartupTaskState.DisabledByPolicy => PackagedStartupState.DisabledByPolicy,
+                global::Windows.ApplicationModel.StartupTaskState.EnabledByPolicy => PackagedStartupState.EnabledByPolicy,
+                _ => (PackagedStartupState)(-1)
+            },
+            async () => { var task = await global::Windows.ApplicationModel.StartupTask.GetAsync(taskId); await task.RequestEnableAsync(); },
+            async () => { var task = await global::Windows.ApplicationModel.StartupTask.GetAsync(taskId); task.Disable(); });
+#elif DEBUG
         try
         {
             var process = Environment.ProcessPath ?? throw new InvalidOperationException("The executable path is unavailable.");
             var marker = Path.Combine(Path.GetDirectoryName(process)!, StartupPublication.ReceiptFileName);
             if (new FileInfo(marker).Length > 16_384) throw new InvalidDataException("Invalid publication receipt size.");
             var executable = StartupPublication.Validate(File.ReadAllText(marker), process);
-            return new(backend, StartupPublication.DevelopmentIdentity, executable);
+            return new StartupRegistration(backend, StartupPublication.DevelopmentIdentity, executable);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            return new(backend, StartupPublication.DevelopmentIdentity, null,
+            return new StartupRegistration(backend, StartupPublication.DevelopmentIdentity, null,
                 "Startup is available only from the development launcher's published output. " + ex.Message);
         }
 #else
@@ -31,9 +45,9 @@ internal static class WindowsStartupRegistration
         {
             var executable = Path.Combine(locator.RootAppDir, "current", "TypeWhisper.WinUI.exe");
             if (File.Exists(executable) && string.Equals(Path.GetFullPath(executable), Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
-                return new(backend, "TypeWhisperDaily", executable);
+                return new StartupRegistration(backend, "TypeWhisperDaily", executable);
         }
-        return new(backend, "TypeWhisperDaily", null,
+        return new StartupRegistration(backend, "TypeWhisperDaily", null,
             "Windows startup is available after installing TypeWhisper Daily.");
 #endif
     }
