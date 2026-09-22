@@ -23,6 +23,7 @@ public sealed class StreamingCompletionTests
         {
             var context=await listener.GetContextAsync().WaitAsync(ct);using var socket=(await context.AcceptWebSocketAsync(null)).WebSocket;
             Assert.Equal("Bearer fixture",context.Request.Headers["Authorization"]);
+            await Send(socket,"""{"type":"transcript.created"}""",ct);
             var audio=await Receive(socket,ct);Assert.Equal(4,audio.Length);
             await Send(socket,"""{"type":"transcript.partial","text":"Hallo","is_final":true}""",ct);
             var end=await Receive(socket,ct);Assert.Contains("audio.done",Encoding.UTF8.GetString(end));endReceived.TrySetResult();
@@ -38,6 +39,35 @@ public sealed class StreamingCompletionTests
         else {await finish;Assert.Equal("Hallo Welt",string.Join(" ",events.Where(e=>e.IsFinal).Select(e=>e.Text)));}
         clientFinished.TrySetResult(); await server.WaitAsync(ct);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Connect_WaitsForReadyAndAllowsCancellation(bool cancelBeforeReady)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var connectCancellation = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+        var tcp = new TcpListener(IPAddress.Loopback, 0); tcp.Start();
+        var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var connecting = XaiStreamingSession.ConnectAsync("fixture", "de", connectCancellation.Token, new Uri($"ws://127.0.0.1:{port}/"));
+        var context = await listener.GetContextAsync().WaitAsync(timeout.Token);
+        using var server = (await context.AcceptWebSocketAsync(null)).WebSocket;
+        Assert.False(connecting.IsCompleted);
+        if (cancelBeforeReady)
+        {
+            connectCancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connecting);
+        }
+        else
+        {
+            await Send(server, """{"type":"transcript.created"}""", timeout.Token);
+            await using var session = await connecting;
+            await session.SendAudioAsync(new byte[] { 1, 2 }, timeout.Token);
+            Assert.Equal(new byte[] { 1, 2 }, await Receive(server, timeout.Token));
+        }
+    }
+
     private static async Task<byte[]> Receive(WebSocket socket,CancellationToken ct)
     {
         using var message=new MemoryStream();var buffer=new byte[4096];WebSocketReceiveResult frame;

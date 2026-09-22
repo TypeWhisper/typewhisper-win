@@ -24,3 +24,5 @@ Explicit fill colors support native SVG rendering. Monochrome marks include ligh
 Gemma: `gemma-color.svg` from [Lobe Icons](https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/gemma-color.svg), MIT; see `Lobe-Icons-LICENSE.txt`.
 
 - Meta: reuses the existing TypeWhisper Windows Meta brand asset unchanged.
+
+- xAI: light and dark SVG marks reused from the TypeWhisper website brand assets; symbol view box cropped and explicit six-digit white fill added for native rendering. Original paths are unchanged.

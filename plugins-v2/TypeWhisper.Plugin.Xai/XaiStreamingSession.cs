@@ -14,6 +14,7 @@ internal sealed class XaiStreamingSession : IStreamingSession
     private readonly XaiTranscriptCollector _collector;
     private readonly CancellationTokenSource _receiveCts = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _terminalTranscript = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _receiveTask;
     private bool _disposed;
@@ -35,25 +36,28 @@ internal sealed class XaiStreamingSession : IStreamingSession
     public static async Task<XaiStreamingSession> ConnectAsync(
         string apiKey,
         string? language,
-        CancellationToken ct, Uri? endpoint = null)
+        CancellationToken ct, Uri? endpoint = null, string model = XaiPlugin.DefaultSttModelId, IReadOnlyList<string>? terms = null)
     {
         var ws = CreateConfiguredWebSocket(apiKey);
-        try { await ws.ConnectAsync(endpoint ?? BuildStreamingUri(language, interimResults: true), ct); }
+        try { await ws.ConnectAsync(endpoint ?? BuildStreamingUri(language, interimResults: true, model, terms), ct); }
         catch { ws.Dispose(); throw; }
 
         var collector = new XaiTranscriptCollector();
         var session = new XaiStreamingSession(ws, collector);
         session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
+        try { await session._ready.Task.WaitAsync(TimeSpan.FromSeconds(15), ct); }
+        catch { await session.DisposeAsync(); throw; }
         return session;
     }
 
     /// <summary>
     /// Builds streaming uri.
     /// </summary>
-    public static Uri BuildStreamingUri(string? language, bool interimResults)
+    public static Uri BuildStreamingUri(string? language, bool interimResults, string model = XaiPlugin.DefaultSttModelId, IReadOnlyList<string>? terms = null)
     {
         var query = new List<string>
         {
+            "model=" + Uri.EscapeDataString(model),
             "sample_rate=16000",
             "encoding=pcm",
             $"interim_results={(interimResults ? "true" : "false")}",
@@ -65,6 +69,7 @@ internal sealed class XaiStreamingSession : IStreamingSession
             query.Add($"language={Uri.EscapeDataString(language)}");
         }
 
+        foreach (var term in terms ?? []) query.Add("keyterm=" + Uri.EscapeDataString(term));
         return new Uri("wss://api.x.ai/v1/stt?" + string.Join("&", query));
     }
 
@@ -160,29 +165,36 @@ internal sealed class XaiStreamingSession : IStreamingSession
                     continue;
 
                 var json = Encoding.UTF8.GetString(messageBuffer.GetBuffer(), 0, (int)messageBuffer.Length);
+                using (var message = JsonDocument.Parse(json))
+                    if (message.RootElement.TryGetProperty("type", out var type) && type.GetString() == "transcript.created")
+                        _ready.TrySetResult();
                 var transcriptEvent = _collector.ApplyEvent(json);
                 if (transcriptEvent is not null)
                     TranscriptReceived?.Invoke(transcriptEvent with { IsFinal = _collector.IsDoneReceived });
-                if (_collector.IsDoneReceived) _terminalTranscript.TrySetResult();
+                if (_collector.IsDoneReceived) { _terminalTranscript.TrySetResult(); return; }
             }
         }
         catch (OperationCanceledException ex)
         {
+            _ready.TrySetException(ex);
             _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"xAI STT receive loop canceled: {ex.Message}");
         }
         catch (WebSocketException ex)
         {
+            _ready.TrySetException(ex);
             _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"xAI STT WebSocket error: {ex.Message}");
         }
         catch (JsonException ex)
         {
+            _ready.TrySetException(ex);
             _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"xAI STT parse error: {ex.Message}");
         }
         catch (InvalidOperationException ex)
         {
+            _ready.TrySetException(ex);
             _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"xAI STT stream error: {ex.Message}");
         }
@@ -254,6 +266,7 @@ internal sealed class XaiStreamingSession : IStreamingSession
 internal sealed class XaiTranscriptCollector
 {
     private readonly List<string> _finals = [];
+    private readonly List<string> _chunks = [];
     private string _interim = "";
     internal bool IsDoneReceived { get; private set; }
     private string? _doneText;
@@ -291,7 +304,7 @@ internal sealed class XaiTranscriptCollector
     {
         var text = !string.IsNullOrWhiteSpace(_doneText)
             ? _doneText!
-            : string.Join(" ", _finals).Trim();
+            : CurrentText();
 
         return new PluginTranscriptionResult(text, _detectedLanguage ?? fallbackLanguage ?? "", _duration);
     }
@@ -307,12 +320,12 @@ internal sealed class XaiTranscriptCollector
         {
             if (!string.IsNullOrWhiteSpace(text))
             {
-                var joined = string.Join(" ", _finals);
-                if (speechFinal && _finals.Count > 0 && text.StartsWith(joined, StringComparison.Ordinal))
-                    _finals.Clear();
-
-                if (_finals.LastOrDefault() != text)
+                if (speechFinal)
+                {
                     _finals.Add(text);
+                    _chunks.Clear();
+                }
+                else _chunks.Add(text);
             }
             _interim = "";
             return new StreamingTranscriptEvent(CurrentText(), IsFinal: true);
@@ -341,6 +354,7 @@ internal sealed class XaiTranscriptCollector
             return _doneText!;
 
         var parts = new List<string>(_finals);
+        parts.AddRange(_chunks);
         if (!string.IsNullOrWhiteSpace(_interim))
             parts.Add(_interim);
         return string.Join(" ", parts).Trim();

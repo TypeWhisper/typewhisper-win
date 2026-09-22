@@ -25,14 +25,15 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     private const string TtsTextNormalizationSettingName = "ttsTextNormalization";
 
     internal const string DefaultLlmModelId = "grok-4.3";
-    internal const string DefaultSttModelId = "grok-stt";
+    internal const string DefaultSttModelId = "grok-voice-transcribe-2.0";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
 
     private static readonly IReadOnlyList<PluginModelInfo> SttModels =
     [
-        new(DefaultSttModelId, "Grok Speech to Text"),
+        new(DefaultSttModelId, "Grok Voice Transcribe 2.0"),
+        new("grok-voice-transcribe-1.0", "Grok Voice Transcribe 1.0"),
     ];
 
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
@@ -90,7 +91,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.3.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -163,6 +164,14 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     public bool SupportsStreamingCompletion => true;
     /// <inheritdoc />
     public bool SupportsStreaming => true;
+    /// <inheritdoc />
+    public bool SupportsDictionaryTerms => true;
+    /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
+    /// <inheritdoc />
+    public DictionaryTermsBudget DictionaryTermsBudget => new(MaxTerms: 100, MaxCharsPerTerm: 50);
+    internal static IReadOnlyList<string> ParseTerms(string? prompt) =>
+        PluginDictionaryTerms.Clip(PluginDictionaryTerms.ParsePrompt(prompt), new(MaxTerms: 100, MaxCharsPerTerm: 50));
     /// <summary>
     /// Gets the language codes accepted by the provider.
     /// </summary>
@@ -194,6 +203,8 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
             throw new InvalidOperationException("Plugin not configured. API key required.");
 
         using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(_selectedModelId ?? DefaultSttModelId), "model");
+        foreach (var term in ParseTerms(prompt)) form.Add(new StringContent(term), "keyterm");
         var normalizedLanguage = NormalizeLanguage(language);
         if (normalizedLanguage is not null)
         {
@@ -217,14 +228,18 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// <summary>
     /// Opens a streaming transcription session for live audio.
     /// </summary>
-    public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
+    public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
+        StartStreamingAsync(language, null, ct);
+
+    /// <inheritdoc />
+    public async Task<IStreamingSession> StartStreamingAsync(string? language, string? prompt, CancellationToken ct)
     {
         if (!IsConfigured)
             throw new PluginRequestException(
                 "API key not configured",
                 PluginRequestFailureKind.Configuration);
 
-        return await XaiStreamingSession.ConnectAsync(_apiKey!, NormalizeLanguage(language), ct);
+        return await XaiStreamingSession.ConnectAsync(_apiKey!, NormalizeLanguage(language), ct, model: _selectedModelId ?? DefaultSttModelId, terms: ParseTerms(prompt));
     }
 
     // ILlmProviderPlugin
@@ -436,28 +451,8 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-        try
-        {
-            using var response = await _httpClient.SendAsync(request, ct);
-            return response.IsSuccessStatusCode;
-        }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return false;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (HttpRequestException)
-        {
-            return false;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
+        return true;
     }
 
     internal void SetFetchedVoices(List<XaiFetchedVoice> voices)
@@ -579,7 +574,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
             return false;
 
         var lowered = id.ToLowerInvariant();
-        var excluded = new[] { "stt", "tts", "voice", "image", "embedding" };
+        var excluded = new[] { "stt", "tts", "voice", "image", "embedding", "video", "audio", "transcribe", "imagine" };
         return !excluded.Any(lowered.Contains);
     }
 

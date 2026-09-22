@@ -50,8 +50,8 @@ public class XaiPluginTests
         Assert.True(sut.IsAvailable);
         Assert.True(sut.SupportsStreaming);
         Assert.False(sut.SupportsTranslation);
-        Assert.Equal("grok-stt", sut.SelectedModelId);
-        Assert.Equal(["grok-stt"], sut.TranscriptionModels.Select(m => m.Id).ToArray());
+        Assert.Equal("grok-voice-transcribe-2.0", sut.SelectedModelId);
+        Assert.Equal(["grok-voice-transcribe-2.0", "grok-voice-transcribe-1.0"], sut.TranscriptionModels.Select(m => m.Id).ToArray());
         Assert.Equal("grok-4.3", sut.SelectedLlmModelId);
         Assert.Equal(["grok-4.3"], sut.SupportedModels.Select(m => m.Id).ToArray());
         Assert.Equal("eve", sut.SelectedVoiceId);
