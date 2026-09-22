@@ -50,6 +50,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.gemma-local" => "gemma",
             "com.typewhisper.gladia" => "gladia",
             "com.typewhisper.meta" => "meta",
+            "com.typewhisper.xai" => "xai",
             "com.typewhisper.groq" => "groq",
             "com.typewhisper.granite-speech" => "ibm",
             "com.typewhisper.github-copilot" => "github-copilot",
@@ -68,6 +69,7 @@ public sealed class PluginBrandIcon : UserControl
         var file = brand switch
         {
             "assemblyai" => light ? "assemblyai-light" : "assemblyai-dark",
+            "xai" => light ? "xai-light" : "xai-dark",
             "openai" => light ? "openai-light" : "openai-dark",
             "github-copilot" => light ? "github-copilot-light" : "github-copilot-dark",
             "openrouter" => light ? "openrouter-light" : "openrouter-dark",
