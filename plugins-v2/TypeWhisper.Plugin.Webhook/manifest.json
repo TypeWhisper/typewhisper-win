@@ -1,0 +1,14 @@
+{
+  "id": "com.typewhisper.webhook",
+  "name": "Webhook",
+  "version": "1.3.2",
+  "author": "TypeWhisper",
+  "description": "Send dictation as JSON to your automations. Test destinations before enabling delivery.",
+  "assemblyName": "TypeWhisper.Plugin.Webhook.dll",
+  "pluginClass": "TypeWhisper.Plugin.Webhook.WebhookPlugin",
+  "minHostVersion": "1.1.2",
+  "categories": [
+    "post-processing",
+    "integrations"
+  ]
+}

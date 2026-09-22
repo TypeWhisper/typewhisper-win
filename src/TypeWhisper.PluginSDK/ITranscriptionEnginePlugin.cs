@@ -83,6 +83,10 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// </summary>
     DictionaryTermsBudget DictionaryTermsBudget => DictionaryTermsBudget.Default;
 
+    /// <summary>Accepts versioned structured dictionary prompts and decodes them before calling the provider.
+    /// Defaults to false so existing packages continue to receive plain comma-separated prompts.</summary>
+    bool SupportsStructuredDictionaryTerms => false;
+
     /// <summary>
     /// Whether this engine can use real-time streaming for the supplied prompt.
     /// Defaults to <see cref="SupportsStreaming"/> for backward compatibility.

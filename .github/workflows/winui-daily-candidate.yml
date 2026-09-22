@@ -1,6 +1,6 @@
-name: WinUI Daily
+name: Candidate
 
-# PR/branch runs only validate. Publishing is restricted to scheduled or explicit main runs.
+# PR runs only validate. Publishing is restricted to scheduled or explicit main runs.
 on:
   workflow_dispatch:
     inputs:
@@ -10,11 +10,6 @@ on:
         default: false
   schedule:
     - cron: '0 4 * * *'
-  push:
-    branches: ['seofood/release-1.1']
-    paths:
-      - '.github/workflows/winui-daily-candidate.yml'
-      - 'eng/Test-WinUIDailyCandidate*.ps1'
   pull_request:
     paths:
       - '.github/workflows/winui-daily-candidate.yml'
@@ -84,7 +79,7 @@ jobs:
             --packVersion $env:CANDIDATE_VERSION --packDir candidate `
             --mainExe TypeWhisper.WinUI.exe --channel '${{ matrix.rid }}-winui-daily' `
             --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
-            --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
+            --icon src/TypeWhisper.WinUI/Assets/app.ico `
             --outputDir installer
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Get-ChildItem installer -Filter '*Setup.exe')) { throw 'Daily installer is missing.' }

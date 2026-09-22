@@ -38,5 +38,5 @@ internal static class AssemblyAiModels
             ? null : language.Trim().ToLowerInvariant();
 
     internal static IReadOnlyList<string> Terms(string? prompt, AssemblyAiModel model) =>
-        PluginDictionaryTerms.Clip(prompt?.Split([',', ';', '\n', '\r'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries), model.Budget);
+        PluginDictionaryTerms.Clip(PluginDictionaryTerms.ParsePrompt(prompt, [',', ';', '\n', '\r']), model.Budget);
 }

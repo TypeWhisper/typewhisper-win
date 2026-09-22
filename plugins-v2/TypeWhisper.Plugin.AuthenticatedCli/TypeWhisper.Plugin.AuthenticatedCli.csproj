@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <Version>1.3.3</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.AuthenticatedCli.Portable.Tests" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+
+    <Content Include="manifest.json;Localization/*.json;Scripts/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.authenticated-cli/</PackageDirectory></PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" />
+      <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+      <PackageTree Include="$(TargetDir)**/*" Exclude="$(TargetDir)*;$(TargetDir)**/*.pdb;$(TargetDir)**/*.xml" />
+    </ItemGroup>
+    <MakeDir Directories="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageFile);@(PackageDependency)" DestinationFolder="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageTree)" DestinationFiles="@(PackageTree->'$(PackageDirectory)%(RecursiveDir)%(Filename)%(Extension)')" Condition="'@(PackageTree)' != ''" />
+  </Target>
+</Project>

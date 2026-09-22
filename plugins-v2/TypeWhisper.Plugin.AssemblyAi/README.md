@@ -1,6 +1,6 @@
 # AssemblyAI for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.0`, requiring host `1.1.2` or later. The package has no WPF dependency and does not import legacy settings or credentials. Legacy source and packages are unchanged.
+Independent .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.1`, requiring host `1.1.5` or later. The package has no WPF dependency and does not import legacy settings or credentials. Legacy source and packages are unchanged.
 
 ## Features and macOS comparison
 
@@ -48,3 +48,5 @@ The native host source includes the official AssemblyAI logomark for light and d
 - [Streaming model selection](https://www.assemblyai.com/docs/streaming/select-the-speech-model)
 - [Streaming WebSocket API](https://www.assemblyai.com/docs/streaming/api-spec/streaming-websocket)
 - [Streaming message sequence and turn ordering](https://www.assemblyai.com/docs/streaming/message-sequence)
+
+Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.
