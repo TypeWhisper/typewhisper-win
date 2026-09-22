@@ -11,6 +11,7 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
 {
     private sealed record Endpoint(string Id, string Name, string Url, string Method, bool Enabled, string Workflows, string? SecretName = null);
     private readonly HttpClient _http;
+    private readonly TimeSpan _deliveryBudget;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IPluginHostServices? _host;
     private Endpoint[] _endpoints = [];
@@ -19,13 +20,14 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
     private readonly object _logLock = new();
     /// <summary>Creates an isolated transport; redirects and ambient cookies are disabled.</summary>
     public WebhookPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(10) }) { }
-    internal WebhookPlugin(HttpClient http) => _http = http;
+    internal WebhookPlugin(HttpClient http, TimeSpan? deliveryBudget = null)
+    { _http = http; _deliveryBudget = deliveryBudget ?? TimeSpan.FromSeconds(10); }
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.webhook";
     /// <inheritdoc />
     public string PluginName => "Webhook";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.1";
+    public string PluginVersion => "1.3.2";
     /// <inheritdoc />
     public string ProcessorName => "Webhook delivery";
     /// <inheritdoc />
@@ -207,17 +209,23 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
     /// <inheritdoc />
     public async Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(_deliveryBudget);
         foreach (var endpoint in _endpoints.Where(e => e.Enabled).ToArray())
         {
             ct.ThrowIfCancellationRequested();
+            if (budget.IsCancellationRequested) break;
             var workflows = endpoint.Workflows.Split(['\r','\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (workflows.Length > 0 && !workflows.Contains(context.ProfileName, StringComparer.Ordinal)) continue;
             try
             {
-                var stored = await Host.LoadSecretAsync(endpoint.SecretName ?? "headers-" + endpoint.Id).ConfigureAwait(false);
-                await DeliverAsync(endpoint, stored, text, context, ct).ConfigureAwait(false);
+                var stored = await Host.LoadSecretAsync(endpoint.SecretName ?? "headers-" + endpoint.Id).WaitAsync(budget.Token).ConfigureAwait(false);
+                await DeliverAsync(endpoint, stored, text, context, budget.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (OperationCanceledException) when (budget.IsCancellationRequested)
+            { Log(endpoint.Name, L("Delivery timed out; remaining destinations were skipped and dictation was preserved.", "Zustellung abgelaufen; weitere Ziele wurden übersprungen und das Diktat bleibt erhalten.")); break; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { Log(endpoint.Name, L("Delivery failed; dictation was preserved.", "Zustellung fehlgeschlagen; Diktat bleibt erhalten.")); }
         }
@@ -248,7 +256,10 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
 
     private static Dictionary<string,string> ParseHeaders(string json)
     {
-        var headers = JsonSerializer.Deserialize<Dictionary<string,string>>(json) ?? throw new ArgumentException("Expected a JSON object.");
+        Dictionary<string,string>? headers;
+        try { headers = JsonSerializer.Deserialize<Dictionary<string,string>>(json); }
+        catch (JsonException ex) { throw new ArgumentException("Expected a JSON object of header names and text values.", ex); }
+        if (headers is null) throw new ArgumentException("Expected a JSON object of header names and text values.");
         if (headers.Count > 30) throw new ArgumentException("Too many headers.");
         using var validation = new HttpRequestMessage();
         foreach (var (key, value) in headers)
@@ -256,7 +267,9 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
             if (string.IsNullOrWhiteSpace(key) || value is null || value.Any(c => c is '\r' or '\n' or '\0') ||
                 new[] { "Host", "Content-Length", "Transfer-Encoding", "Connection", "Content-Type" }.Contains(key, StringComparer.OrdinalIgnoreCase))
                 throw new ArgumentException("Invalid request header. Content-Type is supplied automatically.");
-            validation.Headers.Add(key, value);
+            try { validation.Headers.Add(key, value); }
+            catch (Exception ex) when (ex is FormatException or InvalidOperationException)
+            { throw new ArgumentException("Invalid request header. Content headers are not allowed here.", ex); }
         }
         return headers;
     }

@@ -53,11 +53,14 @@ public sealed class ProfileBehaviorTests
     [InlineData("{\"Host\":\"evil.invalid\"}")]
     [InlineData("{\"Authorization\":\"Bearer abc\\r\\nInjected: yes\"}")]
     [InlineData("null")]
+    [InlineData("not json")]
+    [InlineData("{\"Bad Name\":\"value\"}")]
+    [InlineData("{\"Content-Language\":\"de\"}")]
     public async Task InvalidHeaders_DoNotSaveOtherDraftChanges(string headers)
     {
         using var f=new PortableFixture();using var p=new WebhookPlugin();await p.ActivateAsync(f.Host);await p.ExecuteSettingsActionAsync("add",default);var id=p.ConnectionIdentity;
         var before=File.ReadAllText(Path.Combine(f.Host.PluginDataDirectory,"settings.json"));
-        await Assert.ThrowsAnyAsync<Exception>(()=>p.SaveProfileSettingsAsync(id,new Dictionary<string,string>{{id+":name","Changed"},{id+":headers",headers}},null,default));
+        await Assert.ThrowsAsync<ArgumentException>(()=>p.SaveProfileSettingsAsync(id,new Dictionary<string,string>{{id+":name","Changed"},{id+":headers",headers}},null,default));
         Assert.Equal(before,File.ReadAllText(Path.Combine(f.Host.PluginDataDirectory,"settings.json")));Assert.Empty(f.Secrets.Values);
     }
     [Fact]
