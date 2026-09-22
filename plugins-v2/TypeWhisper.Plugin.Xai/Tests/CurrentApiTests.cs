@@ -57,6 +57,16 @@ public sealed class CurrentApiTests
     }
 
     [Fact]
+    public void Collector_ReportsDetectedLanguageOnFinalStreamingEvent()
+    {
+        var collector = new XaiTranscriptCollector();
+        var partial = collector.ApplyEvent("""{"type":"transcript.partial","text":"Hallo","is_final":true,"language":"de"}""");
+        var done = collector.ApplyEvent("""{"type":"transcript.done","text":"Hallo Welt","language":"de"}""");
+        Assert.Equal("de", partial!.DetectedLanguage);
+        Assert.Equal("de", done!.DetectedLanguage);
+    }
+
+    [Fact]
     public async Task Settings_ExposeCatalogChoicesAndPersistOnlyOnSave()
     {
         using var fixture = new PortableFixture();

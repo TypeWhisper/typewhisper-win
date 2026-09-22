@@ -341,7 +341,7 @@ internal sealed class XaiTranscriptCollector
                 else _chunks.Add(text);
             }
             _interim = "";
-            return new StreamingTranscriptEvent(CurrentText(), IsFinal: true);
+            return new StreamingTranscriptEvent(CurrentText(), IsFinal: true) { DetectedLanguage = _detectedLanguage };
         }
 
         _interim = text;
@@ -358,7 +358,7 @@ internal sealed class XaiTranscriptCollector
             _interim = "";
         }
         RememberMetadata(root);
-        return new StreamingTranscriptEvent(CurrentText(), IsFinal: true);
+        return new StreamingTranscriptEvent(CurrentText(), IsFinal: true) { DetectedLanguage = _detectedLanguage };
     }
 
     private string CurrentText()

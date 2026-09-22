@@ -2,7 +2,7 @@
 
 xAI batch/realtime transcription, Responses LLM completion and TTS with voice/output-device selection.
 
-Version `1.3.1`; plugin ID `com.typewhisper.xai`; minimum host `1.1.5`.
+Version `1.3.2`; plugin ID `com.typewhisper.xai`; minimum host `1.1.5`.
 Independent branch: `seofood/xai-portable`, integrated with the current WinUI-only main.
 
 ## Setup

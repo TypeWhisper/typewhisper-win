@@ -75,6 +75,36 @@ public class XaiPluginTests
     }
 
     [Fact]
+    public async Task ReplacingApiKey_DropsAccountCatalogsInMemoryAndAfterRestart()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "first-account";
+        using var sut = new XaiPlugin();
+        await sut.ActivateAsync(host);
+        sut.SetFetchedLlmModels([new("grok-first-only", "first")]);
+        sut.SetFetchedVoices([new("first-only", "First", "en")]);
+        sut.SelectLlmModel("grok-first-only");
+        sut.SelectVoice("first-only");
+
+        await sut.SetApiKeyAsync("second-account");
+
+        Assert.DoesNotContain(sut.SupportedModels, model => model.Id == "grok-first-only");
+        Assert.DoesNotContain(sut.AvailableVoices, voice => voice.Id == "first-only");
+        Assert.Equal("grok-4.3", sut.SelectedLlmModelId);
+        Assert.Equal("eve", sut.SelectedVoiceId);
+        using var reopened = new XaiPlugin();
+        await reopened.ActivateAsync(host);
+        Assert.DoesNotContain(reopened.SupportedModels, model => model.Id == "grok-first-only");
+        Assert.DoesNotContain(reopened.AvailableVoices, voice => voice.Id == "first-only");
+
+        sut.SetFetchedLlmModels([new("grok-second-only", "second")]);
+        using var reopenedAgain = new XaiPlugin();
+        await reopenedAgain.ActivateAsync(host);
+        Assert.Contains(reopenedAgain.SupportedModels, model => model.Id == "grok-second-only");
+        Assert.DoesNotContain(reopenedAgain.AvailableVoices, voice => voice.Id == "first-only");
+    }
+
+    [Fact]
     public async Task FetchLlmModelsAsync_FiltersAndSortsXaiModelResults()
     {
         var handler = new CapturingHandler((request, _) =>
@@ -326,6 +356,52 @@ public class XaiPluginTests
 
         Assert.NotNull(session);
         Assert.Equal([0, 1, 2, 3], playbackBytes);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public async Task SpeakAsync_RejectsInvalidPcmWithoutStartingPlayback(int byteCount)
+    {
+        var playbackStarted = false;
+        using var http = new HttpClient(new CapturingHandler((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(new byte[byteCount])
+        }));
+        using var sut = new XaiPlugin(http, _ =>
+        {
+            playbackStarted = true;
+            return new FakeTtsPlaybackSession();
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "fixture";
+        await sut.ActivateAsync(host);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => sut.SpeakAsync(new TtsSpeakRequest("Hello", "en"), default));
+        Assert.False(playbackStarted);
+    }
+
+    [Fact]
+    public async Task SpeakAsync_RejectsOversizedPcmWithoutStartingPlayback()
+    {
+        var playbackStarted = false;
+        using var http = new HttpClient(new CapturingHandler((_, _) =>
+        {
+            var content = new ByteArrayContent([0, 1]);
+            content.Headers.ContentLength = 64L * 1024 * 1024 + 1;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        }));
+        using var sut = new XaiPlugin(http, _ =>
+        {
+            playbackStarted = true;
+            return new FakeTtsPlaybackSession();
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "fixture";
+        await sut.ActivateAsync(host);
+
+        await Assert.ThrowsAsync<PluginRequestException>(() => sut.SpeakAsync(new TtsSpeakRequest("Hello", "en"), default));
+        Assert.False(playbackStarted);
     }
 
     private static JsonElement LoadManifest()

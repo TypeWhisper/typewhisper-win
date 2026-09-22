@@ -1,5 +1,8 @@
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 using TypeWhisper.PluginSDK;
@@ -20,6 +23,9 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     private const string FetchedLlmModelsSettingName = "fetchedLlmModels";
     private const string SelectedVoiceSettingName = "selectedVoice";
     private const string FetchedVoicesSettingName = "fetchedVoices";
+    private const string LlmCatalogKeyFingerprintSettingName = "llmCatalogKeyFingerprint";
+    private const string VoiceCatalogKeyFingerprintSettingName = "voiceCatalogKeyFingerprint";
+    private const long MaximumSpeechAudioBytes = 64L * 1024 * 1024;
     private const string CustomVoiceIdSettingName = "customVoiceId";
     private const string TtsLowLatencySettingName = "ttsLowLatency";
     private const string TtsTextNormalizationSettingName = "ttsTextNormalization";
@@ -75,6 +81,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         Func<string, string?, string, IReadOnlyList<string>, CancellationToken, Task<IStreamingSession>>? connectStreaming = null)
     {
         _httpClient = httpClient;
+        _httpClient.MaxResponseContentBufferSize = Math.Min(_httpClient.MaxResponseContentBufferSize, MaximumSpeechAudioBytes);
         _connectStreaming = connectStreaming ?? (async (key, language, model, terms, ct) =>
             await XaiStreamingSession.ConnectAsync(key, language, ct, model: model, terms: terms));
         _usePortablePlayback = ttsPlaybackFactory is null;
@@ -95,7 +102,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.1";
+    public string PluginVersion => "1.3.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -106,11 +113,15 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
         _selectedModelId = NormalizeSttModelId(host.GetSetting<string>(SelectedModelSettingName));
         _selectedLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName) ?? DefaultLlmModelId;
-        _fetchedLlmModels = NormalizeFetchedLlmModels(
-            host.GetSetting<List<XaiFetchedModel>>(FetchedLlmModelsSettingName) ?? []);
+        _fetchedLlmModels = string.Equals(
+            host.GetSetting<string>(LlmCatalogKeyFingerprintSettingName), CatalogKeyFingerprint(), StringComparison.Ordinal)
+            ? NormalizeFetchedLlmModels(host.GetSetting<List<XaiFetchedModel>>(FetchedLlmModelsSettingName) ?? [])
+            : [];
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
-        _fetchedVoices = NormalizeFetchedVoices(
-            host.GetSetting<List<XaiFetchedVoice>>(FetchedVoicesSettingName) ?? []);
+        _fetchedVoices = string.Equals(
+            host.GetSetting<string>(VoiceCatalogKeyFingerprintSettingName), CatalogKeyFingerprint(), StringComparison.Ordinal)
+            ? NormalizeFetchedVoices(host.GetSetting<List<XaiFetchedVoice>>(FetchedVoicesSettingName) ?? [])
+            : [];
         _customVoiceId = host.GetSetting<string>(CustomVoiceIdSettingName)?.Trim() ?? "";
         _ttsLowLatency = host.GetSetting<bool?>(TtsLowLatencySettingName) ?? false;
         _ttsTextNormalization = host.GetSetting<bool?>(TtsTextNormalizationSettingName) ?? false;
@@ -353,7 +364,11 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         httpRequest.Content = XaiJson.CreateJsonContent(body);
 
         using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, httpRequest, ct);
+        if (response.Content.Headers.ContentLength > MaximumSpeechAudioBytes)
+            throw new InvalidDataException("xAI speech audio exceeds the playback limit.");
         var pcm = await response.Content.ReadAsByteArrayAsync(ct);
+        if (pcm.Length == 0 || pcm.LongLength > MaximumSpeechAudioBytes || pcm.Length % sizeof(short) != 0)
+            throw new InvalidDataException("xAI speech audio is empty, too large, or not valid PCM16.");
         return _usePortablePlayback ? new XaiPcmTtsPlaybackSession(pcm, XaiTtsConfiguration.SampleRate, request.OutputDeviceId) : _ttsPlaybackFactory(pcm);
     }
 
@@ -371,19 +386,23 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     internal async Task SetApiKeyAsync(string apiKey)
     {
         var normalized = NormalizeApiKey(apiKey);
-        var wasConfigured = IsConfigured;
         var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
-        _apiKey = normalized;
         if (_host is not null)
         {
             if (normalized is null)
                 await _host.DeleteSecretAsync(ApiKeySecretName);
             else
                 await _host.StoreSecretAsync(ApiKeySecretName, normalized);
-
-            if (changed && wasConfigured != IsConfigured)
-                _host.NotifyCapabilitiesChanged();
+        }
+        _apiKey = normalized;
+        if (changed)
+        {
+            _fetchedLlmModels = [];
+            _fetchedVoices = [];
+            NormalizeSelectedLlmModel(persist: false);
+            NormalizeSelectedVoice(persist: false);
+            _host?.NotifyCapabilitiesChanged();
         }
     }
 
@@ -400,6 +419,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     internal void SetFetchedLlmModels(List<XaiFetchedModel> models)
     {
         _host?.SetSetting(FetchedLlmModelsSettingName, NormalizeFetchedLlmModels(models));
+        _host?.SetSetting(LlmCatalogKeyFingerprintSettingName, CatalogKeyFingerprint());
         _fetchedLlmModels = NormalizeFetchedLlmModels(models);
         NormalizeSelectedLlmModel(persist: true);
         _host?.NotifyCapabilitiesChanged();
@@ -466,6 +486,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     internal void SetFetchedVoices(List<XaiFetchedVoice> voices)
     {
         _host?.SetSetting(FetchedVoicesSettingName, NormalizeFetchedVoices(voices));
+        _host?.SetSetting(VoiceCatalogKeyFingerprintSettingName, CatalogKeyFingerprint());
         _fetchedVoices = NormalizeFetchedVoices(voices);
         NormalizeSelectedVoice(persist: true);
         _host?.NotifyCapabilitiesChanged();
@@ -618,6 +639,9 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
 
     private static string? NormalizeApiKey(string? apiKey) =>
         string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+
+    private string CatalogKeyFingerprint() =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_apiKey ?? "")));
 
     private static string NormalizeSttModelId(string? modelId) =>
         SttModels.Any(model => model.Id == modelId) ? modelId! : DefaultSttModelId;
