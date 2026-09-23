@@ -70,7 +70,7 @@ public sealed partial class MarketplaceView : UserControl
     {
         if (_runtime is null || _fetching || _installation is not null) return;
         _fetching = true; _error = null;
-        EmptyTitle.Text = "Loading integrations…";
+        EmptyTitle.Text = "Loading plugins…";
         EmptyDescription.Text = "";
         ResetFiltersButton.Visibility = Visibility.Collapsed;
         try
@@ -82,7 +82,7 @@ public sealed partial class MarketplaceView : UserControl
                 "plugin", string.Join(" / ", entry.Categories.Select(value => value == "llm" ? "LLM" : char.ToUpperInvariant(value[0]) + value[1..])), "Plugins run with your Windows user's permissions. Install only publishers you trust.",
                 entry.Version, entry.MinHostVersion), entry.Author)
                 { CategoriesIds = entry.Categories, Supported = entry.Supports(LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture) }).ToArray();
-            EmptyTitle.Text = _catalog.Count == 0 ? "No integrations published yet" : "No matching integrations";
+            EmptyTitle.Text = _catalog.Count == 0 ? "No plugins published yet" : "No matching plugins";
             EmptyDescription.Text = _catalog.Count == 0 ? "The catalog is ready. Plugins will appear here when they are published." : "Try another search.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -109,7 +109,7 @@ public sealed partial class MarketplaceView : UserControl
             FilteredItems.Add(item with { Installed = _isInstalled(item.Plugin.Id),
                 UpdateAvailable = HasUpdate(item), PendingRestart = _runtime?.Packages.Store.PendingRestart(item.Plugin.Id) == true });
         MarketList.SelectedItem = FilteredItems.FirstOrDefault(item => item.Plugin.Id == selectedId) ?? FilteredItems.FirstOrDefault();
-        MarketSummary.Text = $"{FilteredItems.Count} integrations";
+        MarketSummary.Text = $"{FilteredItems.Count} {(FilteredItems.Count == 1 ? "plugin" : "plugins")}";
         MarketEmptyState.Visibility = FilteredItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_catalog.Count > 0)
         {
@@ -198,10 +198,10 @@ public sealed partial class MarketplaceView : UserControl
             ShowList(true);
             LauncherRequested?.Invoke(this, EventArgs.Empty);
         }, _settingsLayout ? "Marketplace breadcrumb Settings" : "Marketplace breadcrumb Quick Launch") };
-        if (!IsDetail) crumbs.Add(new("Integrations"));
+        if (!IsDetail) crumbs.Add(new("Plugins"));
         else
         {
-            crumbs.Add(new("Integrations", () => ShowList(true), "Marketplace breadcrumb catalog"));
+            crumbs.Add(new("Plugins", () => ShowList(true), "Marketplace breadcrumb catalog"));
             if (_reviewing)
             {
                 crumbs.Add(new(_opened?.Title ?? "Plugin", CancelInstall, "Marketplace breadcrumb detail"));
@@ -218,7 +218,7 @@ public sealed partial class MarketplaceView : UserControl
         _reviewing = false;
         IsDetail = false;
         IntegrationTabs.Visibility = _settingsLayout ? Visibility.Collapsed : Visibility.Visible;
-        MarketTitle.Text = _settingsLayout ? "Discover plugins" : "Integrations";
+        MarketTitle.Text = _settingsLayout ? "Discover plugins" : "Plugins";
         MarketListPage.Visibility = Visibility.Visible;
         MarketDetailPage.Visibility = Visibility.Collapsed;
         MarketPrimaryButton.Visibility = MarketCancelButton.Visibility = Visibility.Collapsed;
