@@ -25,7 +25,7 @@ public sealed class WorkflowShortcutCatalogTests : IDisposable
         var supported = Draft();
         Seed(supported, Draft("disabled", "CTRL+K") with { IsEnabled = false },
             Draft("recording") with { Trigger = WorkflowTrigger.Hotkey(["CTRL+L"], WorkflowHotkeyBehavior.StartDictation) },
-            Draft("action") with { Output = new() { TargetActionPluginId = "external" } });
+            Draft("action") with { Output = new() { TargetActionPluginId = "external", AutoEnter = true } });
         var bytes = File.ReadAllBytes(PathName);
         var backend = new Backend(); var catalog = Catalog(backend);
         Assert.Null(catalog.Initialize());

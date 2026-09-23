@@ -1,0 +1,17 @@
+{
+  "id": "com.typewhisper.linear",
+  "name": "Linear",
+  "version": "1.2.2",
+  "minHostVersion": "1.1.5",
+  "author": "TypeWhisper",
+  "description": "Create Linear issues from workflow text. Select a team and optional project using your Linear API key.",
+  "categories": [
+    "integrations"
+  ],
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Linear.dll",
+  "pluginClass": "TypeWhisper.Plugin.Linear.LinearPlugin",
+  "descriptions": {
+    "de": "Erstellt Linear-Issues aus Workflow-Text. Team und optionales Projekt mit deinem Linear-API-Schlüssel auswählen."
+  }
+}

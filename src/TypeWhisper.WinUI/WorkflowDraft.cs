@@ -10,6 +10,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string ProviderId { get; init; } = TypeWhisper.Presentation.WorkflowLlmDefaults.Inherit;
     /// <summary>The exact selected provider model.</summary>
     public string ModelId { get; init; } = "";
+    /// <summary>Optional action destination for the processed text.</summary>
+    public string? TargetActionPluginId { get; init; }
     /// <summary>Whether manual execution is enabled.</summary>
     public bool IsEnabled { get; init; } = true;
     /// <summary>The shared Core prompt template.</summary>
@@ -62,6 +64,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
                 WorkflowTriggerKind.Hotkey => WorkflowTrigger.Hotkey(ShortcutRules.Split(Hotkeys), HotkeyBehavior),
                 _ => WorkflowTrigger.Manual()
             },
+        Output = Stored?.Output is { } output && output.TargetActionPluginId == TargetActionPluginId
+            ? output : (Stored?.Output ?? new WorkflowOutput()) with { TargetActionPluginId = TargetActionPluginId },
         Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with
         { FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget }
     };
@@ -79,6 +83,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Hotkeys = string.Join(",", workflow.Trigger.Hotkeys),
         HotkeyBehavior = workflow.Trigger.HotkeyBehavior,
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
+        TargetActionPluginId = workflow.Output.TargetActionPluginId,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, Stored = workflow
     };
 }

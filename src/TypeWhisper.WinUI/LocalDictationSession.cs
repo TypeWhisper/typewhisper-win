@@ -661,6 +661,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
                 else if (workflow is null) await CaptureWorkflowAtStartAsync();
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
+                _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 GetWindowThreadProcessId(_target, out var currentTargetProcessId);
@@ -807,12 +808,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
                         CorrectionLearning.Observe(text, _target);
                     return inserted;
-                }, _operationCancellation.Token, samples, 16000);
+                }, _operationCancellation.Token, samples, 16000,
+                string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
+                    _workflowActionAtStart, text, new TypeWhisper.PluginSDK.Models.ActionContext(record.AppName, record.AppProcessName,
+                        record.AppUrl, record.Language, rawText), ct));
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             PasteDiagnostics.Write(outcome.NeedsReview ? "delivery.review" : "delivery.completed");
             if (_disposed) return;
-            _operationCancellation.Token.ThrowIfCancellationRequested();
-            if (_lastCompletedDictation.TryPublish(outcome, _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
+            if (!outcome.ActionAttempted) _operationCancellation.Token.ThrowIfCancellationRequested();
+            if (_lastCompletedDictation.TryPublish(outcome, outcome.ActionAttempted ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
             SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,

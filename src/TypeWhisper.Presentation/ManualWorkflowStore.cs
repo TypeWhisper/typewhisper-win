@@ -17,7 +17,7 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     /// <summary>Identifies workflows whose semantics this manual editor supports.</summary>
     public static bool IsSupported(Workflow workflow) => Enum.IsDefined(workflow.Template)
         && workflow.Trigger.Kind == WorkflowTriggerKind.Manual && workflow.Behavior.Settings.Count == 0
-        && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId);
+        && (string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId) || AutomaticWorkflowSnapshot.UnsupportedReason(workflow) is null);
 
     /// <summary>Identifies manual or supported App/Website/Global workflows that the editor can preserve and execute.</summary>
     public static bool IsEditable(Workflow workflow) => IsSupported(workflow) || IsSelectedTextShortcut(workflow) || IsDictationShortcut(workflow) ||

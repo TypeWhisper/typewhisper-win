@@ -128,7 +128,7 @@ public sealed class ManualWorkflowTests : IDisposable
     {
         var store = new ManualWorkflowStore(FilePath);
         store.Save(Draft);
-        Assert.True(new WorkflowService(FilePath).TryReplaceAll([Draft with { Output = new() { TargetActionPluginId = "action" } }]));
+        Assert.True(new WorkflowService(FilePath).TryReplaceAll([Draft with { Output = new() { TargetActionPluginId = "action", AutoEnter = true } }]));
         var bytes = File.ReadAllBytes(FilePath);
         Assert.Throws<InvalidOperationException>(() => store.Save(Draft with { IsEnabled = false }));
         Assert.Throws<InvalidOperationException>(() => store.Delete(Draft.Id));

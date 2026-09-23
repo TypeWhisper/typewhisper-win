@@ -133,7 +133,7 @@ public sealed class ManualWorkflowTemplateTests : IDisposable
     {
         var supported = Workflow(WorkflowTemplate.Summary);
         var automatic = Workflow(WorkflowTemplate.Translation) with { Trigger = WorkflowTrigger.App("editor") };
-        var action = Workflow(WorkflowTemplate.Checklist) with { Output = new() { TargetActionPluginId = "action" } };
+        var action = Workflow(WorkflowTemplate.Checklist) with { Output = new() { TargetActionPluginId = "action", AutoEnter = true } };
         var settings = Workflow(WorkflowTemplate.Json) with { Behavior = new() { Settings = new() { ["schema"] = "keep this" } } };
         Assert.True(new WorkflowService(StorePath).TryReplaceAll([automatic, action, settings]));
         var store = new ManualWorkflowStore(StorePath);

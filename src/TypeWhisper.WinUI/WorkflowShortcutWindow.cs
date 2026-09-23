@@ -94,14 +94,11 @@ internal sealed class WorkflowShortcutWindow : Window
         var parentCancellation = ct.Register(RequestCancel);
         try
         {
-            var result = await ManualWorkflowRunner.RunAsync(workflow, _text.Text,
-                (provider, model) => session.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)),
-                session.ProcessLlmAsync, cancellation.Token);
-            ct.ThrowIfCancellationRequested();
-            cancellation.Token.ThrowIfCancellationRequested();
+            var execution = await session.RunWorkflowWithActionAsync(workflow, _text.Text, cancellation.Token);
+            var result = execution.Text;
             if (_closing) return;
             _text.Text = result.ReplaceLineEndings("\r");
-            _status.Text = "Completed. Review and copy the result. Not saved to History.";
+            _status.Text = execution.Message ?? "Completed. Review and copy the result. Not saved to History.";
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         { if (!_closing) _status.Text = "Canceled. Your selected text is still here; no result was applied."; }

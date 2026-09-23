@@ -3,6 +3,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Presentation;
 
+/// <summary>Confirmed outcome of a workflow destination, without automatic retries.</summary>
+public sealed record WorkflowActionResult(bool Success, string Message);
+
 /// <summary>Delivery outcome, retaining the original result for review when needed.</summary>
 /// <param name="Record">The completed dictation.</param>
 /// <param name="Saved">Whether the record was written to history.</param>
@@ -12,6 +15,8 @@ public sealed record DictationOutputResult(TranscriptionRecord Record, bool Save
 {
     /// <summary>Whether a requested history write or paste failed; choosing review-first is not a failure.</summary>
     public bool Failed { get; init; }
+    /// <summary>An action was attempted; its outcome must survive late cancellation.</summary>
+    public bool ActionAttempted { get; init; }
 }
 
 /// <summary>Applies output choices without requiring Windows or a clipboard.</summary>
@@ -21,7 +26,8 @@ public sealed class DictationOutputDelivery(IHistoryService history)
     /// <summary>Saves when allowed, then attempts paste or returns a reviewable result.</summary>
     public async Task<DictationOutputResult> DeliverAsync(TranscriptionRecord record,
         DictationOutputPreferences atStart, Func<DictationOutputPreferences> current,
-        Func<Task<bool>> paste, CancellationToken ct = default, float[]? samples = null, int sampleRate = 16000)
+        Func<Task<bool>> paste, CancellationToken ct = default, float[]? samples = null, int sampleRate = 16000,
+        Func<CancellationToken, Task<WorkflowActionResult>>? action = null)
     {
         ct.ThrowIfCancellationRequested();
         var saved = false;
@@ -68,6 +74,16 @@ public sealed class DictationOutputDelivery(IHistoryService history)
         }
         var storage = saved ? "Saved to History." : "Not saved to History.";
         ct.ThrowIfCancellationRequested();
+        if (record.Status == TranscriptionRecordStatus.Succeeded && action is not null)
+        {
+            WorkflowActionResult result;
+            try { result = await action(ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            { result = new(false, "Action completion is unknown. Check its destination before trying again."); }
+            return new(record, saved, !result.Success, result.Message + " " + storage)
+                { Failed = !result.Success, ActionAttempted = true };
+        }
         if (record.Status != TranscriptionRecordStatus.Succeeded || !atStart.RestrictedBy(current()).AutoPaste)
             return new(record, saved, true, storage + " Review and copy your text; nothing was pasted.");
         try
