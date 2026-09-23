@@ -146,7 +146,9 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowProfileFailure(TypeWhisper.Core.Services.LegacyDailyProfileMigration.DescribeFailure(ex), ex.Message);
+            // Retry or a new profile can still finish startup; keep shares and activations pending until then.
+            ShowProfileFailure(TypeWhisper.Core.Services.LegacyDailyProfileMigration.DescribeFailure(ex), ex.Message,
+                keepStartupPending: true);
             _profileOperation!.OfferActions(
                 "Retry", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: false)),
                 "Start with a new profile", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: true)));
@@ -233,7 +235,9 @@ public partial class App : Application
     {
         if (_profileOperation is { } operation)
         {
-            _activations.Close(); operation.Activate(); return;
+            // While startup can still succeed (import in progress or retryable), queued activations wait for it.
+            if (_shareStartupReady.Task.IsCompleted) _activations.Close();
+            operation.Activate(); return;
         }
         if (_exiting) { _activations.Close(); return; }
         if (!_activationReady || _window is null) return;
@@ -247,9 +251,9 @@ public partial class App : Application
         Exit();
     }
 
-    private void ShowProfileFailure(string message, string? details = null)
+    private void ShowProfileFailure(string message, string? details = null, bool keepStartupPending = false)
     {
-        _shareStartupReady.TrySetResult(false);
+        if (!keepStartupPending) _shareStartupReady.TrySetResult(false);
         if (_profileOperation is null) _profileOperation = new(message, false, CloseProfileOperation);
         else _profileOperation.SetMessage(message, false);
         _profileOperation.SetDetails(details);
