@@ -180,6 +180,10 @@ and four retained versioned archives. The public feed, every ZIP URL, exact size
 and package identity were checked. xAI's automated tests passed; live inference was not
 tested because the connected xAI team lacks API credits.
 
+For the maintained Actions workflow, tag/dispatch instructions, validation and recovery,
+see [Plugin releases](PLUGIN-RELEASES.md). File Memory 1.4.0 was subsequently published
+with verified downloads, bringing the current catalog to 35 entries.
+
 Use `eng/Build-PortablePluginCatalog.py` in a clean Windows checkout to build changed portable
 projects and stage ZIP archives plus catalog JSON. For example, run
 `python eng/Build-PortablePluginCatalog.py --source . --existing-feed ../current-plugins-v2.json --tag plugins-winui-YYYYMMDD --output ../staged-catalog`.

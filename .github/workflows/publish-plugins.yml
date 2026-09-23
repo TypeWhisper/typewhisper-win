@@ -1,0 +1,87 @@
+name: Release plugins
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugin_ids:
+        description: 'Full plugin IDs, separated by commas (for example com.typewhisper.file-memory)'
+        required: true
+        type: string
+      publish:
+        description: 'Publish tested packages and update the catalog (main only)'
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'plugin-*-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-release-gh-pages
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test release safety
+        run: python -m unittest discover -s eng/tests -p 'test_*.py' -v
+      - name: Build and test selected packages
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_IDS: ${{ inputs.plugin_ids }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || format('plugins-{0}', github.run_id) }}
+        run: |
+          $arguments = @('eng/Prepare-PluginRelease.py', '--source', $env:GITHUB_WORKSPACE,
+            '--output', "$env:RUNNER_TEMP/plugin-release", '--tag', $env:RELEASE_TAG)
+          if ($env:GITHUB_EVENT_NAME -eq 'push') { $arguments += '--from-tag' }
+          else { $arguments += @('--plugin-ids', $env:PLUGIN_IDS) }
+          python @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: plugin-release
+          path: ${{ runner.temp }}/plugin-release/
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    if: github.event_name == 'push' || (github.ref == 'refs/heads/main' && inputs.publish)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin-release
+          path: ${{ runner.temp }}/plugin-release
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish verified packages and refresh catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python eng/Publish-PluginCatalog.py --stage "$RUNNER_TEMP/plugin-release" --publish
