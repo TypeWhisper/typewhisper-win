@@ -11,16 +11,19 @@ internal static class OriginalFieldFocus
         (controlType is 50025 or 50026 && keyboardFocusable && writableTextPattern());
 
     // Chromium/Electron build their accessibility tree on the first focus query and can
-    // report the render host Pane until it exists (#513). Retry while the target stays in
-    // front; the microphone is already capturing, so this never delays the recording.
+    // report the render host Pane until it exists (#513). Retry briefly while the target stays
+    // in front; the microphone is already capturing. The time budget bounds how long a Stop
+    // pressed meanwhile waits for startup, however slowly each provider query answers.
     internal static async Task<bool> CaptureAsync(Func<bool> capture, Func<bool> targetIsForeground,
-        Func<CancellationToken, Task> wait, CancellationToken cancellation, int attempts = 20)
+        Func<CancellationToken, Task> wait, CancellationToken cancellation, int attempts = 20, Func<bool>? expired = null)
     {
+        var clock = Stopwatch.StartNew();
+        expired ??= () => clock.Elapsed >= TimeSpan.FromSeconds(1);
         for (var attempt = 1; ; attempt++)
         {
             cancellation.ThrowIfCancellationRequested();
             if (capture()) return true;
-            if (attempt >= attempts || !targetIsForeground()) return false;
+            if (attempt >= attempts || expired() || !targetIsForeground()) return false;
             await wait(cancellation);
         }
     }

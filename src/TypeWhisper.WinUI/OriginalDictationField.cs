@@ -42,8 +42,15 @@ internal sealed class OriginalDictationField : IDisposable
 
     private bool CaptureFocused()
     {
-        Release(_element);
-        _element = _automation.GetFocusedElement();
+        Release(_element); _element = null;
+        try { _element = _automation.GetFocusedElement(); }
+        // UIA_E_ELEMENTNOTAVAILABLE and similar races are transient while focus settles: retry.
+        catch (COMException ex) { PasteDiagnostics.Write("field.capture.transient", ex); return false; }
+        finally
+        {
+            // The first query may wait for a cold provider; retries must stay short.
+            _automation.ConnectionTimeout = 250; _automation.TransactionTimeout = 250;
+        }
         PasteDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.type={_element.CurrentControlType}");
         if (_element?.CurrentControlType is 50025 or 50026)
             PasteDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");

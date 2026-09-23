@@ -57,6 +57,16 @@ public class OriginalFieldFocusTests
     }
 
     [Fact]
+    public async Task CaptureStopsRetryingWhenTimeBudgetExpires()
+    {
+        // Slow providers must not hold recording startup (and a pending Stop) for all attempts.
+        var queries = 0;
+        Assert.False(await OriginalFieldFocus.CaptureAsync(() => { queries++; return false; }, () => true,
+            _ => Task.CompletedTask, default, attempts: 20, expired: () => queries >= 2));
+        Assert.Equal(2, queries);
+    }
+
+    [Fact]
     public async Task CanceledCaptureDoesNotQueryAgain()
     {
         using var cancellation = new CancellationTokenSource();
