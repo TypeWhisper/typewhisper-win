@@ -54,6 +54,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private DictationTextPreferences _textAtStart = new();
     private DictationOutputPreferences _outputAtStart = new();
     internal event Action<DictationOutputResult>? ReviewRequested;
+    internal event Action<string>? OutputWarning;
     internal event Action<Guid>? OutputCompleted;
     internal bool LivePreviewEnabled { get; set; } = true;
     // Availability describes the host's connected preview path, not just an SDK streaming declaration.
@@ -823,7 +824,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,
                 outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
-            else OutputCompleted?.Invoke(recordingId);
+            else
+            {
+                OutputCompleted?.Invoke(recordingId);
+                if (outcome.StorageWarning is not null) OutputWarning?.Invoke(outcome.Message);
+            }
             ReadCompletedDictation(record, outcome, processed.Warnings.Count == 0);
 
         }

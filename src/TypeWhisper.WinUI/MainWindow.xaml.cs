@@ -452,6 +452,12 @@ public sealed partial class MainWindow : Window
         WorkflowsView.IsPinned = id => _pinnedCommands.Contains("workflow:" + id);
         WorkflowsView.TogglePin = command => ToggleLauncherPin(command);
         _dictation.ReviewRequested += ShowOutputReview;
+        _dictation.OutputWarning += message => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closing) return;
+            OutputStorageNotice.Message = message;
+            OutputStorageNotice.IsOpen = true;
+        });
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
         {

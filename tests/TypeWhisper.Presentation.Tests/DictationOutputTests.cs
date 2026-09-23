@@ -46,6 +46,7 @@ public sealed class DictationOutputTests
         Assert.Equal(save, result.Saved);
         Assert.False(result.Failed);
         Assert.Equal(!autoPaste, result.NeedsReview);
+        Assert.Equal(autoPaste ? DictationReviewReason.None : DictationReviewReason.AutomaticPasteDisabled, result.ReviewReason);
         Assert.Equal(autoPaste ? 1 : 0, pasted);
         Assert.Same(record, result.Record);
         history.Verify(h => h.EnsureLoadedAsync(), save ? Times.Once() : Times.Never());
@@ -56,7 +57,7 @@ public sealed class DictationOutputTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task HistoryFailurePreservesReviewAndPreventsPaste(bool loadFails)
+    public async Task HistoryFailureWarnsWithoutInterruptingSuccessfulPaste(bool loadFails)
     {
         var history = new Mock<IHistoryService>();
         history.Setup(h => h.EnsureLoadedAsync()).Returns(loadFails ? Task.FromException(new IOException()) : Task.CompletedTask);
@@ -65,10 +66,12 @@ public sealed class DictationOutputTests
         var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), new(), () => new(),
             () => { pasted = true; return Task.FromResult(true); });
         Assert.False(result.Saved);
-        Assert.True(result.NeedsReview);
+        Assert.False(result.NeedsReview);
         Assert.Equal("Reviewed text", result.Record.FinalText);
         Assert.True(result.Failed);
-        Assert.False(pasted);
+        Assert.True(pasted);
+        Assert.NotNull(result.StorageWarning);
+        Assert.Equal(DictationReviewReason.None, result.ReviewReason);
     }
 
     [Theory]
@@ -83,7 +86,29 @@ public sealed class DictationOutputTests
         Assert.True(result.NeedsReview);
         Assert.True(result.Failed);
         Assert.False(result.Saved);
+        Assert.Equal(DictationReviewReason.PasteFailed, result.ReviewReason);
+        Assert.Equal("Text could not be inserted", result.ReviewTitle);
         history.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(false, true, DictationReviewReason.AutomaticPasteDisabled)]
+    [InlineData(true, false, DictationReviewReason.PasteFailed)]
+    public async Task HistoryFailureKeepsTextWhenItCannotBeDelivered(bool autoPaste, bool pasteSucceeds, DictationReviewReason reason)
+    {
+        var history = new Mock<IHistoryService>();
+        history.Setup(h => h.EnsureLoadedAsync()).ThrowsAsync(new IOException());
+        var prefs = new DictationOutputPreferences { AutoPaste = autoPaste };
+        var pasted = 0;
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), prefs, () => prefs,
+            () => { pasted++; return Task.FromResult(pasteSucceeds); });
+        Assert.True(result.NeedsReview);
+        Assert.True(result.Failed);
+        Assert.False(result.Saved);
+        Assert.NotNull(result.StorageWarning);
+        Assert.Equal(reason, result.ReviewReason);
+        Assert.Equal("Reviewed text", result.Record.FinalText);
+        Assert.Equal(autoPaste ? 1 : 0, pasted);
     }
 
     [Fact]
