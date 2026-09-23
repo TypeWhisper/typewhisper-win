@@ -11,6 +11,13 @@ public sealed record ApplicationInstallation(string PackageId, string Executable
         _ => null
     };
 
+    /// <summary>Points an exact owned early 1.1 Daily command at the renamed executable; never creates a registration.</summary>
+    public void MigrateStartupCommand(IStartupRegistrationBackend backend, string executable)
+    {
+        if (PackageId == "TypeWhisperDaily")
+            StartupRegistration.MigrateExecutable(backend, PackageId, Path.Combine(Path.GetDirectoryName(executable)!, "TypeWhisper.WinUI.exe"), executable);
+    }
+
     /// <summary>Only the original Daily feed changes generations. Stable and RC never fall back to WPF.</summary>
     public string Feed(AppUpdateChannel channel, string architecture) => PackageId == "TypeWhisper" && channel == AppUpdateChannel.Daily
         ? architecture is "win-x64" or "win-arm64" ? architecture + "-daily" : throw new ArgumentException("Unsupported architecture.")

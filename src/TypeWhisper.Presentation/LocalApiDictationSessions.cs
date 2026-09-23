@@ -9,7 +9,10 @@ public sealed record LocalApiDictationSession(string Id, long Generation, string
 /// <summary>Retains bounded API results without attributing later GUI dictations to an earlier request.</summary>
 public sealed class LocalApiDictationSessions
 {
-    private readonly Dictionary<string, LocalApiDictationSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The number of most recently registered sessions retained for polling.</summary>
+    public const int Capacity = 32;
+    // Dictionary reuses freed slots, so its enumeration order is not insertion order after an eviction.
+    private readonly OrderedDictionary<string, LocalApiDictationSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Registers the actual recording generation, reusing its API identity when stopped.</summary>
     public LocalApiDictationSession Register(long generation)
@@ -19,7 +22,7 @@ public sealed class LocalApiDictationSessions
         if (existing is not null) return existing;
         var created = new LocalApiDictationSession(Guid.NewGuid().ToString(), generation, "recording");
         _sessions.Add(created.Id, created);
-        while (_sessions.Count > 32) _sessions.Remove(_sessions.Keys.First());
+        while (_sessions.Count > Capacity) _sessions.RemoveAt(0);
         return created;
     }
 

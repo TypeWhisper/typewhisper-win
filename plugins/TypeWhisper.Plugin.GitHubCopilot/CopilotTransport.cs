@@ -9,6 +9,8 @@ internal interface ICopilotTransport
     Task<IReadOnlyList<CopilotAccount>> GetAccountsAsync(string dataDirectory, CancellationToken ct);
     Task<IReadOnlyList<PluginModelInfo>> GetModelsAsync(string dataDirectory, CopilotAccount account, CancellationToken ct);
     Task<string> ProcessAsync(string dataDirectory, CopilotAccount account, string systemPrompt, string userText, string model, CancellationToken ct);
+    /// <summary>Discards cached account and model checks after a settings change.</summary>
+    void InvalidateCache();
 }
 
 // Only public account identity is retained. SDK account tokens and opaque selection IDs
@@ -26,10 +28,24 @@ internal sealed class CopilotModelUnavailableException : Exception;
 
 internal sealed class CopilotTransport : ICopilotTransport
 {
+    internal static readonly TimeSpan CatalogLifetime = TimeSpan.FromMinutes(10);
     private readonly Func<CopilotClientOptions, CopilotClient> _createClient;
+    private readonly TimeProvider _time;
+    // Per-turn account resolution and model listing are only pre-checks: every turn still binds and
+    // verifies the account on its session and switches with requireAvailable before sending text.
+    // Only public model metadata is cached in memory; selection IDs are never retained.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<PluginModelInfo> Models, DateTimeOffset Expires)> _catalogs = new();
 
-    internal CopilotTransport(Func<CopilotClientOptions, CopilotClient>? createClient = null) =>
-        _createClient = createClient ?? (options => new CopilotClient(options));
+    internal CopilotTransport(Func<CopilotClientOptions, CopilotClient>? createClient = null, TimeProvider? time = null)
+    { _createClient = createClient ?? (options => new CopilotClient(options)); _time = time ?? TimeProvider.System; }
+
+    /// <inheritdoc />
+    public void InvalidateCache() => _catalogs.Clear();
+    private static string CacheKey(string dataDirectory, CopilotAccount account) => dataDirectory + "\n" + account.Key;
+    private bool IsCached(string key, string model) => _catalogs.TryGetValue(key, out var entry) &&
+        entry.Expires > _time.GetUtcNow() && entry.Models.Any(m => m.Id == model);
+    private IReadOnlyList<PluginModelInfo> Cache(string key, IReadOnlyList<PluginModelInfo> models)
+    { _catalogs[key] = (models, _time.GetUtcNow() + CatalogLifetime); return models; }
 
     internal static CopilotClientOptions CreateClientOptions(string dataDirectory, Func<string, string?>? readEnvironment = null)
     {
@@ -107,6 +123,7 @@ internal sealed class CopilotTransport : ICopilotTransport
     };
     public async Task<IReadOnlyList<CopilotAccount>> GetAccountsAsync(string dataDirectory, CancellationToken ct)
     {
+        InvalidateCache(); // Account discovery is a settings refresh; re-verify every account afterwards.
         await using var client = CreateClient(dataDirectory);
         try
         {
@@ -120,11 +137,13 @@ internal sealed class CopilotTransport : ICopilotTransport
 
     public async Task<IReadOnlyList<PluginModelInfo>> GetModelsAsync(string dataDirectory, CopilotAccount account, CancellationToken ct)
     {
+        var key = CacheKey(dataDirectory, account);
+        _catalogs.TryRemove(key, out _);
         await using var client = CreateClient(dataDirectory);
         try
         {
             var selected = await ResolveAccountAsync(client, account, ct);
-            return await ListModelsAsync(client, selected.SelectionId!, ct);
+            return Cache(key, await ListModelsAsync(client, selected.SelectionId!, ct));
         }
         finally { await client.ForceStopAsync(); }
     }
@@ -135,11 +154,16 @@ internal sealed class CopilotTransport : ICopilotTransport
         var config = CreateSessionConfig(dataDirectory, systemPrompt, model);
         CopilotSession? session = null;
         var sessionCreationStarted = false;
+        var key = CacheKey(dataDirectory, account);
         try
         {
-            var selected = await ResolveAccountAsync(client, account, ct);
-            if (!(await ListModelsAsync(client, selected.SelectionId!, ct)).Any(m => m.Id == model))
-                throw new CopilotModelUnavailableException();
+            if (IsCached(key, model)) await client.StartAsync(ct);
+            else
+            {
+                var selected = await ResolveAccountAsync(client, account, ct);
+                if (!Cache(key, await ListModelsAsync(client, selected.SelectionId!, ct)).Any(m => m.Id == model))
+                    throw new CopilotModelUnavailableException();
+            }
             // Bind authentication before choosing the request model or sending any text.
             config.Model = null;
             sessionCreationStarted = true;
@@ -157,6 +181,8 @@ internal sealed class CopilotTransport : ICopilotTransport
                 timeout: TimeSpan.FromMinutes(2), cancellationToken: ct);
             return response?.Data.Content ?? throw new InvalidOperationException("Copilot returned no text.");
         }
+        // Sign-in, credential, model or provider failures re-verify the account on the next turn.
+        catch (Exception ex) when (ex is not OperationCanceledException) { _catalogs.TryRemove(key, out _); throw; }
         finally
         {
             // Cancellation of SendAndWait only cancels the local wait. Abort the remote turn

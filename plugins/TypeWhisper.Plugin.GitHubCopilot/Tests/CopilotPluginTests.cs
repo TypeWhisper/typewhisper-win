@@ -33,7 +33,9 @@ public sealed class CopilotPluginTests
         using var plugin = new GitHubCopilotPlugin(transport);
         await plugin.ActivateAsync(host);
         await plugin.ExecuteSettingsActionAsync("refresh", default);
+        var invalidations = transport.Invalidations;
         await plugin.SaveTextSettingAsync("selectedModel", "model-a", default);
+        Assert.True(transport.Invalidations > invalidations, "Saved settings must discard cached turn checks.");
         await plugin.DeactivateAsync();
         await plugin.ActivateAsync(host);
         Assert.True(plugin.IsAvailable);
@@ -214,6 +216,8 @@ internal sealed class FakeTransport : ICopilotTransport
         if (Error is not null) throw Error;
         return Process?.Invoke(ct) ?? Task.FromResult(Response);
     }
+    internal int Invalidations;
+    public void InvalidateCache() => Invalidations++;
 }
 
 internal sealed class TestHost : IPluginHostServices

@@ -18,7 +18,7 @@ public sealed partial class RecorderView
         public bool Started { get; set; }
     }
 
-    private readonly Dictionary<string, ApiRecorderSession> _apiRecorderSessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly OrderedDictionary<string, ApiRecorderSession> _apiRecorderSessions = new(StringComparer.OrdinalIgnoreCase);
     private ApiRecorderSession? _apiRecorderSession;
     private static readonly System.Text.Json.JsonSerializerOptions RecorderJson = new()
     { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower };
@@ -84,6 +84,7 @@ public sealed partial class RecorderView
         // Bound in-memory polling history without removing the active session.
         if (_apiRecorderSessions.Count >= 100)
         {
+            // Insertion order: a plain Dictionary reuses freed slots and would evict a recent session.
             var oldest = _apiRecorderSessions.First(pair => pair.Value != _apiRecorderSession);
             _apiRecorderSessions.Remove(oldest.Key);
         }

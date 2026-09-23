@@ -62,7 +62,7 @@ internal sealed partial class WinUIHttpApi
                 // Its ID was registered before any silence stop could run.
                 _dictations.Refresh(session.ApiDictationGeneration, session.IsRecording, session.CanCancelProcessing,
                     session.LastApiDictationRecordGeneration, session.LastApiDictationRecord);
-                var item = _dictations.Find(started.Id)!;
+                var item = _dictations.Find(started.Id) ?? started;
                 return LocalApiResponse.Json(200, new { id = item.Id, status = item.Status, workflow_id = workflow?.Id, workflow_name = workflow?.Name });
             }
             finally { _startingDictation = false; }
