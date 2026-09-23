@@ -33,6 +33,8 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LegacyWindowsProfileMigration.cs" Link="LegacyWindowsProfileMigration.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/OverlayLayout.cs" Link="OverlayLayout.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
   </ItemGroup>
   <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
     <Compile Remove="MediaFoundationFileDecoderTests.cs" />

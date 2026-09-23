@@ -54,6 +54,36 @@ public sealed class LegacyWindowsProfileMigrationTests : IDisposable
         finally { await provider.DeactivateAsync(); }
     }
     [Fact]
+    public async Task LicenseOnlyProfileRetainsActivation()
+    {
+        Directory.CreateDirectory(Path.Combine(Source, "Data"));
+        File.WriteAllText(Path.Combine(Source, "Data", "licenses.dat"), "existing-activation");
+        Assert.True(await Import((_, _, _) => throw new Exception("A license-only profile must not install plugins.")));
+        Assert.Equal("existing-activation", File.ReadAllText(Path.Combine(Destination, "licenses.dat")));
+    }
+    [Fact]
+    public async Task OverlayMigrationPreservesDisabledLiveTextAndWidgetMeaning()
+    {
+        Directory.CreateDirectory(Source);
+        File.WriteAllText(Path.Combine(Source, "settings.json"), JsonSerializer.Serialize(new AppSettings
+        {
+            LiveTranscriptionEnabled = false, LiveTranscriptionFontSize = 16,
+            PreviewBubbleAutoHideMilliseconds = 3000, OverlayPosition = OverlayPosition.Top,
+            IndicatorStyle = IndicatorStyle.CompactBadge,
+            OverlayLeftWidget = TypeWhisper.Core.Models.OverlayWidget.Timer,
+            OverlayRightWidget = TypeWhisper.Core.Models.OverlayWidget.Waveform
+        }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+        Assert.True(await Import());
+        var overlay = OverlayPreferencesStore.Read(Path.Combine(Destination, "overlay.json"));
+        Assert.False(overlay.LiveText);
+        Assert.Equal(16, overlay.LiveTranscriptionFontSize);
+        Assert.Equal(3000, overlay.PreviewBubbleAutoHideMilliseconds);
+        Assert.Equal(OverlayAnchor.TopCenter, overlay.Anchor);
+        Assert.Equal(OverlayMode.Compact, overlay.Mode);
+        Assert.Equal(TypeWhisper.WinUI.OverlayWidget.Timer, overlay.Left);
+        Assert.Equal(TypeWhisper.WinUI.OverlayWidget.Waveform, overlay.Right);
+    }
+    [Fact]
     public async Task InterruptedPluginDownloadLeavesNoVisibleProfileAndCanRetry()
     {
         Seed();

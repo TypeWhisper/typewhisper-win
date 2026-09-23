@@ -23,10 +23,14 @@ public static class LegacyDailyProfileMigration
         RejectLinks(legacyRoot);
         var source = Path.Combine(legacyRoot, "Data");
         RejectLinks(source);
-        if (!Directory.Exists(source) && (prepareProfile is null || !File.Exists(Path.Combine(legacyRoot, "settings.json")))) return false;
+        var hasExtendedState = prepareProfile is not null &&
+            (File.Exists(Path.Combine(legacyRoot, "settings.json")) ||
+             File.Exists(Path.Combine(source, "licenses.dat")) || File.Exists(Path.Combine(source, "license.json")) ||
+             Directory.Exists(Path.Combine(legacyRoot, "PluginData")) || Directory.Exists(Path.Combine(legacyRoot, "Plugins")));
+        if (!Directory.Exists(source) && !hasExtendedState) return false;
         foreach (var name in Files) RejectLinks(Path.Combine(source, name));
         if (!Files.Any(name => File.Exists(Path.Combine(source, name))) &&
-            (prepareProfile is null || !File.Exists(Path.Combine(legacyRoot, "settings.json")))) return false;
+            !hasExtendedState) return false;
 
         // The backup reader validates types, identities, duplicate fields and size before conversion.
         // Its portable format deliberately removes device-bound paths and credentials.

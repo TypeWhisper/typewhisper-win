@@ -27,6 +27,19 @@ internal static class LegacyWindowsProfileMigration
         {
             settings = SettingsService.ParseForMigration(Encoding.UTF8.GetString(Read(settingsPath)));
             LegacyApplicationSettings.Write(stage, settings);
+            // Match widget names rather than numeric values: Timer and Waveform changed enum positions.
+            OverlayPreferencesStore.Save(Path.Combine(stage, "overlay.json"), new(
+                settings.IndicatorStyle switch
+                {
+                    IndicatorStyle.CompactBadge => OverlayMode.Compact,
+                    IndicatorStyle.EdgeDock => OverlayMode.Minimal,
+                    _ => OverlayMode.Standard
+                }, settings.LiveTranscriptionEnabled, false,
+                settings.OverlayPosition == OverlayPosition.Top ? OverlayAnchor.TopCenter : OverlayAnchor.BottomCenter,
+                Enum.Parse<OverlayWidget>(settings.OverlayLeftWidget.ToString()),
+                Enum.Parse<OverlayWidget>(settings.OverlayRightWidget.ToString()),
+                AppSettings.NormalizeLiveTranscriptionFontSize(settings.LiveTranscriptionFontSize),
+                AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(settings.PreviewBubbleAutoHideMilliseconds)));
         }
         // The license format and user-scoped DPAPI entropy are unchanged. Activation IDs are preserved.
         foreach (var name in new[] { "licenses.dat", "license.json" })
