@@ -177,6 +177,17 @@ public sealed class SettingsService : ISettingsService
         return NormalizeSettings(settings);
     }
 
+    /// <summary>Converts a captured legacy settings file without writing to its source or recovering it in place.</summary>
+    public static AppSettings ParseForMigration(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object || document.RootElement.EnumerateObject()
+            .GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            throw new JsonException("Invalid legacy settings object.");
+        var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? throw new JsonException("Empty legacy settings.");
+        return ApplySettingsMigrations(settings, json);
+    }
+
     private static AppSettings NormalizeSettings(AppSettings settings)
     {
         if (!Enum.IsDefined(settings.IndicatorStyle))

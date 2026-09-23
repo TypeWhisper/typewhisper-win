@@ -35,18 +35,18 @@ function Expect-Selection([string]$EventName, [string]$BaseSha, [string]$HeadSha
 
 try {
     Invoke-FixtureGit @('init', '-q', '--initial-branch=main') | Out-Null
-    $legacy = 'plugins/Plugin.A/Plugin.A.csproj'
-    $portable = 'plugins-v2/Plugin.A/Plugin.A.csproj'
+    $legacy = 'plugins/Plugin.C/Plugin.C.csproj'
+    $portable = 'plugins/Plugin.A/Plugin.A.csproj'
     $other = 'plugins/Plugin.B/Plugin.B.csproj'
     Write-Fixture $legacy
     Write-Fixture $portable
     Write-Fixture $other
-    Write-Fixture 'plugins-v2/Plugin.A/Tests/Plugin.A.Tests.csproj'
+    Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj'
     $initial = Commit-Fixture
     Expect-Selection 'push' ('0' * 40) $initial @($legacy, $portable, $other) 'changed'
 
     Invoke-FixtureGit @('checkout', '-qb', 'feature') | Out-Null
-    Write-Fixture 'plugins-v2/Plugin.A/Code.cs'
+    Write-Fixture 'plugins/Plugin.A/Code.cs'
     Write-Fixture '.github/workflows/plugins-smoke.yml'
     Write-Fixture 'src/TypeWhisper.PluginSDK/Shared.cs'
     Write-Fixture 'Directory.Build.props'
@@ -68,12 +68,12 @@ try {
     Expect-Selection 'pull_request' $feature $shared @() 'none'
     Expect-Selection 'workflow_dispatch' '' $shared @($legacy, $portable, $other) 'all'
 
-    Write-Fixture 'plugins-v2/Plugin.A/Tests/Plugin.A.Tests.csproj' 'test edit'
+    Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj' 'test edit'
     $testEdit = Commit-Fixture
     Expect-Selection 'push' $shared $testEdit @($portable) 'changed'
 
     # A moved source affects both surviving packages, even when Git detects a rename.
-    Invoke-FixtureGit @('mv', 'plugins-v2/Plugin.A/Code.cs', 'plugins/Plugin.B/Moved.cs') | Out-Null
+    Invoke-FixtureGit @('mv', 'plugins/Plugin.A/Code.cs', 'plugins/Plugin.B/Moved.cs') | Out-Null
     $moved = Commit-Fixture
     Expect-Selection 'push' $testEdit $moved @($portable, $other) 'changed'
 

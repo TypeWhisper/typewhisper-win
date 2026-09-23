@@ -12,7 +12,7 @@ internal static class LiveApplicationUpdateSettings
         var row = content.Children.OfType<AccountView>().Single().UpdatePanel;
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear(); row.IsHitTestVisible = true;
-        row.Children.Add(SettingsHelp.Label("App updates", "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release. Changing channels does not install anything until you choose Download and restart. Only compatible WinUI releases are offered."));
+        row.Children.Add(SettingsHelp.Label("App updates", "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release. Changing channels does not install anything until you choose Download and restart."));
         row.Children.Add(new TextBlock { Text = "Installed version: " + WindowsApplicationUpdates.CurrentVersion });
         var picker = new ChoicePicker(); picker.Configure("Update channel", "download", "Update channel");
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };

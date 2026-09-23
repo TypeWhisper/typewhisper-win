@@ -37,7 +37,7 @@
   <Applications>
     <Application
       Id="TypeWhisper"
-      Executable="TypeWhisper.WinUI.exe"
+      Executable="TypeWhisper.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="TypeWhisper"
@@ -53,7 +53,7 @@
       <Extensions>
         <uap5:Extension
           Category="windows.startupTask"
-          Executable="TypeWhisper.WinUI.exe"
+          Executable="TypeWhisper.exe"
           EntryPoint="Windows.FullTrustApplication">
           <uap5:StartupTask
             TaskId="TypeWhisperStartup"

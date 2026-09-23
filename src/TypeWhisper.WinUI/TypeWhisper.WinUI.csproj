@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <AssemblyName>TypeWhisper</AssemblyName>
+    <RootNamespace>TypeWhisper.WinUI</RootNamespace>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
@@ -67,7 +69,7 @@
   </ItemGroup>
   <Target Name="PublishWinUIResources" AfterTargets="Publish">
     <ItemGroup>
-      <WinUIResource Include="$(OutputPath)**/*.pri;$(OutputPath)**/*.xbf" />
+      <WinUIResource Include="$(OutputPath)$(AssemblyName).pri;$(OutputPath)**/*.xbf" />
     </ItemGroup>
     <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
@@ -84,7 +86,7 @@
     <WriteLinesToFile File="$(_StartupOutputRoot)/typewhisper-dev-publication.json"
       Lines="{&quot;Version&quot;:1,&quot;Identity&quot;:&quot;TypeWhisper.WinUI.Dev&quot;,&quot;SourceRoot&quot;:&quot;$(_StartupSourceJson)&quot;,&quot;OutputDirectory&quot;:&quot;$(_StartupOutputJson)&quot;}"
       Overwrite="true" Encoding="UTF-8"
-      Condition="'$(Configuration)' == 'Debug' and '$(_StartupInsideSource)' != 'True' and '$(_StartupOutputRoot)' != '$(_StartupSourceRoot)' and Exists('$(_StartupOutputRoot)/TypeWhisper.WinUI.exe')" />
+      Condition="'$(Configuration)' == 'Debug' and '$(_StartupInsideSource)' != 'True' and '$(_StartupOutputRoot)' != '$(_StartupSourceRoot)' and Exists('$(_StartupOutputRoot)/TypeWhisper.exe')" />
   </Target>
   <Target Name="PublishBundledCli" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
     <PropertyGroup>

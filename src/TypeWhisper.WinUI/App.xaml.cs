@@ -94,7 +94,15 @@ public partial class App : Application
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var legacy = Path.Combine(localData, "TypeWhisper-UserData");
             if (!Directory.Exists(legacy)) legacy = Path.Combine(localData, "TypeWhisper");
-            await TypeWhisper.Core.Services.LegacyDailyProfileMigration.ImportAsync(legacy, WinUIProfile.Root);
+            if (!Directory.Exists(WinUIProfile.Root) && Directory.Exists(legacy))
+            {
+                _profileOperation = new ProfileOperationWindow("Upgrading your TypeWhisper profile. Your previous data will be preserved…", true, Exit, "Profile upgrade");
+                _profileOperation.Activate();
+                await TypeWhisper.Core.Services.LegacyDailyProfileMigration.ImportAsync(legacy, WinUIProfile.Root,
+                    prepareProfile: (source, stage, ct) => Task.Run(() => LegacyWindowsProfileMigration.PrepareAsync(
+                        source, stage, LocalCtcVocabulary.HostVersion,
+                        message => dispatcher.TryEnqueue(() => _profileOperation?.SetMessage(message, true)), ct)));
+            }
 #endif
             var recovery = new TypeWhisper.Core.Services.PersistedProfileBackup(WinUIProfile.Root).RecoverPending();
             if (!recovery.CanOpenProfile)
@@ -112,6 +120,9 @@ public partial class App : Application
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
         _window = new MainWindow();
+        // Keep a window alive throughout startup; closing the last window can end the XAML application.
+        _profileOperation?.Dismiss();
+        _profileOperation = null;
         _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
         _window.InstallApplicationUpdateAsync = apply => ExitOrRestartAsync(restart: true, applyUpdate: apply);
         _window.RestoreProfile = (store, preview) => RestoreProfileAsync(store, preview);
@@ -146,6 +157,7 @@ public partial class App : Application
         if (presentation == TypeWhisper.Presentation.StartupPresentation.Setup) _window.OpenSetup(returnToTray: true);
         await initialization;
         UpdateTrayActions();
+        _window.ShowMigrationNotice();
 #if DEBUG
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
             _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray);

@@ -42,7 +42,7 @@ def catalog_entries(document: object) -> dict[str, dict]:
 
 def discover_projects(source: pathlib.Path, selected: set[str]) -> list[tuple[pathlib.Path, dict]]:
     projects = {}
-    for portable in sorted(source.glob("plugins/*/portable.proj")) + sorted(source.glob("plugins-v2/*/portable.proj")):
+    for portable in sorted(source.glob("plugins/*/portable.proj")):
         manifest = json.loads((portable.parent / "manifest.json").read_text(encoding="utf-8-sig"))
         plugin_id = manifest["id"]
         if plugin_id in projects:

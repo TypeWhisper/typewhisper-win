@@ -14,13 +14,14 @@ internal sealed class ProfileOperationWindow : Window
     private readonly Expander _details;
     private readonly TextBlock _diagnostic;
     private bool _busy;
+    private bool _dismissed;
     private Func<Task>? _retryAction;
 
-    internal ProfileOperationWindow(string message, bool busy, Action exit)
+    internal ProfileOperationWindow(string message, bool busy, Action exit, string heading = "Profile restore")
     {
-        Title = "TypeWhisper · Profile restore";
+        Title = "TypeWhisper · " + heading;
         var body = new StackPanel { Spacing = 18, Padding = new(24), Background = (Brush)Application.Current.Resources["InkBrush"] };
-        body.Children.Add(new TextBlock { Text = "Profile restore", FontSize = 24, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
+        body.Children.Add(new TextBlock { Text = heading, FontSize = 24, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
         _message = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14, Foreground = (Brush)Application.Current.Resources["TextBrush"] };
         body.Children.Add(_message);
         _diagnostic = new TextBlock { TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, FontSize = 12 };
@@ -42,12 +43,14 @@ internal sealed class ProfileOperationWindow : Window
         Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         NativeWindowAppearance.ApplyAppTitleBar(this);
         AppWindow.Resize(new SizeInt32(620, 300));
-        AppWindow.Closing += (_, args) => { args.Cancel = true; if (!_busy) exit(); };
+        AppWindow.Closing += (_, args) => { if (_dismissed) return; args.Cancel = true; if (!_busy) exit(); };
         SetMessage(message, busy);
     }
 
     internal void SetMessage(string message, bool busy)
     { _message.Text = message; _busy = busy; _close.IsEnabled = !busy; _retry.IsEnabled = !busy; }
+
+    internal void Dismiss() { _dismissed = true; Close(); }
 
     internal void SetDetails(string? details)
     { _diagnostic.Text = details ?? ""; _details.Visibility = details is null ? Visibility.Collapsed : Visibility.Visible; }
