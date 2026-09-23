@@ -96,14 +96,12 @@ public partial class App : Application
             if (!Directory.Exists(legacy)) legacy = Path.Combine(localData, "TypeWhisper");
             if (!Directory.Exists(WinUIProfile.Root) && Directory.Exists(legacy))
             {
-                _profileOperation = new ProfileOperationWindow("Upgrading your TypeWhisper profile. Your previous data will be preserved…", true, Exit);
+                _profileOperation = new ProfileOperationWindow("Upgrading your TypeWhisper profile. Your previous data will be preserved…", true, Exit, "Profile upgrade");
                 _profileOperation.Activate();
                 await TypeWhisper.Core.Services.LegacyDailyProfileMigration.ImportAsync(legacy, WinUIProfile.Root,
                     prepareProfile: (source, stage, ct) => Task.Run(() => LegacyWindowsProfileMigration.PrepareAsync(
                         source, stage, LocalCtcVocabulary.HostVersion,
                         message => dispatcher.TryEnqueue(() => _profileOperation?.SetMessage(message, true)), ct)));
-                _profileOperation.Dismiss();
-                _profileOperation = null;
             }
 #endif
             var recovery = new TypeWhisper.Core.Services.PersistedProfileBackup(WinUIProfile.Root).RecoverPending();
@@ -122,6 +120,9 @@ public partial class App : Application
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
         _window = new MainWindow();
+        // Keep a window alive throughout startup; closing the last window can end the XAML application.
+        _profileOperation?.Dismiss();
+        _profileOperation = null;
         _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
         _window.InstallApplicationUpdateAsync = apply => ExitOrRestartAsync(restart: true, applyUpdate: apply);
         _window.RestoreProfile = (store, preview) => RestoreProfileAsync(store, preview);

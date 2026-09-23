@@ -17,11 +17,11 @@ internal sealed class ProfileOperationWindow : Window
     private bool _dismissed;
     private Func<Task>? _retryAction;
 
-    internal ProfileOperationWindow(string message, bool busy, Action exit)
+    internal ProfileOperationWindow(string message, bool busy, Action exit, string heading = "Profile restore")
     {
-        Title = "TypeWhisper · Profile restore";
+        Title = "TypeWhisper · " + heading;
         var body = new StackPanel { Spacing = 18, Padding = new(24), Background = (Brush)Application.Current.Resources["InkBrush"] };
-        body.Children.Add(new TextBlock { Text = "Profile restore", FontSize = 24, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
+        body.Children.Add(new TextBlock { Text = heading, FontSize = 24, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
         _message = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14, Foreground = (Brush)Application.Current.Resources["TextBrush"] };
         body.Children.Add(_message);
         _diagnostic = new TextBlock { TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, FontSize = 12 };
