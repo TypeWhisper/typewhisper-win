@@ -96,6 +96,38 @@ public partial class OpenAiCompatiblePluginTests
         Assert.Equal(PluginRequestFailureKind.OutputTruncated, error.FailureKind);
     }
 
+    [Theory]
+    [InlineData("<think>plan the edit</think>\n\nCleaned text", "Cleaned text")]
+    [InlineData("  <THINKING>plan</THINKING> Cleaned text", "Cleaned text")]
+    [InlineData("reasoning opened by the chat template</think>Cleaned text", "Cleaned text")]
+    [InlineData("Keep <think>literal</think> markup", "Keep <think>literal</think> markup")]
+    [InlineData("<think>truncated reasoning without an answer", "<think>truncated reasoning without an answer")]
+    [InlineData("Plain answer", "Plain answer")]
+    public void LeadingInlineReasoningIsRemoved(string text, string expected) => Assert.Equal(expected, ReasoningText.StripLeading(text));
+
+    [Fact]
+    public void ResponsesIgnoreInlineReasoning() => Assert.Equal("answer",
+        OpenAiCompatiblePlugin.ParseResponsesText("""{"output_text":"<think>internal</think> answer"}"""));
+
+    [Fact]
+    public async Task ChatCompletionReturnsTextAfterInlineReasoning()
+    {
+        using var plugin = new OpenAiCompatiblePlugin(new HttpClient(new CapturingHandler((_, _) =>
+            JsonResponse("""{"choices":[{"message":{"content":"<think>\nThe user wants cleanup.\n</think>\n\nHello world."}}]}"""))));
+        await plugin.ActivateAsync(new TestPluginHostServices()); plugin.SetBaseUrl("http://localhost:1234");
+        Assert.Equal("Hello world.", await plugin.ProcessAsync("", "hello world", "model", default));
+    }
+
+    [Fact]
+    public async Task ChatCompletionWithOnlyReasoningIsEmpty()
+    {
+        using var plugin = new OpenAiCompatiblePlugin(new HttpClient(new CapturingHandler((_, _) =>
+            JsonResponse("""{"choices":[{"message":{"content":"<think>only reasoning</think>"}}]}"""))));
+        await plugin.ActivateAsync(new TestPluginHostServices()); plugin.SetBaseUrl("http://localhost:1234");
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ProcessAsync("", "fixture", "model", default));
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+    }
+
     [Fact]
     public async Task ChatRetriesOnlyTheExplicitOutputTokenParameterMismatch()
     {
