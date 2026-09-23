@@ -41,6 +41,12 @@ internal static class WindowsStartupRegistration
                 "Startup is available only from the development launcher's published output. " + ex.Message);
         }
 #else
+        return CreateInstalled(backend);
+#endif
+    }
+
+    private static IStartupRegistration CreateInstalled(RegistryBackend backend)
+    {
         var locator = Velopack.Locators.VelopackLocator.Current;
         var installation = ApplicationInstallation.Resolve(locator.AppId);
         if (installation is not null && locator.CurrentlyInstalledVersion is not null &&
@@ -57,12 +63,20 @@ internal static class WindowsStartupRegistration
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 { return new StartupRegistration(backend, installation.PackageId, null, "Startup registration could not be upgraded. " + ex.Message); }
-                return new StartupRegistration(backend, installation.PackageId, executable);
+                var registration = new StartupRegistration(backend, installation.PackageId, executable);
+                if (installation.PackageId != "TypeWhisper" || string.IsNullOrWhiteSpace(locator.ThisExeRelativePath)) return registration;
+                // 1.0 used an owned Startup-folder shortcut. Keep it (including Windows' disabled state)
+                // until the user explicitly changes startup, rather than creating a second registration.
+#pragma warning disable CS0618
+                var shortcuts = new Velopack.Windows.Shortcuts(locator);
+                return new StartupRegistrationWithShortcut(registration,
+                    () => shortcuts.FindShortcuts(locator.ThisExeRelativePath, Velopack.Windows.ShortcutLocation.Startup).Count > 0,
+                    () => shortcuts.DeleteShortcuts(locator.ThisExeRelativePath, Velopack.Windows.ShortcutLocation.Startup));
+#pragma warning restore CS0618
             }
         }
         return new StartupRegistration(backend, "TypeWhisperDaily", null,
             "Windows startup is available after installing TypeWhisper.");
-#endif
     }
 
     private sealed class RegistryBackend : IStartupRegistrationBackend
