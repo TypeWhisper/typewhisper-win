@@ -14,7 +14,7 @@ Local fact storage with explicit workflow output actions and opt-in memory conte
 
 ## Manual acceptance
 
-Settings entry creation, save, restart persistence, matching list search and empty search results were exercised in the running development host. The settings screenshot is in `docs/screenshots/file-memory/settings.png`. Two manual sample workflows were added without replacing existing workflows. The configured LM Studio request did not produce a completed result in the first UI attempt; live model output still needs acceptance. A provider refresh was found to overwrite run errors, which is now fixed so the diagnostic stays visible. Fake-model tests verify context delivery, not model quality.
+Settings entry creation, save, restart persistence, matching list search and empty search results were exercised in the running development host. The settings screenshot is in `docs/screenshots/file-memory/settings.png`. Two manual sample workflows were added without replacing existing workflows. Marco confirmed on September 23, 2026 that both storing a fact with the first workflow and reusing it with the second workflow work in the development app. A provider refresh previously overwrote run errors; the corrected host preserves these diagnostics. Automated fake-model tests verify context delivery, while the user acceptance covers the real save-and-reuse flow.
 
 Suggested test:
 
