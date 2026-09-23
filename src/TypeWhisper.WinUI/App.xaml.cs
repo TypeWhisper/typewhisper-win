@@ -64,6 +64,8 @@ public partial class App : Application
             finally { Exit(); }
             return;
         }
+        // Updates restart into the renamed executable; repair the owned Run command before the next sign-in.
+        WindowsStartupRegistration.MigrateInstalledCommand();
 
         _mainInstance.Activated += (_, redirected) =>
         {
