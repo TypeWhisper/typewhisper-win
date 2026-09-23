@@ -22,8 +22,8 @@ the [functional journal](archive/winui/WINUI-FUNCTIONAL-STATUS.md).
 
 ## Known release boundaries
 
-- The first-dictation insertion report [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513)
-  needs reproduction and diagnosis. Result-window clarity is not a fix for target capture.
+- The first-dictation insertion fix for [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513)
+  (field capture retry for cold Chromium/Electron accessibility trees) still needs native confirmation after a fresh start.
 - Package builds do not replace real ARM64 execution or older-Windows acceptance.
 - Calendar adapters and research prototypes do not establish available calendar sign-in or meeting automation.
 - Plugins published after an application Daily can have different source and validation revisions.

@@ -42,7 +42,8 @@ by these changes.
 
 Include the application version, heading and explanatory message, target app,
 whether it happens only after startup, and the automatic-insertion setting.
-Do not include private dictated text or credentials. The separate first-dictation
+Do not include private dictated text or credentials. The first-dictation
 insertion report [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513)
-still requires reproduction and diagnosis; clearer result wording does not fix
-its underlying cause.
+was traced to Chromium/Electron returning their render host instead of the text
+field on the first accessibility query. Field capture now retries briefly while
+the target stays in front; confirm the fix natively after a fresh start.
