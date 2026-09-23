@@ -817,8 +817,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             PasteDiagnostics.Write(outcome.NeedsReview ? "delivery.review" : "delivery.completed");
             if (_disposed) return;
-            if (!outcome.ActionAttempted) _operationCancellation.Token.ThrowIfCancellationRequested();
-            if (_lastCompletedDictation.TryPublish(outcome, outcome.ActionAttempted ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
+            if (!outcome.Committed) _operationCancellation.Token.ThrowIfCancellationRequested();
+            if (_lastCompletedDictation.TryPublish(outcome, outcome.Committed ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
             SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,
