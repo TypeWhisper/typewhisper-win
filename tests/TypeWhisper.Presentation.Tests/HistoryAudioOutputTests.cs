@@ -119,7 +119,7 @@ public sealed class HistoryAudioOutputTests
     }
 
     [Fact]
-    public async Task AudioWarningRetainsActualSavedRecordAndPreventsPaste()
+    public async Task AudioWarningRetainsActualSavedRecordAndAllowsPaste()
     {
         var history = new Mock<IHistoryAudioService>(MockBehavior.Strict);
         history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
@@ -131,7 +131,8 @@ public sealed class HistoryAudioOutputTests
         var result = await new DictationOutputDelivery(history.Object).DeliverAsync(original, Enabled, () => Enabled,
             () => { pasted = true; return Task.FromResult(true); }, samples: samples);
         Assert.Same(actual, result.Record); Assert.True(result.Saved);
-        Assert.True(result.Failed); Assert.True(result.NeedsReview); Assert.False(pasted);
+        Assert.True(result.Failed); Assert.False(result.NeedsReview); Assert.True(pasted);
+        Assert.Equal("Audio could not be retained.", result.StorageWarning);
         Assert.Contains("Audio could not be retained.", result.Message);
         history.Verify(h => h.TryAddRecord(It.IsAny<TranscriptionRecord>()), Times.Never());
     }

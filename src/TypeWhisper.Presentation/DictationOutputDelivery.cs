@@ -6,6 +6,21 @@ namespace TypeWhisper.Presentation;
 /// <summary>Confirmed outcome of a workflow destination, without automatic retries.</summary>
 public sealed record WorkflowActionResult(bool Success, string Message);
 
+/// <summary>Why a dictation result needs the user's attention.</summary>
+public enum DictationReviewReason
+{
+    /// <summary>No manual text recovery is needed.</summary>
+    None,
+    /// <summary>The effective output preferences disable automatic insertion.</summary>
+    AutomaticPasteDisabled,
+    /// <summary>Automatic insertion could not be completed.</summary>
+    PasteFailed,
+    /// <summary>A workflow or text processor failed before delivery.</summary>
+    ProcessingFailed,
+    /// <summary>A workflow destination did not confirm success.</summary>
+    ActionFailed
+}
+
 /// <summary>Delivery outcome, retaining the original result for review when needed.</summary>
 /// <param name="Record">The completed dictation.</param>
 /// <param name="Saved">Whether the record was written to history.</param>
@@ -13,7 +28,19 @@ public sealed record WorkflowActionResult(bool Success, string Message);
 /// <param name="Message">User-facing delivery status.</param>
 public sealed record DictationOutputResult(TranscriptionRecord Record, bool Saved, bool NeedsReview, string Message)
 {
-    /// <summary>Whether a requested history write or paste failed; choosing review-first is not a failure.</summary>
+    /// <summary>Explicit reason, independent of history storage and translated UI text.</summary>
+    public DictationReviewReason ReviewReason { get; init; }
+    /// <summary>A storage problem that must not prevent successful text delivery.</summary>
+    public string? StorageWarning { get; init; }
+    /// <summary>Describes the result rather than requiring an unexplained review step.</summary>
+    public string ReviewTitle => ReviewReason switch
+    {
+        DictationReviewReason.PasteFailed => "Text could not be inserted",
+        DictationReviewReason.ProcessingFailed => "Text processing did not finish",
+        DictationReviewReason.ActionFailed => "Workflow action needs attention",
+        _ => "Your dictation"
+    };
+    /// <summary>Whether processing, storage or delivery failed; choosing review-first is not a failure. Storage failure alone does not require review.</summary>
     public bool Failed { get; init; }
     /// <summary>An action was attempted; its outcome must survive late cancellation.</summary>
     public bool ActionAttempted { get; init; }
@@ -31,6 +58,7 @@ public sealed class DictationOutputDelivery(IHistoryService history)
     {
         ct.ThrowIfCancellationRequested();
         var saved = false;
+        string? storageWarning = null;
         if (atStart.RestrictedBy(current()).SaveToHistory)
         {
             try
@@ -61,18 +89,19 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                         if (wantsAudio) audioWarning = "History audio saving is unavailable. Only the text was retained.";
                     }
                     if (!saved && !suppressed)
-                        return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.") { Failed = true };
+                        storageWarning = "This dictation could not be saved to History.";
                     if (!string.IsNullOrWhiteSpace(audioWarning))
-                        return new(record, saved, true, (saved ? "Saved to History. " : "Not saved to History. ") + audioWarning + " Review and copy your text; nothing was pasted.") { Failed = true };
+                        storageWarning = string.IsNullOrEmpty(storageWarning) ? audioWarning : storageWarning + " " + audioWarning;
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.") { Failed = true };
+                storageWarning = "This dictation could not be saved to History.";
             }
         }
         var storage = saved ? "Saved to History." : "Not saved to History.";
+        if (storageWarning is not null) storage += " " + storageWarning;
         ct.ThrowIfCancellationRequested();
         if (record.Status == TranscriptionRecordStatus.Succeeded && action is not null)
         {
@@ -81,17 +110,26 @@ public sealed class DictationOutputDelivery(IHistoryService history)
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { result = new(false, "Action completion is unknown. Check its destination before trying again."); }
-            return new(record, saved, !result.Success, result.Message + " " + storage)
-                { Failed = !result.Success, ActionAttempted = true };
+            return new(record, saved, !result.Success, result.Success ? result.Message + " " + storage
+                : result.Message + " Check the destination before trying again. You can copy the text below.")
+                { Failed = !result.Success || storageWarning is not null, ActionAttempted = true,
+                    ReviewReason = result.Success ? DictationReviewReason.None : DictationReviewReason.ActionFailed,
+                    StorageWarning = storageWarning };
         }
-        if (record.Status != TranscriptionRecordStatus.Succeeded || !atStart.RestrictedBy(current()).AutoPaste)
-            return new(record, saved, true, storage + " Review and copy your text; nothing was pasted.");
+        if (record.Status != TranscriptionRecordStatus.Succeeded)
+            return new(record, saved, true, "Your speech was transcribed, but a processing step failed. Nothing was inserted. Check the text before copying it.")
+                { Failed = true, ReviewReason = DictationReviewReason.ProcessingFailed, StorageWarning = storageWarning };
+        if (!atStart.RestrictedBy(current()).AutoPaste)
+            return new(record, saved, true, "Automatic insertion is off. Copy the text, then paste it into the field you want to use.")
+                { Failed = storageWarning is not null, ReviewReason = DictationReviewReason.AutomaticPasteDisabled, StorageWarning = storageWarning };
         try
         {
-            if (await paste()) return new(record, saved, false, "Paste sent. " + storage);
+            if (await paste()) return new(record, saved, false, "Paste sent. " + storage)
+                { Failed = storageWarning is not null, StorageWarning = storageWarning };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { }
-        return new(record, saved, true, storage + " Paste was not completed. Review and copy your text.") { Failed = true };
+        return new(record, saved, true, "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.")
+            { Failed = true, ReviewReason = DictationReviewReason.PasteFailed, StorageWarning = storageWarning };
     }
 }

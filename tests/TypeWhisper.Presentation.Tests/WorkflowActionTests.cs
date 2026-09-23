@@ -39,6 +39,26 @@ public sealed class WorkflowActionTests
         Assert.Equal(!success, result.Failed);
         Assert.Equal(record, result.Record);
         Assert.True(result.ActionAttempted);
+        Assert.Equal(success ? DictationReviewReason.None : DictationReviewReason.ActionFailed, result.ReviewReason);
+    }
+
+    [Fact]
+    public async Task HistoryFailureDoesNotBlockOrRepeatTheSelectedAction()
+    {
+        var history = new Mock<IHistoryService>();
+        history.Setup(h => h.EnsureLoadedAsync()).ThrowsAsync(new IOException());
+        var calls = 0;
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(
+            new() { Id = "test", Timestamp = DateTime.UtcNow, RawText = "text", FinalText = "text" },
+            new(), () => new(), () => throw new Exception("Must not paste"),
+            action: _ => { calls++; return Task.FromResult(new WorkflowActionResult(true, "Created")); });
+        Assert.Equal(1, calls);
+        Assert.True(result.ActionAttempted);
+        Assert.False(result.NeedsReview);
+        Assert.False(result.Saved);
+        Assert.True(result.Failed);
+        Assert.NotNull(result.StorageWarning);
+        Assert.Equal(DictationReviewReason.None, result.ReviewReason);
     }
 
     [Fact]
@@ -51,6 +71,7 @@ public sealed class WorkflowActionTests
                 action: _ => throw new Exception("Must not send"));
         Assert.True(result.NeedsReview);
         Assert.False(result.ActionAttempted);
+        Assert.Equal(DictationReviewReason.ProcessingFailed, result.ReviewReason);
     }
 
     [Fact]

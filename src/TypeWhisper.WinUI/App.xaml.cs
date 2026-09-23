@@ -167,9 +167,10 @@ public partial class App : Application
                 new TypeWhisper.Core.Models.TranscriptionRecord
                 {
                     Id = "review-fixture", Timestamp = DateTime.UtcNow,
-                    RawText = "Review window sample.",
-                    FinalText = "Review window sample.\n\nDieser Text wurde nicht aufgenommen und nicht in der History gespeichert."
-                }, false, true, "UI test sample. Nothing was recorded or pasted.")));
+                    RawText = "Let's finish the release notes tomorrow.",
+                    FinalText = "Let's finish the release notes tomorrow.\n\nWe can check the upgrade together before publishing."
+                }, false, true, "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.")
+                { ReviewReason = TypeWhisper.Presentation.DictationReviewReason.PasteFailed, Failed = true }));
 #endif
         _activationReady = true;
         _shareStartupReady.TrySetResult(true);

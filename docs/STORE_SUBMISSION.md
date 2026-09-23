@@ -1,6 +1,6 @@
 # Microsoft Store Submission
 
-TypeWhisper's Microsoft Store package now contains the WinUI host (`TypeWhisper.WinUI.exe`), requires Windows 11 build 26100 or later, and uses the product identity reserved in Partner Center. The updated MSIX must pass installation and Store activation acceptance before submission.
+TypeWhisper's Microsoft Store package contains the WinUI host (`TypeWhisper.exe`), requires Windows 11 build 26100 or later, and uses the product identity reserved in Partner Center. This Store minimum is separate from the direct-download host's configured minimum. The updated MSIX must pass installation and Store activation acceptance before submission.
 
 ## Partner Center Identity
 
@@ -15,15 +15,17 @@ TypeWhisper's Microsoft Store package now contains the WinUI host (`TypeWhisper.
 
 Run the packaging workflow manually from GitHub Actions:
 
-Open `Actions` -> `Store Package` -> `Run workflow`, enter the package version, and download the generated MSIX artifacts after the workflow completes.
+Open `Actions` -> `Store` -> `Run workflow`, enter the package version, and download the generated MSIX artifacts after the workflow completes.
 
-The workflow builds and uploads the x64 and Arm64 MSIX artifacts only. Upload the artifacts manually in Partner Center for the current Store hotfix. Full Store submission automation can be added later with the Microsoft Store Developer CLI or Store submission API after Partner Center credentials are configured as GitHub secrets.
+The workflow builds and uploads x64 and ARM64 MSIX artifacts only. Submission in
+Partner Center is a separate manual step after acceptance. A successful packaging
+run does not establish Store certification or installed ARM64 execution.
 
 For a local package smoke test on a machine with the Windows SDK installed:
 
 ```powershell
-.\eng\Build-StorePackage.ps1 -Version 1.0.1.1 -RuntimeIdentifier win-x64
-.\eng\Build-StorePackage.ps1 -Version 1.0.1.1 -RuntimeIdentifier win-arm64
+.\eng\Build-StorePackage.ps1 -Version 1.1.0.0 -RuntimeIdentifier win-x64
+.\eng\Build-StorePackage.ps1 -Version 1.1.0.0 -RuntimeIdentifier win-arm64
 ```
 
 The script builds the app with `TypeWhisperStoreBuild=true`, which disables the Velopack runtime path and uses Microsoft Store metadata.

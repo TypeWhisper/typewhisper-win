@@ -1,5 +1,7 @@
 # File Memory acceptance
 
+> Scoped implementation and acceptance record. Observations apply to the stated revisions and environments; see [current capabilities](WINUI-FUNCTIONAL-STATUS.md) and [release readiness](WINUI-PROGRESS.md) for overall status.
+
 ## Scope
 
 Local fact storage with explicit workflow output actions and opt-in memory context for LLM workflows. The package remains independent of other provider migrations. No account or paid API is needed for storage or lexical retrieval.

@@ -1,5 +1,7 @@
 # Windows Premium and cloud compatibility
 
+> Scoped implementation and acceptance record. Observations apply to the stated revisions and environments; see [current capabilities](WINUI-FUNCTIONAL-STATUS.md) and [release readiness](WINUI-PROGRESS.md) for overall status.
+
 Reference: TypeWhisper macOS commit `5f04ae3d1910a252748ba53f26a6e13d5cf18851`.
 
 ## Premium overview

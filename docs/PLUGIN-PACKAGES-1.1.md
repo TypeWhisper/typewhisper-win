@@ -11,20 +11,20 @@ The WPF host and its legacy plugin release workflow have been removed. Previousl
 
 Each plugin owns its project, tests, manifest and complete output folder. The application
 does not reference provider assemblies or copy provider-specific dependencies itself.
-Portable build descriptors live under `plugins/*/portable.proj` and
-`plugins/*/portable.proj`. Each descriptor builds and supplies its own folder. `eng/PortablePlugin.targets` copies that output
+Portable build descriptors live under `plugins/*/portable.proj`.
+Each descriptor builds and supplies its own folder. `eng/PortablePlugin.targets` copies that output
 to the development bundle. Independently distributed plugins do not need a descriptor
 in the application repository; they only need to provide the package described below.
 
-Groq, NVIDIA Parakeet and Deepgram have independent `Tests/*.csproj` suites. Run one suite directly
+Providers have independent `Tests/*.csproj` suites where supplied. Run one suite directly
 with `dotnet test`, or use `eng/Test-WinUIHeadless.ps1`, which discovers plugin-owned
 test projects alongside the SDK/host and presentation checks. Tests do not require
 Computer Use, a desktop, downloaded models, or live API credentials.
 
-The Plugins Smoke workflow builds only packages with changes under their own directory
-on pull requests and pushes to `main`, covering both portable source roots.
+The Plugins workflow builds only packages with changes under their own directory
+on pull requests and pushes to `main`.
 Shared SDK, host and workflow edits do not expand that build matrix. For a full
-cross-plugin compatibility sweep, start Plugins Smoke manually with **Run workflow**.
+cross-plugin compatibility sweep, start Plugins manually with **Run workflow**.
 Manifest validation and the separate headless test suites still run normally.
 
 A portable package is a folder containing:
@@ -46,9 +46,9 @@ NVIDIA Parakeet bundles its CTC component under
 `Dependencies/com.typewhisper.parakeet-ctc/`; it is not a separate installable integration.
 
 The package manager is provider-independent. WinUI connects portable transcription,
-LLM, text-processing and explicit action capabilities. NVIDIA Parakeet retains its
-dedicated local-model adapter. Other SDK capabilities still need host consumers;
-installing a package does not by itself implement every capability's application UI.
+LLM, text-processing, speech, explicit memory context and action capabilities.
+NVIDIA Parakeet retains its dedicated local-model adapter. Installing a package
+does not by itself implement an application UI for every possible SDK capability.
 
 ## Host-rendered settings and models
 
@@ -135,9 +135,9 @@ A checksum establishes consistency with this HTTPS feed; the UI does not present
 as a publisher signature or a sandbox. Production publishing/attestation policy remains
 a separate release decision.
 
-At implementation time the v2 endpoint returned HTTP 404. Discover shows a retryable
-unavailable state, while installed providers continue working. Publishing the feed and
-its actual ZIP artifacts is still required for a live remote install walkthrough.
+The v2 feed and portable archives are published. Discover shows a retryable state
+when the feed is unavailable, while installed providers remain available.
+See [Plugin releases](PLUGIN-RELEASES.md) for publication and public-download verification.
 
 ## Declarative package dependencies and preview (1.1)
 
@@ -152,12 +152,12 @@ runtime initialization and cleanup.
 header. `SupportsLocalLivePreview` explicitly permits repeated local PCM snapshots and defaults
 to false. The WinUI host also requires PCM support and local package metadata for generic preview;
 `SupportsStreaming` alone does not mean that a cloud streaming transport is connected.
-Groq and Deepgram remain batch transcription providers in WinUI.
+Groq remains file-based. Deepgram supports the complete streaming contract described below.
 
-NVIDIA and Groq package versions are 1.1.0. Existing installations are not overwritten by development
-builds: use a package update to adopt the new declarations. Deepgram is built but is not bootstrapped
-into existing or fresh profiles and has not been published to the v2 catalog. Its own tests run without
-keys, models or network requests and verify its installation through the generic package/registry APIs.
+Existing installations are not overwritten by development builds: use a package
+update to adopt changed declarations. Resolve current versions from committed
+manifests and the published feed rather than an old example version. Independent
+package tests run without provider credentials and exercise generic installation APIs.
 
 ## Keep the legacy catalog and packages independent
 
@@ -171,7 +171,7 @@ Publishing portable plugins requires separate ZIP assets and entries containing 
 URLs, sizes and SHA-256 hashes. Do not replace existing release assets or edit `plugins.json`
 when publishing `plugins-v2.json`. Local development installation is not publication.
 
-## Published catalog and updates
+## Catalog publication evidence and updates
 
 The catalog published on 23 September 2026 contains 34 Windows x64 plugins: 29 archives in
 [the Windows Daily plugin release](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-winui-20260923)
@@ -182,7 +182,8 @@ tested because the connected xAI team lacks API credits.
 
 For the maintained Actions workflow, tag/dispatch instructions, validation and recovery,
 see [Plugin releases](PLUGIN-RELEASES.md). File Memory 1.4.0 was subsequently published
-with verified downloads, bringing the current catalog to 35 entries.
+with verified downloads, bringing that catalog snapshot to 35 entries. These counts
+are dated evidence; read the public feed for the current inventory.
 
 Use `eng/Build-PortablePluginCatalog.py` in a clean Windows checkout to build changed portable
 projects and stage ZIP archives plus catalog JSON. For example, run

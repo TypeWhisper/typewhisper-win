@@ -23,17 +23,18 @@ internal sealed class DictationReviewWindow : Window
     internal DictationReviewWindow(DictationOutputResult result, PortablePluginRuntimeRegistry? registry = null)
     {
         NativeWindowAppearance.ApplyAppTitleBar(this);
-        Title = "Review dictation · TypeWhisper";
-        AppWindow.Resize(new SizeInt32(680, 460));
+        Title = result.ReviewTitle + " · TypeWhisper";
+        AppWindow.Resize(new SizeInt32(680, 520));
         var body = new Grid { Padding = new Thickness(24), RowSpacing = 16,
             Background = (Brush)Application.Current.Resources["InkBrush"] };
         body.RowDefinitions.Add(new() { Height = GridLength.Auto });
         body.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
         body.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var heading = new StackPanel { Spacing = 6 };
-        heading.Children.Add(new TextBlock { Text = "Review dictation", FontSize = 24,
+        heading.Children.Add(new TextBlock { Text = result.ReviewTitle, FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)Application.Current.Resources["TextBrush"] });
-        var status = new TextBlock { Text = result.Message + (result.Saved ? "" : " Closing this window discards this review copy."),
+        var status = new TextBlock { Text = result.Message,
             TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
         heading.Children.Add(status);
         body.Children.Add(heading);
@@ -49,6 +50,9 @@ internal sealed class DictationReviewWindow : Window
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12,
             HorizontalAlignment = HorizontalAlignment.Right };
         var copy = new HandCursorButton { Content = "Copy text", Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
+        var copyStatus = new TextBlock { TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)Application.Current.Resources["TextBrush"] };
+        AutomationProperties.SetLiveSetting(copyStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         copy.Click += (_, _) =>
         {
             try
@@ -56,23 +60,34 @@ internal sealed class DictationReviewWindow : Window
                 var data = new DataPackage();
                 data.SetText(result.Record.FinalText);
                 Clipboard.SetContent(data);
-                status.Text = "Copied. " + (result.Saved ? "Saved to History." : "Not saved to History.");
+                copyStatus.Text = "Copied. Switch to the field you want to use and paste the text.";
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { status.Text = "Clipboard unavailable. Your text is still here; try again."; }
+            { copyStatus.Text = "Clipboard unavailable. Your text is still here; try copying again."; }
         };
-        var close = new HandCursorButton { Content = "Done", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
+        var close = new HandCursorButton { Content = "Close", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         close.Click += async (_, _) =>
         {
             try { await ShutdownAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { _actionStatus.Text = "This review could not finish closing. Wait for the action to finish and try closing TypeWhisper again."; }
         };
-        actions.Children.Add(copy); actions.Children.Add(close);
+        actions.Children.Add(close); actions.Children.Add(copy);
         var footer = new StackPanel { Spacing = 10 };
+        if (!string.IsNullOrWhiteSpace(result.StorageWarning))
+            footer.Children.Add(new TextBlock { Text = result.StorageWarning, TextWrapping = TextWrapping.Wrap,
+                Foreground = (Brush)Application.Current.Resources["TextBrush"] });
+        footer.Children.Add(new TextBlock
+        {
+            Text = result.Saved ? "Saved to History. You can find this text there after closing."
+                : "Not saved to History. Copy the text before closing this window.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 12,
+            Foreground = (Brush)Application.Current.Resources["MutedBrush"]
+        });
         var available = registry?.Actions.ToArray() ?? [];
-        var pluginActions = new StackPanel { Spacing = 8, Visibility = available.Length == 0 ? Visibility.Collapsed : Visibility.Visible };
-        pluginActions.Children.Add(new TextBlock { Text = "Manual action", Foreground = (Brush)Application.Current.Resources["TextBrush"] });
+        var pluginActions = new StackPanel { Spacing = 8 };
+        pluginActions.Children.Add(new TextBlock { Text = "Send this text to a plugin. If an earlier action was not confirmed, check its destination before trying again.",
+            TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
         AutomationProperties.SetName(_actionPicker, "Manual plugin action");
         foreach (var action in available) _actionPicker.Items.Add(new ComboBoxItem { Content = action.Name, Tag = action });
         _runAction.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
@@ -83,13 +98,19 @@ internal sealed class DictationReviewWindow : Window
                 _runAction.Content = selected.Name;
         };
         if (available.Length > 0) _actionPicker.SelectedIndex = 0;
-        var pluginButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        var pluginButtons = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Left };
         pluginButtons.Children.Add(_actionPicker); pluginButtons.Children.Add(_runAction);
         pluginActions.Children.Add(pluginButtons);
-        footer.Children.Add(pluginActions);
+        var moreActions = new Expander { Header = "More actions", HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Visibility = available.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
+            Content = new ScrollViewer { Content = pluginActions, MaxHeight = 150,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+        footer.Children.Add(moreActions);
         _actionStatus.Foreground = (Brush)Application.Current.Resources["MutedBrush"];
         AutomationProperties.SetLiveSetting(_actionStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         footer.Children.Add(_actionStatus);
+        footer.Children.Add(copyStatus);
         footer.Children.Add(actions);
         _runAction.Click += async (_, _) =>
         {
@@ -133,7 +154,8 @@ internal sealed class DictationReviewWindow : Window
         };
         Grid.SetRow(footer, 2); body.Children.Add(footer);
         Content = body;
-        if (available.Length > 0) AppWindow.Resize(new SizeInt32(680, 560));
+        if (available.Length > 0) AppWindow.Resize(new SizeInt32(680, 600));
+        body.Loaded += (_, _) => copy.Focus(FocusState.Programmatic);
         AppWindow.Closing += async (_, args) =>
         {
             if (_allowClose) return;
