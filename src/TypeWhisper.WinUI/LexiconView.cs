@@ -336,7 +336,8 @@ public sealed partial class LexiconView : UserControl
         });
         if (_kind == LexiconKind.Correction)
         {
-            AddField("Correct spelling", _draft!.Value, value => _draft = _draft! with { Value = value }, 10000);
+            AddField("Correct spelling", _draft!.Value, value => _draft = _draft! with { Value = value }, 10000, help:
+                @"Type \n for a line break, \n\n for a new paragraph, \t for a tab or \s for a space, e.g. map ""new line"" to \n. Use \\ for a literal backslash. English and German built-in commands such as ""new line"" are available by choosing Replace spoken commands in Dictation settings.");
             AddField("Recognized as", _draft.Key, value => _draft = _draft! with { Key = value }, 160);
         }
         else
