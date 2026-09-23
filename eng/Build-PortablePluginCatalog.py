@@ -56,6 +56,22 @@ def discover_projects(source: pathlib.Path, selected: set[str]) -> list[tuple[pa
     return [value for key, value in projects.items() if not selected or key in selected]
 
 
+def test_package(project_dir: pathlib.Path, source: pathlib.Path, logs: pathlib.Path) -> None:
+    test_dir = project_dir / "Tests"
+    commands = [(test.stem, ["dotnet", "test", str(test), "-c", "Release", "-v", "quiet"])
+                for test in sorted(test_dir.glob("*.csproj"))]
+    if any(test_dir.glob("test_*.py")):
+        commands.append((project_dir.name + "-python-tests", [sys.executable, "-m", "unittest", "discover",
+                                                           "-s", str(test_dir), "-p", "test_*.py", "-v"]))
+    if not commands:
+        raise ValueError(f"No package tests found in {test_dir}; release requires test coverage")
+    for name, command in commands:
+        result = subprocess.run(command, cwd=source, text=True, capture_output=True)
+        (logs / (name + ".log")).write_text(result.stdout + "\n" + result.stderr, encoding="utf-8")
+        if result.returncode:
+            raise ValueError(f"Tests failed: {name}; see {logs}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=pathlib.Path, required=True)
@@ -143,15 +159,7 @@ def main() -> None:
         if run.returncode:
             raise SystemExit(f"Build failed ({run.returncode}): {project}; see {logs / (portable.parent.name + '.log')}")
         if args.test:
-            tests = sorted((portable.parent / "Tests").glob("*.csproj"))
-            if not tests:
-                raise SystemExit(f"No package tests found for {plugin_id}; release requires test coverage")
-            for test in tests:
-                result = subprocess.run(["dotnet", "test", str(test), "-c", "Release", "-v", "quiet"],
-                                        cwd=source, text=True, capture_output=True)
-                (logs / (test.stem + ".log")).write_text(result.stdout + "\n" + result.stderr, encoding="utf-8")
-                if result.returncode:
-                    raise SystemExit(f"Tests failed: {test}; see {logs}")
+            test_package(portable.parent, source, logs)
         package = portable.parent / "bin" / "Release" / "portable-host" / "Plugins" / plugin_id
         packaged_manifest = package / "manifest.json"
         if not packaged_manifest.exists():
@@ -198,7 +206,8 @@ def main() -> None:
     (output / "summary.json").write_text(json.dumps({"source": str(source), "sourceCommit": source_commit,
         "tag": args.tag, "excludedIds": sorted(excluded), "entryCount": len(entries),
         "archiveCount": len(list(archives.glob("*.zip"))), "changedPlugins": changed,
-        "selectedIds": sorted(args.plugin_id), "testsRequired": args.test}, indent=2) + "\n", encoding="utf-8")
+        "selectedIds": sorted(m["id"] for _, m in projects if m["id"] not in excluded),
+        "testsRequired": args.test}, indent=2) + "\n", encoding="utf-8")
     print(f"DONE {len(entries)} entries, {len(list(archives.glob('*.zip')))} archives", flush=True)
 
 

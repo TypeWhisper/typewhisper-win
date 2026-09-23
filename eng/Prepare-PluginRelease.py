@@ -58,6 +58,7 @@ def main():
         command += ["--plugin-id", plugin_id]
     subprocess.run(command, check=True)
     summary = publisher.validate_stage(output)
+    publisher.validate_catalog(json.loads((output / publisher.FEED_PATH).read_text(encoding="utf-8")))
     if report := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(report, "a", encoding="utf-8") as stream:
             stream.write(f"## Plugin release\n\nSource: `{summary['sourceCommit']}`\n\n")

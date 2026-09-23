@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import json
 import pathlib
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -22,6 +23,11 @@ def entry(plugin_id="com.typewhisper.example", version="1.0.0"):
 
 
 class CatalogTests(unittest.TestCase):
+    def setUp(self):
+        validation = patch.object(publish, 'validate_catalog')
+        validation.start()
+        self.addCleanup(validation.stop)
+
     def test_selected_release_preserves_unrelated_entries_and_metadata(self):
         current = {"schema": 1, "plugins": [entry(), entry("com.typewhisper.other", "9.0.0")]}
         merged = publish.merge_feed(current, [entry(version="1.1.0")])
@@ -104,9 +110,37 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(prepare.selection(None, 'com.test.one, com.test.two com.test.one', 'plugins-test', False),
                              ['com.test.one', 'com.test.two'])
 
+    def test_package_runs_both_test_types_and_preserves_failure_logs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "Tests").mkdir()
+            (root / "logs").mkdir()
+            (root / "Tests/test_sidecar.py").touch()
+            # Python-only packages have a release gate too.
+            with patch.object(builder.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, "passed", "")) as run:
+                builder.test_package(root, root, root / "logs")
+                self.assertEqual(run.call_args.args[0][1:4], ['-m', 'unittest', 'discover'])
+            (root / "Tests/Example.Tests.csproj").touch()
+            with patch.object(builder.subprocess, 'run', side_effect=[subprocess.CompletedProcess([], 0, "passed", ""),
+                                                                    subprocess.CompletedProcess([], 1, "", "sidecar failed")]) as run:
+                with self.assertRaises(ValueError):
+                    builder.test_package(root, root, root / "logs")
+                self.assertEqual(run.call_count, 2)
+                self.assertEqual(run.call_args_list[0].args[0][:2], ['dotnet', 'test'])
+            self.assertIn('sidecar failed', (root / "logs" / (root.name + '-python-tests.log')).read_text(encoding='utf-8'))
+
+    def test_package_without_tests_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            with self.assertRaises(ValueError):
+                builder.test_package(root, root, root)
+
 
 class StageTests(unittest.TestCase):
     def setUp(self):
+        validation = patch.object(publish, 'validate_catalog')
+        validation.start()
+        self.addCleanup(validation.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.stage = pathlib.Path(self.temp.name)
@@ -215,6 +249,7 @@ class StageTests(unittest.TestCase):
         with patch.object(publish, "find_release", side_effect=[None, draft]), \
              patch.object(publish, "gh") as gh, \
              patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "check_existing_tag"), \
              patch.object(publish, "verify_download") as download:
             publish.ensure_release(self.stage, self.summary)
         self.assertEqual([call.args[:2] for call in gh.call_args_list],
@@ -243,6 +278,39 @@ class StageTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 publish.main()
             release.assert_not_called()
+
+    def test_verify_live_checks_retained_selected_entries(self):
+        self.archive.unlink()
+        self.summary.update(changedPlugins=[], archiveCount=0, selectedIds=[entry()["id"]])
+        self.save()
+        (self.stage / publish.FEED_PATH).write_text(json.dumps({"plugins": [entry()]}), encoding='utf-8')
+        with patch('sys.argv', ['publish', '--stage', str(self.stage), '--verify-live']), \
+             patch.object(publish, 'verify_live', side_effect=ValueError('stale public catalog')) as verify:
+            with self.assertRaises(ValueError):
+                publish.main()
+        verify.assert_called_once_with([entry()])
+
+    def test_missing_manifest_minimum_uses_host_default(self):
+        self.manifest.pop('minHostVersion')
+        self.write_archive()
+        self.summary['changedPlugins'][0]['minHostVersion'] = '1.1.0'
+        self.save()
+        publish.validate_stage(self.stage)
+
+    def test_moved_tag_prevents_draft_publication(self):
+        draft = {"tag_name": "plugins-test", "body": "Source commit: " + "a" * 40,
+                 "draft": True, "prerelease": True, "assets": []}
+        with patch.object(publish, 'find_release', return_value=draft), \
+             patch.object(publish, 'gh') as gh, \
+             patch.object(publish, 'api', side_effect=[[{'ref': 'refs/tags/plugins-test'}], {'sha': 'b' * 40}]):
+            with self.assertRaises(ValueError):
+                publish.ensure_release(self.stage, self.summary)
+        self.assertFalse(any(call.args[:2] == ('release', 'edit') for call in gh.call_args_list))
+
+    def test_absent_tag_can_be_created_when_publishing(self):
+        with patch.object(publish, 'api', return_value=[]) as api:
+            publish.check_existing_tag('plugins-test', 'a' * 40)
+        api.assert_called_once()
 
 
 if __name__ == '__main__':

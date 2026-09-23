@@ -24,7 +24,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: python -m unittest discover -s eng/tests -p test_plugin_release.py -v
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - run: python -m unittest discover -s eng/tests -p 'test_*.py' -v
 
   python-sidecar-tests:
     runs-on: ubuntu-latest

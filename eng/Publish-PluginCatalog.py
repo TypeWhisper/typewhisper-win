@@ -49,6 +49,18 @@ def snapshot():
     return data["sha"], json.loads(base64.b64decode(data["content"]))
 
 
+def validate_catalog(document):
+    """Use the application's schema, rather than a second incomplete validator."""
+    with tempfile.TemporaryDirectory() as directory:
+        path = pathlib.Path(directory) / "catalog.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        project = pathlib.Path(__file__).with_name("PluginCatalogVerifier") / "PluginCatalogVerifier.csproj"
+        result = subprocess.run(["dotnet", "run", "--project", str(project), "-c", "Release", "--", str(path)],
+                                capture_output=True, text=True)
+        if result.returncode:
+            raise ValueError("Host rejected plugin catalog: " + result.stdout + result.stderr)
+
+
 def merge_feed(document, changes):
     entries = builder.catalog_entries(document)
     for entry in changes:
@@ -76,6 +88,7 @@ def validate_stage(stage):
         raise ValueError("Expected a full source commit")
     changes = summary["changedPlugins"]
     builder.catalog_entries(changes)
+    validate_catalog(changes)
     if len(changes) != summary["archiveCount"]:
         raise ValueError("Archive count differs from changed plugins")
     expected = set()
@@ -98,6 +111,7 @@ def validate_stage(stage):
                 if parts.is_absolute() or '..' in parts.parts or ':' in item:
                     raise ValueError(f"Unsafe archive path: {item}")
             manifest = json.loads(package.read("manifest.json"))
+            manifest.setdefault("minHostVersion", "1.1.0")
             for key in ("id", "version", "minHostVersion"):
                 if manifest.get(key) != entry.get(key):
                     raise ValueError(f"Package/catalog {key} mismatch: {name}")
@@ -127,6 +141,15 @@ def find_release(tag):
     # Query by listing first: authentication/server failures must not mean "not found".
     releases = json.loads(gh("api", f"repos/{REPO}/releases", "--paginate", "--slurp"))
     return next((r for page in releases for r in page if r["tag_name"] == tag), None)
+
+
+def check_existing_tag(tag, source_commit):
+    # The matching-refs endpoint returns an empty array for an absent ref without
+    # treating authentication or network errors as a missing tag.
+    refs = api(f"git/matching-refs/tags/{tag}")
+    if any(ref["ref"] == f"refs/tags/{tag}" for ref in refs):
+        if api(f"commits/{tag}")["sha"] != source_commit:
+            raise ValueError("Existing release tag points to a different source commit")
 
 
 def ensure_release(stage, summary):
@@ -165,6 +188,7 @@ def ensure_release(stage, summary):
                 raise ValueError(f"Published release is missing an expected asset: {name}")
             gh("release", "upload", tag, str(stage / "archives" / name), "--repo", REPO)
     if release["draft"]:
+        check_existing_tag(tag, summary["sourceCommit"])
         gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--prerelease", "--latest=false")
     if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
         raise ValueError("Published tag does not match the tested source commit")
@@ -178,6 +202,7 @@ def update_feed(changes):
         updated = merge_feed(current, changes)
         if updated == current:
             return
+        validate_catalog(updated)
         payload = {"message": "Publish tested portable plugin packages", "branch": "gh-pages", "sha": sha,
                    "content": base64.b64encode((json.dumps(updated, ensure_ascii=False, indent=2) + '\n').encode()).decode()}
         try:
@@ -206,11 +231,17 @@ def main():
     summary = validate_stage(stage)
     changes = summary["changedPlugins"]
     if args.verify_live:
-        verify_live(changes)
+        expected = changes
+        if not expected:
+            staged = builder.catalog_entries(json.loads((stage / FEED_PATH).read_text(encoding="utf-8")))
+            expected = [staged[plugin_id] for plugin_id in summary.get("selectedIds", [])]
+            if not expected:
+                raise ValueError("No selected entries to verify")
+        verify_live(expected)
         print("Public catalog verified.")
         return
     _, current = snapshot()
-    merge_feed(current, changes)  # Fail before creating a release on known conflicts.
+    validate_catalog(merge_feed(current, changes))  # Fail before creating a release on known conflicts.
     print(f"Validated {len(changes)} changed package(s) from {summary['sourceCommit']}", flush=True)
     if not args.publish:
         print("No remote changes made.")

@@ -38,7 +38,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Test release safety
-        run: python -m unittest discover -s eng/tests -p test_plugin_release.py -v
+        run: python -m unittest discover -s eng/tests -p 'test_*.py' -v
       - name: Build and test selected packages
         shell: pwsh
         env:
@@ -78,6 +78,9 @@ jobs:
         with:
           name: plugin-release
           path: ${{ runner.temp }}/plugin-release
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
       - name: Publish verified packages and refresh catalog
         env:
           GH_TOKEN: ${{ github.token }}

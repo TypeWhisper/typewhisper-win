@@ -24,8 +24,9 @@ existing tag. Tags outside main history or mismatched versions fail before build
 Only selected plugins with newer versions are built. Other catalog entries are
 preserved. Publishing the same versions again is a no-op once the public feed agrees.
 Removing or retiring a plugin is a separate catalog change, not a side effect of a
-release selection. Packages without their own `Tests/*.csproj` currently fail the
-release gate; add package tests before using this workflow for those packages.
+release selection. The gate runs both `Tests/*.csproj` and Python `Tests/test_*.py`
+unittest suites when present. Packages with neither test type fail the release gate;
+add package tests before using this workflow for those packages.
 
 ## Validation and publication order
 
@@ -73,7 +74,7 @@ python eng/Publish-PluginCatalog.py --stage ../plugin-release-check
 # Explicitly publish an approved, tested artifact:
 python eng/Publish-PluginCatalog.py --stage ../plugin-release-check --publish
 python eng/Publish-PluginCatalog.py --stage ../plugin-release-check --verify-live
-python -m unittest discover -s eng/tests -p test_plugin_release.py -v
+python -m unittest discover -s eng/tests -p 'test_*.py' -v
 ```
 
 The Python scripts use the authenticated `gh` CLI for GitHub access and anonymous
@@ -94,7 +95,9 @@ do not mutate GitHub. Model downloads and provider credentials are not required.
 - The scripts were exercised locally with `gh`; the hosted Actions path still needs
   its first dispatch after this workflow is merged.
 
-Release-script tests cover selection, version conflicts, concurrent catalog updates,
+34 release tests cover selection, version conflicts, concurrent catalog updates,
 archive corruption, unsafe paths, failed downloads, draft recovery and Pages retry.
+Catalog metadata is validated through the actual .NET host client before staging and
+before publication; the publishing runner therefore also installs .NET 10.
 `actionlint` 1.7.12 accepts the workflows with only its outdated `queue` syntax warning
 suppressed; the property was separately checked against the current GitHub documentation.
