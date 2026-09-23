@@ -26,3 +26,5 @@ Gemma: `gemma-color.svg` from [Lobe Icons](https://github.com/lobehub/lobe-icons
 - Meta: reuses the existing TypeWhisper Windows Meta brand asset unchanged.
 
 - xAI: light and dark SVG marks reused from the TypeWhisper website brand assets; symbol view box cropped and explicit six-digit white fill added for native rendering. Original paths are unchanged.
+
+- Linear: unchanged purple symbol reused from the TypeWhisper website brand assets.

@@ -1,26 +1,26 @@
-# Linear for the portable host
+# Linear
 
-Independent .NET 10 package `com.typewhisper.linear`, version `1.1.0`, requiring host `1.1.2`. Implemented on its own `seofood/linear-portable` branch, based directly on Windows `4db8f6ac`. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Portable workflow action `create-linear-issue`, plugin version 1.2.2, minimum host 1.1.5.
 
-## Behavior and macOS comparison
+## Setup and behavior
 
-Ports issue creation as a real host action, with portable team/project settings, a read-only viewer connection check, correct personal-key Authorization, GraphQL variables, explicit error handling and verified Linear result URLs.
+1. Save a personal Linear API key in the plugin settings.
+2. Select **Load teams and projects** to fetch the available choices. The request is read-only and follows Linear pagination.
+3. Select a team and, optionally, a project belonging to that team. Save the settings together.
+4. Add **Create Linear issue** to a workflow. The first non-empty input line supplies the title (up to 100 characters); the complete input becomes the Markdown description.
 
-The corresponding Mac sources were inspected at `ac00e39e` in `TypeWhisperPluginSDK/Plugins/`. Compared with the Mac Linear action. Team/project IDs are entered manually; the Mac team picker is not included. No real issue was created during verification.
+The connection test reads the current user and never creates an issue. Only the workflow action creates an issue. Successful results include the verified `https://linear.app` issue link.
 
-Setup: **Personal Linear API key and team UUID; optional project UUID**. Settings are rendered by the host in English/German. API keys use the host secret store, with a staged encrypted-key reference and one configuration commit. Failed writes keep the active configuration. Removing a key retains nonsecret preferences. No legacy credentials or settings are imported. Redirects are disabled and provider HTTP failures retain status/retry metadata. Opening the settings page sends no network request.
+The settings use the host's shared save UI and Linear brand icon. Team/project names are cached for restart and tied to the saved API key fingerprint; changing the key hides the prior account's cached names. Failed or canceled refreshes retain the previous list. Project choices include all accessible projects; choose one associated with the selected team. Linear validates the final team/project combination.
 
-## Verification
+Personal API keys use the raw Authorization header. Keys remain in the encrypted host secret store, and are never exposed in settings or logs. HTTP redirects are disabled. GraphQL errors, incomplete responses, cancellation, and provider failures are surfaced without creating a success result.
 
-```powershell
-dotnet test plugins-v2/TypeWhisper.Plugin.Linear/Tests/TypeWhisper.Plugin.Linear.Portable.Tests.csproj -c Release
-dotnet msbuild plugins-v2/TypeWhisper.Plugin.Linear/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
-```
+## Validation
 
-All **20 provider tests passed**. The provider test suite covers protocol requests/responses, HTTP errors, malformed JSON, cancellation, key persistence/failure/removal, host settings rendering and independent ZIP installation/configuration/restart/uninstall/reinstall through the immutable portable store. The resulting package contains only the provider DLL, dependency manifest and plugin manifest, with no WPF dependencies. The unchanged portable SDK/host baseline passed all 259 tests in the Gemini checkout.
+`dotnet test plugins-v2/TypeWhisper.Plugin.Linear/Tests/TypeWhisper.Plugin.Linear.Portable.Tests.csproj -c Release`
 
-On 2026-09-18, the ZIP was installed in the Windows development profile and loaded with the real portable host services and Windows secret-store implementation. Settings were read successfully and the plugin was enabled. Existing unrelated package receipts were preserved. The WinUI development build and launch succeeded. No authenticated provider requests were sent. Native visual inspection was unavailable because the computer-use service could not connect.
+24 tests cover package lifecycle, key persistence, failed saves, settings, issue requests, response validation, pagination, cached choices, account changes, and canceled/failed refreshes. A read-only live check with the existing development-profile key succeeded and loaded two teams and one project. No live issue was created during automated verification; the complete workflow remains a manual acceptance step.
 
-Authenticated provider requests, microphone/workflow execution, native visual inspection, version-upgrade acceptance and ARM64 execution remain pending. Marco will enter credentials and perform live acceptance later. No public package or catalog was published.
+The macOS Linear plugin was compared for action behavior and team selection. The Windows implementation adds an optional project selector and uses the shared WinUI settings host.
 
-Reference: [provider documentation](https://linear.app/developers/graphql).
+References: [Linear GraphQL](https://linear.app/developers/graphql), [pagination](https://linear.app/developers/pagination).

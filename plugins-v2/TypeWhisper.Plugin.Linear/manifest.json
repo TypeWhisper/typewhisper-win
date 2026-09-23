@@ -1,17 +1,17 @@
 {
   "id": "com.typewhisper.linear",
   "name": "Linear",
-  "version": "1.1.0",
-  "minHostVersion": "1.1.2",
+  "version": "1.2.2",
+  "minHostVersion": "1.1.5",
   "author": "TypeWhisper",
-  "description": "Ports issue creation as a real host action, with portable team/project settings, a read-only viewer connection check, correct personal-key Authorization, GraphQL variables, explicit error handling and verified Linear result URLs..",
+  "description": "Create Linear issues from workflow text. Select a team and optional project using your Linear API key.",
   "categories": [
-    "action"
+    "integrations"
   ],
   "requiresApiKey": true,
   "assemblyName": "TypeWhisper.Plugin.Linear.dll",
   "pluginClass": "TypeWhisper.Plugin.Linear.LinearPlugin",
   "descriptions": {
-    "de": "Linear-Integration mit portablen Einstellungen."
+    "de": "Erstellt Linear-Issues aus Workflow-Text. Team und optionales Projekt mit deinem Linear-API-Schlüssel auswählen."
   }
 }

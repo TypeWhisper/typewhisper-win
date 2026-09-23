@@ -45,7 +45,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task MissingTeamAndEmptyTextDoNotCreateIssues()
     {
-        var calls=0;using var http=new HttpClient(new Handler((_,_)=>{calls++;return Json("{}");}));using var plugin=new LinearPlugin(http);await plugin.ActivateAsync(new Host());await plugin.SetApiKeyAsync("fixture");
+        var calls=0;using var http=new HttpClient(new Handler((_,_)=>{calls++;return Json("{}");}));using var plugin=new LinearPlugin(http);await plugin.ActivateAsync(new Host());await plugin.SetApiKeyAsync("fixture");Assert.True(plugin.IsConfigured);
         Assert.False((await plugin.ExecuteAsync("Text",new(null,null,null,null,null),default)).Success);await Configure(plugin);
         Assert.False((await plugin.ExecuteAsync(" ",new(null,null,null,null,null),default)).Success);Assert.Equal(0,calls);
     }
