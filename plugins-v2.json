@@ -183,6 +183,27 @@
       ]
     },
     {
+      "id": "com.typewhisper.file-memory",
+      "name": "File Memory",
+      "version": "1.4.0",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Remember useful facts locally and reuse matching entries in selected text-processing workflows.",
+      "categories": [
+        "memory",
+        "action"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-file-memory-v1.4.0/com.typewhisper.file-memory-1.4.0-win-x64.zip",
+      "sha256": "d4d19dfe1134ac82ab96705882b252f1fd716ae1df289f9abf92ca8aad2aaa25",
+      "size": 19080,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
       "id": "com.typewhisper.filler-words",
       "name": "Filler Words",
       "version": "1.0.0",
