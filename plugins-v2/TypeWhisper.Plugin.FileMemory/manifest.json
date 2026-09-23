@@ -1,0 +1,15 @@
+{
+  "id": "com.typewhisper.file-memory",
+  "name": "File Memory",
+  "version": "1.4.0",
+  "author": "TypeWhisper",
+  "description": "Remember useful facts locally and reuse matching entries in selected text-processing workflows.",
+  "assemblyName": "TypeWhisper.Plugin.FileMemory.dll",
+  "pluginClass": "TypeWhisper.Plugin.FileMemory.FileMemoryPlugin",
+  "minHostVersion": "1.1.5",
+  "categories": [
+    "memory",
+    "action"
+  ],
+  "isLocal": true
+}

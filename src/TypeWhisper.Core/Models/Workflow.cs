@@ -283,6 +283,8 @@ public sealed record WorkflowTrigger
 /// </summary>
 public sealed record WorkflowBehavior
 {
+    /// <summary>Explicit opt-in memory source used only during LLM processing.</summary>
+    public string? MemoryPluginId { get; init; }
     /// <summary>
     /// Creates a new value using the supplied arguments.
     /// </summary>

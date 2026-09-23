@@ -829,6 +829,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 || workflow.Behavior.Settings.Any(pair => !ValidRequired(pair.Key) || pair.Value is null || !ValidShort(pair.Key) || !ValidShort(pair.Value))
                 || workflow.Behavior.FineTuning is null || !ValidShort(workflow.Behavior.FineTuning)
                 || !ValidShort(workflow.Behavior.ProviderOverride) || !ValidShort(workflow.Behavior.ModelOverride)
+                || !ValidShort(workflow.Behavior.MemoryPluginId)
                 || !ValidShort(workflow.Behavior.InputLanguage) || !ValidShort(workflow.Behavior.SelectedTask)
                 || !ValidShort(workflow.Behavior.TranslationTarget)
                 || workflow.Behavior.InputLanguageHints.Any(value => !ValidRequired(value) || !ValidShort(value))
