@@ -12,6 +12,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string ModelId { get; init; } = "";
     /// <summary>Optional action destination for the processed text.</summary>
     public string? TargetActionPluginId { get; init; }
+    /// <summary>Optional memory context source.</summary>
+    public string? MemoryPluginId { get; init; }
     /// <summary>Whether manual execution is enabled.</summary>
     public bool IsEnabled { get; init; } = true;
     /// <summary>The shared Core prompt template.</summary>
@@ -67,7 +69,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Output = Stored?.Output is { } output && output.TargetActionPluginId == TargetActionPluginId
             ? output : (Stored?.Output ?? new WorkflowOutput()) with { TargetActionPluginId = TargetActionPluginId },
         Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with
-        { FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget }
+        { MemoryPluginId = MemoryPluginId, FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget }
     };
 
     private string[] DomainPatterns() => WebsiteDomains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -83,7 +85,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Hotkeys = string.Join(",", workflow.Trigger.Hotkeys),
         HotkeyBehavior = workflow.Trigger.HotkeyBehavior,
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
-        TargetActionPluginId = workflow.Output.TargetActionPluginId,
+        TargetActionPluginId = workflow.Output.TargetActionPluginId, MemoryPluginId = workflow.Behavior.MemoryPluginId,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, Stored = workflow
     };
 }

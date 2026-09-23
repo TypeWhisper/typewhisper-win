@@ -143,7 +143,8 @@ public static class ManualWorkflowRunner
     public static async Task<string> RunAsync(Workflow workflow, string input,
         Func<string, string, bool> available,
         Func<string, string, string, string, CancellationToken, Task<string>> process,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, string, CancellationToken, Task<IReadOnlyList<string>>>? recall = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!workflow.IsEnabled) throw new InvalidOperationException("This workflow is disabled.");
@@ -155,7 +156,8 @@ public static class ManualWorkflowRunner
             throw new InvalidOperationException(configurationError);
         var prompt = workflow.SystemPrompt();
         if (string.IsNullOrWhiteSpace(prompt)) throw new InvalidOperationException("This workflow has no instructions.");
-        var result = await process(provider!, prompt, input, model!, cancellationToken).ConfigureAwait(false);
+        var context = await WorkflowMemoryContext.PrepareAsync(workflow.Behavior.MemoryPluginId, prompt, input, recall, cancellationToken);
+        var result = await process(provider!, context.Prompt, context.Input, model!, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException("The provider returned an empty result. Your source text is unchanged.");
         return result;

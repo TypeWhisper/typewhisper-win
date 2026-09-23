@@ -51,7 +51,10 @@ public sealed partial class WorkflowsView
             ?? (_opened.ProviderId == WorkflowLlmDefaults.Inherit ? "Default LLM: " : "")
                 + (Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider)
                 + " \u00b7 " + choice.Model + " \u00b7 input is sent to this provider when you run";
-        WorkflowExecutionSummary.Text += destination + activation;
+        var memory = string.IsNullOrWhiteSpace(_opened.MemoryPluginId) ? "" : "\nMemory context: "
+            + (_session?.PluginRuntime.MemoryProviders.FirstOrDefault(p => p.PluginId == _opened.MemoryPluginId)?.Name ?? "Saved source unavailable")
+            + " · matching saved facts are sent to this provider.";
+        WorkflowExecutionSummary.Text += memory + destination + activation;
     }
     private async void DefaultLlm_Click(object sender, RoutedEventArgs e)
     {

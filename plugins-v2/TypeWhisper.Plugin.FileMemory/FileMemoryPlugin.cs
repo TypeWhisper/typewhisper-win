@@ -22,7 +22,7 @@ public sealed partial class FileMemoryPlugin : IMemoryStoragePlugin
     /// <inheritdoc />
     public string PluginName => "File Memory";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.0";
+    public string PluginVersion => "1.4.0";
 
     /// <inheritdoc />
     public async Task ActivateAsync(IPluginHostServices host)
@@ -127,11 +127,20 @@ public sealed partial class FileMemoryPlugin : IMemoryStoragePlugin
         try
         {
             RequireWritable();
-            return _entries.Where(e => e.Content.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(e => e.CreatedAt).Take(Math.Clamp(maxResults, 0, 1000)).Select(e => e.Content).ToArray();
+            var terms = MemoryTerms(query);
+            return _entries.Select(e => (Entry: e, Score: string.IsNullOrWhiteSpace(query) ? 1 :
+                    e.Content.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase) ? 1000 :
+                    MemoryTerms(e.Content).Intersect(terms, StringComparer.OrdinalIgnoreCase).Count()))
+                .Where(match => match.Score > 0).OrderByDescending(match => match.Score)
+                .ThenByDescending(match => match.Entry.CreatedAt).Take(Math.Clamp(maxResults, 0, 1000))
+                .Select(match => match.Entry.Content).ToArray();
         }
         finally { _lock.Release(); }
     }
+
+    private static readonly HashSet<string> StopWords = new("the and for with this that from have about please eine einen einer einem eines der die das den dem des und mit für von ist sind bitte über zum zur ich wir mir mich you your our what which how does nicht auch als auf aus bei ein an im es in is to of a".Split(' '), StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> MemoryTerms(string text) => System.Text.RegularExpressions.Regex.Matches(text, @"[\p{L}\p{N}]+")
+        .Select(m => m.Value).Where(t => t.Length >= 2 && !StopWords.Contains(t)).Take(256).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetAllAsync(CancellationToken ct = default)

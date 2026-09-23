@@ -34,9 +34,10 @@ internal sealed partial class LocalDictationSession
     private Func<string, CancellationToken, Task<string>>? WorkflowProcessor(string? configuredLanguage, string? detectedLanguage)
     {
         var snapshot = _workflowAtStart;
+        var memory = _workflowMemoryAtStart;
         return snapshot is null ? null : (text, ct) => snapshot.ProcessAsync(text, configuredLanguage, detectedLanguage,
             (provider, model) => LlmProviders.Any(item => item.SelectionId == provider && item.Ready
                 && item.Models.Any(candidate => candidate.Id == model)),
-            ProcessLlmAsync, ct);
+            ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
     }
 }

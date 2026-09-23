@@ -16,7 +16,7 @@ public sealed class AutomaticWorkflowSnapshot
             Output = workflow.Output with { },
             Behavior = new()
             {
-                ProviderOverride = workflow.Behavior.ProviderOverride, ModelOverride = workflow.Behavior.ModelOverride,
+                MemoryPluginId = workflow.Behavior.MemoryPluginId, ProviderOverride = workflow.Behavior.ProviderOverride, ModelOverride = workflow.Behavior.ModelOverride,
                 FineTuning = workflow.Behavior.FineTuning, TranslationTarget = workflow.Behavior.TranslationTarget
             }
         };
@@ -29,6 +29,8 @@ public sealed class AutomaticWorkflowSnapshot
     public string? Name => _workflow?.Name;
     /// <summary>The explicitly selected action destination.</summary>
     public string? TargetActionPluginId => _workflow?.Output.TargetActionPluginId;
+    /// <summary>The explicitly selected memory source.</summary>
+    public string? MemoryPluginId => _workflow?.Behavior.MemoryPluginId;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
     public string? Error { get; }
 
@@ -90,7 +92,8 @@ public sealed class AutomaticWorkflowSnapshot
     public async Task<string> ProcessAsync(string text, string? configuredLanguage, string? detectedLanguage,
         Func<string, string, bool> available,
         Func<string, string, string, string, CancellationToken, Task<string>> process,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, string, CancellationToken, Task<IReadOnlyList<string>>>? recall = null)
     {
         ct.ThrowIfCancellationRequested();
         if (Error is not null) throw new InvalidOperationException(Error);
@@ -102,7 +105,8 @@ public sealed class AutomaticWorkflowSnapshot
             throw new InvalidOperationException("The workflow provider or model is unavailable.");
         var prompt = workflow.SystemPrompt(detectedLanguage: detectedLanguage, configuredLanguage: configuredLanguage);
         if (string.IsNullOrWhiteSpace(prompt)) throw new InvalidOperationException("The workflow has no instructions.");
-        var result = await process(provider, prompt, text, model, ct);
+        var context = await WorkflowMemoryContext.PrepareAsync(workflow.Behavior.MemoryPluginId, prompt, text, recall, ct);
+        var result = await process(provider, context.Prompt, context.Input, model, ct);
         ct.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException("The workflow returned no text.");
         return result;

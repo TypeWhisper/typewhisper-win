@@ -8,6 +8,16 @@ namespace TypeWhisper.WinUI;
 internal sealed partial class LocalDictationSession
 {
     private PortablePluginAction? _workflowActionAtStart;
+    private PortableMemoryProvider? _workflowMemoryAtStart;
+    private PortableMemoryProvider? FindWorkflowMemory(string? id) => PluginRuntime.MemoryProviders.SingleOrDefault(p => p.PluginId == id);
+    private async Task<IReadOnlyList<string>> RecallMemoryAsync(PortableMemoryProvider? source, string id, string query, CancellationToken ct)
+    {
+        if (source is null || source.PluginId != id)
+            throw new InvalidOperationException("The selected memory source is unavailable. Enable its plugin or turn memory context off.");
+        ct.ThrowIfCancellationRequested();
+        await LocalLlmDownload.CancelAndDrainAsync();
+        return await PluginRuntime.SearchMemoryAsync(source, query, ct);
+    }
 
     private PortablePluginAction? FindWorkflowAction(string? pluginId) => string.IsNullOrWhiteSpace(pluginId)
         ? null : PluginRuntime.Actions.SingleOrDefault(action => action.PluginId == pluginId);
@@ -33,11 +43,12 @@ internal sealed partial class LocalDictationSession
     {
         // Capture the exact enabled action before LLM processing; never substitute a reloaded plugin.
         var action = FindWorkflowAction(workflow.Output.TargetActionPluginId);
+        var memory = FindWorkflowMemory(workflow.Behavior.MemoryPluginId);
         if (!string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId) && action is null)
             throw new InvalidOperationException("The workflow action is unavailable. Enable its plugin first.");
         var text = await ManualWorkflowRunner.RunAsync(workflow, input,
             (provider, model) => LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)),
-            ProcessLlmAsync, ct);
+            ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
         if (action is null) return (text, null, null);
         var result = await ExecuteWorkflowActionAsync(action, text, new ActionContext(null, null, null, null, input), ct);
         // Preserve known completion even if cancellation arrives after an external write.

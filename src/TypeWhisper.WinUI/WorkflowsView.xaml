@@ -122,6 +122,11 @@
                         <local:ChoicePicker x:Name="ConfigActionTarget" />
                         <TextBlock x:Name="ConfigActionHint" Text="Choose Insert Text, or send the finished workflow result to an enabled plugin action." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                     </StackPanel>
+                    <StackPanel x:Name="ConfigMemorySection" Spacing="7">
+                        <TextBlock Text="Memory context" FontSize="18" FontWeight="SemiBold" />
+                        <local:ChoicePicker x:Name="ConfigMemory" />
+                        <TextBlock Text="Optional: search saved facts related to your text. Up to five matches are sent to this workflow’s LLM provider. Nothing is remembered automatically. Dictation-only workflows do not use memory context." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
                     <TextBlock Text="Trigger" FontSize="18" FontWeight="SemiBold" />
                     <StackPanel Spacing="7">
                         <Border x:Name="ActivationHelp" />

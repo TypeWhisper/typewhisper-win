@@ -662,6 +662,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 else if (workflow is null) await CaptureWorkflowAtStartAsync();
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
+                _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 GetWindowThreadProcessId(_target, out var currentTargetProcessId);

@@ -15,6 +15,7 @@ public sealed partial class WorkflowsView : UserControl
     private readonly HandCursorButton _templateHelp = SettingsHelp.Button("Template", "Choose a workflow template.");
     private readonly HandCursorButton _shortcutHelp = SettingsHelp.Button("Shortcut", "Choose a shortcut to activate this workflow.");
     private WorkflowDraft? _opened;
+    private (string Id, string Message)? _workflowRunFailure;
     private string _query = string.Empty;
     private readonly Dictionary<string, string> _drafts = [];
     private readonly List<WorkflowDraft> _workflows = [];
@@ -88,12 +89,15 @@ public sealed partial class WorkflowsView : UserControl
         if (_page == Page.Configuration)
         {
             ConfigureActionTargets(ConfigActionTarget.SelectedId);
+            ConfigureMemorySources(ConfigMemory.SelectedId);
             ConfigProvider.SetOptions(Providers, ConfigProvider.SelectedId, ConfigProvider.SelectedId + " (unavailable)");
             ConfigureModels(ConfigModel.SelectedId);
             UpdateConfigurationState();
         }
         else UpdateSourceState();
     });
+
+    private void ConfigureMemorySources(string selected) => ConfigMemory.SetOptions([new("", "Off", "Do not use saved memories"), .. (_session?.PluginRuntime.MemoryProviders.OrderBy(p => p.Name).Select(p => new Choice(p.PluginId, p.Name, "Use matching saved facts") { PluginId = p.PluginId }) ?? [])], selected, "Unavailable memory source: " + selected);
 
     private void ConfigureActionTargets(string selected) => ConfigActionTarget.SetOptions([new("", "Insert Text", "Use dictation output preferences"), .. (_session?.PluginRuntime.Actions.OrderBy(a => a.Name).Select(a => new Choice(a.PluginId, a.Name, "Send the workflow result to this action") { PluginId = a.PluginId }) ?? [])], selected, "Unavailable action: " + selected);
 
@@ -135,6 +139,8 @@ public sealed partial class WorkflowsView : UserControl
         {
             if (_page == Page.List) ConfigureWorkflowButton.IsEnabled = WorkflowList.SelectedItem is WorkflowDraft { IsEditable: true };
         };
+        ConfigMemory.Configure("Memory context", "file", "Workflow memory source");
+        ConfigMemory.SelectionChanged += _ => UpdateConfigurationState();
         ConfigActionTarget.Configure("Action Target", "plugin", "Workflow action target");
         ConfigActionTarget.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTrigger.Configure("Activation", "workflow", "Workflow activation");
@@ -216,7 +222,7 @@ public sealed partial class WorkflowsView : UserControl
         else if (_page == Page.Configuration)
         {
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
-            else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigActionTarget.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
+            else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigActionTarget.IsPopupOpen && !ConfigMemory.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
         }
         else if (_page == Page.Result) WorkflowPrimaryButton.Focus(FocusState.Programmatic);
     }
@@ -254,7 +260,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_run is not null) { _run.Cancel(); return; }
         if (_page == Page.Configuration)
         {
-            foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget })
+            foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget, ConfigMemory })
                 if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { _afterConfigurationExit = null; DismissDiscard(); return; }
             if (!ConfigurationDirty) { LeaveConfiguration(); return; }
@@ -276,6 +282,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_page != Page.Editor || _opened is null || !_opened.IsEditable || _session is null) return;
         using var cancellation = new CancellationTokenSource();
         _run = cancellation;
+        _workflowRunFailure = null;
         var completion = _runCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
@@ -294,8 +301,8 @@ public sealed partial class WorkflowsView : UserControl
             WorkflowResultScroll.ChangeView(null, 0, null, true);
             FocusEntry();
         }
-        catch (OperationCanceledException) { WorkflowInputHint.Text = "Run cancelled. Your source text is unchanged."; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowInputHint.Text = "Run failed. " + ex.Message; }
+        catch (OperationCanceledException) { RememberRunFailure("Run cancelled. Your source text is unchanged."); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { RememberRunFailure("Run failed. " + ex.Message); }
         finally
         {
             try
@@ -328,8 +335,15 @@ public sealed partial class WorkflowsView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { WorkflowInputHint.Text = "Enablement was not changed. " + ex.Message; }
     }
+    private void RememberRunFailure(string message)
+    {
+        _workflowRunFailure = (_opened!.Id, message);
+        WorkflowInputHint.Text = message;
+    }
+
     private void Source_Changed(object sender, TextChangedEventArgs e)
     {
+        _workflowRunFailure = null;
         if (_opened is not null) _drafts[_opened.Id] = WorkflowSource.Text;
         if (WorkflowPrimaryButton is not null) UpdateSourceState();
     }
@@ -362,6 +376,7 @@ public sealed partial class WorkflowsView : UserControl
             : _opened is null || !(_opened.Template == WorkflowTemplate.Dictation || EffectiveAvailable(_opened.ProviderId, _opened.ModelId))
             ? "The saved provider or model is unavailable. Edit the workflow or configure the plugin."
             : empty ? "Paste or type the text to process." : !string.IsNullOrEmpty(_opened.TargetActionPluginId) ? "Run processes this text and sends the result to the saved plugin action." : "Run sends this text to the selected provider. Review the result before copying.";
+        if (_workflowRunFailure is { } failure && failure.Id == _opened?.Id) WorkflowInputHint.Text = failure.Message;
     }
 
     private void Source_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
@@ -401,6 +416,7 @@ public sealed partial class WorkflowsView : UserControl
         .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
+        || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
         || _draftIcon != _opened.IconKind
         || ConfigTrigger.SelectedId != _opened.ActivationId || ConfigAppProcesses.Text != _opened.AppProcesses
         || DraftHotkeys != _opened.Hotkeys
@@ -488,6 +504,7 @@ public sealed partial class WorkflowsView : UserControl
         _loadingConfiguration = true;
         ConfigEnabled.IsOn = _opened.IsEnabled;
         ConfigureActionTargets(_opened.TargetActionPluginId ?? "");
+        ConfigureMemorySources(_opened.MemoryPluginId ?? "");
         DeleteWorkflowButton.Visibility = _creating ? Visibility.Collapsed : Visibility.Visible;
         ConfigAdvanced.IsExpanded = false;
         _suggestedName = _creating ? WorkflowTemplateCatalog.DefinitionFor(_opened.Template).Name : null;
@@ -559,7 +576,7 @@ public sealed partial class WorkflowsView : UserControl
         ConfigAppSection.Visibility = ConfigWebsiteSection.Visibility = contextual ? Visibility.Visible : Visibility.Collapsed;
         ConfigContextSection.Visibility = contextual && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Visibility.Visible : Visibility.Collapsed;
         var template = Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var selected) ? selected : WorkflowTemplate.Custom;
-        ConfigInstructionSection.Visibility = ConfigProviderSection.Visibility = ConfigModelSection.Visibility = template == WorkflowTemplate.Dictation ? Visibility.Collapsed : Visibility.Visible;
+        ConfigMemorySection.Visibility = ConfigInstructionSection.Visibility = ConfigProviderSection.Visibility = ConfigModelSection.Visibility = template == WorkflowTemplate.Dictation ? Visibility.Collapsed : Visibility.Visible;
         if (template == WorkflowTemplate.Custom) ConfigAdvanced.IsExpanded = true;
         ConfigTranslationSection.Visibility = template == WorkflowTemplate.Translation ? Visibility.Visible : Visibility.Collapsed;
         ConfigInstructionLabel.Text = template == WorkflowTemplate.Custom ? "INSTRUCTIONS (REQUIRED)" : "FINE-TUNING (OPTIONAL)";
@@ -596,6 +613,7 @@ public sealed partial class WorkflowsView : UserControl
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
             TargetActionPluginId = string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? null : ConfigActionTarget.SelectedId,
+            MemoryPluginId = string.IsNullOrEmpty(ConfigMemory.SelectedId) ? null : ConfigMemory.SelectedId,
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,
             IsEnabled = ConfigEnabled.IsOn, Description = ConfigEnabled.IsOn ? "Manual workflow" : "Disabled manual workflow" };
         try

@@ -20,11 +20,7 @@ public sealed partial class FileMemoryPlugin : IActionPlugin, IPluginProfileSett
                 ? selected : _entries.FirstOrDefault()?.Id.ToString() ?? "none";
         }
     }
-    private static string Label(string text)
-    {
-        var firstLine = text.Split(['\r', '\n'], 2)[0];
-        return firstLine.Length > 65 ? firstLine[..65] + "…" : firstLine;
-    }
+    private static string Label(string text) => text;
     /// <inheritdoc />
     public string? ActionIcon => "file";
     /// <inheritdoc />
@@ -66,12 +62,12 @@ public sealed partial class FileMemoryPlugin : IActionPlugin, IPluginProfileSett
             if (_draftId is { } draft) choices.Add(new(draft, L("New memory", "Neue Erinnerung")));
             var fields = new List<PluginTextSetting>
             {
-                new(ProfileSelectorId, L("Memories", "Erinnerungen"), L("Select an entry to edit or remove it.", "Eintrag zum Bearbeiten oder Löschen auswählen."), selected) { Choices = choices }
+                new(ProfileSelectorId, L("Memories", "Erinnerungen"), L("Keep useful facts on this device. For example: ‘Project Aurora uses British English.’ Save text with the ‘Remember in File Memory’ workflow action. To reuse matching facts, choose File Memory under ‘Memory context’ in a text-processing workflow. Only that workflow sends matches to its LLM provider.", "Nützliche Fakten auf diesem Gerät merken, zum Beispiel: ‚Projekt Aurora verwendet britisches Englisch.‘ Texte per Workflow-Aktion ‚In File Memory merken‘ speichern. Zum Wiederverwenden in einem Workflow mit Textverarbeitung unter ‚Memory context‘ File Memory auswählen. Nur dieser Workflow sendet passende Einträge an seinen LLM-Anbieter."), selected) { Choices = choices }
             };
             if (selected != "none")
                 fields.Add(new(selected + ":content", L("Memory", "Erinnerung"),
-                    L($"{entries.Length} saved locally. Add entries here or with a workflow action. Automatic extraction and recall are not enabled.",
-                        $"{entries.Length} lokal gespeichert. Einträge hier oder per Workflow-Aktion hinzufügen. Automatisches Extrahieren und Abrufen ist nicht aktiviert."),
+                    L($"{entries.Length} saved locally. One fact or topic per entry makes relevant information easier to find.",
+                        $"{entries.Length} lokal gespeichert. Ein Fakt oder Thema pro Eintrag erleichtert das Wiederfinden."),
                     entries.FirstOrDefault(e => e.Id.ToString() == selected)?.Content ?? "")
                     { IsMultiline = true, Section = PluginSettingsSection.Connection });
             fields.Add(new("query", L("Search memories", "Erinnerungen suchen"), L("Search the saved entries without saving your draft.", "Gespeicherte Einträge durchsuchen, ohne den Entwurf zu speichern."), _query, 1000)

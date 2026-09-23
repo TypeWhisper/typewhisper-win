@@ -26,6 +26,17 @@ public sealed class MemoryBehaviorTests
         await restart.DeactivateAsync();
     }
     [Fact]
+    public async Task RecallRanksRelatedFactsWithoutReturningUnrelatedEntries()
+    {
+        using var f = new PortableFixture(); using var plugin = new FileMemoryPlugin(); await plugin.ActivateAsync(f.Host);
+        await plugin.StoreAsync("Projekt Aurora verwendet britisches Englisch.");
+        await plugin.StoreAsync("Der Urlaub beginnt im Oktober.");
+        Assert.Equal("Projekt Aurora verwendet britisches Englisch.", Assert.Single(await plugin.SearchAsync("Bitte schreibe einen Text über Aurora.")));
+        Assert.Empty(await plugin.SearchAsync("Zebras"));
+        Assert.Empty(await plugin.SearchAsync("the and"));
+        await plugin.DeactivateAsync();
+    }
+    [Fact]
     public async Task CorruptFile_IsNotSilentlyOverwritten()
     {
         using var f=new PortableFixture(); Directory.CreateDirectory(f.Host.PluginDataDirectory);

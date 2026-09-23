@@ -10,6 +10,7 @@ internal sealed partial class LivePluginTextSettings
 {
     private Action? _profileDirtyChanged;
     private string? _profileName;
+    private string _memoryFilter = "";
     private bool _singleConfiguration;
     private ListView? _profilePicker;
     private double _profileScrollOffset;
@@ -30,11 +31,13 @@ internal sealed partial class LivePluginTextSettings
     private void RenderProfileEditor(PluginTextSetting selector, PluginTextSetting[] fields,
         PluginSettingsAction[] actions, string? addId, string? removeId, bool showKey, bool generic = false)
     {
+        var memoryEditor = _id == "com.typewhisper.file-memory";
         var name = selector.Choices.FirstOrDefault(c => c.Value == selector.Value)?.Title ?? selector.Value;
+        if (memoryEditor) { name = name.Length > 65 ? name[..65] + "…" : name; actions = actions.Where(a => a.Id != "search").ToArray(); }
         _profileName = name;
         var singleConfiguration = selector.Choices.Count == 1 && addId is null && removeId is null;
         _singleConfiguration = singleConfiguration;
-        var editable = fields.Where(f => generic || f.Id != selector.Id).ToArray();
+        var editable = fields.Where(f => (generic || f.Id != selector.Id) && (!memoryEditor || f.Id != "query")).ToArray();
         var values = editable.ToDictionary(f => f.Id,
             f => _drafts.TryGetValue(f.Id, out var draft) ? draft : f.Value);
         _dirtyProfiles[selector.Value] = _profileActionDrafts.Contains(selector.Value) || _pendingApiKey() is not null || editable.Any(f => values[f.Id] != f.Value);
@@ -59,19 +62,39 @@ internal sealed partial class LivePluginTextSettings
         sidebarHeader.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         sidebarHeader.Children.Add(new TextBlock { Text = selector.Title, FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        sidebar.Children.Add(sidebarHeader);
+        var sidebarTop = new StackPanel { Spacing = 10 };
+        sidebarTop.Children.Add(sidebarHeader);
+        sidebar.Children.Add(sidebarTop);
         var picker = new HandCursorListView { SelectionMode = ListViewSelectionMode.Single,
             HorizontalAlignment = HorizontalAlignment.Stretch, ItemContainerStyle = (Style)Application.Current.Resources["CommandItemStyle"] };
         var profileItems = new Dictionary<string, ListViewItem>();
         foreach (var choice in selector.Choices)
         {
             var label = new TextBlock { Text = choice.Title, TextWrapping = TextWrapping.Wrap, FontSize = 13,
-                Margin = new(12, 10, 10, 10), VerticalAlignment = VerticalAlignment.Center };
+                Margin = new(12, 10, 10, 10), VerticalAlignment = VerticalAlignment.Center,
+                MaxLines = memoryEditor ? 3 : 0, TextTrimming = memoryEditor ? TextTrimming.CharacterEllipsis : TextTrimming.None };
             var item = new ListViewItem { Tag = choice.Value, Content = label, HorizontalContentAlignment = HorizontalAlignment.Stretch };
             AutomationProperties.SetName(item, choice.Title);
             profileItems.Add(choice.Value, item); picker.Items.Add(item);
         }
         picker.SelectedItem = profileItems.GetValueOrDefault(selector.Value);
+        if (memoryEditor)
+        {
+            var search = new TextBox { Text = _memoryFilter, PlaceholderText = "Search memories…", MinHeight = 40,
+                HorizontalAlignment = HorizontalAlignment.Stretch };
+            AutomationProperties.SetName(search, "Search saved memories");
+            var empty = ProfileNote("No matching entries.");
+            void Filter()
+            {
+                _memoryFilter = search.Text;
+                foreach (var choice in selector.Choices)
+                    profileItems[choice.Value].Visibility = choice.Title.Contains(_memoryFilter, StringComparison.OrdinalIgnoreCase)
+                        ? Visibility.Visible : Visibility.Collapsed;
+                empty.Visibility = profileItems.Values.Any(item => item.Visibility == Visibility.Visible) ? Visibility.Collapsed : Visibility.Visible;
+            }
+            search.TextChanged += (_, _) => Filter();
+            sidebarTop.Children.Add(search); sidebarTop.Children.Add(empty); Filter();
+        }
         _profilePicker = picker;
         AutomationProperties.SetName(picker, selector.Title);
         AutomationProperties.SetHelpText(picker, selector.Description);
@@ -130,7 +153,7 @@ internal sealed partial class LivePluginTextSettings
         var saveState = ProfileNote("");
         var fieldGroups = new Dictionary<string, FrameworkElement>();
         AutomationProperties.SetLiveSetting(saveState, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        var save = ProfileButton(singleConfiguration ? "Save settings" : "Save profile", async () =>
+        var save = ProfileButton(memoryEditor ? "Save memory" : singleConfiguration ? "Save settings" : "Save profile", async () =>
         {
             if (_busy || !_session.CanStartPluginSettingsAction || !IsLoaded || generation != _generation) return;
             _busy = true; IsEnabled = false;
@@ -164,7 +187,7 @@ internal sealed partial class LivePluginTextSettings
             { if (IsLoaded && generation == _generation) SetStatus("Could not save “" + name + "”. Your edits are still here; retry saving."); }
             finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         });
-        AutomationProperties.SetName(save, singleConfiguration ? "Save settings" : "Save profile “" + name + "”");
+        AutomationProperties.SetName(save, memoryEditor ? "Save memory" : singleConfiguration ? "Save settings" : "Save profile “" + name + "”");
         void UpdateDirty()
         {
             foreach (var field in editable)
@@ -257,7 +280,7 @@ internal sealed partial class LivePluginTextSettings
             else
             {
                 var text = new TextBox { Text = values[field.Id], MaxLength = Math.Clamp(field.MaxLength, 1, 32768),
-                    MinHeight = 40, AcceptsReturn = field.IsMultiline,
+                    MinHeight = memoryEditor && field.IsMultiline ? 220 : 40, AcceptsReturn = field.IsMultiline,
                     Padding = field.IsMultiline ? new Thickness(10, 10, 4, 10) : new Thickness(10, 0, 4, 0),
                     TextWrapping = field.IsMultiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
                     Style = (Style)Application.Current.Resources[field.IsMultiline ? "LexiconMultilineStyle" : "SearchTextBoxStyle"] };
@@ -322,7 +345,7 @@ internal sealed partial class LivePluginTextSettings
             var removeButton = ProfileButton(remove.Title, async () =>
             {
                 var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Remove “" + name + "”?",
-                    Content = showKey ? "This removes this configuration, its saved API key and any unsaved edits. Workflows using it will need another provider." : "This removes this configuration and any unsaved edits.",
+                    Content = memoryEditor ? "This deletes the saved memory from this device. It will no longer be available to workflows." : showKey ? "This removes this configuration, its saved API key and any unsaved edits. Workflows using it will need another provider." : "This removes this configuration and any unsaved edits.",
                     PrimaryButtonText = "Remove", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                     await RunProfileActionAsync(remove, name, removedFields: editable.Select(f => f.Id).ToArray(), removedProfileId: selector.Value);
