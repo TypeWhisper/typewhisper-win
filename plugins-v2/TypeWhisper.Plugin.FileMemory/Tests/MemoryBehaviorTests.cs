@@ -36,6 +36,27 @@ public sealed class MemoryBehaviorTests
         Assert.Empty(await plugin.SearchAsync("the and"));
         await plugin.DeactivateAsync();
     }
+    [Theory]
+    [InlineData("Hi")]
+    [InlineData("ok")]
+    [InlineData("a")]
+    [InlineData("the")]
+    [InlineData(".")]
+    public async Task ShortOrUnindexedQueries_DoNotMatchUnrelatedSubstrings(string query)
+    {
+        using var f = new PortableFixture(); using var plugin = new FileMemoryPlugin(); await plugin.ActivateAsync(f.Host);
+        await plugin.StoreAsync("This project uses the okay template.");
+        Assert.Empty(await plugin.SearchAsync(query));
+        await plugin.DeactivateAsync();
+    }
+    [Fact]
+    public async Task ShortQueries_StillMatchWholeIndexedTerms()
+    {
+        using var f = new PortableFixture(); using var plugin = new FileMemoryPlugin(); await plugin.ActivateAsync(f.Host);
+        await plugin.StoreAsync("UK spelling for Aurora.");
+        Assert.Equal("UK spelling for Aurora.", Assert.Single(await plugin.SearchAsync(" UK ")));
+        await plugin.DeactivateAsync();
+    }
     [Fact]
     public async Task CorruptFile_IsNotSilentlyOverwritten()
     {

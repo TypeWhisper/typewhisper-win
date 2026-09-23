@@ -128,8 +128,10 @@ public sealed partial class FileMemoryPlugin : IMemoryStoragePlugin
         {
             RequireWritable();
             var terms = MemoryTerms(query);
+            var trimmed = query.Trim();
+            var phrase = terms.Count > 0 && trimmed.Length >= 3;
             return _entries.Select(e => (Entry: e, Score: string.IsNullOrWhiteSpace(query) ? 1 :
-                    e.Content.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase) ? 1000 :
+                    phrase && e.Content.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ? 1000 :
                     MemoryTerms(e.Content).Intersect(terms, StringComparer.OrdinalIgnoreCase).Count()))
                 .Where(match => match.Score > 0).OrderByDescending(match => match.Score)
                 .ThenByDescending(match => match.Entry.CreatedAt).Take(Math.Clamp(maxResults, 0, 1000))

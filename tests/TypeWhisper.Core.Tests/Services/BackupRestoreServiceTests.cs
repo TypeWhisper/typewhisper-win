@@ -567,6 +567,29 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Null(Assert.Single(source.Dictionary.Entries).CtcMinSimilarity);
     }
 
+    [Fact]
+    public async Task OversizedMemorySourceFailsBeforeImportWithoutChangingWorkflows()
+    {
+        var source = CreateProfile("memory-source");
+        source.Workflows.AddWorkflow(new Workflow
+        {
+            Id = "memory-workflow", Name = "Remember context", Template = WorkflowTemplate.CleanedText,
+            Trigger = WorkflowTrigger.Manual(),
+            Behavior = new WorkflowBehavior { MemoryPluginId = "com.typewhisper.file-memory" }
+        });
+        var backup = await source.Backup.ExportAsync();
+        var destination = CreateProfile("memory-target");
+        var validImport = await destination.Backup.ImportAsync(backup);
+        Assert.True(validImport.Success, validImport.Error);
+        Assert.Equal("com.typewhisper.file-memory", Assert.Single(destination.Workflows.Workflows).Behavior.MemoryPluginId);
+
+        var json = JsonNode.Parse(backup)!;
+        json["data"]!["workflows"]![0]!["behavior"]!["memoryPluginId"] = new string('x', 16_385);
+        Assert.False(destination.Backup.PreviewImport(json.ToJsonString()).IsValid);
+        Assert.False((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        Assert.Equal("com.typewhisper.file-memory", Assert.Single(destination.Workflows.Workflows).Behavior.MemoryPluginId);
+    }
+
     private Profile CreateProfile(string name)
     {
         var root = Path.Combine(_directory, name);

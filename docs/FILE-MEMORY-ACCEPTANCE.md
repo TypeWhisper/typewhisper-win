@@ -6,9 +6,10 @@ Local fact storage with explicit workflow output actions and opt-in memory conte
 
 ## Automated evidence
 
-- 24 plugin tests: atomic saves, edits, duplicate rejection, persisted reload, corrupt-file preservation, cancellation, ranked retrieval and package install/update/restart/uninstall.
+- 30 plugin tests: atomic saves, edits, duplicate rejection, persisted reload, corrupt-file preservation, cancellation, ranked retrieval, short-query filtering and package install/update/restart/uninstall.
 - 1,321 presentation tests, including seven new memory workflow cases. The seven cases were rerun after the final continuation-context change.
 - 283 portable SDK/host tests.
+- 18 backup restore tests, including valid memory-source roundtrip and rejection of an oversized source ID before import.
 - Real runtime test stores a fact through `IActionPlugin`, retrieves it through the memory lease, then verifies old handles are rejected after disable/re-enable.
 - Canonical Windows development build succeeded with File Memory 1.4.0 installed into the isolated development profile. Unrelated installation receipts were preserved.
 
