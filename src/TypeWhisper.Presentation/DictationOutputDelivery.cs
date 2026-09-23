@@ -40,7 +40,7 @@ public sealed record DictationOutputResult(TranscriptionRecord Record, bool Save
         DictationReviewReason.ActionFailed => "Workflow action needs attention",
         _ => "Your dictation"
     };
-    /// <summary>Whether a requested history write or paste failed; choosing review-first is not a failure.</summary>
+    /// <summary>Whether processing, storage or delivery failed; choosing review-first is not a failure. Storage failure alone does not require review.</summary>
     public bool Failed { get; init; }
     /// <summary>An action was attempted; its outcome must survive late cancellation.</summary>
     public bool ActionAttempted { get; init; }

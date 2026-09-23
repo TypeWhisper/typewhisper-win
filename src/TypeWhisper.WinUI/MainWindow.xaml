@@ -48,7 +48,7 @@
             </Grid>
         </Border>
         <InfoBar x:Name="OutputStorageNotice" IsOpen="False" Severity="Warning" IsClosable="True"
-                 Title="History could not be fully saved" Margin="14,4,14,8" />
+                 Title="Could not save dictation data" Margin="14,4,14,8" />
         </StackPanel>
         <Grid Grid.Row="1" Margin="14,6,14,10">
             <Border x:Name="SearchSurface"

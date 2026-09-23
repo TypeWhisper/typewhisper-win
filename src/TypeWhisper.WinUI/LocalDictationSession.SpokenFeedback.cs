@@ -75,7 +75,7 @@ internal sealed partial class LocalDictationSession
     {
         if (_disposed || !SpokenFeedbackPolicy.ShouldSpeakAutomatically(
             _spokenFeedbackAtStart.SpokenFeedbackEnabled && AudioPreferences.SpokenFeedbackEnabled,
-            processingSucceeded && record.Status == TranscriptionRecordStatus.Succeeded, !outcome.Failed, outcome.NeedsReview)) return;
+            processingSucceeded, outcome)) return;
         _spokenFeedbackActivity = RunSpokenFeedbackAsync(new(record.FinalText, record.Language,
             _spokenFeedbackAtStart.SpokenFeedbackVoiceId, _spokenFeedbackAtStart.OutputDeviceId), reportFailure: true);
     }

@@ -43,6 +43,12 @@ public interface ISpokenFeedbackBackend
 /// <summary>Portable admission rules for automatic spoken output.</summary>
 public static class SpokenFeedbackPolicy
 {
+    /// <summary>Admits completed delivery independently of History storage warnings.</summary>
+    public static bool ShouldSpeakAutomatically(bool enabled, bool processingSucceeded, DictationOutputResult outcome) =>
+        ShouldSpeakAutomatically(enabled,
+            processingSucceeded && outcome.Record.Status == TypeWhisper.Core.Models.TranscriptionRecordStatus.Succeeded,
+            !outcome.NeedsReview, outcome.NeedsReview);
+
     /// <summary>Only explicitly enabled, successfully processed and delivered final output is spoken.</summary>
     public static bool ShouldSpeakAutomatically(bool enabled, bool processingSucceeded,
         bool deliverySucceeded, bool needsReview) =>
