@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace TypeWhisper.Plugin.OpenAiCompatible;
 
 // Some servers (Ollama, LM Studio, vLLM without a reasoning parser) return a model's
@@ -5,20 +7,25 @@ namespace TypeWhisper.Plugin.OpenAiCompatible;
 // templates may also open the block in the prompt, so only the closing tag is visible.
 internal static class ReasoningText
 {
-    private static readonly (string Open, string Close)[] Blocks = [("<think>", "</think>"), ("<thinking>", "</thinking>")];
+    private static readonly (string Open, string Close)[] Blocks = [("<thinking>", "</thinking>"), ("<think>", "</think>")];
+    // Template-opened reasoning ends with the tag on its own line; "Use </think> to close" is answer text.
+    private static readonly Regex ImplicitClose = new(@"</think(?:ing)?>[ \t]*(?:\r?\n|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     internal static string StripLeading(string text)
     {
-        var trimmed = text.TrimStart();
-        foreach (var (open, close) in Blocks)
+        var remaining = text.TrimStart();
+        var stripped = false;
+        // Remove consecutive leading blocks so reasoning-only output is reported as empty.
+        while (Blocks.FirstOrDefault(block => remaining.StartsWith(block.Open, StringComparison.OrdinalIgnoreCase)) is { Open: not null } block)
         {
-            var end = trimmed.IndexOf(close, StringComparison.OrdinalIgnoreCase);
-            if (end < 0) continue;
-            var explicitOpen = trimmed.StartsWith(open, StringComparison.OrdinalIgnoreCase);
-            // A closing tag after ordinary answer text is content, not a leading reasoning block.
-            if (!explicitOpen && trimmed.IndexOf(open, 0, end, StringComparison.OrdinalIgnoreCase) >= 0) continue;
-            return trimmed[(end + close.Length)..].Trim();
+            var end = remaining.IndexOf(block.Close, block.Open.Length, StringComparison.OrdinalIgnoreCase);
+            if (end < 0) return stripped ? remaining : text; // Truncated reasoning: keep it visible rather than guess.
+            remaining = remaining[(end + block.Close.Length)..].TrimStart();
+            stripped = true;
         }
-        return text;
+        if (stripped) return remaining;
+        if (Blocks.Any(block => remaining.Contains(block.Open, StringComparison.OrdinalIgnoreCase)) ||
+            ImplicitClose.Match(remaining) is not { Success: true } close) return text;
+        return StripLeading(remaining[(close.Index + close.Length)..].Trim());
     }
 }

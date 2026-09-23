@@ -36,7 +36,7 @@ dotnet test plugins/TypeWhisper.Plugin.GitHubCopilot/Tests/TypeWhisper.Plugin.Gi
 dotnet msbuild plugins/TypeWhisper.Plugin.GitHubCopilot/portable.proj -t:Package -p:Configuration=Release
 ```
 
-The independent staged package is at `bin/Release/portable-host/Plugins/com.typewhisper.github-copilot/`; the ZIP and SHA-256 file are at `bin/Release/com.typewhisper.github-copilot-1.1.0.zip[.sha256]`.
+The independent staged package is at `bin/Release/portable-host/Plugins/com.typewhisper.github-copilot/`; the ZIP and SHA-256 file are at `bin/Release/com.typewhisper.github-copilot-1.1.1.zip[.sha256]`.
 
 The package contains the runtime for the build machine's architecture. Only advertise that architecture in a catalog entry; build and validate other architectures separately. Do not enable `CopilotSkipCliDownload` for distribution builds. The package intentionally excludes the host-owned `TypeWhisper.PluginSDK.dll`. Keep the runtime and all applicable licenses together. This change does not publish a catalog entry or package.
 

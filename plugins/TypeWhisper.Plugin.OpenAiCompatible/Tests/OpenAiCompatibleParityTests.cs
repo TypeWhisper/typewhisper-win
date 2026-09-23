@@ -99,7 +99,10 @@ public partial class OpenAiCompatiblePluginTests
     [Theory]
     [InlineData("<think>plan the edit</think>\n\nCleaned text", "Cleaned text")]
     [InlineData("  <THINKING>plan</THINKING> Cleaned text", "Cleaned text")]
-    [InlineData("reasoning opened by the chat template</think>Cleaned text", "Cleaned text")]
+    [InlineData("reasoning opened by the chat template\n</think>\n\nCleaned text", "Cleaned text")]
+    [InlineData("<think>first</think>\n<think>second</think>\nCleaned text", "Cleaned text")]
+    [InlineData("<thinking>mentions </think> inside</thinking>Cleaned text", "Cleaned text")]
+    [InlineData("Use </think> to close the block", "Use </think> to close the block")]
     [InlineData("Keep <think>literal</think> markup", "Keep <think>literal</think> markup")]
     [InlineData("<think>truncated reasoning without an answer", "<think>truncated reasoning without an answer")]
     [InlineData("Plain answer", "Plain answer")]
@@ -122,7 +125,7 @@ public partial class OpenAiCompatiblePluginTests
     public async Task ChatCompletionWithOnlyReasoningIsEmpty()
     {
         using var plugin = new OpenAiCompatiblePlugin(new HttpClient(new CapturingHandler((_, _) =>
-            JsonResponse("""{"choices":[{"message":{"content":"<think>only reasoning</think>"}}]}"""))));
+            JsonResponse("""{"choices":[{"message":{"content":"<think>only reasoning</think><think>more</think>"}}]}"""))));
         await plugin.ActivateAsync(new TestPluginHostServices()); plugin.SetBaseUrl("http://localhost:1234");
         var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.ProcessAsync("", "fixture", "model", default));
         Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
