@@ -1,11 +1,10 @@
 # Portable plugin development
 
-The WinUI host is the only application. Portable implementations live under `plugins/` and `plugins-v2/`; WPF provider assemblies, settings views and the legacy plugin publishing workflow have been removed.
+The WinUI host is the only application. All portable implementations live under `plugins/`; WPF provider assemblies, settings views and the legacy plugin publishing workflow have been removed.
 
 ## Current source layout
 
-- `plugins/`: Deepgram, FillerWords, Groq, Obsidian, SherpaOnnx and its internal ParakeetCtc component. These projects target `net10.0` only.
-- `plugins-v2/`: independent portable providers, with provider-owned projects, manifests, settings contracts and tests.
+- `plugins/`: all portable providers and internal components, with provider-owned projects, manifests, settings contracts and tests.
 - `src/TypeWhisper.PluginSDK`: UI-independent contracts. Settings are rendered by WinUI through those contracts.
 - `src/TypeWhisper.PluginHost`: package verification, activation, configuration and lifecycle management.
 
@@ -20,3 +19,5 @@ Providers that existed only for WPF are no longer included. Their removal does n
 5. Complete provider-specific native and live acceptance. Normal automated tests do not require accounts or paid requests.
 
 See [plugin package documentation](PLUGIN-PACKAGES-1.1.md) for the package contract. Run `eng/Test-WinUIHeadless.ps1` for the host, application and provider suites. Published packages continue to use the v2 catalog and immutable package store.
+
+The source-directory consolidation does not rename the public `plugins-v2.json` feed. Existing 1.1 clients depend on that URL. Application upgrades from 1.0 use the profile migration described in [Daily delivery and migration](DAILY-1.1-CANDIDATE.md).

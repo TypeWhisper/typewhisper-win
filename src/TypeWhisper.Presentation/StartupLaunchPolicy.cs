@@ -54,7 +54,7 @@ public static class StartupPublication
             string.IsNullOrWhiteSpace(receipt.OutputDirectory) || !Path.IsPathFullyQualified(receipt.OutputDirectory) ||
             !Path.IsPathFullyQualified(processPath))
             throw new InvalidDataException("This is not a recognized development publication.");
-        var expected = Path.GetFullPath(Path.Combine(receipt.OutputDirectory, "TypeWhisper.WinUI.exe"));
+        var expected = Path.GetFullPath(Path.Combine(receipt.OutputDirectory, "TypeWhisper.exe"));
         var source = Path.TrimEndingDirectorySeparator(Path.GetFullPath(receipt.SourceRoot));
         var output = Path.TrimEndingDirectorySeparator(Path.GetFullPath(receipt.OutputDirectory));
         if (string.Equals(source, output, StringComparison.OrdinalIgnoreCase) ||

@@ -35,7 +35,7 @@ if (-not $runAll) {
 
 $selectedDirs = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($file in $changedFiles) {
-    if ($file -cmatch '^(plugins|plugins-v2)/([^/]+)/') {
+    if ($file -cmatch '^(plugins)/([^/]+)/') {
         [void]$selectedDirs.Add($Matches[1] + '/' + $Matches[2])
     }
 }
@@ -43,8 +43,8 @@ foreach ($file in $changedFiles) {
 # Only tracked, top-level package projects; nested test projects run in headless CI.
 # Shared host/SDK/workflow changes do not expand this matrix. Use a manual run
 # when a cross-plugin compatibility sweep is needed.
-$projects = @(foreach ($path in (Invoke-RepositoryGit @('ls-files', '--', 'plugins', 'plugins-v2') | Sort-Object)) {
-    if ($path -cmatch '^(plugins|plugins-v2)/([^/]+)/([^/]+)\.csproj$') {
+$projects = @(foreach ($path in (Invoke-RepositoryGit @('ls-files', '--', 'plugins') | Sort-Object)) {
+    if ($path -cmatch '^(plugins)/([^/]+)/([^/]+)\.csproj$') {
         $root = $Matches[1]
         $directory = $root + '/' + $Matches[2]
         if (($runAll -or $selectedDirs.Contains($directory)) -and

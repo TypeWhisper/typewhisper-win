@@ -81,7 +81,7 @@ class CatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             for name in ("One", "Two"):
-                package = root / "plugins-v2" / name
+                package = root / "plugins" / name
                 package.mkdir(parents=True)
                 (package / "portable.proj").touch()
                 (package / "manifest.json").write_text(json.dumps(entry("com.typewhisper." + name.lower())), encoding="utf-8")
@@ -89,7 +89,7 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(len(selected), 1)
             with self.assertRaises(ValueError):
                 builder.discover_projects(root, {"com.typewhisper.typo"})
-            (root / "plugins-v2/Two/manifest.json").write_text(json.dumps(entry("com.typewhisper.one")), encoding="utf-8")
+            (root / "plugins/Two/manifest.json").write_text(json.dumps(entry("com.typewhisper.one")), encoding="utf-8")
             with self.assertRaises(ValueError):
                 builder.discover_projects(root, set())
 

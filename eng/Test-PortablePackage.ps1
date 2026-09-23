@@ -23,7 +23,7 @@ $requiredEntries = @(
     ".portable"
     "TypeWhisperDaily.exe"
     "Update.exe"
-    "current/TypeWhisper.WinUI.exe"
+    "current/TypeWhisper.exe"
 )
 $portableArchive = $portableArchives[0]
 $archive = [System.IO.Compression.ZipFile]::OpenRead($portableArchive.FullName)

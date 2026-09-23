@@ -5,7 +5,7 @@ namespace TypeWhisper.Core.Services;
 /// <summary>Copies portable legacy data into an absent profile before any profile consumers start.</summary>
 public static class LegacyDailyProfileMigration
 {
-    /// <summary>Receipt stored with the imported profile. Settings, plugins, secrets and audio are not imported.</summary>
+    /// <summary>Receipt stored with the imported profile; version 2 includes the host's staged settings/plugin conversion.</summary>
     public const string ReceiptName = "legacy-import.json";
     private static readonly string[] Files = ["dictionary.json", "snippets.json", "workflows.json", "history.json"];
 
@@ -13,7 +13,8 @@ public static class LegacyDailyProfileMigration
     /// <remarks>The caller must own the destination's single-instance lock. Existing profiles are never merged or replaced.
     /// Sources are read only; private staging is disposable and a terminated attempt can be retried.</remarks>
     public static async Task<bool> ImportAsync(string legacyRoot, string destination,
-        Action<string>? checkpoint = null, CancellationToken cancellationToken = default)
+        Action<string>? checkpoint = null, CancellationToken cancellationToken = default,
+        Func<string, string, CancellationToken, Task>? prepareProfile = null)
     {
         legacyRoot = Path.GetFullPath(legacyRoot);
         destination = Path.GetFullPath(destination);
@@ -22,9 +23,10 @@ public static class LegacyDailyProfileMigration
         RejectLinks(legacyRoot);
         var source = Path.Combine(legacyRoot, "Data");
         RejectLinks(source);
-        if (!Directory.Exists(source)) return false;
+        if (!Directory.Exists(source) && (prepareProfile is null || !File.Exists(Path.Combine(legacyRoot, "settings.json")))) return false;
         foreach (var name in Files) RejectLinks(Path.Combine(source, name));
-        if (!Files.Any(name => File.Exists(Path.Combine(source, name)))) return false;
+        if (!Files.Any(name => File.Exists(Path.Combine(source, name))) &&
+            (prepareProfile is null || !File.Exists(Path.Combine(legacyRoot, "settings.json")))) return false;
 
         // The backup reader validates types, identities, duplicate fields and size before conversion.
         // Its portable format deliberately removes device-bound paths and credentials.
@@ -38,13 +40,19 @@ public static class LegacyDailyProfileMigration
         {
             var restore = new PersistedProfileBackup(stage);
             var preview = await restore.PreviewAsync(archive, PersistedProfileBackup.SupportedCategories, cancellationToken);
-            var result = restore.Apply(preview);
-            if (!result.Applied) throw new IOException(result.Error ?? "Legacy profile staging failed.");
+            if (preview.ChangedFileCount > 0)
+            {
+                var result = restore.Apply(preview);
+                if (!result.Applied) throw new IOException(result.Error ?? "Legacy profile staging failed.");
+            }
+            if (prepareProfile is not null) await prepareProfile(legacyRoot, stage, cancellationToken);
             await File.WriteAllTextAsync(Path.Combine(stage, ReceiptName), JsonSerializer.Serialize(new
             {
-                version = 1, importedAt = DateTimeOffset.UtcNow,
+                version = prepareProfile is null ? 1 : 2, importedAt = DateTimeOffset.UtcNow,
                 categories = Files, sourcePreserved = true,
-                excluded = new[] { "settings", "credentials", "plugins", "models", "audio", "recordings", "recovery" }
+                excluded = prepareProfile is null
+                    ? new[] { "settings", "credentials", "plugins", "models", "audio", "recordings", "recovery" }
+                    : new[] { "account-sign-ins", "audio", "recordings", "recovery" }
             }), cancellationToken);
             checkpoint?.Invoke("staged");
             cancellationToken.ThrowIfCancellationRequested();

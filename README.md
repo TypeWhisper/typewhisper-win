@@ -1,7 +1,7 @@
 # TypeWhisper for Windows
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Windows](https://img.shields.io/badge/Windows-11%2024H2%2B-0078D4.svg)](https://www.microsoft.com/windows)
+[![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4.svg)](https://www.microsoft.com/windows)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4.svg)](https://dotnet.microsoft.com)
 
 Speech-to-text and AI text processing for Windows. Dictate anywhere, transcribe files, and transform text with reusable workflows. Use local models when privacy matters, or add cloud providers through plugins when speed and scale matter more.
@@ -10,7 +10,7 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 
 See [Platform parity and exclusions](docs/PLATFORM_PARITY.md) for the Windows support matrix, Windows-native replacements, and Apple-only non-goals.
 
-This branch contains only the WinUI application. The WPF host, its settings dialogs, legacy plugins and release workflow have been removed. Portable plugins live in `plugins/` and `plugins-v2/`. Historical release notes remain available as records of earlier versions.
+The application is built with WinUI and published as `TypeWhisper.exe`. All portable plugin projects, manifests and provider tests live in `plugins/`. Historical release notes remain available as records of earlier versions.
 
 ## What's New
 
@@ -91,7 +91,7 @@ WinUI packages use their own installation identity and update channels. See the 
 
 ## System Requirements
 
-- Windows 11 24H2 or later, build 26100+ (x64 or ARM64)
+- Windows 10/11, with a configured minimum build of 19041 (x64 or ARM64). Native validation on older Windows builds and ARM64 hardware is still required before claiming full compatibility.
 - 8 GB RAM minimum, 16 GB+ recommended for larger local models
 - Around 700 MB disk space for Parakeet, around 200 MB for Canary, more for whisper.cpp or Qwen3 Local models
 - .NET 10 SDK for building from source
@@ -120,7 +120,7 @@ dotnet build TypeWhisper.slnx
 dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r win-x64 --self-contained false -o publish/win-x64
 ```
 
-Run `publish/win-x64/TypeWhisper.WinUI.exe`. Use `win-arm64` for ARM64 builds. The publish output includes the WinUI resources and bundled CLI.
+Run `publish/win-x64/TypeWhisper.exe`. Use `win-arm64` for ARM64 builds. The publish output includes the application resources and bundled CLI.
 
 On Marco's development machine, build and launch the current checkout with the shared development script:
 
@@ -191,7 +191,7 @@ The active workflow is shown in the recording overlay.
 
 Plugins are portable .NET class libraries with a `manifest.json`. WinUI renders their settings through the portable SDK and installs them in its own profile through the v2 marketplace. It does not load WPF settings assemblies.
 
-See [plugin package documentation](docs/PLUGIN-PACKAGES-1.1.md) for package layout, lifecycle and host capabilities. The source directories contain six existing portable components under `plugins/` and independent providers under `plugins-v2/`. WPF-only providers without a portable implementation are no longer included.
+See [plugin package documentation](docs/PLUGIN-PACKAGES-1.1.md) for package layout, lifecycle and host capabilities. All providers and the internal CTC component share the `plugins/` source directory. WPF-only providers without a portable implementation are no longer included.
 
 ### Plugin Types
 
@@ -222,8 +222,7 @@ typewhisper-win/
 |   |-- TypeWhisper.Presentation/   # Application logic independent of the UI
 |   |-- TypeWhisper.Cli/            # typewhisper command-line client
 |   `-- TypeWhisper.WinUI/          # WinUI UI, platform services and app composition
-|-- plugins/                       # Existing portable providers and CTC component
-|-- plugins-v2/                    # Independent portable providers
+|-- plugins/                       # Portable providers, tests and internal CTC component
 |-- tests/                         # Core, host, presentation, CLI and native tests
 `-- docs/                          # Guides and historical design/release records
 ```

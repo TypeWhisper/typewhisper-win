@@ -31,6 +31,8 @@ internal static class WindowsStartupRegistration
             var marker = Path.Combine(Path.GetDirectoryName(process)!, StartupPublication.ReceiptFileName);
             if (new FileInfo(marker).Length > 16_384) throw new InvalidDataException("Invalid publication receipt size.");
             var executable = StartupPublication.Validate(File.ReadAllText(marker), process);
+            StartupRegistration.MigrateExecutable(backend, StartupPublication.DevelopmentIdentity,
+                Path.Combine(Path.GetDirectoryName(executable)!, "TypeWhisper.WinUI.exe"), executable);
             return new StartupRegistration(backend, StartupPublication.DevelopmentIdentity, executable);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -40,15 +42,26 @@ internal static class WindowsStartupRegistration
         }
 #else
         var locator = Velopack.Locators.VelopackLocator.Current;
-        if (locator.AppId == "TypeWhisperDaily" && locator.CurrentlyInstalledVersion is not null &&
+        var installation = ApplicationInstallation.Resolve(locator.AppId);
+        if (installation is not null && locator.CurrentlyInstalledVersion is not null &&
             !string.IsNullOrEmpty(locator.RootAppDir))
         {
-            var executable = Path.Combine(locator.RootAppDir, "current", "TypeWhisper.WinUI.exe");
+            var executable = Path.Combine(locator.RootAppDir, "current", installation.Executable);
             if (File.Exists(executable) && string.Equals(Path.GetFullPath(executable), Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
-                return new StartupRegistration(backend, "TypeWhisperDaily", executable);
+            {
+                try
+                {
+                    if (installation.PackageId == "TypeWhisperDaily")
+                        StartupRegistration.MigrateExecutable(backend, installation.PackageId,
+                            Path.Combine(locator.RootAppDir, "current", "TypeWhisper.WinUI.exe"), executable);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                { return new StartupRegistration(backend, installation.PackageId, null, "Startup registration could not be upgraded. " + ex.Message); }
+                return new StartupRegistration(backend, installation.PackageId, executable);
+            }
         }
         return new StartupRegistration(backend, "TypeWhisperDaily", null,
-            "Windows startup is available after installing TypeWhisper Daily.");
+            "Windows startup is available after installing TypeWhisper.");
 #endif
     }
 

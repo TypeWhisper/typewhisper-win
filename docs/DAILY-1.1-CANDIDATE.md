@@ -1,40 +1,46 @@
-# WinUI 1.1 Daily candidate
+# TypeWhisper Daily delivery and 1.0 migration
 
-The `Candidate` workflow creates validation artifacts for x64 and ARM64 on pull requests that change its workflow or candidate validation scripts, and on manual dispatches. Scheduled main runs and explicit main dispatches with `publish_daily=true` publish a GitHub prerelease after both architectures pass. The legacy application release workflow has been removed. Candidate versions are `1.1.0-daily.YYYYMMDD.RUN`; the workflow filename remains unchanged to preserve its run counter.
+The Candidate workflow builds x64 and ARM64 validation artifacts on relevant pull requests and manual dispatches. Scheduled main runs publish a Daily prerelease. The app is always named **TypeWhisper** and its executable is **TypeWhisper.exe**; Daily is an update channel, not a product name.
 
-The candidate bundles the Windows App SDK runtime and CLI, uses the installed .NET 10 runtime, and installs portable plugins through the marketplace. It currently targets Windows build 26100 or newer. CI runs the headless suites, checks package contents, verifies application/CLI versions and executable architecture, rejects development/user state, and records the commit plus ZIP SHA-256. Cross-building ARM64 does not count as testing on ARM64 hardware.
+## Installation compatibility
 
-## Profile boundaries
+| Existing installation | Package ID | Daily feed | Entry point after update |
+| --- | --- | --- | --- |
+| Original TypeWhisper 1.0 | `TypeWhisper` | `win-<arch>-daily` | `TypeWhisper.exe` |
+| Separate early 1.1 Daily | `TypeWhisperDaily` | `win-<arch>-winui-daily` | `TypeWhisper.exe` |
 
-The first successful candidate run is [34451171076](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34451171076), built from `a2acf689`. Both x64 and ARM64 publish, rejection checks, content validation and artifact upload passed. The artifacts are validation-only; this evidence does not establish native startup, installation, or data migration acceptance. Later fixes require a new candidate before distribution.
+The internal `TypeWhisperDaily` identity is retained for existing installations. Both packages use the TypeWhisper display title. Each updater requires its installed package identity and rejects pre-1.1 packages. Stable and RC never fall back to the old WPF feeds. An exact owned startup command pointing at `TypeWhisper.WinUI.exe` is migrated to `TypeWhisper.exe`; unrelated commands are left untouched.
 
-The installer candidate from `ed83c032` passed both architectures in [34455620426](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34455620426), including Velopack packing and artifact upload. [Headless checks 34455620383](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34455620383) passed on Windows and Linux. Locally, 31 focused migration/backup tests and the prescribed development build/relaunch passed. These results do not replace clean-machine installer acceptance or an actual historical-profile migration check.
+Both package variants are built and the original-installation package is inspected before publication. Original Daily assets are kept in the `legacy-upgrade` artifact directory until rollout is enabled. A main dispatch with both `publish_daily=true` and `publish_legacy_daily=true` publishes both feeds. Set the repository variable `LEGACY_DAILY_UPGRADE_ENABLED=true` only after installed upgrade acceptance to continue publishing the original feed on scheduled runs. Without that gate, the separate 1.1 Daily continues receiving updates and the old Daily feed is unchanged.
 
-- Release WinUI: `%LOCALAPPDATA%/TypeWhisper-WinUI`.
-- Normal development WinUI: `%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData`.
-- Named debug smoke profiles: `%TEMP%/TypeWhisper-WinUI-TestProfiles/<name>`.
-- Release model assets stay under the release profile; they do not share the development NVIDIA model directory.
-- Development and release use different single-instance identities.
-- Unbound CLI discovery prefers release WinUI, then WinUI development. Explicit `--dev`, `--profile`, and installed CLI profile bindings retain their precedence.
+The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK remains 26100; the configured minimum OS is 19041. Changing that minimum is not native compatibility evidence. Validate older Windows releases and ARM64 hardware separately.
 
-On first Release launch, an absent WinUI profile receives a copy of dictionary, snippets, workflows and history from `%LOCALAPPDATA%/TypeWhisper-UserData/Data`. Only when that legacy root is absent does the importer try `%LOCALAPPDATA%/TypeWhisper/Data`. An existing WinUI profile, even an empty directory, is never merged or replaced. Debug builds never invoke this importer.
+## Profile migration
 
-The importer uses the validated portable backup format, stages privately on the destination volume, and publishes by a no-overwrite directory rename before opening profile stores. Failure or cancellation leaves the source and destination unchanged; retry is safe. A process termination can leave an unused `.typewhisper-import-*` staging directory beside the profile; it is never treated as a completed import. Unknown fields, malformed data and linked source paths fail closed. The previous app should be closed during migration.
+Release profiles remain under `%LOCALAPPDATA%/TypeWhisper-WinUI`. Development profiles remain separate. Before opening profile stores, an absent release profile imports from `%LOCALAPPDATA%/TypeWhisper-UserData`, falling back to `%LOCALAPPDATA%/TypeWhisper` only when the former root is absent. Existing 1.1 profiles are never merged or overwritten automatically.
 
-Settings, sign-ins, license credentials, plugins, model files, audio, recorder archives and recovery recordings remain in the old installation. History is imported as text without device-bound audio references. The wizard explains these limits and configures the new app. This is a portable-data migration, not complete settings/plugin parity. `legacy-import.json` records completion without storing user content or source paths. Removing the Daily installation does not delete either user-data directory.
+Migration stages on the destination volume and publishes with a no-overwrite directory rename. It reads the source without modifying it. Linked paths, malformed settings and invalid encrypted credentials stop the migration. Download, copy or cancellation failures leave no visible partial profile and can be retried. Close the previous app first. A killed process can leave an unused `.typewhisper-import-*` staging directory; it is not a completed profile.
 
-## Side-by-side installer
+The importer carries over:
 
-The candidate workflow also packs a Velopack `TypeWhisperDaily` installer for each architecture, using pinned tooling `0.0.1298`. It installs separately from legacy `TypeWhisper`; shortcuts and uninstall identity use **TypeWhisper Daily**. The WinUI entry point handles Velopack callbacks before XAML and profile access. Installed Daily builds can register their own `TypeWhisperDaily` startup value, and uninstall removes only that owned value. Startup is unavailable for the standalone ZIP.
+- Dictionary, snippets, workflows and history text through the validated portable backup format.
+- Main and supplementary recording shortcuts, recording mode, output/history choices, retention, text normalization, language hints, microphone priorities, audio options, recorder sources, vocabulary boosting and onboarding completion.
+- The previous plugin/model selection, without choosing a replacement cloud service when unavailable.
+- Plugin settings and API keys. Keys are decrypted in the current Windows user context and written to the new encrypted secret store; license activation IDs and the unchanged encrypted license format are preserved.
+- Compatible portable plugins downloaded from the existing v2 catalog. Legacy assemblies are never loaded. Enabled/disabled state is retained.
+- Available `Models` directories, including a configured external model-storage location, copied into the new profile without old runtime executables. File Memory's `memories.json` is also copied.
 
-Artifacts include the setup executable, packages, feed metadata and SHA-256 files. Main publishing runs attach them to a Daily prerelease without marking it as the latest stable release. The new `win-x64-winui-daily` and `win-arm64-winui-daily` channels are distinct from the legacy Daily channels; old clients must not receive packages with a different installation identity. There is no automatic update polling or feed transition; existing Daily users must explicitly install this candidate. Close the old app before testing to avoid competing hotkeys. The old installation and its update feed remain available for rollback.
+UI-only preferences without a current equivalent, account sign-ins, archived audio, recordings, recovery audio and legacy automation/sync configuration remain in the previous profile. History is imported without old audio references. Unavailable plugins are listed in `legacy-migration-report.json` and shown after startup. Unchanged settings formats are preserved, but provider-specific compatibility still needs real-profile acceptance; model files may require a provider-specific download if layouts changed.
 
-## Before distributing to existing Daily users
+`legacy-import.json` version 2 records the extended import. Reports contain plugin identifiers and migration notes, never keys or transcript content. Existing early 1.1 profiles keep their own settings and data; a separate reviewed import is needed to bring in additional 1.0 data.
 
-1. Produce and inspect both candidate artifacts; launch the x64 candidate on a clean supported Windows machine and confirm runtime prerequisites. Test ARM64 on hardware before claiming support.
-2. Test installer install/reinstall/uninstall and startup on a clean supported Windows machine. Only WinUI is packaged; the removed WPF workflow cannot publish new releases.
-3. Validate the copied portable data against an actual old Daily profile and confirm rollback to the preserved old app. Automated fixture tests cover source preservation, existing destinations, failure/retry, cancellation and invalid data; they do not establish compatibility with every historical profile.
-4. Validate the supported v2 plugin catalog/packages and clearly list unavailable plugins. See `PLUGIN-MIGRATION-1.1.md`.
-5. Check dictation, workflows, API/CLI/Raycast and account/sync in the actual candidate. Publish only to the intended Daily track; do not alter stable or RC feeds.
+## Acceptance before enabling the original Daily feed
 
-Calendar OAuth and pending plugin ports are not completed by packaging the app.
+1. Install an actual 1.0 Daily in an isolated Windows VM; configure a test shortcut, dictionary entry, workflow and local model or test provider credentials.
+2. Upgrade through that installation's updater using the original-identity 1.1 package. Check restart, desktop/Start menu shortcuts, startup, uninstall identity, retained license and profile, and actual dictation.
+3. Install a second 1.1 Daily through the new app to prove subsequent updates still use the correct feed.
+4. Upgrade the separate early 1.1 Daily and check the executable rename and owned startup registration.
+5. Exercise interrupted/offline migration, existing 1.1 profiles, missing providers and rollback. A downgrade does not copy new 1.1 edits back into the preserved 1.0 profile.
+6. Repeat native acceptance for older Windows and ARM64 before expanding the support claim.
+
+Automated tests and a development UI smoke test do not replace the installed 1.0-to-1.1-to-next-1.1 sequence. Stable delivery is a separate rollout.

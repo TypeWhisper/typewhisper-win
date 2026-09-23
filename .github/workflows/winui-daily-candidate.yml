@@ -8,12 +8,17 @@ on:
         description: 'Publish a WinUI Daily prerelease from main after validation'
         type: boolean
         default: false
+      publish_legacy_daily:
+        description: 'Also publish the verified 1.0 Daily upgrade (original TypeWhisper installation)'
+        type: boolean
+        default: false
   schedule:
     - cron: '0 4 * * *'
   pull_request:
     paths:
       - '.github/workflows/winui-daily-candidate.yml'
       - 'eng/Test-WinUIDailyCandidate*.ps1'
+      - 'eng/Test-DailyUpgradePackage*.ps1'
 
 permissions:
   contents: read
@@ -64,7 +69,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test candidate rejection checks
         shell: pwsh
-        run: ./eng/Test-WinUIDailyCandidate.Tests.ps1
+        run: |
+          ./eng/Test-WinUIDailyCandidate.Tests.ps1
+          ./eng/Test-DailyUpgradePackage.Tests.ps1
       - name: Validate candidate contents
         shell: pwsh
         run: |
@@ -75,26 +82,37 @@ jobs:
         run: |
           dotnet tool install vpk --version 0.0.1298 --tool-path tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./tools/vpk.exe pack --packId TypeWhisperDaily --packTitle 'TypeWhisper Daily' `
+          ./tools/vpk.exe pack --packId TypeWhisperDaily --packTitle 'TypeWhisper' `
             --packVersion $env:CANDIDATE_VERSION --packDir candidate `
-            --mainExe TypeWhisper.WinUI.exe --channel '${{ matrix.rid }}-winui-daily' `
+            --mainExe TypeWhisper.exe --channel '${{ matrix.rid }}-winui-daily' `
             --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
             --icon src/TypeWhisper.WinUI/Assets/app.ico `
             --outputDir installer
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Get-ChildItem installer -Filter '*Setup.exe')) { throw 'Daily installer is missing.' }
+      - name: Build original-installation Daily upgrade
+        shell: pwsh
+        run: |
+          ./tools/vpk.exe pack --packId TypeWhisper --packTitle 'TypeWhisper' `
+            --packVersion $env:CANDIDATE_VERSION --packDir candidate `
+            --mainExe TypeWhisper.exe --channel '${{ matrix.rid }}-daily' `
+            --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
+            --icon src/TypeWhisper.WinUI/Assets/app.ico --outputDir legacy-installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./eng/Test-DailyUpgradePackage.ps1 -ReleaseDirectory legacy-installer -RuntimeIdentifier '${{ matrix.rid }}' -ExpectedVersion $env:CANDIDATE_VERSION
       - name: Archive candidate and record provenance
         shell: pwsh
         run: |
           New-Item -ItemType Directory artifacts/candidate -Force | Out-Null
           $name = "TypeWhisper-$env:CANDIDATE_VERSION-${{ matrix.rid }}-candidate"
           @{ version = $env:CANDIDATE_VERSION; commit = '${{ github.sha }}'; runtime = '${{ matrix.rid }}';
-             minimumWindowsBuild = 26100; profile = 'TypeWhisper-WinUI';
+             minimumWindowsBuild = 19041; profile = 'TypeWhisper-WinUI';
              distribution = 'daily-candidate'; automaticUpdates = $false } |
             ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
           Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
           Copy-Item installer/* artifacts/candidate/
-          Get-ChildItem artifacts/candidate -File | Where-Object Extension -In '.exe', '.nupkg' | ForEach-Object {
+          Copy-Item legacy-installer artifacts/candidate/legacy-upgrade -Recurse
+          Get-ChildItem artifacts/candidate -File -Recurse | Where-Object Extension -In '.exe', '.nupkg' | ForEach-Object {
             (Get-FileHash $_.FullName -Algorithm SHA256).Hash | Set-Content ($_.FullName + '.sha256')
           }
           (Get-FileHash "artifacts/candidate/$name.zip" -Algorithm SHA256).Hash |
@@ -122,14 +140,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ needs.version.outputs.value }}
+          PUBLISH_LEGACY_DAILY: ${{ inputs.publish_legacy_daily || vars.LEGACY_DAILY_UPGRADE_ENABLED == 'true' }}
         run: |
           set -euo pipefail
           test -f artifacts/releases.win-x64-winui-daily.json
           test -f artifacts/releases.win-arm64-winui-daily.json
-          # Never publish a feed consumed by the legacy application's incompatible package identity.
           test ! -f artifacts/releases.win-x64-daily.json
           test ! -f artifacts/releases.win-arm64-daily.json
-          gh release create "$TAG" artifacts/* --target "$GITHUB_SHA" \
+          mkdir upload
+          for file in artifacts/*; do
+            if [ -f "$file" ]; then cp "$file" upload/; fi
+          done
+          if [ "$PUBLISH_LEGACY_DAILY" = "true" ]; then
+            cp artifacts/legacy-upgrade/* upload/
+            test -f upload/releases.win-x64-daily.json
+            test -f upload/releases.win-arm64-daily.json
+          fi
+          gh release create "$TAG" upload/* --target "$GITHUB_SHA" \
             --title "TypeWhisper $TAG · Daily" --notes-file docs/releases/1.1-daily.md \
             --prerelease --latest=false --draft
           gh release edit "$TAG" --draft=false --prerelease --latest=false

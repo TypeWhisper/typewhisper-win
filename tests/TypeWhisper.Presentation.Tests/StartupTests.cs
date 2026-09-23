@@ -5,7 +5,7 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class StartupTests
 {
-    private static string Executable => Path.Combine(Path.GetTempPath(), "published output", "TypeWhisper.WinUI.exe");
+    private static string Executable => Path.Combine(Path.GetTempPath(), "published output", "TypeWhisper.exe");
 
     [Theory]
     [InlineData(false, "", true)]
@@ -86,7 +86,7 @@ public sealed class StartupTests
     {
         var root = Path.GetTempPath();
         var source = Path.Combine(root, "checkout"); var output = Path.Combine(root, "custom output");
-        var executable = Path.Combine(output, "TypeWhisper.WinUI.exe");
+        var executable = Path.Combine(output, "TypeWhisper.exe");
         Assert.Equal(executable, StartupPublication.Validate(Receipt(source, output), executable));
     }
 
@@ -100,10 +100,26 @@ public sealed class StartupTests
     {
         var source = Path.Combine(Path.GetTempPath(), "checkout");
         var output = defect == "inside" ? Path.Combine(source, "bin") : defect == "same" ? source : Path.Combine(Path.GetTempPath(), "published");
-        var executable = Path.Combine(output, "TypeWhisper.WinUI.exe");
-        if (defect == "copied") executable = Path.Combine(Path.GetTempPath(), "copy", "TypeWhisper.WinUI.exe");
+        var executable = Path.Combine(output, "TypeWhisper.exe");
+        if (defect == "copied") executable = Path.Combine(Path.GetTempPath(), "copy", "TypeWhisper.exe");
         var json = Receipt(source, output, defect == "production" ? "TypeWhisper" : StartupPublication.DevelopmentIdentity, defect == "version" ? 2 : 1);
         Assert.Throws<InvalidDataException>(() => StartupPublication.Validate(json, executable));
+    }
+
+    [Fact]
+    public void ExecutableRenameOnlyChangesExactOwnedStartupCommand()
+    {
+        var old = Path.GetFullPath("previous/TypeWhisper.WinUI.exe");
+        var next = Path.GetFullPath("previous/TypeWhisper.exe");
+        var backend = new Backend();
+        backend.Values["TypeWhisperDaily"] = StartupRegistration.QuoteCommand(old);
+        backend.Values["TypeWhisper"] = "unrelated command";
+        StartupRegistration.MigrateExecutable(backend, "TypeWhisperDaily", old, next);
+        Assert.Equal(StartupRegistration.QuoteCommand(next), backend.Values["TypeWhisperDaily"]);
+        StartupRegistration.MigrateExecutable(backend, "TypeWhisperDaily", old, next);
+        StartupRegistration.MigrateExecutable(backend, "TypeWhisper", old, next);
+        Assert.Equal(1, backend.Writes);
+        Assert.Equal("unrelated command", backend.Values["TypeWhisper"]);
     }
 
     private static string Receipt(string source, string output, string identity = StartupPublication.DevelopmentIdentity, int version = 1) =>

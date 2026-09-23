@@ -14,6 +14,7 @@ internal sealed class ProfileOperationWindow : Window
     private readonly Expander _details;
     private readonly TextBlock _diagnostic;
     private bool _busy;
+    private bool _dismissed;
     private Func<Task>? _retryAction;
 
     internal ProfileOperationWindow(string message, bool busy, Action exit)
@@ -42,12 +43,14 @@ internal sealed class ProfileOperationWindow : Window
         Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         NativeWindowAppearance.ApplyAppTitleBar(this);
         AppWindow.Resize(new SizeInt32(620, 300));
-        AppWindow.Closing += (_, args) => { args.Cancel = true; if (!_busy) exit(); };
+        AppWindow.Closing += (_, args) => { if (_dismissed) return; args.Cancel = true; if (!_busy) exit(); };
         SetMessage(message, busy);
     }
 
     internal void SetMessage(string message, bool busy)
     { _message.Text = message; _busy = busy; _close.IsEnabled = !busy; _retry.IsEnabled = !busy; }
+
+    internal void Dismiss() { _dismissed = true; Close(); }
 
     internal void SetDetails(string? details)
     { _diagnostic.Text = details ?? ""; _details.Visibility = details is null ? Visibility.Collapsed : Visibility.Visible; }

@@ -99,9 +99,10 @@ jobs:
         run: |
           vpk pack `
             --packId TypeWhisperDaily `
+            --packTitle TypeWhisper `
             --packVersion ${{ steps.meta.outputs.version }} `
             --packDir "publish/${{ matrix.rid }}" `
-            --mainExe TypeWhisper.WinUI.exe `
+            --mainExe TypeWhisper.exe `
             --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
             --icon src/TypeWhisper.WinUI/Assets/app.ico `
             --channel ${{ steps.meta.outputs.velopack_channel }} `

@@ -11,9 +11,9 @@ function Expect-Rejection([string]$Version, [string]$Message) {
 }
 try {
     Expect-Rejection '1.1.0' 'explicit 1.1.0-daily version'; $checks++
-    Expect-Rejection '1.1.0-daily.20260910.1' 'missing TypeWhisper.WinUI.exe'; $checks++
-    $required = @('TypeWhisper.WinUI.exe', 'TypeWhisper.WinUI.dll', 'TypeWhisper.WinUI.runtimeconfig.json',
-        'TypeWhisper.WinUI.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
+    Expect-Rejection '1.1.0-daily.20260910.1' 'missing TypeWhisper.exe'; $checks++
+    $required = @('TypeWhisper.exe', 'TypeWhisper.dll', 'TypeWhisper.runtimeconfig.json',
+        'TypeWhisper.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
         'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json')
     foreach ($name in $required) {
         $file = Join-Path $fixture $name
@@ -33,7 +33,7 @@ try {
         Expect-Rejection '1.1.0-daily.20260910.1' 'development/user state'; $checks++
         Remove-Item -LiteralPath $file
     }
-    foreach ($name in @('TypeWhisper.WinUI.runtimeconfig.json', 'Cli/TypeWhisper.Cli.runtimeconfig.json')) {
+    foreach ($name in @('TypeWhisper.runtimeconfig.json', 'Cli/TypeWhisper.Cli.runtimeconfig.json')) {
         Set-Content -LiteralPath (Join-Path $fixture $name) -Value '{"runtimeOptions":{"framework":{"name":"Microsoft.NETCore.App","version":"10.0.0"}}}'
     }
     Set-Content -LiteralPath (Join-Path $fixture 'Cli/TypeWhisper.Cli.runtimeconfig.json') -Value '{"runtimeOptions":{"includedFrameworks":[]}}'

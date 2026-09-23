@@ -70,7 +70,7 @@ internal sealed class TrayIconService : IDisposable
         _menuWindow = new TrayMenuWindow(menu);
         _icon = new TaskbarIcon
         {
-            ToolTipText = "TypeWhisper · WinUI development",
+            ToolTipText = "TypeWhisper",
             IconSource = new BitmapImage(new Uri("ms-appx:///app.ico")),
             RightClickCommand = new TrayCommand(_menuWindow.Present),
             LeftClickCommand = new TrayCommand(show),

@@ -26,6 +26,12 @@ public interface IStartupRegistration
 /// <summary>Changes only an owned startup command and verifies the resulting backend state.</summary>
 public sealed class StartupRegistration(IStartupRegistrationBackend backend, string identity, string? executable, string? unavailableReason = null) : IStartupRegistration
 {
+    /// <summary>Updates only an exact owned command after an application executable rename.</summary>
+    public static void MigrateExecutable(IStartupRegistrationBackend backend, string identity, string oldExecutable, string executable)
+    {
+        if (string.Equals(backend.Read(identity), QuoteCommand(oldExecutable), StringComparison.Ordinal))
+            backend.Write(identity, QuoteCommand(executable));
+    }
     /// <inheritdoc />
     public Task<StartupRegistrationState> ReadAsync() => Task.FromResult(Read());
     /// <inheritdoc />

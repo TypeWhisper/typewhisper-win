@@ -10,8 +10,8 @@ if ($ExpectedVersion -notmatch '^1\.1\.0-daily\.[0-9]{8}\.[0-9]+$') {
     throw 'A candidate must have an explicit 1.1.0-daily version.'
 }
 $root = (Resolve-Path -LiteralPath $PublishDirectory).Path
-$required = @('TypeWhisper.WinUI.exe', 'TypeWhisper.WinUI.dll', 'TypeWhisper.WinUI.runtimeconfig.json',
-    'TypeWhisper.WinUI.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
+$required = @('TypeWhisper.exe', 'TypeWhisper.dll', 'TypeWhisper.runtimeconfig.json',
+    'TypeWhisper.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
     'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json')
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) {
@@ -26,7 +26,7 @@ foreach ($relative in @('PresentationFramework.dll', 'PresentationCore.dll', 'Sy
     if (Test-Path -LiteralPath (Join-Path $root $relative)) { throw "Candidate contains an unused host dependency: $relative" }
 }
 # Both executables must use the installed .NET 10 runtime, without a desktop dependency.
-foreach ($relative in @('TypeWhisper.WinUI.runtimeconfig.json', 'Cli/TypeWhisper.Cli.runtimeconfig.json')) {
+foreach ($relative in @('TypeWhisper.runtimeconfig.json', 'Cli/TypeWhisper.Cli.runtimeconfig.json')) {
     $config = Get-Content -LiteralPath (Join-Path $root $relative) -Raw | ConvertFrom-Json -AsHashtable
     $options = $config['runtimeOptions']
     $framework = $options['framework']
@@ -45,12 +45,12 @@ foreach ($name in $shared.Keys) {
         (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $shared[$name]) { throw "Shared CLI runtime is missing or changed: $name" }
     if (Test-Path -LiteralPath (Join-Path (Join-Path $root 'Cli') $name)) { throw "CLI runtime is duplicated: $name" }
 }
-foreach ($relative in @('TypeWhisper.WinUI.dll', 'Cli/TypeWhisper.Cli.dll')) {
+foreach ($relative in @('TypeWhisper.dll', 'Cli/TypeWhisper.Cli.dll')) {
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $root $relative)).ProductVersion
     if (($version -split '\+')[0] -ne $ExpectedVersion) { throw "$relative has unexpected version $version" }
 }
 # Read the PE header without executing a cross-architecture candidate.
-$stream = [IO.File]::OpenRead((Join-Path $root 'TypeWhisper.WinUI.exe'))
+$stream = [IO.File]::OpenRead((Join-Path $root 'TypeWhisper.exe'))
 $reader = [IO.BinaryReader]::new($stream)
 try {
     $stream.Position = 0x3c
