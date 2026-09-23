@@ -10,7 +10,9 @@ public sealed partial class MainWindow
     {
         if (action is HybridHotkeyAction.Start or HybridHotkeyAction.Toggle)
             _dictation.ShowLoadingForDictationAttempt();
-        if (action == HybridHotkeyAction.Cancel) _dictation.RequestCancel();
+        // A modifier chord such as Ctrl+Shift+Left emits Cancel after a rejected Start. Only
+        // interrupt capture that this gesture owns, never processing, files or model work.
+        if (action == HybridHotkeyAction.Cancel && _dictationInput?.IsRecordingOrStarting == true) _dictation.RequestCancel();
         _ = _dictationInput?.SubmitAsync(action switch
         {
             HybridHotkeyAction.Start => TypeWhisper.Presentation.DictationInputAction.Start,
