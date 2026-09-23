@@ -387,19 +387,21 @@ internal sealed class WindowsClipboardTransaction : IDisposable
             && name.ToString() == "FileContents";
     }
 
-    // Windows synthesizes these standard formats from any captured member of the same
-    // group when the clipboard is restored. A failed on-demand conversion (typically
-    // CF_DIB from CF_BITMAP, #359) therefore loses nothing and must not block insertion.
-    private static readonly uint[][] SynthesizedFormatGroups =
-    [
-        [NativeMethods.CF_BITMAP, NativeMethods.CF_DIB, NativeMethods.CF_DIBV5],
-        [NativeMethods.CF_TEXT, NativeMethods.CF_OEMTEXT, NativeMethods.CF_UNICODETEXT],
-        [NativeMethods.CF_ENHMETAFILE, NativeMethods.CF_METAFILEPICT]
-    ];
+    // Windows synthesizes these legacy formats from a captured source on restore, so a failed
+    // on-demand conversion (typically CF_DIB, #359) loses nothing and must not block insertion.
+    // Richer formats (Unicode text, DIBV5 alpha/color profiles, enhanced metafiles) cannot be
+    // recreated from their legacy forms and still stop insertion when unavailable.
+    private static readonly Dictionary<uint, uint[]> SynthesizedFrom = new()
+    {
+        [NativeMethods.CF_TEXT] = [NativeMethods.CF_UNICODETEXT, NativeMethods.CF_OEMTEXT],
+        [NativeMethods.CF_OEMTEXT] = [NativeMethods.CF_UNICODETEXT, NativeMethods.CF_TEXT],
+        [NativeMethods.CF_DIB] = [NativeMethods.CF_DIBV5, NativeMethods.CF_BITMAP],
+        [NativeMethods.CF_BITMAP] = [NativeMethods.CF_DIBV5, NativeMethods.CF_DIB],
+        [NativeMethods.CF_METAFILEPICT] = [NativeMethods.CF_ENHMETAFILE]
+    };
 
     private static bool CanSkipSynthesizedFormat(uint unavailableFormat, IReadOnlySet<uint> capturedFormats) =>
-        SynthesizedFormatGroups.Any(group => group.Contains(unavailableFormat)
-            && group.Any(format => format != unavailableFormat && capturedFormats.Contains(format)));
+        SynthesizedFrom.TryGetValue(unavailableFormat, out var sources) && sources.Any(capturedFormats.Contains);
 
     private static IntPtr DuplicateClipboardHandle(uint format, IntPtr sourceHandle)
     {
