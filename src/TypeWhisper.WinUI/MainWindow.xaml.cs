@@ -141,7 +141,10 @@ public sealed partial class MainWindow : Window
             var error = _dictationHotkey.TryChange(saved);
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
             _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
-            if (error is not null) { MetricsText.Text = error; DictationChanged?.Invoke(error, false); return; }
+            // A shortcut taken by another app must not block the session, API, licensing or the
+            // other shortcuts; the user can assign a different chord in Settings without restarting.
+            var hotkeyError = error is null ? null : error + " Assign a different dictation shortcut in Settings.";
+            if (hotkeyError is not null) { MetricsText.Text = hotkeyError; DictationChanged?.Invoke(hotkeyError, false); }
             string? cancelError;
             try
             {
@@ -173,7 +176,7 @@ public sealed partial class MainWindow : Window
                 WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
                 WinUICloudSync.Initialize(DispatcherQueue);
             }
-            if (cancelError is not null && !_closing) MetricsText.Text = cancelError;
+            if ((hotkeyError ?? cancelError) is { } notice && !_closing) MetricsText.Text = notice;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
     }
