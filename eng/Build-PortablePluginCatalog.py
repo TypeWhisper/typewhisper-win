@@ -26,6 +26,36 @@ def numeric_version(value: str) -> tuple[int, int, int]:
     return tuple(map(int, value.split(".")))
 
 
+def catalog_entries(document: object) -> dict[str, dict]:
+    values = document.get("plugins") if isinstance(document, dict) else document
+    if not isinstance(values, list):
+        raise ValueError("Catalog must be an array or contain a plugins array")
+    entries = {}
+    for entry in values:
+        plugin_id = entry["id"]
+        if plugin_id in entries:
+            raise ValueError(f"Duplicate catalog ID: {plugin_id}")
+        numeric_version(entry["version"])
+        entries[plugin_id] = entry
+    return entries
+
+
+def discover_projects(source: pathlib.Path, selected: set[str]) -> list[tuple[pathlib.Path, dict]]:
+    projects = {}
+    for portable in sorted(source.glob("plugins/*/portable.proj")) + sorted(source.glob("plugins-v2/*/portable.proj")):
+        manifest = json.loads((portable.parent / "manifest.json").read_text(encoding="utf-8-sig"))
+        plugin_id = manifest["id"]
+        if plugin_id in projects:
+            raise ValueError(f"Duplicate portable plugin ID: {plugin_id}")
+        if not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)+", plugin_id):
+            raise ValueError(f"Invalid plugin ID: {plugin_id}")
+        numeric_version(manifest["version"])
+        projects[plugin_id] = (portable, manifest)
+    if missing := selected - projects.keys():
+        raise ValueError(f"Unknown portable plugin IDs: {', '.join(sorted(missing))}")
+    return [value for key, value in projects.items() if not selected or key in selected]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=pathlib.Path, required=True)
@@ -33,7 +63,13 @@ def main() -> None:
     parser.add_argument("--existing-feed", type=pathlib.Path, required=True)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--exclude-id", action="append", default=[], help="Plugin ID to omit from this release")
+    parser.add_argument("--plugin-id", action="append", default=[], help="Build only this ID; preserve other catalog entries")
+    parser.add_argument("--test", action="store_true", help="Run each changed plugin's test projects before packaging")
     args = parser.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.tag):
+        raise SystemExit("Release tag contains unsupported characters")
+    if set(args.plugin_id) & set(args.exclude_id):
+        raise SystemExit("A plugin cannot be selected and excluded")
     source = args.source.resolve(strict=True)
     output = args.output.resolve()
     status = subprocess.check_output(
@@ -55,11 +91,12 @@ def main() -> None:
     logs = output / "logs"
     logs.mkdir()
     existing = json.loads(args.existing_feed.read_text(encoding="utf-8"))
-    existing_entries = existing["plugins"] if isinstance(existing, dict) else existing
+    existing_entries = catalog_entries(existing)
     excluded = set(args.exclude_id)
-    entries = {entry["id"]: entry for entry in existing_entries if entry["id"] not in excluded}
-    projects = sorted(source.glob("plugins/*/portable.proj")) + sorted(source.glob("plugins-v2/*/portable.proj"))
-    for portable in projects:
+    entries = {key: value for key, value in existing_entries.items() if key not in excluded}
+    changed = []
+    projects = discover_projects(source, set(args.plugin_id))
+    for portable, manifest in projects:
         manifest_path = portable.parent / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         plugin_id = manifest["id"]
@@ -105,6 +142,16 @@ def main() -> None:
         (logs / (portable.parent.name + ".log")).write_text(run.stdout + "\n" + run.stderr, encoding="utf-8")
         if run.returncode:
             raise SystemExit(f"Build failed ({run.returncode}): {project}; see {logs / (portable.parent.name + '.log')}")
+        if args.test:
+            tests = sorted((portable.parent / "Tests").glob("*.csproj"))
+            if not tests:
+                raise SystemExit(f"No package tests found for {plugin_id}; release requires test coverage")
+            for test in tests:
+                result = subprocess.run(["dotnet", "test", str(test), "-c", "Release", "-v", "quiet"],
+                                        cwd=source, text=True, capture_output=True)
+                (logs / (test.stem + ".log")).write_text(result.stdout + "\n" + result.stderr, encoding="utf-8")
+                if result.returncode:
+                    raise SystemExit(f"Tests failed: {test}; see {logs}")
         package = portable.parent / "bin" / "Release" / "portable-host" / "Plugins" / plugin_id
         packaged_manifest = package / "manifest.json"
         if not packaged_manifest.exists():
@@ -145,11 +192,13 @@ def main() -> None:
             "supportedArchitectures": ["x64"],
         }
         print(f"ZIP   {name} {archive.stat().st_size:,} bytes", flush=True)
+        changed.append(entries[plugin_id])
     feed = {"plugins": sorted(entries.values(), key=lambda entry: (entry["name"].casefold(), entry["id"]))}
     (output / "plugins-v2.json").write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output / "summary.json").write_text(json.dumps({"source": str(source), "sourceCommit": source_commit,
         "tag": args.tag, "excludedIds": sorted(excluded), "entryCount": len(entries),
-        "archiveCount": len(list(archives.glob("*.zip")))}, indent=2) + "\n", encoding="utf-8")
+        "archiveCount": len(list(archives.glob("*.zip"))), "changedPlugins": changed,
+        "selectedIds": sorted(args.plugin_id), "testsRequired": args.test}, indent=2) + "\n", encoding="utf-8")
     print(f"DONE {len(entries)} entries, {len(list(archives.glob('*.zip')))} archives", flush=True)
 
 
