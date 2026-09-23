@@ -80,7 +80,7 @@ public sealed partial class SetupWizard
         features.Children.Add(CardContent("text", "Write instantly", "Your words appear directly as text."));
         features.Children.Add(CardContent("sparkle", "Improve with AI", "Rewrite, translate, summarize and more."));
         _body.Children.Add(features);
-        if (File.Exists(WinUIProfile.DataPath(TypeWhisper.Core.Services.LegacyDailyProfileMigration.ReceiptName)))
+        if (TypeWhisper.Core.Services.LegacyDailyProfileMigration.WasImported(WinUIProfile.Root))
         {
             var details = new Expander { Header = "Data copied from your previous TypeWhisper installation",
                 HorizontalAlignment = HorizontalAlignment.Stretch,
