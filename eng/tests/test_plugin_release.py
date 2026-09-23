@@ -135,6 +135,26 @@ class CatalogTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 builder.test_package(root, root, root)
 
+    def test_package_timeout_keeps_partial_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / 'Tests').mkdir()
+            (root / 'Tests/Example.Tests.csproj').touch()
+            with patch.object(builder.subprocess, 'run', side_effect=subprocess.TimeoutExpired(
+                    ['dotnet'], 600, output=b'partial output', stderr=b'partial error')) as run:
+                with self.assertRaisesRegex(ValueError, 'Tests timed out'):
+                    builder.test_package(root, root, root)
+                self.assertEqual(run.call_args.kwargs['timeout'], 600)
+            self.assertEqual((root / 'Example.Tests.log').read_text(), 'partial output\npartial error')
+
+
+class ValidationTimeoutTests(unittest.TestCase):
+    def test_host_validation_timeout_is_contextual(self):
+        with patch.object(publish.subprocess, 'run', side_effect=subprocess.TimeoutExpired(['dotnet'], 300)) as run:
+            with self.assertRaisesRegex(ValueError, 'Host catalog validation timed out'):
+                publish.validate_catalog([])
+            self.assertEqual(run.call_args.kwargs['timeout'], 300)
+
 
 class StageTests(unittest.TestCase):
     def setUp(self):

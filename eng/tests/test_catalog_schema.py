@@ -10,8 +10,11 @@ class HostSchemaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         project = pathlib.Path(__file__).parents[1] / 'PluginCatalogVerifier/PluginCatalogVerifier.csproj'
-        result = subprocess.run(['dotnet', 'build', str(project), '-c', 'Release', '-v', 'quiet'],
-                                capture_output=True, text=True)
+        try:
+            result = subprocess.run(['dotnet', 'build', str(project), '-c', 'Release', '-v', 'quiet'],
+                                    capture_output=True, text=True, timeout=300)
+        except subprocess.TimeoutExpired as error:
+            raise AssertionError('Catalog verifier build timed out after 300 seconds') from error
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)
         cls.verifier = project.parent / 'bin/Release/net10.0/PluginCatalogVerifier.dll'
@@ -20,7 +23,10 @@ class HostSchemaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / 'feed.json'
             path.write_text(json.dumps(document), encoding='utf-8')
-            return subprocess.run(['dotnet', str(self.verifier), str(path)], capture_output=True).returncode
+            try:
+                return subprocess.run(['dotnet', str(self.verifier), str(path)], capture_output=True, timeout=30).returncode
+            except subprocess.TimeoutExpired as error:
+                raise AssertionError('Catalog verifier invocation timed out after 30 seconds') from error
 
     def entry(self):
         return dict(id='com.typewhisper.example', name='Example', version='1.0.0', minHostVersion='1.1.0',

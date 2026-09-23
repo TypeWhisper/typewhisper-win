@@ -66,7 +66,14 @@ def test_package(project_dir: pathlib.Path, source: pathlib.Path, logs: pathlib.
     if not commands:
         raise ValueError(f"No package tests found in {test_dir}; release requires test coverage")
     for name, command in commands:
-        result = subprocess.run(command, cwd=source, text=True, capture_output=True)
+        try:
+            result = subprocess.run(command, cwd=source, text=True, capture_output=True, timeout=600)
+        except subprocess.TimeoutExpired as error:
+            def output_text(value):
+                return value.decode('utf-8', errors='replace') if isinstance(value, bytes) else (value or '')
+            (logs / (name + ".log")).write_text(
+                output_text(error.stdout) + "\n" + output_text(error.stderr), encoding="utf-8")
+            raise ValueError(f"Tests timed out after 600 seconds: {name}; see {logs}") from error
         (logs / (name + ".log")).write_text(result.stdout + "\n" + result.stderr, encoding="utf-8")
         if result.returncode:
             raise ValueError(f"Tests failed: {name}; see {logs}")

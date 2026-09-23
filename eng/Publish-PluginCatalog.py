@@ -55,8 +55,11 @@ def validate_catalog(document):
         path = pathlib.Path(directory) / "catalog.json"
         path.write_text(json.dumps(document), encoding="utf-8")
         project = pathlib.Path(__file__).with_name("PluginCatalogVerifier") / "PluginCatalogVerifier.csproj"
-        result = subprocess.run(["dotnet", "run", "--project", str(project), "-c", "Release", "--", str(path)],
-                                capture_output=True, text=True)
+        try:
+            result = subprocess.run(["dotnet", "run", "--project", str(project), "-c", "Release", "--", str(path)],
+                                    capture_output=True, text=True, timeout=300)
+        except subprocess.TimeoutExpired as error:
+            raise ValueError("Host catalog validation timed out after 300 seconds") from error
         if result.returncode:
             raise ValueError("Host rejected plugin catalog: " + result.stdout + result.stderr)
 
