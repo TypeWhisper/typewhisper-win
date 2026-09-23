@@ -1,5 +1,7 @@
 # Hotkey recovery after sleep and session changes
 
+> Scoped implementation and acceptance record. Observations apply to the stated revisions and environments; see [current capabilities](WINUI-FUNCTIONAL-STATUS.md) and [release readiness](WINUI-PROGRESS.md) for overall status.
+
 WinUI watches `WM_POWERBROADCAST` and registers for `WM_WTSSESSION_CHANGE` on its primary window, including tray-only operation. These are the Windows [power resume](https://learn.microsoft.com/en-us/windows/win32/power/pbt-apmresumeautomatic) and [session change](https://learn.microsoft.com/en-us/windows/win32/termserv/wm-wtssession-change) notification paths.
 
 On suspend, lock or disconnect, main/alternate dictation gestures are interrupted. An accepted start that has not finished is canceled; an already established recording is not discarded by this hotkey recovery component. Microphone/device recovery remains separate.

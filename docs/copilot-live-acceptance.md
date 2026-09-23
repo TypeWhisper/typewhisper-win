@@ -1,5 +1,7 @@
 # GitHub Copilot live acceptance — 2026-09-14
 
+> Scoped implementation and acceptance record. Observations apply to the stated revisions and environments; see [current capabilities](WINUI-FUNCTIONAL-STATUS.md) and [release readiness](WINUI-PROGRESS.md) for overall status.
+
 Windows x64, plugin 1.1.0, official GitHub.Copilot.SDK 1.0.13, bundled CLI runtime 1.0.83, model auto. Existing account authentication; no plan upgrade. All inputs below are synthetic. These requests used the real portable package loader, profile save capability and ILlmProviderPlugin.ProcessAsync. They did not capture microphone audio or paste output into another app.
 
 Six real requests completed without API errors. Manual assessment: translation, email drafting and literal preservation met the requested constraints. Dictation cleanup retained the leading filler “Also”, so its strict filler-removal criterion was only partially met. The two-request isolation probe returned the marker only in its own request, then NO_PREVIOUS_MARKER in a fresh request. This is an observed probe, not a proof of all isolation properties.

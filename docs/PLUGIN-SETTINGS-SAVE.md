@@ -6,9 +6,17 @@ Editing a field no longer writes it immediately or creates a separate save butto
 
 The host validates published choice/length constraints before starting writes, uses the provider's configuration lease and saves only changed fields. Existing providers expose individual setters, so the generic operation cannot promise a transaction across their files and secret stores. If a later write fails, the result identifies completed fields, retains the remaining edits and reports partial completion. Provider exceptions and credential values are not copied into error feedback.
 
-The implementation is on the independent branch `seofood/plugin-settings-save-all`, based on `4db8f6ac`. It does not change provider binaries or legacy WPF views. The common SDK/host suite passes 264 tests, including five new cases for changed values, pre-validation, partial failure, key retention, cancellation and secret-error redaction. The WinUI development host builds and launches with the required development helper. Native visual acceptance remains pending because the Computer Use helper could not connect.
+## Historical implementation evidence
+
+The initial implementation was developed on `seofood/plugin-settings-save-all`,
+based on `4db8f6ac`. Its SDK/host suite passed 264 tests, including changed values,
+pre-validation, partial failure, key retention, cancellation and secret-error
+redaction. The native visual check was not completed in that session. This is
+historical evidence, not the current test count or branch to check out.
+
+Use the current source and the [test guide](../TESTING_GUIDE.md):
 
 ```powershell
 dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests -c Release
-& "$DevTools/build-typewhisper-windows-dev.ps1" --run --winui $Checkout
+& F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run <checkout-path>
 ```

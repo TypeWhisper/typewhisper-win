@@ -20,7 +20,7 @@ TypeWhisper for Windows follows the same product goals as TypeWhisper for macOS:
 | Local speech recognition | Supported | Local plugins include sherpa-onnx models such as Parakeet and Canary, whisper.cpp models and Qwen3 Local. |
 | Cloud speech recognition | Supported | Cloud engines are supplied through the Windows plugin system and marketplace. |
 | AI text processing | Supported | Workflows use configured portable LLM providers. This does not depend on Apple Intelligence. |
-| Translation | Supported | Workflows can use configured LLM providers and local Marian ONNX fallback. Some transcription providers also expose audio-to-English translation. |
+| Translation | Supported | Workflows use configured LLM providers. Some transcription providers also expose audio-to-English translation. Supporting Marian code does not establish an automatic local fallback in the WinUI host. |
 | Dictionary, snippets, and history | Supported | Windows-native settings and dashboard surfaces manage terms, corrections, snippets, and searchable transcription history. |
 | Backup and restore | Supported | A versioned portable JSON backup covers workflows, user dictionary data, snippets, hotkeys, registry plugin references, text-only history, and an explicit allowlist of portable preferences. Credentials, licenses, audio, hardware selections, and machine-local paths are excluded. The same safe-merge implementation is available in Settings, the authenticated HTTP API, and the CLI. |
 | Automation | Windows-native replacement | The local HTTP API and `typewhisper` CLI expose status, models, transcription, workflows, history, dictionary management, and dictation control. |
@@ -32,12 +32,15 @@ TypeWhisper for Windows follows the same product goals as TypeWhisper for macOS:
 
 | macOS technology or product | Windows parity status | Windows approach |
 |-----------------------------|-----------------------|------------------|
-| Apple Translate | Platform-specific non-goal | Translation is provided through TypeWhisper workflows, configured LLM providers, provider-native transcription translation, and the local Marian ONNX fallback. |
+| Apple Translate | Platform-specific non-goal | Translation uses configured workflow LLMs or provider-native transcription translation. |
 | Apple Intelligence | Platform-specific non-goal | AI processing uses explicit local or cloud provider plugins. TypeWhisper does not emulate or depend on Apple Intelligence services. |
 | SpeechAnalyzer | Platform-specific non-goal | SpeechAnalyzer is an Apple speech framework. Windows uses its own local and cloud transcription plugins. |
 | WhisperKit | Platform-specific non-goal | WhisperKit targets Apple platforms and Apple-native inference stacks. Windows offers whisper.cpp and other Windows-compatible local engines instead. |
 | WidgetKit | Platform-specific non-goal | WidgetKit extensions are not portable to Windows. The WinUI overlay, dashboard, and system tray are the supported TypeWhisper surfaces. A Windows Widgets integration is not required for parity. |
-| Raycast | Platform-specific non-goal | A Raycast-specific extension is not a Windows deliverable. The HTTP API and CLI are the supported automation contracts for launchers, scripts, and external clients. |
+
+Launcher integrations, including the previously tested Raycast integration, use
+the Windows HTTP API and CLI. They are separate clients rather than Apple-only
+framework dependencies or bundled application surfaces.
 
 ## Scope rules
 

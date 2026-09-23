@@ -1,5 +1,9 @@
 # AMD acceleration on Windows
 
+Scope: provider/backend investigation. The matrix records the documented runtime
+paths; it is not certification for every GPU or package architecture. Check the
+selected portable plugin's settings and active runtime for the installed version.
+
 TypeWhisper exposes acceleration per transcription engine. Selecting an acceleration preference does not mean that every engine or model can use that backend. The status below the selector reports the backend that is active for the currently selected engine.
 
 ## Compatibility
@@ -40,12 +44,8 @@ ZLUDA does not add AMD acceleration to sherpa-onnx. Parakeet and Canary continue
 
 ## Diagnostics
 
-Use **Settings > About > Export Diagnostics** after reproducing a load failure. The `transcription_acceleration` object includes:
-
-- selected engine ID and name,
-- selected acceleration preference,
-- active backend,
-- loaded or attempted native runtime path when known, and
-- the most recent native error message when available.
-
-The whisper.cpp plugin also treats Windows native `SEHException` failures, including the common `External component has thrown an exception` message, as native runtime load failures so the compact status and exported diagnostics stay available.
+Report the TypeWhisper and plugin versions, Windows architecture, model, chosen
+backend and exact runtime status after loading. Include the native error if shown,
+without credentials or private transcripts. The old WPF diagnostics-export path
+and `transcription_acceleration` payload are not available in the current WinUI
+source; do not follow older instructions for that menu.
