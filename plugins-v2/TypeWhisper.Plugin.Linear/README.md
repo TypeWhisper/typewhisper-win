@@ -24,3 +24,12 @@ Personal API keys use the raw Authorization header. Keys remain in the encrypted
 The macOS Linear plugin was compared for action behavior and team selection. The Windows implementation adds an optional project selector and uses the shared WinUI settings host.
 
 References: [Linear GraphQL](https://linear.app/developers/graphql), [pagination](https://linear.app/developers/pagination).
+
+## Workflow action target
+
+In Workflows, create or edit a workflow and select **Action Target → Create Linear issue**.
+The host discovers actions from enabled plugins; the selected action receives the final text after
+transcription and workflow processing, instead of pasting it. The Linear settings supply the team
+and optional project. A dictation-only template can send the transcript without an LLM.
+Manual runs and selected-text shortcuts use the same destination. Missing actions and failed or
+uncertain requests preserve the text for review and are never automatically retried.

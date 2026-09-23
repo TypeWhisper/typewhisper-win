@@ -87,12 +87,15 @@ public sealed partial class WorkflowsView : UserControl
     {
         if (_page == Page.Configuration)
         {
+            ConfigureActionTargets(ConfigActionTarget.SelectedId);
             ConfigProvider.SetOptions(Providers, ConfigProvider.SelectedId, ConfigProvider.SelectedId + " (unavailable)");
             ConfigureModels(ConfigModel.SelectedId);
             UpdateConfigurationState();
         }
         else UpdateSourceState();
     });
+
+    private void ConfigureActionTargets(string selected) => ConfigActionTarget.SetOptions([new("", "Insert Text", "Use dictation output preferences"), .. (_session?.PluginRuntime.Actions.OrderBy(a => a.Name).Select(a => new Choice(a.PluginId, a.Name, "Send the workflow result to this action") { PluginId = a.PluginId }) ?? [])], selected, "Unavailable action: " + selected);
 
     private bool Available(string provider, string model) => _session?.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)) == true;
     internal ObservableCollection<WorkflowDraft> FilteredWorkflows { get; } = [];
@@ -122,7 +125,7 @@ public sealed partial class WorkflowsView : UserControl
         TemplateHelp.Child = HelpHeading("Template", _templateHelp);
         InitializeIconPicker();
         ShortcutHelp.Child = HelpHeading("Shortcut", _shortcutHelp);
-        ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides and action plugins remain unavailable.", 12);
+        ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides remain unavailable. The selected action target receives the finished workflow result.", 12);
         AppProcessesHelp.Child = SettingsHelp.Label("Windows process names", "Required for App activation; optional for Website activation. Separate process names with commas.", 12);
         WebsiteDomainsHelp.Child = SettingsHelp.Label("Website domains", "Required for Website activation; optional for App activation. Domains include subdomains (example.com also matches mail.example.com). Use commas, without paths or query strings. The browser address is read once before recording; only the hostname can enter saved History. Chrome, Edge, Brave, Chromium and Firefox require a recognized address bar. Missing context leaves app/global fallback rules available.", 12);
         ContextModeHelp.Child = SettingsHelp.Label("App and website conditions", "Match all requires an app from your list AND a domain from your list. Match any allows either component, so the app rule can still run when a browser address is unavailable.", 12);
@@ -132,6 +135,8 @@ public sealed partial class WorkflowsView : UserControl
         {
             if (_page == Page.List) ConfigureWorkflowButton.IsEnabled = WorkflowList.SelectedItem is WorkflowDraft { IsEditable: true };
         };
+        ConfigActionTarget.Configure("Action Target", "plugin", "Workflow action target");
+        ConfigActionTarget.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTrigger.Configure("Activation", "workflow", "Workflow activation");
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
         ConfigContextMode.Configure("App and website conditions", "workflow", "Workflow context match mode");
@@ -211,7 +216,7 @@ public sealed partial class WorkflowsView : UserControl
         else if (_page == Page.Configuration)
         {
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
-            else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
+            else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigActionTarget.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
         }
         else if (_page == Page.Result) WorkflowPrimaryButton.Focus(FocusState.Programmatic);
     }
@@ -229,7 +234,7 @@ public sealed partial class WorkflowsView : UserControl
         UpdateBreadcrumbs();
         WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "\u232b / Esc Back", _ => "\u232b / Esc Back   \u2191\u2193 Navigate   Enter Open" };
         WorkflowPrimaryButton.Visibility = page == Page.List ? Visibility.Collapsed : Visibility.Visible;
-        WorkflowPrimaryButton.Content = page == Page.Configuration ? (_creating ? "Create workflow" : "Save changes") : page == Page.Result ? "Copy result" : "Run workflow";
+        WorkflowPrimaryButton.Content = page == Page.Configuration ? (_creating ? "Create workflow" : "Save changes") : page == Page.Result ? "Copy result" : RunButtonLabel;
         UpdateExecutionSummary();
         if (_loadError is not null) WorkflowSummary.Text = _loadError;
         else if (Shortcuts?.Error is { } shortcutError) WorkflowSummary.Text = shortcutError;
@@ -249,7 +254,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_run is not null) { _run.Cancel(); return; }
         if (_page == Page.Configuration)
         {
-            foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel })
+            foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget })
                 if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { _afterConfigurationExit = null; DismissDiscard(); return; }
             if (!ConfigurationDirty) { LeaveConfiguration(); return; }
@@ -277,12 +282,14 @@ public sealed partial class WorkflowsView : UserControl
             WorkflowSource.IsReadOnly = true;
             ConfigureWorkflowButton.IsEnabled = false;
             WorkflowPrimaryButton.Content = "Cancel run";
-            WorkflowInputHint.Text = "Processing with the saved provider and model\u2026";
-            var result = await ManualWorkflowRunner.RunAsync(_session.WorkflowDefaults.Resolve(_opened.ToStored()), WorkflowSource.Text,
-                Available, _session.ProcessLlmAsync, cancellation.Token);
+            WorkflowInputHint.Text = string.IsNullOrWhiteSpace(_opened.TargetActionPluginId) ? "Processing with the saved provider and model…" : "Processing and sending to the selected action…";
+            var execution = await _session.RunWorkflowWithActionAsync(_session.WorkflowDefaults.Resolve(_opened.ToStored()), WorkflowSource.Text, cancellation.Token);
+            var result = execution.Text;
             if (_closing) return;
             WorkflowResultText.Text = result;
             ShowPage(Page.Result);
+            WorkflowResultStatus.Text = execution.Message ?? "Completed. Review and copy the result.";
+            if (execution.Message is not null) WorkflowSummary.Text = "Action finished";
             WorkflowResultScroll.ChangeView(null, 0, null, true);
             FocusEntry();
         }
@@ -295,7 +302,7 @@ public sealed partial class WorkflowsView : UserControl
             _run = null;
             WorkflowSource.IsReadOnly = false;
             ConfigureWorkflowButton.IsEnabled = true;
-            WorkflowPrimaryButton.Content = _page == Page.Result ? "Copy result" : "Run workflow";
+            WorkflowPrimaryButton.Content = _page == Page.Result ? "Copy result" : RunButtonLabel;
             WorkflowPrimaryButton.IsEnabled = _page == Page.Result || _opened is { IsEnabled: true } && (_opened.Template == WorkflowTemplate.Dictation || EffectiveAvailable(_opened.ProviderId, _opened.ModelId)) && !string.IsNullOrWhiteSpace(WorkflowSource.Text);
             }
             finally { completion.TrySetResult(); }
@@ -326,6 +333,8 @@ public sealed partial class WorkflowsView : UserControl
         if (WorkflowPrimaryButton is not null) UpdateSourceState();
     }
 
+    private string RunButtonLabel => _session?.PluginRuntime.Actions.FirstOrDefault(a => a.PluginId == _opened?.TargetActionPluginId)?.Name ?? "Run workflow";
+
     private void UpdateSourceState()
     {
         if (_page == Page.Configuration) { UpdateConfigurationState(); return; }
@@ -344,12 +353,14 @@ public sealed partial class WorkflowsView : UserControl
         WorkflowSource.IsReadOnly = _run is not null;
         var empty = string.IsNullOrWhiteSpace(WorkflowSource.Text);
         if (_run is not null) return;
+        UpdateExecutionSummary();
+        if (_page == Page.Editor) WorkflowPrimaryButton.Content = RunButtonLabel;
         WorkflowPrimaryButton.IsEnabled = _page == Page.Result || !empty && _opened is { IsEnabled: true } && (_opened.Template == WorkflowTemplate.Dictation || EffectiveAvailable(_opened.ProviderId, _opened.ModelId));
         SourceWatermark.Visibility = WorkflowSource.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         WorkflowInputHint.Text = _opened is { IsEnabled: false } ? "This workflow is disabled. Enable it in Edit workflow to run it."
             : _opened is null || !(_opened.Template == WorkflowTemplate.Dictation || EffectiveAvailable(_opened.ProviderId, _opened.ModelId))
             ? "The saved provider or model is unavailable. Edit the workflow or configure the plugin."
-            : empty ? "Paste or type the text to process." : "Run sends this text to the selected provider. Review the result before copying.";
+            : empty ? "Paste or type the text to process." : !string.IsNullOrEmpty(_opened.TargetActionPluginId) ? "Run processes this text and sends the result to the saved plugin action." : "Run sends this text to the selected provider. Review the result before copying.";
     }
 
     private void Source_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
@@ -388,6 +399,7 @@ public sealed partial class WorkflowsView : UserControl
     private IReadOnlyList<Choice> Models => _session?.LlmProviders.FirstOrDefault(p => p.SelectionId == ConfigProvider.SelectedId)?.Models
         .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
+        || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || _draftIcon != _opened.IconKind
         || ConfigTrigger.SelectedId != _opened.ActivationId || ConfigAppProcesses.Text != _opened.AppProcesses
         || DraftHotkeys != _opened.Hotkeys
@@ -474,6 +486,7 @@ public sealed partial class WorkflowsView : UserControl
             : "The saved workflow will stay unchanged. Your source text will also be kept.";
         _loadingConfiguration = true;
         ConfigEnabled.IsOn = _opened.IsEnabled;
+        ConfigureActionTargets(_opened.TargetActionPluginId ?? "");
         DeleteWorkflowButton.Visibility = _creating ? Visibility.Collapsed : Visibility.Visible;
         ConfigAdvanced.IsExpanded = false;
         _suggestedName = _creating ? WorkflowTemplateCatalog.DefinitionFor(_opened.Template).Name : null;
@@ -550,8 +563,14 @@ public sealed partial class WorkflowsView : UserControl
         ConfigTranslationSection.Visibility = template == WorkflowTemplate.Translation ? Visibility.Visible : Visibility.Collapsed;
         ConfigInstructionLabel.Text = template == WorkflowTemplate.Custom ? "INSTRUCTIONS (REQUIRED)" : "FINE-TUNING (OPTIONAL)";
         SettingsHelp.Update(_templateHelp, WorkflowTemplateCatalog.DefinitionFor(template).Description);
+        ConfigActionHint.Text = string.IsNullOrEmpty(ConfigActionTarget.SelectedId)
+            ? "Use the normal text output. Choose a plugin action to send the finished result there instead."
+            : _session?.PluginRuntime.Actions.Any(a => a.PluginId == ConfigActionTarget.SelectedId) == true
+                ? "The finished text is sent to this action instead of being pasted. Running this workflow can create an item in the selected service."
+                : "This action is unavailable. Its saved selection is preserved; enable the plugin or choose another target.";
         var error = ConfigurationError;
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? "Save as disabled. Enable this workflow before running it."
+            : !string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? "Runs the selected plugin action after processing. The result is sent there instead of being pasted."
             : template == WorkflowTemplate.Dictation ? "No LLM processing. Dictation uses your selected transcription model."
             : EffectiveConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId) is { } providerError
                 ? providerError + " You can save now and complete the setup later."
@@ -575,6 +594,7 @@ public sealed partial class WorkflowsView : UserControl
             Priority = int.Parse(ConfigPriority.Text),
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
+            TargetActionPluginId = string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? null : ConfigActionTarget.SelectedId,
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,
             IsEnabled = ConfigEnabled.IsOn, Description = ConfigEnabled.IsOn ? "Manual workflow" : "Disabled manual workflow" };
         try

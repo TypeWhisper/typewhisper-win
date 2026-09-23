@@ -13,6 +13,7 @@ public sealed class AutomaticWorkflowSnapshot
         _workflow = workflow is null ? null : new Workflow
         {
             Id = workflow.Id, Name = workflow.Name, Template = workflow.Template, Trigger = WorkflowTrigger.Manual(),
+            Output = workflow.Output with { },
             Behavior = new()
             {
                 ProviderOverride = workflow.Behavior.ProviderOverride, ModelOverride = workflow.Behavior.ModelOverride,
@@ -26,6 +27,8 @@ public sealed class AutomaticWorkflowSnapshot
     public string? Id => _workflow?.Id;
     /// <summary>The selected workflow name.</summary>
     public string? Name => _workflow?.Name;
+    /// <summary>The explicitly selected action destination.</summary>
+    public string? TargetActionPluginId => _workflow?.Output.TargetActionPluginId;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
     public string? Error { get; }
 
@@ -76,7 +79,7 @@ public sealed class AutomaticWorkflowSnapshot
             || behavior.InputLanguageHints.Count != 0 || !string.IsNullOrWhiteSpace(behavior.SelectedTask)
             || behavior.WhisperModeOverride is not null || !string.IsNullOrWhiteSpace(behavior.TranscriptionModelOverride)
             || !string.IsNullOrWhiteSpace(output.Format) || output.AutoEnter
-            || !string.IsNullOrWhiteSpace(output.TargetActionPluginId) || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw))
+            || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw))
             return "The selected workflow has unsupported trigger, recording or output settings. Review your transcript; nothing was pasted.";
         if (workflow.Template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(behavior.FineTuning))
             return "The selected custom workflow requires instructions. Review your transcript; nothing was pasted.";

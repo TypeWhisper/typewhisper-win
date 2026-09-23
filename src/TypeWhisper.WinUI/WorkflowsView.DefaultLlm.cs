@@ -36,12 +36,22 @@ public sealed partial class WorkflowsView
     private void UpdateExecutionSummary()
     {
         if (_opened is null) return;
-        if (_opened.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) { WorkflowExecutionSummary.Text = "Dictation Only · no LLM processing"; return; }
+        var action = _session?.PluginRuntime.Actions.FirstOrDefault(a => a.PluginId == _opened.TargetActionPluginId);
+        var destination = string.IsNullOrWhiteSpace(_opened.TargetActionPluginId) ? ""
+            : "\nAfter processing: " + (action?.Name ?? "Saved action unavailable") + ". The result is sent there instead of being pasted.";
+        var activation = _opened.TriggerKind == TypeWhisper.Core.Models.WorkflowTriggerKind.Hotkey
+            ? "\nShortcut: " + _opened.Hotkeys + (_opened.HotkeyBehavior == TypeWhisper.Core.Models.WorkflowHotkeyBehavior.StartDictation
+                ? " — press in another app to start dictation, then press again to stop and run the action."
+                : " — process selected text.")
+            : _opened.TriggerKind == TypeWhisper.Core.Models.WorkflowTriggerKind.Manual
+                ? "\nManual: enter text below and press the action button. The normal dictation shortcut does not run this workflow." : "";
+        if (_opened.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) { WorkflowExecutionSummary.Text = "No LLM processing" + destination + activation; return; }
         var choice = EffectiveSelection(_opened.ProviderId, _opened.ModelId);
         WorkflowExecutionSummary.Text = EffectiveConfigurationError(_opened.ProviderId, _opened.ModelId)
             ?? (_opened.ProviderId == WorkflowLlmDefaults.Inherit ? "Default LLM: " : "")
                 + (Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider)
                 + " \u00b7 " + choice.Model + " \u00b7 input is sent to this provider when you run";
+        WorkflowExecutionSummary.Text += destination + activation;
     }
     private async void DefaultLlm_Click(object sender, RoutedEventArgs e)
     {
