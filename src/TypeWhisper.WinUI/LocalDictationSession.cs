@@ -658,7 +658,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_disposed) return;
                 PasteDiagnostics.Write("dictation.start");
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
-                    _originalField = OriginalDictationField.Capture(_target, processId);
+                    _originalField = await OriginalDictationField.CaptureAsync(_target, processId, _operationCancellation.Token);
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
                 else if (workflow is null) await CaptureWorkflowAtStartAsync();
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
