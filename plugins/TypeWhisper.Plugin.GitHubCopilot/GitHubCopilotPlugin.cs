@@ -31,7 +31,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
     /// <inheritdoc />
     public string PluginName => "GitHub Copilot";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
     /// <inheritdoc />
     public string ProviderName => RequireProfile(DefaultProfileId).Name;
     /// <inheritdoc />
