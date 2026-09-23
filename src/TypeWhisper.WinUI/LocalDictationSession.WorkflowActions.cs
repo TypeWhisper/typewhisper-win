@@ -29,7 +29,7 @@ internal sealed partial class LocalDictationSession
         }
     }
 
-    internal async Task<(string Text, string? Message)> RunWorkflowWithActionAsync(Workflow workflow, string input, CancellationToken ct)
+    internal async Task<(string Text, string? Message, bool? ActionSucceeded)> RunWorkflowWithActionAsync(Workflow workflow, string input, CancellationToken ct)
     {
         // Capture the exact enabled action before LLM processing; never substitute a reloaded plugin.
         var action = FindWorkflowAction(workflow.Output.TargetActionPluginId);
@@ -38,9 +38,9 @@ internal sealed partial class LocalDictationSession
         var text = await ManualWorkflowRunner.RunAsync(workflow, input,
             (provider, model) => LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)),
             ProcessLlmAsync, ct);
-        if (action is null) return (text, null);
+        if (action is null) return (text, null, null);
         var result = await ExecuteWorkflowActionAsync(action, text, new ActionContext(null, null, null, null, input), ct);
         // Preserve known completion even if cancellation arrives after an external write.
-        return (text, (result.Success ? "Completed: " : "Action not confirmed: ") + result.Message);
+        return (text, (result.Success ? "Completed: " : "Action not confirmed: ") + result.Message, result.Success);
     }
 }

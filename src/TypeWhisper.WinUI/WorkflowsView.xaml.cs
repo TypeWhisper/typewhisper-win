@@ -289,7 +289,8 @@ public sealed partial class WorkflowsView : UserControl
             WorkflowResultText.Text = result;
             ShowPage(Page.Result);
             WorkflowResultStatus.Text = execution.Message ?? "Completed. Review and copy the result.";
-            if (execution.Message is not null) WorkflowSummary.Text = "Action finished";
+            if (execution.ActionSucceeded is { } actionSucceeded)
+                WorkflowSummary.Text = actionSucceeded ? "Action finished" : "Action not confirmed";
             WorkflowResultScroll.ChangeView(null, 0, null, true);
             FocusEntry();
         }
