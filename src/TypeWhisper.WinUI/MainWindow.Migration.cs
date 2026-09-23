@@ -13,7 +13,8 @@ public sealed partial class MainWindow
         {
             using var document = JsonDocument.Parse(File.ReadAllText(report));
             var notes = document.RootElement.GetProperty("Notes").EnumerateArray().Select(item => item.GetString()).ToArray();
-            ShowActivationNotice("Your previous TypeWhisper profile was copied. " + string.Join(" ", notes));
+            // One line per note: skipped plugins and keys to re-enter must stay readable.
+            ShowActivationNotice(string.Join("\n", notes.Prepend("Your previous TypeWhisper profile was copied.")));
             ActivationNoticeTitle.Text = "TypeWhisper upgraded";
             ShowFromActivation();
             File.WriteAllText(acknowledged, "1");
