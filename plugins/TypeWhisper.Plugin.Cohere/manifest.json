@@ -1,9 +1,0 @@
-{
-  "id": "com.typewhisper.cohere",
-  "name": "Cohere",
-  "version": "1.0.0",
-  "author": "TypeWhisper",
-  "description": "Cohere Command LLM for prompt processing",
-  "assemblyName": "TypeWhisper.Plugin.Cohere.dll",
-  "pluginClass": "TypeWhisper.Plugin.Cohere.CoherePlugin"
-}

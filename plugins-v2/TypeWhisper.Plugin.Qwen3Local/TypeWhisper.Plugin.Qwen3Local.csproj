@@ -9,7 +9,7 @@
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.Qwen3Local.Tests" />
-    <ProjectReference Include="../../src/TypeWhisper.PluginSDK.Portable/TypeWhisper.PluginSDK.Portable.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
     <PackageReference Include="SharpCompress" Version="0.48.0" />
     <Content Include="manifest.json;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />

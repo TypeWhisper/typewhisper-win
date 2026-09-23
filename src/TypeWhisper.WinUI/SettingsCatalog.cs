@@ -87,6 +87,7 @@ internal static partial class SettingsCatalog
         Text("Shortcuts", "RecorderToggleHotkeys", "Recorder"),
 
 
+        Choice("Live text", "LiveTextPlacement", "Live text position", "Attached to recording", "Attached to recording|Floating window", "Float the existing live text and drag its header to move it independently of the recording indicator."),
         Choice("Live text", "LiveTranscriptionFontSize", "Text size", "12", "10|11|12|13|14|15|16|17|18", "Size of the live transcript and completed result in the overlay."),
         Toggle("Live text", "OnlineAsrBatchLiveTranscriptionEnabled", "Live text for online batch engines", false, "Availability depends on the selected engine."),
         Choice("Live text", "PreviewBubbleAutoHideMilliseconds", "Result preview duration", "1.5 seconds", "Immediately|0.5 seconds|1 second|1.5 seconds|2 seconds|3 seconds|5 seconds", "After successful paste. Review windows stay open; errors remain visible for five seconds."),

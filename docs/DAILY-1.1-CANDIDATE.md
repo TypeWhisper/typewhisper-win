@@ -1,8 +1,8 @@
 # WinUI 1.1 Daily candidate
 
-The `WinUI Daily` workflow creates validation artifacts for x64 and ARM64 on pull requests and release-branch pushes. Scheduled main runs and explicit main dispatches with `publish_daily=true` publish a GitHub prerelease after both architectures pass. The legacy workflow no longer schedules Daily builds; stable release delivery is unchanged. Candidate versions are `1.1.0-daily.YYYYMMDD.RUN`.
+The `Candidate` workflow creates validation artifacts for x64 and ARM64 on pull requests that change its workflow or candidate validation scripts, and on manual dispatches. Scheduled main runs and explicit main dispatches with `publish_daily=true` publish a GitHub prerelease after both architectures pass. The legacy application release workflow has been removed. Candidate versions are `1.1.0-daily.YYYYMMDD.RUN`; the workflow filename remains unchanged to preserve its run counter.
 
-The candidate bundles .NET, the Windows App SDK runtime, the CLI and portable plugin packages. It currently targets Windows build 26100 or newer. CI runs the headless suites, checks package contents, verifies application/CLI versions and executable architecture, rejects development/user state, and records the commit plus ZIP SHA-256. Cross-building ARM64 does not count as testing on ARM64 hardware.
+The candidate bundles the Windows App SDK runtime and CLI, uses the installed .NET 10 runtime, and installs portable plugins through the marketplace. It currently targets Windows build 26100 or newer. CI runs the headless suites, checks package contents, verifies application/CLI versions and executable architecture, rejects development/user state, and records the commit plus ZIP SHA-256. Cross-building ARM64 does not count as testing on ARM64 hardware.
 
 ## Profile boundaries
 
@@ -15,7 +15,7 @@ The installer candidate from `ed83c032` passed both architectures in [3445562042
 - Named debug smoke profiles: `%TEMP%/TypeWhisper-WinUI-TestProfiles/<name>`.
 - Release model assets stay under the release profile; they do not share the development NVIDIA model directory.
 - Development and release use different single-instance identities.
-- Unbound CLI discovery prefers release WinUI, then legacy production, then development. Explicit `--dev`, `--profile`, and installed CLI profile bindings retain their precedence.
+- Unbound CLI discovery prefers release WinUI, then WinUI development. Explicit `--dev`, `--profile`, and installed CLI profile bindings retain their precedence.
 
 On first Release launch, an absent WinUI profile receives a copy of dictionary, snippets, workflows and history from `%LOCALAPPDATA%/TypeWhisper-UserData/Data`. Only when that legacy root is absent does the importer try `%LOCALAPPDATA%/TypeWhisper/Data`. An existing WinUI profile, even an empty directory, is never merged or replaced. Debug builds never invoke this importer.
 
@@ -32,7 +32,7 @@ Artifacts include the setup executable, packages, feed metadata and SHA-256 file
 ## Before distributing to existing Daily users
 
 1. Produce and inspect both candidate artifacts; launch the x64 candidate on a clean supported Windows machine and confirm runtime prerequisites. Test ARM64 on hardware before claiming support.
-2. Test installer install/reinstall/uninstall and startup on a clean supported Windows machine. The existing Release workflow still packages WPF; automatic Daily update delivery remains separate work.
+2. Test installer install/reinstall/uninstall and startup on a clean supported Windows machine. Only WinUI is packaged; the removed WPF workflow cannot publish new releases.
 3. Validate the copied portable data against an actual old Daily profile and confirm rollback to the preserved old app. Automated fixture tests cover source preservation, existing destinations, failure/retry, cancellation and invalid data; they do not establish compatibility with every historical profile.
 4. Validate the supported v2 plugin catalog/packages and clearly list unavailable plugins. See `PLUGIN-MIGRATION-1.1.md`.
 5. Check dictation, workflows, API/CLI/Raycast and account/sync in the actual candidate. Publish only to the intended Daily track; do not alter stable or RC feeds.

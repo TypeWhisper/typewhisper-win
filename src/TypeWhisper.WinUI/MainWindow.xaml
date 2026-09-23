@@ -202,42 +202,6 @@
         <local:RecorderView x:Name="RecorderView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
         <local:WorkflowsView x:Name="WorkflowsView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
 
-        <Border x:Name="OverlayPreviewPanel" Grid.Row="3" VerticalAlignment="Bottom"
-                Margin="14,0,14,0" Padding="14,12" Visibility="Collapsed"
-                Background="{ThemeResource ElevatedBrush}" CornerRadius="10"
-                BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1">
-            <StackPanel Spacing="8">
-                <TextBlock Text="OVERLAY PREVIEW" FontSize="10" CharacterSpacing="70"
-                           FontWeight="SemiBold" Foreground="{ThemeResource MutedBrush}" />
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <local:HandCursorButton x:Name="StandardOverlayButton" Content="Standard" Tag="Standard"
-                            Click="OverlayMode_Click" Style="{StaticResource SecondaryButtonStyle}"
-                            AutomationProperties.Name="Standard overlay" />
-                        <local:HandCursorButton x:Name="CompactOverlayButton" Content="Compact" Tag="Compact"
-                            Click="OverlayMode_Click" Style="{StaticResource SecondaryButtonStyle}"
-                            AutomationProperties.Name="Compact overlay" />
-                        <local:HandCursorButton x:Name="MinimalOverlayButton" Content="Minimal" Tag="Minimal"
-                            Click="OverlayMode_Click" Style="{StaticResource SecondaryButtonStyle}"
-                            AutomationProperties.Name="Minimal overlay" />
-                    </StackPanel>
-                    <local:HandCursorButton x:Name="PausePreviewButton" Grid.Column="1" Content="Pause"
-                        Click="PausePreview_Click" Style="{StaticResource IconButtonStyle}"
-                        AutomationProperties.Name="Pause or resume overlay preview" />
-                    <local:HandCursorButton Grid.Column="2" Content="End preview"
-                        Click="EndPreview_Click" Style="{StaticResource IconButtonStyle}"
-                        AutomationProperties.Name="End overlay preview" />
-                </Grid>
-                <TextBlock x:Name="OverlayPreviewHint" FontSize="11" TextWrapping="Wrap"
-                    Foreground="{ThemeResource MutedBrush}"
-                    Text="Microphone level only · transcript is sample text · no audio saved" />
-            </StackPanel>
-        </Border>
 
         <Viewbox Grid.Row="4" Visibility="{Binding Visibility, ElementName=QuickLaunchFooter}" Width="22" Height="22"
                  HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0" Stretch="Uniform">

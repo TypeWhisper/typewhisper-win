@@ -64,6 +64,13 @@ public sealed class TypeWhisperGlyph : UserControl
                 Line(drawing, 3, 14, 14, 3); Line(drawing, 7, 17, 18, 6);
                 Line(drawing, 14, 3, 18, 6); Line(drawing, 12, 5, 16, 9);
                 break;
+            case "webhook":
+                drawing.DrawCircle(5, 5, 3, Accent, 1.4f); drawing.DrawCircle(15, 15, 3, Accent, 1.4f);
+                Line(drawing, 5, 8, 5, 15); Line(drawing, 5, 15, 12, 15);
+                Line(drawing, 8, 5, 15, 5); Line(drawing, 15, 5, 15, 12); break;
+            case "terminal":
+                drawing.DrawRoundedRectangle(1, 3, 18, 14, 2, 2, Accent, 1.4f);
+                Line(drawing, 5, 7, 8, 10); Line(drawing, 8, 10, 5, 13); Line(drawing, 11, 13, 15, 13); break;
             case "packs":
                 drawing.DrawRoundedRectangle(3, 7, 14, 11, 1, 1, Accent, 1.4f);
                 Line(drawing, 5, 4, 15, 4); Line(drawing, 7, 1, 13, 1);

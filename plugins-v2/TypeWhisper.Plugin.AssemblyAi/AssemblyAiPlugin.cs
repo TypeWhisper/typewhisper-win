@@ -33,7 +33,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     /// <inheritdoc />
     public string PluginName => "AssemblyAI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
     /// <inheritdoc />
     public string ProviderId => "assemblyai";
     /// <inheritdoc />
@@ -51,6 +51,8 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     public bool SupportsStreaming => !_configuration.SpeakerDiarizationEnabled;
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => true;
+    /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
     /// <inheritdoc />
     public bool SupportsDictionaryTerms => true;
     /// <inheritdoc />

@@ -18,7 +18,7 @@ internal sealed class PluginSpokenFeedbackBackend(PortablePluginRuntimeRegistry 
         }
         return local.Concat(runtime.TtsProviders.Where(p => p.Ready).SelectMany(p => p.Voices.Select(v => new SpokenFeedbackVoice(
             Prefix + Uri.EscapeDataString(p.PluginId) + ":" + Uri.EscapeDataString(v.Id),
-            p.Name + " · " + v.DisplayName + " (cloud)")))).ToArray();
+            p.Name + " \u00b7 " + v.DisplayName + (p.IsLocal ? " (local)" : " (cloud)")) { IsLocal = p.IsLocal }))).ToArray();
     }
 
     public async Task SpeakAsync(SpokenFeedbackRequest request, CancellationToken ct)

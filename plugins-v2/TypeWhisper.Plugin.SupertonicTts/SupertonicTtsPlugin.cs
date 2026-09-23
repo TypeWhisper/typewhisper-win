@@ -1,0 +1,518 @@
+using System.IO;
+using System.Net.Http;
+
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
+using TypeWhisper.PluginSDK.Models;
+
+namespace TypeWhisper.Plugin.SupertonicTts;
+
+/// <summary>
+/// Provides supertonic tts plugin behavior.
+/// </summary>
+public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsModelManagement
+{
+    internal const string LicenseAcceptedSettingName = "licenseAccepted";
+    internal const string AcceptedModelLicenseIdSettingName = "acceptedModelLicenseId";
+    internal const string AcceptedModelLicenseRevisionSettingName = "acceptedModelLicenseRevision";
+    internal const string AcceptedModelLicenseAtSettingName = "acceptedModelLicenseAt";
+    internal const string ModelId = "supertonic-3";
+    internal const string ModelLicenseRequirementId = "model-license";
+    internal const string HuggingFaceTokenRequirementId = "hugging-face-token";
+    internal const string ModelLicenseId = "Supertone/supertonic-3";
+    internal const string ModelLicenseRevision = "openrail-m-2022-08-18";
+    internal const string SelectedVoiceSettingName = "selectedVoice";
+    internal const string SpeedSettingName = "speed";
+    internal const string DenoisingStepsSettingName = "denoisingSteps";
+    internal const string DefaultVoiceId = "M1";
+    internal const double DefaultSpeed = 1.05;
+    internal const int DefaultDenoisingSteps = 8;
+    internal const double MinSpeed = 0.9;
+    internal const double MaxSpeed = 1.5;
+    internal const int MinDenoisingSteps = 1;
+    internal const int MaxDenoisingSteps = 16;
+
+    private static readonly IReadOnlyList<PluginVoiceInfo> Voices =
+    [
+        new("M1", "M1"),
+        new("M2", "M2"),
+        new("M3", "M3"),
+        new("M4", "M4"),
+        new("M5", "M5"),
+        new("F1", "F1"),
+        new("F2", "F2"),
+        new("F3", "F3"),
+        new("F4", "F4"),
+        new("F5", "F5"),
+    ];
+
+    private readonly bool _usePortablePlayback;
+    private readonly ISupertonicAssetManager? _injectedAssetManager;
+    private readonly Func<string, ISupertonicSynthesizer> _synthesizerFactory;
+    private readonly Func<float[], int, ITtsPlaybackSession> _playbackFactory;
+    private readonly HttpClient? _huggingFaceTokenValidationClient;
+    private readonly SemaphoreSlim _synthesisLock = new(1, 1);
+    private ISupertonicAssetManager? _assetManager;
+    private ISupertonicSynthesizer? _synthesizer;
+    private IPluginHostServices? _host;
+    private string _selectedVoiceId = DefaultVoiceId;
+    private string? _acceptedModelLicenseId;
+    private string? _acceptedModelLicenseRevision;
+    private string? _huggingFaceToken;
+    private bool _disposed;
+
+    /// <summary>Raised when model license or optional authentication state changes.</summary>
+    public event EventHandler? ModelDownloadRequirementsChanged;
+
+    /// <summary>
+    /// Initializes a new instance of the SupertonicTtsPlugin class.
+    /// </summary>
+    public SupertonicTtsPlugin()
+        : this(
+            assetManager: null,
+            synthesizerFactory: assetRoot => new SupertonicOnnxSynthesizer(assetRoot),
+            playbackFactory: null,
+            huggingFaceTokenValidationClient: null,
+            useNullableAssetManagerOverload: true)
+    {
+    }
+
+    internal SupertonicTtsPlugin(
+        ISupertonicAssetManager assetManager,
+        Func<string, ISupertonicSynthesizer> synthesizerFactory,
+        Func<float[], int, ITtsPlaybackSession>? playbackFactory = null,
+        HttpClient? huggingFaceTokenValidationClient = null)
+        : this(
+            assetManager,
+            synthesizerFactory,
+            playbackFactory,
+            huggingFaceTokenValidationClient,
+            useNullableAssetManagerOverload: true)
+    {
+    }
+
+    private SupertonicTtsPlugin(
+        ISupertonicAssetManager? assetManager,
+        Func<string, ISupertonicSynthesizer> synthesizerFactory,
+        Func<float[], int, ITtsPlaybackSession>? playbackFactory,
+        HttpClient? huggingFaceTokenValidationClient,
+        bool useNullableAssetManagerOverload)
+    {
+        _usePortablePlayback = playbackFactory is null;
+        _injectedAssetManager = assetManager;
+        _assetManager = assetManager;
+        _synthesizerFactory = synthesizerFactory;
+        _playbackFactory = playbackFactory ?? ((samples, sampleRate) => new SupertonicTtsPlaybackSession(samples, sampleRate));
+        _huggingFaceTokenValidationClient = huggingFaceTokenValidationClient;
+    }
+
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
+    public string PluginId => "com.typewhisper.supertonic-tts";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
+    public string PluginName => "Supertonic TTS";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
+    public string PluginVersion => "1.2.1";
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
+    public string ProviderId => "supertonic-tts";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
+    public string ProviderDisplayName => "Supertonic TTS";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
+    /// <inheritdoc />
+    public bool SupportsPlaybackSelection => true;
+
+    /// <inheritdoc />
+    public bool IsConfigured => _assetManager?.AreAssetsReady ?? false;
+    /// <summary>
+    /// Gets the voices exposed by this provider.
+    /// </summary>
+    public IReadOnlyList<PluginVoiceInfo> AvailableVoices => Voices;
+    /// <summary>
+    /// Gets the currently selected provider voice identifier.
+    /// </summary>
+    public string? SelectedVoiceId => _selectedVoiceId;
+    internal double Speed { get; private set; } = DefaultSpeed;
+    internal int DenoisingSteps { get; private set; } = DefaultDenoisingSteps;
+    internal bool HasAcceptedModelLicense =>
+        string.Equals(_acceptedModelLicenseId, ModelLicenseId, StringComparison.Ordinal)
+        && string.Equals(_acceptedModelLicenseRevision, ModelLicenseRevision, StringComparison.Ordinal);
+    internal bool AreAssetsReady => IsConfigured;
+    /// <inheritdoc />
+    public PluginModelInfo LocalModel => new(ModelId, "Supertonic 3")
+    {
+        Publisher = "Supertone", SizeDescription = "383 MB · CPU · 10 voices",
+        EstimatedSizeMB = 383, LanguageCount = 31,
+        LanguageCodes = SupertonicTextProcessor.SupportedLanguages.Order().ToArray()
+    };
+    /// <inheritdoc />
+    public bool IsModelDownloaded => IsConfigured;
+    /// <inheritdoc />
+    public bool IsModelLoaded => _synthesizer is not null;
+    internal IPluginLocalization? Loc => PortableLocalization.TryGet(_host);
+
+    /// <summary>Gets the host-renderable model license and optional token requirements.</summary>
+    public IReadOnlyList<PluginModelDownloadRequirement> ModelDownloadRequirements =>
+    [
+        new PluginModelDownloadRequirement(
+            ModelId,
+            "Supertonic 3",
+            ModelLicenseRequirementId,
+            PluginModelDownloadRequirementKind.License,
+            Loc?.GetString("Settings.LicenseTitle") ?? "Model license",
+            Loc?.GetString("Settings.LicenseDescription")
+                ?? "Review and accept the OpenRAIL-M model license before downloading.",
+            IsRequired: true,
+            IsSatisfied: HasAcceptedModelLicense)
+        {
+            MoreInfoUri = new Uri("https://huggingface.co/Supertone/supertonic-3/blob/3cadd1ee6394adea1bd021217a0e650ede09a323/LICENSE"),
+            Revision = ModelLicenseRevision
+        },
+        new PluginModelDownloadRequirement(
+            ModelId,
+            "Supertonic 3",
+            HuggingFaceTokenRequirementId,
+            PluginModelDownloadRequirementKind.Credential,
+            Loc?.GetString("Settings.HuggingFaceToken") ?? "Hugging Face token (optional)",
+            Loc?.GetString("Settings.HuggingFaceTokenHint")
+                ?? "Optional authentication for Hugging Face model downloads.",
+            IsRequired: false,
+            IsSatisfied: _huggingFaceToken is not null)
+        {
+            MoreInfoUri = new Uri("https://huggingface.co/settings/tokens")
+        }
+    ];
+
+    /// <summary>
+    /// Gets the user-facing summary of the current settings.
+    /// </summary>
+    public string? SettingsSummary
+    {
+        get
+        {
+            var status = IsConfigured ? "ready" : "download required";
+            return $"Voice: {_selectedVoiceId}; speed {Speed:0.##}; steps {DenoisingSteps}; {status}";
+        }
+    }
+
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
+    public async Task ActivateAsync(IPluginHostServices host)
+    {
+        _host = host;
+        var modelDirectoryName = Path.GetFileName(SupertonicPaths.ModelDirectoryName);
+        if (string.IsNullOrWhiteSpace(modelDirectoryName) || modelDirectoryName is "." or "..")
+            throw new InvalidOperationException("Supertonic model directory name must not be empty.");
+
+        if (_injectedAssetManager is null && _assetManager is IDisposable previousAssets)
+            previousAssets.Dispose();
+        _assetManager = _injectedAssetManager
+            ?? new SupertonicAssetManager(Path.Join(host.PluginAssetDirectory, "Models", modelDirectoryName));
+        _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
+        Speed = NormalizeSpeed(host.GetSetting<double?>(SpeedSettingName) ?? DefaultSpeed);
+        DenoisingSteps = NormalizeDenoisingSteps(host.GetSetting<int?>(DenoisingStepsSettingName) ?? DefaultDenoisingSteps);
+        _acceptedModelLicenseId = host.GetSetting<string>(AcceptedModelLicenseIdSettingName);
+        _acceptedModelLicenseRevision = host.GetSetting<string>(AcceptedModelLicenseRevisionSettingName);
+        var legacyLicenseAccepted = host.GetSetting<bool?>(LicenseAcceptedSettingName);
+        if (!HasAcceptedModelLicense
+            && legacyLicenseAccepted.GetValueOrDefault())
+        {
+            _acceptedModelLicenseId = ModelLicenseId;
+            _acceptedModelLicenseRevision = ModelLicenseRevision;
+            host.SetSetting(AcceptedModelLicenseIdSettingName, _acceptedModelLicenseId);
+            host.SetSetting(AcceptedModelLicenseRevisionSettingName, _acceptedModelLicenseRevision);
+            host.SetSetting(AcceptedModelLicenseAtSettingName, DateTimeOffset.UtcNow.ToString("O"));
+        }
+        if (legacyLicenseAccepted is not null)
+            host.SetSetting<bool?>(LicenseAcceptedSettingName, null);
+
+        try
+        {
+            _huggingFaceToken = await PluginHuggingFaceTokenHelper.LoadTokenAsync(host);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException or System.Security.Cryptography.CryptographicException)
+        {
+            _huggingFaceToken = null;
+            host.Log(PluginLogLevel.Warning, "Optional download token could not be read: " + error.GetType().Name);
+        }
+        PersistSettings();
+        await _assetManager.VerifyCachedAssetsAsync(CancellationToken.None);
+        host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
+    }
+
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
+    public async Task DeactivateAsync()
+    {
+        await UnloadModelAsync(CancellationToken.None);
+        _host = null;
+    }
+
+    /// <inheritdoc />
+    public async Task UnloadModelAsync(CancellationToken cancellationToken)
+    {
+        await _synthesisLock.WaitAsync(cancellationToken);
+        try { _synthesizer?.Dispose(); _synthesizer = null; }
+        finally { _synthesisLock.Release(); }
+    }
+
+    /// <inheritdoc />
+    public async Task DownloadAndLoadModelAsync(IProgress<double>? progress, CancellationToken cancellationToken)
+    {
+        await _synthesisLock.WaitAsync(cancellationToken);
+        try
+        {
+            await DownloadAssetsCoreAsync(progress, cancellationToken);
+            if (_synthesizer is not null) return;
+            // Native initialization cannot be interrupted. Drain it before releasing the lease.
+            var candidate = await Task.Run(() => _synthesizerFactory(_assetManager!.AssetRoot), cancellationToken);
+            try { cancellationToken.ThrowIfCancellationRequested(); _synthesizer = candidate; }
+            catch { candidate.Dispose(); throw; }
+        }
+        finally { _synthesisLock.Release(); }
+    }
+
+
+
+    /// <summary>
+    /// Selects the provider voice used for subsequent speech output.
+    /// </summary>
+    public void SelectVoice(string? voiceId)
+    {
+        _host?.SetSetting(SelectedVoiceSettingName, NormalizeVoiceId(voiceId));
+        _selectedVoiceId = NormalizeVoiceId(voiceId);
+    }
+
+    /// <summary>
+    /// Synthesizes speech and returns a playback session.
+    /// </summary>
+    public async Task<ITtsPlaybackSession> SpeakAsync(TtsSpeakRequest request, CancellationToken ct)
+    {
+        var voiceId = request.VoiceId is null ? _selectedVoiceId : Voices.FirstOrDefault(
+            voice => string.Equals(voice.Id, request.VoiceId.Trim(), StringComparison.OrdinalIgnoreCase))?.Id
+            ?? throw new ArgumentException("The requested Supertonic voice is unavailable.", nameof(request));
+        var text = request.Text.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return SupertonicInactiveTtsPlaybackSession.Instance;
+
+        if (_assetManager?.AreAssetsReady != true)
+            throw new InvalidOperationException("Supertonic 3 assets are not downloaded. Open plugin settings to download them.");
+
+        await _synthesisLock.WaitAsync(ct);
+        try
+        {
+            if (_synthesizer is null && !await _assetManager.VerifyCachedAssetsAsync(ct))
+            {
+                _host?.NotifyCapabilitiesChanged();
+                throw new InvalidOperationException("Supertonic model assets failed verification. Open plugin settings to repair the download.");
+            }
+            var synthesis = await Task.Run(() =>
+            {
+                var synthesizer = _synthesizer ??= _synthesizerFactory(_assetManager.AssetRoot);
+                return synthesizer.Synthesize(
+                    new SupertonicSynthesisRequest(text, NormalizeLanguage(request.Language),
+                        SupertonicPaths.VoiceStylePath(_assetManager.AssetRoot, voiceId), DenoisingSteps, Speed), ct);
+            }, ct);
+            ct.ThrowIfCancellationRequested();
+
+            SupertonicAudioLimits.ValidateSampleCount(synthesis.Samples.LongLength,
+                SupertonicAudioLimits.MaximumSamples(synthesis.SampleRate));
+
+            return synthesis.Samples.Length == 0
+                ? SupertonicInactiveTtsPlaybackSession.Instance
+                : _usePortablePlayback ? new SupertonicTtsPlaybackSession(synthesis.Samples, synthesis.SampleRate, request.OutputDeviceId) : _playbackFactory(synthesis.Samples, synthesis.SampleRate);
+        }
+        finally
+        {
+            _synthesisLock.Release();
+        }
+    }
+
+    internal void SetLicenseAccepted(bool accepted)
+    {
+        _host?.SetSetting(AcceptedModelLicenseIdSettingName, accepted ? ModelLicenseId : null);
+        _host?.SetSetting(AcceptedModelLicenseRevisionSettingName, accepted ? ModelLicenseRevision : null);
+        _host?.SetSetting(
+            AcceptedModelLicenseAtSettingName,
+            accepted ? DateTimeOffset.UtcNow.ToString("O") : null);
+        _acceptedModelLicenseId = accepted ? ModelLicenseId : null;
+        _acceptedModelLicenseRevision = accepted ? ModelLicenseRevision : null;
+        _host?.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void SetSpeed(double speed)
+    {
+        _host?.SetSetting(SpeedSettingName, NormalizeSpeed(speed));
+        Speed = NormalizeSpeed(speed);
+    }
+
+    internal void SetDenoisingSteps(int steps)
+    {
+        _host?.SetSetting(DenoisingStepsSettingName, NormalizeDenoisingSteps(steps));
+        DenoisingSteps = NormalizeDenoisingSteps(steps);
+    }
+
+    internal async Task DownloadAssetsAsync(IProgress<double>? progress, CancellationToken ct)
+    {
+        await _synthesisLock.WaitAsync(ct);
+        try { await DownloadAssetsCoreAsync(progress, ct); }
+        finally { _synthesisLock.Release(); }
+    }
+
+    private async Task DownloadAssetsCoreAsync(IProgress<double>? progress, CancellationToken ct)
+    {
+        if (!HasAcceptedModelLicense)
+            throw new InvalidOperationException("The Supertonic 3 OpenRAIL-M license must be accepted before downloading model assets.");
+
+        if (_assetManager is null)
+            throw new InvalidOperationException("Plugin is not activated.");
+
+        ct.ThrowIfCancellationRequested();
+        await _assetManager.DownloadMissingAssetsAsync(progress, _huggingFaceToken, ct);
+        _host?.NotifyCapabilitiesChanged();
+    }
+
+    /// <summary>Validates and stores the optional Hugging Face token.</summary>
+    public async Task<PluginModelDownloadRequirementResult> SaveModelDownloadCredentialAsync(
+        string modelId,
+        string requirementId,
+        string credential,
+        CancellationToken ct)
+    {
+        ValidateRequirement(modelId, requirementId, HuggingFaceTokenRequirementId);
+        var isValid = await PluginHuggingFaceTokenHelper.ValidateTokenAsync(
+            credential,
+            _huggingFaceTokenValidationClient,
+            ct);
+        if (!isValid)
+        {
+            return new PluginModelDownloadRequirementResult(
+                false,
+                Loc?.GetString("Settings.InvalidToken") ?? "The Hugging Face token is invalid.");
+        }
+
+        if (_host is null)
+            return new PluginModelDownloadRequirementResult(false, "Plugin is not activated.");
+
+        try
+        {
+            _huggingFaceToken = await PluginHuggingFaceTokenHelper.SaveTokenAsync(_host, credential);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException or System.Security.Cryptography.CryptographicException)
+        {
+            _host.Log(PluginLogLevel.Warning, "Optional download token could not be stored: " + error.GetType().Name);
+            return new PluginModelDownloadRequirementResult(false, "The token could not be stored securely.");
+        }
+        _host.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
+        return new PluginModelDownloadRequirementResult(
+            true,
+            Loc?.GetString("Settings.TokenSaved") ?? "Token saved securely.");
+    }
+
+    /// <summary>Clears the optional Hugging Face token.</summary>
+    public async Task ClearModelDownloadCredentialAsync(
+        string modelId,
+        string requirementId,
+        CancellationToken ct)
+    {
+        ValidateRequirement(modelId, requirementId, HuggingFaceTokenRequirementId);
+        ct.ThrowIfCancellationRequested();
+        if (_host is not null)
+            await PluginHuggingFaceTokenHelper.ClearTokenAsync(_host);
+        _huggingFaceToken = null;
+        _host?.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Persists acceptance for the current model license revision.</summary>
+    public Task SetModelDownloadLicenseAcceptanceAsync(
+        string modelId,
+        string requirementId,
+        bool accepted,
+        CancellationToken ct)
+    {
+        ValidateRequirement(modelId, requirementId, ModelLicenseRequirementId);
+        ct.ThrowIfCancellationRequested();
+        SetLicenseAccepted(accepted);
+        return Task.CompletedTask;
+    }
+
+    private static void ValidateRequirement(string modelId, string requirementId, string expectedRequirementId)
+    {
+        if (!string.Equals(modelId, ModelId, StringComparison.Ordinal)
+            || !string.Equals(requirementId, expectedRequirementId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Unknown model download requirement.");
+        }
+    }
+
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        _synthesizer?.Dispose();
+        if (_injectedAssetManager is null && _assetManager is IDisposable disposableAssets)
+            disposableAssets.Dispose();
+        _synthesisLock.Dispose();
+    }
+
+    internal static string NormalizeLanguage(string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language) || language.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            return "en";
+
+        var normalized = language.Trim().ToLowerInvariant();
+        var separator = normalized.IndexOfAny(['-', '_']);
+        if (separator > 0)
+            normalized = normalized[..separator];
+
+        return SupertonicTextProcessor.SupportedLanguages.Contains(normalized)
+            ? normalized
+            : "en";
+    }
+
+    internal static double NormalizeSpeed(double speed)
+    {
+        if (double.IsNaN(speed) || double.IsInfinity(speed))
+            return DefaultSpeed;
+        return Math.Round(Math.Max(MinSpeed, Math.Min(MaxSpeed, speed)), 2);
+    }
+
+    internal static int NormalizeDenoisingSteps(int steps) =>
+        Math.Max(MinDenoisingSteps, Math.Min(MaxDenoisingSteps, steps));
+
+    private static string NormalizeVoiceId(string? voiceId) =>
+        !string.IsNullOrWhiteSpace(voiceId)
+        && Voices.Any(voice => string.Equals(voice.Id, voiceId.Trim(), StringComparison.OrdinalIgnoreCase))
+            ? Voices.First(voice => string.Equals(voice.Id, voiceId.Trim(), StringComparison.OrdinalIgnoreCase)).Id
+            : DefaultVoiceId;
+
+    private void PersistSettings()
+    {
+        if (_host is null)
+            return;
+
+        _host.SetSetting(SelectedVoiceSettingName, _selectedVoiceId);
+        _host.SetSetting(SpeedSettingName, Speed);
+        _host.SetSetting(DenoisingStepsSettingName, DenoisingSteps);
+    }
+}

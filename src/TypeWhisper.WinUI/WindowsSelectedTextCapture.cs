@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using TypeWhisper.Windows.Services;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 

@@ -2,7 +2,9 @@
 
 These assets are bundled with the host; plugin packages do not need to provide new metadata.
 
-- Claude: reuses the existing TypeWhisper Windows `Resources/PluginLogos/claude.png` asset through a linked build item; the source image is unchanged.
+- Fireworks AI: official [website icon](https://fireworks.ai/icon0.svg), retrieved September 18, 2026. Original geometry, view box and purple color are preserved; redundant SVG wrappers and no-op browser media styles are omitted for native rendering.
+
+- Claude and Gemini: the existing TypeWhisper Windows PNG assets now live in this directory; the source images are unchanged.
 
 - Cerebras: orange concentric symbol extracted from the official [Cerebras homepage](https://www.cerebras.ai/) header SVG on September 14, 2026. Original path, stroke width and color are preserved; the view box contains the symbol without the wordmark.
 
@@ -13,3 +15,14 @@ These assets are bundled with the host; plugin packages do not need to provide n
   Source SVG blob IDs: Deepgram `31579cb31bcd948a78c76bc1ae3266917cb979bb`, ElevenLabs `bad5cfb9d03da69f22980499dcc529c3d1a7dcc0`, NVIDIA `2c7ff66f8b1f04c24df0d4653f665cd97a228c92`.
 
 Explicit fill colors support native SVG rendering. Monochrome marks include light and dark variants. Brand names and marks belong to their respective owners.
+
+- Reson8: existing TypeWhisper website brand asset, reused for the portable provider.
+- Speechmatics: standalone symbol path from the [official header SVG](https://www.speechmatics.com/_next/static/media/SM-Logo-main.b945b6cd.svg), with its original dark fill and a white variant for dark backgrounds. Symbol geometry is unchanged.
+- Mistral: reuses the TypeWhisper website brand asset for the Mistral provider.
+
+- Supertonic TTS: unchanged [Supertone 256 px website icon](https://cdn.prod.website-files.com/666c1f308f1a1e34efc9c61a/666fd445621fa9795b5d37b8_SPT_Sym_256px.png), linked by the official Supertone homepage; retrieved September 20, 2026.
+Gemma: `gemma-color.svg` from [Lobe Icons](https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/gemma-color.svg), MIT; see `Lobe-Icons-LICENSE.txt`.
+
+- Meta: reuses the existing TypeWhisper Windows Meta brand asset unchanged.
+
+- xAI: light and dark SVG marks reused from the TypeWhisper website brand assets; symbol view box cropped and explicit six-digit white fill added for native rendering. Original paths are unchanged.

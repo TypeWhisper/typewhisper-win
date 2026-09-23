@@ -19,7 +19,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 {
     private const string BaseUrl = "https://api.openai.com";
     private const string ChatGptModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
-    private const string PluginVersionValue = "1.1.4";
+    private const string PluginVersionValue = "1.1.5";
     private const int TranscriptionUploadBitRate = 48_000;
     private const string ApiKeySecretName = "api-key";
     private const string SelectedModelSettingName = "selectedModel";
@@ -301,6 +301,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         IsConfigured
         && SelectedModelEntry is { SupportsStreaming: true };
 
+    /// <inheritdoc />
+    public bool SupportsStructuredDictionaryTerms => true;
+
     /// <summary>
     /// Gets whether active dictionary terms can be passed to the selected transcription model.
     /// </summary>
@@ -386,7 +389,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
                 translate,
                 entry.ResponseFormat ?? "json",
                 ct,
-                prompt);
+                PluginDictionaryTerms.ToPlainPrompt(prompt));
         }
 
         try

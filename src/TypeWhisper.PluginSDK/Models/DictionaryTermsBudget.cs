@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace TypeWhisper.PluginSDK.Models;
 
 /// <summary>
@@ -24,6 +26,7 @@ public sealed record DictionaryTermsBudget(
 /// </summary>
 public static class PluginDictionaryTerms
 {
+    private const string StructuredPrefix = "TypeWhisper.DictionaryTerms/1\n";
     /// <summary>
     /// Returns normalized, de-duplicated terms in their original order.
     /// </summary>
@@ -90,6 +93,29 @@ public static class PluginDictionaryTerms
 
         return limited;
     }
+
+    /// <summary>Encodes provider-budgeted terms without losing punctuation or term boundaries.</summary>
+    public static string? CreateStructuredPrompt(IEnumerable<string>? terms, DictionaryTermsBudget? budget = null)
+    {
+        var clipped = Clip(terms, budget ?? DictionaryTermsBudget.Default);
+        return clipped.Count == 0 ? null : StructuredPrefix + JsonSerializer.Serialize(clipped);
+    }
+
+    /// <summary>Reads the opt-in structured representation, or an older host's delimited prompt.
+    /// Malformed structured input fails explicitly instead of becoming unintended vocabulary.</summary>
+    public static IReadOnlyList<string> ParsePrompt(string? prompt, char[]? legacySeparators = null)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return [];
+        if (prompt.StartsWith(StructuredPrefix, StringComparison.Ordinal))
+            return Normalize(JsonSerializer.Deserialize<string[]>(prompt.AsSpan(StructuredPrefix.Length))
+                ?? throw new JsonException("Dictionary terms must be an array."));
+        return Normalize(prompt.Split(legacySeparators ?? [','], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>Unwraps structured terms for provider endpoints accepting only a plain text prompt.</summary>
+    public static string? ToPlainPrompt(string? prompt) =>
+        prompt is not null && prompt.StartsWith(StructuredPrefix, StringComparison.Ordinal)
+            ? string.Join(", ", ParsePrompt(prompt)) : prompt;
 
     /// <summary>
     /// Builds the comma-separated prompt accepted by transcription plugins.

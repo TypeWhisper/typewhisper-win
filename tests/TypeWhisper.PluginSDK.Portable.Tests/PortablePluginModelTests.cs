@@ -13,6 +13,37 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
+    public async Task CredentialClearCannotReportSuccessWhileProviderStillHasIt()
+    {
+        await using var registry = await LocalModelRegistry();
+        Host(Id).SetSetting("CredentialRequirement", true);
+        Host(Id).SetSetting("downloadCredential", "fixture-only");
+        Host(Id).SetSetting("IgnoreCredentialClear", true);
+        var model = Assert.Single(await registry.GetModelStatesAsync(Id));
+        var result = await registry.UpdateModelDownloadCredentialAsync(model, "token", null);
+        Assert.False(result.Succeeded);
+        Assert.Equal("fixture-only", Host(Id).GetSetting<string>("downloadCredential"));
+    }
+
+    [Fact]
+    public async Task DownloadCredentialUpdatesRequireTheCurrentModelAndCredentialRequirement()
+    {
+        await using var registry = await LocalModelRegistry();
+        Host(Id).SetSetting("CredentialRequirement", true);
+        var model = Assert.Single(await registry.GetModelStatesAsync(Id));
+        Assert.True((await registry.UpdateModelDownloadCredentialAsync(model, "token", "fixture-only")).Succeeded);
+        Assert.Equal("fixture-only", Host(Id).GetSetting<string>("downloadCredential"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.UpdateModelDownloadCredentialAsync(model, "missing", "changed"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.UpdateModelDownloadCredentialAsync(model with { EngineIdentity = Guid.NewGuid() }, "token", "changed"));
+        Assert.Equal("fixture-only", Host(Id).GetSetting<string>("downloadCredential"));
+        await registry.UpdateModelDownloadCredentialAsync(model, "token", null);
+        Assert.Null(Host(Id).GetSetting<string>("downloadCredential"));
+        Assert.Null(await registry.SetEnabledAsync(Id, false)); Assert.Null(await registry.SetEnabledAsync(Id, true));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.UpdateModelDownloadCredentialAsync(model, "token", "stale"));
+        Assert.Null(Host(Id).GetSetting<string>("downloadCredential"));
+    }
+
+    [Fact]
     public async Task CloudModelSelectionRechecksReadinessWithoutLoadingAssets()
     {
         await using var registry = await LocalModelRegistry();

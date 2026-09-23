@@ -3,7 +3,7 @@ using System.Speech.Synthesis;
 using NAudio.Wave;
 using SherpaOnnx;
 using TypeWhisper.WinUI;
-using TypeWhisper.Windows.Services;
+using TypeWhisper.WinUI.Platform;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -104,7 +104,7 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
         return audio.StopRecording() ?? [];
     }
 
-    private sealed class ReplayDevice : IAudioInputDeviceProvider
+    internal sealed class ReplayDevice : IAudioInputDeviceProvider
     {
         public int DeviceCount => 1;
         public string GetDeviceName(int index) => "Synthetic replay";
@@ -112,14 +112,14 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
         public AudioInputDeviceInfo GetDeviceInfo(int index) => new(0, "replay", "Synthetic replay", true);
         public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos() => [GetDeviceInfo(0)];
     }
-    private sealed class ReplayInput : IAudioInputCaptureFactory, IAudioInputCapture
+    internal sealed class ReplayInput : IAudioInputCaptureFactory, IAudioInputCapture
     {
         public bool Running;
         public bool CanRestartAfterStop => true;
         public WaveFormat WaveFormat => new(16000, 16, 1);
         public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
         public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
-        public IAudioInputCapture Create(int device, WaveFormat format, int bufferMilliseconds) => this;
+        public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds) => this;
         public void Prepare() { }
         public void StartRecording() => Running = true;
         public void StopRecording() { Running = false; RecordingStopped?.Invoke(this, new()); }
