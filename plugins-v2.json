@@ -267,16 +267,16 @@
     {
       "id": "com.typewhisper.github-copilot",
       "name": "GitHub Copilot",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Clean up, translate and rewrite workflow text using your own GitHub Copilot sign-in. Copilot plan limits and model availability apply.",
       "categories": [
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.github-copilot-1.1.0-win-x64.zip",
-      "sha256": "891f3130ef74caad244f3b9f2e30d4f713863bfc528ac38e169754371d901468",
-      "size": 78806180,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-35971628651/com.typewhisper.github-copilot-1.1.1-win-x64.zip",
+      "sha256": "be7b9b6630c5cf4c8decdf7f4cce7d7641f83d0dcf8ff2487c9e224e88c89b9b",
+      "size": 78806983,
       "platforms": [
         "windows"
       ],
@@ -474,7 +474,7 @@
     {
       "id": "com.typewhisper.openai-compatible",
       "name": "OpenAI Compatible",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
@@ -482,9 +482,9 @@
         "transcription",
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.openai-compatible-1.1.0-win-x64.zip",
-      "sha256": "f02802c0213ffe7ee4b20c0568d2e4c1cd259bbddcbdf16bf21327e72ddff274",
-      "size": 48526,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-35971628651/com.typewhisper.openai-compatible-1.1.1-win-x64.zip",
+      "sha256": "8bbfcf1e8aeeff50b69913c037367518c9c5ff647898404765eecd55a002baa2",
+      "size": 49150,
       "platforms": [
         "windows"
       ],
