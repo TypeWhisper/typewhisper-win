@@ -66,6 +66,13 @@ public static class LegacyApplicationSettings
         Json("Dictation/settings.json", new { Provider = selected?.PluginId == "com.typewhisper.sherpa-onnx" ? "local" : selected?.PluginId ?? "legacy-unavailable" });
         File.WriteAllText(PathFor("correction-learning.txt"), settings.TargetAppCorrectionLearningEnabled ? "enabled" : "disabled");
         Json("dictionary-options.json", new { Enabled = settings.VocabularyBoostingEnabled });
+        // Local integrations such as Raycast depend on the API staying on; 1.1 rejects ports below 1024.
+        Json("http-api.json", new
+        {
+            Enabled = settings.ApiServerEnabled,
+            Port = settings.ApiServerPort is >= 1024 and <= 65535 ? settings.ApiServerPort : 8978,
+            RequireAuthentication = settings.ApiServerRequiresAuthentication
+        });
         Check(new SetupPreferencesStore(PathFor("setup.json")).Save(settings.HasCompletedOnboarding ? 4 : 0, settings.HasCompletedOnboarding));
         Json("updates.json", "Daily");
     }
