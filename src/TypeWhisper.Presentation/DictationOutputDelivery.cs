@@ -89,8 +89,14 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                     }
                     else
                     {
-                        saved = history.TryAddRecord(record);
-                        if (wantsAudio) audioWarning = "History audio saving is unavailable. Only the text was retained.";
+                        // Rewriting a large history must not stall the caller's UI thread before paste.
+                        // Like the audio path, recheck permission at the commit boundary on the worker.
+                        var textRecord = record;
+                        var added = await Task.Run(() => !ct.IsCancellationRequested && atStart.RestrictedBy(current()).SaveToHistory
+                            ? history.TryAddRecord(textRecord) : (bool?)null, ct);
+                        suppressed = added is null;
+                        saved = added == true;
+                        if (wantsAudio && !suppressed) audioWarning = "History audio saving is unavailable. Only the text was retained.";
                     }
                     if (!saved && !suppressed)
                         storageWarning = "This dictation could not be saved to History.";

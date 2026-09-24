@@ -54,6 +54,7 @@ internal sealed partial class LocalDictationSession
             await Release(() => _transcriptionPlugin.DisposeAsync().AsTask());
             await Release(() => { _effects.End(); _audio.Dispose(); return Task.CompletedTask; });
             await Release(() => _recoveryAudio.DisposeAsync().AsTask());
+            await Release(() => _inserter.Restored);
             await Release(() => { _originalField?.Dispose(); _originalField = null; _inserter.Dispose(); _operationCancellation.Dispose(); return Task.CompletedTask; });
         }
         finally { _gate.Release(); }

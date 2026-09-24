@@ -15,6 +15,8 @@ public sealed class SoundService
     private readonly byte[]? _stop = LoadWav("stop.wav");
     private readonly byte[]? _success = LoadWav("success.wav");
     private readonly byte[]? _error = LoadWav("error.wav");
+    private readonly object _playbackGate = new();
+    private Task _playback = Task.CompletedTask;
 
     /// <summary>
     /// Gets or sets the is enabled value.
@@ -43,6 +45,17 @@ public sealed class SoundService
     private void Play(byte[]? wav)
     {
         if (!IsEnabled || wav is null) return;
+        // Endpoint lookup and WASAPI initialization can take tens of milliseconds;
+        // keep them off the caller's UI thread and the dictation path, but start
+        // cues in request order so a quick stop never sounds before its start.
+        var deviceId = OutputDeviceId;
+        lock (_playbackGate)
+            _playback = _playback.ContinueWith(_ => PlayOnDevice(wav, deviceId),
+                CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+    }
+
+    private static void PlayOnDevice(byte[] wav, string? outputDeviceId)
+    {
         MemoryStream? ms = null;
         WaveFileReader? reader = null;
         IWavePlayer? output = null;
@@ -59,9 +72,9 @@ public sealed class SoundService
             reader = new WaveFileReader(ms);
             {
                 using var enumerator = new MMDeviceEnumerator();
-                device = string.IsNullOrEmpty(OutputDeviceId)
+                device = string.IsNullOrEmpty(outputDeviceId)
                     ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
-                    : enumerator.GetDevice(OutputDeviceId);
+                    : enumerator.GetDevice(outputDeviceId);
                 output = new WasapiOut(device, AudioClientShareMode.Shared, true, 100);
             }
             output.Init(reader);

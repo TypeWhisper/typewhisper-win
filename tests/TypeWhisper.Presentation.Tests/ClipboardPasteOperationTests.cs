@@ -19,7 +19,8 @@ public class ClipboardPasteOperationTests
             return Task.FromResult<IDisposable>(this);
         }
         public uint SendPaste() { Calls.Add("paste"); if (ThrowOnSend) throw new InvalidOperationException(); return Sent; }
-        public Task WaitForPasteAsync() { Calls.Add("wait"); return Task.CompletedTask; }
+        public TaskCompletionSource? PendingWait;
+        public Task WaitForPasteAsync() { Calls.Add("wait"); return PendingWait?.Task ?? Task.CompletedTask; }
         public Task RestoreAsync(IDisposable lease) { Calls.Add("restore"); return Task.CompletedTask; }
         public void Dispose() => Calls.Add("dispose");
     }
@@ -28,8 +29,23 @@ public class ClipboardPasteOperationTests
     {
         var platform = new Fake();
         var text = "Grüße 👋\n" + new string('x', 10000);
-        Assert.True(await ClipboardPasteOperation.RunAsync(platform, text));
+        var result = await ClipboardPasteOperation.RunAsync(platform, text);
+        Assert.True(result.Inserted);
+        await result.Restored;
         Assert.Equal(text, platform.Text);
+        Assert.Equal(new[] { "capture", "paste", "wait", "restore", "dispose" }, platform.Calls);
+    }
+    [Fact]
+    public async Task ReportsSentPasteBeforeDeferredRestore()
+    {
+        var consumed = new TaskCompletionSource();
+        var platform = new Fake { PendingWait = consumed };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text");
+        Assert.True(result.Inserted);
+        Assert.False(result.Restored.IsCompleted);
+        Assert.Equal(new[] { "capture", "paste", "wait" }, platform.Calls);
+        consumed.SetResult();
+        await result.Restored;
         Assert.Equal(new[] { "capture", "paste", "wait", "restore", "dispose" }, platform.Calls);
     }
     [Fact]
@@ -45,7 +61,9 @@ public class ClipboardPasteOperationTests
     public async Task ChangedFocusOrClipboardDoesNotPaste(bool focus)
     {
         var platform = new Fake { LoseFocusAfterCapture = focus, ClipboardIsOwned = focus };
-        Assert.False(await ClipboardPasteOperation.RunAsync(platform, "text"));
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text");
+        Assert.False(result.Inserted);
+        Assert.True(result.Restored.IsCompleted);
         Assert.Equal(new[] { "capture", "restore", "dispose" }, platform.Calls);
     }
     [Theory]
@@ -54,7 +72,7 @@ public class ClipboardPasteOperationTests
     public async Task PartialInputDoesNotRetry(int sent)
     {
         var platform = new Fake { Sent = (uint)sent };
-        Assert.False(await ClipboardPasteOperation.RunAsync(platform, "text"));
+        Assert.False((await ClipboardPasteOperation.RunAsync(platform, "text")).Inserted);
         Assert.Equal(1, platform.Calls.Count(c => c == "paste"));
         Assert.Contains("restore", platform.Calls);
     }

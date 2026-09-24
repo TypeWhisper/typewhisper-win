@@ -47,6 +47,23 @@ public sealed class DictationOutputTests
         Assert.False(result.Committed);
     }
 
+    [Fact]
+    public async Task DisablingHistoryBeforeTheWorkerCommitsSuppressesTheSave()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        var enabled = new DictationOutputPreferences { SaveToHistory = true, AutoPaste = true };
+        var reads = 0;
+        // The first two reads are the admission checks; the worker's commit-boundary read sees the change.
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), enabled,
+            () => ++reads <= 2 ? enabled : enabled with { SaveToHistory = false }, () => Task.FromResult(true));
+        Assert.False(result.Saved);
+        Assert.True(result.Inserted);
+        Assert.False(result.Failed);
+        Assert.Null(result.StorageWarning);
+        history.Verify(h => h.TryAddRecord(It.IsAny<TranscriptionRecord>()), Times.Never());
+    }
+
     private static TranscriptionRecord Record() => new() { Id = "output-test", Timestamp = DateTime.UtcNow, RawText = "raw", FinalText = "Reviewed text" };
 
     [Theory]

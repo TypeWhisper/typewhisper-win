@@ -7,6 +7,14 @@ public sealed class LocalLivePreviewTests
     public void DefaultIntervalIsOneAndAHalfSeconds()
         => Assert.Equal(TimeSpan.FromMilliseconds(1500), LocalLivePreview.DefaultInterval);
 
+    [Theory]
+    [InlineData(200, 1500)]
+    [InlineData(1500, 1500)]
+    [InlineData(4000, 4000)]
+    public void SlowDecodesStretchTheNextPreviewDelay(int decodeMilliseconds, int expectedMilliseconds)
+        => Assert.Equal(TimeSpan.FromMilliseconds(expectedMilliseconds),
+            LocalLivePreview.NextDelay(LocalLivePreview.DefaultInterval, TimeSpan.FromMilliseconds(decodeMilliseconds)));
+
     [Fact]
     public async Task PublishesActualDecodedSnapshot()
     {

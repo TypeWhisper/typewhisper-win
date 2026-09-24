@@ -6,18 +6,36 @@ namespace TypeWhisper.WinUI;
 internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
 {
     private readonly WindowsClipboardTransaction _clipboard = new(owner);
+    private Task _restored = Task.CompletedTask;
     internal static SemaphoreSlim TransactionGate { get; } = new(1, 1);
+    /// <summary>Completes once the latest paste restored the previous clipboard. Never faults.</summary>
+    internal Task Restored => _restored;
+    /// <summary>Returns once Ctrl+V was sent. The clipboard stays gated until <see cref="Restored"/> completes.</summary>
     internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null)
     {
         await TransactionGate.WaitAsync();
+        var releaseNow = true;
         try
         {
-            var inserted = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text);
-            PasteDiagnostics.Write(inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
-            return inserted;
+            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text);
+            PasteDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
+            _restored = ReleaseAfterRestoreAsync(result.Restored);
+            releaseNow = false;
+            return result.Inserted;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { PasteDiagnostics.Write("clipboard.paste.exception", ex); throw; }
+        finally { if (releaseNow) TransactionGate.Release(); }
+    }
+    private static async Task ReleaseAfterRestoreAsync(Task restored)
+    {
+        try { await restored; }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The paste was already sent; a failed restore must not turn it into a delivery failure.
+            PasteDiagnostics.Write("clipboard.restore.exception", ex);
+            System.Diagnostics.Trace.TraceWarning("Clipboard restore after paste failed: {0}", ex.GetType().Name);
+        }
         finally { TransactionGate.Release(); }
     }
     public void Dispose() => _clipboard.Dispose();

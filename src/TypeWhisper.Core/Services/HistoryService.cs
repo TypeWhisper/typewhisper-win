@@ -11,6 +11,7 @@ namespace TypeWhisper.Core.Services;
 /// </summary>
 public sealed class HistoryService : IHistoryAudioService
 {
+    private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
     private readonly string _filePath;
     /// <summary>Propagates read/format failures instead of treating them as empty history. Missing files remain empty.</summary>
     public bool ThrowOnLoadFailure { get; init; }
@@ -23,9 +24,9 @@ public sealed class HistoryService : IHistoryAudioService
     private readonly SemaphoreSlim _loadLock = new(1, 1);
 
     private int _totalRecords;
-    private int _totalWords;
+    private int? _totalWords;
     private double _totalDuration;
-    private List<string> _distinctApps = [];
+    private List<string>? _distinctApps;
 
     /// <summary>
     /// Gets the persisted transcription history records.
@@ -54,7 +55,18 @@ public sealed class HistoryService : IHistoryAudioService
     /// <summary>
     /// Performs total words.
     /// </summary>
-    public int TotalWords => _cacheLoaded ? _totalWords : Records.Sum(r => r.WordCount);
+    public int TotalWords
+    {
+        get
+        {
+            if (!_cacheLoaded) return Records.Sum(r => r.WordCount);
+            // Counting splits every transcript; do it on demand rather than on each save.
+            lock (_gate)
+            {
+                return _totalWords ??= _cache.Sum(r => r.WordCount);
+            }
+        }
+    }
     /// <summary>
     /// Performs total duration.
     /// </summary>
@@ -104,7 +116,7 @@ public sealed class HistoryService : IHistoryAudioService
         EnsureCacheLoaded();
         lock (_gate)
         {
-            return _distinctApps.ToList();
+            return (_distinctApps ??= DistinctApps()).ToList();
         }
     }
 
@@ -505,54 +517,18 @@ public sealed class HistoryService : IHistoryAudioService
 
     private bool SaveToDisk(IReadOnlyList<TranscriptionRecord> records)
     {
-        string? temporaryPath = null;
-        try
-        {
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(records, new JsonSerializerOptions { WriteIndented = true });
-            temporaryPath = Path.Combine(
-                dir ?? Directory.GetCurrentDirectory(),
-                $".{Path.GetFileName(_filePath)}.{Guid.NewGuid():N}.tmp");
-            using (var stream = new FileStream(
-                temporaryPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                4096,
-                FileOptions.WriteThrough))
-            using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
-            {
-                writer.Write(json);
-                writer.Flush();
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(temporaryPath, _filePath, overwrite: true);
-            temporaryPath = null;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            if (!string.IsNullOrEmpty(temporaryPath))
-            {
-                try { File.Delete(temporaryPath); } catch { }
-            }
-        }
+        byte[] json;
+        try { json = JsonSerializer.SerializeToUtf8Bytes(records, SaveOptions); }
+        catch { return false; }
+        return AtomicFileWriter.TryWriteAllBytes(_filePath, json);
     }
 
     private void RebuildStats()
     {
         _totalRecords = _cache.Count;
-        _totalWords = _cache.Sum(r => r.WordCount);
+        _totalWords = null;
         _totalDuration = _cache.Sum(r => r.DurationSeconds);
-        RebuildDistinctApps();
+        _distinctApps = null;
     }
 
     private void RaiseRecordsChanged()
@@ -566,15 +542,12 @@ public sealed class HistoryService : IHistoryAudioService
         }
     }
 
-    private void RebuildDistinctApps()
-    {
-        _distinctApps = _cache
-            .Select(r => r.AppProcessName)
-            .Where(a => !string.IsNullOrEmpty(a))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order()
-            .ToList()!;
-    }
+    private List<string> DistinctApps() => _cache
+        .Select(r => r.AppProcessName)
+        .Where(a => !string.IsNullOrEmpty(a))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Order()
+        .ToList()!;
 
     private void DeleteAudioFile(string? audioFileName)
     {

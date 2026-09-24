@@ -214,6 +214,23 @@ public class HistoryServiceTests : IDisposable
     }
 
     [Fact]
+    public void StatisticsFollowEachSavedChange()
+    {
+        Assert.True(_sut.TryAddRecord(CreateRecord("first", DateTime.UtcNow) with { FinalText = "one two", AppProcessName = "notepad" }));
+        Assert.Equal(2, _sut.TotalWords);
+        Assert.Equal(["notepad"], _sut.GetDistinctApps());
+
+        Assert.True(_sut.TryAddRecord(CreateRecord("second", DateTime.UtcNow) with { FinalText = "three", AppProcessName = "Code" }));
+        Assert.Equal(3, _sut.TotalWords);
+        Assert.Equal(["Code", "notepad"], _sut.GetDistinctApps());
+
+        _sut.DeleteRecord("first");
+        Assert.Equal(1, _sut.TotalWords);
+        Assert.Equal(["Code"], _sut.GetDistinctApps());
+        Assert.Equal(1, new HistoryService(_filePath).TotalWords);
+    }
+
+    [Fact]
     public void FailedAtomicWrite_DoesNotMutateCacheOrStatistics()
     {
         var blockingParent = Path.Combine(_tempDir, "not-a-directory");
