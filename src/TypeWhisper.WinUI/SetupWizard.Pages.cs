@@ -80,11 +80,11 @@ public sealed partial class SetupWizard
         features.Children.Add(CardContent("text", "Write instantly", "Your words appear directly as text."));
         features.Children.Add(CardContent("sparkle", "Improve with AI", "Rewrite, translate, summarize and more."));
         _body.Children.Add(features);
-        if (File.Exists(WinUIProfile.DataPath(TypeWhisper.Core.Services.LegacyDailyProfileMigration.ReceiptName)))
+        if (TypeWhisper.Core.Services.LegacyDailyProfileMigration.WasImported(WinUIProfile.Root))
         {
             var details = new Expander { Header = "Data copied from your previous TypeWhisper installation",
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                Content = Copy("Dictionary, snippets, workflows and history were copied. Your previous installation is unchanged. Audio, recordings, models, plugins, sign-ins and settings remain there. Set up this version below, and close the previous app before testing shortcuts.") };
+                Content = Copy("Dictionary, snippets, workflows, history text, supported settings, plugin settings, API keys, compatible plugins and local models were copied. Your previous installation is unchanged. Recordings, audio, account sign-ins and settings without an equivalent in this version remain there; plugins that could not be installed are listed after setup. Close the previous app before testing shortcuts.") };
             _body.Children.Add(details);
         }
     }

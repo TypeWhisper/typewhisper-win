@@ -23,6 +23,30 @@ public sealed class DictationOutputTests
         history.Verify(h => h.TryAddRecord(It.IsAny<TranscriptionRecord>()), Times.Never());
     }
 
+    [Fact]
+    public async Task CancelAfterPasteWasSentStillReportsCommittedInsertion()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        using var cancellation = new CancellationTokenSource();
+        var preferences = new DictationOutputPreferences { SaveToHistory = false, AutoPaste = true };
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), preferences, () => preferences,
+            () => { cancellation.Cancel(); return Task.FromResult(true); }, cancellation.Token);
+        Assert.True(result.Inserted);
+        Assert.True(result.Committed);
+        Assert.False(result.NeedsReview);
+    }
+
+    [Fact]
+    public async Task ReviewWithoutPasteIsNotCommitted()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        var preferences = new DictationOutputPreferences { SaveToHistory = false, AutoPaste = true };
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), preferences, () => preferences,
+            () => Task.FromResult(false));
+        Assert.False(result.Inserted);
+        Assert.False(result.Committed);
+    }
+
     private static TranscriptionRecord Record() => new() { Id = "output-test", Timestamp = DateTime.UtcNow, RawText = "raw", FinalText = "Reviewed text" };
 
     [Theory]

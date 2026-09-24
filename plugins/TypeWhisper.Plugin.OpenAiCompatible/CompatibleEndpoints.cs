@@ -68,8 +68,9 @@ public sealed partial class OpenAiCompatiblePlugin
         LlmResponseTruncationGuard.ThrowIfResponsesApiIncomplete(root, "The OpenAI-compatible provider");
         if (root.TryGetProperty("status", out var status) && status.GetString() is "failed" or "cancelled")
             throw new PluginRequestException("The provider did not complete the response.", PluginRequestFailureKind.OutputIncomplete);
-        if (root.TryGetProperty("output_text", out var direct) && direct.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(direct.GetString()))
-            return direct.GetString()!.Trim();
+        if (root.TryGetProperty("output_text", out var direct) && direct.ValueKind == JsonValueKind.String &&
+            ReasoningText.StripLeading(direct.GetString()!).Trim() is { Length: > 0 } directText)
+            return directText;
         var parts = new List<string>();
         if (root.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
             foreach (var item in output.EnumerateArray())
@@ -84,7 +85,7 @@ public sealed partial class OpenAiCompatiblePlugin
                         parts.Add(value.GetString()!);
                 }
             }
-        var result = string.Concat(parts).Trim();
+        var result = ReasoningText.StripLeading(string.Concat(parts)).Trim();
         if (result.Length > 0) return result;
         throw new PluginRequestException("The Responses API returned no answer text.", PluginRequestFailureKind.EmptyResponse);
     }

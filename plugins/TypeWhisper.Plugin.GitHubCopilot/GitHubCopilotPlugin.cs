@@ -31,7 +31,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
     /// <inheritdoc />
     public string PluginName => "GitHub Copilot";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
     /// <inheritdoc />
     public string ProviderName => RequireProfile(DefaultProfileId).Name;
     /// <inheritdoc />
@@ -84,7 +84,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
     {
         await _lifetime.CancelAsync();
         await _gate.WaitAsync();
-        try { _catalogs.Clear(); _draftCatalogs.Clear(); _accounts = []; _host = null; }
+        try { _catalogs.Clear(); _draftCatalogs.Clear(); _accounts = []; _host = null; _transport.InvalidateCache(); }
         finally { _gate.Release(); }
     }
 
@@ -153,6 +153,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
         ValidateConfiguration(configuration);
         Host.SetSetting(ConfigurationKey, JsonSerializer.Serialize(configuration));
         _configuration = configuration;
+        _transport.InvalidateCache();
         Host.NotifyCapabilitiesChanged();
     }
     private void ReplaceProfile(CopilotProfile profile) => Commit(_configuration with

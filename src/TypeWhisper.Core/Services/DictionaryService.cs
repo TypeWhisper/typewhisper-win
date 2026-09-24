@@ -138,11 +138,11 @@ public sealed class DictionaryService : IDictionaryService
         {
             var replacement = ExpandReplacementEscapes(entry.Replacement!);
             var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);
-            // ASR often punctuates a final spoken layout command. That period
-            // belongs to the command, not to a new line after its replacement.
+            // ASR often punctuates a spoken layout command ("Hello new line. Next").
+            // That mark belongs to the command, not to the start of the new line.
             // Preserve regex semantics and punctuation around ordinary corrections.
             if (!entry.IsRegex && replacement.Any(c => c is '\r' or '\n') && replacement.All(char.IsWhiteSpace))
-                pattern += @"(?:[ \t]*\.[ \t]*(?=$))?";
+                pattern += @"(?:[ \t]*[.,;:!?][ \t]*)?";
             var options = entry.CaseSensitive
                 ? RegexOptions.CultureInvariant
                 : RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;

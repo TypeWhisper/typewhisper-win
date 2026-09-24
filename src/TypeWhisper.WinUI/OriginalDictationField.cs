@@ -18,17 +18,15 @@ internal sealed class OriginalDictationField : IDisposable
         _automation.ConnectionTimeout = 2000; _automation.TransactionTimeout = 2000;
     }
 
-    internal static OriginalDictationField? Capture(IntPtr window, uint process)
+    internal static async Task<OriginalDictationField?> CaptureAsync(IntPtr window, uint process, CancellationToken cancellation)
     {
         OriginalDictationField? target = null;
         try
         {
             target = new(window, process);
-            target._element = target._automation.GetFocusedElement();
-            PasteDiagnostics.Write(target._element is null ? "field.capture.no-element" : $"field.capture.type={target._element.CurrentControlType}");
-            if (target._element?.CurrentControlType is 50025 or 50026)
-                PasteDiagnostics.Write($"field.capture.custom focusable={target._element.CurrentIsKeyboardFocusable != 0} writable={target.HasWritableTextPattern()}");
-            if (target.IsCurrent())
+            var field = target;
+            if (await OriginalFieldFocus.CaptureAsync(field.CaptureFocused, () => GetForegroundWindow() == window,
+                ct => Task.Delay(50, ct), cancellation))
             {
                 target._automation.ConnectionTimeout = 200;
                 target._automation.TransactionTimeout = 200;
@@ -36,9 +34,27 @@ internal sealed class OriginalDictationField : IDisposable
                 return target;
             }
         }
+        catch (OperationCanceledException) { target?.Dispose(); throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { PasteDiagnostics.Write("field.capture.exception", ex); }
         PasteDiagnostics.Write("field.capture.failed");
         target?.Dispose(); return null;
+    }
+
+    private bool CaptureFocused()
+    {
+        Release(_element); _element = null;
+        try { _element = _automation.GetFocusedElement(); }
+        // UIA_E_ELEMENTNOTAVAILABLE and similar races are transient while focus settles: retry.
+        catch (COMException ex) { PasteDiagnostics.Write("field.capture.transient", ex); return false; }
+        finally
+        {
+            // The first query may wait for a cold provider; retries must stay short.
+            _automation.ConnectionTimeout = 250; _automation.TransactionTimeout = 250;
+        }
+        PasteDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.type={_element.CurrentControlType}");
+        if (_element?.CurrentControlType is 50025 or 50026)
+            PasteDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");
+        return IsCurrent();
     }
 
     private bool IsValid()

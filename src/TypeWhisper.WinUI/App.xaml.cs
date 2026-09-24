@@ -64,6 +64,8 @@ public partial class App : Application
             finally { Exit(); }
             return;
         }
+        // Updates restart into the renamed executable; repair the owned Run command before the next sign-in.
+        WindowsStartupRegistration.MigrateInstalledCommand();
 
         _mainInstance.Activated += (_, redirected) =>
         {
@@ -88,21 +90,21 @@ public partial class App : Application
         var initialShare = share is null ? Task.CompletedTask :
             TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(new WindowsSharedFileOperation(share.ShareOperation),
                 _activations, CanReceiveSharedActivation, _shareStartupReady.Task);
+        await OpenProfileAsync(request, initialShare, skipLegacyImport: false);
+    }
+
+    // Also re-entered from the upgrade failure window (Retry / Start with a new profile).
+    private async Task OpenProfileAsync(TypeWhisper.Presentation.ApplicationActivationRequest request, Task initialShare, bool skipLegacyImport)
+    {
         try
         {
 #if !DEBUG
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var legacy = Path.Combine(localData, "TypeWhisper-UserData");
-            if (!Directory.Exists(legacy)) legacy = Path.Combine(localData, "TypeWhisper");
-            if (!Directory.Exists(WinUIProfile.Root) && Directory.Exists(legacy))
-            {
-                _profileOperation = new ProfileOperationWindow("Upgrading your TypeWhisper profile. Your previous data will be preserved…", true, Exit, "Profile upgrade");
-                _profileOperation.Activate();
-                await TypeWhisper.Core.Services.LegacyDailyProfileMigration.ImportAsync(legacy, WinUIProfile.Root,
-                    prepareProfile: (source, stage, ct) => Task.Run(() => LegacyWindowsProfileMigration.PrepareAsync(
-                        source, stage, LocalCtcVocabulary.HostVersion,
-                        message => dispatcher.TryEnqueue(() => _profileOperation?.SetMessage(message, true)), ct)));
-            }
+            // #318: a failed 1.0.4 migration can leave an empty TypeWhisper-UserData beside the real profile.
+            if (!Directory.Exists(WinUIProfile.Root) && TypeWhisper.Core.Services.LegacyDailyProfileMigration.SelectSource(
+                    Path.Combine(localData, "TypeWhisper-UserData"), Path.Combine(localData, "TypeWhisper")) is { } legacy &&
+                !await ImportLegacyProfileAsync(legacy, request, initialShare, skipLegacyImport))
+                return;
 #endif
             var recovery = new TypeWhisper.Core.Services.PersistedProfileBackup(WinUIProfile.Root).RecoverPending();
             if (!recovery.CanOpenProfile)
@@ -116,6 +118,55 @@ public partial class App : Application
             ShowProfileFailure("Profile recovery could not complete. Your profile has not been opened. Close TypeWhisper before resolving this recovery error.", ex.Message);
             return;
         }
+        await StartWithProfileAsync(request, initialShare);
+    }
+
+    // A failed import never dead-ends: retry, or publish an empty profile whose receipt records the skip.
+    // Neither path writes to the previous profile.
+    private async Task<bool> ImportLegacyProfileAsync(string legacy,
+        TypeWhisper.Presentation.ApplicationActivationRequest request, Task initialShare, bool skip)
+    {
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        var message = skip ? "Creating a new TypeWhisper profile. Your previous data stays unchanged…"
+            : "Upgrading your TypeWhisper profile. Your previous data will be preserved…";
+        if (_profileOperation is null)
+        {
+            _profileOperation = new ProfileOperationWindow(message, true, Exit, "Profile upgrade");
+            _profileOperation.Activate();
+        }
+        else { _profileOperation.SetMessage(message, true); _profileOperation.SetDetails(null); }
+        try
+        {
+            if (skip) TypeWhisper.Core.Services.LegacyDailyProfileMigration.SkipImport(WinUIProfile.Root);
+            else await TypeWhisper.Core.Services.LegacyDailyProfileMigration.ImportAsync(legacy, WinUIProfile.Root,
+                prepareProfile: (source, stage, ct) => Task.Run(() => LegacyWindowsProfileMigration.PrepareAsync(
+                    source, stage, LocalCtcVocabulary.HostVersion,
+                    update => dispatcher.TryEnqueue(() => _profileOperation?.SetMessage(update, true)), ct)));
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Retry or a new profile can still finish startup; keep shares and activations pending until then.
+            ShowProfileFailure(TypeWhisper.Core.Services.LegacyDailyProfileMigration.DescribeFailure(ex), ex.Message,
+                keepStartupPending: true);
+            _profileOperation!.OfferActions(
+                "Retry", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: false)),
+                "Start with a new profile", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: true)));
+            return false;
+        }
+    }
+
+    private async Task ContinueLaunchAsync(Func<Task> launch)
+    {
+        try { await launch(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ShowProfileFailure("TypeWhisper could not finish starting. Close and reopen the app before trying again.", ex.Message);
+        }
+    }
+
+    private async Task StartWithProfileAsync(TypeWhisper.Presentation.ApplicationActivationRequest request, Task initialShare)
+    {
         var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
@@ -184,7 +235,9 @@ public partial class App : Application
     {
         if (_profileOperation is { } operation)
         {
-            _activations.Close(); operation.Activate(); return;
+            // While startup can still succeed (import in progress or retryable), queued activations wait for it.
+            if (_shareStartupReady.Task.IsCompleted) _activations.Close();
+            operation.Activate(); return;
         }
         if (_exiting) { _activations.Close(); return; }
         if (!_activationReady || _window is null) return;
@@ -198,9 +251,9 @@ public partial class App : Application
         Exit();
     }
 
-    private void ShowProfileFailure(string message, string? details = null)
+    private void ShowProfileFailure(string message, string? details = null, bool keepStartupPending = false)
     {
-        _shareStartupReady.TrySetResult(false);
+        if (!keepStartupPending) _shareStartupReady.TrySetResult(false);
         if (_profileOperation is null) _profileOperation = new(message, false, CloseProfileOperation);
         else _profileOperation.SetMessage(message, false);
         _profileOperation.SetDetails(details);

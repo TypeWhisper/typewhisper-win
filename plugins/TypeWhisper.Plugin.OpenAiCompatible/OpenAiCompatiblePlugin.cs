@@ -78,7 +78,7 @@ public sealed partial class OpenAiCompatiblePlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
 
     /// <summary>Current profiles, including the default profile.</summary>
     public IReadOnlyList<OpenAiCompatibleProfile> Profiles => _profiles;
@@ -625,6 +625,7 @@ public sealed partial class OpenAiCompatiblePlugin :
                 : content.ValueKind == JsonValueKind.Array ? string.Concat(content.EnumerateArray()
                     .Where(p => p.TryGetProperty("type", out var type) && type.GetString() == "text" && p.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String)
                     .Select(p => p.GetProperty("text").GetString())).Trim() : null;
+            if (text is not null) text = ReasoningText.StripLeading(text);
             if (!string.IsNullOrWhiteSpace(text))
                 return text;
         }

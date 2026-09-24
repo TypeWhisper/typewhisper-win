@@ -102,7 +102,7 @@ public sealed class CopilotPackageTests
             Assert.False(restart.PendingRestart(Id));
             Assert.NotEqual(oldPath, restart.Resolve(Id));
             await using var package = await PortablePluginPackage.LoadAsync(restart.Resolve(Id), new TestHost(), new(1, 1, 2));
-            Assert.Equal("1.1.0", package.Plugin.PluginVersion);
+            Assert.Equal("1.1.1", package.Plugin.PluginVersion);
         }
         finally { await DeleteRootAsync(root); }
     }
@@ -139,7 +139,7 @@ public sealed class CopilotPackageTests
         finally { await DeleteRootAsync(root); }
     }
 
-    private static PortableCatalogEntry Entry(byte[] payload, string version = "1.1.0") => new()
+    private static PortableCatalogEntry Entry(byte[] payload, string version = "1.1.1") => new()
     {
         Id = Id, Name = "GitHub Copilot", Version = version, MinHostVersion = "1.1.2",
         DownloadUrl = "https://fixture.invalid/copilot.zip", Size = payload.Length,

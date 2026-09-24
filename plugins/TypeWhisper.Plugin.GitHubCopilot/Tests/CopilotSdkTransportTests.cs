@@ -32,6 +32,44 @@ public sealed class CopilotSdkTransportTests
     }
 
     [Fact]
+    public async Task TurnsReuseVerifiedCatalogUntilExpiryFailureOrSettingsChange()
+    {
+        await using var server = new FakeCopilotServer();
+        var clock = new ManualClock();
+        var transport = server.CreateTransport(clock);
+        Task<string> Turn() => transport.ProcessAsync(server.Root, FakeTransport.Personal, "s", "u", "model-a", default);
+        await Turn();
+        await Turn();
+        Assert.Equal(1, server.Count("account.getAllUsers"));
+        Assert.Equal(1, server.Count("models.list"));
+        // The session account binding is still verified on every turn.
+        Assert.Equal(2, server.Count("session.gitHubAuth.getStatus"));
+        Assert.Equal(2, server.Count("session.send"));
+
+        clock.Now += CopilotTransport.CatalogLifetime;
+        await Turn();
+        Assert.Equal(2, server.Count("models.list"));
+
+        server.MismatchedSessionAccount = true;
+        await Assert.ThrowsAsync<CopilotSignInRequiredException>(Turn);
+        server.MismatchedSessionAccount = false;
+        await Turn();
+        Assert.Equal(3, server.Count("models.list"));
+
+        transport.InvalidateCache();
+        await Turn();
+        Assert.Equal(4, server.Count("account.getAllUsers"));
+        Assert.Equal(4, server.Count("models.list"));
+        Assert.Equal(5, server.Count("session.send"));
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        internal DateTimeOffset Now = DateTimeOffset.UnixEpoch;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
     public void ChildEnvironmentPreservesProxySettingsWithoutAmbientTokenOrRuntimeOverrides()
     {
         var source = new Dictionary<string, string>
@@ -208,12 +246,12 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
 
     internal FakeCopilotServer() { _listener.Start(); _run = RunAsync(); }
 
-    internal CopilotTransport CreateTransport() => new(options =>
+    internal CopilotTransport CreateTransport(TimeProvider? time = null) => new(options =>
     {
         options.Connection = RuntimeConnection.ForUri($"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}");
         options.UseLoggedInUser = null; // External fake peer handles auth; production always uses owned stdio.
         return new CopilotClient(options);
-    });
+    }, time);
 
     internal JsonElement Parameters(string method) => Requests.Single(r => r.Method == method).Params;
 
@@ -221,8 +259,24 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
     {
         try
         {
-            using var socket = await _listener.AcceptTcpClientAsync(_stop.Token);
-            await using var stream = socket.GetStream();
+            // Each turn owns and stops its runtime; serve those connections one after another.
+            while (!_stop.IsCancellationRequested)
+            {
+                using var socket = await _listener.AcceptTcpClientAsync(_stop.Token);
+                try { await ServeAsync(socket.GetStream()); }
+                catch (IOException) { }
+            }
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+        catch (SocketException) when (_stop.IsCancellationRequested) { }
+    }
+
+    internal int Count(string method) => Requests.Count(r => r.Method == method);
+
+    private async Task ServeAsync(NetworkStream stream)
+    {
+        await using (stream)
+        {
             while (!_stop.IsCancellationRequested)
             {
                 var header = new StringBuilder();
@@ -272,8 +326,6 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
-        catch (IOException) { }
     }
 
     private Task EventAsync(NetworkStream stream, string? sessionId, string type, object data) => WriteAsync(stream,

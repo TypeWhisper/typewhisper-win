@@ -239,6 +239,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
     {
         var entries = new List<ClipboardFormatHandle>();
         var unavailableFormats = new List<UnavailableClipboardFormat>();
+        var capturedFormats = new HashSet<uint>();
         string? enterpriseId = null;
         var hasFileDrop = false;
         try
@@ -299,6 +300,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                     nextFormat,
                     duplicateHandle,
                     _handleReleaseObserver));
+                capturedFormats.Add(nextFormat);
                 if (nextFormat == NativeMethods.CF_HDROP)
                     hasFileDrop = NativeMethods.DragQueryFileCount(duplicateHandle, uint.MaxValue, IntPtr.Zero, 0) > 0;
                 currentFormat = nextFormat;
@@ -306,7 +308,8 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 
             foreach (var unavailableFormat in unavailableFormats)
             {
-                if (CanSkipUnavailableFormat(unavailableFormat.Format, hasFileDrop))
+                if (CanSkipUnavailableFormat(unavailableFormat.Format, hasFileDrop)
+                    || CanSkipSynthesizedFormat(unavailableFormat.Format, capturedFormats))
                     continue;
 
                 throw ClipboardError(
@@ -383,6 +386,22 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         return NativeMethods.GetClipboardFormatName(unavailableFormat, name, name.Capacity) > 0
             && name.ToString() == "FileContents";
     }
+
+    // Windows synthesizes these legacy formats from a captured source on restore, so a failed
+    // on-demand conversion (typically CF_DIB, #359) loses nothing and must not block insertion.
+    // Richer formats (Unicode text, DIBV5 alpha/color profiles, enhanced metafiles) cannot be
+    // recreated from their legacy forms and still stop insertion when unavailable.
+    private static readonly Dictionary<uint, uint[]> SynthesizedFrom = new()
+    {
+        [NativeMethods.CF_TEXT] = [NativeMethods.CF_UNICODETEXT, NativeMethods.CF_OEMTEXT],
+        [NativeMethods.CF_OEMTEXT] = [NativeMethods.CF_UNICODETEXT, NativeMethods.CF_TEXT],
+        [NativeMethods.CF_DIB] = [NativeMethods.CF_DIBV5, NativeMethods.CF_BITMAP],
+        [NativeMethods.CF_BITMAP] = [NativeMethods.CF_DIBV5, NativeMethods.CF_DIB],
+        [NativeMethods.CF_METAFILEPICT] = [NativeMethods.CF_ENHMETAFILE]
+    };
+
+    private static bool CanSkipSynthesizedFormat(uint unavailableFormat, IReadOnlySet<uint> capturedFormats) =>
+        SynthesizedFrom.TryGetValue(unavailableFormat, out var sources) && sources.Any(capturedFormats.Contains);
 
     private static IntPtr DuplicateClipboardHandle(uint format, IntPtr sourceHandle)
     {

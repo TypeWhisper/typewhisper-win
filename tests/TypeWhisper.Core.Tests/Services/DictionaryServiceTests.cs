@@ -160,11 +160,12 @@ public class DictionaryServiceTests : IDisposable
     [InlineData("new line.", @"\n\n", "\n\n")]
     [InlineData("new line", @"\n", "\n")]
     [InlineData("new line Hello.", @"\n", "\n Hello.")]
-    [InlineData("Hello new line. Next sentence.", @"\n", "Hello \n. Next sentence.")]
+    [InlineData("Hello new line. Next sentence.", @"\n", "Hello \nNext sentence.")]
+    [InlineData("Hello, new line, next item", @"\n", "Hello, \nnext item")]
     [InlineData("Hello new line.", "replacement", "Hello replacement.")]
     [InlineData("Hello new line.", @"\nItem", "Hello \nItem.")]
     [InlineData("Hello new line.", @"\\n", @"Hello \n.")]
-    public void ApplyCorrections_RemovesOnlyTrailingCommandPeriodForStructuralNewline(
+    public void ApplyCorrections_RemovesCommandPunctuationForStructuralNewline(
         string input, string replacement, string expected)
     {
         _sut.UpsertCorrection("new line", replacement, caseSensitive: false);

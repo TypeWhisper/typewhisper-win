@@ -86,4 +86,20 @@ public sealed class LocalApiDictationSessionsTests
         Assert.Null(sessions.Find(first.Id));
         Assert.Throws<ArgumentOutOfRangeException>(() => sessions.Register(0));
     }
+
+    [Fact]
+    public void EvictionAfterCapacityKeepsNewestSessionsFindable()
+    {
+        var sessions = new LocalApiDictationSessions();
+        var registered = new List<LocalApiDictationSession>();
+        for (var generation = 1; generation <= LocalApiDictationSessions.Capacity * 3; generation++)
+        {
+            registered.Add(sessions.Register(generation));
+            // A freed Dictionary slot once received the newest session, which was then evicted as "oldest".
+            Assert.NotNull(sessions.Find(registered[^1].Id));
+        }
+        var retained = registered.TakeLast(LocalApiDictationSessions.Capacity).ToArray();
+        Assert.All(retained, session => Assert.Equal(session, sessions.Find(session.Id)));
+        Assert.All(registered.SkipLast(LocalApiDictationSessions.Capacity), session => Assert.Null(sessions.Find(session.Id)));
+    }
 }

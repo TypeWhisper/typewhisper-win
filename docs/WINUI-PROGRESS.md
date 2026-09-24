@@ -20,7 +20,8 @@ Use [plugin release tooling](PLUGIN-RELEASES.md) to verify selected package vers
 
 | Topic | Required evidence or decision |
 | --- | --- |
-| First dictation | Reproduce and resolve [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513) on the selected candidate; verify insertion after a fresh start. |
+| First dictation | Verify the [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513) capture retry on the selected candidate: first dictation after a fresh start into a Chromium/Electron field with the field lock enabled. |
+| Licensing on 1.0 | The Polar version pin exists only in 1.1; installed 1.0 builds send unversioned requests. No 1.0.x hotfix is planned (decided 2026-09-24): 1.0 users receive the pin by moving to 1.1 ([#471](https://github.com/TypeWhisper/typewhisper-win/issues/471)). |
 | 1.0 upgrades | Complete the installed 1.0 → 1.1 → next-1.1 sequence, migration, interrupted import and rollback checks in the [upgrade guide](DAILY-1.1-CANDIDATE.md). Earlier updates between 1.1 Dailys do not cover this. |
 | Published plugins | Verify install, configuration, actual use and update through the published catalog for release-critical providers. Preserve the legacy feed. |
 | Display behavior | Complete the outstanding primary-display, mixed-DPI, overlay-layout and live-text positioning checks from the earlier handoff. |

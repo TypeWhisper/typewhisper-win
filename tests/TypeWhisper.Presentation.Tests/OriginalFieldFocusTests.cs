@@ -28,6 +28,55 @@ public class OriginalFieldFocusTests
         Assert.True(OriginalFieldFocus.IsEditableControl(controlType,true,()=>throw new Exception("Existing providers do not require new patterns.")));
 
     [Fact]
+    public async Task ColdProviderReportingPaneFirstIsCapturedOnRetry()
+    {
+        // #513: the first UIA query to Chromium returns the render host Pane (50033).
+        var queries = 0; var waits = 0;
+        Assert.True(await OriginalFieldFocus.CaptureAsync(() => ++queries >= 3, () => true,
+            _ => { waits++; return Task.CompletedTask; }, default));
+        Assert.Equal(3, queries);
+        Assert.Equal(2, waits);
+    }
+
+    [Fact]
+    public async Task CaptureStopsRetryingWhenTargetLosesForeground()
+    {
+        var queries = 0;
+        Assert.False(await OriginalFieldFocus.CaptureAsync(() => { queries++; return false; }, () => false,
+            _ => throw new Exception("Must not wait for a target in the background"), default));
+        Assert.Equal(1, queries);
+    }
+
+    [Fact]
+    public async Task CaptureRetriesAreBounded()
+    {
+        var queries = 0;
+        Assert.False(await OriginalFieldFocus.CaptureAsync(() => { queries++; return false; }, () => true,
+            _ => Task.CompletedTask, default, attempts: 4));
+        Assert.Equal(4, queries);
+    }
+
+    [Fact]
+    public async Task CaptureStopsRetryingWhenTimeBudgetExpires()
+    {
+        // Slow providers must not hold recording startup (and a pending Stop) for all attempts.
+        var queries = 0;
+        Assert.False(await OriginalFieldFocus.CaptureAsync(() => { queries++; return false; }, () => true,
+            _ => Task.CompletedTask, default, attempts: 20, expired: () => queries >= 2));
+        Assert.Equal(2, queries);
+    }
+
+    [Fact]
+    public async Task CanceledCaptureDoesNotQueryAgain()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var queries = 0;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => OriginalFieldFocus.CaptureAsync(
+            () => { queries++; return false; }, () => true, _ => { cancellation.Cancel(); return Task.CompletedTask; }, cancellation.Token));
+        Assert.Equal(1, queries);
+    }
+
+    [Fact]
     public async Task ExpiredWindowDeadlineDoesNotActivate()
     {
         Assert.False(await OriginalFieldFocus.RestoreWindowAsync(() => false, () => true,

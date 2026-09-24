@@ -11,11 +11,13 @@ internal sealed class ProfileOperationWindow : Window
     private readonly TextBlock _message;
     private readonly HandCursorButton _close;
     private readonly HandCursorButton _retry;
+    private readonly HandCursorButton _alternate;
     private readonly Expander _details;
     private readonly TextBlock _diagnostic;
     private bool _busy;
     private bool _dismissed;
     private Func<Task>? _retryAction;
+    private Func<Task>? _alternateAction;
 
     internal ProfileOperationWindow(string message, bool busy, Action exit, string heading = "Profile restore")
     {
@@ -30,13 +32,11 @@ internal sealed class ProfileOperationWindow : Window
         body.Children.Add(_details);
         _retry = new HandCursorButton { Content = "Retry saving and restoring", Visibility = Visibility.Collapsed,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
-        _retry.Click += async (_, _) =>
-        {
-            var retry = _retryAction;
-            _retryAction = null; _retry.Visibility = Visibility.Collapsed;
-            if (retry is not null) await retry();
-        };
-        body.Children.Add(_retry);
+        _retry.Click += async (_, _) => await RunAction(_retryAction);
+        _alternate = new HandCursorButton { Visibility = Visibility.Collapsed,
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
+        _alternate.Click += async (_, _) => await RunAction(_alternateAction);
+        body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _retry, _alternate } });
         _close = new HandCursorButton { Content = "Close TypeWhisper", HorizontalAlignment = HorizontalAlignment.Right,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _close.Click += (_, _) => exit(); body.Children.Add(_close);
@@ -48,16 +48,27 @@ internal sealed class ProfileOperationWindow : Window
     }
 
     internal void SetMessage(string message, bool busy)
-    { _message.Text = message; _busy = busy; _close.IsEnabled = !busy; _retry.IsEnabled = !busy; }
+    { _message.Text = message; _busy = busy; _close.IsEnabled = !busy; _retry.IsEnabled = !busy; _alternate.IsEnabled = !busy; }
 
     internal void Dismiss() { _dismissed = true; Close(); }
 
     internal void SetDetails(string? details)
     { _diagnostic.Text = details ?? ""; _details.Visibility = details is null ? Visibility.Collapsed : Visibility.Visible; }
 
-    internal void OfferSaveRetry(Func<Task> retry)
+    internal void OfferSaveRetry(Func<Task> retry) => OfferActions("Retry saving and restoring", retry);
+
+    // Each offer is single-use; the action re-offers on another failure.
+    internal void OfferActions(string retryLabel, Func<Task> retry, string? alternateLabel = null, Func<Task>? alternate = null)
     {
-        _retryAction = retry;
-        _retry.Visibility = Visibility.Visible;
+        _retry.Content = retryLabel; _retryAction = retry; _retry.Visibility = Visibility.Visible;
+        _alternate.Content = alternateLabel; _alternateAction = alternate;
+        _alternate.Visibility = alternate is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async Task RunAction(Func<Task>? action)
+    {
+        _retryAction = _alternateAction = null;
+        _retry.Visibility = _alternate.Visibility = Visibility.Collapsed;
+        if (action is not null) await action();
     }
 }

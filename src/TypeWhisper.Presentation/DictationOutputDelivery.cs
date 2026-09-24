@@ -44,6 +44,10 @@ public sealed record DictationOutputResult(TranscriptionRecord Record, bool Save
     public bool Failed { get; init; }
     /// <summary>An action was attempted; its outcome must survive late cancellation.</summary>
     public bool ActionAttempted { get; init; }
+    /// <summary>The paste was sent to the target field.</summary>
+    public bool Inserted { get; init; }
+    /// <summary>Text or an action already left TypeWhisper; a late cancel must not report it as discarded.</summary>
+    public bool Committed => ActionAttempted || Inserted;
 }
 
 /// <summary>Applies output choices without requiring Windows or a clipboard.</summary>
@@ -125,7 +129,7 @@ public sealed class DictationOutputDelivery(IHistoryService history)
         try
         {
             if (await paste()) return new(record, saved, false, "Paste sent. " + storage)
-                { Failed = storageWarning is not null, StorageWarning = storageWarning };
+                { Failed = storageWarning is not null, Inserted = true, StorageWarning = storageWarning };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { }

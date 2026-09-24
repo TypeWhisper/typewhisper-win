@@ -658,7 +658,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_disposed) return;
                 PasteDiagnostics.Write("dictation.start");
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
-                    _originalField = OriginalDictationField.Capture(_target, processId);
+                    _originalField = await OriginalDictationField.CaptureAsync(_target, processId, _operationCancellation.Token);
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
                 else if (workflow is null) await CaptureWorkflowAtStartAsync();
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
@@ -817,8 +817,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             PasteDiagnostics.Write(outcome.NeedsReview ? "delivery.review" : "delivery.completed");
             if (_disposed) return;
-            if (!outcome.ActionAttempted) _operationCancellation.Token.ThrowIfCancellationRequested();
-            if (_lastCompletedDictation.TryPublish(outcome, outcome.ActionAttempted ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
+            if (!outcome.Committed) _operationCancellation.Token.ThrowIfCancellationRequested();
+            if (_lastCompletedDictation.TryPublish(outcome, outcome.Committed ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
             SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,

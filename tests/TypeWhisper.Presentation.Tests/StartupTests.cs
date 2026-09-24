@@ -122,6 +122,30 @@ public sealed class StartupTests
         Assert.Equal("unrelated command", backend.Values["TypeWhisper"]);
     }
 
+    [Fact]
+    public void InstalledStartupMigrationRepairsOnlyOwnedDailyCommandAndNeverCreatesOne()
+    {
+        var current = Path.GetFullPath("TypeWhisperDaily/current/TypeWhisper.exe");
+        var daily = ApplicationInstallation.Resolve("TypeWhisperDaily")!;
+        var empty = new Backend();
+        daily.MigrateStartupCommand(empty, current);
+        Assert.Empty(empty.Values);
+        Assert.Equal(0, empty.Writes);
+
+        var backend = new Backend();
+        backend.Values["TypeWhisperDaily"] = StartupRegistration.QuoteCommand(Path.GetFullPath("TypeWhisperDaily/current/TypeWhisper.WinUI.exe"));
+        daily.MigrateStartupCommand(backend, current);
+        Assert.Equal(StartupRegistration.QuoteCommand(current), backend.Values["TypeWhisperDaily"]);
+
+        var unrelated = new Backend();
+        unrelated.Values["TypeWhisperDaily"] = "\"C:/Other/TypeWhisper.WinUI.exe\" --minimized";
+        daily.MigrateStartupCommand(unrelated, current);
+        var original = new Backend();
+        original.Values["TypeWhisper"] = StartupRegistration.QuoteCommand(Path.GetFullPath("TypeWhisper/current/TypeWhisper.WinUI.exe"));
+        ApplicationInstallation.Resolve("TypeWhisper")!.MigrateStartupCommand(original, Path.GetFullPath("TypeWhisper/current/TypeWhisper.exe"));
+        Assert.Equal(0, unrelated.Writes + original.Writes);
+    }
+
     private static string Receipt(string source, string output, string identity = StartupPublication.DevelopmentIdentity, int version = 1) =>
         JsonSerializer.Serialize(new { Version = version, Identity = identity, SourceRoot = source, OutputDirectory = output });
 

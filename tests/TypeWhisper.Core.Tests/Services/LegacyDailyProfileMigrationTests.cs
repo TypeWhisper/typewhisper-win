@@ -120,5 +120,172 @@ public sealed class LegacyDailyProfileMigrationTests : IDisposable
         Assert.False(Directory.Exists(Destination));
     }
 
-    public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
+    [Fact]
+    public async Task ImportCreatesNothingInsideTheSource()
+    {
+        // Settings-only profile: the backup export used to create <legacy>\Data and preview stages inside it.
+        Directory.CreateDirectory(Source);
+        File.WriteAllText(Path.Combine(Source, "settings.json"), "{}");
+        Assert.True(await LegacyDailyProfileMigration.ImportAsync(Source, Destination, prepareProfile: (_, _, _) => Task.CompletedTask));
+        Assert.Equal(new[] { Path.Combine(Source, "settings.json") }, Directory.GetFileSystemEntries(Source, "*", SearchOption.AllDirectories));
+        Assert.False(Directory.Exists(Path.Combine(Destination, ".legacy-data")));
+
+        Directory.Delete(Destination, true);
+        Seed();
+        var entries = Directory.GetFileSystemEntries(Source, "*", SearchOption.AllDirectories).Order().ToArray();
+        var directories = Directory.GetDirectories(Source, "*", SearchOption.AllDirectories).Prepend(Source).ToArray();
+        foreach (var directory in directories) DenyChanges(directory, true);
+        try
+        {
+            Assert.Throws<UnauthorizedAccessException>(() => Directory.CreateDirectory(Path.Combine(Source, "Data", ".probe")));
+            Assert.True(await LegacyDailyProfileMigration.ImportAsync(Source, Destination));
+        }
+        finally { foreach (var directory in directories) DenyChanges(directory, false); }
+        Assert.Equal(entries, Directory.GetFileSystemEntries(Source, "*", SearchOption.AllDirectories).Order().ToArray());
+        Assert.Single(new HistoryService(Path.Combine(Destination, "history.json")).Records);
+    }
+
+    [Fact]
+    public async Task StaleStagingDirectoriesAreRemovedBeforeImport()
+    {
+        Seed();
+        var stale = Path.Combine(_root, ".typewhisper-import-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(stale, "PluginData", "com.example.plugin", "Models"));
+        File.WriteAllText(Path.Combine(stale, "PluginData", "com.example.plugin", "secrets.dat"), "secret");
+        var unrelated = Path.Combine(_root, ".typewhisper-import-keep");
+        Directory.CreateDirectory(unrelated);
+        var other = Path.Combine(_root, "other-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(other);
+        Assert.True(await LegacyDailyProfileMigration.ImportAsync(Source, Destination));
+        Assert.False(Directory.Exists(stale));
+        Assert.True(Directory.Exists(unrelated));
+        Assert.True(Directory.Exists(other));
+    }
+
+    [Fact]
+    public async Task EmptyUserDataFallsBackToThePreviousRoot()
+    {
+        // #318: an interrupted 1.0.4 migration leaves TypeWhisper-UserData with only empty folders.
+        var empty = Path.Combine(_root, "TypeWhisper-UserData");
+        foreach (var name in new[] { "Data", "Models", "Logs", "Audio", "Plugins", Path.Combine("PluginData", "com.example.plugin") })
+            Directory.CreateDirectory(Path.Combine(empty, name));
+        Seed();
+        Assert.False(LegacyDailyProfileMigration.HasImportableContent(empty));
+        Assert.Equal(Source, LegacyDailyProfileMigration.SelectSource(empty, Source));
+        Assert.Null(LegacyDailyProfileMigration.SelectSource(empty, Path.Combine(_root, "absent")));
+        Assert.False(await LegacyDailyProfileMigration.ImportAsync(empty, Destination, prepareProfile: (_, _, _) => Task.CompletedTask));
+
+        File.WriteAllText(Path.Combine(empty, "PluginData", "com.example.plugin", "settings.json"), "{}");
+        Assert.Equal(empty, LegacyDailyProfileMigration.SelectSource(empty, Source));
+        File.Delete(Path.Combine(empty, "PluginData", "com.example.plugin", "settings.json"));
+        File.WriteAllText(Path.Combine(empty, "Data", "licenses.dat"), "activation");
+        Assert.Equal(empty, LegacyDailyProfileMigration.SelectSource(empty, Source));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LinkedLegacyRootOrAncestorIsFollowed(bool ancestor)
+    {
+        var real = Path.Combine(_root, "elsewhere");
+        Directory.CreateDirectory(real);
+        Seed();
+        Directory.Move(Source, Path.Combine(real, "legacy"));
+        var linked = Path.Combine(_root, "linked");
+        Link(linked, ancestor ? real : Path.Combine(real, "legacy"));
+        var root = ancestor ? Path.Combine(linked, "legacy") : linked;
+        Assert.Equal(Path.Combine(real, "legacy"), LegacyDailyProfileMigration.ResolveLinkedPath(root), ignoreCase: true);
+        Assert.True(await LegacyDailyProfileMigration.ImportAsync(root, Destination));
+        Assert.Single(new HistoryService(Path.Combine(Destination, "history.json")).Records);
+        Assert.True(File.Exists(Path.Combine(real, "legacy", "Data", "history.json")));
+    }
+
+    [Fact]
+    public async Task LinkedDestinationParentIsFollowed()
+    {
+        Seed();
+        var real = Path.Combine(_root, "local-data");
+        Directory.CreateDirectory(real);
+        Link(Path.Combine(_root, "redirected"), real);
+        Assert.True(await LegacyDailyProfileMigration.ImportAsync(Source, Path.Combine(_root, "redirected", "daily")));
+        Assert.True(File.Exists(Path.Combine(real, "daily", LegacyDailyProfileMigration.ReceiptName)));
+    }
+
+    [Fact]
+    public async Task LinkInsideSourceIsStillRejected()
+    {
+        Seed();
+        var outside = Path.Combine(_root, "outside");
+        Directory.Move(Path.Combine(Source, "Data"), outside);
+        Link(Path.Combine(Source, "Data"), outside);
+        var error = await Assert.ThrowsAsync<LegacyImportLinkException>(() => LegacyDailyProfileMigration.ImportAsync(Source, Destination));
+        Assert.Contains("linked file or folder", LegacyDailyProfileMigration.DescribeFailure(error));
+        Assert.False(Directory.Exists(Destination));
+        Assert.Empty(Directory.GetDirectories(_root, ".typewhisper-import-*"));
+    }
+
+    [Fact]
+    public async Task SkippedImportPublishesAnEmptyProfileWithoutReadingTheSource()
+    {
+        Seed();
+        var before = Directory.GetFiles(Source, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
+        Assert.True(LegacyDailyProfileMigration.SkipImport(Destination));
+        Assert.Equal(new[] { Path.Combine(Destination, LegacyDailyProfileMigration.ReceiptName) }, Directory.GetFileSystemEntries(Destination));
+        Assert.False(LegacyDailyProfileMigration.WasImported(Destination));
+        Assert.False(await LegacyDailyProfileMigration.ImportAsync(Source, Destination));
+        Assert.False(LegacyDailyProfileMigration.SkipImport(Destination));
+        foreach (var (path, bytes) in before) Assert.Equal(bytes, File.ReadAllBytes(path));
+
+        Directory.Delete(Destination, true);
+        Assert.True(await LegacyDailyProfileMigration.ImportAsync(Source, Destination));
+        Assert.True(LegacyDailyProfileMigration.WasImported(Destination));
+    }
+
+    [Fact]
+    public void FailuresAreDescribedByCause()
+    {
+        Assert.Contains("damaged", LegacyDailyProfileMigration.DescribeFailure(new System.Text.Json.JsonException()));
+        Assert.Contains("Close the previous", LegacyDailyProfileMigration.DescribeFailure(new UnauthorizedAccessException()));
+        Assert.All(new Exception[] { new InvalidDataException(), new IOException(), new InvalidOperationException() },
+            error => Assert.Contains("start with a new profile", LegacyDailyProfileMigration.DescribeFailure(error)));
+    }
+
+    // Junctions need no symlink privilege on Windows; other platforms always allow symbolic links.
+    internal static void Link(string link, string target)
+    {
+        try { Directory.CreateSymbolicLink(link, target); }
+        catch (Exception ex) when (OperatingSystem.IsWindows() && ex is IOException or UnauthorizedAccessException)
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                "cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"") { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true })!;
+            process.WaitForExit();
+            Assert.Equal(0, process.ExitCode);
+        }
+    }
+
+    private static void DenyChanges(string directory, bool deny)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var info = new DirectoryInfo(directory);
+            var acl = info.GetAccessControl();
+            var rule = new System.Security.AccessControl.FileSystemAccessRule(System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+                System.Security.AccessControl.FileSystemRights.CreateFiles | System.Security.AccessControl.FileSystemRights.CreateDirectories |
+                System.Security.AccessControl.FileSystemRights.DeleteSubdirectoriesAndFiles, System.Security.AccessControl.AccessControlType.Deny);
+            if (deny) acl.AddAccessRule(rule); else acl.RemoveAccessRule(rule);
+            info.SetAccessControl(acl);
+        }
+        else File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute | (deny ? UnixFileMode.None : UnixFileMode.UserWrite));
+    }
+
+    // Unlink first: recursive deletion reports access denied for junctions.
+    internal static void DeleteTree(string root)
+    {
+        if (!Directory.Exists(root)) return;
+        foreach (var link in Directory.GetDirectories(root, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 })
+            .Where(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0).ToArray()) Directory.Delete(link);
+        Directory.Delete(root, true);
+    }
+
+    public void Dispose() => DeleteTree(_root);
 }
