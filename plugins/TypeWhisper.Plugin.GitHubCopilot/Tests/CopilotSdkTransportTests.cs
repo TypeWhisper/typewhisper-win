@@ -269,6 +269,8 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         catch (SocketException) when (_stop.IsCancellationRequested) { }
+        // Stopping the listener while an accept is starting disposes its socket.
+        catch (ObjectDisposedException) when (_stop.IsCancellationRequested) { }
     }
 
     internal int Count(string method) => Requests.Count(r => r.Method == method);
