@@ -15,6 +15,8 @@ public sealed class SoundService
     private readonly byte[]? _stop = LoadWav("stop.wav");
     private readonly byte[]? _success = LoadWav("success.wav");
     private readonly byte[]? _error = LoadWav("error.wav");
+    private readonly object _playbackGate = new();
+    private Task _playback = Task.CompletedTask;
 
     /// <summary>
     /// Gets or sets the is enabled value.
@@ -44,9 +46,12 @@ public sealed class SoundService
     {
         if (!IsEnabled || wav is null) return;
         // Endpoint lookup and WASAPI initialization can take tens of milliseconds;
-        // keep them off the caller's UI thread and the dictation path.
+        // keep them off the caller's UI thread and the dictation path, but start
+        // cues in request order so a quick stop never sounds before its start.
         var deviceId = OutputDeviceId;
-        _ = Task.Run(() => PlayOnDevice(wav, deviceId));
+        lock (_playbackGate)
+            _playback = _playback.ContinueWith(_ => PlayOnDevice(wav, deviceId),
+                CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
     }
 
     private static void PlayOnDevice(byte[] wav, string? outputDeviceId)
