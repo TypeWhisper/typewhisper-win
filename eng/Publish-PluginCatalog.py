@@ -168,9 +168,13 @@ def ensure_release(stage, summary):
         gh("release", "create", tag, "--repo", REPO, "--target", summary["sourceCommit"],
            "--title", f"TypeWhisper Plugins · {tag}", "--notes-file", str(notes),
            "--draft", "--prerelease", "--latest=false")
-        # Draft releases do not yet have a resolvable tag endpoint.
-        release = find_release(tag)
-        if release is None:
+        # Draft releases do not yet have a resolvable tag endpoint, and the release list
+        # can lag behind creation for a few seconds.
+        for delay in (0, 2, 4, 8, 16):
+            time.sleep(delay)
+            if (release := find_release(tag)) is not None:
+                break
+        else:
             raise RuntimeError("Created draft release could not be read back")
     if marker not in (release.get("body") or "") or not release["prerelease"]:
         raise ValueError("Existing release has different provenance or is not a prerelease")
