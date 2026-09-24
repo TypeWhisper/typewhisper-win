@@ -41,6 +41,19 @@ public sealed class LegacyApplicationSettingsTests : IDisposable
         Assert.Contains("legacy-unavailable", File.ReadAllText(Path.Combine(_root, "Dictation/settings.json")));
     }
     [Theory]
+    [InlineData(true, 8978, false, 8978)]
+    [InlineData(true, 9123, true, 9123)]
+    [InlineData(false, 80, false, 8978)]
+    public void LocalApiChoiceIsCarriedOver(bool enabled, int port, bool authentication, int expectedPort)
+    {
+        LegacyApplicationSettings.Write(_root, new AppSettings
+        { ApiServerEnabled = enabled, ApiServerPort = port, ApiServerRequiresAuthentication = authentication });
+        // Same shape and default (case-sensitive) options as the WinUI HTTP API settings reader.
+        var api = JsonSerializer.Deserialize<HttpApiPreferences>(File.ReadAllText(Path.Combine(_root, "http-api.json")))!;
+        Assert.Equal(new HttpApiPreferences(enabled, expectedPort, authentication), api);
+    }
+    private sealed record HttpApiPreferences(bool Enabled = false, int Port = 8978, bool RequireAuthentication = false);
+    [Theory]
     [InlineData("null")]
     [InlineData("[]")]
     [InlineData("{\"autoPaste\":true,\"autoPaste\":false}")]

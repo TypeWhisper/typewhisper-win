@@ -29,6 +29,7 @@ The importer carries over:
 - Main and supplementary recording shortcuts, recording mode, output/history choices, retention, text normalization, language hints, microphone priorities, audio options, recorder sources, vocabulary boosting and onboarding completion.
 - Live-text visibility, font size, preview timeout, overlay position and widgets, with the previous indicator style mapped to its closest current layout. Profiles containing only license or plugin state are also eligible for migration.
 - The previous plugin/model selection, without choosing a replacement cloud service when unavailable.
+- Local HTTP API state, port and token requirement, so integrations such as Raycast keep working. A required token is newly issued by 1.1; clients using the 1.0 token must read it again.
 - Plugin settings and API keys. Keys are decrypted in the current Windows user context and written to the new encrypted secret store; license activation IDs and the unchanged encrypted license format are preserved.
 - Compatible portable plugins downloaded from the existing v2 catalog. Legacy assemblies are never loaded. Enabled/disabled state is retained.
 - Available `Models` directories, including a configured external model-storage location, copied into the new profile without old runtime executables. File Memory's `memories.json` is also copied.
