@@ -185,8 +185,14 @@ internal sealed partial class LocalDictationSession
 
     private static async Task<string> ReadSnippetClipboardAsync(CancellationToken ct)
     {
-        var clipboard = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-        return clipboard.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)
-            ? await clipboard.GetTextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2), ct) : "";
+        // A previous paste holds its dictated text on the clipboard until the restore finishes.
+        await ClipboardTextInserter.TransactionGate.WaitAsync(ct);
+        try
+        {
+            var clipboard = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+            return clipboard.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)
+                ? await clipboard.GetTextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2), ct) : "";
+        }
+        finally { ClipboardTextInserter.TransactionGate.Release(); }
     }
 }

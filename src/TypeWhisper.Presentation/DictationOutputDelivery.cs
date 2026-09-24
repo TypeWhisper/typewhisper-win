@@ -89,7 +89,9 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                     }
                     else
                     {
-                        saved = history.TryAddRecord(record);
+                        // Rewriting a large history must not stall the caller's UI thread before paste.
+                        var textRecord = record;
+                        saved = await Task.Run(() => history.TryAddRecord(textRecord), ct);
                         if (wantsAudio) audioWarning = "History audio saving is unavailable. Only the text was retained.";
                     }
                     if (!saved && !suppressed)

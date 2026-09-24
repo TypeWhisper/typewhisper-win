@@ -4,7 +4,12 @@ namespace TypeWhisper.Core.Services;
 
 internal static class AtomicFileWriter
 {
-    public static bool TryWriteAllText(string filePath, string contents)
+    private static readonly UTF8Encoding Utf8WithoutBom = new(false);
+
+    public static bool TryWriteAllText(string filePath, string contents) =>
+        TryWriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
+
+    public static bool TryWriteAllBytes(string filePath, byte[] contents)
     {
         string? temporaryPath = null;
         try
@@ -16,17 +21,16 @@ internal static class AtomicFileWriter
             temporaryPath = Path.Combine(
                 directory ?? Directory.GetCurrentDirectory(),
                 $".{Path.GetFileName(filePath)}.{Guid.NewGuid():N}.tmp");
+            // One unbuffered write followed by a flush to disk keeps the replacement durable
+            // without a synchronous write-through round trip for every small block.
             using (var stream = new FileStream(
                 temporaryPath,
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
-                4096,
-                FileOptions.WriteThrough))
-            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                bufferSize: 0))
             {
-                writer.Write(contents);
-                writer.Flush();
+                stream.Write(contents);
                 stream.Flush(flushToDisk: true);
             }
 

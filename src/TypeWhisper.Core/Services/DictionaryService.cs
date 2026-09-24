@@ -121,51 +121,73 @@ public sealed class DictionaryService : IDictionaryService
     {
         using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
-        return ApplyCorrectionsSnapshot(text, _cache, IncrementUsageCount);
+        return new CorrectionSet(_cache).Apply(text, IncrementUsageCount);
     }
 
     /// <summary>Applies a recording's dictionary snapshot without modifying persisted entries or usage counters.</summary>
     public static string ApplyCorrectionsSnapshot(string text, IReadOnlyList<DictionaryEntry> entries) =>
-        ApplyCorrectionsSnapshot(text, entries, null);
+        new CorrectionSet(entries).Apply(text);
 
-    private static string ApplyCorrectionsSnapshot(string text, IReadOnlyList<DictionaryEntry> entries, Action<string>? onMatch)
+    /// <summary>Compiles the enabled corrections of a fixed snapshot once, so applying them later builds no regexes.</summary>
+    public static CorrectionSet CompileCorrections(IReadOnlyList<DictionaryEntry> entries) => new(entries);
+
+    /// <summary>Enabled corrections of an entry snapshot, longest original first.</summary>
+    public sealed class CorrectionSet
     {
-        var corrections = entries
-            .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction && e.Replacement is not null)
-            .OrderByDescending(e => e.Original.Length);
+        private readonly (string Id, Regex Regex, string Replacement)[] _rules;
 
-        foreach (var entry in corrections)
+        internal CorrectionSet(IReadOnlyList<DictionaryEntry> entries)
         {
-            var replacement = ExpandReplacementEscapes(entry.Replacement!);
-            var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);
-            // ASR often punctuates a spoken layout command ("Hello new line. Next").
-            // That mark belongs to the command, not to the start of the new line.
-            // Preserve regex semantics and punctuation around ordinary corrections.
-            if (!entry.IsRegex && replacement.Any(c => c is '\r' or '\n') && replacement.All(char.IsWhiteSpace))
-                pattern += @"(?:[ \t]*[.,;:!?][ \t]*)?";
-            var options = entry.CaseSensitive
-                ? RegexOptions.CultureInvariant
-                : RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
-            try
+            var rules = new List<(string, Regex, string)>();
+            foreach (var entry in entries
+                .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction && e.Replacement is not null)
+                .OrderByDescending(e => e.Original.Length))
             {
-                var regex = new Regex(pattern, options, CorrectionRegexTimeout);
-                if (!regex.IsMatch(text))
-                    continue;
-
-                text = regex.Replace(text, _ => replacement);
-                onMatch?.Invoke(entry.Id);
+                var replacement = ExpandReplacementEscapes(entry.Replacement!);
+                var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);
+                // ASR often punctuates a spoken layout command ("Hello new line. Next").
+                // That mark belongs to the command, not to the start of the new line.
+                // Preserve regex semantics and punctuation around ordinary corrections.
+                if (!entry.IsRegex && replacement.Any(c => c is '\r' or '\n') && replacement.All(char.IsWhiteSpace))
+                    pattern += @"(?:[ \t]*[.,;:!?][ \t]*)?";
+                var options = entry.CaseSensitive
+                    ? RegexOptions.CultureInvariant
+                    : RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+                try
+                {
+                    rules.Add((entry.Id, new Regex(pattern, options, CorrectionRegexTimeout), replacement));
+                }
+                catch (ArgumentException) when (entry.IsRegex)
+                {
+                    // Invalid persisted regex entries must not break post-processing.
+                }
             }
-            catch (ArgumentException) when (entry.IsRegex)
-            {
-                // Invalid persisted regex entries must not break post-processing.
-            }
-            catch (RegexMatchTimeoutException)
-            {
-                // A pathological regex must not block dictation post-processing.
-            }
+            _rules = [.. rules];
         }
 
-        return text;
+        /// <summary>Applies every correction in order to <paramref name="text"/>.</summary>
+        public string Apply(string text) => Apply(text, null);
+
+        internal string Apply(string text, Action<string>? onMatch)
+        {
+            foreach (var (id, regex, replacement) in _rules)
+            {
+                try
+                {
+                    if (!regex.IsMatch(text))
+                        continue;
+
+                    text = regex.Replace(text, _ => replacement);
+                    onMatch?.Invoke(id);
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    // A pathological regex must not block dictation post-processing.
+                }
+            }
+
+            return text;
+        }
     }
 
     private static string ExpandReplacementEscapes(string replacement)

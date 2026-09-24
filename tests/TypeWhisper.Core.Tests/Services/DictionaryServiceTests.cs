@@ -235,6 +235,21 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void CompiledCorrections_AreReusableAndSkipInvalidRegex()
+    {
+        _sut.AddEntry(new DictionaryEntry { Id = "invalid-regex", EntryType = DictionaryEntryType.Correction,
+            Original = "[", Replacement = "replacement", IsRegex = true });
+        _sut.UpsertCorrection("kubernets", "Kubernetes", caseSensitive: false);
+        _sut.UpsertCorrection("teh", "the", caseSensitive: false);
+
+        var corrections = DictionaryService.CompileCorrections(_sut.Entries.ToArray());
+
+        Assert.Equal("the Kubernetes cluster", corrections.Apply("teh kubernets cluster"));
+        Assert.Equal("keep [this]", corrections.Apply("keep [this]"));
+        Assert.All(_sut.Entries, entry => Assert.Equal(0, entry.UsageCount));
+    }
+
+    [Fact]
     public void ApplyCorrections_TreatsReplacementTokensLiterallyInRegexMode()
     {
         _sut.AddEntry(new DictionaryEntry

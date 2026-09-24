@@ -20,6 +20,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Precompile release publishes. Otherwise startup JIT-compiles app and WinRT projection code
+         on the UI thread, which also serves the global dictation keyboard hooks. -->
+    <PublishReadyToRun Condition="'$(Configuration)' == 'Release'">true</PublishReadyToRun>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TypeWhisperStoreBuild)' == 'true'">
     <DefineConstants>$(DefineConstants);TYPEWHISPER_STORE</DefineConstants>

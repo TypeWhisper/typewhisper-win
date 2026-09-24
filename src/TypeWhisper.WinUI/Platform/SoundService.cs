@@ -43,6 +43,14 @@ public sealed class SoundService
     private void Play(byte[]? wav)
     {
         if (!IsEnabled || wav is null) return;
+        // Endpoint lookup and WASAPI initialization can take tens of milliseconds;
+        // keep them off the caller's UI thread and the dictation path.
+        var deviceId = OutputDeviceId;
+        _ = Task.Run(() => PlayOnDevice(wav, deviceId));
+    }
+
+    private static void PlayOnDevice(byte[] wav, string? outputDeviceId)
+    {
         MemoryStream? ms = null;
         WaveFileReader? reader = null;
         IWavePlayer? output = null;
@@ -59,9 +67,9 @@ public sealed class SoundService
             reader = new WaveFileReader(ms);
             {
                 using var enumerator = new MMDeviceEnumerator();
-                device = string.IsNullOrEmpty(OutputDeviceId)
+                device = string.IsNullOrEmpty(outputDeviceId)
                     ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
-                    : enumerator.GetDevice(OutputDeviceId);
+                    : enumerator.GetDevice(outputDeviceId);
                 output = new WasapiOut(device, AudioClientShareMode.Shared, true, 100);
             }
             output.Init(reader);

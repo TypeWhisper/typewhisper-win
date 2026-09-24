@@ -557,6 +557,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
                 var inserted = await _inserter.InsertAsync(sample, target);
                 File.WriteAllText(WinUIProfile.DataPath("correction-probe.txt"), inserted ? "inserted" : "paste_failed");
+                await _inserter.Restored;
                 if (inserted) CorrectionLearning.Observe(sample, target);
             }
             finally { _gate.Release(); }
@@ -808,7 +809,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
                         (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.IsCurrent() == true));
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
-                        CorrectionLearning.Observe(text, _target);
+                        _ = ObserveCorrectionsAfterPasteAsync(text, _target, _operationCancellation.Token);
                     return inserted;
                 }, _operationCancellation.Token, samples, 16000,
                 string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
@@ -876,6 +877,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     internal string? LastUnsavedText { get; private set; }
+    // Observation needs the pasted text in the field, which the target has consumed once
+    // the clipboard is restored. A newer dictation replaces the operation token and wins.
+    private async Task ObserveCorrectionsAfterPasteAsync(string text, IntPtr target, CancellationToken operation)
+    {
+        await _inserter.Restored;
+        if (_disposed || _operationCancellation.Token != operation || operation.IsCancellationRequested) return;
+        try { CorrectionLearning.Observe(text, target); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { System.Diagnostics.Trace.TraceWarning("Correction learning could not start: {0}", ex.GetType().Name); }
+    }
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
         UsesRegistryProvider ? DecodeRegistryAsync(samples)

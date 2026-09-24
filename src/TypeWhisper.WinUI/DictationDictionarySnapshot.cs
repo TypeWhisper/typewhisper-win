@@ -10,12 +10,15 @@ internal sealed class DictationDictionarySnapshot
     internal static string StoragePath => WinUIProfile.DataPath("dictionary.json");
     private readonly DictionaryEntry[] _entries;
     private readonly TypeWhisper.Core.Interfaces.IVocabularyBoostingService _boosting;
+    private readonly DictionaryService.CorrectionSet _corrections;
     internal string? Error { get; }
     internal IReadOnlyList<DictionaryEntry> EnabledCtcEntries => _entries.Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Term).ToArray();
+    // Loaded off the UI thread while recording, so correction regexes are ready before processing.
     private DictationDictionarySnapshot(DictionaryEntry[] entries, string? error = null)
     {
         _entries = entries; Error = error;
         _boosting = VocabularyBoostingService.CreateSnapshot(entries);
+        _corrections = DictionaryService.CompileCorrections(entries);
     }
     internal IReadOnlyList<string> EnabledTerms => _entries.Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Term)
         .Select(e => e.Original).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -35,12 +38,12 @@ internal sealed class DictationDictionarySnapshot
     }
 
     internal string ApplyBoosting(string text) => _boosting.Apply(text);
-    internal string ApplyCorrections(string text) => DictionaryService.ApplyCorrectionsSnapshot(text, _entries);
+    internal string ApplyCorrections(string text) => _corrections.Apply(text);
 
     internal string Apply(string rawText, bool boostVocabulary = false)
     {
         // This is the existing Windows text heuristic, not acoustic CTC scoring.
         var boosted = boostVocabulary ? _boosting.Apply(rawText) : rawText;
-        return DictionaryService.ApplyCorrectionsSnapshot(boosted, _entries);
+        return _corrections.Apply(boosted);
     }
 }
