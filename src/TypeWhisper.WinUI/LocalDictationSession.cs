@@ -603,8 +603,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await StopCloudStreamAsync();
             _effects.End();
             await _livePreview.StopAsync();
-            SetStatus($"Shortcut cancelled · {ActiveModelName} ready");
-            PublishMicrophoneNoticeAfterDictation();
+            // Like every ready status, the cancellation keeps the current microphone notice visible.
+            SetStatus(_microphoneStatus = (_microphoneNotice = MicrophoneNotice()) is { } notice
+                ? $"Shortcut cancelled · {ActiveModelName} ready · {notice}" : $"Shortcut cancelled · {ActiveModelName} ready");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { SetStatus("Could not cancel recording: " + ex.Message); }
         finally { _effects.End(); _gate.Release(); }
