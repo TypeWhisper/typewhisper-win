@@ -164,16 +164,20 @@ public class HybridHotkeyStateTests
         Assert.Equal(HybridHotkeyAction.Stop, Press(0x50, true, 5010, true));
     }
 
-    [Fact]
-    public void LostHybridHoldReleaseStillStopsRecording()
+    [Theory]
+    [InlineData(RecordingMode.Hold, true)]
+    [InlineData(RecordingMode.Hybrid, false)]
+    public void LostReleaseStopsOnlyWhenTheModeDoesNotDependOnHoldDuration(RecordingMode mode, bool stop)
     {
         var state = new HybridHotkeyState();
         var bindings = new HashSet<string> { "CTRL+SHIFT" };
         var physical = new HashSet<int> { 0xA2 };
-        state.Key(0xA2, true, 0, bindings, held: physical.Contains);
-        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 0, bindings, held: physical.Contains));
+        state.Key(0xA2, true, 0, bindings, mode: mode, held: physical.Contains);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 0, bindings, mode: mode, held: physical.Contains));
         physical.Clear();
-        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x41, true, 2000, bindings, true, held: physical.Contains));
+        // The next event arrives long after the press, but the release may have been a short tap.
+        Assert.Equal(stop ? HybridHotkeyAction.Stop : (HybridHotkeyAction?)null,
+            state.Key(0x41, true, 2000, bindings, true, mode, held: physical.Contains));
     }
 
     [Fact]

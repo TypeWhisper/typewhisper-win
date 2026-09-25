@@ -36,9 +36,8 @@ internal sealed class HybridHotkeyState
         // the UI thread. A lost key-up would otherwise block the next press of the shortcut.
         if (held is not null && _down.RemoveWhere(pressed => !held(pressed)) > 0 && _down.Count == 0)
         {
-            action = !_startedByGesture ? null
-                : mode == RecordingMode.Hold || mode == RecordingMode.Hybrid && now - _pressedAt >= HoldMilliseconds
-                    ? HybridHotkeyAction.Stop : null;
+            // The release time is unknown, so only Hold mode can infer a Stop; a Hybrid gesture counts as a tap.
+            action = _startedByGesture && mode == RecordingMode.Hold ? HybridHotkeyAction.Stop : null;
             _armed = null; _startedByGesture = false; _blocked = false;
         }
         if (_mode is not null && _mode != mode)
