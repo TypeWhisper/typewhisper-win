@@ -35,6 +35,12 @@ public sealed class LegacyApplicationSettingsTests : IDisposable
         Assert.Equal("com.typewhisper.groq", selection.RootElement.GetProperty("Provider").GetString());
     }
     [Fact]
+    public void LegacyCommaKeyDoesNotSplitTheShortcutList()
+    {
+        LegacyApplicationSettings.Write(_root, new AppSettings { MainDictationHotkeys = ["Ctrl+,", "Ctrl+\\"] });
+        Assert.Equal("Ctrl+Comma,Ctrl+\\", File.ReadAllText(Path.Combine(_root, "dictation-hotkeys.txt")));
+    }
+    [Fact]
     public void UnknownModelDoesNotSelectDefaultCloudOrLocalProvider()
     {
         LegacyApplicationSettings.Write(_root, new AppSettings { SelectedModelId = "old-unknown-model" });

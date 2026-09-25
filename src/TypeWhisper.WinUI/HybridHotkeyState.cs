@@ -78,14 +78,11 @@ internal sealed class HybridHotkeyState
         return action;
     }
 
-    private static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
+    private static bool IsModifier(int key) => ShortcutKeys.IsModifier(key);
     private string Chord() => ShortcutRules.Normalize(string.Join("+", _down.Select(key => key switch
     {
         0x11 or 0xA2 or 0xA3 => "CTRL", 0x12 or 0xA4 or 0xA5 => "ALT",
         0x10 or 0xA0 or 0xA1 => "SHIFT", 0x5B or 0x5C => "WIN",
-        >= 65 and <= 90 or >= 48 and <= 57 => ((char)key).ToString(),
-        >= 112 and <= 135 => $"F{key - 111}",
-        0x20 => "SPACE", 0x0D => "ENTER", 0x1B => "ESC", 0x08 => "BACKSPACE",
-        _ => $"VK{key}"
+        _ => ShortcutKeys.Token(key)
     }).Distinct()));
 }

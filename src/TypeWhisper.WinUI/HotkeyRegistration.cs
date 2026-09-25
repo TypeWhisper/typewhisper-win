@@ -48,11 +48,10 @@ internal sealed class HotkeyRegistration : IDisposable
         {
             var error = ShortcutRules.Validate(chord, false);
             var parts = chord.Split('+');
-            var key = parts[^1] switch { "SPACE" => "Space", "ENTER" => "Enter", "ESC" => "Escape", var other => other };
-            if (error is not null || !Enum.TryParse<global::Windows.System.VirtualKey>(key, true, out var vk) || vk == global::Windows.System.VirtualKey.F12)
+            if (error is not null || !ShortcutKeys.TryParse(parts[^1], out var vk) || vk == 0x7B)
             {
                 foreach (var id in added.Values) UnregisterHotKey(_hwnd, id);
-                return error ?? "Choose a letter, function key or Space with modifiers. F12 is reserved.";
+                return error ?? "Choose another key with modifiers. F12 is reserved.";
             }
             uint mods = ModNoRepeat;
             foreach (var modifier in parts[..^1]) mods |= modifier switch { "ALT" => ModAlt, "CTRL" => ModControl, "SHIFT" => 4u, "WIN" => 8u, _ => 0u };
@@ -70,7 +69,7 @@ internal sealed class HotkeyRegistration : IDisposable
             _bindings.Remove(old);
         }
         foreach (var pair in added) _bindings.Add(pair.Key, pair.Value);
-        DisplayText = requested.Length == 0 ? "Not assigned" : requested[0].Replace("+", " ");
+        DisplayText = requested.Length == 0 ? "Not assigned" : ShortcutKeys.Display(requested[0], ShortcutKeys.LayoutCharacter).Replace(" + ", " ");
         return null;
     }
 
