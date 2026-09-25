@@ -1112,9 +1112,35 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     internal void CheckForDeviceChanges()
     {
+        var devicesChanged = false;
+        try
+        {
+            CheckForDeviceChanges(ref devicesChanged);
+        }
+        finally
+        {
+            // Raised after the capture has been moved or retried, outside the lock, so listeners see its outcome.
+            if (devicesChanged)
+                RaiseDevicesChanged();
+        }
+    }
+
+    private void RaiseDevicesChanged()
+    {
+        try
+        {
+            DevicesChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log($"DevicesChanged listener failed {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private void CheckForDeviceChanges(ref bool devicesChanged)
+    {
         lock (_deviceChangeCheckLock)
         {
-            var devicesChanged = false;
             try
             {
                 var snapshot = GetDeviceSnapshot(refresh: true);
@@ -1178,12 +1204,6 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
                 AudioCaptureDiagnostics.Log($"Device change check failed {ex.GetType().Name}: {ex.Message}");
-            }
-            finally
-            {
-                // Raised after the capture has been moved or retried, so listeners see its outcome.
-                if (devicesChanged)
-                    DevicesChanged?.Invoke(this, EventArgs.Empty);
             }
         }
     }

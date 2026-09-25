@@ -128,6 +128,18 @@ public sealed class MicrophoneFailureTests
     }
 
     [Fact]
+    public void FailingDeviceListenerDoesNotEscapeTheDeviceCheck()
+    {
+        var devices = new Devices();
+        using var audio = new AudioRecordingService(devices, new Switchable(), Timeout.InfiniteTimeSpan);
+        Assert.True(audio.WarmUp());
+        audio.DevicesChanged += (_, _) => throw new InvalidOperationException("listener");
+        devices.List = [new(1, "laptop", "Laptop Mic", true)];
+        audio.CheckForDeviceChanges();
+        Assert.Null(audio.CaptureFailure);
+    }
+
+    [Fact]
     public void FailedDefaultMicrophoneMigrationIsReported()
     {
         var devices = new Devices();
