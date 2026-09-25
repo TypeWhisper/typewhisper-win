@@ -255,6 +255,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             return;
 
         _microphonePriorityList = normalized;
+        _lastCaptureFailure = null;
         ApplyPreferredDeviceChange();
     }
 
@@ -269,6 +270,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 $"WarmUp enter warmed={_isWarmedUp} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
             if (_disposed) return false;
             if (_isWarmedUp && _waveIn is not null) return true;
+            // A new attempt supersedes the previous failure, which may concern another microphone.
+            _lastCaptureFailure = null;
 
             if (_deviceProvider.DeviceCount == 0)
             {

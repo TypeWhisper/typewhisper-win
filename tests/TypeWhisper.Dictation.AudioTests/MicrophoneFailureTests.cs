@@ -45,6 +45,20 @@ public sealed class MicrophoneFailureTests
     }
 
     [Fact]
+    public void ChangingTheMicrophoneTargetClearsAnObsoleteFailure()
+    {
+        var factory = new Switchable { Error = new COMException("Access denied", unchecked((int)0x80070005)) };
+        using var audio = new AudioRecordingService(new ImmediateAudioTests.ReplayDevice(), factory, Timeout.InfiniteTimeSpan);
+        Assert.False(audio.WarmUp());
+        Assert.NotNull(audio.CaptureFailure);
+        audio.SetMicrophonePriorityList([new("unplugged", "Unplugged headset")]);
+        Assert.Null(audio.CaptureFailure);
+        // A retry that finds no listed microphone does not resurrect the old error either.
+        Assert.False(audio.WarmUp());
+        Assert.Null(audio.CaptureFailure);
+    }
+
+    [Fact]
     public void PriorityNoticeFollowsTheDeviceResolver()
     {
         AudioInputDeviceInfo[] devices = [new(0, "new-id", "USB Mic", false), new(1, "laptop", "Laptop Mic", true)];

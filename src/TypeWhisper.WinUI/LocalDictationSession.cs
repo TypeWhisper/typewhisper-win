@@ -370,6 +370,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     // Raised on the UI thread when microphones are connected, removed or switched.
     internal event Action? MicrophonesChanged;
     private string? _microphoneNotice;
+    // The last idle status built from the microphone state; other idle messages, such as operation errors, are kept.
+    private string? _microphoneStatus;
 
     // Why dictation cannot use the preferred microphone right now; null when it can.
     internal string? MicrophoneNotice()
@@ -379,12 +381,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         return MicrophoneFailure.PriorityNotice(_microphones, GetMicrophones());
     }
 
-    private string ReadyStatus(bool prepared) => !IsReady ? UsesRegistryProvider ? "The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation." : !Models.Enabled ? "Local transcription plugin disabled" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation."
+    private string ReadyStatus(bool prepared) => _microphoneStatus = !IsReady ? UsesRegistryProvider ? "The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation." : !Models.Enabled ? "Local transcription plugin disabled" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation."
         : MicrophoneNotice() is { } notice ? $"{ActiveModelName} ready · {notice}"
         : prepared ? $"{ActiveModelName} ready · {Shortcut} to dictate" : $"{ActiveModelName} ready · microphone preparation failed; check the device";
 
     // Every idle "ready" status keeps a current microphone warning visible.
-    private string ModelReadyStatus() => MicrophoneNotice() is { } notice ? $"{ActiveModelName} ready · {notice}" : $"{ActiveModelName} ready";
+    private string ModelReadyStatus() => _microphoneStatus = MicrophoneNotice() is { } notice ? $"{ActiveModelName} ready · {notice}" : $"{ActiveModelName} ready";
 
     // Resume may recreate the capture without a device-list change, so publish its result explicitly.
     internal void RefreshMicrophoneAfterResume() =>
@@ -401,8 +403,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         var previous = _microphoneNotice;
         _microphoneNotice = MicrophoneNotice();
-        // Recording, processing and error messages keep their status; idle status follows the microphone.
-        if (_microphoneNotice != previous && !_audio.IsRecording && _phase is (DictationPhase.Idle or DictationPhase.Completed))
+        // Recording, processing, errors and other idle messages stay; a microphone-derived idle status follows the microphone.
+        if (_microphoneNotice != previous && !_audio.IsRecording
+            && (_phase == DictationPhase.Completed || (_phase == DictationPhase.Idle && Status == _microphoneStatus)))
             SetStatus(ReadyStatus(prepared: true));
     }
 
@@ -680,7 +683,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (!_audio.IsRecording)
                 {
                     await previousRecordingWork;
-                    SetStatus(MicrophoneNotice() ?? MicrophoneFailure.Generic);
+                    // Cache what is shown so a later recovery rewrites this failure.
+                    _microphoneNotice = MicrophoneNotice() ?? MicrophoneFailure.Generic;
+                    SetStatus(_microphoneStatus = _microphoneNotice);
                     return;
                 }
                 PasteDiagnostics.Write("dictation.capture.active");
