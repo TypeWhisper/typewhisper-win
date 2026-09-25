@@ -91,6 +91,15 @@ def validate_stage(stage):
         raise ValueError("Expected a full source commit")
     changes = summary["changedPlugins"]
     builder.catalog_entries(changes)
+    # One plugin version per release, under its canonical tag, whichever entry
+    # point staged the output.
+    if len(changes) > 1:
+        raise ValueError("A release publishes exactly one plugin version")
+    for entry in changes:
+        prefix = "com.typewhisper."
+        expected_tag = f"plugin-{entry['id'].removeprefix(prefix)}-v{entry['version']}"
+        if not entry["id"].startswith(prefix) or summary["tag"] != expected_tag:
+            raise ValueError(f"Release tag must be {expected_tag} for {entry['id']} {entry['version']}")
     validate_catalog(changes)
     if len(changes) != summary["archiveCount"]:
         raise ValueError("Archive count differs from changed plugins")

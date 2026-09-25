@@ -196,6 +196,24 @@ class StageTests(unittest.TestCase):
     def test_valid_package(self):
         self.assertEqual(publish.validate_stage(self.stage), self.summary)
 
+    def test_stage_with_several_changed_plugins_rejected(self):
+        # Staging directly with several --plugin-id arguments must not publish a bundle.
+        self.summary["changedPlugins"].append(entry("com.typewhisper.other") | self.summary["changedPlugins"][0])
+        self.summary["changedPlugins"][1]["id"] = "com.typewhisper.other"
+        self.save()
+        with self.assertRaisesRegex(ValueError, "exactly one plugin"):
+            publish.validate_stage(self.stage)
+
+    def test_stage_tag_must_match_the_plugin_and_version(self):
+        for tag in ("plugins-20260925", "plugin-other-v1.0.0", "plugin-example-v1.0.1"):
+            with self.subTest(tag=tag):
+                self.summary["tag"] = tag
+                self.summary["changedPlugins"][0]["downloadUrl"] = \
+                    f"https://github.com/{publish.REPO}/releases/download/{tag}/{self.name}"
+                self.save()
+                with self.assertRaisesRegex(ValueError, "Release tag must be plugin-example-v1.0.0"):
+                    publish.validate_stage(self.stage)
+
     def test_modified_archive_rejected(self):
         with self.archive.open('ab') as output:
             output.write(b"tampered")
