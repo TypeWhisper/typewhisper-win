@@ -228,6 +228,8 @@ public sealed class MicrophoneFailureTests
         // A connected saved entry is its own microphone, so an identically named one is new.
         Assert.Equal(-1, MicrophoneFailure.ReplacedEntryIndex([new("usb-2", "USB Mic")], reinstalled, devices));
         Assert.Equal(-1, MicrophoneFailure.ReplacedEntryIndex([], reinstalled, devices));
+        // Two disconnected entries with the same name leave no safe choice, so the device is added separately.
+        Assert.Equal(-1, MicrophoneFailure.ReplacedEntryIndex([new("twin-a", "USB Mic"), new("twin-b", "USB Mic")], reinstalled, devices));
     }
 
     private sealed class Devices : IAudioInputDeviceProvider

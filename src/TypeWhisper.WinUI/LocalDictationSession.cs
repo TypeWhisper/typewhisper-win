@@ -406,11 +406,22 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     private void RefreshMicrophoneStatus()
     {
-        // Recording, processing, errors and other idle messages stay; a microphone-derived status follows the microphone.
-        if (MicrophoneNotice() != _microphoneNotice && !_audio.IsRecording
-            && (_phase == DictationPhase.Completed || (_phase is DictationPhase.Idle or DictationPhase.Error && Status == _microphoneStatus)))
+        var notice = MicrophoneNotice();
+        if (notice == _microphoneNotice || _audio.IsRecording) return;
+        // A dictation outcome with an appended notice keeps the outcome and only updates the notice.
+        if (_noticeOutcome is { } outcome && Status == _noticeStatus)
+        {
+            _microphoneNotice = notice;
+            SetStatus(_noticeStatus = notice is null ? outcome : outcome + " · " + notice, _phase);
+        }
+        // Recording, processing, errors and other idle messages stay; a microphone-derived idle status follows the microphone.
+        else if (_phase == DictationPhase.Completed || (_phase == DictationPhase.Idle && Status == _microphoneStatus))
             SetStatus(ReadyStatus(prepared: true));
     }
+
+    // The dictation outcome a notice was appended to, and the status that shows both.
+    private string? _noticeOutcome;
+    private string? _noticeStatus;
 
     // A change during recording or processing is not shown over the dictation's own status.
     // Once the dictation settles, add it to the outcome so it does not wait for another device event.
@@ -421,7 +432,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (notice == _microphoneNotice) return;
         _microphoneNotice = notice;
         // A notice that has cleared needs no mention; the outcome never showed the old one.
-        if (notice is not null) SetStatus(_microphoneStatus = Status + " · " + notice, _phase);
+        if (notice is null) return;
+        _noticeOutcome = Status;
+        SetStatus(_noticeStatus = Status + " · " + notice, _phase);
     }
 
     internal string? SelectMicrophone(string id)

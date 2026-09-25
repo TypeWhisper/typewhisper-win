@@ -33,18 +33,23 @@ internal static class MicrophoneFailure
 
     // The saved entry a connected device stands in for after its endpoint ID changed, for example after a driver
     // reinstall: the same name while the saved ID is gone. Unlike the resolver this ignores prefix matches, so
-    // "USB Mic 2" stays a separate microphone. Returns -1 when the device is new to the list.
+    // "USB Mic 2" stays a separate microphone. Returns -1 when the device is new to the list, or when several
+    // disconnected entries share the name and the replaced one would be a guess.
     internal static int ReplacedEntryIndex(IReadOnlyList<MicrophonePriorityItem> priority, AudioInputDeviceInfo device, IReadOnlyList<AudioInputDeviceInfo> devices)
     {
         var name = WasapiAudioInputDeviceOrdering.NormalizeDeviceName(device.Name);
+        var replaced = -1;
         for (var i = 0; i < priority.Count; i++)
         {
             var item = priority[i];
-            if (string.Equals(WasapiAudioInputDeviceOrdering.NormalizeDeviceName(item.Name), name, StringComparison.OrdinalIgnoreCase)
-                && !devices.Any(connected => string.Equals(connected.Id, item.Id, StringComparison.OrdinalIgnoreCase)))
-                return i;
+            if (!string.Equals(WasapiAudioInputDeviceOrdering.NormalizeDeviceName(item.Name), name, StringComparison.OrdinalIgnoreCase)
+                || devices.Any(connected => string.Equals(connected.Id, item.Id, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if (replaced >= 0)
+                return -1;
+            replaced = i;
         }
-        return -1;
+        return replaced;
     }
 
     // Resolves the priority list like AudioRecordingService does (ID, then name); null when the first entry is connected.
