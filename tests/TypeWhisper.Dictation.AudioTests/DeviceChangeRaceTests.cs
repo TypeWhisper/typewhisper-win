@@ -24,7 +24,7 @@ public sealed class DeviceChangeRaceTests
         Task? check = null;
         captures.Created[0].Capture.OnStop = () =>
         {
-            var enumerated = new ManualResetEventSlim();
+            using var enumerated = new ManualResetEventSlim();
             devices.OnEnumerate = enumerated.Set;
             check = Task.Run(audio.CheckForDeviceChanges);
             Assert.True(enumerated.Wait(TimeSpan.FromSeconds(5)));
