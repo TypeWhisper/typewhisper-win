@@ -254,16 +254,25 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     }
 
     /// <summary>
+    /// When true, the capture client is closed after each recording and not prepared while idle.
+    /// Remote Desktop microphone redirection keeps the client's microphone in use for as long as
+    /// a prepared capture client exists, even while it is stopped (#524).
+    /// </summary>
+    public Func<bool> ReleaseCaptureBetweenRecordings { get; init; } = static () => false;
+
+    /// <summary>
     /// Performs warm up.
     /// </summary>
-    public bool WarmUp()
+    public bool WarmUp() => WarmUp(openCapture: !ReleaseCaptureBetweenRecordings());
+
+    private bool WarmUp(bool openCapture)
     {
         lock (_captureLifecycleLock)
         {
             AudioCaptureDiagnostics.Log(
-                $"WarmUp enter warmed={_isWarmedUp} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
+                $"WarmUp enter warmed={_isWarmedUp} openCapture={openCapture} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
             if (_disposed) return false;
-            if (_isWarmedUp && _waveIn is not null) return true;
+            if (_isWarmedUp && (_waveIn is not null || !openCapture)) return true;
 
             if (_deviceProvider.DeviceCount == 0)
             {
@@ -282,6 +291,16 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             }
 
             _activeDeviceNumber = captureSelection.LastKnownDeviceNumber;
+            if (!openCapture)
+            {
+                // Track the device for change handling; StartRecording opens the capture.
+                SetActiveDeviceIdentity(captureSelection);
+                _isWarmedUp = true;
+                AudioCaptureDiagnostics.Log(
+                    $"WarmUp deferred capture until recording active={captureSelection.LastKnownDeviceNumber}:{captureSelection.Name}");
+                StartDevicePolling();
+                return true;
+            }
 
             try
             {
@@ -378,7 +397,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
             RefreshPreparedCaptureSelection();
 
-            if ((!_isWarmedUp || _waveIn is null) && !WarmUp())
+            if ((!_isWarmedUp || _waveIn is null) && !WarmUp(openCapture: true))
             {
                 AudioCaptureDiagnostics.Log("StartRecording warmup failed");
                 return;
@@ -486,8 +505,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _sampleBuffer = null;
             }
 
-            if (_waveIn.CanRestartAfterStop)
+            if (_waveIn.CanRestartAfterStop && !ReleaseCaptureBetweenRecordings())
                 StopAndRetainWaveIn(_waveIn);
+            else if (_waveIn.CanRestartAfterStop)
+                DisposeWaveIn(resetWarmUp: false, reason: "released between recordings");
             else
                 DisposeWaveIn(
                     resetWarmUp: false,
