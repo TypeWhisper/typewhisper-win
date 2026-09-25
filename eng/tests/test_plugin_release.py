@@ -329,6 +329,24 @@ class StageTests(unittest.TestCase):
         self.assertNotIn("--draft=false", edits[0])
         self.assertNotIn("--title", edits[0])
 
+    def test_published_prerelease_with_generated_title_gets_canonical_title(self):
+        published = {"tag_name": self.summary["tag"], "name": "TypeWhisper Plugins · " + self.summary["tag"],
+                     "body": "Source commit: " + "a" * 40,
+                     "draft": False, "prerelease": True, "assets": [{"name": self.name}]}
+        def fake_gh(*args, **kwargs):
+            if args[:2] == ("release", "download"):
+                destination = pathlib.Path(args[args.index("--dir") + 1])
+                (destination / self.name).write_bytes(self.archive.read_bytes())
+            return ""
+        with patch.object(publish, "find_release", return_value=published), \
+             patch.object(publish, "gh", side_effect=fake_gh) as gh, \
+             patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "verify_download"):
+            publish.ensure_release(self.stage, self.summary)
+        edit = next(call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit"))
+        self.assertIn("--prerelease=false", edit)
+        self.assertEqual(edit[edit.index("--title") + 1], "com.typewhisper.example Plugin v1.0.0")
+
     def test_existing_plain_release_with_matching_provenance_is_accepted(self):
         published = {"tag_name": self.summary["tag"], "body": "Fixed a bug.\n\nSource commit: " + "a" * 40,
                      "draft": False, "prerelease": False, "assets": [{"name": self.name}]}

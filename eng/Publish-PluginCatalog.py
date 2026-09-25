@@ -203,8 +203,12 @@ def ensure_release(stage, summary):
            "--title", title)
     elif release.get("prerelease"):
         # An earlier run may have published the release but failed before the catalog
-        # update. Clear the prerelease flag; the hand-written title and notes stay.
-        gh("release", "edit", tag, "--repo", REPO, "--prerelease=false", "--latest=false")
+        # update. Clear the prerelease flag and replace only the old generated title;
+        # a hand-written title and the notes stay.
+        arguments = ["--prerelease=false", "--latest=false"]
+        if release.get("name") == f"TypeWhisper Plugins · {tag}":
+            arguments += ["--title", title]
+        gh("release", "edit", tag, "--repo", REPO, *arguments)
     if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
         raise ValueError("Published tag does not match the tested source commit")
     for entry in summary["changedPlugins"]:
