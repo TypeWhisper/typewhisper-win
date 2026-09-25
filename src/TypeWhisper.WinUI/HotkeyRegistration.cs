@@ -69,7 +69,7 @@ internal sealed class HotkeyRegistration : IDisposable
             _bindings.Remove(old);
         }
         foreach (var pair in added) _bindings.Add(pair.Key, pair.Value);
-        DisplayText = requested.Length == 0 ? "Not assigned" : requested[0].Replace("+", " ");
+        DisplayText = requested.Length == 0 ? "Not assigned" : ShortcutKeys.Display(requested[0], ShortcutKeys.LayoutCharacter).Replace(" + ", " ");
         return null;
     }
 

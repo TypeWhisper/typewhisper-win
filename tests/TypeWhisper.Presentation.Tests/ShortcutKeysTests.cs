@@ -37,6 +37,20 @@ public class ShortcutKeysTests
     [Fact]
     public void StoredNumericKeyIsShownAsItsKey() => Assert.Equal("\\", ShortcutKeys.Label("220"));
 
+    [Fact]
+    public void PunctuationKeysShowTheCharacterOfTheActiveLayout()
+    {
+        // German layout: OEM_102 types "<", OEM_5 the dead key "^", OEM_1 "ü".
+        var german = new Dictionary<int, char> { [0xE2] = '<', [0xDC] = '^', [0xBA] = 'ü', ['Z'] = 'z' };
+        char? Layout(int key) => german.TryGetValue(key, out var character) ? character : null;
+        Assert.Equal("CTRL + <", ShortcutKeys.Display("CTRL+OEM102", Layout));
+        Assert.Equal("Ctrl + ^", ShortcutKeys.Display("Ctrl+220", Layout));
+        Assert.Equal("Ü", ShortcutKeys.Label(";", Layout));
+        Assert.Equal("Z", ShortcutKeys.Label("Z", Layout));
+        Assert.Equal("Space", ShortcutKeys.Label("SPACE", Layout));
+        Assert.Equal("Oem102", ShortcutKeys.Label("OEM102"));
+    }
+
     [Theory]
     [InlineData("Ctrl+Foo")]
     [InlineData("Ctrl+VK0")]

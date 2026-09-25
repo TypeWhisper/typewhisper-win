@@ -193,7 +193,7 @@ public sealed class ShortcutRecorder : UserControl
                     Background = (Brush)Application.Current.Resources["ElevatedBrush"],
                     BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1, 1, 1, 2),
                     CornerRadius = new CornerRadius(5), Padding = new Thickness(7, 4, 7, 4), MinWidth = 28,
-                    Child = Text(ShortcutKeys.Label(keycap), 12)
+                    Child = Text(ShortcutKeys.Label(keycap, ShortcutKeys.LayoutCharacter), 12)
                 });
             var edit = Button(content, "IconButtonStyle", $"Edit {_label} shortcut {chord}");
             edit.MinHeight = 34; edit.Padding = new Thickness(2);
@@ -290,7 +290,7 @@ public sealed class ShortcutRecorder : UserControl
     {
         _candidate = candidate;
         var error = Validate(candidate);
-        _value.Text = candidate.Replace("+", " + ");
+        _value.Text = ShortcutKeys.Display(candidate, ShortcutKeys.LayoutCharacter);
         _hint.Text = error ?? "Ready to use. Choose Use shortcut or press Enter to confirm.";
         _apply.IsEnabled = error is null;
     }

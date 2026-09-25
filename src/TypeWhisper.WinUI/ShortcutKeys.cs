@@ -50,8 +50,24 @@ internal static class ShortcutKeys
         return false;
     }
 
-    // Shows a stored numeric key such as "220" as its key token.
-    internal static string Label(string part) => TryParse(part, out var key) ? Token(key) : part;
+    // Punctuation keys are stored by position; show the character they type on the
+    // active layout instead, e.g. "<" or "^" on a German keyboard.
+    internal static string Label(string part, Func<int, char?>? layout = null) => !TryParse(part, out var key) ? part
+        : IsLayoutKey(key) && layout?.Invoke(key) is { } character ? char.ToUpperInvariant(character).ToString() : Token(key);
+
+    internal static string Display(string chord, Func<int, char?>? layout = null) => string.Join(" + ",
+        chord.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(part => Label(part, layout)));
+
+    internal static char? LayoutCharacter(int key)
+    {
+        // The high bit marks a dead key such as ^ on German layouts; its character is still the label.
+        var character = MapVirtualKey((uint)key, 2) & 0x7FFFFFFF;
+        return character is > 0x20 and < 0xFFFF && !char.IsControl((char)character) ? (char)character : null;
+    }
+
+    private static bool IsLayoutKey(int key) => key is >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint mapType);
 
     internal static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
 }
