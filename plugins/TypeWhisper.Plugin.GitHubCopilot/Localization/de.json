@@ -1,5 +1,12 @@
 {
   "Text model": "Textmodell",
+  "Account and model cache": "Konto- und Modellcache",
+  "How long to reuse account and model checks during dictation. Applies to all GitHub Copilot profiles.": "Wie lange Konto- und Modellabfragen beim Diktieren wiederverwendet werden. Gilt für alle GitHub-Copilot-Profile.",
+  "10 minutes": "10 Minuten",
+  "30 minutes": "30 Minuten",
+  "1 hour": "1 Stunde",
+  "2 hours": "2 Stunden",
+  "Choose a cache duration from the list.": "Wähle eine Cache-Dauer aus der Liste.",
   "Default model for workflow text processing. Copilot plan limits apply.": "Standardmodell für die Textverarbeitung in Workflows. Es gelten die Limits deines Copilot-Tarifs.",
   "Choose a model from the current Copilot model list.": "Wähle ein Modell aus der aktuellen Copilot-Modellliste.",
   "Refresh connection and models": "Verbindung und Modelle aktualisieren",

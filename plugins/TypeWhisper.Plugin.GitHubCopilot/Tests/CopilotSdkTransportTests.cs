@@ -70,6 +70,26 @@ public sealed class CopilotSdkTransportTests
     }
 
     [Fact]
+    public async Task ConfiguredCatalogLifetimeControlsChecksDuringTurns()
+    {
+        await using var server = new FakeCopilotServer();
+        var clock = new ManualClock();
+        var transport = server.CreateTransport(clock);
+        transport.SetCatalogLifetime(TimeSpan.FromHours(2));
+        Task<string> Turn() => transport.ProcessAsync(server.Root, FakeTransport.Personal, "s", "u", "model-a", default);
+
+        await Turn();
+        clock.Now += TimeSpan.FromMinutes(10);
+        await Turn();
+        Assert.Equal(1, server.Count("models.list"));
+        Assert.Equal(2, server.Count("session.gitHubAuth.getStatus"));
+
+        clock.Now += TimeSpan.FromMinutes(110);
+        await Turn();
+        Assert.Equal(2, server.Count("models.list"));
+    }
+
+    [Fact]
     public void ChildEnvironmentPreservesProxySettingsWithoutAmbientTokenOrRuntimeOverrides()
     {
         var source = new Dictionary<string, string>

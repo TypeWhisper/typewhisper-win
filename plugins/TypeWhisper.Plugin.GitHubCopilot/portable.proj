@@ -4,7 +4,7 @@
   <Target Name="Package" DependsOnTargets="Build">
     <PropertyGroup>
       <PackageSource>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.github-copilot</PackageSource>
-      <Archive>$(MSBuildProjectDirectory)/bin/$(Configuration)/com.typewhisper.github-copilot-1.1.0.zip</Archive>
+      <Archive>$(MSBuildProjectDirectory)/bin/$(Configuration)/com.typewhisper.github-copilot-1.1.2.zip</Archive>
     </PropertyGroup>
     <ZipDirectory SourceDirectory="$(PackageSource)" DestinationFile="$(Archive)" Overwrite="true" />
     <GetFileHash Files="$(Archive)" Algorithm="SHA256"><Output TaskParameter="Items" ItemName="HashedArchive" /></GetFileHash>

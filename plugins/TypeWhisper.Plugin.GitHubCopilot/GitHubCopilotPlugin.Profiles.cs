@@ -38,7 +38,10 @@ public sealed partial class GitHubCopilotPlugin
                 new(Field("account"), L("GitHub account"), L("Sign in to additional accounts in Copilot CLI, then refresh accounts here. Tokens stay in the CLI credential store."), account?.Key ?? "")
                 { Section = PluginSettingsSection.Connection, Choices = choices },
                 new(Field("model"), L("Text model"), L("Refresh models for the chosen account, then save this profile."), profile.Model ?? models.FirstOrDefault()?.Id ?? "")
-                { Section = PluginSettingsSection.TextProcessing, Choices = models.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray() }
+                { Section = PluginSettingsSection.TextProcessing, Choices = models.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray() },
+                new(Field("catalogCacheMinutes"), L("Account and model cache"), L("How long to reuse account and model checks during dictation. Applies to all GitHub Copilot profiles."), _configuration.CacheMinutes.ToString())
+                { Section = PluginSettingsSection.TextProcessing, Choices = CacheMinuteChoices.Select(minutes =>
+                    new PluginSettingChoice(minutes.ToString(), minutes == 60 ? L("1 hour") : minutes == 120 ? L("2 hours") : L($"{minutes} minutes"))).ToArray() }
             ];
         }
     }
@@ -83,7 +86,7 @@ public sealed partial class GitHubCopilotPlugin
         {
             ValidateEditor(profileId, apiKey);
             var profile = Editor;
-            var allowed = new[] { profileId + "/name", profileId + "/account", profileId + "/model" };
+            var allowed = new[] { profileId + "/name", profileId + "/account", profileId + "/model", profileId + "/catalogCacheMinutes" };
             if (values.Count != allowed.Length || values.Keys.Any(k => !allowed.Contains(k))) throw new ArgumentException(L("Select the profile again before continuing."));
             var name = values[allowed[0]].Trim();
             if (name.Length is < 1 or > 100) throw new ArgumentException(L("Enter a profile name of up to 100 characters."));
@@ -94,9 +97,16 @@ public sealed partial class GitHubCopilotPlugin
             var models = draft?.Account.Key == key ? draft.Models : profile.Account?.Key == key ? ModelsFor(profileId) : [];
             var model = values[allowed[2]];
             if (!models.Any(m => m.Id == model)) throw new ArgumentException(L("Refresh models for the chosen account, then save this profile."));
+            if (!int.TryParse(values[allowed[3]], out var cacheMinutes) || !CacheMinuteChoices.Contains(cacheMinutes))
+                throw new ArgumentException(L("Choose a cache duration from the list."));
             linked.Token.ThrowIfCancellationRequested();
-            // One settings write is the commit point for name, account, model and enablement.
-            ReplaceProfile(profile with { Name = name, Account = account, Model = model, Connected = true });
+            // One settings write is the commit point for the profile and shared cache duration.
+            Commit(_configuration with
+            {
+                CacheMinutes = cacheMinutes,
+                Profiles = _configuration.Profiles.Select(p => p.Id == profile.Id
+                    ? profile with { Name = name, Account = account, Model = model, Connected = true } : p).ToList()
+            });
             _catalogs[account.Key] = models;
             _draftCatalogs.Remove(profileId);
             Host.NotifyCapabilitiesChanged();
@@ -149,13 +159,13 @@ public sealed partial class GitHubCopilotPlugin
             {
                 if (_configuration.Profiles.Count >= 16) throw new ArgumentException(L("Remove a profile before adding another one."));
                 var profile = new CopilotProfile(DefaultProfileId + "-" + Guid.NewGuid().ToString("N"), L("GitHub account"));
-                Commit(new([.. _configuration.Profiles, profile], profile.Id));
+                Commit(_configuration with { Profiles = [.. _configuration.Profiles, profile], EditorProfileId = profile.Id });
                 return L("Profile added. Refresh accounts, choose an account and load its models.");
             }
             if (id == RemoveProfileActionId)
             {
                 var removed = Editor.Id;
-                Commit(new(_configuration.Profiles.Where(p => p.Id != removed).ToList(), DefaultProfileId));
+                Commit(_configuration with { Profiles = _configuration.Profiles.Where(p => p.Id != removed).ToList(), EditorProfileId = DefaultProfileId });
                 _draftCatalogs.Remove(removed);
                 return L("Profile removed. Your GitHub sign-in is kept.");
             }

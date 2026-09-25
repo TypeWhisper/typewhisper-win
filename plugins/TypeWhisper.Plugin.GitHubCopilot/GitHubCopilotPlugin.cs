@@ -11,6 +11,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
 {
     private const string DefaultProfileId = "github-copilot";
     private const string ConfigurationKey = "accountProfilesV1";
+    private static readonly int[] CacheMinuteChoices = [10, 30, 60, 120];
     private readonly ICopilotTransport _transport;
     private readonly TimeSpan _activationTimeout;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -31,7 +32,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
     /// <inheritdoc />
     public string PluginName => "GitHub Copilot";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.1.2";
     /// <inheritdoc />
     public string ProviderName => RequireProfile(DefaultProfileId).Name;
     /// <inheritdoc />
@@ -56,6 +57,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
             ? new([new(DefaultProfileId, PluginName, Model: host.GetSetting<string>("selectedModel"), Connected: host.GetSetting<bool>("connected"))], DefaultProfileId)
             : JsonSerializer.Deserialize<CopilotConfiguration>(saved) ?? throw new InvalidDataException("Invalid Copilot profiles.");
         ValidateConfiguration(_configuration);
+        _transport.SetCatalogLifetime(TimeSpan.FromMinutes(_configuration.CacheMinutes));
         // Preserve old installations by binding a sole stored OAuth account once. With
         // multiple accounts, require an explicit choice instead of guessing ownership.
         if (saved is null && RequireProfile(DefaultProfileId).Connected)
@@ -153,6 +155,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
         ValidateConfiguration(configuration);
         Host.SetSetting(ConfigurationKey, JsonSerializer.Serialize(configuration));
         _configuration = configuration;
+        _transport.SetCatalogLifetime(TimeSpan.FromMinutes(configuration.CacheMinutes));
         _transport.InvalidateCache();
         Host.NotifyCapabilitiesChanged();
     }
@@ -167,6 +170,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
             configuration.Profiles.Count(p => p.Id == DefaultProfileId) != 1 ||
             configuration.Profiles.Select(p => p.Id).Distinct().Count() != configuration.Profiles.Count ||
             !configuration.Profiles.Any(p => p.Id == configuration.EditorProfileId) ||
+            !CacheMinuteChoices.Contains(configuration.CacheMinutes) ||
             configuration.Profiles.Any(p => p.Account is { } account && !ValidAccount(account)))
             throw new InvalidDataException("Invalid Copilot profile configuration.");
     }
@@ -214,5 +218,5 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
 }
 
 internal sealed record CopilotProfile(string Id, string Name, CopilotAccount? Account = null, string? Model = null, bool Connected = false);
-internal sealed record CopilotConfiguration(List<CopilotProfile> Profiles, string EditorProfileId);
+internal sealed record CopilotConfiguration(List<CopilotProfile> Profiles, string EditorProfileId, int CacheMinutes = 10);
 internal sealed record DraftCatalog(CopilotAccount Account, IReadOnlyList<PluginModelInfo> Models);
