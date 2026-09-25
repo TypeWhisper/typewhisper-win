@@ -17,6 +17,8 @@ public sealed partial class MainWindow
             }, () =>
             {
                 if (_closing || _profileRestoreClosing) return null;
+                // A prepared microphone client can go stale across sleep or a session switch.
+                _dictation?.RefreshMicrophoneAfterResume();
                 var errors = new List<string>();
                 if (_dictationHotkey?.Recover() is { } error) errors.Add(error);
                 foreach (var entry in _recordingShortcuts.Values)

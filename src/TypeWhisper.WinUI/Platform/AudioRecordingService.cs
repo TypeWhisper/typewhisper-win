@@ -63,6 +63,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private float _peakRmsLevel;
     private float _preGainPeakRms;
     private IAudioInputCapture? _failedCaptureCleanup;
+    private Exception? _lastCaptureFailure;
     /// <summary>Whether a capture whose release failed is retained for an explicit retry.</summary>
     public bool HasUnreleasedCapture => _failedCaptureCleanup is not null;
     /// <summary>Retries a previously failed native release without creating another capture.</summary>
@@ -183,6 +184,14 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public bool HasDevice => _deviceProvider.DeviceCount > 0;
     /// <summary>
+    /// Gets the name of the microphone the next recording uses, or null when none is prepared.
+    /// </summary>
+    public string? ActiveDeviceName { get { lock (_captureLifecycleLock) return _isWarmedUp ? _activeDeviceName : null; } }
+    /// <summary>
+    /// Gets an actionable message for the last failed prepare or start, or null after a success.
+    /// </summary>
+    public string? CaptureFailure => _lastCaptureFailure is { } error ? MicrophoneFailure.Describe(error) : null;
+    /// <summary>
     /// Gets or sets the whisper mode enabled value.
     /// </summary>
     public bool WhisperModeEnabled { get; set; }
@@ -297,6 +306,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
                 SetActiveDeviceIdentity(captureSelection);
                 _isWarmedUp = true;
+                _lastCaptureFailure = null;
                 _activeCaptureGeneration = ++_captureGeneration;
                 AudioCaptureDiagnostics.Log(
                     $"WarmUp prepared captureGeneration={_activeCaptureGeneration} reusable={_waveIn.CanRestartAfterStop} active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
@@ -304,6 +314,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
                 AudioCaptureDiagnostics.Log($"WarmUp failed {ex.GetType().Name}: {ex.Message}");
+                _lastCaptureFailure = ex;
                 System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
                 DisposeWaveIn(
                     stopRecording: false,
@@ -411,6 +422,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                     ? _recoveryStore?.BeginRecording()
                     : null;
                 _waveIn.StartRecording();
+                _lastCaptureFailure = null;
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording active sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
             }
@@ -418,6 +430,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording failed sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} {ex.GetType().Name}: {ex.Message}");
+                _lastCaptureFailure = ex;
                 System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
                 DiscardActiveRecoveryRecording();
                 ClearRecordingState();
@@ -2275,10 +2288,21 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
             AudioCaptureDiagnostics.Log(
                 $"Primary microphone capture creation failed; using fallback {ex.GetType().Name}: {ex.Message}");
             _usingFallback = true;
-            _capture = fallbackFactory.Create(selection, waveFormat, bufferMilliseconds);
+            Fallback(ex, () => _capture = fallbackFactory.Create(selection, waveFormat, bufferMilliseconds));
         }
 
         AttachCapture();
+    }
+
+    // The WASAPI error names the cause (privacy block, exclusive use); a failing WaveIn fallback does not.
+    private static void Fallback(Exception primary, Action fallback)
+    {
+        try { fallback(); }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log($"Microphone fallback failed too {ex.GetType().Name}: {ex.Message}");
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(primary);
+        }
     }
 
     public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
@@ -2301,8 +2325,7 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
         {
             AudioCaptureDiagnostics.Log(
                 $"Primary microphone capture prepare failed; using fallback {ex.GetType().Name}: {ex.Message}");
-            SwitchToFallback();
-            _capture!.Prepare();
+            Fallback(ex, () => { SwitchToFallback(); _capture!.Prepare(); });
         }
     }
 
@@ -2318,8 +2341,7 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
         {
             AudioCaptureDiagnostics.Log(
                 $"Primary microphone capture start failed; using fallback {ex.GetType().Name}: {ex.Message}");
-            SwitchToFallback();
-            _capture!.StartRecording();
+            Fallback(ex, () => { SwitchToFallback(); _capture!.StartRecording(); });
         }
     }
 

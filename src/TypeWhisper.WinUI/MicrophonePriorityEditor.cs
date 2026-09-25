@@ -98,6 +98,8 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         AutomationProperties.SetName(refresh, "Refresh microphones"); ToolTipService.SetToolTip(refresh, "Refresh microphones");
         refresh.Click += (_, _) => Refresh(); Grid.SetColumn(refresh, 1); addRow.Children.Add(refresh);
         Children.Add(addRow); Children.Add(_hint);
+        Loaded += (_, _) => session.MicrophonesChanged += Refresh;
+        Unloaded += (_, _) => session.MicrophonesChanged -= Refresh;
         Refresh();
     }
 
@@ -129,7 +131,8 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         _add.SetOptions(devices.Where(device => !_items.Any(item => item.Item.Id == device.Id))
             .Select(device => new Choice(device.Id, device.Name, "Add to priority list")).ToArray(), "", _items.Count == 0 ? "System default · add microphone…" : "Add microphone…");
         var missing = _items.Where(item => !devices.Any(device => device.Id == item.Item.Id)).Select(item => item.Name).ToArray();
-        _hint.Text = missing.Length > 0 ? "Disconnected (kept in priority list): " + string.Join(", ", missing)
+        _hint.Text = _session.MicrophoneNotice() is { } notice ? notice
+            : missing.Length > 0 ? "Disconnected (kept in priority list): " + string.Join(", ", missing)
             : _items.Count == 0 ? "Uses Windows default until you add a microphone." : "Priority saved.";
     }
 
