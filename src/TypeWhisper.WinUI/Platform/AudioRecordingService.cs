@@ -167,7 +167,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public event EventHandler<SamplesAvailableEventArgs>? SamplesAvailable;
     /// <summary>
-    /// Raised when devices changes.
+    /// Raised when the device list changes, after the capture has reacted to the change.
     /// </summary>
     public event EventHandler? DevicesChanged;
     /// <summary>
@@ -1097,6 +1097,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         lock (_deviceChangeCheckLock)
         {
+            var devicesChanged = false;
             try
             {
                 var snapshot = GetDeviceSnapshot(refresh: true);
@@ -1118,8 +1119,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _lastKnownHasDevices = currentHasDevices;
                 _lastKnownPreferredDeviceAvailable = currentPreferredDeviceAvailable;
                 _lastKnownSnapshotInitialized = true;
-
-                DevicesChanged?.Invoke(this, EventArgs.Empty);
+                devicesChanged = true;
 
                 if (!currentHasDevices)
                 {
@@ -1158,6 +1158,12 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
                 AudioCaptureDiagnostics.Log($"Device change check failed {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                // Raised after the capture has been moved or retried, so listeners see its outcome.
+                if (devicesChanged)
+                    DevicesChanged?.Invoke(this, EventArgs.Empty);
             }
         }
     }

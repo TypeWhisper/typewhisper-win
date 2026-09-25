@@ -84,6 +84,32 @@ public sealed class MicrophoneFailureTests
         Assert.Contains("Privacy & security", audio.CaptureFailure);
     }
 
+    [Fact]
+    public void DeviceChangeIsReportedAfterTheFallbackWasTried()
+    {
+        var devices = new Devices();
+        var factory = new Switchable();
+        using var audio = new AudioRecordingService(devices, factory, Timeout.InfiniteTimeSpan);
+        audio.SetMicrophonePriorityList([new("usb", "USB Mic"), new("laptop", "Laptop Mic")]);
+        Assert.True(audio.WarmUp());
+        string? seen = "not raised";
+        audio.DevicesChanged += (_, _) => seen = audio.CaptureFailure;
+        devices.List = [new(0, "laptop", "Laptop Mic", true)];
+        factory.Error = new COMException("In use", unchecked((int)0x8889000A));
+        audio.CheckForDeviceChanges();
+        Assert.Contains("exclusively", seen);
+    }
+
+    private sealed class Devices : IAudioInputDeviceProvider
+    {
+        public AudioInputDeviceInfo[] List = [new(0, "usb", "USB Mic", false), new(1, "laptop", "Laptop Mic", true)];
+        public int DeviceCount => List.Length;
+        public string GetDeviceName(int index) => List[index].Name;
+        public string? GetDefaultDeviceName() => List.FirstOrDefault(device => device.IsDefault)?.Name;
+        public AudioInputDeviceInfo GetDeviceInfo(int index) => List[index];
+        public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos() => List;
+    }
+
     private sealed class Failing(Exception error) : IAudioInputCaptureFactory
     {
         public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds) => throw error;
