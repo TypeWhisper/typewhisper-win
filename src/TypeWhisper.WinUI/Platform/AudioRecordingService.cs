@@ -1213,7 +1213,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         lock (_captureLifecycleLock)
         {
             if (!_isWarmedUp)
+            {
+                RetryFailedCaptureOnNewTarget();
                 return;
+            }
 
             if (!IsPreferredDeviceAvailable(snapshot) || IsActiveDevicePreferred())
                 return;
@@ -1229,6 +1232,27 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             DisposeWaveIn(reason: "device change");
             WarmUp();
         }
+    }
+
+    // A failed prepare or start leaves the service unwarmed, so a new Windows default never
+    // counts as a migration. Retry once the target moves off the failed microphone; the same
+    // target is left for the next recording instead of being reopened on every check.
+    private void RetryFailedCaptureOnNewTarget()
+    {
+        if (_lastCaptureFailure is null || _isRecording || _disposed)
+            return;
+
+        var target = ResolvePreferredDeviceSelection();
+        if (target is null
+            || string.Equals(target.Id, _lastCaptureFailureDeviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        AudioCaptureDiagnostics.Log(
+            $"Retrying failed capture on new target {target.LastKnownDeviceNumber}:{target.Name} id={target.Id}");
+        // In remote sessions this only tracks the new target, like any idle warm-up.
+        WarmUp();
     }
 
     private void RaiseAudioLevelChanged(float peak, float rms) =>

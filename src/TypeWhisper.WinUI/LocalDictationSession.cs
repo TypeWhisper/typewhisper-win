@@ -369,6 +369,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<AudioInputDeviceInfo> GetMicrophones() => _audio.GetAvailableInputDeviceInfos();
     // Raised on the UI thread when microphones are connected, removed or switched.
     internal event Action? MicrophonesChanged;
+    // The notice last reflected in a status. A change that could not be shown yet still differs from it.
     private string? _microphoneNotice;
     // The last idle status built from the microphone state; other idle messages, such as operation errors, are kept.
     private string? _microphoneStatus;
@@ -381,12 +382,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         return MicrophoneFailure.PriorityNotice(_microphones, GetMicrophones());
     }
 
-    private string ReadyStatus(bool prepared) => _microphoneStatus = !IsReady ? UsesRegistryProvider ? "The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation." : !Models.Enabled ? "Local transcription plugin disabled" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation."
-        : MicrophoneNotice() is { } notice ? $"{ActiveModelName} ready · {notice}"
-        : prepared ? $"{ActiveModelName} ready · {Shortcut} to dictate" : $"{ActiveModelName} ready · microphone preparation failed; check the device";
+    private string ReadyStatus(bool prepared)
+    {
+        _microphoneNotice = MicrophoneNotice();
+        return _microphoneStatus = !IsReady ? UsesRegistryProvider ? "The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation." : !Models.Enabled ? "Local transcription plugin disabled" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation."
+            : _microphoneNotice is { } notice ? $"{ActiveModelName} ready · {notice}"
+            : prepared ? $"{ActiveModelName} ready · {Shortcut} to dictate" : $"{ActiveModelName} ready · microphone preparation failed; check the device";
+    }
 
     // Every idle "ready" status keeps a current microphone warning visible.
-    private string ModelReadyStatus() => _microphoneStatus = MicrophoneNotice() is { } notice ? $"{ActiveModelName} ready · {notice}" : $"{ActiveModelName} ready";
+    private string ModelReadyStatus() => _microphoneStatus = (_microphoneNotice = MicrophoneNotice()) is { } notice ? $"{ActiveModelName} ready · {notice}" : $"{ActiveModelName} ready";
 
     // Resume may recreate the capture without a device-list change, so publish its result explicitly.
     internal void RefreshMicrophoneAfterResume() =>
@@ -401,12 +406,22 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     private void RefreshMicrophoneStatus()
     {
-        var previous = _microphoneNotice;
-        _microphoneNotice = MicrophoneNotice();
-        // Recording, processing, errors and other idle messages stay; a microphone-derived idle status follows the microphone.
-        if (_microphoneNotice != previous && !_audio.IsRecording
-            && (_phase == DictationPhase.Completed || (_phase == DictationPhase.Idle && Status == _microphoneStatus)))
+        // Recording, processing, errors and other idle messages stay; a microphone-derived status follows the microphone.
+        if (MicrophoneNotice() != _microphoneNotice && !_audio.IsRecording
+            && (_phase == DictationPhase.Completed || (_phase is DictationPhase.Idle or DictationPhase.Error && Status == _microphoneStatus)))
             SetStatus(ReadyStatus(prepared: true));
+    }
+
+    // A change during recording or processing is not shown over the dictation's own status.
+    // Once the dictation settles, add it to the outcome so it does not wait for another device event.
+    private void PublishMicrophoneNoticeAfterDictation()
+    {
+        if (_disposed || _audio.IsRecording) return;
+        var notice = MicrophoneNotice();
+        if (notice == _microphoneNotice) return;
+        _microphoneNotice = notice;
+        // A notice that has cleared needs no mention; the outcome never showed the old one.
+        if (notice is not null) SetStatus(_microphoneStatus = Status + " · " + notice, _phase);
     }
 
     internal string? SelectMicrophone(string id)
@@ -525,7 +540,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var prepared = _audio.WarmUp();
             await CtcVocabulary.SetEnabledAsync(Models.Enabled);
             LocalPluginError ??= Models.Error;
-            _microphoneNotice = MicrophoneNotice();
             SetStatus(ReadyStatus(prepared));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -576,6 +590,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _effects.End();
             await _livePreview.StopAsync();
             SetStatus($"Shortcut cancelled · {ActiveModelName} ready");
+            PublishMicrophoneNoticeAfterDictation();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { SetStatus("Could not cancel recording: " + ex.Message); }
         finally { _effects.End(); _gate.Release(); }
@@ -619,6 +634,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         TypeWhisper.Core.Services.RecoveryRecordingLease? recoveryLease = null;
         var preserveRecovery = false;
         var preparingRecording = false;
+        var finishingRecording = false;
         Task previousRecordingWork = Task.CompletedTask;
         try
         {
@@ -746,6 +762,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 return;
             }
 
+            finishingRecording = true;
             StopSilenceMonitoring();
             _livePreview.Cancel();
             _lastDuration = _audio.RecordingDuration;
@@ -919,6 +936,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
                 if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }
+                if (finishingRecording) PublishMicrophoneNoticeAfterDictation();
             }
             finally { _gate.Release(); }
         }

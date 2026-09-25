@@ -31,6 +31,22 @@ internal static class MicrophoneFailure
     internal static bool IsSameMicrophone(AudioInputDeviceInfo device, MicrophonePriorityItem item) =>
         string.Equals(device.Id, item.Id, StringComparison.OrdinalIgnoreCase) || WasapiAudioInputDeviceOrdering.DeviceNamesMatch(device.Name, item.Name);
 
+    // The saved entry a connected device stands in for after its endpoint ID changed, for example after a driver
+    // reinstall: the same name while the saved ID is gone. Unlike the resolver this ignores prefix matches, so
+    // "USB Mic 2" stays a separate microphone. Returns -1 when the device is new to the list.
+    internal static int ReplacedEntryIndex(IReadOnlyList<MicrophonePriorityItem> priority, AudioInputDeviceInfo device, IReadOnlyList<AudioInputDeviceInfo> devices)
+    {
+        var name = WasapiAudioInputDeviceOrdering.NormalizeDeviceName(device.Name);
+        for (var i = 0; i < priority.Count; i++)
+        {
+            var item = priority[i];
+            if (string.Equals(WasapiAudioInputDeviceOrdering.NormalizeDeviceName(item.Name), name, StringComparison.OrdinalIgnoreCase)
+                && !devices.Any(connected => string.Equals(connected.Id, item.Id, StringComparison.OrdinalIgnoreCase)))
+                return i;
+        }
+        return -1;
+    }
+
     // Resolves the priority list like AudioRecordingService does (ID, then name); null when the first entry is connected.
     internal static string? PriorityNotice(IReadOnlyList<MicrophonePriorityItem> priority, IReadOnlyList<AudioInputDeviceInfo> devices)
     {
