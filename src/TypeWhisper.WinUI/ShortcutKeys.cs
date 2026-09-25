@@ -13,7 +13,7 @@ internal static class ShortcutKeys
         ("NumMultiply", 0x6A), ("NumAdd", 0x6B), ("NumSeparator", 0x6C), ("NumSubtract", 0x6D), ("NumDecimal", 0x6E), ("NumDivide", 0x6F),
         ("`", 0xC0), ("-", 0xBD), ("=", 0xBB), ("[", 0xDB), ("]", 0xDD), (";", 0xBA), ("'", 0xDE),
         // A literal comma would split the stored shortcut list.
-        ("Comma", 0xBC), (".", 0xBE), ("/", 0xBF), ("\\", 0xDC), ("Oem102", 0xE2)
+        ("Comma", 0xBC), (".", 0xBE), ("/", 0xBF), ("\\", 0xDC), ("Oem8", 0xDF), ("Oem102", 0xE2)
     ];
     private static readonly Dictionary<int, string> TokensByKey = Named.ToDictionary(item => item.Key, item => item.Token);
     private static readonly Dictionary<string, int> KeysByToken = Named
@@ -60,14 +60,19 @@ internal static class ShortcutKeys
 
     internal static char? LayoutCharacter(int key)
     {
-        // The high bit marks a dead key such as ^ on German layouts; its character is still the label.
-        var character = MapVirtualKey((uint)key, 2) & 0x7FFFFFFF;
-        return character is > 0x20 and < 0xFFFF && !char.IsControl((char)character) ? (char)character : null;
+        // MapVirtualKey returns ANSI characters on e.g. Cyrillic layouts, so ask for Unicode.
+        // Flag 4 keeps the thread's dead-key state; a dead key (^, ´) returns -1 with its character.
+        var buffer = new char[4];
+        var count = ToUnicodeEx((uint)key, MapVirtualKey((uint)key, 0), new byte[256], buffer, buffer.Length, 4, GetKeyboardLayout(0));
+        return count != 0 && !char.IsControl(buffer[0]) && !char.IsWhiteSpace(buffer[0]) ? buffer[0] : null;
     }
 
     private static bool IsLayoutKey(int key) => key is >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint mapType);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetKeyboardLayout(uint thread);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int ToUnicodeEx(uint key, uint scan, byte[] state, [System.Runtime.InteropServices.Out] char[] buffer, int size, uint flags, IntPtr layout);
 
     internal static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
 }

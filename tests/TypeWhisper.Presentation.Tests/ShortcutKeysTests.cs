@@ -8,6 +8,7 @@ public class ShortcutKeysTests
     [InlineData(0xBC, "Comma")]
     [InlineData(0xC0, "`")]
     [InlineData(0xE2, "Oem102")]
+    [InlineData(0xDF, "Oem8")]
     [InlineData(0x2D, "Insert")]
     [InlineData(0x21, "PageUp")]
     [InlineData(0x26, "Up")]
