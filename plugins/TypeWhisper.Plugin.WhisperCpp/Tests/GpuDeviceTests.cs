@@ -35,6 +35,30 @@ public partial class WhisperCppPluginTests
             WhisperCppPlugin.CreateLoadedAccelerationStatus(RuntimeLibrary.Vulkan, preference).ActiveBackend);
     }
 
+    [Fact]
+    public async Task VulkanRuntimeWithoutGpuStaysOnCpuUntilRestart()
+    {
+        var previous = RuntimeOptions.LoadedLibrary;
+        try
+        {
+            RuntimeOptions.LoadedLibrary = RuntimeLibrary.Vulkan;
+            using var temp = new TempDirectory();
+            using var plugin = new WhisperCppPlugin { ReleaseFactory = _ => { } };
+            await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+            SetPrivateField(plugin, "_factory", (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory)));
+            SetPrivateField(plugin, "_vulkanHasNoGpu", true);
+            plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+            Assert.Equal(TranscriptionAccelerationBackend.Cpu, plugin.AccelerationStatus.ActiveBackend);
+            Assert.EndsWith("In use: CPU", Assert.Single(plugin.TextSettings).Description);
+            plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+            Assert.True(plugin.AccelerationStatus.RequiresRestart);
+            Assert.Equal(TranscriptionAccelerationBackend.Cpu, plugin.AccelerationStatus.ActiveBackend);
+            Assert.EndsWith("In use: CPU", Assert.Single(plugin.TextSettings).Description);
+            SetPrivateField<WhisperFactory?>(plugin, "_factory", null);
+        }
+        finally { RuntimeOptions.LoadedLibrary = previous; }
+    }
+
     // Opt-in: set TYPEWHISPER_TEST_WHISPER_DATA to a whisper.cpp plugin data folder containing Models/ggml-large-v3-turbo.bin.
     [Fact]
     public async Task VulkanModelLoadsOnTheSelectedGpu()

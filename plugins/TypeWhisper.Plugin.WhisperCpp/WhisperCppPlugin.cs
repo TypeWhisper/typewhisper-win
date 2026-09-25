@@ -1133,7 +1133,7 @@ public sealed partial class WhisperCppPlugin :
         return RuntimeOptions.LoadedLibrary switch
         {
             RuntimeLibrary.Cuda => TranscriptionAccelerationBackend.NvidiaCuda,
-            RuntimeLibrary.Vulkan => TranscriptionAccelerationBackend.AmdVulkan,
+            RuntimeLibrary.Vulkan when !_vulkanHasNoGpu => TranscriptionAccelerationBackend.AmdVulkan,
             _ => TranscriptionAccelerationBackend.Cpu
         };
     }
@@ -1146,7 +1146,7 @@ public sealed partial class WhisperCppPlugin :
         return RuntimeOptions.LoadedLibrary switch
         {
             RuntimeLibrary.Cuda => "Using CUDA",
-            RuntimeLibrary.Vulkan => "Using Vulkan",
+            RuntimeLibrary.Vulkan when !_vulkanHasNoGpu => "Using Vulkan",
             _ => "Using CPU"
         };
     }

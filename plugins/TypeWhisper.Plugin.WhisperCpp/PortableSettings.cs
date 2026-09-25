@@ -32,7 +32,8 @@ public sealed partial class WhisperCppPlugin
             ? " · " + gpu.Name + (gpu.Integrated ? L(" (integrated graphics)", " (integrierte Grafik)") : "") : ""),
         TranscriptionAccelerationBackend.NvidiaCuda => "NVIDIA CUDA",
         TranscriptionAccelerationBackend.AmdRocm => "AMD ROCm",
-        _ when _accelerationPreference is TranscriptionAccelerationPreference.Cpu or TranscriptionAccelerationPreference.Auto => "CPU",
+        _ when _accelerationPreference is TranscriptionAccelerationPreference.Cpu or TranscriptionAccelerationPreference.Auto
+            || _accelerationStatus.DisplayText == "Using CPU" => "CPU",
         _ => $"CPU ({_accelerationStatus.DisplayText})"
     };
 
