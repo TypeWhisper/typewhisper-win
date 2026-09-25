@@ -1,4 +1,5 @@
 using NAudio;
+using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.WinUI.Platform;
 
@@ -25,6 +26,22 @@ internal static class MicrophoneFailure
             _ => error.InnerException is { } inner ? Describe(inner) : Generic
         }
     };
+
+    // Resolves the priority list like AudioRecordingService does (ID, then name); null when the first entry is connected.
+    internal static string? PriorityNotice(IReadOnlyList<MicrophonePriorityItem> priority, IReadOnlyList<AudioInputDeviceInfo> devices)
+    {
+        var missing = new List<string>();
+        foreach (var item in priority)
+        {
+            var device = devices.FirstOrDefault(device => string.Equals(device.Id, item.Id, StringComparison.OrdinalIgnoreCase))
+                ?? devices.FirstOrDefault(device => WasapiAudioInputDeviceOrdering.DeviceNamesMatch(device.Name, item.Name));
+            if (device is not null)
+                return missing.Count == 0 ? null : $"{string.Join(", ", missing)} disconnected · using {device.Name}";
+            missing.Add(item.Name);
+        }
+        return missing.Count == 0 ? null
+            : $"{string.Join(", ", missing)} disconnected. Reconnect a listed microphone or add a connected one in Audio settings.";
+    }
 
     private const string Blocked = "Windows is blocking microphone access. Turn on Settings › Privacy & security › Microphone › Let desktop apps access your microphone.";
     private const string InUse = "Another app is using the microphone exclusively. Close that app, or turn off exclusive mode in the microphone's Windows Sound properties.";

@@ -184,10 +184,6 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public bool HasDevice => _deviceProvider.DeviceCount > 0;
     /// <summary>
-    /// Gets the name of the microphone the next recording uses, or null when none is prepared.
-    /// </summary>
-    public string? ActiveDeviceName { get { lock (_captureLifecycleLock) return _isWarmedUp ? _activeDeviceName : null; } }
-    /// <summary>
     /// Gets an actionable message for the last failed prepare or start, or null after a success.
     /// </summary>
     public string? CaptureFailure => _lastCaptureFailure is { } error ? MicrophoneFailure.Describe(error) : null;

@@ -43,7 +43,7 @@ internal sealed partial class LocalDictationSession
             ActiveRegistryModelDownload = null;
             _gate.Release();
             if (!_disposed)
-                SetStatus(IsReady ? ActiveModelName + " ready" : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
+                SetStatus(IsReady ? ModelReadyStatus() : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
         }
     }
 
@@ -67,7 +67,7 @@ internal sealed partial class LocalDictationSession
         finally
         {
             _gate.Release();
-            if (!_disposed) SetStatus(IsReady ? ActiveModelName + " ready" : "Choose a downloaded model in Dictation.", DictationPhase.Idle);
+            if (!_disposed) SetStatus(IsReady ? ModelReadyStatus() : "Choose a downloaded model in Dictation.", DictationPhase.Idle);
         }
     }
 
@@ -99,7 +99,7 @@ internal sealed partial class LocalDictationSession
             ActiveRegistryModelDownload = null;
             _gate.Release();
             if (!_disposed)
-                SetStatus(IsReady ? ActiveModelName + " ready" : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
+                SetStatus(IsReady ? ModelReadyStatus() : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
         }
     }
 

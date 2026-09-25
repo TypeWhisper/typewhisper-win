@@ -86,7 +86,7 @@ internal sealed partial class LocalDictationSession
             finally
             {
                 _gate.Release();
-                if (!_disposed) SetStatus(IsReady ? ActiveModelName + " ready" : "Choose a downloaded transcription model.", DictationPhase.Idle);
+                if (!_disposed) SetStatus(IsReady ? ModelReadyStatus() : "Choose a downloaded transcription model.", DictationPhase.Idle);
             }
         }
     }

@@ -42,7 +42,19 @@ public sealed class MicrophoneFailureTests
         factory.Error = null;
         Assert.True(audio.WarmUp());
         Assert.Null(audio.CaptureFailure);
-        Assert.Equal("Synthetic replay", audio.ActiveDeviceName);
+    }
+
+    [Fact]
+    public void PriorityNoticeFollowsTheDeviceResolver()
+    {
+        AudioInputDeviceInfo[] devices = [new(0, "new-id", "USB Mic", false), new(1, "laptop", "Laptop Mic", true)];
+        Assert.Null(MicrophoneFailure.PriorityNotice([], devices));
+        // A changed endpoint ID still resolves by name, like FindPriorityDeviceNumber.
+        Assert.Null(MicrophoneFailure.PriorityNotice([new("old-id", "USB Mic")], devices));
+        Assert.Equal("Headset disconnected · using Laptop Mic",
+            MicrophoneFailure.PriorityNotice([new("headset", "Headset"), new("laptop", "Laptop Mic")], devices));
+        // Unlisted microphones are never used when the priority list has entries.
+        Assert.Contains("Headset disconnected. Reconnect", MicrophoneFailure.PriorityNotice([new("headset", "Headset")], devices));
     }
 
     private sealed class Failing(Exception error) : IAudioInputCaptureFactory
