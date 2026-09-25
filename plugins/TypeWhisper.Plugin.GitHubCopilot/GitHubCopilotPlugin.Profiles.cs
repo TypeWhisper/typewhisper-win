@@ -39,7 +39,7 @@ public sealed partial class GitHubCopilotPlugin
                 { Section = PluginSettingsSection.Connection, Choices = choices },
                 new(Field("model"), L("Text model"), L("Refresh models for the chosen account, then save this profile."), profile.Model ?? models.FirstOrDefault()?.Id ?? "")
                 { Section = PluginSettingsSection.TextProcessing, Choices = models.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray() },
-                new("catalogCacheMinutes", L("Account and model cache"), L("How long to reuse account and model checks during dictation. Applies to all GitHub Copilot profiles."), _configuration.CacheMinutes.ToString())
+                new(Field("catalogCacheMinutes"), L("Account and model cache"), L("How long to reuse account and model checks during dictation. Applies to all GitHub Copilot profiles."), _configuration.CacheMinutes.ToString())
                 { Section = PluginSettingsSection.TextProcessing, Choices = CacheMinuteChoices.Select(minutes =>
                     new PluginSettingChoice(minutes.ToString(), minutes == 60 ? L("1 hour") : minutes == 120 ? L("2 hours") : L($"{minutes} minutes"))).ToArray() }
             ];
@@ -86,7 +86,7 @@ public sealed partial class GitHubCopilotPlugin
         {
             ValidateEditor(profileId, apiKey);
             var profile = Editor;
-            var allowed = new[] { profileId + "/name", profileId + "/account", profileId + "/model", "catalogCacheMinutes" };
+            var allowed = new[] { profileId + "/name", profileId + "/account", profileId + "/model", profileId + "/catalogCacheMinutes" };
             if (values.Count != allowed.Length || values.Keys.Any(k => !allowed.Contains(k))) throw new ArgumentException(L("Select the profile again before continuing."));
             var name = values[allowed[0]].Trim();
             if (name.Length is < 1 or > 100) throw new ArgumentException(L("Enter a profile name of up to 100 characters."));

@@ -81,18 +81,27 @@ public sealed class CopilotPluginTests
         await plugin.ExecuteSettingsActionAsync("refresh", default);
         var profileId = plugin.ConnectionIdentity;
         var values = Draft(plugin, FakeTransport.Personal, "model-a");
-        values["catalogCacheMinutes"] = "120";
+        values[profileId + "/catalogCacheMinutes"] = "120";
         await plugin.SaveProfileSettingsAsync(profileId, values, null, default);
         Assert.Equal(120, Saved(host).CacheMinutes);
         Assert.Equal(TimeSpan.FromHours(2), transport.CatalogLifetime);
 
         await plugin.ExecuteSettingsActionAsync("add", default);
         Assert.Equal(120, Saved(host).CacheMinutes);
+        var secondProfileId = plugin.ConnectionIdentity;
+        Assert.DoesNotContain(plugin.TextSettings, f => f.Id == profileId + "/catalogCacheMinutes");
+        Assert.Equal("120", plugin.TextSettings.Single(f => f.Id == secondProfileId + "/catalogCacheMinutes").Value);
+        var secondValues = Draft(plugin, FakeTransport.Personal, "model-a");
+        secondValues[secondProfileId + "/catalogCacheMinutes"] = "60";
+        await plugin.ExecuteProfileActionAsync(secondProfileId, secondProfileId + "/refresh", secondValues, null, default);
+        await plugin.SaveProfileSettingsAsync(secondProfileId, secondValues, null, default);
+        Assert.Equal(60, Saved(host).CacheMinutes);
+        Assert.Equal(TimeSpan.FromHours(1), transport.CatalogLifetime);
         await plugin.ExecuteSettingsActionAsync(plugin.RemoveProfileActionId!, default);
-        Assert.Equal(120, Saved(host).CacheMinutes);
+        Assert.Equal(60, Saved(host).CacheMinutes);
         await plugin.DeactivateAsync();
         await plugin.ActivateAsync(host);
-        Assert.Equal("120", plugin.TextSettings.Single(f => f.Id == "catalogCacheMinutes").Value);
+        Assert.Equal("60", plugin.TextSettings.Single(f => f.Id == profileId + "/catalogCacheMinutes").Value);
         await plugin.DeactivateAsync();
     }
 
@@ -106,7 +115,7 @@ public sealed class CopilotPluginTests
         var transport = new FakeTransport();
         using var plugin = new GitHubCopilotPlugin(transport);
         await plugin.ActivateAsync(host);
-        Assert.Equal("10", plugin.TextSettings.Single(f => f.Id == "catalogCacheMinutes").Value);
+        Assert.Equal("10", plugin.TextSettings.Single(f => f.Id == "github-copilot/catalogCacheMinutes").Value);
         Assert.Equal(TimeSpan.FromMinutes(10), transport.CatalogLifetime);
         await plugin.DeactivateAsync();
     }
@@ -119,7 +128,7 @@ public sealed class CopilotPluginTests
         await plugin.ActivateAsync(host);
         await plugin.ExecuteSettingsActionAsync("refresh", default);
         var values = Draft(plugin, FakeTransport.Personal, "model-a");
-        values["catalogCacheMinutes"] = "999";
+        values[plugin.ConnectionIdentity + "/catalogCacheMinutes"] = "999";
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveProfileSettingsAsync(plugin.ConnectionIdentity, values, null, default));
         Assert.Equal(10, Saved(host).CacheMinutes);
         await plugin.DeactivateAsync();
