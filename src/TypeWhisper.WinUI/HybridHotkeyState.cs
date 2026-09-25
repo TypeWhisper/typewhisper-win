@@ -34,16 +34,21 @@ internal sealed class HybridHotkeyState
         HybridHotkeyAction? action = null;
         // Windows skips a low-level hook that misses its timeout, e.g. while capture starts on
         // the UI thread. A lost key-up would otherwise block the next press of the shortcut.
-        if (held is not null && _down.RemoveWhere(pressed => !held(pressed)) > 0 && _down.Count == 0)
+        if (held is not null && _down.RemoveWhere(pressed => !held(pressed)) > 0)
         {
-            // The release time is unknown, so only Hold mode can infer a Stop; a Hybrid gesture counts as a tap.
-            action = _startedByGesture && mode == RecordingMode.Hold ? HybridHotkeyAction.Stop : null;
-            _armed = null; _startedByGesture = false; _blocked = false;
+            if (_armed is not null && Chord() != _armed)
+            {
+                // The release time is unknown, so only a gesture started in Hold mode can infer a Stop;
+                // a Hybrid gesture counts as a tap. Keys still held must be released before the next gesture.
+                action = _startedByGesture && (_mode ?? mode) == RecordingMode.Hold ? HybridHotkeyAction.Stop : null;
+                _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
+            }
+            else if (_down.Count == 0) _blocked = false;
         }
         if (_mode is not null && _mode != mode)
         {
             // A changed setting must never reinterpret keys which are already held.
-            action = _startedByGesture && recording ? HybridHotkeyAction.Cancel : null;
+            action = _startedByGesture && recording ? HybridHotkeyAction.Cancel : action;
             _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
         }
         _mode = mode;

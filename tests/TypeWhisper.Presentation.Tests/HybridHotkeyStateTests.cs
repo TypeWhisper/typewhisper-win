@@ -181,6 +181,51 @@ public class HybridHotkeyStateTests
     }
 
     [Fact]
+    public void PartiallyLostReleaseEndsTheGestureAsATap()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        var physical = new HashSet<int> { 0xA2 };
+        state.Key(0xA2, true, 0, bindings, held: physical.Contains);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 0, bindings, held: physical.Contains));
+        // Shift-up is lost; Ctrl stays held long past the hold threshold.
+        Assert.Null(state.Key(0xA2, false, 1000, bindings, true, held: physical.Contains));
+        physical.Clear();
+        state.Key(0xA2, true, 2000, bindings, true, held: physical.Contains);
+        physical.Add(0xA2);
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA0, true, 2010, bindings, true, held: physical.Contains));
+    }
+
+    [Fact]
+    public void PartiallyLostReleaseDoesNotCancelOnTheNextKey()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+P" };
+        var physical = new HashSet<int> { 0xA2 };
+        state.Key(0xA2, true, 0, bindings, held: physical.Contains);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x50, true, 10, bindings, held: physical.Contains));
+        // Ctrl-up is lost while P stays held; an unrelated key must not discard the capture.
+        physical.Clear(); physical.Add(0x50);
+        Assert.Null(state.Key(0x41, true, 50, bindings, true, held: physical.Contains));
+        physical.Add(0x41);
+        Assert.Null(state.Key(0x41, false, 60, bindings, true, held: physical.Contains));
+        physical.Remove(0x41);
+        Assert.Null(state.Key(0x50, false, 70, bindings, true, held: physical.Contains));
+    }
+
+    [Fact]
+    public void LostHoldReleaseStopsEvenAfterTheModeChanges()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        var physical = new HashSet<int> { 0xA2 };
+        state.Key(0xA2, true, 0, bindings, mode: RecordingMode.Hold, held: physical.Contains);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 0, bindings, mode: RecordingMode.Hold, held: physical.Contains));
+        physical.Clear();
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x41, true, 2000, bindings, true, RecordingMode.Toggle, held: physical.Contains));
+    }
+
+    [Fact]
     public void RepeatedHeldKeysAreNotTreatedAsLost()
     {
         var state = new HybridHotkeyState();
