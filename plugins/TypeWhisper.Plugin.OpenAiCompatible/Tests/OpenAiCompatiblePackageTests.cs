@@ -28,7 +28,7 @@ public partial class OpenAiCompatiblePluginTests
             PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 2), http, _ => host);
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.openai-compatible", Name = "OpenAI Compatible", Version = "1.1.1", MinHostVersion = "1.1.2",
+                Id = "com.typewhisper.openai-compatible", Name = "OpenAI Compatible", Version = "1.1.2", MinHostVersion = "1.1.2",
                 DownloadUrl = "https://fixture.invalid/openai-compatible.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
                 SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };
