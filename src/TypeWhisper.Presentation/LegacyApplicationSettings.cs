@@ -21,7 +21,9 @@ public static class LegacyApplicationSettings
         Directory.CreateDirectory(destination);
         string PathFor(string name) => Path.Combine(destination, name);
         void Json(string name, object value) => File.WriteAllText(PathFor(name), JsonSerializer.Serialize(value));
-        void Shortcuts(string name, IEnumerable<string> values) => File.WriteAllText(PathFor(name), string.Join(",", values));
+        // 1.0 named the comma key ","; 1.1 separates shortcuts with commas and calls it "Comma".
+        void Shortcuts(string name, IEnumerable<string> values) => File.WriteAllText(PathFor(name),
+            string.Join(",", values.Select(value => value.EndsWith(',') ? value[..^1] + "Comma" : value)));
         void Check(string? error) { if (error is not null) throw new InvalidDataException(error); }
 
         Check(new DictationOutputPreferencesStore(PathFor("dictation-output.json")).Save(new()

@@ -43,6 +43,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationLexiconSnapshot.cs" Link="DictationLexiconSnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ShortcutKeys.cs" Link="ShortcutKeys.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntry.cs" Link="HistoryEntry.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Transcript.cs" Link="Transcript.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />

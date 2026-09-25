@@ -20,7 +20,11 @@ internal static class ShortcutRules
         string.Join(",", current.Where((_, itemIndex) => itemIndex != index));
 
     internal static string Normalize(string value) => string.Join("+", value.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-        .Select(part => part.ToUpperInvariant() switch { "CONTROL" => "CTRL", "ESCAPE" => "ESC", "RETURN" => "ENTER", var token => token })
+        .Select(part => part.ToUpperInvariant() switch
+        {
+            "CONTROL" => "CTRL", ("CTRL" or "ALT" or "SHIFT" or "WIN") and var modifier => modifier,
+            var token => ShortcutKeys.TryParse(token, out var key) ? ShortcutKeys.Token(key).ToUpperInvariant() : token
+        })
         .OrderBy(part => part switch { "CTRL" => 0, "ALT" => 1, "SHIFT" => 2, "WIN" => 3, _ => 4 }));
 
     internal static string? Validate(string candidate, bool allowModifiersOnly)
@@ -31,6 +35,7 @@ internal static class ShortcutRules
         if (keys.Length == 0)
             return allowModifiersOnly && parts.Length >= 2 ? null : "Add a key to the modifier, such as Ctrl + Shift + K.";
         if (keys.Length != 1 || keys[0].Length == 0) return "Press one key together with your modifiers.";
+        if (!ShortcutKeys.TryParse(keys[0], out _)) return "This key can't be used in a shortcut. Choose another key.";
         if (Normalize(candidate) is "ALT+F4" or "ALT+TAB" or "CTRL+ALT+DELETE") return "This combination is reserved by Windows.";
         if (parts.Length == 1 && !(keys[0].StartsWith('F') && int.TryParse(keys[0][1..], out var n) && n is >= 1 and <= 24))
             return "Use Ctrl, Alt or Shift with the key, or choose a function key.";
