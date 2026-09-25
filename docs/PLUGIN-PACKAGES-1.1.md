@@ -185,22 +185,27 @@ see [Plugin releases](PLUGIN-RELEASES.md). File Memory 1.4.0 was subsequently pu
 with verified downloads, bringing that catalog snapshot to 35 entries. These counts
 are dated evidence; read the public feed for the current inventory.
 
-Use `eng/Build-PortablePluginCatalog.py` in a clean Windows checkout to build changed portable
-projects and stage ZIP archives plus catalog JSON. For example, run
-`python eng/Build-PortablePluginCatalog.py --source . --existing-feed ../current-plugins-v2.json --tag plugins-winui-YYYYMMDD --output ../staged-catalog`.
-The current feed can use either supported top-level shape: a plugin array or an object
-containing a `plugins` array. Keep the downloaded feed and staging output outside the
-source checkout, which must have no uncommitted or untracked files. Choose a new release
-tag and output directory for each update. A changed plugin must have a higher three-part
-numeric version than the published entry.
-The `--exclude-id` option leaves an intentionally deferred plugin out of the feed. A plugin
-whose version already exists in the current feed is retained unchanged; bump its manifest
-version before publishing changed binaries.
+Publish through the **Release plugins** workflow described in
+[Plugin releases](PLUGIN-RELEASES.md): one plugin version per run, released under the
+tag `plugin-<ID suffix>-v<version>` as a plain, non-latest GitHub release. The dated
+`plugins-winui-YYYYMMDD` bundles and prereleases above are historical; do not create
+new releases in that shape.
 
-Upload the staged archives to a new prerelease with `latest=false`. Verify every public
-download against its staged size and SHA-256, then update only `plugins-v2.json` on
-`gh-pages`. Check the GitHub Pages build and fetch the exact WinUI feed URL afterward.
-Keep previous release assets and the legacy `plugins.json` intact.
+`eng/Build-PortablePluginCatalog.py` remains the staging step underneath that workflow.
+It builds the selected portable project in a clean Windows checkout and stages the ZIP
+archive plus catalog JSON; `eng/Prepare-PluginRelease.py` wraps it with the tag-derived
+selection and package tests. The current feed can use either supported top-level shape: a
+plugin array or an object containing a `plugins` array. Keep the downloaded feed and
+staging output outside the source checkout, which must have no uncommitted or untracked
+files. A changed plugin must have a higher three-part numeric version than the published
+entry; a plugin whose version already exists in the current feed is retained unchanged,
+so bump its manifest version before publishing changed binaries. The `--exclude-id`
+option exists for local catalog experiments only; publication rejects staged output that
+removes entries.
+
+Publication verifies every public download against its staged size and SHA-256, then
+updates only `plugins-v2.json` on `gh-pages` and requests the GitHub Pages build.
+Previous release assets and the legacy `plugins.json` stay intact.
 
 The 1.1 feed uses `categories`, an array of capability IDs. For example, Groq declares
 `["transcription", "llm"]`. The staging script normalizes older singular `category`

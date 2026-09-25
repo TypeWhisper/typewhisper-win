@@ -94,21 +94,20 @@ class CatalogTests(unittest.TestCase):
                 builder.discover_projects(root, set())
 
     def test_tag_selection_and_version_match(self):
-        with patch.object(prepare.publisher.builder, 'discover_projects', return_value=[(None, {"version": "1.4.0"})]):
-            self.assertEqual(prepare.selection(None, '', 'plugin-file-memory-v1.4.0', True), ['com.typewhisper.file-memory'])
-            with self.assertRaises(ValueError):
-                prepare.selection(None, '', 'plugin-file-memory-v2.0.0', True)
-            with self.assertRaises(ValueError):
-                prepare.selection(None, '', 'bad-tag', True)
+        with patch.object(prepare.publisher.builder, 'discover_projects', return_value=[(None, {"version": "1.4.0"})]) as discover:
+            self.assertEqual(prepare.selection(None, 'plugin-file-memory-v1.4.0'), ['com.typewhisper.file-memory'])
+            discover.assert_called_once_with(None, {'com.typewhisper.file-memory'})
+            with self.assertRaisesRegex(ValueError, 'differs from the committed manifest'):
+                prepare.selection(None, 'plugin-file-memory-v2.0.0')
 
-    def test_dispatch_requires_explicit_selection(self):
-        with self.assertRaises(ValueError):
-            prepare.selection(None, ' , ', 'plugins-test', False)
-
-    def test_dispatch_deduplicates_selection(self):
-        with patch.object(prepare.publisher.builder, 'discover_projects', return_value=[]):
-            self.assertEqual(prepare.selection(None, 'com.test.one, com.test.two com.test.one', 'plugins-test', False),
-                             ['com.test.one', 'com.test.two'])
+    def test_release_names_outside_the_plugin_scheme_are_rejected(self):
+        # Dispatch inputs and pushed tags share one naming scheme: plugin-<suffix>-v<version>.
+        for tag in ('bad-tag', 'plugins-12345', 'plugin-file-memory-v1.4', 'plugin-File-Memory-v1.4.0',
+                    'plugin-one,plugin-two-v1.0.0', 'plugin--v1.0.0'):
+            with self.subTest(tag=tag), patch.object(prepare.publisher.builder, 'discover_projects') as discover:
+                with self.assertRaisesRegex(ValueError, 'Expected plugin-'):
+                    prepare.selection(None, tag)
+                discover.assert_not_called()
 
     def test_package_runs_both_test_types_and_preserves_failure_logs(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -168,7 +167,8 @@ class StageTests(unittest.TestCase):
         self.manifest = entry() | {"minHostVersion": "1.1.5", "assemblyName": "Example.dll"}
         self.name = "com.typewhisper.example-1.0.0-win-x64.zip"
         self.archive = self.stage / "archives" / self.name
-        self.summary = {"tag": "plugins-test", "sourceCommit": "a" * 40, "testsRequired": True,
+        self.latest_tag = "v1.1.0"  # the application release stays latest
+        self.summary = {"tag": "plugin-example-v1.0.0", "sourceCommit": "a" * 40, "testsRequired": True,
                         "archiveCount": 1, "excludedIds": [], "changedPlugins": []}
         self.write_archive()
 
@@ -179,15 +179,40 @@ class StageTests(unittest.TestCase):
             if extra:
                 archive.writestr(extra, "bad")
         self.summary["changedPlugins"] = [self.manifest | {
-            "downloadUrl": f"https://github.com/{publish.REPO}/releases/download/plugins-test/{self.name}",
+            "downloadUrl": f"https://github.com/{publish.REPO}/releases/download/plugin-example-v1.0.0/{self.name}",
             "sha256": builder.sha256(self.archive), "size": self.archive.stat().st_size}]
         self.save()
+
+    def fake_api(self, path, *args, **kwargs):
+        if path.startswith("commits/"):
+            return {"sha": "a" * 40}
+        if path == "releases/latest":
+            return {"tag_name": self.latest_tag}
+        raise AssertionError(f"Unexpected API call: {path}")
 
     def save(self):
         (self.stage / "summary.json").write_text(json.dumps(self.summary), encoding="utf-8")
 
     def test_valid_package(self):
         self.assertEqual(publish.validate_stage(self.stage), self.summary)
+
+    def test_stage_with_several_changed_plugins_rejected(self):
+        # Staging directly with several --plugin-id arguments must not publish a bundle.
+        self.summary["changedPlugins"].append(entry("com.typewhisper.other") | self.summary["changedPlugins"][0])
+        self.summary["changedPlugins"][1]["id"] = "com.typewhisper.other"
+        self.save()
+        with self.assertRaisesRegex(ValueError, "exactly one plugin"):
+            publish.validate_stage(self.stage)
+
+    def test_stage_tag_must_match_the_plugin_and_version(self):
+        for tag in ("plugins-20260925", "plugin-other-v1.0.0", "plugin-example-v1.0.1"):
+            with self.subTest(tag=tag):
+                self.summary["tag"] = tag
+                self.summary["changedPlugins"][0]["downloadUrl"] = \
+                    f"https://github.com/{publish.REPO}/releases/download/{tag}/{self.name}"
+                self.save()
+                with self.assertRaisesRegex(ValueError, "Release tag must be plugin-example-v1.0.0"):
+                    publish.validate_stage(self.stage)
 
     def test_modified_archive_rejected(self):
         with self.archive.open('ab') as output:
@@ -228,8 +253,8 @@ class StageTests(unittest.TestCase):
             publish.validate_stage(self.stage)
 
     def test_existing_asset_not_overwritten(self):
-        existing = {"tag_name": "plugins-test", "body": "Source commit: " + "a" * 40,
-                    "draft": True, "prerelease": True, "assets": [{"name": self.name}]}
+        existing = {"tag_name": "plugin-example-v1.0.0", "body": "Source commit: " + "a" * 40,
+                    "draft": True, "prerelease": False, "assets": [{"name": self.name}]}
         calls = []
         def fake_gh(*args, **kwargs):
             calls.append(args)
@@ -264,16 +289,123 @@ class StageTests(unittest.TestCase):
             update.assert_not_called()
 
     def test_draft_creation_uploads_before_publishing(self):
-        draft = {"tag_name": "plugins-test", "body": "Source commit: " + "a" * 40,
-                 "draft": True, "prerelease": True, "assets": []}
+        draft = {"tag_name": self.summary["tag"], "body": "Source commit: " + "a" * 40,
+                 "draft": True, "prerelease": False, "assets": []}
         with patch.object(publish, "find_release", side_effect=[None, draft]), \
              patch.object(publish, "gh") as gh, \
-             patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "api", side_effect=self.fake_api), \
              patch.object(publish, "check_existing_tag"), \
              patch.object(publish, "verify_download") as download:
             publish.ensure_release(self.stage, self.summary)
         self.assertEqual([call.args[:2] for call in gh.call_args_list],
                          [("release", "create"), ("release", "upload"), ("release", "edit")])
+        download.assert_called_once()
+        # Like the macOS plugin releases: one plugin version per release, a plain
+        # release rather than a prerelease, and never the repository's latest release.
+        create = gh.call_args_list[0].args
+        self.assertEqual(create[create.index("--title") + 1], "com.typewhisper.example Plugin v1.0.0")
+        self.assertEqual(create[2], "plugin-example-v1.0.0")
+        for call in gh.call_args_list:
+            self.assertNotIn("--prerelease", call.args)
+            if call.args[:2] in (("release", "create"), ("release", "edit")):
+                self.assertIn("--latest=false", call.args)
+        notes = pathlib.Path(create[create.index("--notes-file") + 1]).read_text(encoding="utf-8")
+        self.assertEqual(notes, "Source commit: " + "a" * 40 + "\n")
+
+    def test_recovered_prerelease_draft_is_published_plain(self):
+        # A draft left behind by an earlier workflow may still be flagged as a prerelease.
+        draft = {"tag_name": self.summary["tag"], "body": "Source commit: " + "a" * 40,
+                 "draft": True, "prerelease": True, "assets": [{"name": self.name}]}
+        def fake_gh(*args, **kwargs):
+            if args[:2] == ("release", "download"):
+                destination = pathlib.Path(args[args.index("--dir") + 1])
+                (destination / self.name).write_bytes(self.archive.read_bytes())
+            return ""
+        with patch.object(publish, "find_release", return_value=draft), \
+             patch.object(publish, "gh", side_effect=fake_gh) as gh, \
+             patch.object(publish, "api", side_effect=self.fake_api), \
+             patch.object(publish, "check_existing_tag"), \
+             patch.object(publish, "verify_download"):
+            publish.ensure_release(self.stage, self.summary)
+        edit = next(call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit"))
+        self.assertIn("--draft=false", edit)
+        self.assertIn("--prerelease=false", edit)
+        self.assertIn("--latest=false", edit)
+        self.assertEqual(edit[edit.index("--title") + 1], "com.typewhisper.example Plugin v1.0.0")
+
+    def test_published_prerelease_from_earlier_run_is_normalized(self):
+        # Published before the catalog update failed: clear the prerelease flag only,
+        # and leave the hand-edited title and notes alone.
+        published = {"tag_name": self.summary["tag"], "name": "Renamed by hand",
+                     "body": "Fixed a bug.\n\nSource commit: " + "a" * 40,
+                     "draft": False, "prerelease": True, "assets": [{"name": self.name}]}
+        def fake_gh(*args, **kwargs):
+            if args[:2] == ("release", "download"):
+                destination = pathlib.Path(args[args.index("--dir") + 1])
+                (destination / self.name).write_bytes(self.archive.read_bytes())
+            return ""
+        with patch.object(publish, "find_release", return_value=published), \
+             patch.object(publish, "gh", side_effect=fake_gh) as gh, \
+             patch.object(publish, "api", side_effect=self.fake_api), \
+             patch.object(publish, "verify_download"):
+            publish.ensure_release(self.stage, self.summary)
+        edits = [call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit")]
+        self.assertEqual(len(edits), 1)
+        self.assertIn("--prerelease=false", edits[0])
+        self.assertNotIn("--draft=false", edits[0])
+        self.assertNotIn("--title", edits[0])
+
+    def test_published_prerelease_with_generated_title_gets_canonical_title(self):
+        published = {"tag_name": self.summary["tag"], "name": "TypeWhisper Plugins · " + self.summary["tag"],
+                     "body": "Source commit: " + "a" * 40,
+                     "draft": False, "prerelease": True, "assets": [{"name": self.name}]}
+        def fake_gh(*args, **kwargs):
+            if args[:2] == ("release", "download"):
+                destination = pathlib.Path(args[args.index("--dir") + 1])
+                (destination / self.name).write_bytes(self.archive.read_bytes())
+            return ""
+        with patch.object(publish, "find_release", return_value=published), \
+             patch.object(publish, "gh", side_effect=fake_gh) as gh, \
+             patch.object(publish, "api", side_effect=self.fake_api), \
+             patch.object(publish, "verify_download"):
+            publish.ensure_release(self.stage, self.summary)
+        edit = next(call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit"))
+        self.assertIn("--prerelease=false", edit)
+        self.assertEqual(edit[edit.index("--title") + 1], "com.typewhisper.example Plugin v1.0.0")
+
+    def test_plain_release_marked_latest_is_demoted_without_other_changes(self):
+        # A plugin release must never shadow the application's latest release.
+        self.latest_tag = self.summary["tag"]
+        published = {"tag_name": self.summary["tag"], "name": "Renamed by hand",
+                     "body": "Fixed a bug.\n\nSource commit: " + "a" * 40,
+                     "draft": False, "prerelease": False, "assets": [{"name": self.name}]}
+        def fake_gh(*args, **kwargs):
+            if args[:2] == ("release", "download"):
+                destination = pathlib.Path(args[args.index("--dir") + 1])
+                (destination / self.name).write_bytes(self.archive.read_bytes())
+            return ""
+        with patch.object(publish, "find_release", return_value=published), \
+             patch.object(publish, "gh", side_effect=fake_gh) as gh, \
+             patch.object(publish, "api", side_effect=self.fake_api), \
+             patch.object(publish, "verify_download"):
+            publish.ensure_release(self.stage, self.summary)
+        edits = [call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit")]
+        self.assertEqual(edits, [("release", "edit", self.summary["tag"], "--repo", publish.REPO, "--latest=false")])
+
+    def test_existing_plain_release_with_matching_provenance_is_accepted(self):
+        published = {"tag_name": self.summary["tag"], "body": "Fixed a bug.\n\nSource commit: " + "a" * 40,
+                     "draft": False, "prerelease": False, "assets": [{"name": self.name}]}
+        def fake_gh(*args, **kwargs):
+            if args[:2] == ("release", "download"):
+                destination = pathlib.Path(args[args.index("--dir") + 1])
+                (destination / self.name).write_bytes(self.archive.read_bytes())
+                return ""
+            raise AssertionError(f"Unexpected mutation: {args}")
+        with patch.object(publish, "find_release", return_value=published), \
+             patch.object(publish, "gh", side_effect=fake_gh), \
+             patch.object(publish, "api", side_effect=self.fake_api), \
+             patch.object(publish, "verify_download") as download:
+            publish.ensure_release(self.stage, self.summary)
         download.assert_called_once()
 
     def test_noop_can_recover_pages_without_releasing_again(self):
@@ -318,18 +450,18 @@ class StageTests(unittest.TestCase):
         publish.validate_stage(self.stage)
 
     def test_moved_tag_prevents_draft_publication(self):
-        draft = {"tag_name": "plugins-test", "body": "Source commit: " + "a" * 40,
-                 "draft": True, "prerelease": True, "assets": []}
+        draft = {"tag_name": "plugin-example-v1.0.0", "body": "Source commit: " + "a" * 40,
+                 "draft": True, "prerelease": False, "assets": []}
         with patch.object(publish, 'find_release', return_value=draft), \
              patch.object(publish, 'gh') as gh, \
-             patch.object(publish, 'api', side_effect=[[{'ref': 'refs/tags/plugins-test'}], {'sha': 'b' * 40}]):
+             patch.object(publish, 'api', side_effect=[[{'ref': 'refs/tags/plugin-example-v1.0.0'}], {'sha': 'b' * 40}]):
             with self.assertRaises(ValueError):
                 publish.ensure_release(self.stage, self.summary)
         self.assertFalse(any(call.args[:2] == ('release', 'edit') for call in gh.call_args_list))
 
     def test_absent_tag_can_be_created_when_publishing(self):
         with patch.object(publish, 'api', return_value=[]) as api:
-            publish.check_existing_tag('plugins-test', 'a' * 40)
+            publish.check_existing_tag('plugin-example-v1.0.0', 'a' * 40)
         api.assert_called_once()
 
 

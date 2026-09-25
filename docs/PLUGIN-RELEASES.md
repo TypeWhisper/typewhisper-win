@@ -6,23 +6,34 @@ It discovers IDs from committed manifests rather than maintaining a project-name
 It never patches a version during the build: bump the manifest, implementation and
 project version together, test them, and merge first.
 
+Releases follow the macOS repository: every plugin version gets its own GitHub
+release named `plugin-<ID suffix>-v<version>`, for example `plugin-file-memory-v1.4.0`
+for `com.typewhisper.file-memory` 1.4.0. The release is titled after the plugin
+(`File Memory Plugin v1.4.0`), carries the single ZIP as its asset, is a plain release
+rather than a prerelease, and never becomes the repository's latest release. The
+generated notes contain only the source commit line; write the change description
+into the release afterwards and keep that line so publication reruns can verify
+provenance. There is no run-numbered "TypeWhisper Plugins" release any more.
+
 ## Run from Actions
 
 1. Open **Actions → Release plugins → Run workflow**.
-2. Select `main` and enter full plugin IDs separated by commas, for example
-   `com.typewhisper.file-memory,com.typewhisper.linear`.
+2. Select `main` and enter the plugin ID suffix (`file-memory` for
+   `com.typewhisper.file-memory`) and the version from its committed manifest
+   (`1.4.0`). Together they form the release tag `plugin-file-memory-v1.4.0`.
 3. Leave **Publish** unchecked for a dry run. Download the `plugin-release` artifact
-   to inspect package tests, build logs, ZIPs, source commit, hashes and catalog preview.
+   to inspect package tests, build logs, ZIP, source commit, hash and catalog preview.
 4. Run again with **Publish** checked to publish. A dispatch on another branch can
    build a preview, but the publication job runs only for `main`.
 
-For a tag-driven release, push `plugin-<ID suffix>-v<version>` on an already merged
-commit. For example, `plugin-file-memory-v1.4.0` selects
-`com.typewhisper.file-memory` and requires manifest version `1.4.0`. Do not reuse an
-existing tag. Tags outside main history or mismatched versions fail before building.
+Alternatively push the tag `plugin-<ID suffix>-v<version>` on an already merged
+commit; it selects the same plugin and version as the dispatch inputs. Do not reuse an
+existing tag. Tags outside main history, unknown IDs or versions that differ from the
+committed manifest fail before building.
 
-Only selected plugins with newer versions are built. Other catalog entries are
-preserved. Publishing the same versions again is a no-op once the public feed agrees.
+Only the selected plugin is built, and only when its version is newer than the
+published one. Other catalog entries are preserved. Publishing the same version again
+is a no-op once the public feed agrees.
 Removing or retiring a plugin is a separate catalog change, not a side effect of a
 release selection. The gate runs both `Tests/*.csproj` and Python `Tests/test_*.py`
 unittest suites when present. Packages with neither test type fail the release gate;
@@ -30,12 +41,14 @@ add package tests before using this workflow for those packages.
 
 ## Validation and publication order
 
-1. Test the release scripts, build selected packages and run their package tests.
+1. Test the release scripts, build the selected package and run its package tests.
 2. Check the ZIP root manifest, assembly, version, minimum host version, paths,
    SHA-256 and byte size. Save the source commit and package metadata in `summary.json`.
-3. Create a draft prerelease without changing the application's latest-release marker.
-   Existing assets are downloaded and compared; they are never overwritten.
-4. Publish the release and verify each anonymous public ZIP download.
+3. Create a draft release titled after the plugin without changing the application's
+   latest-release marker. Existing assets are downloaded and compared; they are never
+   overwritten.
+4. Publish the release as a plain, non-latest release and verify the anonymous public
+   ZIP download.
 5. Read the latest catalog, merge only the changed entries and write using the file's
    current Git blob SHA. Retry concurrent updates against a fresh snapshot; reject
    downgrades and conflicting contents for an already published version.
@@ -69,7 +82,7 @@ Use a clean source checkout and an output directory outside it:
 
 ```powershell
 python eng/Prepare-PluginRelease.py --source . --output ../plugin-release-check `
-  --tag plugins-local-check --plugin-ids com.typewhisper.file-memory
+  --tag plugin-file-memory-v1.4.0
 python eng/Publish-PluginCatalog.py --stage ../plugin-release-check
 # Explicitly publish an approved, tested artifact:
 python eng/Publish-PluginCatalog.py --stage ../plugin-release-check --publish

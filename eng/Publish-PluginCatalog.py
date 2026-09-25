@@ -91,6 +91,15 @@ def validate_stage(stage):
         raise ValueError("Expected a full source commit")
     changes = summary["changedPlugins"]
     builder.catalog_entries(changes)
+    # One plugin version per release, under its canonical tag, whichever entry
+    # point staged the output.
+    if len(changes) > 1:
+        raise ValueError("A release publishes exactly one plugin version")
+    for entry in changes:
+        prefix = "com.typewhisper."
+        expected_tag = f"plugin-{entry['id'].removeprefix(prefix)}-v{entry['version']}"
+        if not entry["id"].startswith(prefix) or summary["tag"] != expected_tag:
+            raise ValueError(f"Release tag must be {expected_tag} for {entry['id']} {entry['version']}")
     validate_catalog(changes)
     if len(changes) != summary["archiveCount"]:
         raise ValueError("Archive count differs from changed plugins")
@@ -159,15 +168,15 @@ def ensure_release(stage, summary):
     tag = summary["tag"]
     release = find_release(tag)
     marker = f"Source commit: {summary['sourceCommit']}"
+    # One plugin version per release, named like the macOS plugin releases.
+    title = ", ".join(f"{e['name']} Plugin v{e['version']}" for e in summary["changedPlugins"])
     if release is None:
+        # The notes stay minimal so the change description can be written by hand
+        # afterwards; keep the source commit line, publication reruns rely on it.
         notes = stage / "release-notes.md"
-        notes.write_text("Portable TypeWhisper plugins for Windows x64.\n\n" + marker + "\n\n" +
-                         "\n".join(f"- {e['name']} {e['version']}" for e in summary["changedPlugins"]) +
-                         "\n\nPackage tests passed before staging. SHA-256 and sizes are recorded in the catalog. "
-                         "Model downloads and credentials are not included.\n", encoding="utf-8")
+        notes.write_text(marker + "\n", encoding="utf-8")
         gh("release", "create", tag, "--repo", REPO, "--target", summary["sourceCommit"],
-           "--title", f"TypeWhisper Plugins · {tag}", "--notes-file", str(notes),
-           "--draft", "--prerelease", "--latest=false")
+           "--title", title, "--notes-file", str(notes), "--draft", "--latest=false")
         # Draft releases do not yet have a resolvable tag endpoint, and the release list
         # can lag behind creation for a few seconds.
         for delay in (0, 2, 4, 8, 16):
@@ -176,8 +185,8 @@ def ensure_release(stage, summary):
                 break
         else:
             raise RuntimeError("Created draft release could not be read back")
-    if marker not in (release.get("body") or "") or not release["prerelease"]:
-        raise ValueError("Existing release has different provenance or is not a prerelease")
+    if marker not in (release.get("body") or ""):
+        raise ValueError("Existing release has different provenance")
     if not release["draft"]:
         if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
             raise ValueError("Release tag points to a different source commit")
@@ -196,7 +205,23 @@ def ensure_release(stage, summary):
             gh("release", "upload", tag, str(stage / "archives" / name), "--repo", REPO)
     if release["draft"]:
         check_existing_tag(tag, summary["sourceCommit"])
-        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--prerelease", "--latest=false")
+        # A draft left behind by an earlier run may still carry the old title or
+        # prerelease flag; publishing normalizes it so every plugin release ends up
+        # as a plain, canonically titled, non-latest release.
+        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--prerelease=false", "--latest=false",
+           "--title", title)
+    else:
+        # An earlier run may have published the release but failed before the catalog
+        # update. Clear a leftover prerelease flag, replace only the old generated
+        # title, and make sure the plugin never shadows the application's latest
+        # release; a hand-written title and the notes stay.
+        arguments = []
+        if release.get("prerelease"):
+            arguments.append("--prerelease=false")
+            if release.get("name") == f"TypeWhisper Plugins · {tag}":
+                arguments += ["--title", title]
+        if arguments or api("releases/latest")["tag_name"] == tag:
+            gh("release", "edit", tag, "--repo", REPO, "--latest=false", *arguments)
     if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
         raise ValueError("Published tag does not match the tested source commit")
     for entry in summary["changedPlugins"]:
