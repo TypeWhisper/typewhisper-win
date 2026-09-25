@@ -60,7 +60,9 @@ public sealed partial class WhisperCppPlugin :
     private IWhisperCppCudaRuntimeInstaller? _cudaRuntimeInstaller;
     private IPluginHostServices? _host;
     private WhisperFactory? _factory;
-    internal Func<string, WhisperFactory> CreateFactory { get; set; } = path => WhisperFactory.FromPath(path);
+    internal Func<string, WhisperFactory> CreateFactory { get; set; }
+    internal Func<string, IReadOnlyList<GpuDevice>> ListGpuDevices { get; set; } = GpuDevices.List;
+    private GpuDevice? _gpuDevice;
     internal Action<WhisperFactory> ReleaseFactory { get; set; } = factory => factory.Dispose();
     private string? _selectedModelId;
     private string? _loadedModelId;
@@ -86,11 +88,37 @@ public sealed partial class WhisperCppPlugin :
     /// </summary>
     public WhisperCppPlugin()
     {
+        CreateFactory = path => WhisperFactory.FromPath(path, CreateFactoryOptions());
     }
 
-    internal WhisperCppPlugin(IWhisperCppCudaRuntimeInstaller cudaRuntimeInstaller)
+    internal WhisperCppPlugin(IWhisperCppCudaRuntimeInstaller cudaRuntimeInstaller) : this()
     {
         _cudaRuntimeInstaller = cudaRuntimeInstaller;
+    }
+
+    // Loads the native runtime before the model so a Vulkan runtime can place it on the dedicated GPU.
+    internal WhisperFactoryOptions CreateFactoryOptions()
+    {
+        _gpuDevice = null;
+        var options = new WhisperFactoryOptions();
+        if (_accelerationPreference is TranscriptionAccelerationPreference.Cpu or TranscriptionAccelerationPreference.AmdRocm) return options;
+        try
+        {
+            WhisperFactory.GetRuntimeInfo();
+            if (RuntimeOptions.LoadedLibrary != RuntimeLibrary.Vulkan
+                || ResolveRuntimePathForDiagnostics(RuntimeLibrary.Vulkan, _accelerationPreference, useRequestedBackend: false) is not { } runtime)
+                return options;
+            var devices = ListGpuDevices(Path.GetDirectoryName(runtime)!);
+            if (devices.Count == 0) return options;
+            options.GpuDevice = GpuDevices.Select(devices);
+            _gpuDevice = devices[options.GpuDevice];
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Without the list whisper.cpp keeps its default device.
+            _host?.Log(PluginLogLevel.Warning, "GPU list unavailable: " + GetRootCauseMessage(ex));
+        }
+        return options;
     }
 
     /// <summary>
@@ -104,7 +132,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.19";
+    public string PluginVersion => "1.2.20";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -230,7 +258,7 @@ public sealed partial class WhisperCppPlugin :
 
         if (_factory is not null && !_runtimeRestartRequired)
         {
-            _accelerationStatus = CreateLoadedAccelerationStatus(RuntimeOptions.LoadedLibrary, preference);
+            _accelerationStatus = CreateLoadedAccelerationStatus(RuntimeOptions.LoadedLibrary, preference, _gpuDevice);
             return;
         }
 
@@ -432,7 +460,8 @@ public sealed partial class WhisperCppPlugin :
         var loadedLibrary = RuntimeOptions.LoadedLibrary;
         _accelerationStatus = CreateLoadedAccelerationStatus(
             loadedLibrary,
-            _accelerationPreference);
+            _accelerationPreference,
+            _gpuDevice);
         _customRocmRuntimeLoaded = _accelerationPreference == TranscriptionAccelerationPreference.AmdRocm;
         _runtimePath = ResolveRuntimePathForDiagnostics(
             loadedLibrary,
@@ -442,7 +471,7 @@ public sealed partial class WhisperCppPlugin :
         _loadedModelId = modelId;
         _host?.Log(
             PluginLogLevel.Info,
-            $"Loaded model {modelId}. {BuildAccelerationDiagnosticMessage(AccelerationDiagnostics)}");
+            $"Loaded model {modelId}. {BuildAccelerationDiagnosticMessage(AccelerationDiagnostics)}{(_gpuDevice is { } gpu ? $" gpu='{gpu.Name}'" : "")}");
     }
 
     /// <summary>
@@ -614,7 +643,8 @@ public sealed partial class WhisperCppPlugin :
 
     private static TranscriptionAccelerationStatus CreateLoadedAccelerationStatus(
         RuntimeLibrary? loadedLibrary,
-        TranscriptionAccelerationPreference preference)
+        TranscriptionAccelerationPreference preference,
+        GpuDevice? gpu = null)
     {
         if (preference == TranscriptionAccelerationPreference.AmdRocm)
             return new(TranscriptionAccelerationBackend.AmdRocm, "Using ROCm");
@@ -622,7 +652,8 @@ public sealed partial class WhisperCppPlugin :
         return loadedLibrary switch
         {
             RuntimeLibrary.Cuda => new(TranscriptionAccelerationBackend.NvidiaCuda, "Using CUDA"),
-            RuntimeLibrary.Vulkan => new(TranscriptionAccelerationBackend.AmdVulkan, "Using Vulkan"),
+            RuntimeLibrary.Vulkan => new(TranscriptionAccelerationBackend.AmdVulkan, "Using Vulkan",
+                gpu is null ? null : $"Running on {gpu.Name}{(gpu.Integrated ? " (integrated graphics)" : "")}."),
             RuntimeLibrary.Cpu => preference switch
             {
                 TranscriptionAccelerationPreference.Auto => new(
