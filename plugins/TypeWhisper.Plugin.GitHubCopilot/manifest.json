@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.github-copilot",
   "name": "GitHub Copilot",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minHostVersion": "1.1.2",
   "author": "TypeWhisper",
   "description": "Clean up, translate and rewrite workflow text using your own GitHub Copilot sign-in. Copilot plan limits and model availability apply.",

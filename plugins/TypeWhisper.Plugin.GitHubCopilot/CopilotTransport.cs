@@ -11,6 +11,7 @@ internal interface ICopilotTransport
     Task<string> ProcessAsync(string dataDirectory, CopilotAccount account, string systemPrompt, string userText, string model, CancellationToken ct);
     /// <summary>Discards cached account and model checks after a settings change.</summary>
     void InvalidateCache();
+    void SetCatalogLifetime(TimeSpan lifetime);
 }
 
 // Only public account identity is retained. SDK account tokens and opaque selection IDs
@@ -31,6 +32,7 @@ internal sealed class CopilotTransport : ICopilotTransport
     internal static readonly TimeSpan CatalogLifetime = TimeSpan.FromMinutes(10);
     private readonly Func<CopilotClientOptions, CopilotClient> _createClient;
     private readonly TimeProvider _time;
+    private TimeSpan _catalogLifetime = CatalogLifetime;
     // Per-turn account resolution and model listing are only pre-checks: every turn still binds and
     // verifies the account on its session and switches with requireAvailable before sending text.
     // Only public model metadata is cached in memory; selection IDs are never retained.
@@ -41,11 +43,17 @@ internal sealed class CopilotTransport : ICopilotTransport
 
     /// <inheritdoc />
     public void InvalidateCache() => _catalogs.Clear();
+    public void SetCatalogLifetime(TimeSpan lifetime)
+    {
+        if (lifetime == _catalogLifetime) return;
+        _catalogLifetime = lifetime;
+        InvalidateCache();
+    }
     private static string CacheKey(string dataDirectory, CopilotAccount account) => dataDirectory + "\n" + account.Key;
     private bool IsCached(string key, string model) => _catalogs.TryGetValue(key, out var entry) &&
         entry.Expires > _time.GetUtcNow() && entry.Models.Any(m => m.Id == model);
     private IReadOnlyList<PluginModelInfo> Cache(string key, IReadOnlyList<PluginModelInfo> models)
-    { _catalogs[key] = (models, _time.GetUtcNow() + CatalogLifetime); return models; }
+    { _catalogs[key] = (models, _time.GetUtcNow() + _catalogLifetime); return models; }
 
     internal static CopilotClientOptions CreateClientOptions(string dataDirectory, Func<string, string?>? readEnvironment = null)
     {

@@ -72,6 +72,60 @@ public sealed class CopilotPluginTests
     }
 
     [Fact]
+    public async Task CacheDurationIsSharedAcrossProfilesAndSurvivesRestart()
+    {
+        var host = new TestHost();
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(host);
+        await plugin.ExecuteSettingsActionAsync("refresh", default);
+        var profileId = plugin.ConnectionIdentity;
+        var values = Draft(plugin, FakeTransport.Personal, "model-a");
+        values["catalogCacheMinutes"] = "120";
+        await plugin.SaveProfileSettingsAsync(profileId, values, null, default);
+        Assert.Equal(120, Saved(host).CacheMinutes);
+        Assert.Equal(TimeSpan.FromHours(2), transport.CatalogLifetime);
+
+        await plugin.ExecuteSettingsActionAsync("add", default);
+        Assert.Equal(120, Saved(host).CacheMinutes);
+        await plugin.ExecuteSettingsActionAsync(plugin.RemoveProfileActionId!, default);
+        Assert.Equal(120, Saved(host).CacheMinutes);
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(host);
+        Assert.Equal("120", plugin.TextSettings.Single(f => f.Id == "catalogCacheMinutes").Value);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task ExistingConfigurationWithoutCacheDurationUsesTenMinutes()
+    {
+        var host = new TestHost();
+        host.SetSetting("accountProfilesV1", """
+            {"Profiles":[{"Id":"github-copilot","Name":"GitHub Copilot","Connected":false}],"EditorProfileId":"github-copilot"}
+            """);
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(host);
+        Assert.Equal("10", plugin.TextSettings.Single(f => f.Id == "catalogCacheMinutes").Value);
+        Assert.Equal(TimeSpan.FromMinutes(10), transport.CatalogLifetime);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task InvalidCacheDurationDoesNotChangeSavedConfiguration()
+    {
+        var host = new TestHost();
+        using var plugin = new GitHubCopilotPlugin(new FakeTransport());
+        await plugin.ActivateAsync(host);
+        await plugin.ExecuteSettingsActionAsync("refresh", default);
+        var values = Draft(plugin, FakeTransport.Personal, "model-a");
+        values["catalogCacheMinutes"] = "999";
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveProfileSettingsAsync(plugin.ConnectionIdentity, values, null, default));
+        Assert.Equal(10, Saved(host).CacheMinutes);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
     public async Task ProfileSaveRejectsStaleAndInvalidDraftsAndRetainsSelectionOnWriteFailure()
     {
         var host = new TestHost();
@@ -218,6 +272,13 @@ internal sealed class FakeTransport : ICopilotTransport
     }
     internal int Invalidations;
     public void InvalidateCache() => Invalidations++;
+    internal TimeSpan CatalogLifetime = CopilotTransport.CatalogLifetime;
+    public void SetCatalogLifetime(TimeSpan lifetime)
+    {
+        if (CatalogLifetime == lifetime) return;
+        CatalogLifetime = lifetime;
+        InvalidateCache();
+    }
 }
 
 internal sealed class TestHost : IPluginHostServices
