@@ -15,7 +15,8 @@ public sealed partial class WhisperCppPlugin
                 ? L("CUDA support was installed successfully. Restart TypeWhisper, then select this model again.",
                     "CUDA-Unterstützung wurde erfolgreich installiert. Starte TypeWhisper neu und wähle danach das Modell erneut aus.")
                 : L("Local transcription with whisper.cpp. Choose the processor used for transcription. Changing a loaded runtime may require an app restart.",
-              "Lokale Transkription mit whisper.cpp. Wähle den Prozessor für die Transkription. Der Wechsel einer geladenen Laufzeit kann einen App-Neustart erfordern."),
+              "Lokale Transkription mit whisper.cpp. Wähle den Prozessor für die Transkription. Der Wechsel einer geladenen Laufzeit kann einen App-Neustart erfordern.")
+                + (CurrentDevice is { } current ? " " + L("In use: ", "In Verwendung: ") + current : ""),
             _accelerationPreference.ToString())
         {
             Section = PluginSettingsSection.Transcription,
@@ -23,6 +24,18 @@ public sealed partial class WhisperCppPlugin
                 new("AmdVulkan", "Vulkan"), new("AmdRocm", "AMD ROCm")]
         }
     ];
+
+    // What the loaded model actually runs on, including the GPU and why a GPU choice fell back to CPU.
+    private string? CurrentDevice => _factory is null ? null : _accelerationStatus.ActiveBackend switch
+    {
+        TranscriptionAccelerationBackend.AmdVulkan => "Vulkan" + (_gpuDevice is { } gpu
+            ? " · " + gpu.Name + (gpu.Integrated ? L(" (integrated graphics)", " (integrierte Grafik)") : "") : ""),
+        TranscriptionAccelerationBackend.NvidiaCuda => "NVIDIA CUDA",
+        TranscriptionAccelerationBackend.AmdRocm => "AMD ROCm",
+        _ when _accelerationPreference is TranscriptionAccelerationPreference.Cpu or TranscriptionAccelerationPreference.Auto
+            || _accelerationStatus.DisplayText == "Using CPU" => "CPU",
+        _ => $"CPU ({_accelerationStatus.DisplayText})"
+    };
 
     /// <inheritdoc />
     public Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken)

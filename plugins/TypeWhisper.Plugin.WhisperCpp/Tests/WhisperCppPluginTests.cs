@@ -36,7 +36,7 @@ public partial class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.19", manifest.Version);
+        Assert.Equal("1.2.20", manifest.Version);
         Assert.Equal("1.1.2", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
@@ -216,7 +216,7 @@ public partial class WhisperCppPluginTests
 
         var status = Assert.IsType<TranscriptionAccelerationStatus>(method.Invoke(
             null,
-            [RuntimeLibrary.Cpu, TranscriptionAccelerationPreference.NvidiaCuda]));
+            [RuntimeLibrary.Cpu, TranscriptionAccelerationPreference.NvidiaCuda, null, false]));
 
         Assert.Equal(TranscriptionAccelerationBackend.Cpu, status.ActiveBackend);
         Assert.Equal("CUDA unavailable", status.DisplayText);

@@ -2,7 +2,7 @@
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.19`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
+Version `1.2.20`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
 Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -38,7 +38,9 @@ Review regressions also cover readiness with missing model files, English-only d
 
 The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
 
-Marco confirmed German microphone dictation and local live preview on Large V3 Turbo after the restart-loading fix. The installed package and UI screenshots are version 1.2.4, with the Whisper (Local) name and chip icon. CPU, Vulkan, custom ROCm and ARM64 inference remain unverified. Public catalog publication and production-profile migration are pending.
+Marco confirmed German microphone dictation and local live preview on Large V3 Turbo after the restart-loading fix. The installed package and UI screenshots are version 1.2.4, with the Whisper (Local) name and chip icon. CPU, custom ROCm and ARM64 inference remain unverified. Public catalog publication and production-profile migration are pending.
+
+Source 1.2.20 places Vulkan models on the first dedicated GPU instead of whisper.cpp's default device 0, which can be integrated graphics. It reads the GPU list from the loaded ggml runtime before the model loads. Processing device shows what the loaded model runs on, for example `Vulkan · NVIDIA GeForce RTX 4060 Ti`, or why a GPU choice fell back to CPU. The load log records the GPU name. Large V3 Turbo ran through the Vulkan runtime on both an NVIDIA RTX 4060 Ti and the integrated AMD Radeon graphics of a Ryzen 7 7800X3D. The ggml device list reported the Radeon as integrated.
 
 Source 1.2.19 verifies the persisted CUDA package identity and freshly computed DLL hashes on every check, stages complete files before atomic replacement and publishes its installation receipt last. Regression tests cover corruption, interrupted installation and package changes.
 
