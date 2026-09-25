@@ -63,6 +63,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private float _peakRmsLevel;
     private float _preGainPeakRms;
     private IAudioInputCapture? _failedCaptureCleanup;
+    private Exception? _lastCaptureFailure;
+    private string? _lastCaptureFailureDeviceId;
     /// <summary>Whether a capture whose release failed is retained for an explicit retry.</summary>
     public bool HasUnreleasedCapture => _failedCaptureCleanup is not null;
     /// <summary>Retries a previously failed native release without creating another capture.</summary>
@@ -166,7 +168,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public event EventHandler<SamplesAvailableEventArgs>? SamplesAvailable;
     /// <summary>
-    /// Raised when devices changes.
+    /// Raised when the device list changes or a default-device migration changes the capture
+    /// outcome, after the capture has reacted to the change.
     /// </summary>
     public event EventHandler? DevicesChanged;
     /// <summary>
@@ -182,6 +185,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// Gets whether has device.
     /// </summary>
     public bool HasDevice => _deviceProvider.DeviceCount > 0;
+    /// <summary>
+    /// Gets an actionable message for the last failed prepare or start, or null after a success.
+    /// </summary>
+    public string? CaptureFailure => _lastCaptureFailure is { } error ? MicrophoneFailure.Describe(error) : null;
     /// <summary>
     /// Gets or sets the whisper mode enabled value.
     /// </summary>
@@ -251,6 +258,21 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
         _microphonePriorityList = normalized;
         ApplyPreferredDeviceChange();
+        lock (_captureLifecycleLock)
+            ForgetCaptureFailureUnlessTarget(ResolvePreferredDeviceSelection()?.Id);
+    }
+
+    private void RecordCaptureFailure(Exception error, string? deviceId)
+    {
+        _lastCaptureFailure = error;
+        _lastCaptureFailureDeviceId = deviceId;
+    }
+
+    // A failure describes the microphone it happened on; forget it once another one is targeted.
+    private void ForgetCaptureFailureUnlessTarget(string? targetDeviceId)
+    {
+        if (!string.Equals(targetDeviceId, _lastCaptureFailureDeviceId, StringComparison.OrdinalIgnoreCase))
+            _lastCaptureFailure = null;
     }
 
     /// <summary>
@@ -278,6 +300,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 AudioCaptureDiagnostics.Log("WarmUp no devices");
                 System.Diagnostics.Debug.WriteLine("WarmUp: No audio input devices available.");
+                // No microphone is left to fail, so an earlier failure no longer applies.
+                _lastCaptureFailure = null;
                 StartDevicePolling();
                 return false;
             }
@@ -286,6 +310,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (captureSelection is null)
             {
                 AudioCaptureDiagnostics.Log("WarmUp no active device after resolve");
+                // The failed microphone is no longer the target; the priority notice explains the state.
+                _lastCaptureFailure = null;
                 StartDevicePolling();
                 return false;
             }
@@ -295,6 +321,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 // Track the device for change handling; StartRecording opens the capture.
                 SetActiveDeviceIdentity(captureSelection);
+                ForgetCaptureFailureUnlessTarget(captureSelection.Id);
                 _isWarmedUp = true;
                 AudioCaptureDiagnostics.Log(
                     $"WarmUp deferred capture until recording active={captureSelection.LastKnownDeviceNumber}:{captureSelection.Name}");
@@ -316,6 +343,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
                 SetActiveDeviceIdentity(captureSelection);
                 _isWarmedUp = true;
+                _lastCaptureFailure = null;
                 _activeCaptureGeneration = ++_captureGeneration;
                 AudioCaptureDiagnostics.Log(
                     $"WarmUp prepared captureGeneration={_activeCaptureGeneration} reusable={_waveIn.CanRestartAfterStop} active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
@@ -323,6 +351,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
                 AudioCaptureDiagnostics.Log($"WarmUp failed {ex.GetType().Name}: {ex.Message}");
+                RecordCaptureFailure(ex, captureSelection.Id);
                 System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
                 DisposeWaveIn(
                     stopRecording: false,
@@ -430,6 +459,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                     ? _recoveryStore?.BeginRecording()
                     : null;
                 _waveIn.StartRecording();
+                _lastCaptureFailure = null;
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording active sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
             }
@@ -437,6 +467,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording failed sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} {ex.GetType().Name}: {ex.Message}");
+                RecordCaptureFailure(ex, _activeDeviceId);
                 System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
                 DiscardActiveRecoveryRecording();
                 ClearRecordingState();
@@ -1081,6 +1112,33 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     internal void CheckForDeviceChanges()
     {
+        var devicesChanged = false;
+        try
+        {
+            CheckForDeviceChanges(ref devicesChanged);
+        }
+        finally
+        {
+            // Raised after the capture has been moved or retried, outside the lock, so listeners see its outcome.
+            if (devicesChanged)
+                RaiseDevicesChanged();
+        }
+    }
+
+    private void RaiseDevicesChanged()
+    {
+        try
+        {
+            DevicesChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log($"DevicesChanged listener failed {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private void CheckForDeviceChanges(ref bool devicesChanged)
+    {
         lock (_deviceChangeCheckLock)
         {
             try
@@ -1091,7 +1149,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 {
                     // The device list is unchanged, but the system default endpoint
                     // may have moved (or a migration was deferred while recording).
+                    var failure = _lastCaptureFailure;
                     EnsureActiveDeviceIsPreferred(snapshot);
+                    // Publish a migration whose capture failed, or a failure that it cleared.
+                    devicesChanged = _lastCaptureFailure != failure;
                     return;
                 }
 
@@ -1104,8 +1165,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _lastKnownHasDevices = currentHasDevices;
                 _lastKnownPreferredDeviceAvailable = currentPreferredDeviceAvailable;
                 _lastKnownSnapshotInitialized = true;
-
-                DevicesChanged?.Invoke(this, EventArgs.Empty);
+                devicesChanged = true;
 
                 if (!currentHasDevices)
                 {
@@ -2296,10 +2356,21 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
             AudioCaptureDiagnostics.Log(
                 $"Primary microphone capture creation failed; using fallback {ex.GetType().Name}: {ex.Message}");
             _usingFallback = true;
-            _capture = fallbackFactory.Create(selection, waveFormat, bufferMilliseconds);
+            Fallback(ex, () => _capture = fallbackFactory.Create(selection, waveFormat, bufferMilliseconds));
         }
 
         AttachCapture();
+    }
+
+    // The WASAPI error names the cause (privacy block, exclusive use); a failing WaveIn fallback does not.
+    private static void Fallback(Exception primary, Action fallback)
+    {
+        try { fallback(); }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log($"Microphone fallback failed too {ex.GetType().Name}: {ex.Message}");
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(primary);
+        }
     }
 
     public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
@@ -2322,8 +2393,7 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
         {
             AudioCaptureDiagnostics.Log(
                 $"Primary microphone capture prepare failed; using fallback {ex.GetType().Name}: {ex.Message}");
-            SwitchToFallback();
-            _capture!.Prepare();
+            Fallback(ex, () => { SwitchToFallback(); _capture!.Prepare(); });
         }
     }
 
@@ -2339,8 +2409,7 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
         {
             AudioCaptureDiagnostics.Log(
                 $"Primary microphone capture start failed; using fallback {ex.GetType().Name}: {ex.Message}");
-            SwitchToFallback();
-            _capture!.StartRecording();
+            Fallback(ex, () => { SwitchToFallback(); _capture!.StartRecording(); });
         }
     }
 

@@ -199,7 +199,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_disposed) return "The application is shutting down.";
             var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled);
             LocalPluginError = Models.Error ?? vocabularyError;
-            SetStatus(enabled ? IsReady ? $"{ActiveModelName} ready" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation." : "Local transcription plugin disabled", DictationPhase.Idle);
+            SetStatus(enabled ? IsReady ? ModelReadyStatus() : Models.Error ?? "Download a model in plugin settings, then select it in Dictation." : "Local transcription plugin disabled", DictationPhase.Idle);
             return LocalPluginError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -221,7 +221,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _selection.SetSetting("Provider", "local");
             _providerId = "local";
             LocalPluginError = null;
-            SetStatus($"{ActiveModelName} ready", DictationPhase.Idle);
+            SetStatus(ModelReadyStatus(), DictationPhase.Idle);
             return null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -264,7 +264,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException) { return "Could not uninstall plugin: " + ex.Message; }
         finally
         {
-            SetStatus(IsReady ? $"{ActiveModelName} ready" : "Choose an installed provider in Dictation.", DictationPhase.Idle);
+            SetStatus(IsReady ? ModelReadyStatus() : "Choose an installed provider in Dictation.", DictationPhase.Idle);
             _gate.Release(); Changed?.Invoke();
         }
     }
@@ -337,7 +337,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             SetStatus(loadingModel ? "Loading model…" : "Updating plugin…", loadingModel ? DictationPhase.LoadingModel : DictationPhase.Configuring);
             await _livePreview.StopAsync();
             await action();
-            SetStatus(IsReady ? $"{ActiveModelName} ready" : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
+            SetStatus(IsReady ? ModelReadyStatus() : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
             return null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -367,6 +367,47 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal string SelectedMicrophoneId => _microphones.FirstOrDefault()?.Id ?? "default";
     internal string SelectedMicrophoneName => _microphones.FirstOrDefault()?.Name ?? "System default";
     internal IReadOnlyList<AudioInputDeviceInfo> GetMicrophones() => _audio.GetAvailableInputDeviceInfos();
+    // Raised on the UI thread when microphones are connected, removed or switched.
+    internal event Action? MicrophonesChanged;
+    private string? _microphoneNotice;
+    // The last idle status built from the microphone state; other idle messages, such as operation errors, are kept.
+    private string? _microphoneStatus;
+
+    // Why dictation cannot use the preferred microphone right now; null when it can.
+    internal string? MicrophoneNotice()
+    {
+        if (!_audio.HasDevice) return "No microphone connected. Connect one to dictate.";
+        if (_audio.CaptureFailure is { } failure) return failure;
+        return MicrophoneFailure.PriorityNotice(_microphones, GetMicrophones());
+    }
+
+    private string ReadyStatus(bool prepared) => _microphoneStatus = !IsReady ? UsesRegistryProvider ? "The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation." : !Models.Enabled ? "Local transcription plugin disabled" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation."
+        : MicrophoneNotice() is { } notice ? $"{ActiveModelName} ready · {notice}"
+        : prepared ? $"{ActiveModelName} ready · {Shortcut} to dictate" : $"{ActiveModelName} ready · microphone preparation failed; check the device";
+
+    // Every idle "ready" status keeps a current microphone warning visible.
+    private string ModelReadyStatus() => _microphoneStatus = MicrophoneNotice() is { } notice ? $"{ActiveModelName} ready · {notice}" : $"{ActiveModelName} ready";
+
+    // Resume may recreate the capture without a device-list change, so publish its result explicitly.
+    internal void RefreshMicrophoneAfterResume() =>
+        Task.Run(_audio.RefreshAfterDisplayOrPowerChange).ContinueWith(_ => _fileDispatcher.TryEnqueue(OnMicrophonesChanged), TaskScheduler.Default);
+
+    private void OnMicrophonesChanged()
+    {
+        if (_disposed) return;
+        MicrophonesChanged?.Invoke();
+        RefreshMicrophoneStatus();
+    }
+
+    private void RefreshMicrophoneStatus()
+    {
+        var previous = _microphoneNotice;
+        _microphoneNotice = MicrophoneNotice();
+        // Recording, processing, errors and other idle messages stay; a microphone-derived idle status follows the microphone.
+        if (_microphoneNotice != previous && !_audio.IsRecording
+            && (_phase == DictationPhase.Completed || (_phase == DictationPhase.Idle && Status == _microphoneStatus)))
+            SetStatus(ReadyStatus(prepared: true));
+    }
 
     internal string? SelectMicrophone(string id)
     {
@@ -389,6 +430,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             File.Move(pending, MicrophonePath, true);
             _microphones = selected;
             _audio.SetMicrophonePriorityList(selected);
+            RefreshMicrophoneStatus();
             return null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return "Could not apply microphone: " + ex.Message; }
@@ -426,6 +468,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         };
         _audio.SamplesAvailable += (_, args) => _streamAudio.Append(args.Samples);
         _audio.AudioLevelChanged += (_, level) => _silence?.Observe(_silenceClock.Elapsed, level.RmsLevel);
+        _audio.DevicesChanged += (_, _) => dispatcher.TryEnqueue(OnMicrophonesChanged);
+        _audio.DeviceAvailable += (_, _) => dispatcher.TryEnqueue(OnMicrophonesChanged);
+        _audio.DeviceLost += (_, _) => dispatcher.TryEnqueue(OnMicrophonesChanged);
         _audio.DeviceLost += (_, _) => dispatcher.TryEnqueue(() =>
         {
             if (_disposed || _audio.IsRecording) return;
@@ -480,7 +525,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var prepared = _audio.WarmUp();
             await CtcVocabulary.SetEnabledAsync(Models.Enabled);
             LocalPluginError ??= Models.Error;
-            SetStatus(!IsReady ? UsesRegistryProvider ? "The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation." : !Models.Enabled ? "Local transcription plugin disabled" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation." : prepared ? $"{ActiveModelName} ready · {Shortcut} to dictate" : $"{ActiveModelName} ready · microphone preparation failed; check the device");
+            _microphoneNotice = MicrophoneNotice();
+            SetStatus(ReadyStatus(prepared));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -637,7 +683,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (!_audio.IsRecording)
                 {
                     await previousRecordingWork;
-                    SetStatus("Microphone could not start. Check the input device and microphone access.");
+                    // Cache what is shown so a later recovery rewrites this failure.
+                    _microphoneNotice = MicrophoneNotice() ?? MicrophoneFailure.Generic;
+                    SetStatus(_microphoneStatus = _microphoneNotice);
                     return;
                 }
                 PasteDiagnostics.Write("dictation.capture.active");

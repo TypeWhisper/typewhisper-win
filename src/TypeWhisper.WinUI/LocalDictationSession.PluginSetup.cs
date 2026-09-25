@@ -34,7 +34,7 @@ internal sealed partial class LocalDictationSession
         { return "Could not install the plugin: " + ex.Message; }
         finally
         {
-            SetStatus(IsReady ? $"{ActiveModelName} ready" : "Choose and download a model to start dictating.", DictationPhase.Idle);
+            SetStatus(IsReady ? ModelReadyStatus() : "Choose and download a model to start dictating.", DictationPhase.Idle);
             _gate.Release();
         }
     }

@@ -25,6 +25,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/SystemAudioCaptureService.cs" Link="SystemAudioCaptureService.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioCaptureDiagnostics.cs" Link="AudioCaptureDiagnostics.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/NonFatalExceptionFilter.cs" Link="NonFatalExceptionFilter.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/MicrophoneFailure.cs" Link="MicrophoneFailure.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
