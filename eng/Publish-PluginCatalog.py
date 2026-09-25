@@ -196,7 +196,9 @@ def ensure_release(stage, summary):
             gh("release", "upload", tag, str(stage / "archives" / name), "--repo", REPO)
     if release["draft"]:
         check_existing_tag(tag, summary["sourceCommit"])
-        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--latest=false")
+        # A draft left behind by an earlier run may still carry the old prerelease
+        # flag; publishing clears it so every plugin release ends up plain.
+        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--prerelease=false", "--latest=false")
     if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
         raise ValueError("Published tag does not match the tested source commit")
     for entry in summary["changedPlugins"]:
