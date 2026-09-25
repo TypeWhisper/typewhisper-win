@@ -3,12 +3,16 @@ name: Release plugins
 on:
   workflow_dispatch:
     inputs:
-      plugin_ids:
-        description: 'Full plugin IDs, separated by commas (for example com.typewhisper.file-memory)'
+      plugin_name:
+        description: 'Plugin ID suffix, for example file-memory (com.typewhisper.file-memory)'
+        required: true
+        type: string
+      plugin_version:
+        description: 'Plugin version from its committed manifest, for example 1.4.0'
         required: true
         type: string
       publish:
-        description: 'Publish tested packages and update the catalog (main only)'
+        description: 'Publish the tested package and update the catalog (main only)'
         default: false
         type: boolean
   push:
@@ -39,17 +43,15 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Test release safety
         run: python -m unittest discover -s eng/tests -p 'test_*.py' -v
-      - name: Build and test selected packages
+      - name: Build and test the selected package
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          PLUGIN_IDS: ${{ inputs.plugin_ids }}
-          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || format('plugins-{0}', github.run_id) }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || format('plugin-{0}-v{1}', inputs.plugin_name, inputs.plugin_version) }}
         run: |
           $arguments = @('eng/Prepare-PluginRelease.py', '--source', $env:GITHUB_WORKSPACE,
             '--output', "$env:RUNNER_TEMP/plugin-release", '--tag', $env:RELEASE_TAG)
-          if ($env:GITHUB_EVENT_NAME -eq 'push') { $arguments += '--from-tag' }
-          else { $arguments += @('--plugin-ids', $env:PLUGIN_IDS) }
+          if ($env:GITHUB_EVENT_NAME -eq 'push') { $arguments += '--require-main' }
           python @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
@@ -81,7 +83,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
-      - name: Publish verified packages and refresh catalog
+      - name: Publish the verified package and refresh the catalog
         env:
           GH_TOKEN: ${{ github.token }}
         run: python eng/Publish-PluginCatalog.py --stage "$RUNNER_TEMP/plugin-release" --publish

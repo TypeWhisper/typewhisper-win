@@ -160,14 +160,14 @@ def ensure_release(stage, summary):
     release = find_release(tag)
     marker = f"Source commit: {summary['sourceCommit']}"
     if release is None:
+        # One plugin version per release, named like the macOS plugin releases.
+        # The notes stay minimal so the change description can be written by hand
+        # afterwards; keep the source commit line, publication reruns rely on it.
+        title = ", ".join(f"{e['name']} Plugin v{e['version']}" for e in summary["changedPlugins"])
         notes = stage / "release-notes.md"
-        notes.write_text("Portable TypeWhisper plugins for Windows x64.\n\n" + marker + "\n\n" +
-                         "\n".join(f"- {e['name']} {e['version']}" for e in summary["changedPlugins"]) +
-                         "\n\nPackage tests passed before staging. SHA-256 and sizes are recorded in the catalog. "
-                         "Model downloads and credentials are not included.\n", encoding="utf-8")
+        notes.write_text(marker + "\n", encoding="utf-8")
         gh("release", "create", tag, "--repo", REPO, "--target", summary["sourceCommit"],
-           "--title", f"TypeWhisper Plugins · {tag}", "--notes-file", str(notes),
-           "--draft", "--prerelease", "--latest=false")
+           "--title", title, "--notes-file", str(notes), "--draft", "--latest=false")
         # Draft releases do not yet have a resolvable tag endpoint, and the release list
         # can lag behind creation for a few seconds.
         for delay in (0, 2, 4, 8, 16):
@@ -176,8 +176,8 @@ def ensure_release(stage, summary):
                 break
         else:
             raise RuntimeError("Created draft release could not be read back")
-    if marker not in (release.get("body") or "") or not release["prerelease"]:
-        raise ValueError("Existing release has different provenance or is not a prerelease")
+    if marker not in (release.get("body") or ""):
+        raise ValueError("Existing release has different provenance")
     if not release["draft"]:
         if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
             raise ValueError("Release tag points to a different source commit")
@@ -196,7 +196,7 @@ def ensure_release(stage, summary):
             gh("release", "upload", tag, str(stage / "archives" / name), "--repo", REPO)
     if release["draft"]:
         check_existing_tag(tag, summary["sourceCommit"])
-        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--prerelease", "--latest=false")
+        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--latest=false")
     if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
         raise ValueError("Published tag does not match the tested source commit")
     for entry in summary["changedPlugins"]:

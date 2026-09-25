@@ -1,4 +1,8 @@
-"""Resolve an explicit plugin selection/tag and stage tested release artifacts."""
+"""Resolve one plugin release tag and stage its tested release artifacts.
+
+Every release, whether pushed as a tag or dispatched from Actions, is named
+plugin-<ID suffix>-v<version> and publishes exactly one plugin version.
+"""
 import argparse
 import importlib.util
 import json
@@ -13,34 +17,32 @@ publisher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publisher)
 
 
-def selection(source, plugin_ids, tag, from_tag):
-    if from_tag:
-        match = re.fullmatch(r"plugin-([a-z0-9][a-z0-9.-]*)-v(\d+\.\d+\.\d+)", tag)
-        if not match:
-            raise ValueError("Expected plugin-<id suffix>-v<major.minor.patch>")
-        ids = {"com.typewhisper." + match[1]}
-    else:
-        ids = set(filter(None, re.split(r"[,\s]+", plugin_ids)))
-        if not ids:
-            raise ValueError("Select at least one full plugin ID")
-    projects = publisher.builder.discover_projects(source, ids)
-    if from_tag and projects[0][1]["version"] != match[2]:
-        raise ValueError("Tag version differs from the committed manifest; bump and merge the version first")
-    return sorted(ids)
+TAG_PATTERN = re.compile(r"plugin-([a-z0-9][a-z0-9.-]*)-v(\d+\.\d+\.\d+)")
+
+
+def selection(source, tag):
+    match = TAG_PATTERN.fullmatch(tag)
+    if not match:
+        raise ValueError("Expected plugin-<id suffix>-v<major.minor.patch>, for example plugin-file-memory-v1.4.0")
+    plugin_id = "com.typewhisper." + match[1]
+    _, manifest = publisher.builder.discover_projects(source, {plugin_id})[0]
+    if manifest["version"] != match[2]:
+        raise ValueError(f"Tag version {match[2]} differs from the committed manifest version "
+                         f"{manifest['version']}; bump and merge the version first")
+    return [plugin_id]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
-    parser.add_argument("--plugin-ids", default="")
-    parser.add_argument("--tag", required=True)
-    parser.add_argument("--from-tag", action="store_true")
+    parser.add_argument("--tag", required=True, help="plugin-<ID suffix>-v<version>")
+    parser.add_argument("--require-main", action="store_true", help="Refuse a pushed tag outside main history")
     args = parser.parse_args()
     source = args.source.resolve(strict=True)
-    ids = selection(source, args.plugin_ids, args.tag, args.from_tag)
+    ids = selection(source, args.tag)
     # Avoid running package build/test code from unmerged release tags.
-    if args.from_tag:
+    if args.require_main:
         sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
         if publisher.api(f"compare/{sha}...main")["status"] not in ("ahead", "identical"):
             raise ValueError("Release tags must point to a commit on main")
