@@ -167,6 +167,7 @@ class StageTests(unittest.TestCase):
         self.manifest = entry() | {"minHostVersion": "1.1.5", "assemblyName": "Example.dll"}
         self.name = "com.typewhisper.example-1.0.0-win-x64.zip"
         self.archive = self.stage / "archives" / self.name
+        self.latest_tag = "v1.1.0"  # the application release stays latest
         self.summary = {"tag": "plugin-example-v1.0.0", "sourceCommit": "a" * 40, "testsRequired": True,
                         "archiveCount": 1, "excludedIds": [], "changedPlugins": []}
         self.write_archive()
@@ -181,6 +182,13 @@ class StageTests(unittest.TestCase):
             "downloadUrl": f"https://github.com/{publish.REPO}/releases/download/plugin-example-v1.0.0/{self.name}",
             "sha256": builder.sha256(self.archive), "size": self.archive.stat().st_size}]
         self.save()
+
+    def fake_api(self, path, *args, **kwargs):
+        if path.startswith("commits/"):
+            return {"sha": "a" * 40}
+        if path == "releases/latest":
+            return {"tag_name": self.latest_tag}
+        raise AssertionError(f"Unexpected API call: {path}")
 
     def save(self):
         (self.stage / "summary.json").write_text(json.dumps(self.summary), encoding="utf-8")
@@ -267,7 +275,7 @@ class StageTests(unittest.TestCase):
                  "draft": True, "prerelease": False, "assets": []}
         with patch.object(publish, "find_release", side_effect=[None, draft]), \
              patch.object(publish, "gh") as gh, \
-             patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "api", side_effect=self.fake_api), \
              patch.object(publish, "check_existing_tag"), \
              patch.object(publish, "verify_download") as download:
             publish.ensure_release(self.stage, self.summary)
@@ -297,7 +305,7 @@ class StageTests(unittest.TestCase):
             return ""
         with patch.object(publish, "find_release", return_value=draft), \
              patch.object(publish, "gh", side_effect=fake_gh) as gh, \
-             patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "api", side_effect=self.fake_api), \
              patch.object(publish, "check_existing_tag"), \
              patch.object(publish, "verify_download"):
             publish.ensure_release(self.stage, self.summary)
@@ -320,7 +328,7 @@ class StageTests(unittest.TestCase):
             return ""
         with patch.object(publish, "find_release", return_value=published), \
              patch.object(publish, "gh", side_effect=fake_gh) as gh, \
-             patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "api", side_effect=self.fake_api), \
              patch.object(publish, "verify_download"):
             publish.ensure_release(self.stage, self.summary)
         edits = [call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit")]
@@ -340,12 +348,31 @@ class StageTests(unittest.TestCase):
             return ""
         with patch.object(publish, "find_release", return_value=published), \
              patch.object(publish, "gh", side_effect=fake_gh) as gh, \
-             patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "api", side_effect=self.fake_api), \
              patch.object(publish, "verify_download"):
             publish.ensure_release(self.stage, self.summary)
         edit = next(call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit"))
         self.assertIn("--prerelease=false", edit)
         self.assertEqual(edit[edit.index("--title") + 1], "com.typewhisper.example Plugin v1.0.0")
+
+    def test_plain_release_marked_latest_is_demoted_without_other_changes(self):
+        # A plugin release must never shadow the application's latest release.
+        self.latest_tag = self.summary["tag"]
+        published = {"tag_name": self.summary["tag"], "name": "Renamed by hand",
+                     "body": "Fixed a bug.\n\nSource commit: " + "a" * 40,
+                     "draft": False, "prerelease": False, "assets": [{"name": self.name}]}
+        def fake_gh(*args, **kwargs):
+            if args[:2] == ("release", "download"):
+                destination = pathlib.Path(args[args.index("--dir") + 1])
+                (destination / self.name).write_bytes(self.archive.read_bytes())
+            return ""
+        with patch.object(publish, "find_release", return_value=published), \
+             patch.object(publish, "gh", side_effect=fake_gh) as gh, \
+             patch.object(publish, "api", side_effect=self.fake_api), \
+             patch.object(publish, "verify_download"):
+            publish.ensure_release(self.stage, self.summary)
+        edits = [call.args for call in gh.call_args_list if call.args[:2] == ("release", "edit")]
+        self.assertEqual(edits, [("release", "edit", self.summary["tag"], "--repo", publish.REPO, "--latest=false")])
 
     def test_existing_plain_release_with_matching_provenance_is_accepted(self):
         published = {"tag_name": self.summary["tag"], "body": "Fixed a bug.\n\nSource commit: " + "a" * 40,
@@ -358,7 +385,7 @@ class StageTests(unittest.TestCase):
             raise AssertionError(f"Unexpected mutation: {args}")
         with patch.object(publish, "find_release", return_value=published), \
              patch.object(publish, "gh", side_effect=fake_gh), \
-             patch.object(publish, "api", return_value={"sha": "a" * 40}), \
+             patch.object(publish, "api", side_effect=self.fake_api), \
              patch.object(publish, "verify_download") as download:
             publish.ensure_release(self.stage, self.summary)
         download.assert_called_once()
