@@ -103,6 +103,7 @@ public sealed class CopilotPackageTests
             Assert.NotEqual(oldPath, restart.Resolve(Id));
             await using var package = await PortablePluginPackage.LoadAsync(restart.Resolve(Id), new TestHost(), new(1, 1, 2));
             Assert.Equal("1.1.2", package.Plugin.PluginVersion);
+            Assert.Equal(new Version(1, 1, 2, 0), package.Plugin.GetType().Assembly.GetName().Version);
         }
         finally { await DeleteRootAsync(root); }
     }
