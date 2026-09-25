@@ -71,6 +71,19 @@ public sealed class MicrophoneFailureTests
         Assert.Contains("Headset disconnected. Reconnect", MicrophoneFailure.PriorityNotice([new("headset", "Headset")], devices));
     }
 
+    [Fact]
+    public void DeferredWarmUpKeepsTheFailureOfTheLastOpenAttempt()
+    {
+        var factory = new Switchable { Error = new COMException("Access denied", unchecked((int)0x80070005)) };
+        using var audio = new AudioRecordingService(new ImmediateAudioTests.ReplayDevice(), factory, Timeout.InfiniteTimeSpan)
+            { ReleaseCaptureBetweenRecordings = () => true };
+        audio.StartRecording(enableRecovery: false);
+        Assert.False(audio.IsRecording);
+        // A remote-session warm-up opens nothing, so it cannot vouch that the microphone works now.
+        Assert.True(audio.WarmUp());
+        Assert.Contains("Privacy & security", audio.CaptureFailure);
+    }
+
     private sealed class Failing(Exception error) : IAudioInputCaptureFactory
     {
         public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds) => throw error;
