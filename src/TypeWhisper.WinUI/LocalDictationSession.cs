@@ -397,7 +397,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     internal LocalDictationSession(IHistoryService history, IntPtr owner)
     {
-        _audio = new(_recoveryAudio);
+        _audio = new(_recoveryAudio) { ReleaseCaptureBetweenRecordings = Platform.RemoteSession.IsActive };
         Recovery = new(_recoveryAudio, DecodeRecoveryAudioAsync);
         _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId));
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
