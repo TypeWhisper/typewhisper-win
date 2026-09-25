@@ -50,6 +50,20 @@ public partial class OpenAiCompatiblePluginTests
     }
 
     [Fact]
+    public void GpuStackNumericStringsAreReadAsNumbers()
+    {
+        var result = CompatibleTranscriptionHelper.ParseTranscriptionResponse("""
+            {"text":"Hello","duration":"2.49","segments":[
+              {"text":"Hello","start":"0.0","end":"2.49","no_speech_prob":"0.8"},
+              {"text":"","start":null,"end":"NaN","no_speech_prob":null}]}
+            """);
+        Assert.Equal(2.49, result.DurationSeconds);
+        Assert.Equal((0.0, 2.49), (result.Segments[0].Start, result.Segments[0].End));
+        Assert.Equal((0.0, 0.0), (result.Segments[1].Start, result.Segments[1].End));
+        Assert.Equal(0.8f, result.NoSpeechProbability);
+    }
+
+    [Fact]
     public async Task CatalogKeepsValidEntriesAndDraftUsesTheSameParser()
     {
         using var plugin = new OpenAiCompatiblePlugin(new HttpClient(new CapturingHandler((_, _) =>

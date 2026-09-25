@@ -1,6 +1,6 @@
 # OpenAI Compatible for the portable host
 
-Independent .NET 10 port of the Windows provider at `3282e9ca`, extended from the local Swift plugin (checkout `d0171b38`) with host-rendered settings instead of WPF views. The logical plugin ID remains `com.typewhisper.openai-compatible`; package version is `1.1.1`.
+Independent .NET 10 port of the Windows provider at `3282e9ca`, extended from the local Swift plugin (checkout `d0171b38`) with host-rendered settings instead of WPF views. The logical plugin ID remains `com.typewhisper.openai-compatible`; package version is `1.1.2`.
 
 Each server profile has its own URL, encrypted key, model catalog, transcription model, text model, thinking preference and text request timeout. A key is optional for local servers. Model discovery is explicit, preserves manual model IDs and retains the saved catalog when the server returns no models. Additional profiles expose stable selection IDs to the host and workflows.
 

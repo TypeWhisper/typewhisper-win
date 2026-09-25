@@ -35,7 +35,7 @@ public partial class OpenAiCompatiblePluginTests
         var manifest = LoadManifest();
         var sut = new OpenAiCompatiblePlugin();
 
-        Assert.Equal("1.1.1", manifest.Version);
+        Assert.Equal("1.1.2", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 

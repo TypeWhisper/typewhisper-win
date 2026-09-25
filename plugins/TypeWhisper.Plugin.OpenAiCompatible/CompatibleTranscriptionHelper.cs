@@ -3,6 +3,7 @@ using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Globalization;
 using System.Text.Json;
 using TypeWhisper.PluginSDK.Models;
 
@@ -148,6 +149,9 @@ internal static class CompatibleTranscriptionHelper
         };
     }
 
+    // Some servers, e.g. GPUStack, send verbose_json numbers as strings ("2.49").
     private static double? Number(JsonElement root, string name) => root.TryGetProperty(name, out var value)
-        && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number) ? number : null;
+        && (value.ValueKind == JsonValueKind.Number ? value.TryGetDouble(out var number)
+            : value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+        && double.IsFinite(number) ? number : null;
 }
