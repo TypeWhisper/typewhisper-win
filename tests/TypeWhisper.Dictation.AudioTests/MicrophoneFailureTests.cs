@@ -85,6 +85,33 @@ public sealed class MicrophoneFailureTests
     }
 
     [Fact]
+    public void PriorityEditKeepingTheTargetKeepsItsFailure()
+    {
+        var factory = new Switchable { Error = new COMException("Access denied", unchecked((int)0x80070005)) };
+        using var audio = new AudioRecordingService(new ImmediateAudioTests.ReplayDevice(), factory, Timeout.InfiniteTimeSpan);
+        Assert.False(audio.WarmUp());
+        // Only a lower-priority fallback is added; the failing microphone is still the one used.
+        audio.SetMicrophonePriorityList([new("replay", "Synthetic replay"), new("usb", "USB Mic")]);
+        Assert.Contains("Privacy & security", audio.CaptureFailure);
+    }
+
+    [Fact]
+    public void DeferredWarmUpOnAnotherMicrophoneForgetsTheFailure()
+    {
+        var devices = new Devices();
+        var factory = new Switchable { Error = new COMException("In use", unchecked((int)0x8889000A)) };
+        using var audio = new AudioRecordingService(devices, factory, Timeout.InfiniteTimeSpan)
+            { ReleaseCaptureBetweenRecordings = () => true };
+        audio.SetMicrophonePriorityList([new("usb", "USB Mic"), new("laptop", "Laptop Mic")]);
+        audio.StartRecording(enableRecovery: false);
+        Assert.Contains("exclusively", audio.CaptureFailure);
+        // Unplugging the failed microphone makes the topology change target the fallback without opening it.
+        devices.List = [new(0, "laptop", "Laptop Mic", true)];
+        audio.CheckForDeviceChanges();
+        Assert.Null(audio.CaptureFailure);
+    }
+
+    [Fact]
     public void DeviceChangeIsReportedAfterTheFallbackWasTried()
     {
         var devices = new Devices();

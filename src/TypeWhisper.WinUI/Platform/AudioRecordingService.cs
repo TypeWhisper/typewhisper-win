@@ -64,6 +64,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private float _preGainPeakRms;
     private IAudioInputCapture? _failedCaptureCleanup;
     private Exception? _lastCaptureFailure;
+    private string? _lastCaptureFailureDeviceId;
     /// <summary>Whether a capture whose release failed is retained for an explicit retry.</summary>
     public bool HasUnreleasedCapture => _failedCaptureCleanup is not null;
     /// <summary>Retries a previously failed native release without creating another capture.</summary>
@@ -256,8 +257,22 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             return;
 
         _microphonePriorityList = normalized;
-        _lastCaptureFailure = null;
         ApplyPreferredDeviceChange();
+        lock (_captureLifecycleLock)
+            ForgetCaptureFailureUnlessTarget(ResolvePreferredDeviceSelection()?.Id);
+    }
+
+    private void RecordCaptureFailure(Exception error, string? deviceId)
+    {
+        _lastCaptureFailure = error;
+        _lastCaptureFailureDeviceId = deviceId;
+    }
+
+    // A failure describes the microphone it happened on; forget it once another one is targeted.
+    private void ForgetCaptureFailureUnlessTarget(string? targetDeviceId)
+    {
+        if (!string.Equals(targetDeviceId, _lastCaptureFailureDeviceId, StringComparison.OrdinalIgnoreCase))
+            _lastCaptureFailure = null;
     }
 
     /// <summary>
@@ -306,6 +321,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 // Track the device for change handling; StartRecording opens the capture.
                 SetActiveDeviceIdentity(captureSelection);
+                ForgetCaptureFailureUnlessTarget(captureSelection.Id);
                 _isWarmedUp = true;
                 AudioCaptureDiagnostics.Log(
                     $"WarmUp deferred capture until recording active={captureSelection.LastKnownDeviceNumber}:{captureSelection.Name}");
@@ -335,7 +351,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
                 AudioCaptureDiagnostics.Log($"WarmUp failed {ex.GetType().Name}: {ex.Message}");
-                _lastCaptureFailure = ex;
+                RecordCaptureFailure(ex, captureSelection.Id);
                 System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
                 DisposeWaveIn(
                     stopRecording: false,
@@ -451,7 +467,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording failed sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} {ex.GetType().Name}: {ex.Message}");
-                _lastCaptureFailure = ex;
+                RecordCaptureFailure(ex, _activeDeviceId);
                 System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
                 DiscardActiveRecoveryRecording();
                 ClearRecordingState();
