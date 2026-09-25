@@ -46,7 +46,8 @@ internal sealed class DictationHotkeyRegistration : IDisposable
                     else if (down || up)
                     {
                         var mode = recordingMode();
-                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true));
+                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true,
+                            held => (GetAsyncKeyState(held) & 0x8000) != 0));
                     }
                 }
             }

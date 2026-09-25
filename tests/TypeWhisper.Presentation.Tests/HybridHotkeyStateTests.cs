@@ -139,4 +139,53 @@ public class HybridHotkeyStateTests
         Assert.Equal(stop ? HybridHotkeyAction.Stop : (HybridHotkeyAction?)null,
             state.Key(0xA0, false, duration, bindings, true));
     }
+
+    [Theory]
+    [InlineData(0x50)]
+    [InlineData(0xA2)]
+    public void LostReleaseDoesNotSwallowTheNextToggleStop(int lostKey)
+    {
+        // Issue #528: Windows skipped the hook for a release while capture started.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+P" };
+        var physical = new HashSet<int>();
+        HybridHotkeyAction? Press(int key, bool down, long now, bool recording, bool observed = true)
+        {
+            if (!observed) { physical.Remove(key); return null; }
+            var action = state.Key(key, down, now, bindings, recording, RecordingMode.Toggle, held: physical.Contains);
+            if (down) physical.Add(key); else physical.Remove(key);
+            return action;
+        }
+        Press(0xA2, true, 0, false);
+        Assert.Equal(HybridHotkeyAction.Start, Press(0x50, true, 10, false));
+        Assert.Null(Press(0x50, false, 100, true, observed: lostKey != 0x50));
+        Assert.Null(Press(0xA2, false, 110, true, observed: false));
+        Assert.Null(Press(0xA2, true, 5000, true));
+        Assert.Equal(HybridHotkeyAction.Stop, Press(0x50, true, 5010, true));
+    }
+
+    [Fact]
+    public void LostHybridHoldReleaseStillStopsRecording()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        var physical = new HashSet<int> { 0xA2 };
+        state.Key(0xA2, true, 0, bindings, held: physical.Contains);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 0, bindings, held: physical.Contains));
+        physical.Clear();
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x41, true, 2000, bindings, true, held: physical.Contains));
+    }
+
+    [Fact]
+    public void RepeatedHeldKeysAreNotTreatedAsLost()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+P" };
+        var physical = new HashSet<int> { 0xA2 };
+        state.Key(0xA2, true, 0, bindings, mode: RecordingMode.Toggle, held: _ => false);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x50, true, 10, bindings, false, RecordingMode.Toggle, held: physical.Contains));
+        physical.Add(0x50);
+        Assert.Null(state.Key(0x50, true, 40, bindings, true, RecordingMode.Toggle, held: physical.Contains));
+        Assert.Null(state.Key(0x50, false, 80, bindings, true, RecordingMode.Toggle, held: physical.Contains));
+    }
 }

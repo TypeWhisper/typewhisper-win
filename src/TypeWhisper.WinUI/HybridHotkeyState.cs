@@ -29,9 +29,18 @@ internal sealed class HybridHotkeyState
     }
 
     internal HybridHotkeyAction? Key(int key, bool down, long now, IReadOnlySet<string> bindings, bool recording = false,
-        RecordingMode mode = RecordingMode.Hybrid, bool paused = false)
+        RecordingMode mode = RecordingMode.Hybrid, bool paused = false, Func<int, bool>? held = null)
     {
         HybridHotkeyAction? action = null;
+        // Windows skips a low-level hook that misses its timeout, e.g. while capture starts on
+        // the UI thread. A lost key-up would otherwise block the next press of the shortcut.
+        if (held is not null && _down.RemoveWhere(pressed => !held(pressed)) > 0 && _down.Count == 0)
+        {
+            action = !_startedByGesture ? null
+                : mode == RecordingMode.Hold || mode == RecordingMode.Hybrid && now - _pressedAt >= HoldMilliseconds
+                    ? HybridHotkeyAction.Stop : null;
+            _armed = null; _startedByGesture = false; _blocked = false;
+        }
         if (_mode is not null && _mode != mode)
         {
             // A changed setting must never reinterpret keys which are already held.
@@ -56,7 +65,8 @@ internal sealed class HybridHotkeyState
         {
             _armed = chord; _pressedAt = now;
             _startedByGesture = !recording;
-            action = recording ? mode == RecordingMode.Hold ? null : HybridHotkeyAction.Stop : HybridHotkeyAction.Start;
+            // Keep a Stop inferred from a lost release when a hold-mode press is otherwise ignored.
+            action = recording ? mode == RecordingMode.Hold ? action : HybridHotkeyAction.Stop : HybridHotkeyAction.Start;
         }
         // Non-modifier keys outside a configured chord invalidate the gesture.
         if (down && _armed is null && !IsModifier(key)) _blocked = true;
