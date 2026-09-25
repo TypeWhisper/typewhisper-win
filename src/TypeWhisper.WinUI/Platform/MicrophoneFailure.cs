@@ -27,6 +27,10 @@ internal static class MicrophoneFailure
         }
     };
 
+    // Whether a device satisfies a priority entry the way AudioRecordingService resolves it (ID or name).
+    internal static bool IsSameMicrophone(AudioInputDeviceInfo device, MicrophonePriorityItem item) =>
+        string.Equals(device.Id, item.Id, StringComparison.OrdinalIgnoreCase) || WasapiAudioInputDeviceOrdering.DeviceNamesMatch(device.Name, item.Name);
+
     // Resolves the priority list like AudioRecordingService does (ID, then name); null when the first entry is connected.
     internal static string? PriorityNotice(IReadOnlyList<MicrophonePriorityItem> priority, IReadOnlyList<AudioInputDeviceInfo> devices)
     {

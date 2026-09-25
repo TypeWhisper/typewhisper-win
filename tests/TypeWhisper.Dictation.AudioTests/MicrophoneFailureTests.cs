@@ -100,6 +100,31 @@ public sealed class MicrophoneFailureTests
         Assert.Contains("exclusively", seen);
     }
 
+    [Fact]
+    public void FailedDefaultMicrophoneMigrationIsReported()
+    {
+        var devices = new Devices();
+        var factory = new Switchable();
+        using var audio = new AudioRecordingService(devices, factory, Timeout.InfiniteTimeSpan);
+        Assert.True(audio.WarmUp());
+        audio.CheckForDeviceChanges();
+        string? seen = "not raised";
+        audio.DevicesChanged += (_, _) => seen = audio.CaptureFailure;
+        // Same endpoints, only the Windows default moves.
+        devices.List = [new(0, "usb", "USB Mic", true), new(1, "laptop", "Laptop Mic", false)];
+        factory.Error = new COMException("In use", unchecked((int)0x8889000A));
+        audio.CheckForDeviceChanges();
+        Assert.Contains("exclusively", seen);
+    }
+
+    [Fact]
+    public void SameMicrophoneMatchesByIdOrName()
+    {
+        Assert.True(MicrophoneFailure.IsSameMicrophone(new(0, "new-id", "USB Mic", false), new("old-id", "USB Mic")));
+        Assert.True(MicrophoneFailure.IsSameMicrophone(new(0, "usb", "Renamed", false), new("usb", "USB Mic")));
+        Assert.False(MicrophoneFailure.IsSameMicrophone(new(0, "laptop", "Laptop Mic", false), new("usb", "USB Mic")));
+    }
+
     private sealed class Devices : IAudioInputDeviceProvider
     {
         public AudioInputDeviceInfo[] List = [new(0, "usb", "USB Mic", false), new(1, "laptop", "Laptop Mic", true)];

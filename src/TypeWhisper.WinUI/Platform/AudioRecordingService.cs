@@ -167,7 +167,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public event EventHandler<SamplesAvailableEventArgs>? SamplesAvailable;
     /// <summary>
-    /// Raised when the device list changes, after the capture has reacted to the change.
+    /// Raised when the device list changes or a default-device migration changes the capture
+    /// outcome, after the capture has reacted to the change.
     /// </summary>
     public event EventHandler? DevicesChanged;
     /// <summary>
@@ -1106,7 +1107,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 {
                     // The device list is unchanged, but the system default endpoint
                     // may have moved (or a migration was deferred while recording).
+                    var failure = _lastCaptureFailure;
                     EnsureActiveDeviceIsPreferred(snapshot);
+                    // Publish a migration whose capture failed, or a failure that it cleared.
+                    devicesChanged = _lastCaptureFailure != failure;
                     return;
                 }
 
