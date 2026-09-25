@@ -9,8 +9,11 @@ internal static class ShortcutKeys
         ("Space", 0x20), ("Enter", 0x0D), ("Backspace", 0x08), ("Tab", 0x09), ("Esc", 0x1B),
         ("Delete", 0x2E), ("Insert", 0x2D), ("Home", 0x24), ("End", 0x23), ("PageUp", 0x21), ("PageDown", 0x22),
         ("Up", 0x26), ("Down", 0x28), ("Left", 0x25), ("Right", 0x27),
-        ("PrintScreen", 0x2C), ("Pause", 0x13), ("ScrollLock", 0x91), ("CapsLock", 0x14), ("NumLock", 0x90), ("Apps", 0x5D),
+        ("PrintScreen", 0x2C), ("Pause", 0x13), ("ScrollLock", 0x91), ("CapsLock", 0x14), ("NumLock", 0x90), ("Apps", 0x5D), ("Sleep", 0x5F),
         ("NumMultiply", 0x6A), ("NumAdd", 0x6B), ("NumSeparator", 0x6C), ("NumSubtract", 0x6D), ("NumDecimal", 0x6E), ("NumDivide", 0x6F),
+        ("BrowserBack", 0xA6), ("BrowserForward", 0xA7), ("BrowserRefresh", 0xA8), ("BrowserStop", 0xA9), ("BrowserSearch", 0xAA), ("BrowserFavorites", 0xAB), ("BrowserHome", 0xAC),
+        ("VolumeMute", 0xAD), ("VolumeDown", 0xAE), ("VolumeUp", 0xAF), ("MediaNext", 0xB0), ("MediaPrevious", 0xB1), ("MediaStop", 0xB2), ("MediaPlayPause", 0xB3),
+        ("LaunchMail", 0xB4), ("MediaSelect", 0xB5), ("LaunchApp1", 0xB6), ("LaunchApp2", 0xB7),
         ("`", 0xC0), ("-", 0xBD), ("=", 0xBB), ("[", 0xDB), ("]", 0xDD), (";", 0xBA), ("'", 0xDE),
         // A literal comma would split the stored shortcut list.
         ("Comma", 0xBC), (".", 0xBE), ("/", 0xBF), ("\\", 0xDC), ("Oem8", 0xDF), ("Oem102", 0xE2)
@@ -20,7 +23,7 @@ internal static class ShortcutKeys
         // Windows.System.VirtualKey names, which earlier 1.1 Daily builds stored and registered.
         .Concat<(string Token, int Key)>([("Cancel", 0x03), ("Back", 0x08), ("Clear", 0x0C), ("Return", 0x0D), ("CapitalLock", 0x14),
             ("Kana", 0x15), ("Hangul", 0x15), ("Hanja", 0x19), ("Kanji", 0x19), ("Escape", 0x1B), ("Help", 0x2F),
-            ("Application", 0x5D), ("Sleep", 0x5F), ("NumberKeyLock", 0x90), ("Scroll", 0x91)])
+            ("Application", 0x5D), ("NumberKeyLock", 0x90), ("Scroll", 0x91)])
         .Concat(Run(0x16, "ImeOn", "Junja", "Final", "", "ImeOff", "", "Convert", "NonConvert", "Accept", "ModeChange"))
         .Concat(Run(0x29, "Select", "Print", "Execute", "Snapshot"))
         .Concat(Run(0x6A, "Multiply", "Add", "Separator", "Subtract", "Decimal", "Divide"))

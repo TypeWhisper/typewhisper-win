@@ -15,6 +15,8 @@ public class ShortcutKeysTests
     [InlineData(0x6A, "NumMultiply")]
     [InlineData(0x61, "Num1")]
     [InlineData(0x20, "Space")]
+    [InlineData(0xA6, "BrowserBack")]
+    [InlineData(0xB3, "MediaPlayPause")]
     public void RecordedKeyStartsDictationFromTheHook(int key, string token)
     {
         Assert.Equal(token, ShortcutKeys.Token(key));
@@ -31,8 +33,11 @@ public class ShortcutKeysTests
     [InlineData("Ctrl+VK220", "CTRL+\\")]
     [InlineData("Ctrl+Snapshot", "CTRL+PRINTSCREEN")]
     [InlineData("Ctrl+Escape", "CTRL+ESC")]
-    [InlineData("Ctrl+GoBack", "CTRL+VK166")]
-    [InlineData("Ctrl+Sleep", "CTRL+VK95")]
+    [InlineData("Ctrl+GoBack", "CTRL+BROWSERBACK")]
+    [InlineData("Ctrl+BrowserBack", "CTRL+BROWSERBACK")]
+    [InlineData("Ctrl+VolumeMute", "CTRL+VOLUMEMUTE")]
+    [InlineData("Ctrl+MediaPlayPause", "CTRL+MEDIAPLAYPAUSE")]
+    [InlineData("Ctrl+Sleep", "CTRL+SLEEP")]
     [InlineData("Ctrl+Convert", "CTRL+VK28")]
     [InlineData("Ctrl+NumberPad1", "CTRL+NUM1")]
     [InlineData("control+shift+a", "CTRL+SHIFT+A")]
