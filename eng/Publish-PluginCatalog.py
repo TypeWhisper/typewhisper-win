@@ -159,11 +159,11 @@ def ensure_release(stage, summary):
     tag = summary["tag"]
     release = find_release(tag)
     marker = f"Source commit: {summary['sourceCommit']}"
+    # One plugin version per release, named like the macOS plugin releases.
+    title = ", ".join(f"{e['name']} Plugin v{e['version']}" for e in summary["changedPlugins"])
     if release is None:
-        # One plugin version per release, named like the macOS plugin releases.
         # The notes stay minimal so the change description can be written by hand
         # afterwards; keep the source commit line, publication reruns rely on it.
-        title = ", ".join(f"{e['name']} Plugin v{e['version']}" for e in summary["changedPlugins"])
         notes = stage / "release-notes.md"
         notes.write_text(marker + "\n", encoding="utf-8")
         gh("release", "create", tag, "--repo", REPO, "--target", summary["sourceCommit"],
@@ -196,9 +196,15 @@ def ensure_release(stage, summary):
             gh("release", "upload", tag, str(stage / "archives" / name), "--repo", REPO)
     if release["draft"]:
         check_existing_tag(tag, summary["sourceCommit"])
-        # A draft left behind by an earlier run may still carry the old prerelease
-        # flag; publishing clears it so every plugin release ends up plain.
-        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--prerelease=false", "--latest=false")
+        # A draft left behind by an earlier run may still carry the old title or
+        # prerelease flag; publishing normalizes it so every plugin release ends up
+        # as a plain, canonically titled, non-latest release.
+        gh("release", "edit", tag, "--repo", REPO, "--draft=false", "--prerelease=false", "--latest=false",
+           "--title", title)
+    elif release.get("prerelease"):
+        # An earlier run may have published the release but failed before the catalog
+        # update. Clear the prerelease flag; the hand-written title and notes stay.
+        gh("release", "edit", tag, "--repo", REPO, "--prerelease=false", "--latest=false")
     if api(f"commits/{tag}")["sha"] != summary["sourceCommit"]:
         raise ValueError("Published tag does not match the tested source commit")
     for entry in summary["changedPlugins"]:
