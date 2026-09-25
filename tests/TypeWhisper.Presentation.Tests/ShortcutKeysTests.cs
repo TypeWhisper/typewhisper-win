@@ -31,6 +31,10 @@ public class ShortcutKeysTests
     [InlineData("Ctrl+VK220", "CTRL+\\")]
     [InlineData("Ctrl+Snapshot", "CTRL+PRINTSCREEN")]
     [InlineData("Ctrl+Escape", "CTRL+ESC")]
+    [InlineData("Ctrl+GoBack", "CTRL+VK166")]
+    [InlineData("Ctrl+Sleep", "CTRL+VK95")]
+    [InlineData("Ctrl+Convert", "CTRL+VK28")]
+    [InlineData("Ctrl+NumberPad1", "CTRL+NUM1")]
     [InlineData("control+shift+a", "CTRL+SHIFT+A")]
     public void StoredValuesFromEarlierBuildsMatchTheHookChord(string stored, string normalized) =>
         Assert.Equal(normalized, ShortcutRules.Normalize(stored));

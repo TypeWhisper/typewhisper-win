@@ -17,11 +17,24 @@ internal static class ShortcutKeys
     ];
     private static readonly Dictionary<int, string> TokensByKey = Named.ToDictionary(item => item.Key, item => item.Token);
     private static readonly Dictionary<string, int> KeysByToken = Named
-        // Windows.System.VirtualKey names, which earlier 1.1 Daily builds stored for these keys.
-        .Concat<(string Token, int Key)>([("Escape", 0x1B), ("Return", 0x0D), ("Back", 0x08), ("CapitalLock", 0x14), ("Scroll", 0x91), ("NumberKeyLock", 0x90),
-            ("Snapshot", 0x2C), ("Application", 0x5D), ("Multiply", 0x6A), ("Add", 0x6B), ("Separator", 0x6C),
-            ("Subtract", 0x6D), ("Decimal", 0x6E), ("Divide", 0x6F)])
+        // Windows.System.VirtualKey names, which earlier 1.1 Daily builds stored and registered.
+        .Concat<(string Token, int Key)>([("Cancel", 0x03), ("Back", 0x08), ("Clear", 0x0C), ("Return", 0x0D), ("CapitalLock", 0x14),
+            ("Kana", 0x15), ("Hangul", 0x15), ("Hanja", 0x19), ("Kanji", 0x19), ("Escape", 0x1B), ("Help", 0x2F),
+            ("Application", 0x5D), ("Sleep", 0x5F), ("NumberKeyLock", 0x90), ("Scroll", 0x91)])
+        .Concat(Run(0x16, "ImeOn", "Junja", "Final", "", "ImeOff", "", "Convert", "NonConvert", "Accept", "ModeChange"))
+        .Concat(Run(0x29, "Select", "Print", "Execute", "Snapshot"))
+        .Concat(Run(0x6A, "Multiply", "Add", "Separator", "Subtract", "Decimal", "Divide"))
+        .Concat(Run(0x88, "NavigationView", "NavigationMenu", "NavigationUp", "NavigationDown", "NavigationLeft", "NavigationRight", "NavigationAccept", "NavigationCancel"))
+        .Concat(Run(0xA6, "GoBack", "GoForward", "Refresh", "Stop", "Search", "Favorites", "GoHome"))
+        .Concat(Run(0xC3, "GamepadA", "GamepadB", "GamepadX", "GamepadY", "GamepadRightShoulder", "GamepadLeftShoulder", "GamepadLeftTrigger", "GamepadRightTrigger",
+            "GamepadDPadUp", "GamepadDPadDown", "GamepadDPadLeft", "GamepadDPadRight", "GamepadMenu", "GamepadView", "GamepadLeftThumbstickButton", "GamepadRightThumbstickButton",
+            "GamepadLeftThumbstickUp", "GamepadLeftThumbstickDown", "GamepadLeftThumbstickRight", "GamepadLeftThumbstickLeft",
+            "GamepadRightThumbstickUp", "GamepadRightThumbstickDown", "GamepadRightThumbstickRight", "GamepadRightThumbstickLeft"))
+        .Concat<(string Token, int Key)>(Enumerable.Range(0, 10).SelectMany(digit => new[] { ($"Number{digit}", 0x30 + digit), ($"NumberPad{digit}", 0x60 + digit) }))
         .ToDictionary(item => item.Token, item => item.Key, StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<(string Token, int Key)> Run(int first, params string[] names) =>
+        names.Select((name, index) => (name, first + index)).Where(item => item.name.Length > 0);
 
     internal static string Token(int key) => key switch
     {
