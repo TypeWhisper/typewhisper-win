@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using TypeWhisper.Plugin.WhisperCpp;
 using TypeWhisper.PluginSDK.Models;
 using Whisper.net;
+using Whisper.net.LibraryLoader;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -14,6 +15,25 @@ public partial class WhisperCppPluginTests
     [InlineData(new[] { true }, 0)]
     public void VulkanPrefersTheFirstDedicatedGpu(bool[] integrated, int expected) =>
         Assert.Equal(expected, GpuDevices.Select(integrated.Select((value, index) => new GpuDevice($"GPU {index}", value)).ToArray()));
+
+    [Fact]
+    public void GpuListIsUnavailableWithoutTheRuntime()
+    {
+        using var temp = new TempDirectory();
+        Assert.Null(GpuDevices.List(temp.Path));
+    }
+
+    [Theory]
+    [InlineData(TranscriptionAccelerationPreference.AmdVulkan, "Vulkan unavailable")]
+    [InlineData(TranscriptionAccelerationPreference.Auto, "Using CPU")]
+    public void VulkanRuntimeWithoutGpuReportsCpu(TranscriptionAccelerationPreference preference, string displayText)
+    {
+        var status = WhisperCppPlugin.CreateLoadedAccelerationStatus(RuntimeLibrary.Vulkan, preference, vulkanHasNoGpu: true);
+        Assert.Equal(TranscriptionAccelerationBackend.Cpu, status.ActiveBackend);
+        Assert.Equal(displayText, status.DisplayText);
+        Assert.Equal(TranscriptionAccelerationBackend.AmdVulkan,
+            WhisperCppPlugin.CreateLoadedAccelerationStatus(RuntimeLibrary.Vulkan, preference).ActiveBackend);
+    }
 
     // Opt-in: set TYPEWHISPER_TEST_WHISPER_DATA to a whisper.cpp plugin data folder containing Models/ggml-large-v3-turbo.bin.
     [Fact]

@@ -216,7 +216,7 @@ public partial class WhisperCppPluginTests
 
         var status = Assert.IsType<TranscriptionAccelerationStatus>(method.Invoke(
             null,
-            [RuntimeLibrary.Cpu, TranscriptionAccelerationPreference.NvidiaCuda, null]));
+            [RuntimeLibrary.Cpu, TranscriptionAccelerationPreference.NvidiaCuda, null, false]));
 
         Assert.Equal(TranscriptionAccelerationBackend.Cpu, status.ActiveBackend);
         Assert.Equal("CUDA unavailable", status.DisplayText);

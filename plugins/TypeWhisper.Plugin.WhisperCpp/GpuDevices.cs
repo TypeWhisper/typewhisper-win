@@ -21,25 +21,37 @@ internal static class GpuDevices
         return 0;
     }
 
-    internal static IReadOnlyList<GpuDevice> List(string runtimeDirectory)
+    // Null when the device list cannot be read; empty when the runtime reports no GPU, so whisper.cpp runs on the CPU.
+    internal static IReadOnlyList<GpuDevice>? List(string runtimeDirectory)
     {
         // Whisper.net has already loaded these; the device registry and device properties live in different DLLs.
-        if (!NativeLibrary.TryLoad(Path.Join(runtimeDirectory, "ggml-whisper.dll"), out var registry)
-            || !NativeLibrary.TryLoad(Path.Join(runtimeDirectory, "ggml-base-whisper.dll"), out var core)
-            || !TryExport<Count>(registry, "ggml_backend_dev_count", out var count)
-            || !TryExport<Get>(registry, "ggml_backend_dev_get", out var get)
-            || !TryExport<DeviceType>(core, "ggml_backend_dev_type", out var type)
-            || !TryExport<Text>(core, "ggml_backend_dev_description", out var description))
-            return [];
-        var devices = new List<GpuDevice>();
-        for (nuint index = 0, total = count(); index < total; index++)
+        // Our handles only add references, so they are released once the list has been read.
+        var registry = IntPtr.Zero;
+        var core = IntPtr.Zero;
+        try
         {
-            var device = get(index);
-            var kind = type(device);
-            if (kind is GpuType or IntegratedGpuType)
-                devices.Add(new(Marshal.PtrToStringUTF8(description(device)) ?? $"GPU {devices.Count}", kind == IntegratedGpuType));
+            if (!NativeLibrary.TryLoad(Path.Join(runtimeDirectory, "ggml-whisper.dll"), out registry)
+                || !NativeLibrary.TryLoad(Path.Join(runtimeDirectory, "ggml-base-whisper.dll"), out core)
+                || !TryExport<Count>(registry, "ggml_backend_dev_count", out var count)
+                || !TryExport<Get>(registry, "ggml_backend_dev_get", out var get)
+                || !TryExport<DeviceType>(core, "ggml_backend_dev_type", out var type)
+                || !TryExport<Text>(core, "ggml_backend_dev_description", out var description))
+                return null;
+            var devices = new List<GpuDevice>();
+            for (nuint index = 0, total = count(); index < total; index++)
+            {
+                var device = get(index);
+                var kind = type(device);
+                if (kind is GpuType or IntegratedGpuType)
+                    devices.Add(new(Marshal.PtrToStringUTF8(description(device)) ?? $"GPU {devices.Count}", kind == IntegratedGpuType));
+            }
+            return devices;
         }
-        return devices;
+        finally
+        {
+            if (core != IntPtr.Zero) NativeLibrary.Free(core);
+            if (registry != IntPtr.Zero) NativeLibrary.Free(registry);
+        }
     }
 
     private static bool TryExport<T>(IntPtr library, string name, out T function) where T : Delegate

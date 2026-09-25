@@ -32,6 +32,8 @@ public sealed partial class WhisperCppPlugin :
         "Vulkan runtime could not be loaded; using CPU. Make sure the AMD Vulkan driver is installed.";
     private const string VulkanLoadFailureDetail =
         "Vulkan runtime could not be loaded. Make sure the AMD Vulkan driver is installed.";
+    private const string VulkanNoGpuDetail =
+        "The Vulkan runtime found no GPU; using CPU. Make sure the graphics driver is installed.";
     private const string RocmHookMissingDetail =
         "Set TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH to a custom ROCm whisper.dll path and restart TypeWhisper.";
 
@@ -61,8 +63,10 @@ public sealed partial class WhisperCppPlugin :
     private IPluginHostServices? _host;
     private WhisperFactory? _factory;
     internal Func<string, WhisperFactory> CreateFactory { get; set; }
-    internal Func<string, IReadOnlyList<GpuDevice>> ListGpuDevices { get; set; } = GpuDevices.List;
+    internal Func<string, IReadOnlyList<GpuDevice>?> ListGpuDevices { get; set; } = GpuDevices.List;
     private GpuDevice? _gpuDevice;
+    // The Vulkan runtime loaded but reports no GPU, so whisper.cpp runs the model on the CPU.
+    private bool _vulkanHasNoGpu;
     internal Action<WhisperFactory> ReleaseFactory { get; set; } = factory => factory.Dispose();
     private string? _selectedModelId;
     private string? _loadedModelId;
@@ -100,6 +104,7 @@ public sealed partial class WhisperCppPlugin :
     internal WhisperFactoryOptions CreateFactoryOptions()
     {
         _gpuDevice = null;
+        _vulkanHasNoGpu = false;
         var options = new WhisperFactoryOptions();
         if (_accelerationPreference is TranscriptionAccelerationPreference.Cpu or TranscriptionAccelerationPreference.AmdRocm) return options;
         try
@@ -108,10 +113,16 @@ public sealed partial class WhisperCppPlugin :
             if (RuntimeOptions.LoadedLibrary != RuntimeLibrary.Vulkan) return options;
             var devices = ResolveRuntimePathForDiagnostics(RuntimeLibrary.Vulkan, _accelerationPreference, useRequestedBackend: false) is { } runtime
                 ? ListGpuDevices(Path.GetDirectoryName(runtime)!)
-                : [];
-            if (devices.Count == 0)
+                : null;
+            if (devices is null)
             {
                 _host?.Log(PluginLogLevel.Warning, "GPU list unavailable: no GPU could be read from the Vulkan runtime, so whisper.cpp keeps its default device.");
+                return options;
+            }
+            if (devices.Count == 0)
+            {
+                _vulkanHasNoGpu = true;
+                _host?.Log(PluginLogLevel.Warning, "The Vulkan runtime reports no GPU, so whisper.cpp runs on the CPU.");
                 return options;
             }
             options.GpuDevice = GpuDevices.Select(devices);
@@ -262,7 +273,7 @@ public sealed partial class WhisperCppPlugin :
 
         if (_factory is not null && !_runtimeRestartRequired)
         {
-            _accelerationStatus = CreateLoadedAccelerationStatus(RuntimeOptions.LoadedLibrary, preference, _gpuDevice);
+            _accelerationStatus = CreateLoadedAccelerationStatus(RuntimeOptions.LoadedLibrary, preference, _gpuDevice, _vulkanHasNoGpu);
             return;
         }
 
@@ -465,7 +476,8 @@ public sealed partial class WhisperCppPlugin :
         _accelerationStatus = CreateLoadedAccelerationStatus(
             loadedLibrary,
             _accelerationPreference,
-            _gpuDevice);
+            _gpuDevice,
+            _vulkanHasNoGpu);
         _customRocmRuntimeLoaded = _accelerationPreference == TranscriptionAccelerationPreference.AmdRocm;
         _runtimePath = ResolveRuntimePathForDiagnostics(
             loadedLibrary,
@@ -645,10 +657,11 @@ public sealed partial class WhisperCppPlugin :
             _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
         };
 
-    private static TranscriptionAccelerationStatus CreateLoadedAccelerationStatus(
+    internal static TranscriptionAccelerationStatus CreateLoadedAccelerationStatus(
         RuntimeLibrary? loadedLibrary,
         TranscriptionAccelerationPreference preference,
-        GpuDevice? gpu = null)
+        GpuDevice? gpu = null,
+        bool vulkanHasNoGpu = false)
     {
         if (preference == TranscriptionAccelerationPreference.AmdRocm)
             return new(TranscriptionAccelerationBackend.AmdRocm, "Using ROCm");
@@ -656,6 +669,10 @@ public sealed partial class WhisperCppPlugin :
         return loadedLibrary switch
         {
             RuntimeLibrary.Cuda => new(TranscriptionAccelerationBackend.NvidiaCuda, "Using CUDA"),
+            // A loaded Vulkan runtime without a GPU leaves whisper.cpp on its CPU backend.
+            RuntimeLibrary.Vulkan when vulkanHasNoGpu => new(TranscriptionAccelerationBackend.Cpu,
+                preference == TranscriptionAccelerationPreference.AmdVulkan ? "Vulkan unavailable" : "Using CPU",
+                VulkanNoGpuDetail),
             RuntimeLibrary.Vulkan => new(TranscriptionAccelerationBackend.AmdVulkan, "Using Vulkan",
                 gpu is null ? null : $"Running on {gpu.Name}{(gpu.Integrated ? " (integrated graphics)" : "")}."),
             RuntimeLibrary.Cpu => preference switch

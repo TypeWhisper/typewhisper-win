@@ -22,7 +22,7 @@ After a whisper.cpp model has loaded (plugin 1.2.20 or later), the Processing de
 
 - `In use: Vulkan · <GPU name>` names the GPU. `(integrated graphics)` marks the processor's built-in graphics.
 - `In use: NVIDIA CUDA`, `In use: AMD ROCm` or `In use: CPU` name the other backends.
-- `In use: CPU (Vulkan unavailable)` or `In use: CPU (CUDA unavailable)` means the chosen GPU runtime could not load and whisper.cpp fell back to CPU. Update the graphics driver, then dictate again to reload the model.
+- `In use: CPU (Vulkan unavailable)` or `In use: CPU (CUDA unavailable)` means the chosen GPU runtime could not load, or the Vulkan runtime found no GPU, and whisper.cpp fell back to CPU. Update the graphics driver and restart TypeWhisper. The next dictation loads the model again.
 
 Nothing is shown before the first dictation or file transcription loads the model. If the description instead says to restart TypeWhisper, a different native runtime is already loaded in the process. Restart before switching.
 
