@@ -193,7 +193,7 @@ public sealed class ShortcutRecorder : UserControl
                     Background = (Brush)Application.Current.Resources["ElevatedBrush"],
                     BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1, 1, 1, 2),
                     CornerRadius = new CornerRadius(5), Padding = new Thickness(7, 4, 7, 4), MinWidth = 28,
-                    Child = Text(keycap, 12)
+                    Child = Text(ShortcutKeys.Label(keycap), 12)
                 });
             var edit = Button(content, "IconButtonStyle", $"Edit {_label} shortcut {chord}");
             edit.MinHeight = 34; edit.Padding = new Thickness(2);
@@ -333,12 +333,7 @@ public sealed class ShortcutRecorder : UserControl
             return;
         }
         _hasMainKey = true;
-        var key = (int)e.Key;
-        var name = key is >= 65 and <= 90 ? ((char)key).ToString()
-            : key is >= 48 and <= 57 ? ((char)key).ToString()
-            : key is >= 112 and <= 135 ? $"F{key - 111}"
-            : key is >= 96 and <= 105 ? $"Num{key - 96}"
-            : e.Key switch { VirtualKey.Menu => "Alt", VirtualKey.Enter => "Enter", VirtualKey.Back => "Backspace", _ => e.Key.ToString() };
+        var name = ShortcutKeys.Token((int)e.Key);
         Candidate(modifiers.Length == 0 ? name : $"{modifiers}+{name}");
     }
     internal void CaptureKeyUp(KeyRoutedEventArgs e)
