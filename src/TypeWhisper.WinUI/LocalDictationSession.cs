@@ -408,8 +408,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         var notice = MicrophoneNotice();
         if (notice == _microphoneNotice || _audio.IsRecording) return;
-        // A dictation outcome with an appended notice keeps the outcome and only updates the notice.
-        if (_noticeOutcome is { } outcome && Status == _noticeStatus)
+        // An error or review outcome with an appended notice keeps the outcome and only updates the notice.
+        // A completed dictation follows the microphone like before, whether or not a notice was appended.
+        if (_phase != DictationPhase.Completed && _noticeOutcome is { } outcome && Status == _noticeStatus)
         {
             _microphoneNotice = notice;
             SetStatus(_noticeStatus = notice is null ? outcome : outcome + " · " + notice, _phase);
