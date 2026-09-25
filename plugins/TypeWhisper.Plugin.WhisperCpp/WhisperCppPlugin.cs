@@ -105,11 +105,15 @@ public sealed partial class WhisperCppPlugin :
         try
         {
             WhisperFactory.GetRuntimeInfo();
-            if (RuntimeOptions.LoadedLibrary != RuntimeLibrary.Vulkan
-                || ResolveRuntimePathForDiagnostics(RuntimeLibrary.Vulkan, _accelerationPreference, useRequestedBackend: false) is not { } runtime)
+            if (RuntimeOptions.LoadedLibrary != RuntimeLibrary.Vulkan) return options;
+            var devices = ResolveRuntimePathForDiagnostics(RuntimeLibrary.Vulkan, _accelerationPreference, useRequestedBackend: false) is { } runtime
+                ? ListGpuDevices(Path.GetDirectoryName(runtime)!)
+                : [];
+            if (devices.Count == 0)
+            {
+                _host?.Log(PluginLogLevel.Warning, "GPU list unavailable: no GPU could be read from the Vulkan runtime, so whisper.cpp keeps its default device.");
                 return options;
-            var devices = ListGpuDevices(Path.GetDirectoryName(runtime)!);
-            if (devices.Count == 0) return options;
+            }
             options.GpuDevice = GpuDevices.Select(devices);
             _gpuDevice = devices[options.GpuDevice];
         }
