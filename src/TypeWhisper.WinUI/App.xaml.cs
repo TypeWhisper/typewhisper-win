@@ -188,7 +188,10 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(async () => await _window.CancelProcessingAsync()),
             () => _window.DispatcherQueue.TryEnqueue(_window.ToggleDictationHotkeyPause),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenRecoveryFromTray),
-            () => _window.DispatcherQueue.TryEnqueue(_window.ShowApplicationUpdates));
+            () => _window.DispatcherQueue.TryEnqueue(_window.ShowApplicationUpdates),
+            () => _window.DispatcherQueue.TryEnqueue(_window.PasteLastTranscriptionFromTray),
+            () => _window.DispatcherQueue.TryEnqueue(_window.CopyLastTranscriptionFromTray),
+            () => _window.DispatcherQueue.TryEnqueue(_window.ReadLastTranscriptionFromTray));
         _window.TrayMenuHandle = _tray.WindowHandle;
         void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,
             _window.CanChangeDictationHotkeyPause, _window.DictationHotkeyPauseError);

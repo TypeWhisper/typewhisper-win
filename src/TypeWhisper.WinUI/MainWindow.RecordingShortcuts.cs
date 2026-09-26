@@ -60,7 +60,7 @@ public sealed partial class MainWindow
         if (RecordingShortcutConflicts.Overlap(value, true, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
             return "Already used by Cancel processing.";
         return RecordingShortcutConflict(value, true, key) ?? RecorderShortcutConflict(value, true)
-            ?? HistoryShortcutConflict(value, true) ?? CopyLastShortcutConflict(value, true)
+            ?? HistoryShortcutConflict(value, true) ?? CopyLastShortcutConflict(value, true) ?? PasteLastShortcutConflict(value, true)
             ?? ReadLastShortcutConflict(value, true) ?? WorkflowPaletteShortcutConflict(value, true)
             ?? _workflowShortcuts?.Conflict(value, modifierOnly: true);
     }

@@ -19,6 +19,7 @@ public sealed partial class SettingsWindow : Window
     internal Func<string, string?>? CommitCancelProcessingHotkeys { get; set; }
     internal Func<string, string?>? CommitRecentTranscriptionsHotkeys { get; set; }
     internal Func<string, string?>? CommitCopyLastTranscriptionHotkeys { get; set; }
+    internal Func<string, string?>? CommitPasteLastTranscriptionHotkeys { get; set; }
     internal Func<string, string?>? CommitReadLastTranscriptionHotkeys { get; set; }
     internal Func<string, string?>? CommitWorkflowPaletteHotkeys { get; set; }
     internal Func<string, string, string?>? CommitRecordingShortcut { get; set; }
@@ -459,7 +460,7 @@ public sealed partial class SettingsWindow : Window
         if (catalog)
         {
             _catalogPickers.Clear();
-            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
+            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitPasteLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Startup preferences are saved for this app";

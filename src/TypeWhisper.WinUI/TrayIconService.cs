@@ -23,7 +23,8 @@ internal sealed class TrayIconService : IDisposable
     private bool _hotkeysPaused;
     private string? _pauseError;
 
-    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates)
+    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates,
+        Action pasteLast, Action copyLast, Action readLast)
     {
         var menu = new MenuFlyout();
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
@@ -57,9 +58,11 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(_pauseHotkeys);
         menu.Items.Add(CreateItem("Transcribe file…", "\uE8A5", files));
         menu.Items.Add(CreateItem("Review recovery recordings…", "\uE777", recovery));
-        var recent = new MenuFlyoutSubItem { Text = "Last transcription", IsEnabled = false, FontSize = 13 };
-        recent.Items.Add(Unavailable("Copy", "\uE8C8"));
-        recent.Items.Add(Unavailable("Read back", "\uE767"));
+        var recent = new MenuFlyoutSubItem { Text = "Last transcription", FontSize = 13 };
+        // Paste targets the app window used before the tray menu opened.
+        recent.Items.Add(CreateItem("Paste", "\uE77F", pasteLast));
+        recent.Items.Add(CreateItem("Copy", "\uE8C8", copyLast));
+        recent.Items.Add(CreateItem("Read back", "\uE767", readLast));
         menu.Items.Add(recent);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(CreateItem("Check for updates…", "\uE895", updates));
