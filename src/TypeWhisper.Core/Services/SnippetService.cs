@@ -116,7 +116,13 @@ public sealed partial class SnippetService : ISnippetService
     {
         var activeSnippets = snippets
             .Where(s => s.IsEnabled && !string.IsNullOrEmpty(s.Trigger))
-            .OrderByDescending(s => s.Trigger.Length);
+            .OrderByDescending(s => s.Trigger.Length)
+            .ToArray();
+        if (activeSnippets.Length == 0) return text;
+
+        // A literal trigger must not split a combining sequence or an emoji grapheme.
+        var textElementStarts = StringInfo.ParseCombiningCharacters(text);
+        bool IsTextElementBoundary(int index) => index == text.Length || Array.BinarySearch(textElementStarts, index) >= 0;
         var replacements = new List<(int Start, int End, string Text)>();
         bool[]? occupied = null;
 
@@ -137,6 +143,8 @@ public sealed partial class SnippetService : ISnippetService
 
                 var end = index + snippet.Trigger.Length;
                 searchFrom = index + 1;
+                if (!IsTextElementBoundary(index) || !IsTextElementBoundary(end))
+                    continue;
                 if ((requiresLeftBoundary && IsWordContinuation(text, index - 1, -1)) ||
                     (requiresRightBoundary && IsWordContinuation(text, end, 1)))
                     continue;
@@ -145,7 +153,7 @@ public sealed partial class SnippetService : ISnippetService
 
                 expanded ??= ExpandPlaceholders(snippet.Replacement, clipboardProvider);
                 occupied ??= new bool[text.Length];
-                if (end < text.Length && !occupied[end] && text[end] is '.' or '!' or '?')
+                if (end < text.Length && !occupied[end] && text[end] is '.' or '!' or '?' && IsTextElementBoundary(end + 1))
                     end++;
                 occupied.AsSpan(index, end - index).Fill(true);
                 replacements.Add((index, end, expanded));
@@ -169,7 +177,7 @@ public sealed partial class SnippetService : ISnippetService
         return result.Append(text, copiedThrough, text.Length - copiedThrough).ToString();
     }
 
-    private static bool IsWordContinuation(string text, int index, int direction, bool includeApostrophes = true)
+    private static bool IsWordContinuation(string text, int index, int direction, bool includeWordPunctuation = true)
     {
         while (index >= 0 && index < text.Length)
         {
@@ -187,11 +195,12 @@ public sealed partial class SnippetService : ISnippetService
                 continue;
             }
 
-            // Internal apostrophes join contractions; surrounding quotation marks remain separators.
-            if (includeApostrophes && rune.Value is '\'' or '\u2018' or '\u2019')
+            // Internal apostrophes and Hebrew gershayim join words; surrounding quotes remain separators.
+            if (includeWordPunctuation && rune.Value is '\'' or '\u2018' or '\u2019' or '\u05F4')
                 return IsWordContinuation(text, index - 1, -1, false) && IsWordContinuation(text, index + 1, 1, false);
 
-            return Rune.IsLetter(rune) || Rune.IsNumber(rune) || category is
+            return rune.Value == 0x05F3 || // Hebrew geresh is also word-internal at an abbreviation's end.
+                Rune.IsLetter(rune) || Rune.IsNumber(rune) || category is
                 UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or
                 UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
         }
@@ -201,7 +210,8 @@ public sealed partial class SnippetService : ISnippetService
     // Preserve unspaced scripts independently at each trigger edge; digit sequences still need boundaries.
     // Blocks and South East Asian (SA) scripts: https://www.unicode.org/reports/tr14/#SA
     private static bool IsScriptWithoutWhitespaceBoundaries(Rune rune) =>
-        !Rune.IsNumber(rune) && rune.Value is
+        (Rune.IsLetter(rune) || Rune.GetUnicodeCategory(rune) is UnicodeCategory.NonSpacingMark or
+            UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark) && rune.Value is
             >= 0x0E00 and <= 0x0EFF // Thai and Lao
             or >= 0x1000 and <= 0x109F // Myanmar
             or >= 0x1100 and <= 0x11FF // Hangul Jamo
