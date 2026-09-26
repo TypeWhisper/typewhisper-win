@@ -147,7 +147,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.20";
+    public string PluginVersion => "1.2.21";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -172,7 +172,16 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets whether the provider supports translation requests.
     /// </summary>
-    public bool SupportsTranslation => _selectedModelId?.EndsWith(".en", StringComparison.Ordinal) != true;
+    public bool SupportsTranslation => SupportsTranslationFor(_selectedModelId);
+
+    private const string TranslationUnsupportedMessage =
+        "This Whisper model cannot translate to English. Choose a multilingual model other than Turbo.";
+
+    // English-only and Turbo weights were not trained for translation.
+    private static bool SupportsTranslationFor(string? modelId) => modelId is not null
+        && Models.Any(model => model.Id == modelId)
+        && !modelId.EndsWith(".en", StringComparison.Ordinal)
+        && !modelId.StartsWith("large-v3-turbo", StringComparison.Ordinal);
     /// <summary>
     /// Gets whether the provider can download models through the host.
     /// </summary>
@@ -510,7 +519,9 @@ public sealed partial class WhisperCppPlugin :
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var sample in samples.Span)
             if (!float.IsFinite(sample)) throw new ArgumentException("Audio samples must be finite.", nameof(samples));
-        if (samples.IsEmpty) return Task.FromResult(new PluginTranscriptionResult("", language, 0, null));
+        if (samples.IsEmpty) return translate && !SupportsTranslation
+            ? Task.FromException<PluginTranscriptionResult>(new NotSupportedException(TranslationUnsupportedMessage))
+            : Task.FromResult(new PluginTranscriptionResult("", language, 0, null));
         return TranscribeCoreAsync(processor => processor.ProcessAsync(samples, cancellationToken), language, translate, null, cancellationToken);
     }
 
@@ -521,6 +532,8 @@ public sealed partial class WhisperCppPlugin :
         try
         {
             var modelId = _selectedModelId ?? throw new InvalidOperationException("Select a downloaded model before transcribing.");
+            if (translate && !SupportsTranslationFor(modelId))
+                throw new NotSupportedException(TranslationUnsupportedMessage);
             await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false);
 
             var builder = _factory!.CreateBuilder()

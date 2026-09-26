@@ -17,7 +17,8 @@ public sealed class AutomaticWorkflowSnapshot
             Behavior = new()
             {
                 MemoryPluginId = workflow.Behavior.MemoryPluginId, ProviderOverride = workflow.Behavior.ProviderOverride, ModelOverride = workflow.Behavior.ModelOverride,
-                FineTuning = workflow.Behavior.FineTuning, TranslationTarget = workflow.Behavior.TranslationTarget
+                FineTuning = workflow.Behavior.FineTuning, TranslationTarget = workflow.Behavior.TranslationTarget,
+                SelectedTask = workflow.Behavior.SelectedTask
             }
         };
         Error = error;
@@ -31,6 +32,8 @@ public sealed class AutomaticWorkflowSnapshot
     public string? TargetActionPluginId => _workflow?.Output.TargetActionPluginId;
     /// <summary>The explicitly selected memory source.</summary>
     public string? MemoryPluginId => _workflow?.Behavior.MemoryPluginId;
+    /// <summary>The native transcription task for this recording; null inherits the global preference.</summary>
+    public string? SelectedTask => _workflow?.Behavior.SelectedTask;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
     public string? Error { get; }
 
@@ -78,7 +81,7 @@ public sealed class AutomaticWorkflowSnapshot
             || workflow.Trigger.WebsitePatterns.Any(pattern => BrowserWorkflowContext.NormalizePattern(pattern) is null)
             || workflow.Trigger.Hotkeys.Count != 0
             || behavior.Settings.Count != 0 || !string.IsNullOrWhiteSpace(behavior.InputLanguage)
-            || behavior.InputLanguageHints.Count != 0 || !string.IsNullOrWhiteSpace(behavior.SelectedTask)
+            || behavior.InputLanguageHints.Count != 0 || !WorkflowTranscriptionTask.IsSupported(behavior.SelectedTask)
             || behavior.WhisperModeOverride is not null || !string.IsNullOrWhiteSpace(behavior.TranscriptionModelOverride)
             || !string.IsNullOrWhiteSpace(output.Format) || output.AutoEnter
             || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw))

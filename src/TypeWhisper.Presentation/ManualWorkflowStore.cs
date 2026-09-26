@@ -17,6 +17,7 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     /// <summary>Identifies workflows whose semantics this manual editor supports.</summary>
     public static bool IsSupported(Workflow workflow) => Enum.IsDefined(workflow.Template)
         && workflow.Trigger.Kind == WorkflowTriggerKind.Manual && workflow.Behavior.Settings.Count == 0
+        && WorkflowTranscriptionTask.IsSupported(workflow.Behavior.SelectedTask)
         && (string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId) || AutomaticWorkflowSnapshot.UnsupportedReason(workflow) is null);
 
     /// <summary>Identifies manual or supported App/Website/Global workflows that the editor can preserve and execute.</summary>
@@ -27,15 +28,18 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
             && AutomaticWorkflowSnapshot.UnsupportedReason(workflow) is null);
 
     /// <summary>Accepts selected-text shortcuts without implicit recording or output overrides.</summary>
-    public static bool IsSelectedTextShortcut(Workflow workflow) => workflow.Trigger.Kind == WorkflowTriggerKind.Hotkey
-        && Enum.IsDefined(workflow.Trigger.ContextMatchMode)
+    public static bool IsSelectedTextShortcut(Workflow workflow) => IsSupportedShortcut(workflow)
         && workflow.Trigger.HotkeyBehavior == WorkflowHotkeyBehavior.ProcessSelectedText
+        && string.IsNullOrWhiteSpace(workflow.Behavior.SelectedTask);
+
+    private static bool IsSupportedShortcut(Workflow workflow) => workflow.Trigger.Kind == WorkflowTriggerKind.Hotkey
+        && Enum.IsDefined(workflow.Trigger.ContextMatchMode)
         && workflow.Trigger.Hotkeys.Count > 0 && !workflow.Trigger.HasAppBindings && !workflow.Trigger.HasWebsiteBindings
         && AutomaticWorkflowSnapshot.UnsupportedReason(workflow with { Trigger = WorkflowTrigger.Manual() }) is null;
 
     /// <summary>Accepts explicit dictation shortcuts using the normal recording and delivery preferences.</summary>
     public static bool IsDictationShortcut(Workflow workflow) => workflow.Trigger.HotkeyBehavior == WorkflowHotkeyBehavior.StartDictation
-        && IsSelectedTextShortcut(workflow with { Trigger = workflow.Trigger with { HotkeyBehavior = WorkflowHotkeyBehavior.ProcessSelectedText } });
+        && IsSupportedShortcut(workflow);
 
     /// <summary>Reads the current snapshot, preserving workflows outside the manual editor.</summary>
     public IReadOnlyList<Workflow> Read()

@@ -58,10 +58,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal event Action<Guid>? OutputCompleted;
     internal bool LivePreviewEnabled { get; set; } = true;
     // Availability describes the host's connected preview path, not just an SDK streaming declaration.
-    internal bool SupportsLiveTranscription => (UsesRegistryProvider
+    private bool ModelSupportsLiveTranscription => UsesRegistryProvider
         ? ActiveRegistryProvider is { SupportsStreaming: true } || (ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId))
-        : Models.SupportsLocalLivePreview) &&
-        TranscriptionTaskPreferences.Current == TranscriptionTask.Transcribe;
+        : Models.SupportsLocalLivePreview;
+    // The captured task applies from recording through processing and its error state.
+    internal bool SupportsLiveTranscription => ModelSupportsLiveTranscription &&
+        (_audio.IsRecording || _phase is DictationPhase.Processing or DictationPhase.Error ? _taskAtStart : TranscriptionTaskPreferences.Current)
+            == TranscriptionTask.Transcribe;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _silenceTimer;
@@ -653,16 +656,20 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Task previousRecordingWork = Task.CompletedTask;
         try
         {
+            TaskStartError = null;
             if (recording.HasValue && recording.Value == _audio.IsRecording) return;
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
-                if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)
-                {
-                    SetStatus("This model cannot translate to English. Choose Transcribe or a translation-capable model in Dictation.");
-                    return;
-                }
-                _taskAtStart = TranscriptionTaskPreferences.Current;
+                var globalTaskAtStart = TranscriptionTaskPreferences.Current;
+                _taskAtStart = globalTaskAtStart;
+                // Unsupported tasks fail before microphone capture. When the model cannot translate
+                // and an automatic rule decides the task, that rule is matched before capture too.
+                // Otherwise matching follows capture, and its task is resolved below, before any
+                // preview, streaming connection or final decoding.
+                var matchRuleBeforeCapture = workflow is null && AutomaticRuleDecidesTask(globalTaskAtStart);
+                var ruleMatched = false;
+                if (!matchRuleBeforeCapture && RejectTask(workflow?.SelectedTask, globalTaskAtStart)) return;
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
@@ -690,6 +697,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 await speechStopped;
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
+                if (matchRuleBeforeCapture)
+                {
+                    _targetProcessId = processId;
+                    _targetApp = TargetProcessName(processId);
+                    if (_setupOutputAtStart is null) { await CaptureWorkflowAtStartAsync(); ruleMatched = true; }
+                    if (_disposed) return;
+                    if (RejectTask(ruleMatched ? WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart) : null, globalTaskAtStart))
+                    {
+                        await previousRecordingWork;
+                        return;
+                    }
+                }
                 var preferences = AudioPreferences;
                 _spokenFeedbackAtStart = preferences;
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
@@ -701,7 +720,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 LivePreviewText = "";
                 _hasConfirmedPreviewText = false;
                 preparingRecording = true;
-                if (LivePreviewEnabled && SupportsLiveTranscription && UsesRegistryProvider &&
+                // Buffer locally while context matching is pending, even if the global task
+                // is Translate: the matched workflow may explicitly request Transcribe.
+                if (LivePreviewEnabled && ModelSupportsLiveTranscription && UsesRegistryProvider &&
                     ActiveRegistryProvider is { SupportsStreaming: true }) _streamAudio.Begin();
                 if (preferences.SilenceAutoStopEnabled)
                 {
@@ -721,8 +742,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
                 PasteDiagnostics.Write("dictation.capture.active");
                 _targetProcessId = processId;
-                try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { _targetApp = "Target app"; }
+                _targetApp = TargetProcessName(processId);
                 BeginApiDictationGeneration();
                 captureStarted?.Invoke(ApiDictationGeneration);
                 _started = DateTime.UtcNow;
@@ -740,8 +760,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
                     _originalField = await OriginalDictationField.CaptureAsync(_target, processId, _operationCancellation.Token);
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
-                else if (workflow is null) await CaptureWorkflowAtStartAsync();
+                else if (workflow is null) { if (!ruleMatched) await CaptureWorkflowAtStartAsync(); }
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
+                var resolvedTask = WorkflowTranscriptionTask.Resolve(WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart), globalTaskAtStart, SupportsTranslation);
+                // The overlay configured live preview for the global task when recording began.
+                if (resolvedTask != _taskAtStart) { _taskAtStart = resolvedTask; Changed?.Invoke(); }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();

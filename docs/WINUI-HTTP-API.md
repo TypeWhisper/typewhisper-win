@@ -35,7 +35,7 @@ Send Authorization: Bearer <token> or X-TypeWhisper-API-Token: <token>. When Req
 | DELETE /v1/history | Query id; delete the entry and its associated audio |
 | GET /v1/rules, GET /v1/profiles | Workflow rule lists; both aliases return rules and profiles |
 | PUT /v1/rules/toggle, PUT /v1/profiles/toggle | Query id; persist enablement and refresh UI/shortcuts |
-| POST /v1/dictation/start | Optional JSON workflow_id; returns recording session id |
+| POST /v1/dictation/start | Optional JSON workflow_id, including its transcription task; 409 if the workflow is unsupported or the model cannot translate; returns recording session id |
 | POST /v1/dictation/stop | Returns stopped plus id; processing continues asynchronously |
 | GET /v1/dictation/status | Current state and is_recording |
 | GET /v1/dictation/transcription | Query id; recording/processing/completed/failed with transcript/error |

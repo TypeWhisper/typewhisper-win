@@ -48,8 +48,13 @@ internal sealed partial class WinUIHttpApi
                     if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString())) return Error(400, "Invalid workflow_id.");
                     var selected = new ManualWorkflowStore(WinUIProfile.DataPath("workflows.json")).Read().FirstOrDefault(w => string.Equals(w.Id, value.GetString(), StringComparison.OrdinalIgnoreCase));
                     if (selected is null) return Error(404, "Workflow not found.");
-                    try { workflow = AutomaticWorkflowSnapshot.ForApi(session.WorkflowDefaults.Resolve(selected)); }
-                    catch (InvalidOperationException ex) { return Error(409, ex.Message); }
+                    try
+                    {
+                        workflow = AutomaticWorkflowSnapshot.ForApi(session.WorkflowDefaults.Resolve(selected));
+                        // Report the task error here; a rejected start only reaches the generic message below.
+                        WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, session.TranscriptionTaskPreferences.Current, session.SupportsTranslation);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return Error(409, ex.Message); }
                 }
             }
             _startingDictation = true;
@@ -57,7 +62,7 @@ internal sealed partial class WinUIHttpApi
             {
                 LocalApiDictationSession? started = null;
                 await session.StartForApiAsync(workflow, generation => started = _dictations.Register(generation));
-                if (started is null) return Error(409, "Dictation could not start. Check the microphone and selected model.");
+                if (started is null) return Error(409, session.TaskStartError ?? "Dictation could not start. Check the microphone and selected model.");
                 // Capture may already be processing or complete after slow provider startup.
                 // Its ID was registered before any silence stop could run.
                 _dictations.Refresh(session.ApiDictationGeneration, session.IsRecording, session.CanCancelProcessing,
