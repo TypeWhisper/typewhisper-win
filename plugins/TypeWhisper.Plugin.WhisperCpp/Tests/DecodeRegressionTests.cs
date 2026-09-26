@@ -170,6 +170,8 @@ public partial class WhisperCppPluginTests
             plugin.TranscribePcmAsync(new float[160], "de", true, default));
         Assert.Contains("cannot translate to English", pcmError.Message);
         await Assert.ThrowsAsync<NotSupportedException>(() =>
+            plugin.TranscribePcmAsync(ReadOnlyMemory<float>.Empty, "de", true, default));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
             plugin.TranscribeAsync([], "de", true, null, default));
     }
 
