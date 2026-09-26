@@ -246,6 +246,8 @@ public class SnippetServiceTests : IDisposable
     [InlineData("fooขอบคุณ", "fooขอบคุณครับ", "expandedครับ")]
     [InlineData("btw", "'btw' ‘btw’", "'expanded' ‘expanded’")]
     [InlineData("btw", "''btw''", "''expanded''")]
+    [InlineData("btw", "\u200Ebtw\u200F", "\u200Eexpanded\u200F")]
+    [InlineData("btw", "a\u200Bbtw\u200Bx", "a\u200Bexpanded\u200Bx")]
     public void ApplySnippets_StandaloneTriggers_Expand(string trigger, string input, string expected)
     {
         _sut.AddSnippet(new Snippet { Id = "1", Trigger = trigger, Replacement = "expanded" });
@@ -280,6 +282,9 @@ public class SnippetServiceTests : IDisposable
     [InlineData("can", "can't can’t")]
     [InlineData("re", "we're we’re")]
     [InlineData("can", "can'𐐀")]
+    [InlineData("ware", "soft\u00ADware")]
+    [InlineData("soft", "soft\u00ADware")]
+    [InlineData("btw", "a\u200E\u2060btw btw\u2060\u200Fx")]
     [InlineData(";sig", "a;sig ;signature")]
     [InlineData("c++", "abc++ c++17")]
     [InlineData("[sig]", "sig")]

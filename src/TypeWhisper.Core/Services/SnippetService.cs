@@ -137,8 +137,8 @@ public sealed partial class SnippetService : ISnippetService
 
                 var end = index + snippet.Trigger.Length;
                 searchFrom = index + 1;
-                if ((requiresLeftBoundary && IsWordContinuation(text, index - 1)) ||
-                    (requiresRightBoundary && IsWordContinuation(text, end)))
+                if ((requiresLeftBoundary && IsWordContinuation(text, index - 1, -1)) ||
+                    (requiresRightBoundary && IsWordContinuation(text, end, 1)))
                     continue;
                 if (occupied is not null && occupied.AsSpan(index, snippet.Trigger.Length).Contains(true))
                     continue;
@@ -169,22 +169,33 @@ public sealed partial class SnippetService : ISnippetService
         return result.Append(text, copiedThrough, text.Length - copiedThrough).ToString();
     }
 
-    private static bool IsWordContinuation(string text, int index, bool includeApostrophes = true)
+    private static bool IsWordContinuation(string text, int index, int direction, bool includeApostrophes = true)
     {
-        if (index < 0 || index >= text.Length) return false;
-        // Decode the preceding scalar from its low surrogate when checking a left boundary.
-        if (char.IsLowSurrogate(text[index]) && index > 0 && char.IsHighSurrogate(text[index - 1]))
-            index--;
-        if (!Rune.TryGetRuneAt(text, index, out var rune)) return false;
+        while (index >= 0 && index < text.Length)
+        {
+            // Decode the preceding scalar from its low surrogate when checking a left boundary.
+            if (char.IsLowSurrogate(text[index]) && index > 0 && char.IsHighSurrogate(text[index - 1]))
+                index--;
+            if (!Rune.TryGetRuneAt(text, index, out var rune)) return false;
 
-        // Internal apostrophes join contractions; surrounding quotation marks remain separators.
-        if (includeApostrophes && rune.Value is '\'' or '\u2018' or '\u2019')
-            return IsWordContinuation(text, index - 1, false) && IsWordContinuation(text, index + 1, false);
+            // Zero-width space separates words; other format controls do not create boundaries.
+            if (rune.Value == 0x200B) return false;
+            var category = Rune.GetUnicodeCategory(rune);
+            if (category == UnicodeCategory.Format)
+            {
+                index += direction > 0 ? rune.Utf16SequenceLength : -1;
+                continue;
+            }
 
-        return rune.Value is 0x200C or 0x200D || // ZWNJ and ZWJ can occur inside orthographic words.
-            Rune.IsLetter(rune) || Rune.IsNumber(rune) || Rune.GetUnicodeCategory(rune) is
-            UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or
-            UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
+            // Internal apostrophes join contractions; surrounding quotation marks remain separators.
+            if (includeApostrophes && rune.Value is '\'' or '\u2018' or '\u2019')
+                return IsWordContinuation(text, index - 1, -1, false) && IsWordContinuation(text, index + 1, 1, false);
+
+            return Rune.IsLetter(rune) || Rune.IsNumber(rune) || category is
+                UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or
+                UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
+        }
+        return false;
     }
 
     // Preserve unspaced scripts independently at each trigger edge; digit sequences still need boundaries.
