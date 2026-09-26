@@ -16,6 +16,13 @@ public sealed partial class MainWindow
         ActivationNoticeText.Text = message;
         ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
     }
+    // A rejected transcription task stops before recording, so the overlay cannot explain it.
+    private void ShowTaskStartError(TypeWhisper.Core.Models.Workflow? workflow = null)
+    {
+        if (_closing || _profileRestoreClosing || _dictation.TaskStartError is not { } error) return;
+        ShowFromActivation();
+        ShowActivationNotice(workflow is null ? error : workflow.Name + "\n" + error, workflow?.Id);
+    }
     private void DismissActivationNotice_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         _noticeWorkflowId = null;

@@ -80,10 +80,11 @@ public sealed partial class MainWindow
                 return;
             }
             var snapshot = AutomaticWorkflowSnapshot.ForDictationShortcut(workflow);
-            _ = _dictationInput?.SubmitAsync(DictationInputAction.Start, () =>
+            _ = _dictationInput?.SubmitAsync(DictationInputAction.Start, async () =>
             {
                 _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
-                return _dictation.StartAsync(snapshot);
+                await _dictation.StartAsync(snapshot);
+                ShowTaskStartError(workflow);
             });
             return;
         }

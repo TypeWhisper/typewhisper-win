@@ -654,12 +654,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Task previousRecordingWork = Task.CompletedTask;
         try
         {
+            TaskStartError = null;
             if (recording.HasValue && recording.Value == _audio.IsRecording) return;
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
-                TaskStartError = null;
                 _taskAtStart = globalTaskAtStart;
                 // Unsupported tasks fail before microphone capture. When the model cannot translate
                 // and an automatic rule decides the task, that rule is matched before capture too.
