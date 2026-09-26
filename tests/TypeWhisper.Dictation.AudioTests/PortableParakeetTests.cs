@@ -18,7 +18,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
         var modelDirectory = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL");
         Assert.False(string.IsNullOrWhiteSpace(packageDirectory), "Set TYPEWHISPER_TEST_PARAKEET_PACKAGE to a published portable sherpa-onnx plugin.");
         Assert.False(string.IsNullOrWhiteSpace(modelDirectory), "Set TYPEWHISPER_TEST_PARAKEET_MODEL to an existing Parakeet model directory.");
-        var data = Path.Combine(Path.GetTempPath(), "typewhisper-portable-parakeet-" + Guid.NewGuid());
+        var data = Path.Join(Path.GetTempPath(), "typewhisper-portable-parakeet-" + Guid.NewGuid());
         try
         {
             var assets = Directory.GetParent(modelDirectory!)!.Parent!.FullName;
@@ -68,7 +68,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
         var modelDirectory = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL");
         Assert.False(string.IsNullOrWhiteSpace(packageDirectory), "Set TYPEWHISPER_TEST_PARAKEET_PACKAGE to a published portable sherpa-onnx plugin.");
         Assert.False(string.IsNullOrWhiteSpace(modelDirectory), "Set TYPEWHISPER_TEST_PARAKEET_MODEL to an existing Parakeet model directory.");
-        var data = Path.Combine(Path.GetTempPath(), "typewhisper-portable-parakeet-" + Guid.NewGuid());
+        var data = Path.Join(Path.GetTempPath(), "typewhisper-portable-parakeet-" + Guid.NewGuid());
         try
         {
             var assets = Directory.GetParent(modelDirectory!)!.Parent!.FullName;
