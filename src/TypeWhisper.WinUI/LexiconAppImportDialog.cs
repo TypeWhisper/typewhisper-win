@@ -36,17 +36,20 @@ internal sealed class LexiconAppImportDialog(Control owner, Action<string> repor
         return _dialog = dialog;
     }
 
-    internal async Task<string?> ShowAsync(bool snippets, LexiconImportApp? preferredApp = null)
+    internal async Task<string?> ShowAsync(bool snippets, LexiconImportApp? preferredApp = null, bool chooseDestination = false)
     {
         if (IsCanceled) return null;
         var wasEnabled = owner.IsEnabled;
         var store = new Lexicon(DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath);
         try
         {
-            var apps = snippets ? new[] { LexiconImportApp.WisprFlow } : [LexiconImportApp.WisprFlow, LexiconImportApp.Handy];
+            var apps = snippets && !chooseDestination ? new[] { LexiconImportApp.WisprFlow } : [LexiconImportApp.WisprFlow, LexiconImportApp.Handy];
             var source = new ComboBox { ItemsSource = apps.Select(LexiconAppImport.Name).ToArray(),
                 SelectedIndex = Math.Max(0, Array.IndexOf(apps, preferredApp ?? LexiconImportApp.WisprFlow)), HorizontalAlignment = HorizontalAlignment.Stretch };
             AutomationProperties.SetName(source, "Import source");
+            var destination = new ComboBox { ItemsSource = new[] { "Words and corrections", "Snippets" },
+                SelectedIndex = snippets ? 1 : 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+            AutomationProperties.SetName(destination, "Import content");
             var location = Text("", 12, true);
             var browse = new CheckBox { Content = "Choose a file instead" };
             void UpdateSource()
@@ -55,17 +58,23 @@ internal sealed class LexiconAppImportDialog(Control owner, Action<string> repor
                 var found = File.Exists(LexiconAppImport.DefaultPath(app));
                 location.Text = found ? $"{LexiconAppImport.Name(app)} data found on this PC." : "No data found in the default location. Choose the source file to continue.";
                 browse.IsChecked = !found;
+                destination.IsEnabled = app == LexiconImportApp.WisprFlow;
+                if (!destination.IsEnabled) destination.SelectedIndex = 0;
             }
             source.SelectionChanged += (_, _) => UpdateSource();
             UpdateSource();
             var body = new StackPanel { Spacing = 12, MaxWidth = 480 };
-            body.Children.Add(Text(snippets ? "Bring your Wispr Flow snippets into TypeWhisper." : "Bring your words and alternate spellings into TypeWhisper.", 14));
-            body.Children.Add(source); body.Children.Add(location); body.Children.Add(browse);
+            body.Children.Add(Text(chooseDestination ? "Choose what to bring into TypeWhisper."
+                : snippets ? "Bring your Wispr Flow snippets into TypeWhisper." : "Bring your words and alternate spellings into TypeWhisper.", 14));
+            body.Children.Add(source);
+            if (chooseDestination) { body.Children.Add(Text("Import", 12, true)); body.Children.Add(destination); }
+            body.Children.Add(location); body.Children.Add(browse);
             body.Children.Add(Text("Review every entry before adding it. Existing entries and the source app's data stay unchanged.", 12, true));
-            body.Children.Add(Text(snippets ? "Handy word import is available in Words. Snippets containing TypeWhisper placeholders are excluded to preserve their original meaning."
+            body.Children.Add(Text(snippets && !chooseDestination ? "Handy word import is available in Words. Snippets containing TypeWhisper placeholders are excluded to preserve their original meaning."
                 : "Wispr Flow: flow.sqlite · Handy: settings_store.json. Handy imports words only.", 12, true));
             var choose = ImportDialog("Import from another app", body, "Review entries");
             if (await choose.ShowAsync() != ContentDialogResult.Primary || IsCanceled) return null;
+            if (chooseDestination) snippets = destination.SelectedIndex == 1;
             var selectedApp = apps[source.SelectedIndex];
             var path = LexiconAppImport.DefaultPath(selectedApp);
             if (browse.IsChecked == true)

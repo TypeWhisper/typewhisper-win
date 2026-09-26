@@ -3,9 +3,9 @@
 In the Windows app, open **Dictionary** or **Snippets** from Quick Launch, then
 choose **Import → From another app…**.
 
-The setup wizard also offers **Import from another app** on its welcome page.
-It detects data files in the default locations and offers separate word and snippet
-imports using the same review. Detection does not read entries or import anything.
+The setup wizard has an **Import from Wispr Flow or Handy…** text link below its
+welcome introduction. The dialog detects data files in the default locations and lets
+you choose words or snippets using the same review. Detection does not read entries or import anything.
 Choose **Continue** to proceed without importing; the option remains available later
 in Dictionary and Snippets.
 

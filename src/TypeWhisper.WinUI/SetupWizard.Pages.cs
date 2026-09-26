@@ -75,7 +75,6 @@ public sealed partial class SetupWizard
     private void RenderWelcome()
     {
         _body.Children.Add(new SetupLogo { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 18) });
-        RenderAppImport();
         var features = new StackPanel { Spacing = 24, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 16) };
         features.Children.Add(CardContent("microphone", "Speak naturally", "Press a hotkey and speak in any app."));
         features.Children.Add(CardContent("text", "Write instantly", "Your words appear directly as text."));
@@ -88,6 +87,7 @@ public sealed partial class SetupWizard
                 Content = Copy("Dictionary, snippets, workflows, history text, supported settings, plugin settings, API keys, compatible plugins and local models were copied. Your previous installation is unchanged. Recordings, audio, account sign-ins and settings without an equivalent in this version remain there; plugins that could not be installed are listed after setup. Close the previous app before testing shortcuts.") };
             _body.Children.Add(details);
         }
+        RenderAppImport();
     }
 
     private void RenderPermissions()

@@ -21,35 +21,33 @@ public sealed partial class SetupWizard
 
     private void RenderAppImport()
     {
-        // Detect files only. Reading another app's entries always requires an explicit import action.
-        var detected = new[] { LexiconImportApp.WisprFlow, LexiconImportApp.Handy }
-            .Where(app => File.Exists(LexiconAppImport.DefaultPath(app))).ToArray();
-        var description = detected.Length > 0
-            ? string.Join(" and ", detected.Select(LexiconAppImport.Name)) + " data found on this PC. Bring your words and snippets with you."
-            : "Switching from Wispr Flow or Handy? Bring your words with you, or choose a file from another installation.";
-        var panel = new StackPanel { Spacing = 12 };
-        panel.Children.Add(CardContent("dictionary", "Import from another app", description, "Optional"));
-        var actions = new StackPanel { Spacing = 8 };
-        var words = Button("Import words and corrections…", () => StartAppImport(false, detected.FirstOrDefault()));
-        words.HorizontalAlignment = HorizontalAlignment.Left;
-        var snippets = Button("Import Wispr Flow snippets…", () => StartAppImport(true, LexiconImportApp.WisprFlow));
-        snippets.HorizontalAlignment = HorizontalAlignment.Left;
-        actions.Children.Add(words); actions.Children.Add(snippets); panel.Children.Add(actions);
-        panel.Children.Add(Copy("Review before adding. Existing entries stay unchanged. You can continue setup without importing and do this later in Dictionary or Snippets."));
+        var panel = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
+        var link = new HyperlinkButton
+        {
+            Content = "Import from Wispr Flow or Handy…", FontSize = 13,
+            Foreground = Resource("MutedBrush"), Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        link.Click += (_, _) => StartAppImport();
+        panel.Children.Add(link);
         _appImportStatus = Copy(_appImportResult ?? "");
+        _appImportStatus.TextAlignment = TextAlignment.Center;
         _appImportStatus.Visibility = string.IsNullOrEmpty(_appImportResult) ? Visibility.Collapsed : Visibility.Visible;
         AutomationProperties.SetLiveSetting(_appImportStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         panel.Children.Add(_appImportStatus);
-        _body.Children.Add(Card(panel));
+        _body.Children.Add(panel);
     }
 
-    private void StartAppImport(bool snippets, LexiconImportApp app)
+    private void StartAppImport()
     {
         if (_closing || _importsClosing || _appImportTask is { IsCompleted: false }) return;
-        _appImportTask = RunAppImportAsync(snippets, app);
+        // Presence only preselects a source; reading requires confirmation in the dialog.
+        var app = new[] { LexiconImportApp.WisprFlow, LexiconImportApp.Handy }
+            .FirstOrDefault(source => File.Exists(LexiconAppImport.DefaultPath(source)));
+        _appImportTask = RunAppImportAsync(app);
     }
 
-    private async Task RunAppImportAsync(bool snippets, LexiconImportApp app)
+    private async Task RunAppImportAsync(LexiconImportApp app)
     {
         void Report(string message)
         {
@@ -63,7 +61,7 @@ public sealed partial class SetupWizard
         _appImportFlow = new(this, Report);
         try
         {
-            var result = await _appImportFlow.ShowAsync(snippets, app);
+            var result = await _appImportFlow.ShowAsync(false, app, chooseDestination: true);
             if (!_closing && !_importsClosing) Report(result ?? "Import canceled. Nothing was changed.");
         }
         finally { _appImportFlow = null; }
