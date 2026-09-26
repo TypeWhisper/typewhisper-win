@@ -48,8 +48,13 @@ internal sealed partial class WinUIHttpApi
                     if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString())) return Error(400, "Invalid workflow_id.");
                     var selected = new ManualWorkflowStore(WinUIProfile.DataPath("workflows.json")).Read().FirstOrDefault(w => string.Equals(w.Id, value.GetString(), StringComparison.OrdinalIgnoreCase));
                     if (selected is null) return Error(404, "Workflow not found.");
-                    try { workflow = AutomaticWorkflowSnapshot.ForApi(session.WorkflowDefaults.Resolve(selected)); }
-                    catch (InvalidOperationException ex) { return Error(409, ex.Message); }
+                    try
+                    {
+                        workflow = AutomaticWorkflowSnapshot.ForApi(session.WorkflowDefaults.Resolve(selected));
+                        // Report the task error here; a rejected start only reaches the generic message below.
+                        WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, session.TranscriptionTaskPreferences.Current, session.SupportsTranslation);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return Error(409, ex.Message); }
                 }
             }
             _startingDictation = true;
