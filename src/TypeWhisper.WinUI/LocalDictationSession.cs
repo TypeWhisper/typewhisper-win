@@ -61,8 +61,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private bool ModelSupportsLiveTranscription => UsesRegistryProvider
         ? ActiveRegistryProvider is { SupportsStreaming: true } || (ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId))
         : Models.SupportsLocalLivePreview;
+    // The captured task applies from recording through processing and its error state.
     internal bool SupportsLiveTranscription => ModelSupportsLiveTranscription &&
-        (_audio.IsRecording ? _taskAtStart : TranscriptionTaskPreferences.Current) == TranscriptionTask.Transcribe;
+        (_audio.IsRecording || _phase is DictationPhase.Processing or DictationPhase.Error ? _taskAtStart : TranscriptionTaskPreferences.Current)
+            == TranscriptionTask.Transcribe;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _silenceTimer;
