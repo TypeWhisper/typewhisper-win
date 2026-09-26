@@ -82,10 +82,16 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         _add.Configure("Add microphone", "microphone", "Add microphone to priority list");
         _add.SelectionChanged += id =>
         {
-            var device = session.GetMicrophones().FirstOrDefault(item => item.Id == id);
+            var devices = session.GetMicrophones();
+            var device = devices.FirstOrDefault(item => item.Id == id);
             if (device is not null && !_items.Any(item => item.Item.Id == id))
             {
-                var error = session.SetMicrophonePriority(_items.Select(item => item.Item).Append(new MicrophonePriorityItem(device.Id, device.Name)).ToArray());
+                var priority = _items.Select(item => item.Item).ToList();
+                var added = new MicrophonePriorityItem(device.Id, device.Name);
+                // A microphone whose endpoint ID changed takes over its saved entry and priority instead of being listed twice.
+                if (Platform.MicrophoneFailure.ReplacedEntryIndex(priority, device, devices) is var replaced and >= 0) priority[replaced] = added;
+                else priority.Add(added);
+                var error = session.SetMicrophonePriority(priority);
                 Refresh(); if (error is not null) _hint.Text = error;
             }
         };
@@ -128,8 +134,10 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         }
         _list.Visibility = _items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         var devices = _session.GetMicrophones();
+        var priority = _items.Select(item => item.Item).ToArray();
         _add.SetOptions(devices.Where(device => !_items.Any(item => item.Item.Id == device.Id))
-            .Select(device => new Choice(device.Id, device.Name, "Add to priority list")).ToArray(), "", _items.Count == 0 ? "System default · add microphone…" : "Add microphone…");
+            .Select(device => new Choice(device.Id, device.Name, Platform.MicrophoneFailure.ReplacedEntryIndex(priority, device, devices) >= 0
+                ? "Update the saved entry for this microphone" : "Add to priority list")).ToArray(), "", _items.Count == 0 ? "System default · add microphone…" : "Add microphone…");
         var missing = _items.Where(item => !devices.Any(device => Platform.MicrophoneFailure.IsSameMicrophone(device, item.Item))).Select(item => item.Name).ToArray();
         _hint.Text = _session.MicrophoneNotice() is { } notice ? notice
             : missing.Length > 0 ? "Disconnected (kept in priority list): " + string.Join(", ", missing)

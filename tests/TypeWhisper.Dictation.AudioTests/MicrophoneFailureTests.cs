@@ -157,11 +157,79 @@ public sealed class MicrophoneFailureTests
     }
 
     [Fact]
+    public void DefaultSwitchAfterAFailedPrepareRetriesTheNewDefault()
+    {
+        var devices = new Devices();
+        var factory = new Switchable { Error = new COMException("In use", unchecked((int)0x8889000A)) };
+        using var audio = new AudioRecordingService(devices, factory, Timeout.InfiniteTimeSpan);
+        Assert.False(audio.WarmUp());
+        audio.CheckForDeviceChanges();
+        Assert.Equal(1, factory.Created);
+        string? seen = "not raised";
+        audio.DevicesChanged += (_, _) => seen = audio.CaptureFailure;
+        // Same endpoints, only the Windows default moves away from the failed microphone.
+        devices.List = [new(0, "usb", "USB Mic", true), new(1, "laptop", "Laptop Mic", false)];
+        factory.Error = null;
+        audio.CheckForDeviceChanges();
+        Assert.Equal(2, factory.Created);
+        Assert.Null(seen);
+        Assert.Null(audio.CaptureFailure);
+    }
+
+    [Fact]
+    public void UnchangedFailedDefaultIsNotReopenedOnEveryCheck()
+    {
+        var devices = new Devices();
+        var factory = new Switchable { Error = new COMException("In use", unchecked((int)0x8889000A)) };
+        using var audio = new AudioRecordingService(devices, factory, Timeout.InfiniteTimeSpan);
+        Assert.False(audio.WarmUp());
+        audio.CheckForDeviceChanges();
+        audio.CheckForDeviceChanges();
+        Assert.Equal(1, factory.Created);
+        Assert.Contains("exclusively", audio.CaptureFailure);
+    }
+
+    [Fact]
+    public void DefaultSwitchAfterARemoteStartFailureOnlyTracksTheNewDefault()
+    {
+        var devices = new Devices();
+        var factory = new Switchable { Error = new COMException("In use", unchecked((int)0x8889000A)) };
+        using var audio = new AudioRecordingService(devices, factory, Timeout.InfiniteTimeSpan)
+            { ReleaseCaptureBetweenRecordings = () => true };
+        audio.StartRecording(enableRecovery: false);
+        Assert.Contains("exclusively", audio.CaptureFailure);
+        string? seen = "not raised";
+        audio.DevicesChanged += (_, _) => seen = audio.CaptureFailure;
+        devices.List = [new(0, "usb", "USB Mic", true), new(1, "laptop", "Laptop Mic", false)];
+        audio.CheckForDeviceChanges();
+        // The failure described the old default; the new one is opened by the next recording.
+        Assert.Equal(1, factory.Created);
+        Assert.Null(seen);
+        Assert.Null(audio.CaptureFailure);
+    }
+
+    [Fact]
     public void SameMicrophoneMatchesByIdOrName()
     {
         Assert.True(MicrophoneFailure.IsSameMicrophone(new(0, "new-id", "USB Mic", false), new("old-id", "USB Mic")));
         Assert.True(MicrophoneFailure.IsSameMicrophone(new(0, "usb", "Renamed", false), new("usb", "USB Mic")));
         Assert.False(MicrophoneFailure.IsSameMicrophone(new(0, "laptop", "Laptop Mic", false), new("usb", "USB Mic")));
+    }
+
+    [Fact]
+    public void MicrophoneWithANewEndpointIdReplacesItsSavedEntry()
+    {
+        AudioInputDeviceInfo reinstalled = new(0, "new-id", "USB Mic", false);
+        AudioInputDeviceInfo second = new(1, "usb-2", "USB Mic 2", false);
+        AudioInputDeviceInfo[] devices = [reinstalled, second, new(2, "laptop", "Laptop Mic", true)];
+        Assert.Equal(1, MicrophoneFailure.ReplacedEntryIndex([new("laptop", "Laptop Mic"), new("old-id", "USB Mic")], reinstalled, devices));
+        // A prefix match is a different microphone, even though the resolver would accept it.
+        Assert.Equal(-1, MicrophoneFailure.ReplacedEntryIndex([new("old-id", "USB Mic")], second, devices));
+        // A connected saved entry is its own microphone, so an identically named one is new.
+        Assert.Equal(-1, MicrophoneFailure.ReplacedEntryIndex([new("usb-2", "USB Mic")], reinstalled, devices));
+        Assert.Equal(-1, MicrophoneFailure.ReplacedEntryIndex([], reinstalled, devices));
+        // Two disconnected entries with the same name leave no safe choice, so the device is added separately.
+        Assert.Equal(-1, MicrophoneFailure.ReplacedEntryIndex([new("twin-a", "USB Mic"), new("twin-b", "USB Mic")], reinstalled, devices));
     }
 
     private sealed class Devices : IAudioInputDeviceProvider
@@ -182,7 +250,11 @@ public sealed class MicrophoneFailureTests
     private sealed class Switchable : IAudioInputCaptureFactory
     {
         public Exception? Error;
-        public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds) =>
-            Error is { } error ? throw error : new ImmediateAudioTests.ReplayInput();
+        public int Created;
+        public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds)
+        {
+            Created++;
+            return Error is { } error ? throw error : new ImmediateAudioTests.ReplayInput();
+        }
     }
 }

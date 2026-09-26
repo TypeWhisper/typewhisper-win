@@ -1144,62 +1144,11 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             try
             {
                 var snapshot = GetDeviceSnapshot(refresh: true);
-                var signature = BuildDeviceSignature(snapshot);
-                if (_lastKnownSnapshotInitialized && signature == _lastKnownDeviceSignature)
-                {
-                    // The device list is unchanged, but the system default endpoint
-                    // may have moved (or a migration was deferred while recording).
-                    var failure = _lastCaptureFailure;
-                    EnsureActiveDeviceIsPreferred(snapshot);
-                    // Publish a migration whose capture failed, or a failure that it cleared.
-                    devicesChanged = _lastCaptureFailure != failure;
-                    return;
-                }
-
-                var previousHadDevices = _lastKnownHasDevices;
-                var previousPreferredDeviceAvailable = _lastKnownPreferredDeviceAvailable;
-                var currentHasDevices = snapshot.Count > 0;
-                var currentPreferredDeviceAvailable = IsPreferredDeviceAvailable(snapshot);
-
-                _lastKnownDeviceSignature = signature;
-                _lastKnownHasDevices = currentHasDevices;
-                _lastKnownPreferredDeviceAvailable = currentPreferredDeviceAvailable;
-                _lastKnownSnapshotInitialized = true;
-                devicesChanged = true;
-
-                if (!currentHasDevices)
-                {
-                    if (_isWarmedUp || _waveIn is not null)
-                        HandleDeviceLost();
-                    return;
-                }
-
-                if (_isWarmedUp && !IsActiveDeviceAvailable(snapshot))
-                {
-                    HandleDeviceLost();
-                    WarmUp();
-                    if (!previousHadDevices
-                        || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
-                    {
-                        RaiseDeviceAvailableIfDeviceLossWasReported();
-                    }
-                    return;
-                }
-
-                if (_isWarmedUp && currentPreferredDeviceAvailable && !IsActiveDevicePreferred())
-                {
-                    EnsureActiveDeviceIsPreferred(snapshot);
-                }
-                else if (!_isWarmedUp)
-                {
-                    WarmUp();
-                }
-
-                if (!previousHadDevices
-                    || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
-                {
-                    RaiseDeviceAvailableIfDeviceLossWasReported();
-                }
+                // Enumerating endpoints is slow, so it runs before the capture lock. Deciding under the lock
+                // keeps a recording that started meanwhile, possibly on another microphone, from being
+                // stopped because of the capture state it replaced.
+                lock (_captureLifecycleLock)
+                    ReactToDeviceSnapshot(snapshot, ref devicesChanged);
             }
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
@@ -1208,12 +1157,75 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
     }
 
+    private void ReactToDeviceSnapshot(IReadOnlyList<AudioInputDeviceSnapshot> snapshot, ref bool devicesChanged)
+    {
+        var signature = BuildDeviceSignature(snapshot);
+        if (_lastKnownSnapshotInitialized && signature == _lastKnownDeviceSignature)
+        {
+            // The device list is unchanged, but the system default endpoint
+            // may have moved (or a migration was deferred while recording).
+            var failure = _lastCaptureFailure;
+            EnsureActiveDeviceIsPreferred(snapshot);
+            // Publish a migration whose capture failed, or a failure that it cleared.
+            devicesChanged = _lastCaptureFailure != failure;
+            return;
+        }
+
+        var previousHadDevices = _lastKnownHasDevices;
+        var previousPreferredDeviceAvailable = _lastKnownPreferredDeviceAvailable;
+        var currentHasDevices = snapshot.Count > 0;
+        var currentPreferredDeviceAvailable = IsPreferredDeviceAvailable(snapshot);
+
+        _lastKnownDeviceSignature = signature;
+        _lastKnownHasDevices = currentHasDevices;
+        _lastKnownPreferredDeviceAvailable = currentPreferredDeviceAvailable;
+        _lastKnownSnapshotInitialized = true;
+        devicesChanged = true;
+
+        if (!currentHasDevices)
+        {
+            if (_isWarmedUp || _waveIn is not null)
+                HandleDeviceLost();
+            return;
+        }
+
+        if (_isWarmedUp && !IsActiveDeviceAvailable(snapshot))
+        {
+            HandleDeviceLost();
+            WarmUp();
+            if (!previousHadDevices
+                || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
+            {
+                RaiseDeviceAvailableIfDeviceLossWasReported();
+            }
+            return;
+        }
+
+        if (_isWarmedUp && currentPreferredDeviceAvailable && !IsActiveDevicePreferred())
+        {
+            EnsureActiveDeviceIsPreferred(snapshot);
+        }
+        else if (!_isWarmedUp)
+        {
+            WarmUp();
+        }
+
+        if (!previousHadDevices
+            || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
+        {
+            RaiseDeviceAvailableIfDeviceLossWasReported();
+        }
+    }
+
     private void EnsureActiveDeviceIsPreferred(IReadOnlyList<AudioInputDeviceSnapshot> snapshot)
     {
         lock (_captureLifecycleLock)
         {
             if (!_isWarmedUp)
+            {
+                RetryFailedCaptureOnNewTarget();
                 return;
+            }
 
             if (!IsPreferredDeviceAvailable(snapshot) || IsActiveDevicePreferred())
                 return;
@@ -1229,6 +1241,27 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             DisposeWaveIn(reason: "device change");
             WarmUp();
         }
+    }
+
+    // A failed prepare or start leaves the service unwarmed, so a new Windows default never
+    // counts as a migration. Retry once the target moves off the failed microphone; the same
+    // target is left for the next recording instead of being reopened on every check.
+    private void RetryFailedCaptureOnNewTarget()
+    {
+        if (_lastCaptureFailure is null || _isRecording || _disposed)
+            return;
+
+        var target = ResolvePreferredDeviceSelection();
+        if (target is null
+            || string.Equals(target.Id, _lastCaptureFailureDeviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        AudioCaptureDiagnostics.Log(
+            $"Retrying failed capture on new target {target.LastKnownDeviceNumber}:{target.Name} id={target.Id}");
+        // In remote sessions this only tracks the new target, like any idle warm-up.
+        WarmUp();
     }
 
     private void RaiseAudioLevelChanged(float peak, float rms) =>
@@ -1406,12 +1439,21 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         if (_activeDeviceNumber < 0)
             return false;
 
+        if (!string.IsNullOrWhiteSpace(_activeDeviceId))
+        {
+            // An endpoint keeps its ID when another microphone connects before it and shifts its index.
+            var byId = devices.FirstOrDefault(device =>
+                string.Equals(device.Id, _activeDeviceId, StringComparison.OrdinalIgnoreCase));
+            if (byId is null)
+                return false;
+
+            _activeDeviceNumber = byId.DeviceNumber;
+            return true;
+        }
+
         var active = devices.FirstOrDefault(device => device.DeviceNumber == _activeDeviceNumber);
         if (active is null)
             return false;
-
-        if (!string.IsNullOrWhiteSpace(_activeDeviceId))
-            return string.Equals(active.Id, _activeDeviceId, StringComparison.OrdinalIgnoreCase);
 
         return string.IsNullOrWhiteSpace(_activeDeviceName)
             || DeviceNamesMatch(active.Name, _activeDeviceName);
