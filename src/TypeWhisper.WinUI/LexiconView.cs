@@ -18,6 +18,7 @@ public sealed partial class LexiconView : UserControl
         _closing = true;
         IsEnabled = false;
         _trainingDialog?.Hide();
+        _appImportFlow?.Cancel();
         try { _cancelPicker?.Invoke(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
         return Task.WhenAll(_transferCompletion?.Task ?? Task.CompletedTask, _trainingTask ?? Task.CompletedTask);
@@ -424,7 +425,15 @@ public sealed partial class LexiconView : UserControl
                 {
                     if (_trainingTask is null || _trainingTask.IsCompleted) _trainingTask = TrainWordAsync();
                 }));
-            _actions.Children.Add(Button("Import", () => _ = ImportAsync()));
+            var import = Button("Import", () => { });
+            var importMenu = new MenuFlyout();
+            var jsonImport = new MenuFlyoutItem { Text = "TypeWhisper JSON…" };
+            jsonImport.Click += (_, _) => _ = ImportAsync();
+            var appImport = new MenuFlyoutItem { Text = "From another app…" };
+            appImport.Click += (_, _) => _ = ImportFromAppAsync();
+            importMenu.Items.Add(jsonImport); importMenu.Items.Add(appImport);
+            import.Flyout = importMenu;
+            _actions.Children.Add(import);
             _actions.Children.Add(Button("Export", () => _ = ExportAsync()));
             _actions.Children.Add(Button("+ Add " + Singular, () => OpenEditor(new(Guid.NewGuid(), _kind, "")), primary: true)); return;
         }

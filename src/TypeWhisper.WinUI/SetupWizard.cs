@@ -73,12 +73,13 @@ public sealed partial class SetupWizard : UserControl
         };
         KeyUp += (_, e) => { if (_shortcutRecorder?.IsCapturing == true) _shortcutRecorder.CaptureKeyUp(e); };
         Loaded += (_, _) => { _closing = false; _session.Changed += Changed; _session.Models.Changed += Changed; _session.SetupTestTarget = CaptureTestTarget; RefreshStatus(); _testBox?.Focus(FocusState.Programmatic); };
-        Unloaded += (_, _) => { _closing = true; _pluginInstallation?.Cancel(); _session.Changed -= Changed; _session.Models.Changed -= Changed; _session.SetupTestTarget = null; };
+        Unloaded += (_, _) => { _closing = true; _ = ShutdownImportAsync(); _pluginInstallation?.Cancel(); _session.Changed -= Changed; _session.Models.Changed -= Changed; _session.SetupTestTarget = null; };
         _feedback.ReportPersistence(store.Error);
         Render();
     }
     internal bool CloseOpenPicker()
     {
+        if (_appImportTask is { IsCompleted: false }) { _appImportFlow?.Cancel(); return true; }
         var picker = _pickers.FirstOrDefault(item => item.IsPopupOpen);
         if (picker is null) return false;
         picker.ClosePopup(); return true;
@@ -128,6 +129,7 @@ public sealed partial class SetupWizard : UserControl
     private void Render()
     {
         _body.Children.Clear(); _pickers.Clear(); _shortcutRecorder = null; _testBox = null;
+        _appImportStatus = null;
         _providerPicker = _modelPicker = _languagePicker = null;
         _providerSettings = null; _modelLabel = _engineStatus = null; _renderedProvider = null;
         _pluginInstallPanel = null;
