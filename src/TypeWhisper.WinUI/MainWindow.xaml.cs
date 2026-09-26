@@ -262,8 +262,9 @@ public sealed partial class MainWindow : Window
         var history = HistoryView.ShutdownAsync();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
+        var setupImport = _settingsWindow?.ShutdownSetupImportAsync() ?? Task.CompletedTask;
         await Task.WhenAll(WinUIPremiumAccount.ShutdownAsync(), WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
-            _dictationInitialization ?? Task.CompletedTask);
+            _dictationInitialization ?? Task.CompletedTask, setupImport);
         _liveOverlay?.Close();
     });
     internal void ShowShutdownFailure()

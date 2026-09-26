@@ -18,7 +18,7 @@ public sealed partial class LexiconView : UserControl
         _closing = true;
         IsEnabled = false;
         _trainingDialog?.Hide();
-        _appImportDialog?.Hide();
+        _appImportFlow?.Cancel();
         try { _cancelPicker?.Invoke(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
         return Task.WhenAll(_transferCompletion?.Task ?? Task.CompletedTask, _trainingTask ?? Task.CompletedTask);

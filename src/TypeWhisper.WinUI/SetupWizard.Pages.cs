@@ -75,6 +75,7 @@ public sealed partial class SetupWizard
     private void RenderWelcome()
     {
         _body.Children.Add(new SetupLogo { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 18) });
+        RenderAppImport();
         var features = new StackPanel { Spacing = 24, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 16) };
         features.Children.Add(CardContent("microphone", "Speak naturally", "Press a hotkey and speak in any app."));
         features.Children.Add(CardContent("text", "Write instantly", "Your words appear directly as text."));

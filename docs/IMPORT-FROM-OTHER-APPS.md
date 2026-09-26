@@ -3,6 +3,12 @@
 In the Windows app, open **Dictionary** or **Snippets** from Quick Launch, then
 choose **Import → From another app…**.
 
+The setup wizard also offers **Import from another app** on its welcome page.
+It detects data files in the default locations and offers separate word and snippet
+imports using the same review. Detection does not read entries or import anything.
+Choose **Continue** to proceed without importing; the option remains available later
+in Dictionary and Snippets.
+
 | Source | Supported content | Default Windows location |
 | --- | --- | --- |
 | Wispr Flow | Words, alternate spellings as corrections, and snippets | `%APPDATA%\Wispr Flow\flow.sqlite` |
@@ -22,6 +28,9 @@ list changes during review, the import stops; start it again to review the curre
 Wispr Flow's database and write-ahead log are copied to a temporary folder. Source
 hashes before and after copying must match the copies' SHA-256 hashes before SQLite
 opens the copy. The original database is never opened with SQLite or written to.
+Closing the app cancels ongoing copy and hash operations. If a temporary copy cannot
+be removed immediately, abandoned copies older than a day are cleaned up on subsequent
+launches and imports; active imports are protected by an exclusive lease.
 Handy settings must produce two consecutive identical reads. Quitting the source app
 and retrying can help when its data cannot be read consistently.
 
@@ -35,7 +44,8 @@ containing TypeWhisper formatting escapes such as `\n` are excluded for the same
 Review these entries manually if you want to use TypeWhisper's dynamic formatting.
 
 Each source is limited to 10,000 rows, including deleted and filtered entries.
-Database copies are limited to 2 GB and Handy settings to 8 MB. Resulting catalogs must
+Database copies are limited to 2 GB, source dictionary text to five million characters,
+and Handy settings to 8 MB. Resulting catalogs must
 fit the existing TypeWhisper transfer limits: 10,000 entries, 160 characters per phrase,
 10,000 characters per expansion, and five million JSON characters.
 

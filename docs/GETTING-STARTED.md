@@ -50,8 +50,9 @@ Use Integrations to manage installed plugins and their settings. Installing a
 plugin, configuring it, downloading a model and selecting that model are separate
 steps. Save edited plugin settings before running its actions.
 
-Switching from Wispr Flow or Handy? Use **Import → From another app…** in Dictionary
-or Snippets to review and add your existing entries. See the
+Switching from Wispr Flow or Handy? The setup wizard detects existing data and offers
+an optional import on its welcome page. You can also use **Import → From another app…**
+in Dictionary or Snippets to review and add your existing entries. See the
 [import guide](IMPORT-FROM-OTHER-APPS.md) for supported content and formats.
 
 ## Workflows and automation

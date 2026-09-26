@@ -153,6 +153,94 @@ public sealed class AppImportTests : IDisposable
     }
 
     [Fact]
+    public void CancelingAcquisitionStopsBeforeParsingAndCleansTheCopy()
+    {
+        File.WriteAllText(Source, "source");
+        using var cancellation = new CancellationTokenSource();
+        var reads = 0;
+        Assert.Throws<OperationCanceledException>(() => StableImportCopy.Read(Source, _ => ++reads,
+            afterCopy: cancellation.Cancel, scratchParent: _directory, cancellationToken: cancellation.Token));
+        Assert.Equal(0, reads);
+        Assert.Empty(Directory.GetDirectories(_directory));
+    }
+
+    [Fact]
+    public void CancellationStopsHandyBeforeItsSecondRead()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var reads = 0;
+        Assert.Throws<OperationCanceledException>(() => LexiconAppImport.ReadHandy("unused", _ =>
+        { reads++; cancellation.Cancel(); return Encoding.UTF8.GetBytes("{}"); }, cancellation.Token));
+        Assert.Equal(1, reads);
+    }
+
+    [Fact]
+    public void DeterministicReaderFailureDoesNotRecopyTheDatabase()
+    {
+        File.WriteAllText(Source, "stable");
+        var copies = 0;
+        Assert.Throws<IOException>(() => StableImportCopy.Read<int>(Source, _ => throw new IOException("Unsupported schema"),
+            afterCopy: () => copies++, scratchParent: _directory));
+        Assert.Equal(1, copies);
+        Assert.Empty(Directory.GetDirectories(_directory));
+    }
+
+    [Fact]
+    public void CleanupRemovesOnlyAbandonedOwnedCopiesAndPreservesActiveAndRecentImports()
+    {
+        string Create(string name, bool old)
+        {
+            var path = Path.Combine(_directory, name);
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Combine(path, ".lease"), "");
+            File.WriteAllText(Path.Combine(path, "flow.sqlite"), "private copied data");
+            if (old) Directory.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
+            return path;
+        }
+        var abandoned = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"), true);
+        var active = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"), true);
+        var recent = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"), false);
+        var unrelated = Create("typewhisper-import-user-notes", true);
+        using (new FileStream(Path.Combine(active, ".lease"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            StableImportCopy.CleanupAbandonedCopies(_directory);
+            Assert.False(Directory.Exists(abandoned));
+            Assert.True(Directory.Exists(active));
+            Assert.True(Directory.Exists(recent));
+            Assert.True(Directory.Exists(unrelated));
+        }
+        StableImportCopy.CleanupAbandonedCopies(_directory);
+        Assert.False(Directory.Exists(active));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LargeCatalogIsRejectedBeforeEnumeratingAllCandidatesOrSerializingTheWholeArray(bool snippets)
+    {
+        var replacement = new string('x', 10000);
+        var words = new CountingCandidates<DictionaryEntry>(i => new()
+        { Id = i.ToString(), Original = "phrase " + i, EntryType = DictionaryEntryType.Correction, Replacement = replacement });
+        var expansions = new CountingCandidates<Snippet>(i => new()
+        { Id = i.ToString(), Trigger = "phrase " + i, Replacement = replacement });
+        var batch = new AppImportBatch(snippets ? [] : words, snippets ? expansions : [], 0);
+        Assert.Throws<InvalidDataException>(() => LexiconAppImport.Review(batch, snippets, null));
+        Assert.InRange(snippets ? expansions.ReadCount : words.ReadCount, 1, 500);
+    }
+
+    private sealed class CountingCandidates<T>(Func<int, T> create) : IReadOnlyList<T>
+    {
+        public int ReadCount { get; private set; }
+        public int Count => 10000;
+        public T this[int index] => create(index);
+        public IEnumerator<T> GetEnumerator()
+        {
+            for (var i = 0; i < Count; i++) { ReadCount++; yield return create(i); }
+        }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    [Fact]
     public void StableCopyRejectsSameSizeAndTimestampMutationAndRemovesScratchFiles()
     {
         File.WriteAllText(Source, "initial");

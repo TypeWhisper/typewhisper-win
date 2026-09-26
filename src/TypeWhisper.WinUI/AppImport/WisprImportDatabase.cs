@@ -20,9 +20,10 @@ internal static class WisprImportDatabase
     [DllImport(Library, ExactSpelling = true)] private static extern int sqlite3_column_bytes16(nint statement, int column);
     [DllImport(Library, ExactSpelling = true)] private static extern long sqlite3_column_int64(nint statement, int column);
 
-    internal static IReadOnlyList<WisprImportRow> Read(string source) => StableImportCopy.Read(source, ReadCopy);
+    internal static IReadOnlyList<WisprImportRow> Read(string source, CancellationToken cancellationToken = default) =>
+        StableImportCopy.Read(source, copy => ReadCopy(copy, cancellationToken), cancellationToken: cancellationToken);
 
-    private static IReadOnlyList<WisprImportRow> ReadCopy(string copy)
+    private static IReadOnlyList<WisprImportRow> ReadCopy(string copy, CancellationToken cancellationToken)
     {
         // READWRITE without CREATE permits rebuilding the WAL index, exclusively inside our scratch folder.
         var opened = sqlite3_open_v2(Utf8(copy), out var db, 2, 0);
@@ -36,11 +37,17 @@ internal static class WisprImportDatabase
             {
                 if (prepared != 0) throw Unreadable();
                 var rows = new List<WisprImportRow>();
+                var characters = 0;
                 int result;
                 while ((result = sqlite3_step(statement)) == 100)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (rows.Count == MaximumRows) throw new InvalidDataException($"The source has more than {MaximumRows:N0} entries. Nothing was imported.");
-                    rows.Add(new(Text(statement, 0)!, Text(statement, 1, optional: true), Boolean(statement, 2), Boolean(statement, 3)));
+                    var row = new WisprImportRow(Text(statement, 0)!, Text(statement, 1, optional: true), Boolean(statement, 2), Boolean(statement, 3));
+                    characters += row.Phrase.Length + (row.Replacement?.Length ?? 0);
+                    if (characters > LexiconAppImport.MaximumCatalogCharacters)
+                        throw new InvalidDataException("The source contains more than five million characters of dictionary text. Nothing was imported.");
+                    rows.Add(row);
                 }
                 if (result != 101) throw Unreadable();
                 return rows;

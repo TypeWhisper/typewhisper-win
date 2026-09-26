@@ -145,6 +145,7 @@ public sealed partial class SettingsWindow : Window
             if (currentDpi != _dpi) PlaceOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
         };
         SetPreferences(preferences);
+        Closed += (_, _) => _ = ShutdownSetupImportAsync();
         AppWindow.Closing += async (_, args) =>
         {
             if (_allowClose) return;
@@ -509,6 +510,8 @@ public sealed partial class SettingsWindow : Window
     }
 
     private bool _returnToTrayAfterSetup;
+    internal Task ShutdownSetupImportAsync() => SetupHost.Child is SetupWizard wizard ? wizard.ShutdownImportAsync() : Task.CompletedTask;
+
     internal void ShowSetup(bool returnToTray = false)
     {
         if (CreateSetupWizard is null) return;
