@@ -80,7 +80,7 @@ internal static partial class SettingsCatalog
         AutomationProperties.SetHelpText(expandButton, "Show or hide recording, translation and formatting options.");
         ShowAdvanced(false);
         target.Children.Add(expandButton); target.Children.Add(advanced);
-        FieldsInto(advanced, "Mode");
+        FieldsInto(advanced, "Mode", "CancellationBehavior");
         advanced.Children.Add(Conditional(() => values.GetValueOrDefault("Language", "Automatic") == "Automatic", "LanguageHints"));
         FieldsInto(advanced, "TranscriptionTask");
         advanced.Children.Add(Conditional(() => values.GetValueOrDefault("TranscriptionTask", "Transcribe") == "Translate", "TranslationTargetLanguage"));

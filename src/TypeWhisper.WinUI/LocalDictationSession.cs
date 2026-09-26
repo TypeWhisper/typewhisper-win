@@ -178,7 +178,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     internal DictationOverlayState OverlayState => new(
         DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation),
-        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current);
+        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current, CancelWarning, Cancelled);
     internal string Status { get; private set; } = "Loading local transcription plugin…";
     internal const string DefaultShortcut = "Ctrl+Shift";
     internal string Shortcut { get; set; } = DefaultShortcut;

@@ -168,6 +168,7 @@ public sealed partial class MainWindow : Window
             InitializeWorkflowPaletteShortcut();
             InitializeRecordingShortcuts();
             InitializeRecorderShortcut();
+            InitializeEscapeCancel();
             InitializeHotkeyRecovery();
             await WinUILicensing.ValidateAsync();
             if (!_closing) await WinUIPremiumAccount.RefreshAsync();
@@ -214,6 +215,7 @@ public sealed partial class MainWindow : Window
         _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
         _readLastHotkey?.Dispose();
+        DisposeEscapeCancel();
         await StopWorkflowShortcutsAsync();
         // The recorder owns the session gate while capturing; save it before session shutdown waits for that gate.
         var reviews = DrainReviewWindowsAsync();
@@ -232,6 +234,7 @@ public sealed partial class MainWindow : Window
         _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
         _readLastHotkey?.Dispose();
+        DisposeEscapeCancel();
         _dictationHotkey?.Dispose();
         _dictationInput?.Dispose();
         if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
@@ -298,7 +301,8 @@ public sealed partial class MainWindow : Window
             _liveOverlay?.HidePreview();
             return;
         }
-        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel)
+        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel
+            || _dictation.OverlayState.ShowsCancelled || _dictation.OverlayState.ShowsCancelWarning)
         {
             HideOverlayPreview();
             var showTranscript = _dictation.OverlayState.ShouldShowTranscript(_transcriptPreviewEnabled, _dictation.SupportsLiveTranscription);
