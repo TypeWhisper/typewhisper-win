@@ -115,6 +115,26 @@ internal sealed class Lexicon
     internal int PreviewImport(string json, bool snippets) => snippets
         ? LexiconTransfer.ReadSnippets(json).Length : LexiconTransfer.ReadDictionary(json).Length;
 
+    internal AppImportReview ReviewAppImport(AppImportBatch batch, bool snippets)
+    {
+        var path = (snippets ? _snippetPath : _dictionaryPath) ?? throw new InvalidOperationException("Persistent storage is unavailable.");
+        return LexiconAppImport.Review(batch, snippets, ReviewedCatalogTransaction.Read(path));
+    }
+
+    internal string? CommitAppImport(AppImportReview review)
+    {
+        try
+        {
+            if (review.Additions == 0) return "No new entries to import.";
+            var path = (review.IsSnippets ? _snippetPath : _dictionaryPath) ?? throw new InvalidOperationException("Persistent storage is unavailable.");
+            ReviewedCatalogTransaction.Commit(path, review.Baseline, review.Json);
+            if (review.IsSnippets) ReloadSnippets(); else ReloadDictionary();
+            return LastError = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        { return LastError = "Import canceled: " + ex.Message; }
+    }
+
     internal string? Import(string json, bool snippets, bool replace)
     {
         if ((snippets ? _snippetLoadError : _loadError) is { } loadError) return LastError = loadError;
