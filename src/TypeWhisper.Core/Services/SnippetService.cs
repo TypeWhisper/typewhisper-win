@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -113,28 +115,126 @@ public sealed partial class SnippetService : ISnippetService
         Func<string>? clipboardProvider = null, Action<string>? onApplied = null)
     {
         var activeSnippets = snippets
-            .Where(s => s.IsEnabled)
-            .OrderByDescending(s => s.Trigger.Length);
+            .Where(s => s.IsEnabled && !string.IsNullOrEmpty(s.Trigger))
+            .OrderByDescending(s => s.Trigger.Length)
+            .ToArray();
+        if (activeSnippets.Length == 0) return text;
+
+        // A literal trigger must not split a combining sequence or an emoji grapheme.
+        var textElementStarts = StringInfo.ParseCombiningCharacters(text);
+        bool IsTextElementBoundary(int index) => index == text.Length || Array.BinarySearch(textElementStarts, index) >= 0;
+        var replacements = new List<(int Start, int End, string Text)>();
+        bool[]? occupied = null;
 
         foreach (var snippet in activeSnippets)
         {
             var comparison = snippet.CaseSensitive
                 ? StringComparison.Ordinal
                 : StringComparison.OrdinalIgnoreCase;
+            var requiresLeftBoundary = !IsScriptWithoutWhitespaceBoundaries(snippet.Trigger.EnumerateRunes().First());
+            var requiresRightBoundary = !IsScriptWithoutWhitespaceBoundaries(snippet.Trigger.EnumerateRunes().Last());
+            string? expanded = null;
+            var searchFrom = 0;
 
-            if (!text.Contains(snippet.Trigger, comparison)) continue;
+            while (searchFrom <= text.Length - snippet.Trigger.Length)
+            {
+                var index = text.IndexOf(snippet.Trigger, searchFrom, comparison);
+                if (index < 0) break;
 
-            var expanded = ExpandPlaceholders(snippet.Replacement, clipboardProvider);
+                var end = index + snippet.Trigger.Length;
+                searchFrom = index + 1;
+                if (!IsTextElementBoundary(index) || !IsTextElementBoundary(end))
+                    continue;
+                if ((requiresLeftBoundary && IsWordContinuation(text, index - 1, -1)) ||
+                    (requiresRightBoundary && IsWordContinuation(text, end, 1)))
+                    continue;
+                if (occupied is not null && occupied.AsSpan(index, snippet.Trigger.Length).Contains(true))
+                    continue;
 
-            var pattern = Regex.Escape(snippet.Trigger) + @"[.!?]?";
-            var options = snippet.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-            text = Regex.Replace(text, pattern, expanded.Replace("$", "$$"), options);
+                expanded ??= ExpandPlaceholders(snippet.Replacement, clipboardProvider);
+                occupied ??= new bool[text.Length];
+                if (end < text.Length && !occupied[end] && text[end] is '.' or '!' or '?' && IsTextElementBoundary(end + 1))
+                    end++;
+                occupied.AsSpan(index, end - index).Fill(true);
+                replacements.Add((index, end, expanded));
+                searchFrom = end;
+            }
 
-            onApplied?.Invoke(snippet.Id);
+            if (expanded is not null)
+                onApplied?.Invoke(snippet.Id);
         }
 
-        return text;
+        if (replacements.Count == 0) return text;
+
+        // Resolve all matches against the original transcript, keeping longest-trigger priority.
+        var result = new StringBuilder();
+        var copiedThrough = 0;
+        foreach (var replacement in replacements.OrderBy(r => r.Start))
+        {
+            result.Append(text, copiedThrough, replacement.Start - copiedThrough).Append(replacement.Text);
+            copiedThrough = replacement.End;
+        }
+        return result.Append(text, copiedThrough, text.Length - copiedThrough).ToString();
     }
+
+    private static bool IsWordContinuation(string text, int index, int direction, bool includeWordPunctuation = true)
+    {
+        while (index >= 0 && index < text.Length)
+        {
+            // Decode the preceding scalar from its low surrogate when checking a left boundary.
+            if (char.IsLowSurrogate(text[index]) && index > 0 && char.IsHighSurrogate(text[index - 1]))
+                index--;
+            if (!Rune.TryGetRuneAt(text, index, out var rune)) return false;
+
+            // Zero-width space separates words; other format controls do not create boundaries.
+            if (rune.Value == 0x200B) return false;
+            var category = Rune.GetUnicodeCategory(rune);
+            if (category == UnicodeCategory.Format)
+            {
+                index += direction > 0 ? rune.Utf16SequenceLength : -1;
+                continue;
+            }
+
+            // Internal apostrophes and Hebrew gershayim join words; surrounding quotes remain separators.
+            if (includeWordPunctuation && rune.Value is '\'' or '\u2018' or '\u2019' or '\u05F4')
+                return IsWordContinuation(text, index - 1, -1, false) && IsWordContinuation(text, index + 1, 1, false);
+
+            return rune.Value == 0x05F3 || // Hebrew geresh is also word-internal at an abbreviation's end.
+                Rune.IsLetter(rune) || Rune.IsNumber(rune) || category is
+                UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or
+                UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
+        }
+        return false;
+    }
+
+    // Preserve unspaced scripts independently at each trigger edge; digit sequences still need boundaries.
+    // Blocks and South East Asian (SA) scripts: https://www.unicode.org/reports/tr14/#SA
+    private static bool IsScriptWithoutWhitespaceBoundaries(Rune rune) =>
+        (Rune.IsLetter(rune) || Rune.GetUnicodeCategory(rune) is UnicodeCategory.NonSpacingMark or
+            UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark) && rune.Value is
+            >= 0x0E00 and <= 0x0EFF // Thai and Lao
+            or >= 0x1000 and <= 0x109F // Myanmar
+            or >= 0x1100 and <= 0x11FF // Hangul Jamo
+            or >= 0x1780 and <= 0x17FF // Khmer
+            or >= 0x1950 and <= 0x19DF // Tai Le and New Tai Lue
+            or >= 0x1A20 and <= 0x1AAF // Tai Tham
+            or >= 0x3040 and <= 0x30FF // Hiragana and Katakana
+            or >= 0x3130 and <= 0x318F // Hangul Compatibility Jamo
+            or >= 0x31F0 and <= 0x31FF // Katakana Phonetic Extensions
+            or >= 0x3400 and <= 0x4DBF // CJK Extension A
+            or >= 0x4E00 and <= 0x9FFF // CJK ideographs
+            or >= 0xA960 and <= 0xA97F // Hangul Jamo Extended-A
+            or >= 0xA9E0 and <= 0xA9FF // Myanmar Extended-B
+            or >= 0xAA60 and <= 0xAADF // Myanmar Extended-A and Tai Viet
+            or >= 0xAC00 and <= 0xD7FF // Hangul syllables and Jamo Extended-B
+            or >= 0xF900 and <= 0xFAFF // CJK Compatibility Ideographs
+            or >= 0xFF66 and <= 0xFF9F // Halfwidth Katakana
+            or >= 0x11700 and <= 0x1174F // Ahom
+            or >= 0x1AFF0 and <= 0x1B16F // Supplementary Kana blocks
+            or >= 0x20000 and <= 0x2A6DF // CJK Extension B
+            or >= 0x2A700 and <= 0x2EE5F // CJK Extensions C-F and I
+            or >= 0x2F800 and <= 0x2FA1F // CJK Compatibility Ideographs Supplement
+            or >= 0x30000 and <= 0x3347F; // CJK Extensions G, H and J
 
     /// <summary>
     /// Exports the current data as JSON.
