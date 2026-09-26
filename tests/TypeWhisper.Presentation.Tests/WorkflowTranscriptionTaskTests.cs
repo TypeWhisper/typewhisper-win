@@ -74,18 +74,27 @@ public sealed class WorkflowTranscriptionTaskTests
     }
 
     [Fact]
-    public void OnlyEnabledAutomaticTranscribeRulesDeferTheEarlyTranslationCheck()
+    public void AutomaticRulesDecideTheTaskOnlyWhenTheyConflictWithTheModel()
     {
-        Assert.False(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([]));
-        Assert.False(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([
-            Dictation("transcribe"),
+        Workflow[] irrelevant =
+        [
+            Dictation("translate"),
             Dictation("transcribe", WorkflowTrigger.Manual()),
-            Dictation("transcribe", WorkflowTrigger.Global()) with { IsEnabled = false },
-            Dictation("translate", WorkflowTrigger.App("editor")),
-            Dictation(null, WorkflowTrigger.Global())]));
-        Assert.True(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([Dictation("transcribe", WorkflowTrigger.App("editor"))]));
-        Assert.True(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([Dictation("transcribe", WorkflowTrigger.Website("example.com"))]));
-        Assert.True(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([Dictation("transcribe", WorkflowTrigger.Global())]));
+            Dictation("translate", WorkflowTrigger.Global()) with { IsEnabled = false },
+            Dictation(null, WorkflowTrigger.Global())
+        ];
+        foreach (var global in new[] { TranscriptionTask.Transcribe, TranscriptionTask.Translate })
+        {
+            Assert.False(WorkflowTranscriptionTask.AutomaticRuleDecidesTask([], global, false));
+            Assert.False(WorkflowTranscriptionTask.AutomaticRuleDecidesTask(irrelevant, global, false));
+            Assert.True(WorkflowTranscriptionTask.AutomaticRuleDecidesTask([Dictation("translate", WorkflowTrigger.App("editor"))], global, false));
+            // A model that can translate runs every rule's task, so matching stays after capture.
+            Assert.False(WorkflowTranscriptionTask.AutomaticRuleDecidesTask([Dictation("translate", WorkflowTrigger.App("editor"))], global, true));
+        }
+        Workflow[] transcribeRules =
+            [Dictation("transcribe", WorkflowTrigger.Website("example.com")), Dictation("transcribe", WorkflowTrigger.Global())];
+        Assert.True(WorkflowTranscriptionTask.AutomaticRuleDecidesTask(transcribeRules, TranscriptionTask.Translate, false));
+        Assert.False(WorkflowTranscriptionTask.AutomaticRuleDecidesTask(transcribeRules, TranscriptionTask.Transcribe, false));
     }
 
     [Fact]

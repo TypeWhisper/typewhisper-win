@@ -659,22 +659,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!_audio.IsRecording)
             {
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
-                // Fail before microphone capture unless an automatic rule may still select
-                // Transcribe. Those rules are resolved below, before any preview, streaming
-                // connection or final decoding.
+                TaskStartError = null;
                 _taskAtStart = globalTaskAtStart;
-                if (workflow is not null || globalTaskAtStart != TranscriptionTask.Translate || SupportsTranslation
-                    || !AutomaticRuleMayTranscribe())
-                {
-                    try { _taskAtStart = WorkflowTranscriptionTask.Resolve(workflow?.SelectedTask, globalTaskAtStart, SupportsTranslation); }
-                    catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
-                    {
-                        // A previously canceled recording may still own the operation token.
-                        // Report this configuration failure without interpreting it as cancellation.
-                        SetStatus(ex.Message, DictationPhase.Error);
-                        return;
-                    }
-                }
+                // Unsupported tasks fail before microphone capture. When the model cannot translate
+                // and an automatic rule decides the task, that rule is matched before capture too.
+                // Otherwise matching follows capture, and its task is resolved below, before any
+                // preview, streaming connection or final decoding.
+                var matchRuleBeforeCapture = workflow is null && AutomaticRuleDecidesTask(globalTaskAtStart);
+                var ruleMatched = false;
+                if (!matchRuleBeforeCapture && RejectTask(workflow?.SelectedTask, globalTaskAtStart)) return;
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
@@ -702,6 +695,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 await speechStopped;
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
+                if (matchRuleBeforeCapture)
+                {
+                    _targetProcessId = processId;
+                    _targetApp = TargetProcessName(processId);
+                    if (_setupOutputAtStart is null) { await CaptureWorkflowAtStartAsync(); ruleMatched = true; }
+                    if (_disposed) return;
+                    if (RejectTask(ruleMatched ? _workflowAtStart?.SelectedTask : null, globalTaskAtStart))
+                    {
+                        await previousRecordingWork;
+                        return;
+                    }
+                }
                 var preferences = AudioPreferences;
                 _spokenFeedbackAtStart = preferences;
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
@@ -735,8 +740,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
                 PasteDiagnostics.Write("dictation.capture.active");
                 _targetProcessId = processId;
-                try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { _targetApp = "Target app"; }
+                _targetApp = TargetProcessName(processId);
                 BeginApiDictationGeneration();
                 captureStarted?.Invoke(ApiDictationGeneration);
                 _started = DateTime.UtcNow;
@@ -754,9 +758,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
                     _originalField = await OriginalDictationField.CaptureAsync(_target, processId, _operationCancellation.Token);
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
-                else if (workflow is null) await CaptureWorkflowAtStartAsync();
+                else if (workflow is null) { if (!ruleMatched) await CaptureWorkflowAtStartAsync(); }
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
-                _taskAtStart = WorkflowTranscriptionTask.Resolve(_workflowAtStart?.SelectedTask, globalTaskAtStart, SupportsTranslation);
+                var resolvedTask = WorkflowTranscriptionTask.Resolve(_workflowAtStart?.SelectedTask, globalTaskAtStart, SupportsTranslation);
+                // The overlay configured live preview for the global task when recording began.
+                if (resolvedTask != _taskAtStart) { _taskAtStart = resolvedTask; Changed?.Invoke(); }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();

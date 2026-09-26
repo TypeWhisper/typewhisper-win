@@ -25,8 +25,13 @@ public static class WorkflowTranscriptionTask
         return task;
     }
 
-    /// <summary>Whether a matching App, Website or Global rule could still replace the global task with Transcribe.</summary>
-    public static bool AutomaticRuleMayTranscribe(IEnumerable<Workflow> workflows) => workflows.Any(workflow => workflow.IsEnabled
-        && workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global
-        && workflow.Behavior.SelectedTask == "transcribe");
+    /// <summary>
+    /// Whether the matching App, Website or Global rule decides if a model without translation can record:
+    /// a rule may request Translate, or select Transcribe instead of an unsupported global translation.
+    /// </summary>
+    public static bool AutomaticRuleDecidesTask(IEnumerable<Workflow> workflows, TranscriptionTask globalTask, bool supportsTranslation) =>
+        !supportsTranslation && workflows.Any(workflow => workflow.IsEnabled
+            && workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global
+            && (workflow.Behavior.SelectedTask == "translate"
+                || globalTask == TranscriptionTask.Translate && workflow.Behavior.SelectedTask == "transcribe"));
 }
