@@ -182,14 +182,29 @@ public sealed partial class SnippetService : ISnippetService
             UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
     }
 
-    // Apply the dictionary's boundaryless-script policy independently at each trigger edge.
-    // Supplementary CJK blocks: https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt
+    // Preserve unspaced scripts independently at each trigger edge; digit sequences still need boundaries.
+    // Blocks and South East Asian (SA) scripts: https://www.unicode.org/reports/tr14/#SA
     private static bool IsScriptWithoutWhitespaceBoundaries(Rune rune) =>
-        rune.Value is >= 0x3040 and <= 0x30FF // Hiragana and Katakana
+        !Rune.IsNumber(rune) && rune.Value is
+            >= 0x0E00 and <= 0x0EFF // Thai and Lao
+            or >= 0x1000 and <= 0x109F // Myanmar
+            or >= 0x1100 and <= 0x11FF // Hangul Jamo
+            or >= 0x1780 and <= 0x17FF // Khmer
+            or >= 0x1950 and <= 0x19DF // Tai Le and New Tai Lue
+            or >= 0x1A20 and <= 0x1AAF // Tai Tham
+            or >= 0x3040 and <= 0x30FF // Hiragana and Katakana
+            or >= 0x3130 and <= 0x318F // Hangul Compatibility Jamo
+            or >= 0x31F0 and <= 0x31FF // Katakana Phonetic Extensions
             or >= 0x3400 and <= 0x4DBF // CJK Extension A
             or >= 0x4E00 and <= 0x9FFF // CJK ideographs
-            or >= 0xAC00 and <= 0xD7AF // Hangul syllables
+            or >= 0xA960 and <= 0xA97F // Hangul Jamo Extended-A
+            or >= 0xA9E0 and <= 0xA9FF // Myanmar Extended-B
+            or >= 0xAA60 and <= 0xAADF // Myanmar Extended-A and Tai Viet
+            or >= 0xAC00 and <= 0xD7FF // Hangul syllables and Jamo Extended-B
             or >= 0xF900 and <= 0xFAFF // CJK Compatibility Ideographs
+            or >= 0xFF66 and <= 0xFF9F // Halfwidth Katakana
+            or >= 0x11700 and <= 0x1174F // Ahom
+            or >= 0x1AFF0 and <= 0x1B16F // Supplementary Kana blocks
             or >= 0x20000 and <= 0x2A6DF // CJK Extension B
             or >= 0x2A700 and <= 0x2EE5F // CJK Extensions C-F and I
             or >= 0x2F800 and <= 0x2FA1F // CJK Compatibility Ideographs Supplement
