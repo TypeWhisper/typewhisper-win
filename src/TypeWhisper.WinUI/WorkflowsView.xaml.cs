@@ -419,7 +419,7 @@ public sealed partial class WorkflowsView : UserControl
     private bool ConfigUsesRecordingTask => ConfigTrigger.SelectedId is "DictationHotkey" or "App" or "Website" or "Global";
     private string? ConfigSelectedTask => ConfigUsesRecordingTask
         ? (string.IsNullOrEmpty(ConfigTask.SelectedId) ? null : ConfigTask.SelectedId)
-        : ConfigTrigger.SelectedId == _opened?.ActivationId ? _opened.SelectedTask : null;
+        : _opened is { } opened && ConfigTrigger.SelectedId == opened.ActivationId ? opened.SelectedTask : null;
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")

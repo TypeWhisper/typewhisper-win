@@ -172,7 +172,10 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets whether the provider supports translation requests.
     /// </summary>
-    public bool SupportsTranslation => _selectedModelId is { } modelId
+    public bool SupportsTranslation => SupportsTranslationFor(_selectedModelId);
+
+    // English-only and Turbo weights were not trained for translation.
+    private static bool SupportsTranslationFor(string? modelId) => modelId is not null
         && Models.Any(model => model.Id == modelId)
         && !modelId.EndsWith(".en", StringComparison.Ordinal)
         && !modelId.StartsWith("large-v3-turbo", StringComparison.Ordinal);
@@ -524,7 +527,7 @@ public sealed partial class WhisperCppPlugin :
         try
         {
             var modelId = _selectedModelId ?? throw new InvalidOperationException("Select a downloaded model before transcribing.");
-            if (translate && !SupportsTranslation)
+            if (translate && !SupportsTranslationFor(modelId))
                 throw new NotSupportedException("This Whisper model cannot translate to English. Choose a multilingual model other than Turbo.");
             await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false);
 
