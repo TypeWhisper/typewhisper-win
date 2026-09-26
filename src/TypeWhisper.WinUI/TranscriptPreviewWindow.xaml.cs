@@ -37,7 +37,7 @@ public sealed partial class TranscriptPreviewWindow : Window
     private double _animationFrom;
     private double _animationTarget;
     private double _expansion;
-    private bool _followTranscript = true;
+    private readonly TranscriptScrollFollow _scrollFollow = new();
     private int _lastWordCount = -1;
     private int _pixelWidth = OverlayWindow.WindowWidth;
     private double _scale = 1;
@@ -338,7 +338,7 @@ public sealed partial class TranscriptPreviewWindow : Window
             AppWindow.Show(activateWindow: false);
             _streamClock.Restart();
             if (_paused) _streamClock.Stop();
-            _followTranscript = true;
+            _scrollFollow.Reset();
             _lastWordCount = -1;
             TranscriptText.Text = string.Empty;
         }
@@ -435,11 +435,7 @@ public sealed partial class TranscriptPreviewWindow : Window
         {
             var text = _liveText();
             if (TranscriptText.Text != text)
-            {
                 TranscriptText.Text = text;
-                if (_followTranscript)
-                    DispatcherQueue.TryEnqueue(() => { TranscriptScrollViewer.UpdateLayout(); TranscriptScrollViewer.ChangeView(null, TranscriptScrollViewer.ScrollableHeight, null, true); });
-            }
             return;
         }
         if (!_streamClock.IsRunning)
@@ -455,28 +451,19 @@ public sealed partial class TranscriptPreviewWindow : Window
         _lastWordCount = wordCount;
         TranscriptText.Text = string.Join(" ", DemoTranscriptWords, 0, wordCount);
 
-        if (_followTranscript)
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                TranscriptScrollViewer.UpdateLayout();
-                TranscriptScrollViewer.ChangeView(
-                    horizontalOffset: null,
-                    verticalOffset: TranscriptScrollViewer.ScrollableHeight,
-                    zoomFactor: null,
-                    disableAnimation: true);
-            });
-        }
-
         if (wordCount >= DemoTranscriptWords.Length)
             _streamClock.Stop();
     }
 
-    private void TranscriptScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    // Runs after layout, when the new text or viewport size is already reflected in ScrollableHeight.
+    private void KeepTranscriptEndVisible(object sender, SizeChangedEventArgs e)
     {
-        _followTranscript = TranscriptScrollViewer.ScrollableHeight
-            - TranscriptScrollViewer.VerticalOffset <= 12;
+        if (_scrollFollow.Following)
+            TranscriptScrollViewer.ChangeView(null, TranscriptScrollViewer.ScrollableHeight, null, disableAnimation: true);
     }
+
+    private void TranscriptScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e) =>
+        _scrollFollow.ViewChanged(TranscriptScrollViewer.VerticalOffset, TranscriptScrollViewer.ScrollableHeight);
 
     private void ConfigureNativeWindow()
     {

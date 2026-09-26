@@ -50,8 +50,10 @@
                           HorizontalScrollMode="Disabled"
                           HorizontalScrollBarVisibility="Disabled"
                           ViewChanged="TranscriptScrollViewer_ViewChanged"
+                          SizeChanged="KeepTranscriptEndVisible"
                           AutomationProperties.Name="Live transcript text">
                 <TextBlock x:Name="TranscriptText"
+                           SizeChanged="KeepTranscriptEndVisible"
                            Margin="0"
                            FontSize="13"
                            LineHeight="18"
