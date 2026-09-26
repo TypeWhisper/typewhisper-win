@@ -222,11 +222,12 @@ public sealed partial class OverlayWindow : Window
             }
             StatusText.Text = state.Label;
             StatusText.Foreground = new SolidColorBrush(state.Phase == DictationPhase.Error
-                ? Color.FromArgb(255, 255, 120, 130) : Color.FromArgb(255, 59, 167, 255));
+                ? Color.FromArgb(255, 255, 120, 130) : state.ShowsCancelWarning || state.ShowsCancelled
+                    ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 59, 167, 255));
             RecordingDot.Visibility = state.Phase == DictationPhase.Recording ? Visibility.Visible : Visibility.Collapsed;
             PauseMark.Visibility = Visibility.Collapsed;
-            AutomationProperties.SetName(OverlayRoot, $"{_mode} · {state.Message}");
-            ToolTipService.SetToolTip(OverlayRoot, state.Message);
+            AutomationProperties.SetName(OverlayRoot, $"{_mode} · {state.AccessibleMessage}");
+            ToolTipService.SetToolTip(OverlayRoot, state.AccessibleMessage);
             return;
         }
         StatusText.Text = _paused ? "PAUSED" : "RECORDING";

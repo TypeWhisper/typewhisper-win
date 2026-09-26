@@ -45,6 +45,7 @@ internal static partial class SettingsCatalog
         Choice("Account & about", "UpdateChannel", "Update channel", "Stable", "Stable|Daily|Release Candidate"),
 
         Choice("Dictation", "Mode", "Recording mode", "Toggle", "Toggle|Push to talk|Hybrid"),
+        Choice("Dictation", "CancellationBehavior", "Cancellation behavior", "Double", "Double|Single|Instant", "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing."),
         Choice("Dictation", "Language", "Spoken language", "Automatic", "Automatic|English|German|French|Spanish|Italian"),
         Choice("Dictation", "LanguageHints", "Preferred languages", "Unrestricted", "Unrestricted|German and English|German|English|French|Spanish", "Sample language selection; no language codes required."),
         Choice("Dictation", "TranscriptionTask", "Task", "Transcribe", "Transcribe|Translate"),
@@ -368,7 +369,7 @@ internal static partial class SettingsCatalog
         "RecorderOutputFormat" or "WatchFolderOutputFormat" => "file",
         "TranscriptionTask" or "RecorderTranscriptionTask" or "DictationRecoveryTask" => "workflow",
         "RecorderTrackMode" => "layout",
-        "Mode" => "microphone",
+        "Mode" or "CancellationBehavior" => "microphone",
         "RecorderMicDuckingMode" => "speaker",
         _ => "settings"
     };
