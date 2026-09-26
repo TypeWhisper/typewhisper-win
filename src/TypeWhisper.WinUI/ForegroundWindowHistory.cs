@@ -13,6 +13,7 @@ internal sealed class ForegroundWindowHistory : IDisposable
     private readonly uint _ownProcessId = (uint)Environment.ProcessId;
     private IntPtr _hook;
     private IntPtr _last;
+    private uint _lastProcessId;
 
     internal ForegroundWindowHistory()
     {
@@ -22,7 +23,9 @@ internal sealed class ForegroundWindowHistory : IDisposable
         Observe(GetForegroundWindow());
     }
 
-    internal IntPtr LastTarget => _last != IntPtr.Zero && IsWindow(_last) && IsWindowVisible(_last) ? _last : IntPtr.Zero;
+    // The process check rejects a closed window whose handle Windows reused for another app.
+    internal IntPtr LastTarget => _last != IntPtr.Zero && IsWindow(_last) && IsWindowVisible(_last)
+        && GetWindowThreadProcessId(_last, out var processId) != 0 && processId == _lastProcessId ? _last : IntPtr.Zero;
 
     private void Observe(IntPtr window)
     {
@@ -30,7 +33,11 @@ internal sealed class ForegroundWindowHistory : IDisposable
         GetWindowThreadProcessId(window, out var processId);
         var name = new StringBuilder(256);
         var length = GetClassName(window, name, name.Capacity);
-        if (PasteTargetFilter.IsEligible(length > 0 ? name.ToString() : null, processId, _ownProcessId)) _last = window;
+        if (PasteTargetFilter.IsEligible(length > 0 ? name.ToString() : null, processId, _ownProcessId))
+        {
+            _last = window;
+            _lastProcessId = processId;
+        }
     }
 
     public void Dispose()

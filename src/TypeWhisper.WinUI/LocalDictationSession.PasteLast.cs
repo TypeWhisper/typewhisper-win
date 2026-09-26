@@ -18,7 +18,9 @@ internal sealed partial class LocalDictationSession
                 if (activate && !await ActivateAsync(target)) return false;
                 // A global shortcut fires while its modifiers are still held; Ctrl+V must not combine with them.
                 for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
-                return await _inserter.InsertAsync(text, target);
+                // Exit or profile restore may have started during the waits above.
+                if (_disposed) return false;
+                return await _inserter.InsertAsync(text, target, () => !_disposed);
             });
         }
         finally { _gate.Release(); }
