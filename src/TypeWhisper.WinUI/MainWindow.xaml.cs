@@ -31,6 +31,7 @@ public sealed partial class MainWindow : Window
         if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
         if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
         if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
+        if (PasteLastShortcutConflict(value) is { } pasteConflict) return pasteConflict;
         if (ReadLastShortcutConflict(value) is { } readConflict) return readConflict;
         var previous = _hotkeyRegistration.Value;
         var error = _hotkeyRegistration.TryChange(value);
@@ -90,6 +91,7 @@ public sealed partial class MainWindow : Window
         if (WorkflowPaletteShortcutConflict(value, modifierOnly: true) is { } paletteConflict) return paletteConflict;
         if (HistoryShortcutConflict(value, modifierOnly: true) is { } historyConflict) return historyConflict;
         if (CopyLastShortcutConflict(value, modifierOnly: true) is { } copyConflict) return copyConflict;
+        if (PasteLastShortcutConflict(value, modifierOnly: true) is { } pasteConflict) return pasteConflict;
         if (ReadLastShortcutConflict(value, modifierOnly: true) is { } readConflict) return readConflict;
         if (_dictation.IsRecording) return "Finish the recording before changing its shortcut.";
         var previous = _dictationHotkey.Value;
@@ -164,6 +166,7 @@ public sealed partial class MainWindow : Window
             InitializeWorkflowShortcuts();
             InitializeHistoryShortcut();
             InitializeCopyLastShortcut();
+            InitializePasteLastShortcut();
             InitializeReadLastShortcut();
             InitializeWorkflowPaletteShortcut();
             InitializeRecordingShortcuts();
@@ -214,6 +217,8 @@ public sealed partial class MainWindow : Window
         DisposeRecordingShortcuts();
         _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
+        _pasteLastHotkey?.Dispose();
+        _foregroundHistory?.Dispose();
         _readLastHotkey?.Dispose();
         DisposeEscapeCancel();
         await StopWorkflowShortcutsAsync();
@@ -233,6 +238,8 @@ public sealed partial class MainWindow : Window
         DisposeRecordingShortcuts();
         _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
+        _pasteLastHotkey?.Dispose();
+        _foregroundHistory?.Dispose();
         _readLastHotkey?.Dispose();
         DisposeEscapeCancel();
         _dictationHotkey?.Dispose();
@@ -1212,6 +1219,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
             _settingsWindow.CommitCopyLastTranscriptionHotkeys = ChangeCopyLastShortcut;
+            _settingsWindow.CommitPasteLastTranscriptionHotkeys = ChangePasteLastShortcut;
             _settingsWindow.CommitReadLastTranscriptionHotkeys = ChangeReadLastShortcut;
             _settingsWindow.CommitWorkflowPaletteHotkeys = ChangeWorkflowPaletteShortcut;
             _settingsWindow.CommitRecordingShortcut = ChangeRecordingShortcut;
@@ -1227,6 +1235,7 @@ public sealed partial class MainWindow : Window
                 if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
                 if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
                 if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
+                if (PasteLastShortcutConflict(value) is { } pasteConflict) return pasteConflict;
                 if (ReadLastShortcutConflict(value) is { } readConflict) return readConflict;
                 var error = _cancelProcessingHotkey.TryChange(value);
                 _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey.Value;

@@ -83,6 +83,7 @@ internal static partial class SettingsCatalog
         Text("Shortcuts", "HoldOnlyHotkeys", "Hold to record"),
         Text("Shortcuts", "RecentTranscriptionsHotkeys", "Recent transcriptions"),
         Text("Shortcuts", "CopyLastTranscriptionHotkeys", "Copy last transcription"),
+        Text("Shortcuts", "PasteLastTranscriptionHotkeys", "Paste last transcription"),
         Text("Shortcuts", "ReadLastTranscriptionHotkeys", "Read last transcription"),
         Text("Shortcuts", "WorkflowPaletteHotkeys", "Workflow palette"),
         Text("Shortcuts", "RecorderToggleHotkeys", "Recorder"),
@@ -134,7 +135,7 @@ internal static partial class SettingsCatalog
     internal static IEnumerable<(string Key, string Label, string Value)> ShortcutBindings(Dictionary<string, string> values) =>
         Fields.Where(field => field.Category == "Shortcuts").Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
 
-    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null, Func<string, string, string?>? commitRecordingShortcut = null, Func<string, string?>? commitRecorderHotkeys = null)
+    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitPasteLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null, Func<string, string, string?>? commitRecordingShortcut = null, Func<string, string?>? commitRecorderHotkeys = null)
     {
         target.Children.Clear();
         var title = Label(category, 24);
@@ -167,7 +168,7 @@ internal static partial class SettingsCatalog
             [
                 ("Quick Launch", ["QuickLaunchHotkeys"]),
                 ("Dictation", ["MainDictationHotkeys", "CancelProcessingHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
-                ("Recent transcriptions", ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys", "ReadLastTranscriptionHotkeys"]),
+                ("Recent transcriptions", ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys", "PasteLastTranscriptionHotkeys", "ReadLastTranscriptionHotkeys"]),
                 ("Workflow palette", ["WorkflowPaletteHotkeys"]),
                 ("Recorder", ["RecorderToggleHotkeys"])
             ];
@@ -193,6 +194,7 @@ internal static partial class SettingsCatalog
                         "MainDictationHotkeys" => commitDictationHotkeys, "CancelProcessingHotkeys" => commitCancelProcessingHotkeys,
                         "RecentTranscriptionsHotkeys" => commitRecentTranscriptionsHotkeys,
                         "CopyLastTranscriptionHotkeys" => commitCopyLastTranscriptionHotkeys,
+                        "PasteLastTranscriptionHotkeys" => commitPasteLastTranscriptionHotkeys,
                         "ReadLastTranscriptionHotkeys" => commitReadLastTranscriptionHotkeys,
                         "WorkflowPaletteHotkeys" => commitWorkflowPaletteHotkeys,
                         "RecorderToggleHotkeys" => commitRecorderHotkeys,

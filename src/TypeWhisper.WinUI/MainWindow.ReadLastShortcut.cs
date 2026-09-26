@@ -10,7 +10,7 @@ public sealed partial class MainWindow
     private void InitializeReadLastShortcut()
     {
         if (_closing || _profileRestoreClosing) return;
-        _readLastHotkey = new(this, ReadLastTranscription, 0x7E00);
+        _readLastHotkey = new(this, () => ReadLastTranscription(), 0x7E00);
         _readLastShortcutSettings = new(WinUIProfile.DataPath("read-last-transcription-hotkeys.txt"),
             new ReadLastShortcutBackend(_readLastHotkey), ValidateReadLastShortcut, "Read last transcription shortcuts");
         var error = _readLastShortcutSettings.Initialize();
@@ -33,7 +33,7 @@ public sealed partial class MainWindow
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
             return "Already used by Cancel processing.";
-        return RecordingShortcutConflict(value) ?? RecorderShortcutConflict(value) ?? WorkflowPaletteShortcutConflict(value) ?? CopyLastShortcutConflict(value) ?? HistoryShortcutConflict(value) ?? _workflowShortcuts?.Conflict(value);
+        return RecordingShortcutConflict(value) ?? RecorderShortcutConflict(value) ?? WorkflowPaletteShortcutConflict(value) ?? CopyLastShortcutConflict(value) ?? PasteLastShortcutConflict(value) ?? HistoryShortcutConflict(value) ?? _workflowShortcuts?.Conflict(value);
     }
 
     private string? ChangeReadLastShortcut(string value)
@@ -46,14 +46,16 @@ public sealed partial class MainWindow
     }
 
     private long _readLastRevision;
-    private async void ReadLastTranscription()
+    private async void ReadLastTranscription(bool fromTray = false)
     {
         if (_closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing) return;
         if (_dictationInitialization is not { IsCompleted: true } ||
             (!_dictation.SpokenFeedback.IsBusy && (!_dictation.CanChangeProvider || _dictation.Models.Busy)) ||
             _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false })
         {
-            MetricsText.Text = "Finish the current operation before reading the last dictation.";
+            const string busy = "Finish the current operation before reading the last dictation.";
+            MetricsText.Text = busy;
+            if (fromTray) { ShowFromActivation(); ShowActivationNotice(busy); }
             return;
         }
         var revision = ++_readLastRevision;

@@ -23,6 +23,8 @@ public sealed partial class MainWindow
         DisposeRecordingShortcuts();
         _recorderHotkey?.Dispose();
         _copyLastHotkey?.Dispose();
+        _pasteLastHotkey?.Dispose();
+        _foregroundHistory?.Dispose();
         _readLastHotkey?.Dispose();
         var workflowShortcuts = StopWorkflowShortcutsAsync();
         _dictationInput?.Dispose();

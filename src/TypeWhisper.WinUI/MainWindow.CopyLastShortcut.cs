@@ -10,7 +10,7 @@ public sealed partial class MainWindow
     private void InitializeCopyLastShortcut()
     {
         if (_closing || _profileRestoreClosing) return;
-        _copyLastHotkey = new(this, CopyLastTranscription, 0x7C00);
+        _copyLastHotkey = new(this, () => CopyLastTranscription(), 0x7C00);
         _copyLastShortcutSettings = new(WinUIProfile.DataPath("copy-last-transcription-hotkeys.txt"),
             new CopyLastShortcutBackend(_copyLastHotkey), ValidateCopyLastShortcut, "Copy last transcription shortcuts");
         var error = _copyLastShortcutSettings.Initialize();
@@ -33,7 +33,7 @@ public sealed partial class MainWindow
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
             return "Already used by Cancel processing.";
-        return RecordingShortcutConflict(value) ?? RecorderShortcutConflict(value) ?? WorkflowPaletteShortcutConflict(value) ?? ReadLastShortcutConflict(value) ?? HistoryShortcutConflict(value) ?? _workflowShortcuts?.Conflict(value);
+        return RecordingShortcutConflict(value) ?? RecorderShortcutConflict(value) ?? WorkflowPaletteShortcutConflict(value) ?? ReadLastShortcutConflict(value) ?? HistoryShortcutConflict(value) ?? PasteLastShortcutConflict(value) ?? _workflowShortcuts?.Conflict(value);
     }
 
     private string? ChangeCopyLastShortcut(string value)
@@ -45,7 +45,7 @@ public sealed partial class MainWindow
         return error;
     }
 
-    private void CopyLastTranscription()
+    private void CopyLastTranscription(bool fromTray = false)
     {
         var blocked = _closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
@@ -57,7 +57,8 @@ public sealed partial class MainWindow
             global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(content);
         });
         if (result == LastDictationCopyResult.Ignored) return;
-        if (result == LastDictationCopyResult.Busy)
+        // A shortcut keeps focus in the target app; the tray has no other place to show the refusal.
+        if (result == LastDictationCopyResult.Busy && !fromTray)
         {
             MetricsText.Text = "Finish the current operation before copying the last dictation.";
             return;
