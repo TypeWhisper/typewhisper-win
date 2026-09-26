@@ -284,6 +284,21 @@ public sealed class AppImportTests : IDisposable
     }
 
     [WindowsSqliteFact]
+    public async Task CancellationInterruptsNativeSortBeforeTheFirstRow()
+    {
+        var db = CreateDatabase();
+        Execute(db, "DROP TABLE Dictionary; CREATE VIEW Dictionary AS WITH RECURSIVE n(x) AS " +
+            "(SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<100000) " +
+            "SELECT a.x+b.x AS id,'word' AS phrase,NULL AS replacement,0 AS isDeleted,0 AS isSnippet FROM n a CROSS JOIN n b;");
+        sqlite3_close_v2(db);
+        var before = SourceHashes();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        var read = Task.Run(() => WisprImportDatabase.Read(Source, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await read.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(before, SourceHashes());
+    }
+
+    [WindowsSqliteFact]
     public void RealSqliteWrongBooleanTypeFailsWithoutPartialImport()
     {
         var db = CreateDatabase();

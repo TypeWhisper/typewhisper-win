@@ -338,6 +338,7 @@ public sealed partial class SettingsWindow : Window
     private async Task RequestCloseAsync()
     {
         if (!await ConfirmLeaveIntegrationAsync()) return;
+        await ShutdownSetupImportAsync();
         IntegrationDismissed?.Invoke();
         _allowClose = true;
         Close();

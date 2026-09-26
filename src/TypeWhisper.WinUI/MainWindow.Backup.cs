@@ -35,7 +35,7 @@ public sealed partial class MainWindow
             DrainRecoveryViewsAsync(),
             DrainReviewWindowsAsync(),
             _lexicon?.ShutdownAsync() ?? Task.CompletedTask,
-            _settingsWindow?.ShutdownSetupImportAsync() ?? Task.CompletedTask,
+            ShutdownSettingsImportsAsync(),
             _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask,
             _dictation.HistoryRetention.CloseAndDrainAsync(),
             _dictationInput?.Completion ?? Task.CompletedTask);

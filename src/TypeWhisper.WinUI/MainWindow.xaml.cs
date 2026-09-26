@@ -262,7 +262,7 @@ public sealed partial class MainWindow : Window
         var history = HistoryView.ShutdownAsync();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
-        var setupImport = _settingsWindow?.ShutdownSetupImportAsync() ?? Task.CompletedTask;
+        var setupImport = ShutdownSettingsImportsAsync();
         await Task.WhenAll(WinUIPremiumAccount.ShutdownAsync(), WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
             _dictationInitialization ?? Task.CompletedTask, setupImport);
         _liveOverlay?.Close();
@@ -358,6 +358,9 @@ public sealed partial class MainWindow : Window
     private Command? _selected;
     private OverlayWindow? _overlay;
     private SettingsWindow? _settingsWindow;
+    private Task _closedSettingsImports = Task.CompletedTask;
+    private Task ShutdownSettingsImportsAsync() => Task.WhenAll(_closedSettingsImports,
+        _settingsWindow?.ShutdownSetupImportAsync() ?? Task.CompletedTask);
     private bool _technicalDetailsEnabled;
     private bool _isSearchEditing;
     private bool _transcriptPreviewEnabled = true;
@@ -1284,6 +1287,8 @@ public sealed partial class MainWindow : Window
             _settingsWindow.WorkspaceRequested += OpenUtility;
             _settingsWindow.Closed += (_, _) =>
             {
+                // Preserve direct-close drains after the window reference is cleared.
+                _closedSettingsImports = ShutdownSettingsImportsAsync();
                 _settingsWindow?.DetachIntegrationsContent();
                 CloseRecoveryView(recoveryView);
                 _settingsWindow = null;

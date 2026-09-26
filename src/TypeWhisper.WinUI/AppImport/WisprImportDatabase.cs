@@ -15,6 +15,9 @@ internal static class WisprImportDatabase
     [DllImport(Library, ExactSpelling = true)] private static extern int sqlite3_prepare_v2(nint db, byte[] sql, int length, out nint statement, nint tail);
     [DllImport(Library, ExactSpelling = true)] private static extern int sqlite3_step(nint statement);
     [DllImport(Library, ExactSpelling = true)] private static extern int sqlite3_finalize(nint statement);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ProgressCallback(nint argument);
+    [DllImport(Library, ExactSpelling = true, CallingConvention = CallingConvention.Cdecl)]
+    private static extern void sqlite3_progress_handler(nint db, int instructions, ProgressCallback? callback, nint argument);
     [DllImport(Library, ExactSpelling = true)] private static extern int sqlite3_column_type(nint statement, int column);
     [DllImport(Library, ExactSpelling = true)] private static extern nint sqlite3_column_text16(nint statement, int column);
     [DllImport(Library, ExactSpelling = true)] private static extern int sqlite3_column_bytes16(nint statement, int column);
@@ -27,14 +30,19 @@ internal static class WisprImportDatabase
     {
         // READWRITE without CREATE permits rebuilding the WAL index, exclusively inside our scratch folder.
         var opened = sqlite3_open_v2(Utf8(copy), out var db, 2, 0);
+        ProgressCallback progress = _ => cancellationToken.IsCancellationRequested ? 1 : 0;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (opened != 0) throw Unreadable();
+            // Interrupt scans and sorts inside sqlite3_step, before any row is returned.
+            sqlite3_progress_handler(db, 1000, progress, 0);
             if (sqlite3_exec(db, Utf8("PRAGMA query_only=ON; PRAGMA trusted_schema=OFF;"), 0, 0, 0) != 0) throw Unreadable();
             var sql = $"SELECT phrase, replacement, isDeleted, isSnippet FROM Dictionary ORDER BY id COLLATE BINARY LIMIT {MaximumRows + 1}";
             var prepared = sqlite3_prepare_v2(db, Utf8(sql), -1, out var statement, 0);
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (prepared != 0) throw Unreadable();
                 var rows = new List<WisprImportRow>();
                 var characters = 0;
@@ -49,12 +57,21 @@ internal static class WisprImportDatabase
                         throw new InvalidDataException("The source contains more than five million characters of dictionary text. Nothing was imported.");
                     rows.Add(row);
                 }
+                cancellationToken.ThrowIfCancellationRequested();
                 if (result != 101) throw Unreadable();
                 return rows;
             }
             finally { if (statement != 0) sqlite3_finalize(statement); }
         }
-        finally { if (db != 0) sqlite3_close_v2(db); }
+        finally
+        {
+            if (db != 0)
+            {
+                sqlite3_progress_handler(db, 0, null, 0);
+                sqlite3_close_v2(db);
+            }
+            GC.KeepAlive(progress);
+        }
     }
 
     private static string? Text(nint statement, int column, bool optional = false)
