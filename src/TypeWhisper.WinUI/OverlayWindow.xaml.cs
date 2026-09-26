@@ -80,7 +80,7 @@ public sealed partial class OverlayWindow : Window
         SetMode(OverlayMode.Standard, area);
         CorrectionHeading.Text = corrections.Count == 1 ? "Saved to Dictionary" : $"Saved {corrections.Count} corrections to Dictionary";
         CorrectionText.Text = string.Join(" · ", corrections.Select(c => $"{c.Original} → {c.Replacement}"));
-        RecordingLayout.Visibility = DiagnosticsText.Visibility = Visibility.Collapsed;
+        RecordingLayout.Visibility = NoticeText.Visibility = DiagnosticsText.Visibility = Visibility.Collapsed;
         CorrectionFeedback.Visibility = Visibility.Visible;
         CorrectionCountdown.ScaleX = 1;
         IsCorrectionFeedbackVisible = true;
@@ -180,6 +180,7 @@ public sealed partial class OverlayWindow : Window
         _feedbackClock.Reset();
         CorrectionFeedback.Visibility = Visibility.Collapsed;
         RecordingLayout.Visibility = Visibility.Visible;
+        NoticeText.Visibility = Visibility.Collapsed;
         _previewVisible = false;
         _sessionStarted = false;
         _paused = false;
@@ -210,6 +211,8 @@ public sealed partial class OverlayWindow : Window
         WaveformCanvas.Invalidate();
     }
 
+    private static bool HasNotice(DictationOverlayState state) => state.ShowsCancelWarning || state.ShowsCancelled;
+
     private void UpdateStateAppearance()
     {
         if (_runtimeState is not null)
@@ -223,10 +226,20 @@ public sealed partial class OverlayWindow : Window
             StatusText.Text = state.Label;
             StatusText.Foreground = new SolidColorBrush(state.Phase == DictationPhase.Error
                 ? Color.FromArgb(255, 255, 120, 130) : Color.FromArgb(255, 59, 167, 255));
+            var notice = HasNotice(state);
+            if (!IsCorrectionFeedbackVisible)
+            {
+                RecordingLayout.Visibility = notice ? Visibility.Collapsed : Visibility.Visible;
+                NoticeText.Visibility = notice ? Visibility.Visible : Visibility.Collapsed;
+            }
+            NoticeText.Text = notice ? state.AccessibleMessage : "";
+            NoticeText.FontSize = _mode == OverlayMode.Minimal ? 11 : _mode == OverlayMode.Compact ? 12 : 14;
+            NoticeText.Foreground = state.ShowsCancelWarning
+                ? new SolidColorBrush(Color.FromArgb(255, 244, 188, 106)) : (Brush)Application.Current.Resources["TextBrush"];
             RecordingDot.Visibility = state.Phase == DictationPhase.Recording ? Visibility.Visible : Visibility.Collapsed;
             PauseMark.Visibility = Visibility.Collapsed;
-            AutomationProperties.SetName(OverlayRoot, $"{_mode} · {state.Message}");
-            ToolTipService.SetToolTip(OverlayRoot, state.Message);
+            AutomationProperties.SetName(OverlayRoot, $"{_mode} · {state.AccessibleMessage}");
+            ToolTipService.SetToolTip(OverlayRoot, state.AccessibleMessage);
             return;
         }
         StatusText.Text = _paused ? "PAUSED" : "RECORDING";
@@ -251,7 +264,7 @@ public sealed partial class OverlayWindow : Window
         _mode = mode;
         var minimal = mode == OverlayMode.Minimal;
         var compact = mode == OverlayMode.Compact;
-        _logicalWidth = minimal ? 112 : compact ? 280 : WindowWidth;
+        _logicalWidth = minimal ? (_runtimeState?.Invoke() is { } state && HasNotice(state) ? 280 : 112) : compact ? 280 : WindowWidth;
         _logicalHeight = minimal ? 22 : compact ? 36 : WindowHeight;
         OverlayRoot.Padding = minimal ? new Thickness(16, 4, 16, 4) : compact ? new Thickness(12, 6, 12, 6) : new Thickness(14, 10, 14, 10);
         DotHost.Visibility = minimal || compact ? Visibility.Collapsed : Visibility.Visible;
