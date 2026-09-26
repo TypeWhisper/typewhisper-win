@@ -302,7 +302,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel
-            || _dictation.OverlayState.ShowsCancelled)
+            || _dictation.OverlayState.ShowsCancelled || _dictation.OverlayState.ShowsCancelWarning)
         {
             HideOverlayPreview();
             var showTranscript = _dictation.OverlayState.ShouldShowTranscript(_transcriptPreviewEnabled, _dictation.SupportsLiveTranscription);

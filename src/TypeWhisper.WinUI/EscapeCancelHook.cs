@@ -28,7 +28,7 @@ internal sealed class EscapeCancelHook : IDisposable
                 {
                     // The hook runs on the installing UI thread and must return quickly;
                     // callers only record intent here and schedule the cancellation.
-                    var (consume, press) = _filter.Key(down, Environment.TickCount64,
+                    var (consume, press) = _filter.Key(down, key.Time,
                         down && !ShortcutRecorder.AnyEditing && available(), down && ModifiersHeld());
                     if (press) pressed();
                     if (consume) return (IntPtr)1;

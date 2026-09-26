@@ -50,6 +50,8 @@ public sealed partial class MainWindow
         {
             _dictation.CancelWarning = target == TypeWhisper.Presentation.EscapeCancelTarget.Recording
                 ? "Press Esc again to cancel recording" : "Press Esc again to cancel transcription";
+            // Start() alone does not restart a running DispatcherQueueTimer.
+            _escapeWarningTimer?.Stop();
             _escapeWarningTimer?.Start();
             return;
         }

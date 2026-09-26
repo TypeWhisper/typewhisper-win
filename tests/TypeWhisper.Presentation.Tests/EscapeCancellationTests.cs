@@ -106,6 +106,33 @@ public sealed class EscapeCancellationTests : IDisposable
     }
 
     [Fact]
+    public void FilterConsumesLateReleaseOfLongPressWithoutAutoRepeat()
+    {
+        var filter = new EscapeKeyFilter();
+        Assert.Equal((true, true), filter.Key(true, 0, true, false));
+        Assert.Equal((true, false), filter.Key(false, 4000, false, false));
+    }
+
+    [Fact]
+    public void FilterKeepsRepeatsStampedCloseTogetherAsRepeats()
+    {
+        var filter = new EscapeKeyFilter();
+        Assert.Equal((true, true), filter.Key(true, 0, true, false));
+        // Timestamps come from the events, so a hook that runs late does not turn a repeat into a press.
+        for (uint time = 500; time < 5000; time += 33) Assert.Equal((true, false), filter.Key(true, time, true, false));
+        Assert.Equal((true, false), filter.Key(false, 5000, true, false));
+    }
+
+    [Fact]
+    public void FilterHandlesTickCountWrap()
+    {
+        var filter = new EscapeKeyFilter();
+        Assert.Equal((true, true), filter.Key(true, uint.MaxValue - 10, true, false));
+        Assert.Equal((true, false), filter.Key(true, 20, true, false));
+        Assert.Equal((true, true), filter.Key(true, 5000, true, false));
+    }
+
+    [Fact]
     public void MissingPreferencesDefaultToDoubleWithoutCreatingFiles()
     {
         var store = new EscapeCancelPreferencesStore(PreferencesPath);
@@ -155,9 +182,10 @@ public sealed class EscapeCancellationTests : IDisposable
     [Theory]
     [InlineData(1, "PRESS ESC AGAIN")]
     [InlineData(2, "PRESS ESC AGAIN")]
-    [InlineData(0, "READY")]
-    [InlineData(5, "DONE")]
-    public void CancelWarningReplacesLabelOnlyWhileCancellable(int phase, string label)
+    [InlineData(0, "PRESS ESC AGAIN")]
+    [InlineData(5, "PRESS ESC AGAIN")]
+    [InlineData(3, "ERROR")]
+    public void CancelWarningReplacesLabelUnlessDictationFailed(int phase, string label)
     {
         var state = new DictationOverlayState((DictationPhase)phase, TimeSpan.Zero, "Status", "Notepad", CancelWarning: "Press Esc again to cancel recording");
         Assert.Equal(label, state.Label);

@@ -74,18 +74,26 @@ public sealed class EscapeCancelConfirmation
 /// </summary>
 public sealed class EscapeKeyFilter
 {
-    // Auto-repeat arrives well within this gap. A longer silence means the release was lost,
-    // e.g. while Windows skipped a slow hook, so the next key-down is a new press.
-    internal const long LostReleaseMilliseconds = 1500;
+    // Auto-repeat key-downs are stamped well within this gap. A longer gap between two key-downs
+    // means the release was lost, e.g. while Windows skipped a slow hook, so the second is a new press.
+    // A release is never reclassified: without auto-repeat a held key sends no events until it.
+    internal const uint LostReleaseMilliseconds = 1500;
     private bool _down;
     private bool _owned;
-    private long _lastEvent;
+    private uint _lastDown;
 
-    /// <summary>Returns whether to consume the event and whether it is a new handled press.</summary>
-    public (bool Consume, bool Pressed) Key(bool down, long now, bool available, bool modifiersHeld)
+    /// <summary>
+    /// Returns whether to consume the event and whether it is a new handled press.
+    /// <paramref name="time"/> is the event's own tick-count timestamp, not the time the hook runs.
+    /// </summary>
+    public (bool Consume, bool Pressed) Key(bool down, uint time, bool available, bool modifiersHeld)
     {
-        if (_down && now - _lastEvent > LostReleaseMilliseconds) Reset();
-        _lastEvent = now;
+        if (down)
+        {
+            // Unsigned subtraction stays correct across the 49.7-day tick-count wrap.
+            if (_down && unchecked(time - _lastDown) > LostReleaseMilliseconds) Reset();
+            _lastDown = time;
+        }
         if (!down)
         {
             var owned = _owned;

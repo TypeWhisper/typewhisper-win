@@ -6,8 +6,9 @@ internal enum DictationPhase { Idle, Recording, Processing, Error, Configuring, 
 internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Duration, string Message, string TargetApp, uint TargetProcessId = 0,
     RecordingMode RecordingMode = RecordingMode.Hybrid, string? CancelWarning = null, bool Cancelled = false)
 {
-    // A pending Escape warning replaces the phase label until it is confirmed or expires.
-    internal bool ShowsCancelWarning => CancelWarning is not null && Phase is DictationPhase.Recording or DictationPhase.Processing;
+    // A pending Escape warning replaces the phase label until it is confirmed or expires. The owner clears it
+    // once nothing is cancellable, so it also shows while capture is still starting from an earlier phase.
+    internal bool ShowsCancelWarning => CancelWarning is not null && Phase != DictationPhase.Error;
     // After an Escape cancellation the idle overlay briefly confirms it, as on macOS.
     internal bool ShowsCancelled => Cancelled && Phase == DictationPhase.Idle;
     internal string AccessibleMessage => ShowsCancelWarning ? CancelWarning! : ShowsCancelled ? "Cancelled" : Message;
