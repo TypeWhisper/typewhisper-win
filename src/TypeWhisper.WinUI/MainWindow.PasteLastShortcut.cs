@@ -12,8 +12,8 @@ public sealed partial class MainWindow
     {
         if (_closing || _profileRestoreClosing) return;
         _foregroundHistory = new();
-        // The shortcut pastes into the window it was pressed in.
-        _pasteLastHotkey = new(this, () => _ = PasteLastTranscriptionAsync(GetForegroundWindow(), activate: false), 0x8A00);
+        // The shortcut pastes into the app window it was pressed in.
+        _pasteLastHotkey = new(this, () => _ = PasteLastTranscriptionAsync(ForegroundWindowHistory.CurrentTarget, activate: false), 0x8A00);
         _pasteLastShortcutSettings = new(WinUIProfile.DataPath("paste-last-transcription-hotkeys.txt"),
             new PasteLastShortcutBackend(_pasteLastHotkey), ValidatePasteLastShortcut, "Paste last transcription shortcuts");
         var error = _pasteLastShortcutSettings.Initialize();
@@ -50,11 +50,11 @@ public sealed partial class MainWindow
     }
 
     // The tray menu takes the foreground, so it pastes into the last app window used before.
-    internal void PasteLastTranscriptionFromTray() => _ = PasteLastTranscriptionAsync(_foregroundHistory?.LastTarget ?? IntPtr.Zero, activate: true);
+    internal void PasteLastTranscriptionFromTray() => _ = PasteLastTranscriptionAsync(_foregroundHistory?.LastTarget, activate: true);
     internal void CopyLastTranscriptionFromTray() => CopyLastTranscription();
     internal void ReadLastTranscriptionFromTray() => ReadLastTranscription();
 
-    private async Task PasteLastTranscriptionAsync(IntPtr target, bool activate)
+    private async Task PasteLastTranscriptionAsync(PasteTarget? target, bool activate)
     {
         var blocked = _closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
