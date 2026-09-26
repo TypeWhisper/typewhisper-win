@@ -31,6 +31,13 @@ internal sealed partial class LocalDictationSession
         }
     }
 
+    // An unreadable catalog cannot select Transcribe later either, so it keeps the early failure.
+    private static bool AutomaticRuleMayTranscribe()
+    {
+        try { return WorkflowTranscriptionTask.AutomaticRuleMayTranscribe(new ManualWorkflowStore(WinUIProfile.DataPath("workflows.json")).Read()); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
+    }
+
     private Func<string, CancellationToken, Task<string>>? WorkflowProcessor(string? configuredLanguage, string? detectedLanguage)
     {
         var snapshot = _workflowAtStart;

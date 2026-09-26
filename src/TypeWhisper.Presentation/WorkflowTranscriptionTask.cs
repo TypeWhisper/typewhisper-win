@@ -1,4 +1,5 @@
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Presentation;
 
@@ -23,4 +24,9 @@ public static class WorkflowTranscriptionTask
             throw new NotSupportedException("This model cannot translate to English. Choose a translation-capable model in Dictation, or change the transcription task to Transcribe.");
         return task;
     }
+
+    /// <summary>Whether a matching App, Website or Global rule could still replace the global task with Transcribe.</summary>
+    public static bool AutomaticRuleMayTranscribe(IEnumerable<Workflow> workflows) => workflows.Any(workflow => workflow.IsEnabled
+        && workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global
+        && workflow.Behavior.SelectedTask == "transcribe");
 }

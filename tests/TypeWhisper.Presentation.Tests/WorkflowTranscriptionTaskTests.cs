@@ -74,6 +74,21 @@ public sealed class WorkflowTranscriptionTaskTests
     }
 
     [Fact]
+    public void OnlyEnabledAutomaticTranscribeRulesDeferTheEarlyTranslationCheck()
+    {
+        Assert.False(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([]));
+        Assert.False(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([
+            Dictation("transcribe"),
+            Dictation("transcribe", WorkflowTrigger.Manual()),
+            Dictation("transcribe", WorkflowTrigger.Global()) with { IsEnabled = false },
+            Dictation("translate", WorkflowTrigger.App("editor")),
+            Dictation(null, WorkflowTrigger.Global())]));
+        Assert.True(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([Dictation("transcribe", WorkflowTrigger.App("editor"))]));
+        Assert.True(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([Dictation("transcribe", WorkflowTrigger.Website("example.com"))]));
+        Assert.True(WorkflowTranscriptionTask.AutomaticRuleMayTranscribe([Dictation("transcribe", WorkflowTrigger.Global())]));
+    }
+
+    [Fact]
     public async Task NativeTranslationNeedsNoLlmAndNeverChangesGlobalPreference()
     {
         var directory = Path.Combine(Path.GetTempPath(), "workflow-task-" + Guid.NewGuid());
