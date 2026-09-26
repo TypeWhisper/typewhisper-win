@@ -109,7 +109,7 @@ public sealed class ShortcutRecorder : UserControl
             "CopyLastTranscriptionHotkeys" => ("file", "Copy the last dictation from this session"),
             "ReadLastTranscriptionHotkeys" => ("audio", "Read last dictation aloud; press again to stop"),
             "WorkflowPaletteHotkeys" => ("workflow", "Run a text workflow"),
-            "WorkflowSelectedTextHotkeys" => ("workflow", "Process selected text with this workflow · saved when you save the workflow"),
+            "WorkflowSelectedTextHotkeys" => ("workflow", "Activate this workflow · saved when you save the workflow"),
             _ => ("recorder", "Open the audio recorder")
         };
         var layout = new Grid { ColumnSpacing = 14 };

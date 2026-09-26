@@ -661,8 +661,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
                 // Explicit shortcuts can fail before microphone capture. Automatic rules are
                 // resolved below, before any preview, streaming connection or final decoding.
-                _taskAtStart = workflow is null ? globalTaskAtStart
-                    : WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, globalTaskAtStart, SupportsTranslation);
+                _taskAtStart = globalTaskAtStart;
+                if (workflow is not null)
+                {
+                    try { _taskAtStart = WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, globalTaskAtStart, SupportsTranslation); }
+                    catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+                    {
+                        // A previously canceled recording may still own the operation token.
+                        // Report this configuration failure without interpreting it as cancellation.
+                        SetStatus(ex.Message, DictationPhase.Error);
+                        return;
+                    }
+                }
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
