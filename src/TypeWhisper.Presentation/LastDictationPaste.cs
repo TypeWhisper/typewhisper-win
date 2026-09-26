@@ -40,10 +40,17 @@ public static class PasteTargetFilter
     private static readonly HashSet<string> ShellClasses = new(StringComparer.Ordinal)
     {
         "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland",
-        "XamlExplorerHostIslandWindow", "Windows.UI.Core.CoreWindow", "Progman", "WorkerW", "#32768"
+        "XamlExplorerHostIslandWindow", "Progman", "WorkerW", "#32768"
+    };
+    // Start, Search, notifications and the touch keyboard or emoji panel. Their windows share the CoreWindow class
+    // with ordinary UWP apps, so they are recognized by process instead of by class.
+    private static readonly HashSet<string> ShellProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ShellExperienceHost", "StartMenuExperienceHost", "SearchHost", "SearchApp", "TextInputHost"
     };
 
     /// <summary>Whether a foreground window belongs to another app and can hold a text field.</summary>
-    public static bool IsEligible(string? className, uint processId, uint ownProcessId) =>
-        processId != 0 && processId != ownProcessId && !string.IsNullOrEmpty(className) && !ShellClasses.Contains(className);
+    public static bool IsEligible(string? className, string? processName, uint processId, uint ownProcessId) =>
+        processId != 0 && processId != ownProcessId && !string.IsNullOrEmpty(className) && !ShellClasses.Contains(className)
+        && (processName is null || !ShellProcesses.Contains(processName));
 }

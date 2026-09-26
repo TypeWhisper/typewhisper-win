@@ -47,20 +47,27 @@ public sealed class LastDictationPasteTests
     }
 
     [Theory]
-    [InlineData("Notepad", 42u, true)]
-    [InlineData("Chrome_WidgetWin_1", 42u, true)]
-    [InlineData("Notepad", 7u, false)]
-    [InlineData("Notepad", 0u, false)]
-    [InlineData("Shell_TrayWnd", 42u, false)]
-    [InlineData("NotifyIconOverflowWindow", 42u, false)]
-    [InlineData("TopLevelWindowForOverflowXamlIsland", 42u, false)]
-    [InlineData("Progman", 42u, false)]
-    [InlineData("WorkerW", 42u, false)]
-    [InlineData("#32768", 42u, false)]
-    [InlineData("", 42u, false)]
-    [InlineData(null, 42u, false)]
-    public void TrayPasteTargetsOnlyOtherAppWindows(string? className, uint processId, bool eligible)
+    [InlineData("Notepad", "notepad", 42u, true)]
+    [InlineData("Chrome_WidgetWin_1", "chrome", 42u, true)]
+    [InlineData("ApplicationFrameWindow", "ApplicationFrameHost", 42u, true)]
+    [InlineData("Windows.UI.Core.CoreWindow", "SomeUwpApp", 42u, true)]
+    [InlineData("Windows.UI.Core.CoreWindow", "SearchHost", 42u, false)]
+    [InlineData("Windows.UI.Core.CoreWindow", "StartMenuExperienceHost", 42u, false)]
+    [InlineData("Windows.UI.Core.CoreWindow", "ShellExperienceHost", 42u, false)]
+    [InlineData("Windows.UI.Core.CoreWindow", "textinputhost", 42u, false)]
+    [InlineData("Notepad", "notepad", 7u, false)]
+    [InlineData("Notepad", null, 0u, false)]
+    [InlineData("Shell_TrayWnd", "explorer", 42u, false)]
+    [InlineData("CabinetWClass", "explorer", 42u, true)]
+    [InlineData("NotifyIconOverflowWindow", "explorer", 42u, false)]
+    [InlineData("TopLevelWindowForOverflowXamlIsland", "explorer", 42u, false)]
+    [InlineData("Progman", "explorer", 42u, false)]
+    [InlineData("WorkerW", "explorer", 42u, false)]
+    [InlineData("#32768", "explorer", 42u, false)]
+    [InlineData("", "notepad", 42u, false)]
+    [InlineData(null, "notepad", 42u, false)]
+    public void PasteTargetsOnlyOtherAppWindows(string? className, string? processName, uint processId, bool eligible)
     {
-        Assert.Equal(eligible, PasteTargetFilter.IsEligible(className, processId, ownProcessId: 7));
+        Assert.Equal(eligible, PasteTargetFilter.IsEligible(className, processName, processId, ownProcessId: 7));
     }
 }

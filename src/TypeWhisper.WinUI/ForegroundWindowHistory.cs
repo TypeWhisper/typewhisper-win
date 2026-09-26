@@ -42,7 +42,15 @@ internal sealed class ForegroundWindowHistory : IDisposable
         var processId = ProcessOf(window);
         var name = new StringBuilder(256);
         var length = GetClassName(window, name, name.Capacity);
-        return PasteTargetFilter.IsEligible(length > 0 ? name.ToString() : null, processId, OwnProcessId) ? new(window, processId) : null;
+        return PasteTargetFilter.IsEligible(length > 0 ? name.ToString() : null, ProcessName(processId), processId, OwnProcessId)
+            ? new(window, processId) : null;
+    }
+
+    private static string? ProcessName(uint processId)
+    {
+        if (processId == 0) return null;
+        try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); return process.ProcessName; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return null; }
     }
 
     public void Dispose()

@@ -51,8 +51,8 @@ public sealed partial class MainWindow
 
     // The tray menu takes the foreground, so it pastes into the last app window used before.
     internal void PasteLastTranscriptionFromTray() => _ = PasteLastTranscriptionAsync(_foregroundHistory?.LastTarget, activate: true);
-    internal void CopyLastTranscriptionFromTray() => CopyLastTranscription();
-    internal void ReadLastTranscriptionFromTray() => ReadLastTranscription();
+    internal void CopyLastTranscriptionFromTray() => CopyLastTranscription(fromTray: true);
+    internal void ReadLastTranscriptionFromTray() => ReadLastTranscription(fromTray: true);
 
     private async Task PasteLastTranscriptionAsync(PasteTarget? target, bool activate)
     {
