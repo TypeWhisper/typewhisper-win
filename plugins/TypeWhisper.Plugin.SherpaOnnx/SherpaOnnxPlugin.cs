@@ -20,6 +20,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     // The exported encoder fails near 400 seconds; use a lower bound to leave room for feature padding.
     internal const int ParakeetMaximumChunkSeconds = 300;
     internal const int ParakeetChunkOverlapSeconds = 5;
+    // Matches the macOS Canary plugin: 20-second chunks cut at the quietest 100 ms within 5 seconds.
+    internal const int CanaryChunkSeconds = 20;
+    internal const int CanaryChunkSearchSeconds = 5;
+    internal const int CanarySilenceWindowMilliseconds = 100;
     private const int MinimumTranscriptOverlapWords = 2;
     private const int MaximumTranscriptOverlapWords = 40;
     private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main";
@@ -111,7 +115,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.1.2";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -428,7 +432,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
                 var model = GetModelDefinition(_loadedModelId);
 
                 if (model.SupportsTranslation)
+                {
                     EnsureCanaryLanguage(language, translate);
+                    var (canaryText, detectedLanguage) = TranscribeCanarySamples(_recognizer, audioSamples, cancellationToken);
+                    return new PluginTranscriptionResult(canaryText, detectedLanguage, audioDuration, NoSpeechProbability: null);
+                }
 
                 // Long recordings need bounded chunks; single-chunk recordings retain token timings.
                 if (model.Id == "parakeet-tdt-0.6b" && audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
@@ -439,15 +447,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
                 stream.AcceptWaveform(SampleRate, audioSamples);
                 _recognizer.Decode(stream);
                 var result = stream.Result;
-                var rawText = result.Text.Trim();
 
-                var (text, detectedLanguage) = model.SupportsTranslation
-                    ? ParseCanaryResult(rawText)
-                    : (rawText, (string?)null);
-
-                return new PluginTranscriptionResult(text, detectedLanguage, audioDuration, NoSpeechProbability: null)
+                return new PluginTranscriptionResult(result.Text.Trim(), null, audioDuration, NoSpeechProbability: null)
                 {
-                    TokenTimings = !model.SupportsTranslation && result.Tokens is not null && result.Timestamps is not null
+                    TokenTimings = result.Tokens is not null && result.Timestamps is not null
                         ? TypeWhisper.PluginSDK.Helpers.TranscriptionTokenTimings.Create(result.Tokens, result.Timestamps, result.Durations, audioDuration) : []
                 };
             }
@@ -477,6 +480,74 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         }
 
         return transcript;
+    }
+
+    private (string Text, string? DetectedLanguage) TranscribeCanarySamples(
+        OfflineRecognizer recognizer,
+        float[] audioSamples,
+        CancellationToken ct)
+    {
+        var chunks = CreateCanaryChunks(audioSamples);
+        if (chunks.Count > 1)
+            _host?.Log(
+                PluginLogLevel.Info,
+                $"Splitting {audioSamples.Length / (double)SampleRate:F1}s of Canary audio into {chunks.Count} chunks.");
+
+        var transcript = string.Empty;
+        string? detectedLanguage = null;
+        foreach (var chunk in chunks)
+        {
+            ct.ThrowIfCancellationRequested();
+            var samples = chunks.Count == 1 ? audioSamples : audioSamples[chunk.Offset..(chunk.Offset + chunk.Count)];
+            var (text, language) = ParseCanaryResult(RecognizeSamples(recognizer, samples));
+            // Chunks do not overlap, so joining must not drop words that repeat across a boundary.
+            transcript = transcript.Length == 0 ? text : AppendTranscript(transcript, text);
+            detectedLanguage ??= language;
+        }
+
+        return (transcript, detectedLanguage);
+    }
+
+    /// <summary>
+    /// Splits audio for Canary, which was trained on short segments and silently drops or repeats
+    /// speech in longer input. Each cut lands in the quietest window near the target length.
+    /// </summary>
+    internal static IReadOnlyList<(int Offset, int Count)> CreateCanaryChunks(ReadOnlySpan<float> samples)
+    {
+        var chunkSamples = CanaryChunkSeconds * SampleRate;
+        var searchSamples = CanaryChunkSearchSeconds * SampleRate;
+        var halfWindow = SampleRate * CanarySilenceWindowMilliseconds / 2000;
+        var step = SampleRate / 100;
+        var chunks = new List<(int Offset, int Count)>();
+        var start = 0;
+
+        while (samples.Length - start > chunkSamples)
+        {
+            var target = start + chunkSamples;
+            // Keep at least one second on both sides of every cut.
+            var searchStart = Math.Max(start + SampleRate, target - searchSamples);
+            var searchEnd = Math.Min(samples.Length - SampleRate, target + searchSamples);
+            var cut = target;
+            var quietest = double.MaxValue;
+
+            for (var candidate = searchStart; candidate <= searchEnd; candidate += step)
+            {
+                var energy = 0d;
+                foreach (var sample in samples[(candidate - halfWindow)..(candidate + halfWindow)])
+                    energy += sample * sample;
+                if (energy < quietest)
+                {
+                    quietest = energy;
+                    cut = candidate;
+                }
+            }
+
+            chunks.Add((start, cut - start));
+            start = cut;
+        }
+
+        chunks.Add((start, samples.Length - start));
+        return chunks;
     }
 
     private static string RecognizeSamples(OfflineRecognizer recognizer, float[] samples)
