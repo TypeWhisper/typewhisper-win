@@ -22,7 +22,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.1.1", manifest.Version);
+        Assert.Equal("1.1.2", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -521,6 +521,54 @@ public class SherpaOnnxPluginTests
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\sherpa-onnx-c-api.dll", project);
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\onnxruntime.dll", project);
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\sherpaort.dll", project);
+    }
+
+    [Fact]
+    public void CanaryChunks_KeepShortRecordingsWhole()
+    {
+        var samples = new float[SherpaOnnxPlugin.CanaryChunkSeconds * SherpaOnnxPlugin.SampleRate];
+
+        Assert.Equal([(0, samples.Length)], SherpaOnnxPlugin.CreateCanaryChunks(samples));
+    }
+
+    [Fact]
+    public void CanaryChunks_CutLongRecordingsInsidePauses()
+    {
+        const int rate = SherpaOnnxPlugin.SampleRate;
+        // One minute of tone with 300 ms pauses at 13 s, 22 s, 37 s and 55 s.
+        var samples = Enumerable.Range(0, 60 * rate).Select(i => 0.5f * MathF.Sin(i * 0.1f)).ToArray();
+        int[] pauses = [13 * rate, 22 * rate, 37 * rate, 55 * rate];
+        foreach (var pause in pauses)
+            Array.Clear(samples, pause, 3 * rate / 10);
+
+        var chunks = SherpaOnnxPlugin.CreateCanaryChunks(samples);
+
+        Assert.Equal(0, chunks[0].Offset);
+        Assert.Equal(samples.Length, chunks[^1].Offset + chunks[^1].Count);
+        for (var index = 1; index < chunks.Count; index++)
+        {
+            Assert.Equal(chunks[index - 1].Offset + chunks[index - 1].Count, chunks[index].Offset);
+            Assert.Contains(pauses, pause => chunks[index].Offset > pause && chunks[index].Offset < pause + 3 * rate / 10);
+        }
+        Assert.All(chunks, chunk => Assert.InRange(
+            chunk.Count,
+            rate,
+            (SherpaOnnxPlugin.CanaryChunkSeconds + SherpaOnnxPlugin.CanaryChunkSearchSeconds) * rate));
+    }
+
+    [Fact]
+    public void CanaryChunks_LeaveAtLeastOneSecondAfterTheLastCut()
+    {
+        const int rate = SherpaOnnxPlugin.SampleRate;
+        var samples = Enumerable.Range(0, SherpaOnnxPlugin.CanaryChunkSeconds * rate + rate / 2)
+            .Select(i => 0.5f * MathF.Sin(i * 0.1f)).ToArray();
+        // Trailing silence would attract the cut; the final chunk must still be usable.
+        Array.Clear(samples, samples.Length - rate / 4, rate / 4);
+
+        var chunks = SherpaOnnxPlugin.CreateCanaryChunks(samples);
+
+        Assert.Equal(2, chunks.Count);
+        Assert.True(chunks[1].Count >= rate);
     }
 
     private static void CreateParakeetModelFiles(string pluginDataDirectory)
