@@ -69,10 +69,15 @@ public sealed class DictationSnippetSnapshotTests : IDisposable
         store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "disabled", "{clipboard}", Enabled: false));
         var snapshot = DictationSnippetSnapshot.Load(FilePath);
         Assert.False(snapshot.NeedsClipboard("normal disabled"));
+        Assert.False(snapshot.NeedsClipboard("hyperlink links"));
         Assert.True(snapshot.NeedsClipboard("link"));
         var reads = 0;
         Assert.Equal("normal", snapshot.Apply("normal", () => { reads++; return "secret"; }).Text);
         Assert.Equal(0, reads);
+        var unmatched = snapshot.ApplyWithUsage("hyperlink links");
+        Assert.Equal("hyperlink links", unmatched.Text);
+        Assert.Null(unmatched.Error);
+        Assert.Empty(unmatched.AppliedIds);
         Assert.Equal("See https://example.com", snapshot.Apply("link", () => "https://example.com").Text);
         var failed = snapshot.Apply("link");
         Assert.Equal("link", failed.Text);

@@ -113,22 +113,21 @@ public sealed partial class SnippetService : ISnippetService
         Func<string>? clipboardProvider = null, Action<string>? onApplied = null)
     {
         var activeSnippets = snippets
-            .Where(s => s.IsEnabled)
+            .Where(s => s.IsEnabled && !string.IsNullOrEmpty(s.Trigger))
             .OrderByDescending(s => s.Trigger.Length);
 
         foreach (var snippet in activeSnippets)
         {
-            var comparison = snippet.CaseSensitive
-                ? StringComparison.Ordinal
-                : StringComparison.OrdinalIgnoreCase;
-
-            if (!text.Contains(snippet.Trigger, comparison)) continue;
+            // Lookarounds also support triggers that begin or end with punctuation.
+            var pattern = @"(?<!\w)" + Regex.Escape(snippet.Trigger) + @"(?!\w)[.!?]?";
+            var options = RegexOptions.CultureInvariant |
+                (snippet.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
+            var regex = new Regex(pattern, options);
+            if (!regex.IsMatch(text)) continue;
 
             var expanded = ExpandPlaceholders(snippet.Replacement, clipboardProvider);
 
-            var pattern = Regex.Escape(snippet.Trigger) + @"[.!?]?";
-            var options = snippet.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-            text = Regex.Replace(text, pattern, expanded.Replace("$", "$$"), options);
+            text = regex.Replace(text, expanded.Replace("$", "$$"));
 
             onApplied?.Invoke(snippet.Id);
         }

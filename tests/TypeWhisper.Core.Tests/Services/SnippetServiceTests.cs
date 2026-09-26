@@ -219,6 +219,64 @@ public class SnippetServiceTests : IDisposable
         Assert.Equal(expected, result);
     }
 
+    [Theory]
+    [InlineData("btw", "btw", "expanded")]
+    [InlineData("btw", "BTW, bitte", "expanded, bitte")]
+    [InlineData("btw", "(btw)\nbtw!", "(expanded)\nexpanded")]
+    [InlineData("btw", "btw. btw? btw!", "expanded expanded expanded")]
+    [InlineData("btw", "abtw btwx abtwx btw", "abtw btwx abtwx expanded")]
+    [InlineData(";sig", ";sig", "expanded")]
+    [InlineData(";sig", "Bitte ;sig.", "Bitte expanded")]
+    [InlineData("c++", "(c++)", "(expanded)")]
+    [InlineData("[sig]", "[sig]!", "expanded")]
+    [InlineData("backslash sig", "Bitte backslash sig.", "Bitte expanded")]
+    public void ApplySnippets_StandaloneTriggers_Expand(string trigger, string input, string expected)
+    {
+        _sut.AddSnippet(new Snippet { Id = "1", Trigger = trigger, Replacement = "expanded" });
+
+        Assert.Equal(expected, _sut.ApplySnippets(input));
+        Assert.Equal(1, _sut.Snippets[0].UsageCount);
+    }
+
+    [Theory]
+    [InlineData("btw", "abtw")]
+    [InlineData("btw", "btwx")]
+    [InlineData("btw", "abtwx")]
+    [InlineData("btw", "1btw btw2 _btw btw_")]
+    [InlineData("btw", "äbtw btwß")]
+    [InlineData("btw", "btw\u0301")]
+    [InlineData(";sig", "a;sig ;signature")]
+    [InlineData("c++", "abc++ c++17")]
+    [InlineData("[sig]", "sig")]
+    [InlineData("backslash sig", "backslash signature")]
+    [InlineData("backslash sig", "abackslash sig")]
+    [InlineData("", "normal text")]
+    public void ApplySnippets_NonMatchingTriggers_DoNotExpandOrCountUsage(string trigger, string input)
+    {
+        _sut.AddSnippet(new Snippet { Id = "1", Trigger = trigger, Replacement = "{clipboard}" });
+        var clipboardReads = 0;
+
+        var result = _sut.ApplySnippets(input, () => { clipboardReads++; return "expanded"; });
+
+        Assert.Equal(input, result);
+        Assert.Equal(0, clipboardReads);
+        Assert.Equal(0, _sut.Snippets[0].UsageCount);
+        Assert.Equal(0, new SnippetService(_filePath).Snippets[0].UsageCount);
+    }
+
+    [Theory]
+    [InlineData(false, "expanded expanded abtw")]
+    [InlineData(true, "BTW expanded abtw")]
+    public void ApplySnippets_RespectsCaseSensitivityAtWordBoundaries(bool caseSensitive, string expected)
+    {
+        _sut.AddSnippet(new Snippet
+        {
+            Id = "1", Trigger = "btw", Replacement = "expanded", CaseSensitive = caseSensitive
+        });
+
+        Assert.Equal(expected, _sut.ApplySnippets("BTW btw abtw"));
+    }
+
     [Fact]
     public void UpdateSnippet_WithTags_PersistsChanges()
     {
