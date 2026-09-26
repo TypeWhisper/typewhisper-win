@@ -235,6 +235,9 @@ public class SnippetServiceTests : IDisposable
     [InlineData("ありがとう", "本当にありがとうございます", "本当にexpandedございます")]
     [InlineData("サイン", "ここにサインしてください", "ここにexpandedしてください")]
     [InlineData("감사", "감사합니다", "expanded합니다")]
+    [InlineData("𠀀", "𠀁𠀀𠀂", "𠀁expanded𠀂")]
+    [InlineData("foo谢谢", "foo谢谢你", "expanded你")]
+    [InlineData("谢谢bar", "非常谢谢bar", "非常expanded")]
     public void ApplySnippets_StandaloneTriggers_Expand(string trigger, string input, string expected)
     {
         _sut.AddSnippet(new Snippet { Id = "1", Trigger = trigger, Replacement = "expanded" });
@@ -257,6 +260,9 @@ public class SnippetServiceTests : IDisposable
     [InlineData("btw", "btw\U0001D165")]
     [InlineData("btw", "\U0001D7D8btw")]
     [InlineData("btw", "Ⅲbtw btw²")]
+    [InlineData("foo谢谢bar", "xfoo谢谢bary")]
+    [InlineData("foo谢谢", "xfoo谢谢你")]
+    [InlineData("谢谢bar", "非常谢谢bary")]
     [InlineData(";sig", "a;sig ;signature")]
     [InlineData("c++", "abc++ c++17")]
     [InlineData("[sig]", "sig")]
@@ -287,6 +293,30 @@ public class SnippetServiceTests : IDisposable
         });
 
         Assert.Equal(expected, _sut.ApplySnippets("BTW btw abtw"));
+    }
+
+    [Fact]
+    public void ApplySnippets_AdjacentTriggers_UseOriginalBoundaries()
+    {
+        _sut.AddSnippet(new Snippet { Id = "1", Trigger = "hello", Replacement = "Hi" });
+        _sut.AddSnippet(new Snippet { Id = "2", Trigger = "btw", Replacement = "aside" });
+
+        Assert.Equal("Hiaside asideHi", _sut.ApplySnippets("hello.btw btw!hello"));
+        Assert.All(_sut.Snippets, snippet => Assert.Equal(1, snippet.UsageCount));
+    }
+
+    [Fact]
+    public void ApplySnippets_OverlappingTriggers_PreferLongestAndDoNotReprocessReplacement()
+    {
+        _sut.AddSnippet(new Snippet { Id = "1", Trigger = "my signature", Replacement = "sig" });
+        _sut.AddSnippet(new Snippet { Id = "2", Trigger = "signature", Replacement = "{clipboard}" });
+        _sut.AddSnippet(new Snippet { Id = "3", Trigger = "sig", Replacement = "Expanded" });
+        var clipboardReads = 0;
+
+        Assert.Equal("sig Expanded", _sut.ApplySnippets("my signature sig",
+            () => { clipboardReads++; return "unexpected"; }));
+        Assert.Equal(0, clipboardReads);
+        Assert.Equal(0, _sut.Snippets[1].UsageCount);
     }
 
     [Fact]

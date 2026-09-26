@@ -117,16 +117,17 @@ public sealed partial class SnippetService : ISnippetService
         var activeSnippets = snippets
             .Where(s => s.IsEnabled && !string.IsNullOrEmpty(s.Trigger))
             .OrderByDescending(s => s.Trigger.Length);
+        var replacements = new List<(int Start, int End, string Text)>();
+        bool[]? occupied = null;
 
         foreach (var snippet in activeSnippets)
         {
             var comparison = snippet.CaseSensitive
                 ? StringComparison.Ordinal
                 : StringComparison.OrdinalIgnoreCase;
-            var requiresBoundaries = !ContainsScriptWithoutWhitespaceBoundaries(snippet.Trigger);
-            StringBuilder? result = null;
+            var requiresLeftBoundary = !IsScriptWithoutWhitespaceBoundaries(snippet.Trigger.EnumerateRunes().First());
+            var requiresRightBoundary = !IsScriptWithoutWhitespaceBoundaries(snippet.Trigger.EnumerateRunes().Last());
             string? expanded = null;
-            var copiedThrough = 0;
             var searchFrom = 0;
 
             while (searchFrom <= text.Length - snippet.Trigger.Length)
@@ -136,25 +137,36 @@ public sealed partial class SnippetService : ISnippetService
 
                 var end = index + snippet.Trigger.Length;
                 searchFrom = index + 1;
-                if (requiresBoundaries && (IsWordContinuation(text, index - 1) || IsWordContinuation(text, end)))
+                if ((requiresLeftBoundary && IsWordContinuation(text, index - 1)) ||
+                    (requiresRightBoundary && IsWordContinuation(text, end)))
+                    continue;
+                if (occupied is not null && occupied.AsSpan(index, snippet.Trigger.Length).Contains(true))
                     continue;
 
                 expanded ??= ExpandPlaceholders(snippet.Replacement, clipboardProvider);
-                result ??= new StringBuilder();
-                result.Append(text, copiedThrough, index - copiedThrough).Append(expanded);
-                if (end < text.Length && text[end] is '.' or '!' or '?')
+                occupied ??= new bool[text.Length];
+                if (end < text.Length && !occupied[end] && text[end] is '.' or '!' or '?')
                     end++;
-                copiedThrough = end;
+                occupied.AsSpan(index, end - index).Fill(true);
+                replacements.Add((index, end, expanded));
                 searchFrom = end;
             }
 
-            if (result is null) continue;
-            text = result.Append(text, copiedThrough, text.Length - copiedThrough).ToString();
-
-            onApplied?.Invoke(snippet.Id);
+            if (expanded is not null)
+                onApplied?.Invoke(snippet.Id);
         }
 
-        return text;
+        if (replacements.Count == 0) return text;
+
+        // Resolve all matches against the original transcript, keeping longest-trigger priority.
+        var result = new StringBuilder();
+        var copiedThrough = 0;
+        foreach (var replacement in replacements.OrderBy(r => r.Start))
+        {
+            result.Append(text, copiedThrough, replacement.Start - copiedThrough).Append(replacement.Text);
+            copiedThrough = replacement.End;
+        }
+        return result.Append(text, copiedThrough, text.Length - copiedThrough).ToString();
     }
 
     private static bool IsWordContinuation(string text, int index)
@@ -170,12 +182,18 @@ public sealed partial class SnippetService : ISnippetService
             UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
     }
 
-    // Match the dictionary's existing policy for scripts used without whitespace boundaries.
-    private static bool ContainsScriptWithoutWhitespaceBoundaries(string text) =>
-        text.Any(ch => ch is >= '\u3040' and <= '\u30FF' // Hiragana and Katakana
-            or >= '\u3400' and <= '\u9FFF' // CJK ideographs
-            or >= '\uAC00' and <= '\uD7AF' // Hangul syllables
-            or >= '\uF900' and <= '\uFAFF'); // CJK Compatibility Ideographs
+    // Apply the dictionary's boundaryless-script policy independently at each trigger edge.
+    // Supplementary CJK blocks: https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt
+    private static bool IsScriptWithoutWhitespaceBoundaries(Rune rune) =>
+        rune.Value is >= 0x3040 and <= 0x30FF // Hiragana and Katakana
+            or >= 0x3400 and <= 0x4DBF // CJK Extension A
+            or >= 0x4E00 and <= 0x9FFF // CJK ideographs
+            or >= 0xAC00 and <= 0xD7AF // Hangul syllables
+            or >= 0xF900 and <= 0xFAFF // CJK Compatibility Ideographs
+            or >= 0x20000 and <= 0x2A6DF // CJK Extension B
+            or >= 0x2A700 and <= 0x2EE5F // CJK Extensions C-F and I
+            or >= 0x2F800 and <= 0x2FA1F // CJK Compatibility Ideographs Supplement
+            or >= 0x30000 and <= 0x3347F; // CJK Extensions G, H and J
 
     /// <summary>
     /// Exports the current data as JSON.
