@@ -45,7 +45,13 @@ public sealed partial class WorkflowsView
                 : " — process selected text.")
             : _opened.TriggerKind == TypeWhisper.Core.Models.WorkflowTriggerKind.Manual
                 ? "\nManual: enter text below and press the action button. The normal dictation shortcut does not run this workflow." : "";
-        if (_opened.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) { WorkflowExecutionSummary.Text = "No LLM processing" + destination + activation; return; }
+        var recordingTask = _opened.SelectedTask switch
+        {
+            "transcribe" => "\nRecording task: Transcribe.",
+            "translate" => "\nRecording task: Translate to English using a compatible transcription model.",
+            _ => ""
+        };
+        if (_opened.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) { WorkflowExecutionSummary.Text = "No LLM processing" + recordingTask + destination + activation; return; }
         var choice = EffectiveSelection(_opened.ProviderId, _opened.ModelId);
         WorkflowExecutionSummary.Text = EffectiveConfigurationError(_opened.ProviderId, _opened.ModelId)
             ?? (_opened.ProviderId == WorkflowLlmDefaults.Inherit ? "Default LLM: " : "")
@@ -54,7 +60,7 @@ public sealed partial class WorkflowsView
         var memory = string.IsNullOrWhiteSpace(_opened.MemoryPluginId) ? "" : "\nMemory context: "
             + (_session?.PluginRuntime.MemoryProviders.FirstOrDefault(p => p.PluginId == _opened.MemoryPluginId)?.Name ?? "Saved source unavailable")
             + " · matching saved facts are sent to this provider.";
-        WorkflowExecutionSummary.Text += memory + destination + activation;
+        WorkflowExecutionSummary.Text += recordingTask + memory + destination + activation;
     }
     private async void DefaultLlm_Click(object sender, RoutedEventArgs e)
     {

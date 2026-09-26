@@ -150,6 +150,11 @@
                     </StackPanel>
                     <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,12,0,8" />
                     <TextBlock Text="Behavior" FontSize="18" FontWeight="SemiBold" />
+                    <StackPanel x:Name="ConfigTaskSection" Spacing="7" Visibility="Collapsed">
+                        <TextBlock Text="Transcription task" FontSize="12" />
+                        <local:ChoicePicker x:Name="ConfigTask" />
+                        <TextBlock x:Name="ConfigTaskHint" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
                     <ToggleSwitch x:Name="ConfigEnabled" Header="Enable workflow" OnContent="Enabled" OffContent="Disabled"
                         Toggled="ConfigEnabled_Toggled" AutomationProperties.Name="Enable workflow" />
                     <StackPanel Spacing="7">

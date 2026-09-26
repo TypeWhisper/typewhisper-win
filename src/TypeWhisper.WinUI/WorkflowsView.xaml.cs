@@ -129,7 +129,7 @@ public sealed partial class WorkflowsView : UserControl
         TemplateHelp.Child = HelpHeading("Template", _templateHelp);
         InitializeIconPicker();
         ShortcutHelp.Child = HelpHeading("Shortcut", _shortcutHelp);
-        ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides remain unavailable. The selected action target receives the finished workflow result.", 12);
+        ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow and transcription task for one recording, overriding these automatic rules. The selected action target receives the finished workflow result.", 12);
         AppProcessesHelp.Child = SettingsHelp.Label("Windows process names", "Required for App activation; optional for Website activation. Separate process names with commas.", 12);
         WebsiteDomainsHelp.Child = SettingsHelp.Label("Website domains", "Required for Website activation; optional for App activation. Domains include subdomains (example.com also matches mail.example.com). Use commas, without paths or query strings. The browser address is read once before recording; only the hostname can enter saved History. Chrome, Edge, Brave, Chromium and Firefox require a recognized address bar. Missing context leaves app/global fallback rules available.", 12);
         ContextModeHelp.Child = SettingsHelp.Label("App and website conditions", "Match all requires an app from your list AND a domain from your list. Match any allows either component, so the app rule can still run when a browser address is unavailable.", 12);
@@ -145,6 +145,8 @@ public sealed partial class WorkflowsView : UserControl
         ConfigActionTarget.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTrigger.Configure("Activation", "workflow", "Workflow activation");
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
+        ConfigTask.Configure("Transcription task", "microphone", "Workflow transcription task");
+        ConfigTask.SelectionChanged += _ => UpdateConfigurationState();
         ConfigContextMode.Configure("App and website conditions", "workflow", "Workflow context match mode");
         ConfigContextMode.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTemplate.SelectionChanged += _ =>
@@ -414,12 +416,17 @@ public sealed partial class WorkflowsView : UserControl
 
     private IReadOnlyList<Choice> Models => _session?.LlmProviders.FirstOrDefault(p => p.SelectionId == ConfigProvider.SelectedId)?.Models
         .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
+    private bool ConfigUsesRecordingTask => ConfigTrigger.SelectedId is "DictationHotkey" or "App" or "Website" or "Global";
+    private string? ConfigSelectedTask => ConfigUsesRecordingTask
+        ? (string.IsNullOrEmpty(ConfigTask.SelectedId) ? null : ConfigTask.SelectedId)
+        : ConfigTrigger.SelectedId == _opened?.ActivationId ? _opened.SelectedTask : null;
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
         || _draftIcon != _opened.IconKind
         || ConfigTrigger.SelectedId != _opened.ActivationId || ConfigAppProcesses.Text != _opened.AppProcesses
         || DraftHotkeys != _opened.Hotkeys
+        || ConfigSelectedTask != (string.IsNullOrWhiteSpace(_opened.SelectedTask) ? null : _opened.SelectedTask)
         || ConfigWebsiteDomains.Text != _opened.WebsiteDomains || ConfigContextMode.SelectedId != _opened.ContextMatchMode.ToString()
         || ConfigPriority.Text != _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
         || ConfigTemplate.SelectedId != _opened.Template.ToString() || ConfigTranslationTarget.Text != (_opened.TranslationTarget ?? "")
@@ -517,6 +524,10 @@ public sealed partial class WorkflowsView : UserControl
             new("App", "App", "Apply to dictation in matching Windows processes"),
             new("Website", "Website", "Apply to dictation on matching browser domains"),
             new("Global", "Global fallback", "Apply when no app or website rule matches")], activation ?? _opened.ActivationId);
+        ConfigTask.SetOptions([
+            new("", "Use global setting", "Use the transcription task selected in Dictation"),
+            new("transcribe", "Transcribe", "Keep speech in its original language"),
+            new("translate", "Translate to English", "Use the transcription model's native English translation")], string.IsNullOrWhiteSpace(_opened.SelectedTask) ? "" : _opened.SelectedTask);
         ConfigAppProcesses.Text = _opened.AppProcesses;
         _shortcutDraft["WorkflowSelectedTextHotkeys"] = _opened.Hotkeys;
         ConfigShortcutHost.Children.Clear();
@@ -572,6 +583,10 @@ public sealed partial class WorkflowsView : UserControl
             ? "Focus a text field in another app. Press this shortcut to start recording and press again to stop. The transcript is processed by this workflow using your dictation paste and History settings."
             : "Select text in another app, then press this shortcut to send it to the configured provider. The result opens for review. Nothing is pasted or saved to History.");
         var contextual = ConfigTrigger.SelectedId is "App" or "Website";
+        ConfigTaskSection.Visibility = ConfigUsesRecordingTask ? Visibility.Visible : Visibility.Collapsed;
+        ConfigTaskHint.Text = "Applies only to this recording. Native translation outputs English and requires a compatible transcription model. With Dictation Only, no LLM is needed; local models work offline."
+            + (ConfigTask.SelectedId == "translate" && _session?.SupportsTranslation != true
+                ? " The current model cannot translate to English. Choose a compatible model in Dictation before running this workflow." : "");
         ConfigShortcutSection.Visibility = ConfigTrigger.SelectedId is "Hotkey" or "DictationHotkey" ? Visibility.Visible : Visibility.Collapsed;
         ConfigAppSection.Visibility = ConfigWebsiteSection.Visibility = contextual ? Visibility.Visible : Visibility.Collapsed;
         ConfigContextSection.Visibility = contextual && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Visibility.Visible : Visibility.Collapsed;
@@ -612,6 +627,7 @@ public sealed partial class WorkflowsView : UserControl
             Priority = int.Parse(ConfigPriority.Text),
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
+            SelectedTask = ConfigSelectedTask,
             TargetActionPluginId = string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? null : ConfigActionTarget.SelectedId,
             MemoryPluginId = string.IsNullOrEmpty(ConfigMemory.SelectedId) ? null : ConfigMemory.SelectedId,
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,

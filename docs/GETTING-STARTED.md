@@ -57,5 +57,22 @@ configured LLM, and send output to an enabled action plugin. A workflow that
 requires an unavailable provider reports that problem rather than choosing
 another service silently. Memory context is explicitly selected per workflow.
 
+To switch between normal dictation and native English translation with separate
+shortcuts, create two **Dictation Only** workflows. Set both to **Shortcut ·
+dictation**, assign different shortcuts, and select **Transcribe** for one and
+**Translate to English** for the other under **Transcription task**. Press a
+workflow shortcut once to start recording and again to stop.
+
+The task applies only to that recording. **Use global setting** keeps the task
+selected in Dictation; existing workflows use this default. App, Website and
+Global fallback workflows can also select a recording task.
+
+Native translation produces English directly with the selected transcription
+model, without an LLM. Local models work offline after download. Choose a
+translation-capable model: Whisper's English-only and Large V3 Turbo models
+(including quantized Turbo) cannot translate. An incompatible model stops the
+workflow with an explanation. The **Translation** template instead translates
+text through a configured LLM and can target other languages.
+
 For scripts and external tools, start with the [CLI guide](WINDOWS-CLI.md).
 It explains how to enable the local HTTP API and install the bundled command.

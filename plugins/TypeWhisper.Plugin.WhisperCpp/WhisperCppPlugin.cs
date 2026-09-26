@@ -147,7 +147,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.20";
+    public string PluginVersion => "1.2.21";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -172,7 +172,10 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets whether the provider supports translation requests.
     /// </summary>
-    public bool SupportsTranslation => _selectedModelId?.EndsWith(".en", StringComparison.Ordinal) != true;
+    public bool SupportsTranslation => _selectedModelId is { } modelId
+        && Models.Any(model => model.Id == modelId)
+        && !modelId.EndsWith(".en", StringComparison.Ordinal)
+        && !modelId.StartsWith("large-v3-turbo", StringComparison.Ordinal);
     /// <summary>
     /// Gets whether the provider can download models through the host.
     /// </summary>
@@ -521,6 +524,8 @@ public sealed partial class WhisperCppPlugin :
         try
         {
             var modelId = _selectedModelId ?? throw new InvalidOperationException("Select a downloaded model before transcribing.");
+            if (translate && !SupportsTranslation)
+                throw new NotSupportedException("This Whisper model cannot translate to English. Choose a multilingual model other than Turbo.");
             await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false);
 
             var builder = _factory!.CreateBuilder()

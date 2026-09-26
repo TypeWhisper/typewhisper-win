@@ -145,12 +145,32 @@ public partial class WhisperCppPluginTests
 
     [Theory]
     [InlineData("tiny.en", false)]
-    [InlineData("large-v3-turbo", true)]
-    public void TranslationRequiresMultilingualWeights(string model, bool supported)
+    [InlineData("small.en", false)]
+    [InlineData("large-v3-turbo", false)]
+    [InlineData("large-v3-turbo-q5_0", false)]
+    [InlineData("tiny", true)]
+    [InlineData("medium", true)]
+    [InlineData("medium-q5_0", true)]
+    public void TranslationRequiresTranslationTrainedWeights(string model, bool supported)
     {
         using var plugin = new WhisperCppPlugin();
         plugin.SelectModel(model);
         Assert.Equal(supported, plugin.SupportsTranslation);
+    }
+
+    [Theory]
+    [InlineData("tiny.en")]
+    [InlineData("large-v3-turbo")]
+    [InlineData("large-v3-turbo-q5_0")]
+    public async Task UnsupportedTranslationFailsBeforeLoadingModel(string model)
+    {
+        using var plugin = new WhisperCppPlugin();
+        plugin.SelectModel(model);
+        var pcmError = await Assert.ThrowsAsync<NotSupportedException>(() =>
+            plugin.TranscribePcmAsync(new float[160], "de", true, default));
+        Assert.Contains("cannot translate to English", pcmError.Message);
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            plugin.TranscribeAsync([], "de", true, null, default));
     }
 
     [Fact]

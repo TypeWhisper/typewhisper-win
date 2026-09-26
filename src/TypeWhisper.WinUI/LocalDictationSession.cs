@@ -58,10 +58,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal event Action<Guid>? OutputCompleted;
     internal bool LivePreviewEnabled { get; set; } = true;
     // Availability describes the host's connected preview path, not just an SDK streaming declaration.
-    internal bool SupportsLiveTranscription => (UsesRegistryProvider
+    private bool ModelSupportsLiveTranscription => UsesRegistryProvider
         ? ActiveRegistryProvider is { SupportsStreaming: true } || (ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId))
-        : Models.SupportsLocalLivePreview) &&
-        TranscriptionTaskPreferences.Current == TranscriptionTask.Transcribe;
+        : Models.SupportsLocalLivePreview;
+    internal bool SupportsLiveTranscription => ModelSupportsLiveTranscription &&
+        (_audio.IsRecording ? _taskAtStart : TranscriptionTaskPreferences.Current) == TranscriptionTask.Transcribe;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _silenceTimer;
@@ -657,12 +658,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
-                if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)
-                {
-                    SetStatus("This model cannot translate to English. Choose Transcribe or a translation-capable model in Dictation.");
-                    return;
-                }
-                _taskAtStart = TranscriptionTaskPreferences.Current;
+                var globalTaskAtStart = TranscriptionTaskPreferences.Current;
+                // Explicit shortcuts can fail before microphone capture. Automatic rules are
+                // resolved below, before any preview, streaming connection or final decoding.
+                _taskAtStart = workflow is null ? globalTaskAtStart
+                    : WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, globalTaskAtStart, SupportsTranslation);
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
@@ -701,7 +701,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 LivePreviewText = "";
                 _hasConfirmedPreviewText = false;
                 preparingRecording = true;
-                if (LivePreviewEnabled && SupportsLiveTranscription && UsesRegistryProvider &&
+                // Buffer locally while context matching is pending, even if the global task
+                // is Translate: the matched workflow may explicitly request Transcribe.
+                if (LivePreviewEnabled && ModelSupportsLiveTranscription && UsesRegistryProvider &&
                     ActiveRegistryProvider is { SupportsStreaming: true }) _streamAudio.Begin();
                 if (preferences.SilenceAutoStopEnabled)
                 {
@@ -742,6 +744,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
                 else if (workflow is null) await CaptureWorkflowAtStartAsync();
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
+                _taskAtStart = WorkflowTranscriptionTask.Resolve(_workflowAtStart?.SelectedTask, globalTaskAtStart, SupportsTranslation);
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();

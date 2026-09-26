@@ -2,7 +2,7 @@
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.20`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
+Version `1.2.21`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.2`.
 Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -10,6 +10,8 @@ Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 Download a model explicitly, select the processing device and save the settings, then load the model. The shared Save button persists the processing-device choice. Model download, use and removal remain explicit actions. GPU capability and driver requirements must be checked on the target machine.
 
 This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
+
+Native translation outputs English. Version 1.2.21 rejects translation with English-only or Large V3 Turbo weights, including quantized Turbo, before loading the model. Use a multilingual non-Turbo model such as Small or Medium for translation.
 
 ## Source and platform scope
 
