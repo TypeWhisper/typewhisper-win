@@ -169,7 +169,7 @@ public sealed partial class SnippetService : ISnippetService
         return result.Append(text, copiedThrough, text.Length - copiedThrough).ToString();
     }
 
-    private static bool IsWordContinuation(string text, int index)
+    private static bool IsWordContinuation(string text, int index, bool includeApostrophes = true)
     {
         if (index < 0 || index >= text.Length) return false;
         // Decode the preceding scalar from its low surrogate when checking a left boundary.
@@ -177,7 +177,12 @@ public sealed partial class SnippetService : ISnippetService
             index--;
         if (!Rune.TryGetRuneAt(text, index, out var rune)) return false;
 
-        return Rune.IsLetter(rune) || Rune.IsNumber(rune) || Rune.GetUnicodeCategory(rune) is
+        // Internal apostrophes join contractions; surrounding quotation marks remain separators.
+        if (includeApostrophes && rune.Value is '\'' or '\u2018' or '\u2019')
+            return IsWordContinuation(text, index - 1, false) && IsWordContinuation(text, index + 1, false);
+
+        return rune.Value is 0x200C or 0x200D || // ZWNJ and ZWJ can occur inside orthographic words.
+            Rune.IsLetter(rune) || Rune.IsNumber(rune) || Rune.GetUnicodeCategory(rune) is
             UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or
             UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
     }
