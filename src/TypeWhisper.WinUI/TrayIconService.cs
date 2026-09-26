@@ -58,12 +58,11 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(_pauseHotkeys);
         menu.Items.Add(CreateItem("Transcribe file…", "\uE8A5", files));
         menu.Items.Add(CreateItem("Review recovery recordings…", "\uE777", recovery));
-        var recent = new MenuFlyoutSubItem { Text = "Last transcription", FontSize = 13 };
+        // Flat items like the macOS menu; a submenu cannot open beside the tray menu's own window.
         // Paste targets the app window used before the tray menu opened.
-        recent.Items.Add(CreateItem("Paste", "\uE77F", pasteLast));
-        recent.Items.Add(CreateItem("Copy", "\uE8C8", copyLast));
-        recent.Items.Add(CreateItem("Read back", "\uE767", readLast));
-        menu.Items.Add(recent);
+        menu.Items.Add(CreateItem("Paste last transcription", "\uE77F", pasteLast));
+        menu.Items.Add(CreateItem("Copy last transcription", "\uE8C8", copyLast));
+        menu.Items.Add(CreateItem("Read back last transcription", "\uE767", readLast));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(CreateItem("Check for updates…", "\uE895", updates));
         menu.Items.Add(new MenuFlyoutSeparator());
