@@ -701,7 +701,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _targetApp = TargetProcessName(processId);
                     if (_setupOutputAtStart is null) { await CaptureWorkflowAtStartAsync(); ruleMatched = true; }
                     if (_disposed) return;
-                    if (RejectTask(ruleMatched ? _workflowAtStart?.SelectedTask : null, globalTaskAtStart))
+                    if (RejectTask(ruleMatched ? WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart) : null, globalTaskAtStart))
                     {
                         await previousRecordingWork;
                         return;
@@ -760,7 +760,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
                 else if (workflow is null) { if (!ruleMatched) await CaptureWorkflowAtStartAsync(); }
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
-                var resolvedTask = WorkflowTranscriptionTask.Resolve(_workflowAtStart?.SelectedTask, globalTaskAtStart, SupportsTranslation);
+                var resolvedTask = WorkflowTranscriptionTask.Resolve(WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart), globalTaskAtStart, SupportsTranslation);
                 // The overlay configured live preview for the global task when recording began.
                 if (resolvedTask != _taskAtStart) { _taskAtStart = resolvedTask; Changed?.Invoke(); }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);

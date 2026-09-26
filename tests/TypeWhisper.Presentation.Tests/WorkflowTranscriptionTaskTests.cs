@@ -45,15 +45,30 @@ public sealed class WorkflowTranscriptionTaskTests
     [InlineData("summarize")]
     [InlineData("Translate")]
     [InlineData("1")]
-    public void UnknownTaskIsRejectedByAllRecordingEntryPoints(string task)
+    public void UnknownTaskIsRejectedOrFallsBackToTranscriptReview(string task)
     {
         Assert.False(ManualWorkflowStore.IsDictationShortcut(Dictation(task)));
         Assert.Throws<InvalidOperationException>(() => AutomaticWorkflowSnapshot.ForDictationShortcut(Dictation(task)));
         Assert.Throws<InvalidOperationException>(() => AutomaticWorkflowSnapshot.ForApi(Dictation(task, WorkflowTrigger.Manual())));
         Assert.Throws<InvalidOperationException>(() => WorkflowTranscriptionTask.Resolve(task, TranscriptionTask.Transcribe, true));
+        // An unsupported automatic rule still records for transcript review, using the global task.
         var snapshot = AutomaticWorkflowSnapshot.Select([Dictation(task, WorkflowTrigger.Global())], "editor")!;
         Assert.NotNull(snapshot.Error);
-        Assert.Throws<InvalidOperationException>(() => WorkflowTranscriptionTask.Resolve(snapshot.SelectedTask, TranscriptionTask.Transcribe, true));
+        Assert.Null(WorkflowTranscriptionTask.SelectedTaskFor(snapshot));
+        Assert.Equal(TranscriptionTask.Translate,
+            WorkflowTranscriptionTask.Resolve(WorkflowTranscriptionTask.SelectedTaskFor(snapshot), TranscriptionTask.Translate, true));
+    }
+
+    [Fact]
+    public void UnsupportedAutomaticRuleDoesNotApplyItsTask()
+    {
+        var rule = Dictation("translate", WorkflowTrigger.Global()) with { Output = new() { AutoEnter = true } };
+        var snapshot = AutomaticWorkflowSnapshot.Select([rule], "editor")!;
+        Assert.NotNull(snapshot.Error);
+        Assert.Equal(TranscriptionTask.Transcribe,
+            WorkflowTranscriptionTask.Resolve(WorkflowTranscriptionTask.SelectedTaskFor(snapshot), TranscriptionTask.Transcribe, false));
+        Assert.Equal("translate", WorkflowTranscriptionTask.SelectedTaskFor(AutomaticWorkflowSnapshot.ForDictationShortcut(Dictation("translate"))));
+        Assert.Null(WorkflowTranscriptionTask.SelectedTaskFor(null));
     }
 
     [Fact]

@@ -26,6 +26,13 @@ public static class WorkflowTranscriptionTask
     }
 
     /// <summary>
+    /// The task a matched workflow requests. An unsupported automatic rule already falls back to
+    /// transcript review without applying its settings, so its task cannot block recording.
+    /// </summary>
+    public static string? SelectedTaskFor(AutomaticWorkflowSnapshot? workflow) =>
+        workflow is { Error: null } ? workflow.SelectedTask : null;
+
+    /// <summary>
     /// Whether the matching App, Website or Global rule decides if a model without translation can record:
     /// a rule may request Translate, or select Transcribe instead of an unsupported global translation.
     /// </summary>
