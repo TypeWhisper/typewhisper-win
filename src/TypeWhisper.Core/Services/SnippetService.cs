@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -118,22 +120,62 @@ public sealed partial class SnippetService : ISnippetService
 
         foreach (var snippet in activeSnippets)
         {
-            // Lookarounds also support triggers that begin or end with punctuation.
-            var pattern = @"(?<!\w)" + Regex.Escape(snippet.Trigger) + @"(?!\w)[.!?]?";
-            var options = RegexOptions.CultureInvariant |
-                (snippet.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
-            var regex = new Regex(pattern, options);
-            if (!regex.IsMatch(text)) continue;
+            var comparison = snippet.CaseSensitive
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+            var requiresBoundaries = !ContainsScriptWithoutWhitespaceBoundaries(snippet.Trigger);
+            StringBuilder? result = null;
+            string? expanded = null;
+            var copiedThrough = 0;
+            var searchFrom = 0;
 
-            var expanded = ExpandPlaceholders(snippet.Replacement, clipboardProvider);
+            while (searchFrom <= text.Length - snippet.Trigger.Length)
+            {
+                var index = text.IndexOf(snippet.Trigger, searchFrom, comparison);
+                if (index < 0) break;
 
-            text = regex.Replace(text, expanded.Replace("$", "$$"));
+                var end = index + snippet.Trigger.Length;
+                searchFrom = index + 1;
+                if (requiresBoundaries && (IsWordContinuation(text, index - 1) || IsWordContinuation(text, end)))
+                    continue;
+
+                expanded ??= ExpandPlaceholders(snippet.Replacement, clipboardProvider);
+                result ??= new StringBuilder();
+                result.Append(text, copiedThrough, index - copiedThrough).Append(expanded);
+                if (end < text.Length && text[end] is '.' or '!' or '?')
+                    end++;
+                copiedThrough = end;
+                searchFrom = end;
+            }
+
+            if (result is null) continue;
+            text = result.Append(text, copiedThrough, text.Length - copiedThrough).ToString();
 
             onApplied?.Invoke(snippet.Id);
         }
 
         return text;
     }
+
+    private static bool IsWordContinuation(string text, int index)
+    {
+        if (index < 0 || index >= text.Length) return false;
+        // Decode the preceding scalar from its low surrogate when checking a left boundary.
+        if (char.IsLowSurrogate(text[index]) && index > 0 && char.IsHighSurrogate(text[index - 1]))
+            index--;
+        if (!Rune.TryGetRuneAt(text, index, out var rune)) return false;
+
+        return Rune.IsLetter(rune) || Rune.IsNumber(rune) || Rune.GetUnicodeCategory(rune) is
+            UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or
+            UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
+    }
+
+    // Match the dictionary's existing policy for scripts used without whitespace boundaries.
+    private static bool ContainsScriptWithoutWhitespaceBoundaries(string text) =>
+        text.Any(ch => ch is >= '\u3040' and <= '\u30FF' // Hiragana and Katakana
+            or >= '\u3400' and <= '\u9FFF' // CJK ideographs
+            or >= '\uAC00' and <= '\uD7AF' // Hangul syllables
+            or >= '\uF900' and <= '\uFAFF'); // CJK Compatibility Ideographs
 
     /// <summary>
     /// Exports the current data as JSON.

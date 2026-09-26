@@ -230,6 +230,11 @@ public class SnippetServiceTests : IDisposable
     [InlineData("c++", "(c++)", "(expanded)")]
     [InlineData("[sig]", "[sig]!", "expanded")]
     [InlineData("backslash sig", "Bitte backslash sig.", "Bitte expanded")]
+    [InlineData("btw", "😀btw😀", "😀expanded😀")]
+    [InlineData("谢谢", "非常谢谢你", "非常expanded你")]
+    [InlineData("ありがとう", "本当にありがとうございます", "本当にexpandedございます")]
+    [InlineData("サイン", "ここにサインしてください", "ここにexpandedしてください")]
+    [InlineData("감사", "감사합니다", "expanded합니다")]
     public void ApplySnippets_StandaloneTriggers_Expand(string trigger, string input, string expected)
     {
         _sut.AddSnippet(new Snippet { Id = "1", Trigger = trigger, Replacement = "expanded" });
@@ -245,6 +250,13 @@ public class SnippetServiceTests : IDisposable
     [InlineData("btw", "1btw btw2 _btw btw_")]
     [InlineData("btw", "äbtw btwß")]
     [InlineData("btw", "btw\u0301")]
+    [InlineData("क", "का")]
+    [InlineData("btw", "btw\u20DD")]
+    [InlineData("btw", "𐐀btw")]
+    [InlineData("btw", "btw𐐀")]
+    [InlineData("btw", "btw\U0001D165")]
+    [InlineData("btw", "\U0001D7D8btw")]
+    [InlineData("btw", "Ⅲbtw btw²")]
     [InlineData(";sig", "a;sig ;signature")]
     [InlineData("c++", "abc++ c++17")]
     [InlineData("[sig]", "sig")]
