@@ -49,6 +49,7 @@ public sealed class DictationOverlayStateTests
     [InlineData(2, "TRANSCRIBING")]
     [InlineData(3, "ERROR")]
     [InlineData(6, "LOADING MODEL")]
+    [InlineData(7, "COPIED")]
     public void RuntimeStateRetainsRealSessionData(int phase, string label)
     {
         var state = new DictationOverlayState((DictationPhase)phase, TimeSpan.FromSeconds(12), "Session status", "Notepad");
@@ -56,5 +57,14 @@ public sealed class DictationOverlayStateTests
         Assert.Equal("Notepad", state.TargetApp);
         Assert.Equal(TimeSpan.FromSeconds(12), state.Duration);
         Assert.Equal("Session status", state.Message);
+    }
+
+    [Fact]
+    public void BlockedPasteNoticeIsNotReplacedByAnEscapeWarning()
+    {
+        // A blocked paste has nothing left to cancel; its clipboard notice must stay readable.
+        var state = new DictationOverlayState(DictationPhase.Copied, TimeSpan.Zero, "Not inserted", "Notepad", CancelWarning: "Press Esc again");
+        Assert.False(state.ShowsCancelWarning);
+        Assert.Equal("COPIED", state.Label);
     }
 }

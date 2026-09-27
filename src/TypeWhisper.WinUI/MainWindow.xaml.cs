@@ -128,8 +128,7 @@ public sealed partial class MainWindow : Window
                 async () =>
                 {
                     _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
-                    await _dictation.StartAsync();
-                    ShowTaskStartError();
+                    ShowTaskStartError(await _dictation.StartAsync());
                 },
                 _dictation.StopAsync, _dictation.CancelAsync,
                 () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanStartFromShortcut,
@@ -305,7 +304,7 @@ public sealed partial class MainWindow : Window
         UpdateTranscriptToggle();
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
         if (_liveOverlay?.IsCorrectionFeedbackVisible == true &&
-            _dictation.OverlayState.Phase is not (DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.LoadingModel)) return;
+            _dictation.OverlayState.Phase is not (DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Copied or DictationPhase.LoadingModel)) return;
         if (_dictation.OverlayState.Phase != DictationPhase.Completed) _completedPreviewExpired = false;
         else if (_completedPreviewExpired) return;
         else if (OverlayPreferences.PreviewBubbleAutoHideMilliseconds == 0)
@@ -314,7 +313,7 @@ public sealed partial class MainWindow : Window
             _liveOverlay?.HidePreview();
             return;
         }
-        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel
+        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Copied or DictationPhase.Completed or DictationPhase.LoadingModel
             || _dictation.OverlayState.ShowsCancelled || _dictation.OverlayState.ShowsCancelWarning)
         {
             HideOverlayPreview();
@@ -328,7 +327,7 @@ public sealed partial class MainWindow : Window
             _liveOverlay.SetMode(_overlayMode, ResolveOverlayDisplayArea());
             _liveOverlay.ActivateWithoutTakingFocus();
             _liveOverlay.SetTechnicalDetailsEnabled(_technicalDetailsEnabled);
-            if (_dictation.OverlayState.Phase == DictationPhase.Error) _ = HideErrorOverlayAsync(revision);
+            if (_dictation.OverlayState.Phase is DictationPhase.Error or DictationPhase.Copied) _ = HideErrorOverlayAsync(revision);
         }
         else
         {
@@ -383,7 +382,7 @@ public sealed partial class MainWindow : Window
         var review = new DictationReviewWindow(result, _dictation.PluginRuntime);
         _reviewWindows.Add(review);
         review.Closed += (_, _) => _reviewWindows.Remove(review);
-        review.Activate();
+        review.ShowInFront();
     }
 
     private readonly List<DictationReviewWindow> _reviewWindows = [];

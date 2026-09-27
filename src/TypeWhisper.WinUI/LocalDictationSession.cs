@@ -580,9 +580,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal static bool CorrectionProbeEnabled => WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_CORRECTION_PROBE") == "1";
 #endif
     internal nint TrayMenuHandle { get; set; }
-    internal Task StartForApiAsync(AutomaticWorkflowSnapshot? workflow, Action<long> captureStarted) => SetRecordingAsync(true, workflow, captureStarted);
-    internal Task StartAsync() => SetRecordingAsync(true);
-    internal Task StartAsync(AutomaticWorkflowSnapshot workflow) => SetRecordingAsync(true, workflow);
+    // Each start returns only its own task rejection; a concurrent or ignored start cannot see or erase another's.
+    internal Task<string?> StartForApiAsync(AutomaticWorkflowSnapshot? workflow, Action<long> captureStarted) => StartWithRejectionAsync(workflow, captureStarted);
+    internal Task<string?> StartAsync() => StartWithRejectionAsync(null, null);
+    internal Task<string?> StartAsync(AutomaticWorkflowSnapshot workflow) => StartWithRejectionAsync(workflow, null);
+    private async Task<string?> StartWithRejectionAsync(AutomaticWorkflowSnapshot? workflow, Action<long>? captureStarted)
+    {
+        string? rejection = null;
+        await SetRecordingAsync(true, workflow, captureStarted, error => rejection = error);
+        return rejection;
+    }
     private bool _stopPending;
     internal async Task StopAsync()
     {
@@ -614,7 +621,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         finally { _effects.End(); _gate.Release(); }
     }
 
-    private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null)
+    private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null,
+        Action<string>? rejected = null)
     {
         if (_disposed) return;
         // An API-started capture can bypass the input coordinator. Preserve explicit
@@ -656,7 +664,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Task previousRecordingWork = Task.CompletedTask;
         try
         {
-            TaskStartError = null;
             if (recording.HasValue && recording.Value == _audio.IsRecording) return;
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
@@ -669,7 +676,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 // preview, streaming connection or final decoding.
                 var matchRuleBeforeCapture = workflow is null && AutomaticRuleDecidesTask(globalTaskAtStart);
                 var ruleMatched = false;
-                if (!matchRuleBeforeCapture && RejectTask(workflow?.SelectedTask, globalTaskAtStart)) return;
+                if (!matchRuleBeforeCapture && RejectTask(workflow?.SelectedTask, globalTaskAtStart, rejected)) return;
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
@@ -703,7 +710,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _targetApp = TargetProcessName(processId);
                     if (_setupOutputAtStart is null) { await CaptureWorkflowAtStartAsync(); ruleMatched = true; }
                     if (_disposed) return;
-                    if (RejectTask(ruleMatched ? WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart) : null, globalTaskAtStart))
+                    if (RejectTask(ruleMatched ? WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart) : null, globalTaskAtStart, rejected))
                     {
                         await previousRecordingWork;
                         return;
@@ -925,8 +932,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_lastCompletedDictation.TryPublish(outcome, outcome.Committed ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
-            SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,
-                outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
+            // A blocked or failed paste leaves the text on the clipboard, as on macOS, and says so where the
+            // user looks while dictating. The overlay only claims a copy that succeeded.
+            var pasteFailed = outcome.ReviewReason == DictationReviewReason.PasteFailed;
+            if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText) };
+            var message = !pasteFailed ? outcome.Message : outcome.CopiedToClipboard
+                ? "Not inserted. The text is on the clipboard." : "Not inserted. Copy the text from the review window.";
+            SetStatus(snippetError is null ? message : message + " · " + snippetError,
+                pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
+                    : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
             else
             {

@@ -46,6 +46,8 @@ public sealed record DictationOutputResult(TranscriptionRecord Record, bool Save
     public bool ActionAttempted { get; init; }
     /// <summary>The paste was sent to the target field.</summary>
     public bool Inserted { get; init; }
+    /// <summary>The host left the text on the clipboard after a failed paste.</summary>
+    public bool CopiedToClipboard { get; init; }
     /// <summary>Text or an action already left TypeWhisper; a late cancel must not report it as discarded.</summary>
     public bool Committed => ActionAttempted || Inserted;
 }

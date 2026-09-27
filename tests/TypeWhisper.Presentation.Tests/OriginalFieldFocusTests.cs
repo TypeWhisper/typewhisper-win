@@ -21,6 +21,26 @@ public class OriginalFieldFocusTests
     public void OtherControlsCannotBecomeEditorsThroughAPattern(int controlType) =>
         Assert.False(OriginalFieldFocus.IsEditableControl(controlType,true,()=>throw new Exception("Unexpected pattern query.")));
 
+    [Fact]
+    public void WindowsTerminalInputRequiresFocusAndWritableTextMetadata()
+    {
+        // #551: Windows Terminal exposes its input as Text (50020) with class TermControl.
+        Assert.True(OriginalFieldFocus.IsEditableControl(50020,true,()=>true,"TermControl"));
+        Assert.False(OriginalFieldFocus.IsEditableControl(50020,true,()=>false,"TermControl"));
+        Assert.False(OriginalFieldFocus.IsEditableControl(50020,false,()=>throw new Exception("Non-focusable text must not be queried."),"TermControl"));
+        Assert.False(OriginalFieldFocus.IsEditableControl(50020,true,()=>throw new Exception("Other text must not be queried."),"TextBlock"));
+    }
+
+    [Fact]
+    public void ConsoleElementsMayBelongToTheWindowHostProcess()
+    {
+        // #551: a conhost window reports powershell, its Document element reports conhost.
+        Assert.True(OriginalFieldFocus.BelongsToWindowProcess(42,42,()=>throw new Exception("Matching processes need no host lookup.")));
+        Assert.True(OriginalFieldFocus.BelongsToWindowProcess(7,42,()=>7));
+        Assert.False(OriginalFieldFocus.BelongsToWindowProcess(9,42,()=>7));
+        Assert.False(OriginalFieldFocus.BelongsToWindowProcess(0,42,()=>0));
+    }
+
     [Theory]
     [InlineData(50004)]
     [InlineData(50030)]

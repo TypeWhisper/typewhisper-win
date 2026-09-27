@@ -10,6 +10,7 @@ internal sealed class OriginalDictationField : IDisposable
     private IUIAutomationElement? _element;
     private readonly IntPtr _window;
     private readonly uint _process;
+    private int? _windowHostProcess;
     private OriginalDictationField(IntPtr window, uint process)
     {
         _window = window; _process = process;
@@ -60,10 +61,11 @@ internal sealed class OriginalDictationField : IDisposable
     private bool IsValid()
     {
         GetWindowThreadProcessId(_window, out var process);
-        if (process != _process || _element is null || _element.CurrentProcessId != _process ||
+        if (process != _process || _element is null ||
+            !OriginalFieldFocus.BelongsToWindowProcess(_element.CurrentProcessId, _process, WindowHostProcess) ||
             _element.CurrentIsEnabled == 0 || _element.CurrentIsPassword != 0 ||
             !OriginalFieldFocus.IsEditableControl(_element.CurrentControlType,
-                _element.CurrentIsKeyboardFocusable != 0, HasWritableTextPattern)) return false;
+                _element.CurrentIsKeyboardFocusable != 0, HasWritableTextPattern, _element.CurrentClassName)) return false;
         var walker = _automation.RawViewWalker;
         IUIAutomationElement? parent = null;
         try
@@ -79,6 +81,16 @@ internal sealed class OriginalDictationField : IDisposable
             return false;
         }
         finally { Release(parent); Release(walker); }
+    }
+
+    private int WindowHostProcess()
+    {
+        if (_windowHostProcess is { } known) return known;
+        IUIAutomationElement? window = null;
+        try { window = _automation.ElementFromHandle(_window); _windowHostProcess = window.CurrentProcessId; }
+        catch (COMException) { return 0; }
+        finally { Release(window); }
+        return _windowHostProcess.Value;
     }
 
     internal bool IsCurrent()

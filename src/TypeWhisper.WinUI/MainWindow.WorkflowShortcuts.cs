@@ -83,8 +83,7 @@ public sealed partial class MainWindow
             _ = _dictationInput?.SubmitAsync(DictationInputAction.Start, async () =>
             {
                 _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
-                await _dictation.StartAsync(snapshot);
-                ShowTaskStartError(workflow);
+                ShowTaskStartError(await _dictation.StartAsync(snapshot), workflow);
             });
             return;
         }

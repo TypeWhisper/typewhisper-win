@@ -224,8 +224,8 @@ public sealed partial class OverlayWindow : Window
                 _ = UpdateTargetIconAsync(state.TargetProcessId, ++_iconRequest);
             }
             StatusText.Text = state.Label;
-            StatusText.Foreground = new SolidColorBrush(state.Phase == DictationPhase.Error
-                ? Color.FromArgb(255, 255, 120, 130) : Color.FromArgb(255, 59, 167, 255));
+            StatusText.Foreground = new SolidColorBrush(state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130)
+                : state.Phase == DictationPhase.Copied ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 59, 167, 255));
             var notice = HasNotice(state);
             if (!IsCorrectionFeedbackVisible)
             {
@@ -493,7 +493,7 @@ public sealed partial class OverlayWindow : Window
 
     private void WaveformCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed or DictationPhase.LoadingModel } state)
+        if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error or DictationPhase.Copied or DictationPhase.Completed or DictationPhase.LoadingModel } state)
         {
             var color = state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130)
                 : state.Phase == DictationPhase.Completed ? Color.FromArgb(255, 96, 210, 140) : Color.FromArgb(255, 244, 188, 106);
