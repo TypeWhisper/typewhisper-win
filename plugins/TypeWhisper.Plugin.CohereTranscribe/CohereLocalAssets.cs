@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
+using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.Plugin.CohereTranscribe;
 
@@ -215,6 +216,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
     private readonly TimeSpan _downloadInactivityTimeout;
     private readonly int _maxDownloadAttempts;
     private readonly TimeSpan _downloadRetryDelay;
+    private readonly Func<string, long?>? _availableBytes;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private string? _huggingFaceToken;
 
@@ -224,7 +226,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         int downloadChunkSizeBytes = DefaultDownloadChunkSizeBytes,
         TimeSpan? downloadInactivityTimeout = null,
         int maxDownloadAttempts = DefaultMaxDownloadAttempts,
-        TimeSpan? downloadRetryDelay = null)
+        TimeSpan? downloadRetryDelay = null,
+        Func<string, long?>? availableBytes = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(assetRoot);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(downloadChunkSizeBytes);
@@ -245,6 +248,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         _downloadInactivityTimeout = inactivityTimeout;
         _maxDownloadAttempts = maxDownloadAttempts;
         _downloadRetryDelay = retryDelay;
+        _availableBytes = availableBytes;
 
         if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("TypeWhisper-CohereTranscribe/1.0");
@@ -330,6 +334,13 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 (Artifact: VadModel, Path: paths.VadModelPath),
                 (Artifact: LanguageIdModel, Path: paths.LanguageIdModelPath)
             };
+
+            // Partial .download files are kept for resuming, so only the bytes still missing need free space.
+            ModelStorageSpace.EnsureAvailable(
+                Path.GetDirectoryName(paths.ModelPath)!,
+                targets.Sum(target => RemainingTransferBytes(target.Artifact, target.Path)),
+                model.DisplayName,
+                _availableBytes);
 
             long completed = 0;
             foreach (var target in targets)
@@ -428,6 +439,17 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             EnsurePathWithinAssetRoot(archivePath);
             EnsurePathWithinAssetRoot(stagingDirectory);
 
+            foreach (var abandoned in RuntimeStagingDirectories())
+                TryDeleteDirectory(abandoned);
+
+            // Extracted files need at least as much room as the archive; the exact size is checked before extraction.
+            var runtimeName = $"the CrispASR {GetRuntimeDisplayName(backend)} runtime";
+            ModelStorageSpace.EnsureAvailable(
+                runtimeParent,
+                RemainingPartialBytes(package.Archive, archivePath) + package.Archive.SizeBytes,
+                runtimeName,
+                _availableBytes);
+
             try
             {
                 await DownloadVerifiedAsync(
@@ -435,6 +457,11 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                     archivePath,
                     progress,
                     cancellationToken);
+
+                long extractedBytes;
+                using (var archive = ZipFile.OpenRead(archivePath))
+                    extractedBytes = archive.Entries.Sum(entry => entry.Length);
+                ModelStorageSpace.EnsureAvailable(runtimeParent, extractedBytes, runtimeName, _availableBytes);
 
                 Directory.CreateDirectory(stagingDirectory);
                 await ExtractArchiveAsync(archivePath, stagingDirectory, cancellationToken);
@@ -538,6 +565,25 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         if (_ownsHttpClient)
             _httpClient.Dispose();
     }
+
+    private static long RemainingTransferBytes(RemoteArtifact artifact, string destinationPath) =>
+        File.Exists(destinationPath) && new FileInfo(destinationPath).Length == artifact.SizeBytes
+            ? 0
+            : RemainingPartialBytes(artifact, $"{destinationPath}.download");
+
+    private static long RemainingPartialBytes(RemoteArtifact artifact, string partialPath)
+    {
+        var partial = File.Exists(partialPath) ? new FileInfo(partialPath).Length : 0;
+        return partial <= artifact.SizeBytes ? artifact.SizeBytes - partial : artifact.SizeBytes;
+    }
+
+    private static string GetRuntimeDisplayName(CrispAsrBackend backend) =>
+        backend switch
+        {
+            CrispAsrBackend.Cuda => "CUDA",
+            CrispAsrBackend.Vulkan => "Vulkan",
+            _ => "CPU"
+        };
 
     internal static RuntimePackage GetRuntimePackage(CrispAsrBackend backend) =>
         backend switch
@@ -684,7 +730,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                         $"Download of {artifact.FileName} made no progress for {_downloadInactivityTimeout.TotalSeconds:0} seconds.",
                         ex);
                 }
-                catch (Exception ex) when (ex is HttpRequestException or IOException)
+                catch (Exception ex) when (ex is HttpRequestException or IOException && !ModelStorageSpace.IsDiskFull(ex))
                 {
                     lastError = ex;
                 }

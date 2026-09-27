@@ -1,11 +1,12 @@
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    internal ModelDownloadController LocalLlmDownload { get; } = new();
+    internal ModelDownloadController LocalLlmDownload { get; } = new(ModelStorageSpace.DescribeFailure);
     internal string? LocalLlmDownloadPluginId { get; private set; }
     internal string? LocalLlmDownloadModelName { get; private set; }
 

@@ -22,7 +22,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.1.2", manifest.Version);
+        Assert.Equal("1.1.3", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -46,6 +46,41 @@ public class SherpaOnnxPluginTests
             Assert.True(sut.SupportsModelRemoval);
             Assert.False(Directory.Exists(requestedDirectory));
             Assert.True(Directory.Exists(otherDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+                Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadModelAsync_StopsWhenMissingFilesDoNotFitAfterRemovingAbandonedPartials()
+    {
+        var tempDirectory = Path.Join(Path.GetTempPath(), $"tw-sherpa-space-{Guid.NewGuid():N}");
+        try
+        {
+            var sut = new SherpaOnnxPlugin();
+            await sut.ActivateAsync(new FakePluginHostServices(tempDirectory));
+            var modelDirectory = Path.Join(tempDirectory, "Models", "parakeet-tdt-0.6b");
+            Directory.CreateDirectory(modelDirectory);
+            await File.WriteAllTextAsync(Path.Join(modelDirectory, "tokens.txt"), "tokens");
+            var abandoned = Path.Join(modelDirectory, "encoder.int8.onnx.tmp");
+            await File.WriteAllBytesAsync(abandoned, new byte[32]);
+            sut.AvailableBytes = directory =>
+            {
+                Assert.Equal(modelDirectory, directory);
+                Assert.False(File.Exists(abandoned));
+                return 100L * 1024 * 1024;
+            };
+
+            var error = await Assert.ThrowsAsync<TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException>(
+                () => sut.DownloadModelAsync("parakeet-tdt-0.6b", null, CancellationToken.None));
+
+            // tokens.txt is already present, so only the encoder, decoder and joiner still need space.
+            Assert.Equal((652L + 12 + 6) * 1024 * 1024 + TypeWhisper.PluginSDK.Helpers.ModelStorageSpace.ReserveBytes, error.RequiredBytes);
+            Assert.StartsWith("Not enough free disk space to download Parakeet TDT 0.6B.", error.Message);
+            Assert.Equal(["tokens.txt"], Directory.GetFiles(modelDirectory).Select(Path.GetFileName));
         }
         finally
         {

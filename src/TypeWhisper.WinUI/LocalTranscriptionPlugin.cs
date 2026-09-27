@@ -1,5 +1,6 @@
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.WinUI;
@@ -222,7 +223,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         { Feedback = "Download canceled. Your active model is unchanged."; if (propagateErrors) throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { Error = "Download failed: " + ex.Message; if (propagateErrors) throw; }
+        { Error = ModelStorageSpace.DescribeFailure(ex) ?? "Download failed: " + ex.Message; if (propagateErrors) throw; }
         finally { _download = null; DownloadingModelId = null; Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
     internal void CancelDownload() => _download?.Cancel();

@@ -64,7 +64,7 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal("com.typewhisper.cohere-transcribe", manifest.Id);
         Assert.Contains("transcription", manifest.Categories!);
         Assert.True(manifest.IsLocal);
-        Assert.Equal("1.1.2", manifest.MinHostVersion);
+        Assert.Equal("1.1.6", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
         Assert.Equal(manifest.Id, sut.PluginId);
         Assert.Equal("cohere-transcribe", sut.ProviderId);
@@ -264,6 +264,60 @@ public sealed class CohereTranscribePluginTests
 
         Assert.Equal(payload, await File.ReadAllBytesAsync(destination));
         Assert.Equal(["bytes=3-6", "bytes=7-10", "bytes=11-11"], handler.RequestedRanges);
+    }
+
+    [Fact]
+    public async Task EnsureModelAsync_ChecksOnlyMissingBytesAndKeepsPartialDownload()
+    {
+        using var temp = new TempDirectory();
+        var handler = new RangeDownloadHandler([]);
+        using var httpClient = new HttpClient(handler);
+        string? probed = null;
+        using var sut = new CohereLocalAssetManager(
+            temp.Path,
+            httpClient,
+            availableBytes: directory => { probed = directory; return 512L * 1024 * 1024; });
+        var model = CohereModelCatalog.Resolve(CohereModelCatalog.DefaultModelId);
+        var paths = sut.GetModelPaths(model.Id);
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.ModelPath)!);
+        const int partialBytes = 1_000_000;
+        await File.WriteAllBytesAsync(paths.ModelPath + ".download", new byte[partialBytes]);
+
+        var error = await Assert.ThrowsAsync<TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException>(
+            () => sut.EnsureModelAsync(model.Id, progress: null, CancellationToken.None));
+
+        Assert.Equal(Path.GetDirectoryName(paths.ModelPath), probed);
+        Assert.Equal(
+            sut.GetModelTransferSize(model.Id) - partialBytes + TypeWhisper.PluginSDK.Helpers.ModelStorageSpace.ReserveBytes,
+            error.RequiredBytes);
+        Assert.StartsWith("Not enough free disk space to download Cohere Transcribe 2B (Q5_0).", error.Message);
+        Assert.Equal(partialBytes, new FileInfo(paths.ModelPath + ".download").Length);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task DownloadVerifiedAsync_DoesNotRetryWhenTheDiskIsFull()
+    {
+        using var temp = new TempDirectory();
+        var handler = new DiskFullDownloadHandler();
+        using var httpClient = new HttpClient(handler);
+        using var sut = new CohereLocalAssetManager(
+            temp.Path,
+            httpClient,
+            downloadChunkSizeBytes: 64,
+            downloadInactivityTimeout: TimeSpan.FromSeconds(5),
+            maxDownloadAttempts: 3,
+            downloadRetryDelay: TimeSpan.Zero);
+        var artifact = new RemoteArtifact("model.gguf", "https://downloads.example/model.gguf", 32, new string('0', 64));
+
+        var error = await Assert.ThrowsAsync<IOException>(() => sut.DownloadVerifiedAsync(
+            artifact,
+            Path.Join(temp.Path, "model.gguf.download"),
+            progress: null,
+            CancellationToken.None));
+
+        Assert.True(TypeWhisper.PluginSDK.Helpers.ModelStorageSpace.IsDiskFull(error));
+        Assert.Equal(1, handler.RequestCount);
     }
 
     [Fact]
@@ -1434,6 +1488,29 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public async Task RuntimeDownloadStopsWhenArchiveAndExtractionDoNotFitAfterRemovingAbandonedStaging()
+    {
+        using var temp = new TempDirectory();
+        var handler = new RangeDownloadHandler([]);
+        using var http = new HttpClient(handler);
+        using var assets = new CohereLocalAssetManager(temp.Path, http, maxDownloadAttempts: 1, availableBytes: _ => 100L * 1024 * 1024);
+        var parent = Path.Join(temp.Path, "Runtimes", "CrispASR", CohereLocalAssetManager.CrispAsrVersion);
+        var abandoned = Path.Join(parent, $".cuda.{Guid.NewGuid():N}.staging");
+        Directory.CreateDirectory(Path.Join(abandoned, "nested"));
+        await File.WriteAllBytesAsync(Path.Join(abandoned, "nested", "runtime.dll"), new byte[16]);
+
+        var error = await Assert.ThrowsAsync<TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException>(
+            () => assets.EnsureRuntimeAsync(CrispAsrBackend.Cuda, null, default));
+
+        Assert.Equal(
+            2 * CohereLocalAssetManager.CudaRuntime.Archive.SizeBytes + TypeWhisper.PluginSDK.Helpers.ModelStorageSpace.ReserveBytes,
+            error.RequiredBytes);
+        Assert.StartsWith("Not enough free disk space to download the CrispASR CUDA runtime.", error.Message);
+        Assert.False(Directory.Exists(abandoned));
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [WindowsFact]
     public async Task RuntimeTimestampDriftIsReverifiedWithoutDownloading()
     {
         using var temp = new TempDirectory();
@@ -1535,6 +1612,33 @@ public sealed class CohereTranscribePluginTests
                 EnsuredRuntimes.Add(backend);
             progress?.Report(new ArtifactTransferProgress(20, 20));
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class DiskFullDownloadHandler : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            var content = new StreamContent(new DiskFullStream());
+            content.Headers.ContentLength = 32;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+        }
+
+        private sealed class DiskFullStream : MemoryStream
+        {
+            public override int Read(byte[] buffer, int offset, int count) =>
+                throw new IOException("There is not enough space on the disk.", unchecked((int)0x80070070));
+
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+                ValueTask.FromException<int>(new IOException("There is not enough space on the disk.", unchecked((int)0x80070070)));
+
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+                Task.FromException<int>(new IOException("There is not enough space on the disk.", unchecked((int)0x80070070)));
         }
     }
 

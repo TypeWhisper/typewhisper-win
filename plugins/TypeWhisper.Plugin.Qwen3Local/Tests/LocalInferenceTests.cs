@@ -38,14 +38,14 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
             var host = new TestHost(Path.Combine(root, "assets"));
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.qwen3-local", Name = "Qwen3 ASR (Local)", Version = "1.0.0", MinHostVersion = "1.1.2",
+                Id = "com.typewhisper.qwen3-local", Name = "Qwen3 ASR (Local)", Version = "1.0.1", MinHostVersion = "1.1.6",
                 DownloadUrl = "https://fixture.invalid/qwen.zip", Size = new FileInfo(zip).Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))),
                 SupportedArchitectures = ["x64", "arm64"], Categories = ["transcription"]
             };
-            var store = new PortablePluginStore(Path.Combine(root, "store"), new(1, 1, 2), http, _ => host);
+            var store = new PortablePluginStore(Path.Combine(root, "store"), new(1, 1, 6), http, _ => host);
             await store.InitializeAsync(); await store.InstallAsync(entry);
-            await using (var package = await PortablePluginPackage.LoadAsync(store.Resolve(entry.Id), host, new(1, 1, 2)))
+            await using (var package = await PortablePluginPackage.LoadAsync(store.Resolve(entry.Id), host, new(1, 1, 6)))
             {
                 var engine = Assert.IsAssignableFrom<IPcmTranscriptionEnginePlugin>(package.Plugin);
                 Assert.True(engine.SupportsModelDownload); Assert.True(engine.SupportsModelRemoval);
@@ -55,9 +55,9 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
                 await Assert.ThrowsAsync<InvalidOperationException>(() => engine.LoadModelAsync(Qwen3LocalPlugin.ModelId, default));
                 engine.SelectModel(Qwen3LocalPlugin.ModelId);
             }
-            var restarted = new PortablePluginStore(store.Root, new(1, 1, 2), http, _ => host);
+            var restarted = new PortablePluginStore(store.Root, new(1, 1, 6), http, _ => host);
             await restarted.InitializeAsync(); Assert.True(restarted.IsInstalled(entry.Id));
-            await using (var package = await PortablePluginPackage.LoadAsync(restarted.Resolve(entry.Id), host, new(1, 1, 2)))
+            await using (var package = await PortablePluginPackage.LoadAsync(restarted.Resolve(entry.Id), host, new(1, 1, 6)))
                 Assert.Equal(Qwen3LocalPlugin.ModelId, ((IPcmTranscriptionEnginePlugin)package.Plugin).SelectedModelId);
             var modelDirectory = Path.Combine(host.PluginDataDirectory, "Models", Qwen3LocalPlugin.ModelId);
             foreach (var name in QwenModelAssets.RequiredFiles)
@@ -71,7 +71,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
                 QwenModelAssets.Official.Sha256,
                 Files = QwenModelAssets.RequiredFiles.ToDictionary(name => name, _ => 7L)
             }));
-            await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 2), _ => host))
+            await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 6), _ => host))
             {
                 await registry.InitializeAsync();
                 Assert.Null(await registry.SetEnabledAsync(entry.Id, true));
@@ -109,7 +109,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
         var modelDirectory = Path.Combine(assetRoot, "Models", Qwen3LocalPlugin.ModelId);
         await assets.DownloadAsync(modelDirectory, null, default);
         var metrics = new List<object>();
-        await using var package = await PortablePluginPackage.LoadAsync(PackageDirectory, new TestHost(assetRoot), new(1, 1, 2));
+        await using var package = await PortablePluginPackage.LoadAsync(PackageDirectory, new TestHost(assetRoot), new(1, 1, 6));
         var engine = (IPcmTranscriptionEnginePlugin)package.Plugin;
         engine.SelectModel(Qwen3LocalPlugin.ModelId);
         var timer = Stopwatch.StartNew(); await engine.LoadModelAsync(Qwen3LocalPlugin.ModelId, default);

@@ -27,15 +27,16 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
 
     /// <summary>Creates the local Qwen provider.</summary>
     public Qwen3LocalPlugin() : this(new HttpClient { Timeout = TimeSpan.FromHours(2) }, path => new QwenRecognizer(path)) { }
-    internal Qwen3LocalPlugin(HttpClient http, Func<string, IQwenRecognizer> factory, QwenAssetSource? source = null)
-    { _http = http; _factory = factory; _assets = new(http, source); }
+    internal Qwen3LocalPlugin(HttpClient http, Func<string, IQwenRecognizer> factory, QwenAssetSource? source = null,
+        Func<string, long?>? availableBytes = null)
+    { _http = http; _factory = factory; _assets = new(http, source, availableBytes); }
 
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.qwen3-local";
     /// <inheritdoc />
     public string PluginName => "Qwen3 ASR (Local)";
     /// <inheritdoc />
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
     /// <inheritdoc />
     public string ProviderId => "qwen3-local";
     /// <inheritdoc />

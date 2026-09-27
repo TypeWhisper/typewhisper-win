@@ -24,6 +24,35 @@ public partial class WhisperCppPluginTests
         Assert.Empty(Directory.GetFiles(Path.Join(temp.Path, "Models")));
     }
 
+    [Fact]
+    public async Task InsufficientDiskSpaceStopsBeforeDownloadAfterRemovingAbandonedPartials()
+    {
+        using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        var models = Path.Join(temp.Path, "Models");
+        Directory.CreateDirectory(models);
+        var orphan = Path.Join(models, $"ggml-medium.bin.{Guid.NewGuid():N}.tmp");
+        await File.WriteAllBytesAsync(orphan, new byte[16]);
+        var opened = false;
+        long? checkedDirectoryFree = null;
+        plugin.OpenModelDownloadAsync = (_, _, _) => { opened = true; return Task.FromResult<Stream>(new MemoryStream()); };
+        plugin.AvailableBytes = directory =>
+        {
+            Assert.False(File.Exists(orphan));
+            Assert.Equal(models, directory);
+            return checkedDirectoryFree = 1_000_000_000;
+        };
+
+        var error = await Assert.ThrowsAsync<TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException>(
+            () => plugin.DownloadModelAsync("medium", null, default));
+
+        Assert.NotNull(checkedDirectoryFree);
+        Assert.False(opened);
+        Assert.Equal(1_533_763_059 + TypeWhisper.PluginSDK.Helpers.ModelStorageSpace.ReserveBytes, error.RequiredBytes);
+        Assert.StartsWith("Not enough free disk space to download Medium.", error.Message);
+        Assert.Empty(Directory.GetFiles(models));
+    }
+
     private sealed class CountedNonSeekableWeights(byte[] bytes) : MemoryStream(bytes)
     {
         public long BytesRead { get; private set; }

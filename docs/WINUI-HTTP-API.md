@@ -68,7 +68,7 @@ Raw uploads accept query parameters. Multipart accepts fields; local-file reques
 | `task` | `transcribe` or `translate`; omission uses the Dictation selection. Unsupported language/task returns 422. |
 | `response_format` | `json` (default), `text`, `srt` or `vtt`. |
 | `engine`, `model` | Request-scoped overrides using IDs from `/v1/models`. The backend loads the requested model and restores the previous selection afterward. |
-| `await_download` | Boolean, commonly query `?await_download=1`; permits downloading required model assets before loading. Without it, required assets must already be available. |
+| `await_download` | Boolean, commonly query `?await_download=1`; permits downloading required model assets before loading. Without it, required assets must already be available. Returns 507 with the required and available space when the model's drive is too full. |
 | `apply_corrections` | Defaults to `true`. Set JSON `false` or multipart `false` to bypass dictionary corrections. API file transcription does not run snippets or post-processors. |
 | `target_language` | Translate the transcript through the Windows default workflow LLM configuration. Missing default LLM configuration returns 422. This uses Windows providers, not the macOS Translation framework. |
 
