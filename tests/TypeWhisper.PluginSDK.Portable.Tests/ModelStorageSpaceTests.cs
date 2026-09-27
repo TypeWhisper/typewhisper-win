@@ -4,7 +4,7 @@ using Xunit;
 public sealed class ModelStorageSpaceTests : IDisposable
 {
     private const long MiB = 1024L * 1024;
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "storage-" + Guid.NewGuid());
+    private readonly string _root = Path.Join(Path.GetTempPath(), "storage-" + Guid.NewGuid());
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 
     [Fact]
@@ -12,9 +12,9 @@ public sealed class ModelStorageSpaceTests : IDisposable
     {
         string? probed = null;
         var error = Assert.Throws<InsufficientModelStorageException>(() => ModelStorageSpace.EnsureAvailable(
-            Path.Combine(_root, "Models"), 670 * MiB, "Parakeet TDT 0.6B", path => { probed = path; return 400 * MiB; }));
+            Path.Join(_root, "Models"), 670 * MiB, "Parakeet TDT 0.6B", path => { probed = path; return 400 * MiB; }));
 
-        Assert.Equal(Path.Combine(_root, "Models"), probed);
+        Assert.Equal(Path.Join(_root, "Models"), probed);
         Assert.Equal(670 * MiB + ModelStorageSpace.ReserveBytes, error.RequiredBytes);
         Assert.Equal(400 * MiB, error.AvailableBytes);
         Assert.Equal(unchecked((int)0x80070070), error.HResult);
@@ -61,7 +61,7 @@ public sealed class ModelStorageSpaceTests : IDisposable
     public void ReadsFreeSpaceThroughTheNearestExistingDirectory()
     {
         Directory.CreateDirectory(_root);
-        var available = ModelStorageSpace.GetAvailableBytes(Path.Combine(_root, "missing", "Models"));
+        var available = ModelStorageSpace.GetAvailableBytes(Path.Join(_root, "missing", "Models"));
         Assert.NotNull(available);
         Assert.True(available > 0);
     }
@@ -87,8 +87,8 @@ public sealed class ModelStorageSpaceTests : IDisposable
     public void RemovesOnlyAbandonedPartialFiles()
     {
         Directory.CreateDirectory(_root);
-        var abandoned = Path.Combine(_root, "encoder.onnx.tmp");
-        var active = Path.Combine(_root, "decoder.onnx.tmp");
+        var abandoned = Path.Join(_root, "encoder.onnx.tmp");
+        var active = Path.Join(_root, "decoder.onnx.tmp");
         File.WriteAllText(abandoned, "partial");
         File.WriteAllText(active, "partial");
 

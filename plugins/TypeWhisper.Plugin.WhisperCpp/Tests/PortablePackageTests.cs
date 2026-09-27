@@ -36,7 +36,7 @@ public sealed class PortablePackageTests
         ZipFile.CreateFromDirectory(source,archive,CompressionLevel.Fastest,false);
         var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archive)));
         using var http = new HttpClient(new ArchiveTransport(archive));
-        PortablePluginStore Store() => new(Path.Combine(fixture.Root,"store"),new(1, 1, 6),http,_ => fixture.Host);
+        PortablePluginStore Store() => new(Path.Join(fixture.Root,"store"),new(1, 1, 6),http,_ => fixture.Host);
         var entry = new PortableCatalogEntry { Id=manifest.Id,Name=manifest.Name,Version=manifest.Version,MinHostVersion=manifest.MinHostVersion!,
             DownloadUrl="https://fixture.invalid/package.zip",Size=new FileInfo(archive).Length,Sha256=hash,SupportedArchitectures=[PortablePluginCatalog.Architecture] };
         var store=Store(); await store.InitializeAsync(); await store.InstallAsync(entry);

@@ -43,7 +43,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
                 Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))),
                 SupportedArchitectures = ["x64", "arm64"], Categories = ["transcription"]
             };
-            var store = new PortablePluginStore(Path.Combine(root, "store"), new(1, 1, 6), http, _ => host);
+            var store = new PortablePluginStore(Path.Join(root, "store"), new(1, 1, 6), http, _ => host);
             await store.InitializeAsync(); await store.InstallAsync(entry);
             await using (var package = await PortablePluginPackage.LoadAsync(store.Resolve(entry.Id), host, new(1, 1, 6)))
             {
