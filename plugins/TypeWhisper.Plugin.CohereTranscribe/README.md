@@ -2,12 +2,14 @@
 
 Local CrispASR transcription with managed runtime/model downloads and download requirements.
 
-Version `1.2.2`; plugin ID `com.typewhisper.cohere-transcribe`; minimum host `1.1.2`.
+Version `1.2.3`; plugin ID `com.typewhisper.cohere-transcribe`; minimum host `1.1.6`.
 Independent branch: `seofood/coheretranscribe-portable`, based on `4db8f6ac`.
 
 ## Setup
 
 Select the engine, review its download requirements, and download a model and runtime. Q5_0 is the recommended default. The selected model loads automatically on the first transcription, including after an app restart. Choose a processing device and save the settings together with the shared Save button.
+
+Before each download the plugin checks that the drive has room for the files still missing plus a 256 MB reserve. Partial model downloads are kept and count toward that amount, so an interrupted download still resumes. Abandoned runtime staging folders are removed first, and the runtime archive's extracted size is checked again before unpacking. A full drive stops the download immediately with the required and available space, and is not retried.
 
 The plugin supports local live preview through the host PCM transcription path. It transcribes growing audio snapshots while recording and produces the final result after stopping. No audio is sent to a cloud provider. The provider icon appears in the settings sidebar and provider selector.
 

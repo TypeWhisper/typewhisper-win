@@ -135,4 +135,40 @@ public sealed class ModelDownloadControllerTests
         await controller.RunAsync((_, _) => { called = true; return Task.CompletedTask; });
         Assert.False(called); Assert.False(controller.State.Succeeded);
     }
+
+    [Fact]
+    public async Task DownloadFailureUsesDescribedMessageAndFallsBackToGenericText()
+    {
+        var controller = new ModelDownloadController(ex => ex is IOException ? "Not enough free disk space to download Model." : null);
+        await controller.RunAsync((_, _) => throw new IOException("disk"));
+        Assert.False(controller.State.Succeeded);
+        Assert.Equal("Not enough free disk space to download Model.", controller.State.Message);
+
+        await controller.RunAsync((_, _) => throw new InvalidOperationException("other"));
+        Assert.StartsWith("The model could not be downloaded.", controller.State.Message);
+
+        var throwing = new ModelDownloadController(_ => throw new InvalidOperationException("describer"));
+        await throwing.RunAsync((_, _) => throw new IOException("disk"));
+        Assert.StartsWith("The model could not be downloaded.", throwing.State.Message);
+    }
+
+    [Fact]
+    public async Task OutOfMemoryInFailureDescriberStillCompletesTheOperation()
+    {
+        var controller = new ModelDownloadController(_ => throw new OutOfMemoryException());
+        var run = controller.RunAsync((_, _) => throw new IOException("disk"));
+        await Assert.ThrowsAsync<OutOfMemoryException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.False(controller.State.IsBusy);
+        Assert.Equal("The model download could not finish.", controller.State.Message);
+        await controller.RunAsync((_, _) => Task.CompletedTask);
+        Assert.True(controller.State.Succeeded);
+    }
+
+    [Fact]
+    public async Task RemovalFailureKeepsItsOwnMessage()
+    {
+        var controller = new ModelDownloadController(_ => "described");
+        await controller.RunRemovalAsync(_ => throw new IOException("locked"));
+        Assert.StartsWith("The model could not be removed.", controller.State.Message);
+    }
 }

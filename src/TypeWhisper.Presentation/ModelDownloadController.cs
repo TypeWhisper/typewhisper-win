@@ -14,11 +14,25 @@ public sealed record ModelDownloadState(bool IsBusy, bool IsClosing, double? Pro
 public sealed class ModelDownloadController
 {
     private readonly object _sync = new();
+    private readonly Func<Exception, string?>? _describeDownloadFailure;
     private CancellationTokenSource? _request;
     private Task _callbacks = Task.CompletedTask;
     private Task _completion = Task.CompletedTask;
     private ModelDownloadState _state = new(false, false, null, null, false);
     private long _generation;
+
+    /// <summary>Creates a controller that reports every download failure with the same generic message.</summary>
+    public ModelDownloadController() { }
+
+    /// <summary>
+    /// Creates a controller that asks <paramref name="describeDownloadFailure"/> for a user-facing message first,
+    /// for example to show required and available disk space. A null result keeps the generic message.
+    /// </summary>
+    public ModelDownloadController(Func<Exception, string?> describeDownloadFailure)
+    {
+        ArgumentNullException.ThrowIfNull(describeDownloadFailure);
+        _describeDownloadFailure = describeDownloadFailure;
+    }
 
     /// <summary>Raised after state changes; throwing listeners cannot prevent operation drain.</summary>
     public event Action? Changed;
@@ -103,7 +117,7 @@ public sealed class ModelDownloadController
         catch (OperationCanceledException)
         { message = CanceledMessage(removal); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { message = removal ? "The model could not be removed. Refresh model status; some files may have been removed." : "The model could not be downloaded. Check its requirements and configuration before trying again."; }
+        { message = removal ? "The model could not be removed. Refresh model status; some files may have been removed." : DownloadFailureMessage(ex, ref fatal); }
         catch (Exception ex)
         { fatal = ex; message = removal ? "The model removal could not finish." : "The model download could not finish."; }
         lock (_sync)
@@ -129,6 +143,23 @@ public sealed class ModelDownloadController
             else completion.TrySetResult();
         }
         Notify();
+    }
+
+    private string DownloadFailureMessage(Exception exception, ref Exception? fatal)
+    {
+        string? described = null;
+        try { described = _describeDownloadFailure?.Invoke(exception); }
+        catch (OutOfMemoryException ex)
+        {
+            // Completion must still be published, so a fatal describer failure takes the fatal path.
+            fatal = ex;
+            return "The model download could not finish.";
+        }
+        catch (Exception ex)
+        { System.Diagnostics.Trace.WriteLine("Model download failure description failed: " + ex.GetType().Name); }
+        return string.IsNullOrWhiteSpace(described)
+            ? "The model could not be downloaded. Check its requirements and configuration before trying again."
+            : described;
     }
 
     private static string CanceledMessage(bool removal) => removal

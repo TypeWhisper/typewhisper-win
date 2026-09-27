@@ -12,6 +12,11 @@ provides download progress, cancellation and removal controls. No credentials,
 Python installation, server or GPU are required. Internet access is used only
 to download the model; recognition runs in the process on the CPU.
 
+Before downloading, the plugin removes staging folders left by an interrupted
+download and checks that the drive has room for the 879 MB archive, about
+1.1 GB of extracted files and a 256 MB reserve. If it does not, the download
+stops immediately and names the required and available space.
+
 To reclaim disk space after selecting the sole model, use **Unload and remove
 Qwen model** in the plugin settings. This explicit action drains processing,
 unloads the model, deletes its files and clears the saved selection. The generic

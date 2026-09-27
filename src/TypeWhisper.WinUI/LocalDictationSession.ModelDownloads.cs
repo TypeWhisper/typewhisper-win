@@ -1,4 +1,5 @@
 using TypeWhisper.PluginHost;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -12,7 +13,7 @@ internal sealed partial class LocalDictationSession
         RegistrySelectionId(_providerId) == model.SelectionId
         && ActiveRegistryProvider?.SelectedModelId == model.ModelId;
 
-    internal ModelDownloadController RegistryModelDownload { get; } = new();
+    internal ModelDownloadController RegistryModelDownload { get; } = new(ModelStorageSpace.DescribeFailure);
     internal PortableDownloadableModel? ActiveRegistryModelDownload { get; private set; }
 
     internal async Task<string?> DownloadRegistryModelAsync(PortableDownloadableModel model)

@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SherpaOnnx;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.SherpaOnnx;
@@ -56,6 +57,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
     private readonly object _sync = new();
     private readonly HttpClient _httpClient = new();
+    internal Func<string, long?> AvailableBytes { get; set; } = ModelStorageSpace.GetAvailableBytes;
     private readonly Func<string, string, string, OfflineRecognizer>? _recognizerFactory;
     private ISherpaCudaRuntimeInstaller? _cudaRuntimeInstaller;
     private ISherpaCudaRuntimeProbe? _cudaRuntimeProbe;
@@ -115,7 +117,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.1.3";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -256,6 +258,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         var model = GetModelDefinition(modelId);
         var dir = GetModelDirectory(modelId);
         Directory.CreateDirectory(dir);
+
+        var missing = model.Files.Where(f => !File.Exists(Path.Join(dir, f.FileName)) || new FileInfo(Path.Join(dir, f.FileName)).Length == 0).ToList();
+        foreach (var file in missing)
+            ModelStorageSpace.TryRemoveAbandonedFile(Path.Join(dir, file.FileName) + ".tmp");
+        ModelStorageSpace.EnsureAvailable(dir, missing.Sum(f => f.EstimatedSizeMB * 1024L * 1024), model.DisplayName, AvailableBytes);
 
         var total = model.Files.Sum(f => f.EstimatedSizeMB);
         double completed = 0;

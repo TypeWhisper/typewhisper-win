@@ -72,7 +72,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.2";
+    public string PluginVersion => "1.2.3";
 
     /// <inheritdoc />
     public bool SupportsLocalLivePreview => true;

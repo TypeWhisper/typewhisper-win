@@ -48,6 +48,45 @@ public sealed class QwenTests : IDisposable
     }
 
     [Fact]
+    public async Task InsufficientDiskSpaceStopsBeforeDownloadAfterRemovingAbandonedStaging()
+    {
+        var bytes = Archive();
+        var requests = 0;
+        using var http = Http(() => { requests++; return new ByteArrayContent(bytes); });
+        var source = Source(bytes) with { ExtractedSize = 1_000_000 };
+        var parent = Path.GetDirectoryName(_root)!;
+        var abandoned = _root + ".download-" + Guid.NewGuid().ToString("N");
+        var active = _root + ".download-" + Guid.NewGuid().ToString("N");
+        var unrelated = _root + ".download-backup";
+        foreach (var directory in new[] { abandoned, active, unrelated }) Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Join(abandoned, "model.tar.bz2"), new byte[16]);
+        File.WriteAllBytes(Path.Join(active, "model.tar.bz2"), new byte[16]);
+        try
+        {
+            string? probed = null;
+            var assets = new QwenModelAssets(http, source, directory => { probed = directory; return 1_000_000; });
+            TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException error;
+            using (new FileStream(Path.Join(active, "model.tar.bz2"), FileMode.Open, FileAccess.Write, FileShare.None))
+                error = await Assert.ThrowsAsync<TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException>(
+                    () => assets.DownloadAsync(_root, null, default));
+
+            Assert.Equal(parent, probed);
+            Assert.Equal(0, requests);
+            Assert.Equal(bytes.Length + 1_000_000 + TypeWhisper.PluginSDK.Helpers.ModelStorageSpace.ReserveBytes, error.RequiredBytes);
+            Assert.StartsWith("Not enough free disk space to download Qwen3-ASR 0.6B.", error.Message);
+            Assert.False(Directory.Exists(abandoned));
+            Assert.True(Directory.Exists(active));
+            Assert.True(Directory.Exists(unrelated));
+            Assert.False(assets.IsReady(_root));
+        }
+        finally
+        {
+            foreach (var directory in new[] { abandoned, active, unrelated }.Where(Directory.Exists))
+                Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public async Task CancelledDownloadCleansStagingAndCanRetry()
     {
         var bytes = Archive();

@@ -24,7 +24,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
             var assets = Directory.GetParent(modelDirectory!)!.Parent!.FullName;
             var host = new VocabularyHostServices(data, assetDirectory: assets);
             Assert.False(((IPluginHostServices)host).AllowLegacyDataMigration);
-            await using var package = await PortablePluginPackage.LoadAsync(packageDirectory!, host, new(1, 1, 0));
+            await using var package = await PortablePluginPackage.LoadAsync(packageDirectory!, host, new(1, 1, 6));
             var engine = Assert.IsAssignableFrom<IPcmTranscriptionEnginePlugin>(package.Plugin);
             Assert.Equal("com.typewhisper.sherpa-onnx", engine.PluginId);
             Assert.DoesNotContain(engine.GetType().Assembly.GetReferencedAssemblies(), a => a.Name is "PresentationFramework" or "PresentationCore");
@@ -73,7 +73,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
         {
             var assets = Directory.GetParent(modelDirectory!)!.Parent!.FullName;
             var host = new VocabularyHostServices(data, assetDirectory: assets);
-            await using var package = await PortablePluginPackage.LoadAsync(packageDirectory!, host, new(1, 1, 0));
+            await using var package = await PortablePluginPackage.LoadAsync(packageDirectory!, host, new(1, 1, 6));
             var engine = Assert.IsAssignableFrom<IPcmTranscriptionEnginePlugin>(package.Plugin);
             engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
             await engine.LoadModelAsync(modelId, CancellationToken.None);

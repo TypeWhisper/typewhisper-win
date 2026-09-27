@@ -1,3 +1,4 @@
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -98,6 +99,11 @@ internal sealed partial class LocalDictationSession
             _providerId = provider.Id;
             if (!IsReady) throw new LocalApiRequestException(409, "The requested transcription model is not ready.");
             return scope;
+        }
+        catch (Exception ex) when (ModelStorageSpace.DescribeFailure(ex) is { } storageMessage)
+        {
+            await scope.DisposeAsync();
+            throw new LocalApiRequestException(507, storageMessage);
         }
         catch
         {

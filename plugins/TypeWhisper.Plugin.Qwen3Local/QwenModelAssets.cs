@@ -3,16 +3,18 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using SharpCompress.Compressors;
 using SharpCompress.Compressors.BZip2;
+using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.Plugin.Qwen3Local;
 
-internal sealed record QwenAssetSource(string Url, string Sha256, long Size);
+// ExtractedSize covers the model files unpacked next to the archive before the verified set is moved into place.
+internal sealed record QwenAssetSource(string Url, string Sha256, long Size, long ExtractedSize = 0);
 
-internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource? source = null)
+internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource? source = null, Func<string, long?>? availableBytes = null)
 {
     internal static readonly QwenAssetSource Official = new(
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2",
-        "393f8a14e2f5fb96746aaab342997a40641001fbd5bf9592a080a8329178ee96", 878702423);
+        "393f8a14e2f5fb96746aaab342997a40641001fbd5bf9592a080a8329178ee96", 878702423, 1_100_000_000);
     internal static readonly string[] RequiredFiles = ["conv_frontend.onnx", "encoder.int8.onnx",
         "decoder.int8.onnx", "tokenizer/merges.txt", "tokenizer/vocab.json", "tokenizer/tokenizer_config.json"];
     private readonly QwenAssetSource _source = source ?? Official;
@@ -32,6 +34,9 @@ internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource? source =
     internal async Task DownloadAsync(string directory, IProgress<double>? progress, CancellationToken ct)
     {
         if (IsReady(directory)) { progress?.Report(1); return; }
+        RemoveAbandonedStaging(directory);
+        ModelStorageSpace.EnsureAvailable(Path.GetDirectoryName(directory)!, _source.Size + _source.ExtractedSize,
+            "Qwen3-ASR 0.6B", availableBytes);
         var staging = directory + ".download-" + Guid.NewGuid().ToString("N");
         Directory.CreateDirectory(staging);
         try
@@ -67,6 +72,25 @@ internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource? source =
             progress?.Report(1);
         }
         finally { Directory.Delete(staging, true); }
+    }
+
+    // An interrupted download leaves its staging directory behind; a download still writing its archive is kept.
+    internal static void RemoveAbandonedStaging(string directory)
+    {
+        var parent = Path.GetDirectoryName(directory)!;
+        if (!Directory.Exists(parent)) return;
+        var prefix = Path.GetFileName(directory) + ".download-";
+        var abandoned = Directory.EnumerateDirectories(parent, prefix + "*").Where(staging =>
+            Guid.TryParseExact(Path.GetFileName(staging)[prefix.Length..], "N", out _)
+            && (File.GetAttributes(staging) & FileAttributes.ReparsePoint) == 0);
+        foreach (var staging in abandoned)
+        {
+            var archive = Path.Join(staging, "model.tar.bz2");
+            if (File.Exists(archive) && !ModelStorageSpace.TryRemoveAbandonedFile(archive)) continue;
+            try { Directory.Delete(staging, true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { System.Diagnostics.Debug.WriteLine("Abandoned Qwen staging directory could not be removed: " + ex.GetType().Name); }
+        }
     }
 
     internal static async Task ExtractAsync(string archive, string destination, CancellationToken ct, IProgress<double>? progress = null)

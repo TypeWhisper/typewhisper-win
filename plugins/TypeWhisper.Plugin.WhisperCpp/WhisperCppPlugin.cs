@@ -5,6 +5,7 @@ using System.Text;
 using System.Security.Cryptography;
 
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 using Whisper.net;
 using Whisper.net.Ggml;
@@ -84,6 +85,7 @@ public sealed partial class WhisperCppPlugin :
     private TranscriptionAccelerationStatus _accelerationStatus = new(
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
+    internal Func<string, long?> AvailableBytes { get; set; } = ModelStorageSpace.GetAvailableBytes;
     internal Func<GgmlType, QuantizationType, CancellationToken, Task<Stream>> OpenModelDownloadAsync { get; set; } =
         (type, quantization, ct) => WhisperGgmlDownloader.Default.GetGgmlModelAsync(type, quantization, ct);
 
@@ -147,7 +149,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.21";
+    public string PluginVersion => "1.2.22";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -338,6 +340,7 @@ public sealed partial class WhisperCppPlugin :
                 return;
             }
 
+            ModelStorageSpace.EnsureAvailable(modelDirectory, model.ExpectedSizeBytes, model.DisplayName, AvailableBytes);
             var tempPath = Path.Combine(modelDirectory, $"{Path.GetFileName(modelPath)}.{Guid.NewGuid():N}.tmp");
 
             try
