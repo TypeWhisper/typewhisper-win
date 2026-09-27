@@ -2,13 +2,14 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-internal enum DictationPhase { Idle, Recording, Processing, Error, Configuring, Completed, LoadingModel }
+// Copied: the text was not inserted but is on the clipboard, a notice rather than an error.
+internal enum DictationPhase { Idle, Recording, Processing, Error, Configuring, Completed, LoadingModel, Copied }
 internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Duration, string Message, string TargetApp, uint TargetProcessId = 0,
     RecordingMode RecordingMode = RecordingMode.Hybrid, string? CancelWarning = null, bool Cancelled = false)
 {
     // A pending Escape warning replaces the phase label until it is confirmed or expires. The owner clears it
     // once nothing is cancellable, so it also shows while capture is still starting from an earlier phase.
-    internal bool ShowsCancelWarning => CancelWarning is not null && Phase != DictationPhase.Error;
+    internal bool ShowsCancelWarning => CancelWarning is not null && Phase is not (DictationPhase.Error or DictationPhase.Copied);
     // After an Escape cancellation the idle overlay briefly confirms it, as on macOS.
     internal bool ShowsCancelled => Cancelled && Phase == DictationPhase.Idle;
     internal string AccessibleMessage => ShowsCancelWarning ? CancelWarning! : ShowsCancelled ? "Cancelled" : Message;
@@ -32,6 +33,7 @@ internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Dura
         DictationPhase.Recording => "RECORDING",
         DictationPhase.Processing => "TRANSCRIBING",
         DictationPhase.Error => "ERROR",
+        DictationPhase.Copied => "COPIED",
         DictationPhase.Completed => "DONE",
         _ => "READY"
     };

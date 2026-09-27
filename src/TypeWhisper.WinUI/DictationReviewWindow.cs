@@ -23,6 +23,12 @@ internal sealed class DictationReviewWindow : Window
     internal DictationReviewWindow(DictationOutputResult result, PortablePluginRuntimeRegistry? registry = null)
     {
         NativeWindowAppearance.ApplyAppTitleBar(this);
+        // Stay above the paste target only until the user leaves this review, so it never covers that field afterwards.
+        Activated += (_, e) =>
+        {
+            if (e.WindowActivationState == WindowActivationState.Deactivated && AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+                presenter.IsAlwaysOnTop = false;
+        };
         Title = result.ReviewTitle + " · TypeWhisper";
         AppWindow.Resize(new SizeInt32(680, 520));
         var body = new Grid { Padding = new Thickness(24), RowSpacing = 16,
@@ -53,18 +59,23 @@ internal sealed class DictationReviewWindow : Window
         var copyStatus = new TextBlock { TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)Application.Current.Resources["TextBrush"] };
         AutomationProperties.SetLiveSetting(copyStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        copy.Click += (_, _) =>
+        bool CopyText(string copied)
         {
             try
             {
                 var data = new DataPackage();
                 data.SetText(result.Record.FinalText);
                 Clipboard.SetContent(data);
-                copyStatus.Text = "Copied. Switch to the field you want to use and paste the text.";
+                copyStatus.Text = copied;
+                return true;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { copyStatus.Text = "Clipboard unavailable. Your text is still here; try copying again."; }
-        };
+            { copyStatus.Text = "Clipboard unavailable. Your text is still here; try copying again."; return false; }
+        }
+        copy.Click += (_, _) => CopyText("Copied. Switch to the field you want to use and paste the text.");
+        // A blocked or failed paste leaves the text on the clipboard, as on macOS, so it is never only in this window.
+        if (result.ReviewReason == DictationReviewReason.PasteFailed)
+            CopyText("The text is on the clipboard. Switch to the field you want to use and paste it.");
         var close = new HandCursorButton { Content = "Close", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         close.Click += async (_, _) =>
         {
@@ -167,6 +178,17 @@ internal sealed class DictationReviewWindow : Window
     }
 
     // Called on the window's UI thread. Closing is deferred beyond input callbacks and waits for the action lease.
+    // The paste target keeps the foreground, so Windows may refuse activation; topmost keeps the review visible anyway.
+    internal void ShowInFront()
+    {
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) presenter.IsAlwaysOnTop = true;
+        Activate();
+        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
     internal Task ShutdownAsync()
     {
         if (_shutdownTask is not null) return _shutdownTask;

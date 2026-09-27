@@ -932,8 +932,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_lastCompletedDictation.TryPublish(outcome, outcome.Committed ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
-            SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,
-                outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
+            // A blocked paste is shown where the user looks while dictating; the review window copies the text.
+            var pasteFailed = outcome.ReviewReason == DictationReviewReason.PasteFailed;
+            var message = pasteFailed ? "Not inserted. The text is on the clipboard." : outcome.Message;
+            SetStatus(snippetError is null ? message : message + " · " + snippetError,
+                pasteFailed ? DictationPhase.Copied : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
             else
             {
