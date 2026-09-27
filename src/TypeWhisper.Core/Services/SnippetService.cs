@@ -195,6 +195,9 @@ public sealed partial class SnippetService : ISnippetService
                 continue;
             }
 
+            // Unspaced scripts start a new word next to Latin text, as in "我的email是" (UAX #29).
+            if (IsScriptWithoutWhitespaceBoundaries(rune)) return false;
+
             // Internal apostrophes and Hebrew gershayim join words; surrounding quotes remain separators.
             if (includeWordPunctuation && rune.Value is '\'' or '\u2018' or '\u2019' or '\u05F4')
                 return IsWordContinuation(text, index - 1, -1, false) && IsWordContinuation(text, index + 1, 1, false);
