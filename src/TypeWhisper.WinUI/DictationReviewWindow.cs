@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml.Media;
 using TypeWhisper.Presentation;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK.Models;
-using global::Windows.ApplicationModel.DataTransfer;
 using global::Windows.Graphics;
 
 namespace TypeWhisper.WinUI;
@@ -59,23 +58,12 @@ internal sealed class DictationReviewWindow : Window
         var copyStatus = new TextBlock { TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)Application.Current.Resources["TextBrush"] };
         AutomationProperties.SetLiveSetting(copyStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        bool CopyText(string copied)
-        {
-            try
-            {
-                var data = new DataPackage();
-                data.SetText(result.Record.FinalText);
-                Clipboard.SetContent(data);
-                copyStatus.Text = copied;
-                return true;
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            { copyStatus.Text = "Clipboard unavailable. Your text is still here; try copying again."; return false; }
-        }
-        copy.Click += (_, _) => CopyText("Copied. Switch to the field you want to use and paste the text.");
-        // A blocked or failed paste leaves the text on the clipboard, as on macOS, so it is never only in this window.
-        if (result.ReviewReason == DictationReviewReason.PasteFailed)
-            CopyText("The text is on the clipboard. Switch to the field you want to use and paste it.");
+        copy.Click += (_, _) => copyStatus.Text = ClipboardText.TrySet(result.Record.FinalText)
+            ? "Copied. Switch to the field you want to use and paste the text."
+            : "Clipboard unavailable. Your text is still here; try copying again.";
+        // The session already left a blocked paste on the clipboard; only confirm a copy that succeeded.
+        if (result.CopiedToClipboard)
+            copyStatus.Text = "The text is on the clipboard. Switch to the field you want to use and paste it.";
         var close = new HandCursorButton { Content = "Close", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         close.Click += async (_, _) =>
         {

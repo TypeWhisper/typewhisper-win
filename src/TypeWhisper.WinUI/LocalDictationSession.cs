@@ -932,11 +932,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_lastCompletedDictation.TryPublish(outcome, outcome.Committed ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
-            // A blocked paste is shown where the user looks while dictating; the review window copies the text.
+            // A blocked or failed paste leaves the text on the clipboard, as on macOS, and says so where the
+            // user looks while dictating. The overlay only claims a copy that succeeded.
             var pasteFailed = outcome.ReviewReason == DictationReviewReason.PasteFailed;
-            var message = pasteFailed ? "Not inserted. The text is on the clipboard." : outcome.Message;
+            if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText) };
+            var message = !pasteFailed ? outcome.Message : outcome.CopiedToClipboard
+                ? "Not inserted. The text is on the clipboard." : "Not inserted. Copy the text from the review window.";
             SetStatus(snippetError is null ? message : message + " · " + snippetError,
-                pasteFailed ? DictationPhase.Copied : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
+                pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
+                    : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
             else
             {
