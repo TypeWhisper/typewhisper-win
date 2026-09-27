@@ -80,15 +80,16 @@ internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource? source =
         var parent = Path.GetDirectoryName(directory)!;
         if (!Directory.Exists(parent)) return;
         var prefix = Path.GetFileName(directory) + ".download-";
-        foreach (var staging in Directory.EnumerateDirectories(parent, prefix + "*"))
+        var abandoned = Directory.EnumerateDirectories(parent, prefix + "*").Where(staging =>
+            Guid.TryParseExact(Path.GetFileName(staging)[prefix.Length..], "N", out _)
+            && (File.GetAttributes(staging) & FileAttributes.ReparsePoint) == 0);
+        foreach (var staging in abandoned)
         {
-            if (!Guid.TryParseExact(Path.GetFileName(staging)[prefix.Length..], "N", out _)
-                || (File.GetAttributes(staging) & FileAttributes.ReparsePoint) != 0)
-                continue;
-            var archive = Path.Combine(staging, "model.tar.bz2");
+            var archive = Path.Join(staging, "model.tar.bz2");
             if (File.Exists(archive) && !ModelStorageSpace.TryRemoveAbandonedFile(archive)) continue;
             try { Directory.Delete(staging, true); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { System.Diagnostics.Debug.WriteLine("Abandoned Qwen staging directory could not be removed: " + ex.GetType().Name); }
         }
     }
 

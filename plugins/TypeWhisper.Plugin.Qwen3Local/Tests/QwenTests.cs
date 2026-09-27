@@ -81,8 +81,8 @@ public sealed class QwenTests : IDisposable
         }
         finally
         {
-            foreach (var directory in new[] { abandoned, active, unrelated })
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            foreach (var directory in new[] { abandoned, active, unrelated }.Where(Directory.Exists))
+                Directory.Delete(directory, true);
         }
     }
 

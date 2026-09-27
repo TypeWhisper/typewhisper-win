@@ -35,7 +35,7 @@ public partial class WhisperCppPluginTests
         await File.WriteAllBytesAsync(orphan, new byte[16]);
         var opened = false;
         long? checkedDirectoryFree = null;
-        plugin.OpenModelDownloadAsync = (_, _, _) => { opened = true; return Task.FromResult<Stream>(new MemoryStream()); };
+        plugin.OpenModelDownloadAsync = (_, _, _) => { opened = true; return Task.FromResult(Stream.Null); };
         plugin.AvailableBytes = directory =>
         {
             Assert.False(File.Exists(orphan));
