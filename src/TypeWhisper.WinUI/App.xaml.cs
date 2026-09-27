@@ -66,6 +66,7 @@ public partial class App : Application
         }
         // Updates restart into the renamed executable; repair the owned Run command before the next sign-in.
         WindowsStartupRegistration.MigrateInstalledCommand();
+        _ = Task.Run(() => StableImportCopy.CleanupAbandonedCopies());
 
         _mainInstance.Activated += (_, redirected) =>
         {

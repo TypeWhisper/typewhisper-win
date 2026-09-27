@@ -8,6 +8,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/TypeWhisper.WinUI/AppImport/*.cs" Link="AppImport/%(Filename)%(Extension)" />
     <Compile Include="../../src/TypeWhisper.WinUI/RecorderView.Api.cs" Link="RecorderView.Api.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayLayout.cs" Link="OverlayLayout.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/WorkflowDraft.cs" Link="WorkflowDraft.cs" />
