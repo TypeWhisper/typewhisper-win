@@ -153,6 +153,18 @@ public sealed class ModelDownloadControllerTests
     }
 
     [Fact]
+    public async Task OutOfMemoryInFailureDescriberStillCompletesTheOperation()
+    {
+        var controller = new ModelDownloadController(_ => throw new OutOfMemoryException());
+        var run = controller.RunAsync((_, _) => throw new IOException("disk"));
+        await Assert.ThrowsAsync<OutOfMemoryException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.False(controller.State.IsBusy);
+        Assert.Equal("The model download could not finish.", controller.State.Message);
+        await controller.RunAsync((_, _) => Task.CompletedTask);
+        Assert.True(controller.State.Succeeded);
+    }
+
+    [Fact]
     public async Task RemovalFailureKeepsItsOwnMessage()
     {
         var controller = new ModelDownloadController(_ => "described");

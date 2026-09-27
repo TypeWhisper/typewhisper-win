@@ -566,8 +566,9 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             _httpClient.Dispose();
     }
 
+    // An unverified full-size file may still be rejected and downloaded again, so only verified artifacts count as present.
     private static long RemainingTransferBytes(RemoteArtifact artifact, string destinationPath) =>
-        File.Exists(destinationPath) && new FileInfo(destinationPath).Length == artifact.SizeBytes
+        IsArtifactReady(artifact, destinationPath)
             ? 0
             : RemainingPartialBytes(artifact, $"{destinationPath}.download");
 

@@ -117,7 +117,7 @@ public sealed class ModelDownloadController
         catch (OperationCanceledException)
         { message = CanceledMessage(removal); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { message = removal ? "The model could not be removed. Refresh model status; some files may have been removed." : DownloadFailureMessage(ex); }
+        { message = removal ? "The model could not be removed. Refresh model status; some files may have been removed." : DownloadFailureMessage(ex, ref fatal); }
         catch (Exception ex)
         { fatal = ex; message = removal ? "The model removal could not finish." : "The model download could not finish."; }
         lock (_sync)
@@ -145,11 +145,17 @@ public sealed class ModelDownloadController
         Notify();
     }
 
-    private string DownloadFailureMessage(Exception exception)
+    private string DownloadFailureMessage(Exception exception, ref Exception? fatal)
     {
         string? described = null;
         try { described = _describeDownloadFailure?.Invoke(exception); }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (OutOfMemoryException ex)
+        {
+            // Completion must still be published, so a fatal describer failure takes the fatal path.
+            fatal = ex;
+            return "The model download could not finish.";
+        }
+        catch (Exception ex)
         { System.Diagnostics.Trace.WriteLine("Model download failure description failed: " + ex.GetType().Name); }
         return string.IsNullOrWhiteSpace(described)
             ? "The model could not be downloaded. Check its requirements and configuration before trying again."

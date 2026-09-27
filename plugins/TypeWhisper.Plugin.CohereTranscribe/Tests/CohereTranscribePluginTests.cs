@@ -282,6 +282,10 @@ public sealed class CohereTranscribePluginTests
         Directory.CreateDirectory(Path.GetDirectoryName(paths.ModelPath)!);
         const int partialBytes = 1_000_000;
         await File.WriteAllBytesAsync(paths.ModelPath + ".download", new byte[partialBytes]);
+        // A full-size VAD file without a verification marker may still be replaced, so it counts in full.
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.VadModelPath)!);
+        await using (var unverified = File.Create(paths.VadModelPath))
+            unverified.SetLength(CohereLocalAssetManager.VadModel.SizeBytes);
 
         var error = await Assert.ThrowsAsync<TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException>(
             () => sut.EnsureModelAsync(model.Id, progress: null, CancellationToken.None));
