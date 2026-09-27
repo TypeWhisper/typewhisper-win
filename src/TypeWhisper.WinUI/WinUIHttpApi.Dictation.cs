@@ -61,8 +61,8 @@ internal sealed partial class WinUIHttpApi
             try
             {
                 LocalApiDictationSession? started = null;
-                await session.StartForApiAsync(workflow, generation => started = _dictations.Register(generation));
-                if (started is null) return Error(409, session.TaskStartError ?? "Dictation could not start. Check the microphone and selected model.");
+                var rejection = await session.StartForApiAsync(workflow, generation => started = _dictations.Register(generation));
+                if (started is null) return Error(409, rejection ?? "Dictation could not start. Check the microphone and selected model.");
                 // Capture may already be processing or complete after slow provider startup.
                 // Its ID was registered before any silence stop could run.
                 _dictations.Refresh(session.ApiDictationGeneration, session.IsRecording, session.CanCancelProcessing,

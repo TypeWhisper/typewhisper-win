@@ -128,8 +128,7 @@ public sealed partial class MainWindow : Window
                 async () =>
                 {
                     _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
-                    await _dictation.StartAsync();
-                    ShowTaskStartError();
+                    ShowTaskStartError(await _dictation.StartAsync());
                 },
                 _dictation.StopAsync, _dictation.CancelAsync,
                 () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanStartFromShortcut,

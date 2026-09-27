@@ -17,9 +17,9 @@ public sealed partial class MainWindow
         ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
     }
     // A rejected transcription task stops before recording, so the overlay cannot explain it.
-    private void ShowTaskStartError(TypeWhisper.Core.Models.Workflow? workflow = null)
+    private void ShowTaskStartError(string? error, TypeWhisper.Core.Models.Workflow? workflow = null)
     {
-        if (_closing || _profileRestoreClosing || _dictation.TaskStartError is not { } error) return;
+        if (_closing || _profileRestoreClosing || error is null) return;
         ShowFromActivation();
         ShowActivationNotice(workflow is null ? error : workflow.Name + "\n" + error, workflow?.Id);
     }
