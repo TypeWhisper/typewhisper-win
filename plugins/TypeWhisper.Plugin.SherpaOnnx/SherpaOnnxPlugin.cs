@@ -259,9 +259,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         var dir = GetModelDirectory(modelId);
         Directory.CreateDirectory(dir);
 
-        var missing = model.Files.Where(f => !File.Exists(Path.Combine(dir, f.FileName)) || new FileInfo(Path.Combine(dir, f.FileName)).Length == 0).ToList();
+        var missing = model.Files.Where(f => !File.Exists(Path.Join(dir, f.FileName)) || new FileInfo(Path.Join(dir, f.FileName)).Length == 0).ToList();
         foreach (var file in missing)
-            ModelStorageSpace.TryRemoveAbandonedFile(Path.Combine(dir, file.FileName) + ".tmp");
+            ModelStorageSpace.TryRemoveAbandonedFile(Path.Join(dir, file.FileName) + ".tmp");
         ModelStorageSpace.EnsureAvailable(dir, missing.Sum(f => f.EstimatedSizeMB * 1024L * 1024), model.DisplayName, AvailableBytes);
 
         var total = model.Files.Sum(f => f.EstimatedSizeMB);

@@ -59,14 +59,14 @@ public sealed class QwenTests : IDisposable
         var active = _root + ".download-" + Guid.NewGuid().ToString("N");
         var unrelated = _root + ".download-backup";
         foreach (var directory in new[] { abandoned, active, unrelated }) Directory.CreateDirectory(directory);
-        File.WriteAllBytes(Path.Combine(abandoned, "model.tar.bz2"), new byte[16]);
-        File.WriteAllBytes(Path.Combine(active, "model.tar.bz2"), new byte[16]);
+        File.WriteAllBytes(Path.Join(abandoned, "model.tar.bz2"), new byte[16]);
+        File.WriteAllBytes(Path.Join(active, "model.tar.bz2"), new byte[16]);
         try
         {
             string? probed = null;
             var assets = new QwenModelAssets(http, source, directory => { probed = directory; return 1_000_000; });
             TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException error;
-            using (new FileStream(Path.Combine(active, "model.tar.bz2"), FileMode.Open, FileAccess.Write, FileShare.None))
+            using (new FileStream(Path.Join(active, "model.tar.bz2"), FileMode.Open, FileAccess.Write, FileShare.None))
                 error = await Assert.ThrowsAsync<TypeWhisper.PluginSDK.Helpers.InsufficientModelStorageException>(
                     () => assets.DownloadAsync(_root, null, default));
 
