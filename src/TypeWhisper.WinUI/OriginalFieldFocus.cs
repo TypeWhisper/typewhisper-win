@@ -6,9 +6,17 @@ internal static class OriginalFieldFocus
 {
     // Chromium/Electron contenteditable controls may expose Group or Custom, not Edit.
     // Keep the exact captured element; accept those roles only with writable text metadata.
-    internal static bool IsEditableControl(int controlType, bool keyboardFocusable, Func<bool> writableTextPattern) =>
+    // Windows Terminal's input control is Text (50020) with class TermControl (#551).
+    internal static bool IsEditableControl(int controlType, bool keyboardFocusable, Func<bool> writableTextPattern,
+        string? className = null) =>
         controlType is 50004 or 50030 ||
-        (controlType is 50025 or 50026 && keyboardFocusable && writableTextPattern());
+        ((controlType is 50025 or 50026 || (controlType is 50020 && className == "TermControl")) &&
+            keyboardFocusable && writableTextPattern());
+
+    // Classic console windows report the client process (e.g. powershell), while their
+    // UIA elements live in conhost. UIA's process for the window itself identifies that host.
+    internal static bool BelongsToWindowProcess(int elementProcess, uint windowProcess, Func<int> windowHostProcess) =>
+        elementProcess == windowProcess || (elementProcess != 0 && elementProcess == windowHostProcess());
 
     // Chromium/Electron build their accessibility tree on the first focus query and can
     // report the render host Pane until it exists (#513). Retry briefly while the target stays
