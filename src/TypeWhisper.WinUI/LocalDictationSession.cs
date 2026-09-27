@@ -624,7 +624,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await _gate.WaitAsync();
             if (_disposed) { _gate.Release(); return; }
         }
-        else if (!await _gate.WaitAsync(0)) return;
+        // An ignored start must not leave an earlier rejection for callers to show again.
+        else if (!await _gate.WaitAsync(0)) { TaskStartError = null; return; }
 #if DEBUG
         if (CorrectionProbeEnabled && !_audio.IsRecording)
         {
