@@ -350,10 +350,11 @@ public partial class App : Application
         try
         {
             _profileOperation.SetMessage("Deleting your TypeWhisper data…", true);
+            // Recorded first, so the deletion resumes on the next launch if the app ends during the cleanup below.
+            ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             // Start with Windows lives in the registration, not the profile; a new installation starts with it off.
             var startupError = await TurnOffStartupAsync();
             var cliError = await Task.Run(RemoveOwnCli);
-            ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             var report = await Task.Run(UserDataDeletion.FinishPending);
             if (startupError is not null || cliError is not null)
             {
@@ -398,13 +399,15 @@ public partial class App : Application
         try
         {
             var cli = new TypeWhisper.Presentation.CliInstallation(WinUIProfile.Root);
-            if (!cli.GetState().CanRemove) return null;
             switch (cli.IsBoundTo(WinUIProfile.Root))
             {
-                // Another profile's tool, such as the release app's next to a development build, stays.
+                // No tool, or another profile's, such as the release app's next to a development build: it stays.
                 case false: return null;
                 case null: return "The command line tool's profile setting could not be read, so it was left installed.";
             }
+            // Bound to this profile but without the install record Remove relies on to know which files it owns.
+            if (!cli.GetState().CanRemove)
+                return "The command line tool still points to this profile, but its install record is missing or unreadable, so it was left installed.";
             cli.Remove();
             // A changed file stays; a binding left behind would still point a terminal at this profile.
             return cli.GetState() is { Installed: false, CanRemove: false } && cli.IsBoundTo(WinUIProfile.Root) is false

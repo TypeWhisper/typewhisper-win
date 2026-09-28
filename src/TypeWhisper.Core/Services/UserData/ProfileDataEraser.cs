@@ -128,10 +128,18 @@ public static class ProfileDataEraser
     }
 
     /// <summary>Whether a confirmed erasure of <paramref name="root"/> has not finished yet.</summary>
+    /// <remarks>A marker that cannot be inspected counts as pending: only "not found" proves there is none.</remarks>
     public static bool IsErasurePending(string root)
     {
         var fullRoot = Normalize(root);
-        return Classify(fullRoot) == RootKind.PlainFolder && File.Exists(Path.Join(fullRoot, PendingMarkerName));
+        if (Classify(fullRoot) != RootKind.PlainFolder) return false;
+        try
+        {
+            File.GetAttributes(Path.Join(fullRoot, PendingMarkerName));
+            return true;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return false; }
+        catch (Exception ex) when (IsFileSystemFailure(ex)) { return true; }
     }
 
     /// <summary>Finishes a pending erasure; the marker is removed only once nothing is left in any target.</summary>
