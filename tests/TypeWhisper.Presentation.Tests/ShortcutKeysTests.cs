@@ -62,6 +62,24 @@ public class ShortcutKeysTests
     }
 
     [Theory]
+    [InlineData("Ctrl+Alt+S", "ś")]
+    [InlineData("Alt+Ctrl+Shift+S", "Ś")]
+    [InlineData("Ctrl+Alt+Comma", "<")]
+    [InlineData("Ctrl+Alt+A", null)]
+    [InlineData("Ctrl+S", null)]
+    [InlineData("Alt+Shift+S", null)]
+    [InlineData("Ctrl+Alt+Win+S", null)]
+    [InlineData("Ctrl+Alt", null)]
+    public void CtrlAltShortcutsMustNotSwallowAltGrCharacters(string candidate, string? typed)
+    {
+        // Polish programmer's layout for S, Czech for the comma key.
+        char? Layout(int key, bool shift) => key switch { 'S' => shift ? 'Ś' : 'ś', 0xBC when !shift => '<', _ => null };
+        var error = ShortcutRules.AltGrConflict(candidate, Layout);
+        if (typed is null) Assert.Null(error);
+        else Assert.Contains($"\"{typed}\"", error);
+    }
+
+    [Theory]
     [InlineData("Ctrl+Foo")]
     [InlineData("Ctrl+VK0")]
     [InlineData("Ctrl+300")]

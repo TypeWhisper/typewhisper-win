@@ -14,6 +14,8 @@ internal sealed class DictationHotkeyRegistration : IDisposable
     private HybridHotkeyState _state = new();
     private bool _disposed;
     internal string Value { get; private set; } = "";
+    // Lets the shortcut recorder tell AltGr from a real Ctrl, which XAML key events cannot.
+    internal static bool AltGrControlDown { get; private set; }
     internal DictationHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<HybridHotkeyAction> invoke, Func<bool> isRecording,
         Func<RecordingMode>? recordingMode = null, Func<bool>? paused = null, int idBase = 0x6500)
     {
@@ -32,6 +34,8 @@ internal sealed class DictationHotkeyRegistration : IDisposable
             if (code >= 0 && !_interrupted && !_disposed)
             {
                 var key = Marshal.PtrToStructure<KeyData>(data);
+                var altGr = ShortcutKeys.IsAltGrControl(key.Key, key.Scan);
+                if (altGr) AltGrControlDown = message.ToInt64() is 0x100 or 0x104;
                 var acceptInjectedProbeInput = false;
 #if DEBUG
                 // Computer Use emits injected keys. Accept them only in the explicit
@@ -46,8 +50,8 @@ internal sealed class DictationHotkeyRegistration : IDisposable
                     else if (down || up)
                     {
                         var mode = recordingMode();
-                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true,
-                            held => (GetAsyncKeyState(held) & 0x8000) != 0));
+                        Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true,
+                            held => (GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0));
                     }
                 }
             }

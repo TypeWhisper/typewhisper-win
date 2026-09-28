@@ -42,6 +42,17 @@ internal static class ShortcutRules
         return null;
     }
 
+    // Only checked while recording, so shortcuts saved earlier keep working.
+    internal static string? AltGrConflict(string candidate, Func<int, bool, char?> altGrCharacter)
+    {
+        var parts = Normalize(candidate).Split('+');
+        if (!parts.Contains("CTRL") || !parts.Contains("ALT") || parts.Contains("WIN")) return null;
+        var keys = parts.Where(part => part is not ("CTRL" or "ALT" or "SHIFT")).ToArray();
+        if (keys.Length != 1 || !ShortcutKeys.TryParse(keys[0], out var key)) return null;
+        return altGrCharacter(key, parts.Contains("SHIFT")) is { } character
+            ? $"Your keyboard types \"{character}\" with this combination (AltGr). Choose another shortcut." : null;
+    }
+
     internal static string? Conflict(string candidate, string ownKey, IEnumerable<(string Key, string Label, string Value)> bindings)
     {
         if (string.IsNullOrWhiteSpace(candidate)) return null;

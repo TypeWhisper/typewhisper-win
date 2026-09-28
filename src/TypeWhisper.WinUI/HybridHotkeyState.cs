@@ -8,6 +8,8 @@ internal enum HybridHotkeyAction { Toggle, Start, Stop, Cancel }
 internal sealed class HybridHotkeyState
 {
     internal const long HoldMilliseconds = 300;
+    // Stands in for the synthetic left Ctrl that AltGr sends; outside the virtual-key range.
+    internal const int AltGrControl = 0x1A2;
     private readonly HashSet<int> _down = [];
     private string? _armed;
     private long _pressedAt;
@@ -78,10 +80,13 @@ internal sealed class HybridHotkeyState
         return action;
     }
 
-    private static bool IsModifier(int key) => ShortcutKeys.IsModifier(key);
-    private string Chord() => ShortcutRules.Normalize(string.Join("+", _down.Select(key => key switch
+    private static bool IsModifier(int key) => key == AltGrControl || ShortcutKeys.IsModifier(key);
+    // With a main key AltGr is Ctrl+Alt, as for RegisterHotKey. Alone it is only Alt, so typing
+    // "@" or "ś" with AltGr does not start and cancel a modifier-only Ctrl+Alt shortcut.
+    private string Chord() => ShortcutRules.Normalize(string.Join("+", _down
+        .Where(key => key != AltGrControl || _down.Any(other => !IsModifier(other))).Select(key => key switch
     {
-        0x11 or 0xA2 or 0xA3 => "CTRL", 0x12 or 0xA4 or 0xA5 => "ALT",
+        0x11 or 0xA2 or 0xA3 or AltGrControl => "CTRL", 0x12 or 0xA4 or 0xA5 => "ALT",
         0x10 or 0xA0 or 0xA1 => "SHIFT", 0x5B or 0x5C => "WIN",
         _ => ShortcutKeys.Token(key)
     }).Distinct()));

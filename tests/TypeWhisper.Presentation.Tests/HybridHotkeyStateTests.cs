@@ -24,6 +24,32 @@ public class HybridHotkeyStateTests
             state.Key(0xA0, true, duration + 30, bindings, !stop, mode));
     }
 
+    [Fact]
+    public void TypingWithAltGrDoesNotStartAModifierOnlyCtrlAltShortcut()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+ALT" };
+        // AltGr+Q types "@" on a German keyboard.
+        Assert.Null(state.Key(HybridHotkeyState.AltGrControl, true, 0, bindings));
+        Assert.Null(state.Key(0xA5, true, 0, bindings));
+        Assert.Null(state.Key('Q', true, 10, bindings));
+        Assert.Null(state.Key('Q', false, 20, bindings));
+        Assert.Null(state.Key(HybridHotkeyState.AltGrControl, false, 30, bindings));
+        Assert.Null(state.Key(0xA5, false, 30, bindings));
+        Assert.Null(state.Key(0xA2, true, 40, bindings));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA4, true, 40, bindings));
+    }
+
+    [Fact]
+    public void AltGrStillCountsAsCtrlAltWithAMainKey()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+ALT+A" };
+        Assert.Null(state.Key(HybridHotkeyState.AltGrControl, true, 0, bindings));
+        Assert.Null(state.Key(0xA5, true, 0, bindings));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key('A', true, 10, bindings));
+    }
+
     [Theory]
     [InlineData(RecordingMode.Toggle)]
     [InlineData(RecordingMode.Hold)]
