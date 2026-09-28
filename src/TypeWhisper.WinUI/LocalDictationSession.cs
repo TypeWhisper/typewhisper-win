@@ -788,7 +788,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
                 var resolvedTask = WorkflowTranscriptionTask.Resolve(WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart), globalTaskAtStart, SupportsTranslation);
                 // The overlay configured live preview for the global task when recording began.
-                if (resolvedTask != _taskAtStart) { _taskAtStart = resolvedTask; Changed?.Invoke(); }
+                if (resolvedTask != _taskAtStart)
+                {
+                    _taskAtStart = resolvedTask; Changed?.Invoke();
+                    AppDiagnostics.Write($"dictation.task-resolved task={resolvedTask}");
+                }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();

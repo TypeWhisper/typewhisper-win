@@ -26,7 +26,9 @@ public partial class App : Application
         {
             if (args.ExceptionObject is Exception error) AppDiagnostics.WriteFailure("app.crash", error);
         };
-        TaskScheduler.UnobservedTaskException += (_, args) => AppDiagnostics.WriteFailure("task.unobserved-exception", args.Exception);
+        // The scheduler wraps the fault; its type and stack are on the inner exception.
+        TaskScheduler.UnobservedTaskException += (_, args) => AppDiagnostics.WriteFailure("task.unobserved-exception",
+            args.Exception.InnerExceptions is [var single] ? single : args.Exception);
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)

@@ -52,10 +52,21 @@ internal sealed class OriginalDictationField : IDisposable
             // The first query may wait for a cold provider; retries must stay short.
             _automation.ConnectionTimeout = 250; _automation.TransactionTimeout = 250;
         }
-        AppDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.element control={_element.CurrentControlType}");
-        if (_element?.CurrentControlType is 50025 or 50026)
-            AppDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");
+        DiagnoseCapture();
         return IsCurrent();
+    }
+
+    // These probes query the same provider as IsCurrent. A transient provider failure must leave
+    // the verdict to IsCurrent, which lets the capture retry, instead of ending the capture here.
+    private void DiagnoseCapture()
+    {
+        try
+        {
+            AppDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.element control={_element.CurrentControlType}");
+            if (_element?.CurrentControlType is 50025 or 50026)
+                AppDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); }
     }
 
     private bool IsValid()

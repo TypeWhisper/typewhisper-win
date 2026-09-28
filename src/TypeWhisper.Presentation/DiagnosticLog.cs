@@ -179,6 +179,13 @@ public sealed partial class DiagnosticLogFile
         }
     }
 
+    /// <summary>Applies retention when the hourly prune is due, so entries expire while no events are written.</summary>
+    public void PruneIfDue()
+    {
+        lock (_lock)
+            if (_preferences.Enabled && _clock() >= _nextPrune) BestEffort(PruneUnsafe);
+    }
+
     /// <summary>Writes the header and every retained line to a new file and returns the number of retained lines.</summary>
     /// <exception cref="IOException">The destination could not be written.</exception>
     public int Export(string destination, DiagnosticLogLine header)

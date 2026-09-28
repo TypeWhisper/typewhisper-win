@@ -224,6 +224,20 @@ public sealed class DiagnosticLogTests : IDisposable
     }
 
     [Fact]
+    public void PrunesExpiredEntriesWithoutNewWritesOnceDue()
+    {
+        var log = Log(new(RetentionDays: 1));
+        log.Write(Line("old"));
+        _now = _now.AddMinutes(30);
+        log.PruneIfDue();
+        Assert.Single(Lines());
+
+        _now = _now.AddDays(2);
+        log.PruneIfDue();
+        Assert.Empty(Lines());
+    }
+
+    [Fact]
     public void ClearDeletesEveryLine()
     {
         var log = Log();

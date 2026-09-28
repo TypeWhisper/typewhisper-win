@@ -14,6 +14,7 @@ internal static class AppDiagnostics
     private static volatile DiagnosticLogFile? _log;
     private static Guid? _dictation;
     private static long _dictationStarted;
+    private static Timer? _pruneTimer;
 
     internal static DiagnosticLogPreferencesStore? Preferences { get; private set; }
 
@@ -28,6 +29,8 @@ internal static class AppDiagnostics
             // Retries a deletion that failed when the log was turned off, and applies retention.
             // Unreadable settings only pause the log; they do not delete what it already holds.
             if (Preferences.Error is null) _log.Configure(Preferences.Current);
+            // Retention also applies while the app runs without writing any events.
+            _pruneTimer = new(_ => _log?.PruneIfDue(), null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
         }
         // Earlier builds wrote full exception text here; this log replaces it.
         try { File.Delete(Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log")); }
