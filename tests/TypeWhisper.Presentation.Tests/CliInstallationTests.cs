@@ -32,12 +32,13 @@ public sealed class CliInstallationTests : IDisposable
     public void InstallationIsBoundOnlyToTheProfileThatInstalledIt()
     {
         var service = Service();
-        Assert.False(service.IsBoundTo(Path.Combine(_root, "profile")));
+        var profile = Path.Join(_root, "profile");
+        Assert.False(service.IsBoundTo(profile));
         service.Install();
-        Assert.True(service.IsBoundTo(Path.Combine(_root, "profile") + Path.DirectorySeparatorChar));
-        Assert.False(service.IsBoundTo(Path.Combine(_root, "other-profile")));
+        Assert.True(service.IsBoundTo(profile + Path.DirectorySeparatorChar));
+        Assert.False(service.IsBoundTo(Path.Join(_root, "other-profile")));
         service.Remove();
-        Assert.False(service.IsBoundTo(Path.Combine(_root, "profile")));
+        Assert.False(service.IsBoundTo(profile));
     }
 
     [Fact]

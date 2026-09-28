@@ -147,9 +147,23 @@ internal static class StableImportCopy
             {
                 // Denied: the copy stays and is counted below.
             }
-            if (Directory.Exists(path)) left++;
+            if (!IsGone(path)) left++;
         }
         return left;
+    }
+
+    // Only "not found" proves a copy is gone; a folder that cannot be read may still hold the database.
+    private static bool IsGone(string path)
+    {
+        try
+        {
+            File.GetAttributes(path);
+            return false;
+        }
+        catch (FileNotFoundException) { return true; }
+        catch (DirectoryNotFoundException) { return true; }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
     // Retry cleanup on launch and later imports. Age protects folder creation; the lease protects active imports.

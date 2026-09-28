@@ -112,7 +112,7 @@ public sealed class CliInstallation
     {
         try
         {
-            using var binding = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(_destination, "cli-profile.json")));
+            using var binding = JsonDocument.Parse(File.ReadAllBytes(Path.Join(_destination, "cli-profile.json")));
             return binding.RootElement.TryGetProperty("profile_directory", out var bound) && bound.ValueKind == JsonValueKind.String &&
                 string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(bound.GetString()!)),
                     Path.TrimEndingDirectorySeparator(Path.GetFullPath(profileDirectory)), StringComparison.OrdinalIgnoreCase);
