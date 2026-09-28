@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using System.Security;
+using Microsoft.Win32.SafeHandles;
 
 namespace TypeWhisper.Core.Services.UserData;
 
@@ -29,7 +31,8 @@ public sealed record ErasureTarget(string Root, IReadOnlyList<string>? Entries =
 /// <remarks>
 /// Never a recursive delete of the root. Every entry must resolve strictly inside the root before it is touched,
 /// links (junctions and symbolic links) are removed as links and never entered, and real folders are emptied the
-/// same way before they are removed. A root that is itself a link, a file or a drive root is refused untouched,
+/// same way before they are removed. Each folder is held open while it is emptied, so it cannot be swapped for a
+/// link between the check and the listing. A root that is itself a link, a file or a drive root is refused untouched,
 /// because its contents belong to whoever created the link. The report is taken from a second walk, not from the
 /// delete calls: a file that is still in use stays where it is and is counted.
 ///
@@ -82,7 +85,13 @@ public static class ProfileDataEraser
 
     private static ProfileErasureReport EraseSelected(string fullRoot, Func<string, bool> selects)
     {
-        var removed = EmptyDirectory(fullRoot, fullRoot, selects);
+        int removed;
+        try
+        {
+            using (PinFolder(fullRoot)) removed = EmptyDirectory(fullRoot, fullRoot, selects);
+        }
+        // Replaced by a link or a file since it was classified.
+        catch (Exception ex) when (IsFileSystemFailure(ex)) { return new(0, 0, true); }
         return new(removed, CountRemaining(fullRoot, fullRoot, selects), false);
     }
 
@@ -171,7 +180,8 @@ public static class ProfileDataEraser
                 }
                 else if (attributes.HasFlag(FileAttributes.Directory))
                 {
-                    removed += EmptyDirectory(root, path, null);
+                    // Fails when the folder became a link since the check; the next pass removes it as a link.
+                    using (PinFolder(path)) removed += EmptyDirectory(root, path, null);
                     ClearReadOnly(path, attributes);
                     Directory.Delete(path, recursive: false);
                 }
@@ -222,9 +232,52 @@ public static class ProfileDataEraser
         try { attributes = File.GetAttributes(fullRoot); }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return RootKind.Missing; }
         catch (Exception ex) when (IsFileSystemFailure(ex)) { return RootKind.Refused; }
-        return attributes.HasFlag(FileAttributes.Directory) && !attributes.HasFlag(FileAttributes.ReparsePoint)
-            ? RootKind.PlainFolder : RootKind.Refused;
+        return IsPlainFolder(attributes) ? RootKind.PlainFolder : RootKind.Refused;
     }
+
+    /// <summary>Opens <paramref name="path"/> without following a link and fails unless it is still a plain folder.</summary>
+    /// <remarks>
+    /// On Windows the handle does not share delete access, so the folder cannot be renamed, removed or replaced by a
+    /// link until it is closed. Elsewhere the attributes are only checked again.
+    /// </remarks>
+    private static IDisposable? PinFolder(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            if (!IsPlainFolder(File.GetAttributes(path))) throw new IOException($"'{path}' is no longer a plain folder.");
+            return null;
+        }
+
+        var handle = CreateFile(path, ListFolder | ReadAttributes, FileShare.ReadWrite, 0, FileMode.Open, BackupSemantics | OpenReparsePoint, 0);
+        if (handle.IsInvalid)
+        {
+            var error = Marshal.GetLastPInvokeError();
+            handle.Dispose();
+            throw new IOException($"'{path}' could not be opened (Windows error {error}).");
+        }
+        try
+        {
+            if (!IsPlainFolder(File.GetAttributes(handle))) throw new IOException($"'{path}' is no longer a plain folder.");
+            return handle;
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
+    }
+
+    private static bool IsPlainFolder(FileAttributes attributes) =>
+        attributes.HasFlag(FileAttributes.Directory) && !attributes.HasFlag(FileAttributes.ReparsePoint);
+
+    // Windows enforces sharing only against handles with data access, so attribute access alone would not pin the folder.
+    private const uint ListFolder = 0x01;
+    private const uint ReadAttributes = 0x80;
+    private const uint BackupSemantics = 0x02000000;
+    private const uint OpenReparsePoint = 0x00200000;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateFileW")]
+    private static extern SafeFileHandle CreateFile(string path, uint access, FileShare share, nint security, FileMode mode, uint flags, nint template);
 
     private static bool IsFileSystemFailure(Exception ex) => ex is IOException or UnauthorizedAccessException or SecurityException;
 

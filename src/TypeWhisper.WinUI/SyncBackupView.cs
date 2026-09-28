@@ -186,7 +186,9 @@ internal sealed class SyncBackupView : UserControl
         if (result.Skipped.Count > 0)
             summary += $" {result.Skipped.Count:N0} {(result.Skipped.Count == 1 ? "item was" : "items were")} in use or unreadable and are missing from the export; README.txt in the export lists them.";
         if (!result.IncludesBackup)
-            summary += " The restorable backup file could not be created, but the copy of your data folder is complete.";
+            summary += result.Skipped.Count == 0
+                ? " The restorable backup file could not be created, but the copy of your data folder is complete."
+                : " The restorable backup file could not be created either.";
         _dataNotice.Text = summary;
     }
 
