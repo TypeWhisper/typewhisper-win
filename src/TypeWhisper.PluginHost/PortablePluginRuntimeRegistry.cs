@@ -395,6 +395,17 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         lock (slot.Isolated) return slot.Isolated.Values.Select(engine => engine.ReportedAccelerationStatus).FirstOrDefault(status => status is not null);
     }
 
+    /// <summary>Ends the plugin's transcription workers, which release their models and model files.</summary>
+    public async Task StopTranscriptionWorkersAsync(string pluginId)
+    {
+        Slot? slot;
+        lock (_sync) _slots.TryGetValue(pluginId, out slot);
+        if (slot is null) return;
+        IsolatedTranscriptionEngine[] isolated;
+        lock (slot.Isolated) isolated = slot.Isolated.Values.ToArray();
+        foreach (var engine in isolated) await engine.UnloadModelAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Refreshes capability indices after plugin notifications without invoking plugins under the state lock.</summary>
     public async Task RefreshCapabilitiesAsync()
     {

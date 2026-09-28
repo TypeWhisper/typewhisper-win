@@ -198,7 +198,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     }
 
     private string PausedMessage() => ProviderDisplayName + " stopped unexpectedly several times, so TypeWhisper paused it briefly. " +
-        "Your recording is kept. Try again in a minute, select the model again, or choose another model.";
+        $"Your recording is kept. Try again in {PauseAfterRepeatedCrashes.TotalSeconds:0} seconds, select the model again, or choose another model.";
 
     private void RaiseNotice(string message)
     {

@@ -35,7 +35,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _engine.DisposeAsync();
+        if (_engine is not null) await _engine.DisposeAsync();
         try { Directory.Delete(_root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
@@ -203,7 +203,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TheRegistryPresentsIsolatedEnginesAndEndsTheirWorkersOnDisable()
+    public async Task TheRegistryPresentsIsolatedEnginesAndEndsTheirWorkersOnRequestAndDisable()
     {
         var bundles = Path.Combine(_root, "bundles");
         WritePackage(Path.Combine(bundles, PluginId), typeof(WorkerProbePlugin));
@@ -217,14 +217,19 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.True(provider.SupportsPcm);
         var model = (await registry.GetModelStatesAsync(provider.SelectionId)).Single(state => state.ModelId == "large");
         await registry.SelectModelAsync(model);
-        var (pid, result) = await registry.UseTranscriptionAsync(provider.SelectionId, async (engine, ct) =>
+        Task<(int, PluginTranscriptionResult)> Transcribe() => registry.UseTranscriptionAsync(provider.SelectionId, async (engine, ct) =>
         {
             Assert.IsType<IsolatedTranscriptionEngine>(engine);
             var decoded = await LanguageHintTranscription.DecodeAsync(engine, new float[] { 0 }, () => [], null, [], false, ct);
             return (((IsolatedTranscriptionEngine)engine).WorkerProcessId!.Value, decoded);
         });
+        var (pid, result) = await Transcribe();
         Assert.Equal("large", Fields(result)["model"]);
         var worker = Process.GetProcessById(pid);
+        await registry.StopTranscriptionWorkersAsync(PluginId);
+        await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        (pid, _) = await Transcribe();
+        worker = Process.GetProcessById(pid);
         Assert.Null(await registry.SetEnabledAsync(PluginId, false));
         await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
     }

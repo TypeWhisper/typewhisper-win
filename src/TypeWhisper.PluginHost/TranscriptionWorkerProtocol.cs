@@ -12,7 +12,8 @@ namespace TypeWhisper.PluginHost;
 internal static class TranscriptionWorkerProtocol
 {
     internal const int Version = 1;
-    private const int MaximumHeaderBytes = 1 << 20;
+    // Responses carry the full result, including segments and token timings of long files, in the header.
+    private const int MaximumHeaderBytes = 64 << 20;
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() },
@@ -22,6 +23,8 @@ internal static class TranscriptionWorkerProtocol
     internal static async Task WriteAsync(Stream stream, TranscriptionWorkerMessage message, ReadOnlyMemory<byte> payload, CancellationToken ct)
     {
         var header = JsonSerializer.SerializeToUtf8Bytes(message, Json);
+        // Checked before anything is written, so the stream stays usable for an error response.
+        if (header.Length > MaximumHeaderBytes) throw new InvalidDataException("The transcription result is too large to return.");
         var prefix = new byte[8];
         BinaryPrimitives.WriteInt32LittleEndian(prefix, header.Length);
         BinaryPrimitives.WriteInt32LittleEndian(prefix.AsSpan(4), payload.Length);

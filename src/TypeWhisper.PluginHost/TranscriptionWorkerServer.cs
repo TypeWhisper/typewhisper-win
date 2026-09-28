@@ -115,7 +115,7 @@ public static class TranscriptionWorkerServer
         internal void Post(TranscriptionWorkerMessage message) => _ = Task.Run(async () =>
         {
             try { await SendAsync(message).ConfigureAwait(false); }
-            catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or ObjectDisposedException) { }
         });
     }
 
@@ -154,7 +154,8 @@ public static class TranscriptionWorkerServer
                 try { result = await ExecuteAsync(message, payload, cancellation.Token).ConfigureAwait(false); }
                 catch (Exception ex) when (ex is not OutOfMemoryException) { error = TranscriptionWorkerProtocol.ToError(ex); }
                 finally { lock (_sync) { _current = 0; _currentCancellation = null; } }
-                await connection.SendAsync(Response(message.Id, error, result)).ConfigureAwait(false);
+                try { await connection.SendAsync(Response(message.Id, error, result)).ConfigureAwait(false); }
+                catch (InvalidDataException ex) { await connection.SendAsync(Response(message.Id, TranscriptionWorkerProtocol.ToError(ex), null)).ConfigureAwait(false); }
             }
             await reader.ConfigureAwait(false);
             return 0;
@@ -301,6 +302,6 @@ internal sealed class TranscriptionWorkerHostServices(string dataDirectory, stri
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(stream) ?? [];
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or JsonException) { return []; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return []; }
     }
 }
