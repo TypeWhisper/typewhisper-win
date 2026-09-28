@@ -200,7 +200,7 @@ internal sealed class SyncBackupView : UserControl
         var content = new StackPanel { Spacing = 12, MaxWidth = 460 };
         content.Children.Add(Copy("This permanently deletes everything TypeWhisper stores on this PC: history and its audio, recordings, dictionary, snippets, workflows, settings, plugin settings and API keys, downloaded models, and the license and account sign-in saved on this PC.", 14));
         content.Children.Add(Copy("Use Export all data first if you want to keep a copy. Files in your cloud sync folder, your TypeWhisper account and your license activations are not changed; to move a license to another PC, use Deactivate this device under Premium first.", 13, true));
-        content.Children.Add(Copy("Active work stops and Start with Windows is turned off, then TypeWhisper restarts and opens setup like a new installation.", 13, true));
+        content.Children.Add(Copy("Active work stops, Start with Windows is turned off and the command line tool installed from this profile is removed, then TypeWhisper restarts and opens setup like a new installation.", 13, true));
         content.Children.Add(understood);
         var dialog = new ContentDialog
         {

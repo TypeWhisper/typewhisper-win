@@ -352,13 +352,17 @@ public partial class App : Application
             _profileOperation.SetMessage("Deleting your TypeWhisper data…", true);
             // Start with Windows lives in the registration, not the profile; a new installation starts with it off.
             var startupError = await TurnOffStartupAsync();
+            var cliError = await Task.Run(RemoveOwnCli);
             ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             var report = await Task.Run(UserDataDeletion.FinishPending);
-            if (startupError is not null)
+            if (startupError is not null || cliError is not null)
             {
-                ShowProfileFailure(report.Complete
-                    ? "Your data was deleted, but Start with Windows could not be turned off. Reopen TypeWhisper and turn it off under General, or remove TypeWhisper from the startup apps in Windows Settings."
-                    : "Not all data could be deleted yet, and Start with Windows could not be turned off. Reopen TypeWhisper to finish deleting your data, then turn off Start with Windows under General.", startupError);
+                string[] leftovers = [.. new[] { startupError is null ? null : "turn off Start with Windows under General",
+                    cliError is null ? null : "remove the command line tool under Advanced" }.OfType<string>()];
+                ShowProfileFailure((report.Complete
+                    ? "Your data was deleted, but not everything outside it could be undone. Reopen TypeWhisper and "
+                    : "Not all data could be deleted yet, and not everything outside it could be undone. Reopen TypeWhisper to finish deleting your data, then ")
+                    + string.Join(" and ", leftovers) + ".", string.Join(Environment.NewLine, new[] { startupError, cliError }.OfType<string>()));
                 return;
             }
             _mainInstance?.UnregisterKey();
@@ -383,6 +387,20 @@ public partial class App : Application
         {
             var state = await WindowsStartupRegistration.Create().SetEnabledAsync(false);
             return state.IsEnabled ? state.Error ?? "Windows still lists TypeWhisper as a startup app." : null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
+    }
+
+    /// <returns>Null once the command line tool this profile installed is removed, or when there is none; otherwise why it stayed.</returns>
+    private static string? RemoveOwnCli()
+    {
+        try
+        {
+            var cli = new TypeWhisper.Presentation.CliInstallation(WinUIProfile.Root);
+            // Another profile's tool, such as the release app's next to a development build, stays.
+            if (!cli.GetState().CanRemove || !cli.IsBoundTo(WinUIProfile.Root)) return null;
+            cli.Remove();
+            return cli.GetState() is { Installed: false, CanRemove: false } ? null : "Some files of the command line tool were changed and stayed.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
     }
