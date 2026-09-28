@@ -2,20 +2,40 @@ using TypeWhisper.Core.Services.UserData;
 
 namespace TypeWhisper.WinUI;
 
-// "Delete all data" empties the profile folder and, in release builds, the 1.0 data folder the upgrade copied
-// from, which still holds the old history and models. The 1.0 install folder (LocalAppData\TypeWhisper) is never
-// touched: it can hold the installed app itself.
+// "Delete all data" empties the profile folder and, in release builds, the places the 1.0 upgrade copied from,
+// which still hold the old history, models and keys: the whole 1.0 data folder, and the data entries 1.0 kept in
+// its install folder. That install folder (LocalAppData\TypeWhisper) also holds the installed app, so only the
+// named data entries go; Update.exe, current and packages stay. The unhandled-exception log in the temp folder is
+// outside the profile and holds exception details, so it goes too.
 internal static class UserDataDeletion
 {
     private const int Passes = 3;
     private static readonly TimeSpan PassDelay = TimeSpan.FromMilliseconds(500);
 
-    internal static string[] AdditionalRoots =>
+    internal static readonly string[] LegacyInstallDataEntries =
+    [
+        "settings.json", "Data", "Logs", "Models", "Plugins", "PluginData", "Audio", "DictationRecovery",
+        "api-port", "api-discovery.json", "api-token",
+    ];
+
+    internal static ErasureTarget[] Targets
+    {
+        get
+        {
+            var crashLog = ErasureTarget.Entry(Path.Join(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log"));
 #if DEBUG
-        [];
+            return [crashLog];
 #else
-        [Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-UserData")];
+            var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return
+            [
+                new(Path.Join(localData, "TypeWhisper-UserData")),
+                new(Path.Join(localData, "TypeWhisper"), LegacyInstallDataEntries),
+                crashLog,
+            ];
 #endif
+        }
+    }
 
     // The previous process lets go of its files a moment after it ends, so a few passes a moment apart.
     internal static ProfileErasureReport FinishPending()
@@ -24,17 +44,9 @@ internal static class UserDataDeletion
         for (var pass = 0; pass < Passes; pass++)
         {
             if (pass > 0) Thread.Sleep(PassDelay);
-            report = ProfileDataEraser.CompletePendingErasure(WinUIProfile.Root, AdditionalRoots);
+            report = ProfileDataEraser.CompletePendingErasure(WinUIProfile.Root, Targets);
             if (report is null or { Complete: true }) break;
         }
-        DeleteCrashLog();
         return report ?? new(0, 0, false);
-    }
-
-    // The unhandled-exception log sits in the temp folder, outside the profile, and holds exception details.
-    private static void DeleteCrashLog()
-    {
-        try { File.Delete(Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log")); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 }

@@ -184,7 +184,7 @@ internal sealed class SyncBackupView : UserControl
         _lifetime.Token.ThrowIfCancellationRequested();
         var summary = $"Exported {result.Files:N0} files ({Size(result.Bytes)}) to {file.Path}.";
         if (result.Skipped.Count > 0)
-            summary += $" {result.Skipped.Count:N0} {(result.Skipped.Count == 1 ? "file was" : "files were")} in use and could not be copied; README.txt in the export lists them.";
+            summary += $" {result.Skipped.Count:N0} {(result.Skipped.Count == 1 ? "item was" : "items were")} in use or unreadable and are missing from the export; README.txt in the export lists them.";
         if (!result.IncludesBackup)
             summary += " The restorable backup file could not be created, but the copy of your data folder is complete.";
         _dataNotice.Text = summary;
@@ -198,7 +198,7 @@ internal sealed class SyncBackupView : UserControl
         var content = new StackPanel { Spacing = 12, MaxWidth = 460 };
         content.Children.Add(Copy("This permanently deletes everything TypeWhisper stores on this PC: history and its audio, recordings, dictionary, snippets, workflows, settings, plugin settings and API keys, downloaded models, and the license and account sign-in saved on this PC.", 14));
         content.Children.Add(Copy("Use Export all data first if you want to keep a copy. Files in your cloud sync folder, your TypeWhisper account and your license activations are not changed; to move a license to another PC, use Deactivate this device under Premium first.", 13, true));
-        content.Children.Add(Copy("Active work stops, then TypeWhisper restarts and opens setup like a new installation.", 13, true));
+        content.Children.Add(Copy("Active work stops and Start with Windows is turned off, then TypeWhisper restarts and opens setup like a new installation.", 13, true));
         content.Children.Add(understood);
         var dialog = new ContentDialog
         {

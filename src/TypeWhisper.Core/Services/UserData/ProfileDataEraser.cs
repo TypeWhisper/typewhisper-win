@@ -12,6 +12,19 @@ public sealed record ProfileErasureReport(int Removed, int Remaining, bool Refus
     public bool Complete => Remaining == 0 && !Refused;
 }
 
+/// <summary>Another place a pending erasure clears together with the data folder.</summary>
+/// <param name="Root">A folder outside the data folder.</param>
+/// <param name="Entries">Top-level names inside <paramref name="Root"/> to delete, or null to empty the whole folder.</param>
+public sealed record ErasureTarget(string Root, IReadOnlyList<string>? Entries = null)
+{
+    /// <summary>A single file or folder, such as a log kept outside the data folder.</summary>
+    public static ErasureTarget Entry(string path)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        return new(Path.GetDirectoryName(full) ?? full, [Path.GetFileName(full)]);
+    }
+}
+
 /// <summary>Empties a TypeWhisper data folder for "Delete all data", keeping the folder itself.</summary>
 /// <remarks>
 /// Never a recursive delete of the root. Every entry must resolve strictly inside the root before it is touched,
@@ -49,8 +62,28 @@ public static class ProfileDataEraser
         }
 
         var kept = new HashSet<string>(keep, StringComparer.OrdinalIgnoreCase);
-        var removed = EmptyDirectory(fullRoot, fullRoot, kept);
-        return new(removed, CountRemaining(fullRoot, fullRoot, kept), false);
+        return EraseSelected(fullRoot, name => !kept.Contains(name));
+    }
+
+    /// <summary>Deletes only the top-level entries named in <paramref name="names"/> inside <paramref name="root"/>.</summary>
+    /// <remarks>For folders the app shares with something else, such as an install folder that also held data.</remarks>
+    public static ProfileErasureReport EraseEntries(string root, IEnumerable<string> names)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+        var fullRoot = Normalize(root);
+        var selected = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        return Classify(fullRoot) switch
+        {
+            RootKind.Missing => new(0, 0, false),
+            RootKind.Refused => new(0, 0, true),
+            _ => EraseSelected(fullRoot, selected.Contains),
+        };
+    }
+
+    private static ProfileErasureReport EraseSelected(string fullRoot, Func<string, bool> selects)
+    {
+        var removed = EmptyDirectory(fullRoot, fullRoot, selects);
+        return new(removed, CountRemaining(fullRoot, fullRoot, selects), false);
     }
 
     /// <summary>True when the folder is a plain folder or absent, the two cases <see cref="Erase"/> acts on.</summary>
@@ -64,39 +97,43 @@ public static class ProfileDataEraser
         if (Classify(fullRoot) == RootKind.Refused)
             throw new IOException("The TypeWhisper data folder is a link or not a folder, so it is never deleted automatically.");
         Directory.CreateDirectory(fullRoot);
-        File.WriteAllText(Path.Combine(fullRoot, PendingMarkerName), DateTimeOffset.UtcNow.ToString("O"));
+        File.WriteAllText(Path.Join(fullRoot, PendingMarkerName), DateTimeOffset.UtcNow.ToString("O"));
     }
 
     /// <summary>Whether a confirmed erasure of <paramref name="root"/> has not finished yet.</summary>
     public static bool IsErasurePending(string root)
     {
         var fullRoot = Normalize(root);
-        return Classify(fullRoot) == RootKind.PlainFolder && File.Exists(Path.Combine(fullRoot, PendingMarkerName));
+        return Classify(fullRoot) == RootKind.PlainFolder && File.Exists(Path.Join(fullRoot, PendingMarkerName));
     }
 
-    /// <summary>Finishes a pending erasure; the marker is removed only once nothing else is left.</summary>
+    /// <summary>Finishes a pending erasure; the marker is removed only once nothing is left in any target.</summary>
     /// <param name="root">The folder holding the marker.</param>
-    /// <param name="additionalRoots">Other folders emptied with it, such as an older version's data folder.</param>
+    /// <param name="others">Other places cleared with it, such as an older version's data folder or a log outside the folder.</param>
     /// <returns>Null when no erasure was pending.</returns>
-    public static ProfileErasureReport? CompletePendingErasure(string root, params string[] additionalRoots)
+    public static ProfileErasureReport? CompletePendingErasure(string root, params ErasureTarget[] others)
     {
         if (!IsErasurePending(root)) return null;
         var fullRoot = Normalize(root);
-        // A folder holding the marker's folder would take the marker with it and end the erasure half done.
-        if (additionalRoots.Any(other => string.Equals(Normalize(other), fullRoot, PathComparison) || IsStrictlyInside(other, fullRoot)))
-            throw new ArgumentException("An additional folder must not contain the data folder.", nameof(additionalRoots));
-        var report = additionalRoots.Select(other => Erase(other)).Append(Erase(root, PendingMarkerName))
+        // A target holding the marker's folder would take the marker with it and end the erasure half done.
+        if (others.SelectMany(TargetPaths).Any(path => string.Equals(Normalize(path), fullRoot, PathComparison) || IsStrictlyInside(path, fullRoot)))
+            throw new ArgumentException("Another erasure target must not contain the data folder.", nameof(others));
+        var report = others.Select(other => other.Entries is null ? Erase(other.Root) : EraseEntries(other.Root, other.Entries))
+            .Append(Erase(root, PendingMarkerName))
             .Aggregate((first, second) => new(first.Removed + second.Removed, first.Remaining + second.Remaining, first.Refused || second.Refused));
         if (report.Complete) CancelPendingErasure(root);
         return report;
     }
+
+    private static IEnumerable<string> TargetPaths(ErasureTarget target) =>
+        target.Entries is null ? [target.Root] : target.Entries.Select(name => Path.Join(target.Root, name));
 
     /// <summary>Drops the pending marker, so the next launch opens the folder as it is.</summary>
     public static void CancelPendingErasure(string root)
     {
         var fullRoot = Normalize(root);
         if (Classify(fullRoot) != RootKind.PlainFolder) return;
-        var marker = Path.Combine(fullRoot, PendingMarkerName);
+        var marker = Path.Join(fullRoot, PendingMarkerName);
         if (File.Exists(marker)) File.Delete(marker);
     }
 
@@ -111,7 +148,7 @@ public static class ProfileDataEraser
     internal static StringComparison PathComparison =>
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    private static int EmptyDirectory(string root, string directory, HashSet<string>? kept)
+    private static int EmptyDirectory(string root, string directory, Func<string, bool>? selects)
     {
         FileSystemInfo[] entries;
         // Listed completely before anything is deleted, so the walk never runs over a directory it is changing.
@@ -122,7 +159,7 @@ public static class ProfileDataEraser
         foreach (var entry in entries)
         {
             var path = Path.GetFullPath(entry.FullName);
-            if (!IsStrictlyInside(root, path) || kept?.Contains(entry.Name) == true) continue;
+            if (!IsStrictlyInside(root, path) || selects?.Invoke(entry.Name) == false) continue;
             try
             {
                 // Read again now: a folder replaced by a link since the listing must be removed as the link.
@@ -153,7 +190,7 @@ public static class ProfileDataEraser
         return removed;
     }
 
-    private static int CountRemaining(string root, string directory, HashSet<string>? kept)
+    private static int CountRemaining(string root, string directory, Func<string, bool>? selects)
     {
         FileSystemInfo[] entries;
         // A folder that cannot be listed is not known to be empty.
@@ -161,9 +198,8 @@ public static class ProfileDataEraser
         catch (Exception ex) when (IsFileSystemFailure(ex)) { return 1; }
 
         var count = 0;
-        foreach (var entry in entries)
+        foreach (var entry in entries.Where(entry => selects?.Invoke(entry.Name) != false))
         {
-            if (kept?.Contains(entry.Name) == true) continue;
             count++;
             if (entry.Attributes.HasFlag(FileAttributes.Directory) && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint) &&
                 IsStrictlyInside(root, entry.FullName))

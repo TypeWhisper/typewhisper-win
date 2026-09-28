@@ -350,8 +350,15 @@ public partial class App : Application
         try
         {
             _profileOperation.SetMessage("Deleting your TypeWhisper data…", true);
+            // Start with Windows lives in the registration, not the profile; a new installation starts with it off.
+            var startupError = await TurnOffStartupAsync();
             ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             await Task.Run(UserDataDeletion.FinishPending);
+            if (startupError is not null)
+            {
+                ShowProfileFailure("Your data was deleted, but Start with Windows could not be turned off. Reopen TypeWhisper and turn it off under General, or remove TypeWhisper from the startup apps in Windows Settings.", startupError);
+                return;
+            }
             _mainInstance?.UnregisterKey();
             // On success this API ends the process; returning means the restart failed.
             var reason = AppInstance.Restart("");
@@ -367,6 +374,17 @@ public partial class App : Application
 
     private const string DataDeletionHeading = "Delete all data";
 
+    /// <returns>Null once startup is off or cannot be changed in this build; otherwise why it stayed on.</returns>
+    private static async Task<string?> TurnOffStartupAsync()
+    {
+        try
+        {
+            var state = await WindowsStartupRegistration.Create().SetEnabledAsync(false);
+            return state.IsEnabled ? state.Error ?? "Windows still lists TypeWhisper as a startup app." : null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
+    }
+
     // Runs before anything reads the profile, so a confirmed deletion is never undone by a store writing it back.
     private async Task<bool> FinishPendingDataDeletionAsync(TypeWhisper.Presentation.ApplicationActivationRequest request,
         Task initialShare, bool skipLegacyImport)
@@ -379,7 +397,7 @@ public partial class App : Application
         if (report.Complete) return true;
         var message = report.Refused
             ? "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched."
-            : $"{report.Remaining:N0} {(report.Remaining == 1 ? "item" : "items")} in your TypeWhisper data folder could not be deleted, usually because another program is using them. Close other programs that may use these files, then retry.";
+            : $"{report.Remaining:N0} {(report.Remaining == 1 ? "item" : "items")} of your TypeWhisper data could not be deleted, usually because another program is using them. Close other programs that may use these files, then retry.";
         ShowProfileFailure(message, TypeWhisper.WinUI.Platform.AppDistribution.ResolveShellVisiblePath(WinUIProfile.Root), keepStartupPending: true);
         _profileOperation.OfferActions(
             "Retry", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport)),

@@ -8,7 +8,7 @@ namespace TypeWhisper.Core.Services.UserData;
 /// <param name="Files">Profile files copied into the archive.</param>
 /// <param name="Bytes">Their combined size before compression.</param>
 /// <param name="IncludesBackup">Whether the restorable backup file could be added.</param>
-/// <param name="Skipped">Profile files that were in use or unreadable, relative to the data folder.</param>
+/// <param name="Skipped">Profile files that were in use or unreadable, and folders that could not be listed (ending in a slash), relative to the data folder.</param>
 public sealed record UserDataExportResult(int Files, long Bytes, bool IncludesBackup, IReadOnlyList<string> Skipped);
 
 /// <summary>Progress of a running export.</summary>
@@ -75,7 +75,7 @@ public static class UserDataExport
             throw new ArgumentException("Choose a location outside the TypeWhisper data folder.", nameof(destination));
         var folder = Path.GetDirectoryName(target) ?? throw new IOException("The export destination has no folder.");
 
-        var temporary = Path.Combine(folder, ".typewhisper-export-" + Guid.NewGuid().ToString("N") + ".tmp");
+        var temporary = Path.Join(folder, ".typewhisper-export-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
             UserDataExportResult result;
@@ -87,7 +87,7 @@ public static class UserDataExport
                 var skipped = new List<string>();
                 var files = 0;
                 long bytes = 0;
-                foreach (var (path, relative) in EnumerateIncludedFiles(root))
+                foreach (var (path, relative) in EnumerateIncludedFiles(root, skipped))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var copied = await TryCopyFileAsync(archive, path, relative, cancellationToken).ConfigureAwait(false);
@@ -106,7 +106,10 @@ public static class UserDataExport
         finally
         {
             try { File.Delete(temporary); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The export already succeeded or failed on its own terms; a leftover temporary is dot-named and harmless.
+            }
         }
     }
 
@@ -126,7 +129,8 @@ public static class UserDataExport
         return !isDirectory && ExcludedExtensions.Contains(Path.GetExtension(segments[^1]));
     }
 
-    private static IEnumerable<(string Path, string Relative)> EnumerateIncludedFiles(string root)
+    // Folders that cannot be listed go to unreadable with a trailing slash; the data folder itself failing throws.
+    private static IEnumerable<(string Path, string Relative)> EnumerateIncludedFiles(string root, List<string> unreadable)
     {
         var pending = new Stack<string>();
         pending.Push(root);
@@ -135,11 +139,16 @@ public static class UserDataExport
             var directory = pending.Pop();
             FileSystemInfo[] entries;
             try { entries = new DirectoryInfo(directory).GetFileSystemInfos("*", EveryEntry); }
-            catch (Exception ex) when (IsFileSystemFailure(ex)) { continue; }
-            foreach (var entry in entries.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+            catch (Exception ex) when (IsFileSystemFailure(ex) && directory != root)
             {
-                // Links are never followed: their target is not part of the data folder.
-                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                // Reported, never silently dropped: an export that looks complete could be trusted as a copy.
+                unreadable.Add(Path.GetRelativePath(root, directory).Replace('\\', '/') + "/");
+                continue;
+            }
+            // Links are never followed: their target is not part of the data folder.
+            foreach (var entry in entries.Where(entry => !entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+            {
                 var full = Path.GetFullPath(entry.FullName);
                 if (!ProfileDataEraser.IsStrictlyInside(root, full)) continue;
                 var relative = Path.GetRelativePath(root, full).Replace('\\', '/');
@@ -200,7 +209,7 @@ public static class UserDataExport
             .Append("downloaded models, installed plugins and temporary files.\r\n");
         if (result.Skipped.Count > 0)
         {
-            text.Append("\r\nThese files were in use or could not be read and are missing from this export:\r\n");
+            text.Append("\r\nThese files and folders were in use or could not be read and are missing from this export:\r\n");
             foreach (var path in result.Skipped) text.Append("  ").Append(path).Append("\r\n");
         }
         return text.ToString();
@@ -228,7 +237,10 @@ public static class UserDataExport
                 if (info.Exists && info.LinkTarget is not null && info.ResolveLinkTarget(returnFinalTarget: true) is { } target)
                     current = Path.TrimEndingDirectorySeparator(Path.GetFullPath(target.FullName));
             }
-            catch (Exception ex) when (IsFileSystemFailure(ex)) { }
+            catch (Exception ex) when (IsFileSystemFailure(ex))
+            {
+                // An unreadable part is compared as written; the rest of the path is still resolved.
+            }
         }
         return Path.TrimEndingDirectorySeparator(current);
     }

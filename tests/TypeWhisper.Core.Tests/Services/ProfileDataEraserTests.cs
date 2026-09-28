@@ -18,7 +18,8 @@ public sealed class ProfileDataEraserTests : IDisposable
     {
         foreach (var file in Directory.EnumerateFiles(_directory, "*", SearchOption.AllDirectories))
             File.SetAttributes(file, FileAttributes.Normal);
-        try { Directory.Delete(_directory, recursive: true); } catch (IOException) { }
+        try { Directory.Delete(_directory, recursive: true); }
+        catch (IOException) { /* A leftover temp folder must not fail the test run. */ }
     }
 
     private void Seed()
@@ -143,7 +144,7 @@ public sealed class ProfileDataEraserTests : IDisposable
         File.WriteAllText(Path.Combine(legacy, "Data", "history.json"), "[]");
         ProfileDataEraser.RequestErasure(Root);
 
-        var report = ProfileDataEraser.CompletePendingErasure(Root, legacy);
+        var report = ProfileDataEraser.CompletePendingErasure(Root, new ErasureTarget(legacy));
 
         Assert.NotNull(report);
         Assert.True(report.Complete);
@@ -157,10 +158,55 @@ public sealed class ProfileDataEraserTests : IDisposable
         Seed();
         ProfileDataEraser.RequestErasure(Root);
 
-        Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, _directory));
-        Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, Root));
+        Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, new ErasureTarget(_directory)));
+        Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, new ErasureTarget(Root)));
+        Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, new ErasureTarget(_directory, ["profile"])));
+        Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, ErasureTarget.Entry(Root)));
         Assert.True(File.Exists(Path.Combine(Root, "history.json")));
         Assert.True(ProfileDataEraser.IsErasurePending(Root));
+    }
+
+    [Fact]
+    public void NamedEntriesAreDeletedAndEverythingElseInTheFolderStays()
+    {
+        var install = Path.Combine(_directory, "install");
+        Directory.CreateDirectory(Path.Combine(install, "Data"));
+        File.WriteAllText(Path.Combine(install, "Data", "history.json"), "[]");
+        File.WriteAllText(Path.Combine(install, "settings.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(install, "current"));
+        File.WriteAllText(Path.Combine(install, "current", "TypeWhisper.exe"), "app");
+        File.WriteAllText(Path.Combine(install, "Update.exe"), "updater");
+
+        var report = ProfileDataEraser.EraseEntries(install, ["Data", "settings.json", "Models"]);
+
+        Assert.True(report.Complete);
+        Assert.Equal(3, report.Removed);
+        Assert.Equal(["Update.exe", "current"], Directory.EnumerateFileSystemEntries(install).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.True(File.Exists(Path.Combine(install, "current", "TypeWhisper.exe")));
+    }
+
+    [Fact]
+    public void ExternalFileInUseKeepsTheErasurePending()
+    {
+        if (!OperatingSystem.IsWindows()) return; // Only Windows refuses to delete an open file.
+        Seed();
+        var log = Path.Combine(Outside, "errors.log");
+        File.WriteAllText(log, "exception details");
+        ProfileDataEraser.RequestErasure(Root);
+
+        using (new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var report = ProfileDataEraser.CompletePendingErasure(Root, ErasureTarget.Entry(log));
+            Assert.NotNull(report);
+            Assert.Equal(1, report.Remaining);
+            Assert.True(ProfileDataEraser.IsErasurePending(Root));
+        }
+
+        var finished = ProfileDataEraser.CompletePendingErasure(Root, ErasureTarget.Entry(log));
+        Assert.NotNull(finished);
+        Assert.True(finished.Complete);
+        Assert.False(File.Exists(log));
+        Assert.False(ProfileDataEraser.IsErasurePending(Root));
     }
 
     [Fact]

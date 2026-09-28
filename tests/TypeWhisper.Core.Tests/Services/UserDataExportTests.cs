@@ -19,7 +19,8 @@ public sealed class UserDataExportTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_directory, recursive: true); } catch (IOException) { }
+        try { Directory.Delete(_directory, recursive: true); }
+        catch (IOException) { /* A leftover temp folder must not fail the test run. */ }
     }
 
     private void Write(string relative, string content = "x")
@@ -140,6 +141,42 @@ public sealed class UserDataExportTests : IDisposable
         using var archive = ZipFile.OpenRead(Destination);
         using var readMe = new StreamReader(archive.GetEntry(UserDataExport.ReadMeEntryName)!.Open());
         Assert.Contains("recordings/locked.wav", await readMe.ReadToEndAsync());
+    }
+
+    [Fact]
+    public async Task FolderThatCannotBeListedIsReportedAsMissing()
+    {
+        Write("history.json", "[]");
+        Write("recordings/meeting.wav", "audio");
+        var recordings = Path.Combine(Root, "recordings");
+        DenyListing(recordings, deny: true);
+        UserDataExportResult result;
+        try
+        {
+            try { Directory.EnumerateFileSystemEntries(recordings).ToArray(); return; } // Elevated or root runs can still list it.
+            catch (UnauthorizedAccessException) { }
+            result = await UserDataExport.ExportAsync(Root, Destination);
+        }
+        finally { DenyListing(recordings, deny: false); }
+
+        Assert.Equal(["recordings/"], result.Skipped);
+        using var archive = ZipFile.OpenRead(Destination);
+        using var readMe = new StreamReader(archive.GetEntry(UserDataExport.ReadMeEntryName)!.Open());
+        Assert.Contains("recordings/", await readMe.ReadToEndAsync());
+    }
+
+    private static void DenyListing(string directory, bool deny)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var info = new DirectoryInfo(directory);
+            var acl = info.GetAccessControl();
+            var rule = new System.Security.AccessControl.FileSystemAccessRule(System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+                System.Security.AccessControl.FileSystemRights.ListDirectory, System.Security.AccessControl.AccessControlType.Deny);
+            if (deny) acl.AddAccessRule(rule); else acl.RemoveAccessRule(rule);
+            info.SetAccessControl(acl);
+        }
+        else File.SetUnixFileMode(directory, deny ? UnixFileMode.None : UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
     [Fact]
