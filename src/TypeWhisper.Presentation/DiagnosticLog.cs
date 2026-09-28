@@ -126,13 +126,14 @@ public sealed partial class DiagnosticLogFile
     public DiagnosticLogPreferences Preferences { get { lock (_lock) return _preferences; } }
 
     /// <summary>Applies new preferences. Turning the log off deletes it; a shorter retention prunes it now.</summary>
-    public void Configure(DiagnosticLogPreferences preferences)
+    /// <returns>False when the file could not be deleted or pruned, for example while another program holds it.</returns>
+    public bool Configure(DiagnosticLogPreferences preferences)
     {
-        if (!preferences.IsValid) return;
+        if (!preferences.IsValid) return false;
         lock (_lock)
         {
             _preferences = preferences;
-            BestEffort(() =>
+            return BestEffort(() =>
             {
                 if (!preferences.Enabled) File.Delete(FilePath);
                 else PruneUnsafe();
@@ -185,22 +186,24 @@ public sealed partial class DiagnosticLogFile
     }
 
     /// <summary>Deletes every line. The log continues with new events while it is on.</summary>
-    public void Clear()
+    /// <returns>False when the file could not be deleted.</returns>
+    public bool Clear()
     {
-        lock (_lock) BestEffort(() => File.Delete(FilePath));
+        lock (_lock) return BestEffort(() => File.Delete(FilePath));
     }
 
     /// <summary>Reduces a line to allowlisted values: invalid fields are dropped and an invalid event is renamed.</summary>
     public static DiagnosticLogLine Admit(DiagnosticLogLine line)
     {
+        // Lines read back from disk can hold JSON nulls anywhere; they are invalid values, not errors.
         var data = line.Data?
-            .Where(entry => DataKey().IsMatch(entry.Key) && DataValue().IsMatch(entry.Value))
+            .Where(entry => entry.Key is not null && DataKey().IsMatch(entry.Key) && entry.Value is not null && DataValue().IsMatch(entry.Value))
             .Take(MaximumDataEntries)
             .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
-        var stack = line.Stack?.Where(frame => StackFrame().IsMatch(frame)).Take(MaximumStackFrames).ToArray();
+        var stack = line.Stack?.Where(frame => frame is not null && StackFrame().IsMatch(frame)).Take(MaximumStackFrames).ToArray();
         return new(
             line.Time.ToUniversalTime(),
-            EventName().IsMatch(line.Event) ? line.Event : "diagnostics.invalid-event",
+            line.Event is { } name && EventName().IsMatch(name) ? name : "diagnostics.invalid-event",
             line.DictationId is { } id && id != Guid.Empty ? id : null,
             line.ElapsedMs is >= 0 and <= MaximumElapsedMs ? line.ElapsedMs : null,
             data is { Count: > 0 } ? data : null,
@@ -232,11 +235,20 @@ public sealed partial class DiagnosticLogFile
             selected.Add(json);
         }
         selected.Reverse();
+        var content = Utf8.GetBytes(string.Concat(selected.Select(json => json + "\n")));
         var temporary = FilePath + $".{Guid.NewGuid():N}.tmp";
         try
         {
-            File.WriteAllText(temporary, string.Concat(selected.Select(json => json + "\n")), Utf8);
-            File.Move(temporary, FilePath, overwrite: true);
+            File.WriteAllBytes(temporary, content);
+            try { File.Move(temporary, FilePath, overwrite: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Another program holds the log without sharing deletion but still lets this app append.
+                // Overwrite it in place so retention and the size cap keep applying while it stays open.
+                using var stream = new FileStream(FilePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                stream.SetLength(0);
+                stream.Write(content);
+            }
         }
         finally
         {
@@ -271,10 +283,10 @@ public sealed partial class DiagnosticLogFile
         catch (JsonException) { return null; }
     }
 
-    private static void BestEffort(Action action)
+    private static bool BestEffort(Action action)
     {
-        try { action(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        try { action(); return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     [GeneratedRegex(@"^(?=.{1,80}$)[a-z0-9]+(?:[.\-][a-z0-9]+)*$")]

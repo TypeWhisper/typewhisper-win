@@ -13,13 +13,14 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     /// <summary>Returns once Ctrl+V was sent. The clipboard stays gated until <see cref="Restored"/> completes.</summary>
     internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null)
     {
+        var dictation = AppDiagnostics.CurrentDictation;
         await TransactionGate.WaitAsync();
         var releaseNow = true;
         try
         {
             var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text);
             AppDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
-            _restored = ReleaseAfterRestoreAsync(result.Restored);
+            _restored = ReleaseAfterRestoreAsync(result.Restored, dictation);
             releaseNow = false;
             return result.Inserted;
         }
@@ -27,13 +28,14 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         { AppDiagnostics.Write("clipboard.paste.exception", ex); throw; }
         finally { if (releaseNow) TransactionGate.Release(); }
     }
-    private static async Task ReleaseAfterRestoreAsync(Task restored)
+    private static async Task ReleaseAfterRestoreAsync(Task restored, AppDiagnostics.DictationContext dictation)
     {
         try { await restored; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // The paste was already sent; a failed restore must not turn it into a delivery failure.
-            AppDiagnostics.Write("clipboard.restore.exception", ex);
+            // The restore usually ends after the dictation, so log it under the dictation that pasted.
+            AppDiagnostics.Write(dictation, "clipboard.restore.exception", ex);
             System.Diagnostics.Trace.TraceWarning("Clipboard restore after paste failed: {0}", ex.GetType().Name);
         }
         finally { TransactionGate.Release(); }

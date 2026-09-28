@@ -24,6 +24,8 @@ internal static class AppDiagnostics
             if (_log is not null) return;
             Preferences = new(WinUIProfile.DataPath("diagnostics.json"));
             _log = new(WinUIProfile.DataPath("diagnostics.jsonl"), Preferences.Current);
+            // Retries a deletion that failed when the log was turned off, and applies retention.
+            _log.Configure(Preferences.Current);
         }
         Write($"app.start version={WindowsApplicationUpdates.CurrentVersion} os={Environment.OSVersion.Version} " +
             $"arch={RuntimeInformation.ProcessArchitecture} build={(WinUIProfile.DevelopmentBuild ? "debug" : "release")}");
@@ -33,17 +35,18 @@ internal static class AppDiagnostics
     {
         if (Preferences is not { } store || _log is not { } log) return "Diagnostics are not available until TypeWhisper has finished starting.";
         if (store.Save(preferences) is { } error) return error;
-        log.Configure(preferences);
-        return null;
+        if (log.Configure(preferences) || preferences.Enabled) return null;
+        return "The diagnostic log is off, but the existing log could not be deleted because another program is using it. " +
+            "TypeWhisper tries again the next time it starts.";
     }
 
-    internal static void Clear() => _log?.Clear();
+    internal static bool Clear() => _log?.Clear() ?? true;
 
     internal static int Export(string destination)
     {
         if (_log is not { } log) throw new InvalidOperationException("Diagnostics are not available until TypeWhisper has finished starting.");
         return log.Export(destination, Line($"diagnostics.export version={WindowsApplicationUpdates.CurrentVersion} " +
-            $"os={Environment.OSVersion.Version} arch={RuntimeInformation.ProcessArchitecture} retentionDays={log.Preferences.RetentionDays}", null, false));
+            $"os={Environment.OSVersion.Version} arch={RuntimeInformation.ProcessArchitecture} retentionDays={log.Preferences.RetentionDays}", null, false, default));
     }
 
     // Lines until EndDictation carry this id and the time since the recording started.
@@ -57,12 +60,23 @@ internal static class AppDiagnostics
         lock (Gate) _dictation = null;
     }
 
-    internal static void Write(string stage, Exception? error = null) => _log?.Write(Line(stage, error, false));
+    // Work that finishes after its dictation ended (or while the next one runs) captures this
+    // first and passes it to Write, so its lines stay attributed to the dictation that caused them.
+    internal static DictationContext CurrentDictation
+    {
+        get { lock (Gate) return new(_dictation, _dictationStarted); }
+    }
+
+    internal static void Write(string stage, Exception? error = null) => _log?.Write(Line(stage, error, false, CurrentDictation));
+
+    internal static void Write(DictationContext dictation, string stage, Exception? error = null) => _log?.Write(Line(stage, error, false, dictation));
 
     // Unhandled failures also record the method names of the failing stack, never its message.
-    internal static void WriteFailure(string stage, Exception error) => _log?.Write(Line(stage, error, true));
+    internal static void WriteFailure(string stage, Exception error) => _log?.Write(Line(stage, error, true, CurrentDictation));
 
-    private static DiagnosticLogLine Line(string stage, Exception? error, bool stack)
+    internal readonly record struct DictationContext(Guid? Id, long Started);
+
+    private static DiagnosticLogLine Line(string stage, Exception? error, bool stack, DictationContext dictation)
     {
         var parts = stage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var data = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -70,14 +84,8 @@ internal static class AppDiagnostics
             if (part.IndexOf('=') is > 0 and var split) data[part[..split]] = part[(split + 1)..];
         if (stack && error?.GetBaseException() is { } inner && inner != error && inner.GetType().FullName is { } innerType)
             data["inner"] = innerType;
-        Guid? dictation;
-        long? elapsed = null;
-        lock (Gate)
-        {
-            dictation = _dictation;
-            if (dictation is not null) elapsed = (long)Stopwatch.GetElapsedTime(_dictationStarted).TotalMilliseconds;
-        }
-        return new(DateTimeOffset.UtcNow, parts.FirstOrDefault() ?? "", dictation, elapsed, data.Count > 0 ? data : null,
+        long? elapsed = dictation.Id is null ? null : (long)Stopwatch.GetElapsedTime(dictation.Started).TotalMilliseconds;
+        return new(DateTimeOffset.UtcNow, parts.FirstOrDefault() ?? "", dictation.Id, elapsed, data.Count > 0 ? data : null,
             error?.GetType().FullName, error is null ? null : $"0x{error.HResult:X8}", stack && error is not null ? Frames(error) : null);
     }
 

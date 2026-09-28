@@ -98,8 +98,9 @@ internal sealed class DiagnosticsSettingsView : UserControl
         };
         clear.Click += (_, _) =>
         {
-            AppDiagnostics.Clear();
-            status.Text = "Diagnostic log deleted. New entries are recorded while the log is on.";
+            status.Text = AppDiagnostics.Clear()
+                ? "Diagnostic log deleted. New entries are recorded while the log is on."
+                : "The diagnostic log could not be deleted because another program is using it. Close that program and try again.";
         };
         Refresh();
         Content = body;

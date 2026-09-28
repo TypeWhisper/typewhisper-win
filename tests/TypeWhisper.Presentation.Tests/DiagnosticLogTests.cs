@@ -138,11 +138,56 @@ public sealed class DiagnosticLogTests : IDisposable
     }
 
     [Fact]
+    public void TrimsInPlaceWhileAnotherProgramHoldsTheLogWithoutSharingDeletion()
+    {
+        var log = Log();
+        log.Write(Line("app.start"));
+        using var editor = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var padding = Enumerable.Range(0, 15).ToDictionary(key => "pad" + key, _ => new string('x', 64));
+        for (var index = 0; index < 3_000; index++)
+            log.Write(new(_now, "dictation.step", Data: new Dictionary<string, string>(padding) { ["index"] = index.ToString() }));
+
+        Assert.True(new FileInfo(LogPath).Length <= DiagnosticLogFile.MaximumBytes);
+        Assert.Contains("\"index\":\"2999\"", Lines()[^1]);
+    }
+
+    [Fact]
+    public void DropsReadBackLinesWithNullValuesInsteadOfThrowing()
+    {
+        var log = Log();
+        log.Write(Line("app.start"));
+        File.AppendAllText(LogPath, "{\"time\":\"2026-09-27T12:00:00+00:00\",\"event\":\"dictation.start\",\"data\":{\"key\":null}}\n");
+        File.AppendAllText(LogPath, "{\"time\":\"2026-09-27T12:00:00+00:00\",\"event\":\"app.crash\",\"stack\":[null]}\n");
+        File.AppendAllText(LogPath, "{\"time\":\"2026-09-27T12:00:00+00:00\",\"event\":null}\n");
+
+        Assert.True(log.Configure(new()));
+        Assert.Contains("app.start", Assert.Single(Lines()));
+        Assert.Equal("diagnostics.invalid-event", DiagnosticLogFile.Admit(new(_now, null!, Data: new Dictionary<string, string> { ["key"] = null! },
+            Stack: [null!])).Event);
+    }
+
+    [Fact]
+    public void ReportsAFailedDeletionAndRetriesItWhenConfiguredAgain()
+    {
+        var log = Log();
+        log.Write(Line("app.start"));
+        using (new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            Assert.False(log.Configure(new(Enabled: false)));
+            Assert.False(log.Clear());
+            Assert.True(File.Exists(LogPath));
+        }
+
+        Assert.True(Log(new(Enabled: false)).Configure(new(Enabled: false)));
+        Assert.False(File.Exists(LogPath));
+    }
+
+    [Fact]
     public void ClearDeletesEveryLine()
     {
         var log = Log();
         log.Write(Line("app.start"));
-        log.Clear();
+        Assert.True(log.Clear());
         Assert.False(File.Exists(LogPath));
     }
 
