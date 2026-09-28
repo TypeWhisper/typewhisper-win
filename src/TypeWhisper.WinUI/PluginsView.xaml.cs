@@ -143,8 +143,13 @@ public sealed partial class PluginsView : UserControl
         if (_settingsLayout)
         {
             // Record navigation before awaiting: every refresh renders the latest selection.
-            SelectSettingsPlugin(pluginId);
+            // A plugin installed a moment ago is listed only after the refresh; rendering it
+            // earlier would report it unavailable and drop the selection.
+            var listed = _plugins.Any(plugin => Path.GetFileName(plugin.Id) == pluginId);
+            if (listed) SelectSettingsPlugin(pluginId);
+            else _selectedSettingsPlugin = Path.GetFileName(pluginId);
             await RefreshRuntimeAsync();
+            if (!listed) PluginContentScroll.ChangeView(null, 0, null, true);
             return;
         }
         await RefreshRuntimeAsync();

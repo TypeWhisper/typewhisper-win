@@ -292,6 +292,16 @@ public sealed partial class MarketplaceView : UserControl
                 if (IsDetail) MarketStatusExplanation.Text = value.Message;
             }), operation.Token);
             openSettings = !restart && !operation.IsCancellationRequested && ReferenceEquals(_installation, operation);
+            // A new install starts enabled so its settings page can show what it provides.
+            // If enabling is refused (e.g. while recording), the page still offers Enable.
+            if (openSettings && _runtime.GetPluginBinding(item.Plugin.Id) is { } binding && !binding.IsEnabled())
+            {
+                _operationMessage = "Enabling " + item.Plugin.Title + "…";
+                SetProgress(null);
+                if (IsDetail) MarketStatusExplanation.Text = _operationMessage;
+                if (await binding.ChangeEnabledAsync(true) is not null)
+                    AppDiagnostics.Write($"plugin.install.enable-failed plugin={item.Plugin.Id}");
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _error = ex.Message; }
