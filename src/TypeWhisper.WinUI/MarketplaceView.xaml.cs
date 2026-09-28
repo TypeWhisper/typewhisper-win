@@ -301,6 +301,8 @@ public sealed partial class MarketplaceView : UserControl
                 if (IsDetail) MarketStatusExplanation.Text = _operationMessage;
                 if (await binding.ChangeEnabledAsync(true) is not null)
                     AppDiagnostics.Write($"plugin.install.enable-failed plugin={item.Plugin.Id}");
+                // Enabling cannot be interrupted, but Cancel still keeps the user on this page.
+                openSettings = !operation.IsCancellationRequested;
             }
         }
         catch (OperationCanceledException) { }
