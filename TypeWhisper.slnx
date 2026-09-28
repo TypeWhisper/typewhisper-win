@@ -14,6 +14,7 @@
     <Project Path="tests/TypeWhisper.Cli.Tests/TypeWhisper.Cli.Tests.csproj" />
     <Project Path="tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Portable.Tests.csproj" />
     <Project Path="tests/TypeWhisper.PluginSDK.PortableFixture/TypeWhisper.PluginSDK.PortableFixture.csproj" />
+    <Project Path="tests/TypeWhisper.TranscriptionWorker.TestHost/TypeWhisper.TranscriptionWorker.TestHost.csproj" />
     <Project Path="tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj" />
     <Project Path="tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj" />
     <Project Path="tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj" />

@@ -433,6 +433,8 @@ internal sealed partial class LivePluginTextSettings
                         return actionResult.Message;
                     }
                     if (plugin is not IPluginSettingsActions settings) throw new NotSupportedException();
+                    // Actions such as removing a model must not leave a worker holding the old model and its files.
+                    await _session.PluginRuntime.StopTranscriptionWorkersAsync(_id);
                     return await settings.ExecuteSettingsActionAsync(action.Id, ct);
                 }, timeout.Token, preserveCompletedResult: true);
             }

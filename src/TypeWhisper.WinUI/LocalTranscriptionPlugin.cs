@@ -18,6 +18,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     private readonly IPluginHostServices _host;
     private readonly Func<Task<LocalTranscriptionLease>> _load;
     private readonly Func<string> _packageDirectory;
+    private readonly TranscriptionIsolation? _isolation;
     private readonly SemaphoreSlim _operations = new(1, 1);
     private CancellationTokenSource? _download;
     private bool _disposed;
@@ -57,8 +58,10 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         }
     }
 
-    internal LocalTranscriptionPlugin(IPluginHostServices? host = null, Func<Task<LocalTranscriptionLease>>? load = null, Func<string>? packageDirectory = null)
+    internal LocalTranscriptionPlugin(IPluginHostServices? host = null, Func<Task<LocalTranscriptionLease>>? load = null, Func<string>? packageDirectory = null,
+        TranscriptionIsolation? isolation = null)
     {
+        _isolation = isolation;
         _packageDirectory = packageDirectory ?? (() => Path.Combine(AppContext.BaseDirectory, "Plugins", PluginId));
         _host = host ?? new VocabularyHostServices(WinUIProfile.DataPath("PluginData", PluginId),
             assetDirectory: WinUIProfile.PluginAssetPath(PluginId));
@@ -67,8 +70,12 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
 
     private async Task<LocalTranscriptionLease> LoadPackageAsync()
     {
-        var package = await PortablePluginPackage.LoadAsync(_packageDirectory(), _host, LocalCtcVocabulary.HostVersion);
-        if (package.Plugin is IPcmTranscriptionEnginePlugin engine) return new(engine, package);
+        var directory = _packageDirectory();
+        var package = await PortablePluginPackage.LoadAsync(directory, _host, LocalCtcVocabulary.HostVersion);
+        if (package.Plugin is IPcmTranscriptionEnginePlugin engine)
+            return _isolation?.TryIsolate(engine, directory, _host) is { } isolated
+                ? new(isolated, new IsolatedLifetime(isolated, package))
+                : new(engine, package);
         await package.DisposeAsync();
         throw new NotSupportedException("The local plugin does not provide PCM transcription.");
     }
@@ -255,6 +262,16 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         finally { RemovingModelId = null; Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
     private sealed class InlineProgress(Action<double> report) : IProgress<double> { public void Report(double value) => report(value); }
+
+    // Ends the worker before the in-process plugin instance is deactivated.
+    private sealed class IsolatedLifetime(IsolatedTranscriptionEngine engine, IAsyncDisposable package) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            try { await engine.DisposeAsync(); }
+            finally { await package.DisposeAsync(); }
+        }
+    }
 
     internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false, CancellationToken ct = default)
     {
