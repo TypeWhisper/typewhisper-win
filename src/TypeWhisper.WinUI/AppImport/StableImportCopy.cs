@@ -113,6 +113,20 @@ internal static class StableImportCopy
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
+    /// <summary>Scratch folders this app created in <paramref name="parent"/>, in use or abandoned; never links.</summary>
+    internal static string[] ScratchFolders(string? parent = null)
+    {
+        try
+        {
+            return new DirectoryInfo(parent ?? Path.GetTempPath()).EnumerateDirectories(ScratchPrefix + "*")
+                .Where(info => Guid.TryParseExact(info.Name[ScratchPrefix.Length..], "N", out _) &&
+                    !info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                .Select(info => info.FullName).ToArray();
+        }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
+    }
+
     // Retry cleanup on launch and later imports. Age protects folder creation; the lease protects active imports.
     internal static void CleanupAbandonedCopies(string? parent = null)
     {

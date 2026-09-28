@@ -185,6 +185,52 @@ public sealed class UserDataExportTests : IDisposable
     }
 
     [Fact]
+    public async Task EarlierVersionDataIsCopiedWithoutDownloadsSecretsOrTheInstalledApp()
+    {
+        Write("history.json", "[]");
+        var userData = Path.Join(_directory, "TypeWhisper-UserData");
+        var install = Path.Join(_directory, "TypeWhisper");
+        WriteAt(userData, "Data/history.json", "[]");
+        WriteAt(userData, "Audio/archived.wav", "audio");
+        WriteAt(userData, "Models/model.bin", "weights");
+        WriteAt(userData, "licenses.dat", "cipher");
+        WriteAt(install, "settings.json", "{}");
+        WriteAt(install, "DictationRecovery/take.wav", "audio");
+        WriteAt(install, "Plugins/plugin.dll", "binary");
+        WriteAt(install, "current/TypeWhisper.exe", "app");
+        WriteAt(install, "Update.exe", "updater");
+
+        var result = await UserDataExport.ExportAsync(Root, Destination,
+        [
+            new ErasureTarget(userData),
+            new ErasureTarget(install, ["settings.json", "DictationRecovery", "Plugins"]),
+            new ErasureTarget(Path.Join(_directory, "never-used")),
+        ]);
+
+        Assert.Empty(result.Skipped);
+        Assert.Equal(
+        [
+            "README.txt",
+            "previous-version/TypeWhisper-UserData/Audio/archived.wav",
+            "previous-version/TypeWhisper-UserData/Data/history.json",
+            "previous-version/TypeWhisper/DictationRecovery/take.wav",
+            "previous-version/TypeWhisper/settings.json",
+            "profile/history.json",
+            UserDataExport.BackupEntryName,
+        ], Entries());
+        using var archive = ZipFile.OpenRead(Destination);
+        using var readMe = new StreamReader(archive.GetEntry(UserDataExport.ReadMeEntryName)!.Open());
+        Assert.Contains("previous-version/", await readMe.ReadToEndAsync());
+    }
+
+    private static void WriteAt(string root, string relative, string content)
+    {
+        var path = Path.Join(root, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+    }
+
+    [Fact]
     public async Task CanceledExportLeavesNothingAtTheChosenPath()
     {
         Write("history.json", "[]");

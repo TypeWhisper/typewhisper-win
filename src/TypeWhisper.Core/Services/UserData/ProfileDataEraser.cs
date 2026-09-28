@@ -240,7 +240,7 @@ public static class ProfileDataEraser
     /// On Windows the handle does not share delete access, so the folder cannot be renamed, removed or replaced by a
     /// link until it is closed. Elsewhere the attributes are only checked again.
     /// </remarks>
-    private static IDisposable? PinFolder(string path)
+    internal static IDisposable? PinFolder(string path)
     {
         if (!OperatingSystem.IsWindows())
         {

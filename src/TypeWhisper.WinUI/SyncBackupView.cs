@@ -180,7 +180,7 @@ internal sealed class SyncBackupView : UserControl
         _dataNotice.Text = "Exporting your data…";
         var progress = new Progress<UserDataExportProgress>(value =>
         { if (!_unloaded) _dataNotice.Text = $"Exporting your data… {value.Files:N0} files, {Size(value.Bytes)}"; });
-        var result = await Task.Run(() => UserDataExport.ExportAsync(WinUIProfile.Root, file.Path, progress, _lifetime.Token));
+        var result = await Task.Run(() => UserDataExport.ExportAsync(WinUIProfile.Root, file.Path, UserDataDeletion.PreviousVersionData, progress, _lifetime.Token));
         _lifetime.Token.ThrowIfCancellationRequested();
         var summary = $"Exported {result.Files:N0} files ({Size(result.Bytes)}) to {file.Path}.";
         if (result.Skipped.Count > 0)

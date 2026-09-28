@@ -5,8 +5,9 @@ namespace TypeWhisper.WinUI;
 // "Delete all data" empties the profile folder and, in release builds, the places the 1.0 upgrade copied from,
 // which still hold the old history, models and keys: the whole 1.0 data folder, and the data entries 1.0 kept in
 // its install folder. That install folder (LocalAppData\TypeWhisper) also holds the installed app, so only the
-// named data entries go; Update.exe, current and packages stay. The unhandled-exception log in the temp folder is
-// outside the profile and holds exception details, so it goes too.
+// named data entries go; Update.exe, current and packages stay. Export all data copies those places too. The
+// unhandled-exception log and interrupted Wispr Flow import copies in the temp folder are outside the profile and
+// hold exception details or a copied transcript database, so they go too.
 internal static class UserDataDeletion
 {
     private const int Passes = 3;
@@ -18,24 +19,31 @@ internal static class UserDataDeletion
         "api-port", "api-discovery.json", "api-token",
     ];
 
-    internal static ErasureTarget[] Targets
+    // Development builds never read the 1.0 folders, so they neither export nor delete them.
+    internal static ErasureTarget[] PreviousVersionData
     {
         get
         {
-            var crashLog = ErasureTarget.Entry(Path.Join(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log"));
 #if DEBUG
-            return [crashLog];
+            return [];
 #else
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             return
             [
                 new(Path.Join(localData, "TypeWhisper-UserData")),
                 new(Path.Join(localData, "TypeWhisper"), LegacyInstallDataEntries),
-                crashLog,
             ];
 #endif
         }
     }
+
+    internal static ErasureTarget[] Targets =>
+    [
+        .. PreviousVersionData,
+        ErasureTarget.Entry(Path.Join(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log")),
+        // An import still running holds its lease file open, so its copy stays and is counted until it ends.
+        .. StableImportCopy.ScratchFolders().Select(ErasureTarget.Entry),
+    ];
 
     // The previous process lets go of its files a moment after it ends, so a few passes a moment apart.
     internal static ProfileErasureReport FinishPending()

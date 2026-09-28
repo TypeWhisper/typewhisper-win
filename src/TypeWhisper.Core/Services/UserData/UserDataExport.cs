@@ -8,7 +8,10 @@ namespace TypeWhisper.Core.Services.UserData;
 /// <param name="Files">Profile files copied into the archive.</param>
 /// <param name="Bytes">Their combined size before compression.</param>
 /// <param name="IncludesBackup">Whether the restorable backup file could be added.</param>
-/// <param name="Skipped">Profile files that were in use or unreadable, and folders that could not be listed (ending in a slash), relative to the data folder.</param>
+/// <param name="Skipped">
+/// Files that were in use or unreadable, and folders that could not be listed (ending in a slash): relative to the data
+/// folder, or starting with <see cref="UserDataExport.PreviousVersionFolderName"/> for an earlier version's data.
+/// </param>
 public sealed record UserDataExportResult(int Files, long Bytes, bool IncludesBackup, IReadOnlyList<string> Skipped);
 
 /// <summary>Progress of a running export.</summary>
@@ -19,7 +22,11 @@ public readonly record struct UserDataExportProgress(int Files, long Bytes);
 /// The archive copies the data folder as it is, so history, audio, recordings, recaps, preferences and plugin
 /// settings go with it without a list that falls behind new features. What stays out is decided by rules
 /// (<see cref="IsExcluded"/>): stored secrets, license and account sign-ins, the local API's token, installed plugin
-/// packages, downloaded models inside plugin folders, and internal or temporary files. Links are never followed.
+/// packages, downloaded models inside plugin folders, and internal or temporary files. Links are never followed, and
+/// each folder stays open while it is read, so it cannot be swapped for a link on the way.
+///
+/// Data an earlier version kept in its own folders, which "Delete all data" removes as well, is copied the same way
+/// under <see cref="PreviousVersionFolderName"/>, without its models and plugin binaries.
 ///
 /// The archive is written to a temporary file beside the destination and moved over it once complete, so a
 /// failed or canceled export never leaves a partial file under the chosen name.
@@ -34,6 +41,12 @@ public static class UserDataExport
 
     /// <summary>The folder inside the archive that mirrors the data folder.</summary>
     public const string ProfileFolderName = "profile";
+
+    /// <summary>The folder inside the archive holding data an earlier version kept elsewhere, one subfolder per place.</summary>
+    public const string PreviousVersionFolderName = "previous-version";
+
+    // Downloads and binaries in an earlier version's folders, reinstalled from Integrations rather than restored.
+    private static readonly HashSet<string> PreviousVersionDownloads = new(StringComparer.OrdinalIgnoreCase) { "Models", "Plugins" };
 
     private static readonly HashSet<string> ExcludedTopLevel = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -61,9 +74,15 @@ public static class UserDataExport
     };
 
     /// <summary>Writes the archive for <paramref name="profileRoot"/> to <paramref name="destination"/>.</summary>
+    /// <param name="profileRoot">The data folder.</param>
+    /// <param name="destination">The .zip file to write.</param>
+    /// <param name="previousVersionData">Places an earlier version kept data in; missing ones are left out.</param>
+    /// <param name="progress">Receives the running totals.</param>
+    /// <param name="cancellationToken">Stops the export without leaving a file at the destination.</param>
     /// <exception cref="ArgumentException">The destination is inside the data folder.</exception>
     public static async Task<UserDataExportResult> ExportAsync(string profileRoot, string destination,
-        IProgress<UserDataExportProgress>? progress = null, CancellationToken cancellationToken = default)
+        IReadOnlyList<ErasureTarget>? previousVersionData = null, IProgress<UserDataExportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(destination);
@@ -87,17 +106,19 @@ public static class UserDataExport
                 var skipped = new List<string>();
                 var files = 0;
                 long bytes = 0;
-                foreach (var (path, relative) in EnumerateIncludedFiles(root, skipped))
+                var hasPreviousVersion = false;
+                foreach (var (path, entryName, skippedName) in EnumerateSources(root, previousVersionData ?? [], skipped))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var copied = await TryCopyFileAsync(archive, path, relative, cancellationToken).ConfigureAwait(false);
-                    if (copied is null) { skipped.Add(relative); continue; }
+                    var copied = await TryCopyFileAsync(archive, path, entryName, cancellationToken).ConfigureAwait(false);
+                    if (copied is null) { skipped.Add(skippedName); continue; }
                     files++;
+                    hasPreviousVersion |= entryName.StartsWith(PreviousVersionFolderName + "/", StringComparison.Ordinal);
                     bytes += copied.Value;
                     progress?.Report(new(files, bytes));
                 }
                 result = new(files, bytes, backup is not null, skipped);
-                await WriteTextAsync(archive, ReadMeEntryName, ReadMe(result), cancellationToken).ConfigureAwait(false);
+                await WriteTextAsync(archive, ReadMeEntryName, ReadMe(result, hasPreviousVersion), cancellationToken).ConfigureAwait(false);
             }
             cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporary, target, overwrite: true);
@@ -129,22 +150,43 @@ public static class UserDataExport
         return !isDirectory && ExcludedExtensions.Contains(Path.GetExtension(segments[^1]));
     }
 
-    // Folders that cannot be listed go to unreadable with a trailing slash; the data folder itself failing throws.
-    private static IEnumerable<(string Path, string Relative)> EnumerateIncludedFiles(string root, List<string> unreadable)
+    private static IEnumerable<(string Path, string EntryName, string SkippedName)> EnumerateSources(string root,
+        IReadOnlyList<ErasureTarget> previousVersionData, List<string> skipped)
     {
-        var pending = new Stack<string>();
-        pending.Push(root);
-        while (pending.Count > 0)
+        foreach (var (path, relative) in EnumerateFolder(root, root, IsExcluded, "", skipped, required: true))
+            yield return (path, ProfileFolderName + "/" + relative, relative);
+
+        foreach (var place in previousVersionData)
         {
-            var directory = pending.Pop();
-            FileSystemInfo[] entries;
-            try { entries = new DirectoryInfo(directory).GetFileSystemInfos("*", EveryEntry); }
-            catch (Exception ex) when (IsFileSystemFailure(ex) && directory != root)
+            var placeRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(place.Root));
+            // Nothing to copy when the earlier version never used this place, or it was already deleted.
+            if (!Directory.Exists(placeRoot) || IsSameOrInside(root, placeRoot)) continue;
+            var prefix = PreviousVersionFolderName + "/" + Path.GetFileName(placeRoot) + "/";
+            var entries = place.Entries is null ? null : new HashSet<string>(place.Entries, StringComparer.OrdinalIgnoreCase);
+            bool Excluded(string relative, bool isDirectory)
             {
-                // Reported, never silently dropped: an export that looks complete could be trusted as a copy.
-                unreadable.Add(Path.GetRelativePath(root, directory).Replace('\\', '/') + "/");
-                continue;
+                var first = relative.Split('/')[0];
+                return entries?.Contains(first) == false || PreviousVersionDownloads.Contains(first) || IsExcluded(relative, isDirectory);
             }
+            foreach (var (path, relative) in EnumerateFolder(placeRoot, placeRoot, Excluded, prefix, skipped, required: false))
+                yield return (path, prefix + relative, prefix + relative);
+        }
+    }
+
+    // Recursive so every folder on the way stays open while anything below it is read: an open folder cannot be
+    // renamed or replaced by a link, which keeps each path inside the data folder until its file is copied.
+    // Folders that cannot be listed go to skipped with a trailing slash; a required root failing throws.
+    private static IEnumerable<(string Path, string Relative)> EnumerateFolder(string root, string directory,
+        Func<string, bool, bool> excluded, string skippedPrefix, List<string> skipped, bool required)
+    {
+        if (!TryOpenFolder(directory, required && directory == root, out var pin, out var entries))
+        {
+            // Reported, never silently dropped: an export that looks complete could be trusted as a copy.
+            skipped.Add(skippedPrefix + (directory == root ? "" : Path.GetRelativePath(root, directory).Replace('\\', '/') + "/"));
+            yield break;
+        }
+        using (pin)
+        {
             // Links are never followed: their target is not part of the data folder.
             foreach (var entry in entries.Where(entry => !entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
@@ -153,15 +195,40 @@ public static class UserDataExport
                 if (!ProfileDataEraser.IsStrictlyInside(root, full)) continue;
                 var relative = Path.GetRelativePath(root, full).Replace('\\', '/');
                 var isDirectory = entry.Attributes.HasFlag(FileAttributes.Directory);
-                if (IsExcluded(relative, isDirectory)) continue;
-                if (isDirectory) pending.Push(full);
-                else yield return (full, relative);
+                if (excluded(relative, isDirectory)) continue;
+                if (!isDirectory) yield return (full, relative);
+                else
+                    foreach (var file in EnumerateFolder(root, full, excluded, skippedPrefix, skipped, required))
+                        yield return file;
             }
         }
     }
 
+    private static bool TryOpenFolder(string directory, bool required, out IDisposable? pin, out FileSystemInfo[] entries)
+    {
+        pin = null;
+        try
+        {
+            pin = ProfileDataEraser.PinFolder(directory);
+            entries = new DirectoryInfo(directory).GetFileSystemInfos("*", EveryEntry);
+            return true;
+        }
+        catch (Exception ex) when (IsFileSystemFailure(ex) && !required)
+        {
+            pin?.Dispose();
+            pin = null;
+            entries = [];
+            return false;
+        }
+        catch
+        {
+            pin?.Dispose();
+            throw;
+        }
+    }
+
     /// <returns>The bytes copied, or null when the file was in use, denied or gone.</returns>
-    private static async Task<long?> TryCopyFileAsync(ZipArchive archive, string path, string relative, CancellationToken cancellationToken)
+    private static async Task<long?> TryCopyFileAsync(ZipArchive archive, string path, string entryName, CancellationToken cancellationToken)
     {
         FileStream source;
         // Opened before the entry exists, so a file that cannot be read never leaves an empty entry behind.
@@ -169,7 +236,7 @@ public static class UserDataExport
         catch (Exception ex) when (IsFileSystemFailure(ex)) { return null; }
         await using (source)
         {
-            var entry = archive.CreateEntry(ProfileFolderName + "/" + relative,
+            var entry = archive.CreateEntry(entryName,
                 StoredExtensions.Contains(Path.GetExtension(path)) ? CompressionLevel.NoCompression : CompressionLevel.Fastest);
             var modified = File.GetLastWriteTime(path);
             if (modified.Year is >= 1980 and <= 2107) entry.LastWriteTime = modified;
@@ -193,7 +260,7 @@ public static class UserDataExport
         await stream.WriteAsync(new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(text), cancellationToken).ConfigureAwait(false);
     }
 
-    private static string ReadMe(UserDataExportResult result)
+    private static string ReadMe(UserDataExportResult result, bool hasPreviousVersion)
     {
         var text = new StringBuilder()
             .Append("TypeWhisper data export\r\n")
@@ -205,9 +272,13 @@ public static class UserDataExport
             text.Append("The restorable backup file could not be created for this data (it may exceed the 64 MB backup limit). ")
                 .Append("The same data is in the profile folder.\r\n");
         text.Append(ProfileFolderName).Append("/: a copy of your TypeWhisper data folder, including history and its audio, recordings, ")
-            .Append("dictionary, snippets, workflows, preferences and plugin settings.\r\n\r\n")
-            .Append("Not included: API keys and other stored secrets, licenses and account sign-ins, the local API token, ")
-            .Append("downloaded models, installed plugins and temporary files.\r\n");
+            .Append("dictionary, snippets, workflows, preferences and plugin settings.\r\n");
+        if (hasPreviousVersion)
+            text.Append(PreviousVersionFolderName).Append("/: data an earlier TypeWhisper version kept in its own folders, ")
+                .Append("such as archived audio and recordings.\r\n");
+        text.Append("\r\nNot included: API keys and other stored secrets, licenses and account sign-ins, the local API token, ")
+            .Append("downloaded models, installed plugins, folders inside a plugin's folder (models, runtimes and sign-ins ")
+            .Append("of tools a plugin uses) and temporary files.\r\n");
         if (result.Skipped.Count > 0)
         {
             text.Append("\r\nThese files and folders were in use or could not be read and are missing from this export:\r\n");
