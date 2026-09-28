@@ -28,6 +28,7 @@ public sealed partial class MainWindow
         {
             _utilityBackup = new SyncBackupView();
             _utilityBackup.ConnectRestore(RestoreProfile);
+            _utilityBackup.ConnectDeleteAllData(DeleteAllData);
             var body = new StackPanel { Spacing = 16 };
             body.Children.Add(new TextBlock { Text = title, FontSize = 24 });
             body.Children.Add(_utilityBackup);

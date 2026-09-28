@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using TypeWhisper.Core.Services.UserData;
 
 namespace TypeWhisper.WinUI;
 
@@ -99,6 +100,7 @@ public partial class App : Application
     {
         try
         {
+            if (!await FinishPendingDataDeletionAsync(request, initialShare, skipLegacyImport)) return;
 #if !DEBUG
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             // #318: a failed 1.0.4 migration can leave an empty TypeWhisper-UserData beside the real profile.
@@ -179,6 +181,7 @@ public partial class App : Application
         _window.InstallApplicationUpdateAsync = apply => ExitOrRestartAsync(restart: true, applyUpdate: apply);
         _window.RestoreProfile = (store, preview) => RestoreProfileAsync(store, preview);
         _window.RestoreApiProfile = (store, preview) => RestoreProfileAsync(store, preview, true);
+        _window.DeleteAllData = DeleteAllDataAsync;
         _tray = new TrayIconService(
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowFromActivation),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenSettings),
@@ -321,6 +324,71 @@ public partial class App : Application
             }
             else ShowProfileFailure("Restore did not complete. Close and reopen TypeWhisper before continuing.", ex.Message);
         }
+    }
+
+    // "Delete all data" asks for confirmation in Sync & backup, then stops every writer the way a restore does,
+    // deletes what this process no longer holds and restarts. Loaded models and other files still open until the
+    // process ends are removed by the next launch, before any store opens the folder again.
+    private async Task DeleteAllDataAsync()
+    {
+        if (_exiting || _window is null) return;
+        _exiting = true;
+        _shareStartupReady.TrySetResult(false);
+        _profileOperation = new("Finishing active work before deleting your data…", true, CloseProfileOperation, DataDeletionHeading);
+        _profileOperation.Activate();
+        try
+        {
+            _tray?.Dispose(); _tray = null;
+            _window.FreezeForProfileRestore();
+            await _window.ShutdownDictationAsync();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ShowProfileFailure("Active work could not be stopped, so no data was deleted. Close TypeWhisper, reopen it and try again.", ex.Message);
+            return;
+        }
+        try
+        {
+            _profileOperation.SetMessage("Deleting your TypeWhisper data…", true);
+            ProfileDataEraser.RequestErasure(WinUIProfile.Root);
+            await Task.Run(UserDataDeletion.FinishPending);
+            _mainInstance?.UnregisterKey();
+            // On success this API ends the process; returning means the restart failed.
+            var reason = AppInstance.Restart("");
+            ShowProfileFailure("Your data was deleted. Reopen TypeWhisper to finish removing files that were still in use.", reason.ToString());
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ShowProfileFailure(ProfileDataEraser.IsErasurePending(WinUIProfile.Root)
+                ? "Not all data could be deleted yet. Reopen TypeWhisper to finish deleting it."
+                : "No data was deleted. Close TypeWhisper, reopen it and try again.", ex.Message);
+        }
+    }
+
+    private const string DataDeletionHeading = "Delete all data";
+
+    // Runs before anything reads the profile, so a confirmed deletion is never undone by a store writing it back.
+    private async Task<bool> FinishPendingDataDeletionAsync(TypeWhisper.Presentation.ApplicationActivationRequest request,
+        Task initialShare, bool skipLegacyImport)
+    {
+        if (!ProfileDataEraser.IsErasurePending(WinUIProfile.Root)) return true;
+        _profileOperation ??= new("Finishing the deletion of your TypeWhisper data…", true, Exit, DataDeletionHeading);
+        _profileOperation.SetMessage("Finishing the deletion of your TypeWhisper data…", true);
+        _profileOperation.Activate();
+        var report = await Task.Run(UserDataDeletion.FinishPending);
+        if (report.Complete) return true;
+        var message = report.Refused
+            ? "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched."
+            : $"{report.Remaining:N0} {(report.Remaining == 1 ? "item" : "items")} in your TypeWhisper data folder could not be deleted, usually because another program is using them. Close other programs that may use these files, then retry.";
+        ShowProfileFailure(message, TypeWhisper.WinUI.Platform.AppDistribution.ResolveShellVisiblePath(WinUIProfile.Root), keepStartupPending: true);
+        _profileOperation.OfferActions(
+            "Retry", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport)),
+            "Open TypeWhisper anyway", () =>
+            {
+                ProfileDataEraser.CancelPendingErasure(WinUIProfile.Root);
+                return ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport));
+            });
+        return false;
     }
 
     private async void CloseProfileOperation()
