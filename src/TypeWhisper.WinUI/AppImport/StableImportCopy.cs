@@ -136,11 +136,17 @@ internal static class StableImportCopy
             // Same lease rule as the cleanup below: a running import holds it, so its copy is left and counted.
             try
             {
-                using (new FileStream(Path.Combine(path, ".lease"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) { }
+                using (new FileStream(Path.Join(path, ".lease"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) { }
                 TryDelete(path);
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (IOException)
+            {
+                // Held by an import or in use: the copy stays and is counted below.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Denied: the copy stays and is counted below.
+            }
             if (Directory.Exists(path)) left++;
         }
         return left;

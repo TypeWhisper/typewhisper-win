@@ -218,25 +218,25 @@ public sealed class AppImportTests : IDisposable
     {
         string Create(string name)
         {
-            var path = Path.Combine(_directory, name);
+            var path = Path.Join(_directory, name);
             Directory.CreateDirectory(path);
-            File.WriteAllText(Path.Combine(path, ".lease"), "");
-            File.WriteAllText(Path.Combine(path, "flow.sqlite"), "private copied data");
+            File.WriteAllText(Path.Join(path, ".lease"), "");
+            File.WriteAllText(Path.Join(path, "flow.sqlite"), "private copied data");
             return path;
         }
         var recent = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"));
         var active = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"));
         var unrelated = Create("typewhisper-import-user-notes");
-        using (new FileStream(Path.Combine(active, ".lease"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        using (new FileStream(Path.Join(active, ".lease"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             Assert.Equal(1, StableImportCopy.DeleteCopies(_directory));
             Assert.False(Directory.Exists(recent));
-            Assert.True(File.Exists(Path.Combine(active, "flow.sqlite")));
+            Assert.True(File.Exists(Path.Join(active, "flow.sqlite")));
             Assert.True(Directory.Exists(unrelated));
         }
         Assert.Equal(0, StableImportCopy.DeleteCopies(_directory));
         Assert.False(Directory.Exists(active));
-        Assert.Equal(1, StableImportCopy.DeleteCopies(Path.Combine(_directory, "missing")));
+        Assert.Equal(1, StableImportCopy.DeleteCopies(Path.Join(_directory, "missing")));
     }
 
     [Theory]

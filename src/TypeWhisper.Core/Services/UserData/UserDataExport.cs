@@ -140,6 +140,7 @@ public static class UserDataExport
         }
     }
 
+    // Only a missing file counts as removed: an inaccessible one can look absent to File.Exists.
     private static bool TryDelete(string path)
     {
         try
@@ -147,7 +148,8 @@ public static class UserDataExport
             File.Delete(path);
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return !File.Exists(path); }
+        catch (DirectoryNotFoundException) { return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     /// <summary>Whether a data-folder entry stays out of the export.</summary>
@@ -176,12 +178,16 @@ public static class UserDataExport
         foreach (var place in previousVersionData)
         {
             var placeRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(place.Root));
-            // Nothing to copy when the earlier version never used this place, or it was already deleted.
-            if (!Directory.Exists(placeRoot) || IsSameOrInside(root, placeRoot)) continue;
+            if (IsSameOrInside(root, placeRoot)) continue;
             // Two places with the same folder name must not write the same entries.
             var name = Path.GetFileName(placeRoot);
             for (var number = 2; !names.Add(name); number++) name = Path.GetFileName(placeRoot) + "-" + number;
             var prefix = PreviousVersionFolderName + "/" + name + "/";
+            try { File.GetAttributes(placeRoot); }
+            // Nothing to copy when the earlier version never used this place, or it was already deleted.
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { continue; }
+            // Present but unreadable: reported like any folder that cannot be listed.
+            catch (Exception ex) when (IsFileSystemFailure(ex)) { skipped.Add(prefix); continue; }
             var entries = place.Entries is null ? null : new HashSet<string>(place.Entries, StringComparer.OrdinalIgnoreCase);
             bool Excluded(string relative, bool isDirectory)
             {
@@ -295,7 +301,7 @@ public static class UserDataExport
                 .Append("Extract it and choose it under Sync & backup > Choose backup to restore.\r\n");
         else
             text.Append("The restorable backup file could not be created for this data (it may exceed the 64 MB backup limit). ")
-                .Append("The same data is in the profile folder.\r\n");
+                .Append(result.Skipped.Count == 0 ? "The same data is in the profile folder.\r\n" : "The profile folder holds the same data except the items listed at the end.\r\n");
         text.Append(ProfileFolderName).Append("/: a copy of your TypeWhisper data folder, including history and its audio, recordings, ")
             .Append("dictionary, snippets, workflows, preferences and plugin settings.\r\n");
         if (hasPreviousVersion)
