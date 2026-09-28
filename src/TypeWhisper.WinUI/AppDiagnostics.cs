@@ -6,7 +6,8 @@ namespace TypeWhisper.WinUI;
 
 // Local support log in every build. Stages are "event key=value …" with short token values.
 // Never pass transcript, field value, title, clipboard contents, exception message, URL, path,
-// or window/process identifiers; DiagnosticLogFile drops anything that is not an allowed value.
+// or window/process identifiers; DiagnosticLogFile drops anything that is not an allowed value,
+// including data keys it does not list.
 internal static class AppDiagnostics
 {
     private static readonly Lock Gate = new();
@@ -25,7 +26,8 @@ internal static class AppDiagnostics
             Preferences = new(WinUIProfile.DataPath("diagnostics.json"));
             _log = new(WinUIProfile.DataPath("diagnostics.jsonl"), Preferences.Current);
             // Retries a deletion that failed when the log was turned off, and applies retention.
-            _log.Configure(Preferences.Current);
+            // Unreadable settings only pause the log; they do not delete what it already holds.
+            if (Preferences.Error is null) _log.Configure(Preferences.Current);
         }
         Write($"app.start version={WindowsApplicationUpdates.CurrentVersion} os={Environment.OSVersion.Version} " +
             $"arch={RuntimeInformation.ProcessArchitecture} build={(WinUIProfile.DevelopmentBuild ? "debug" : "release")}");
@@ -35,9 +37,10 @@ internal static class AppDiagnostics
     {
         if (Preferences is not { } store || _log is not { } log) return "Diagnostics are not available until TypeWhisper has finished starting.";
         if (store.Save(preferences) is { } error) return error;
-        if (log.Configure(preferences) || preferences.Enabled) return null;
-        return "The diagnostic log is off, but the existing log could not be deleted because another program is using it. " +
-            "TypeWhisper tries again the next time it starts.";
+        if (log.Configure(preferences)) return null;
+        return preferences.Enabled
+            ? "Your choice is saved, but the log could not be updated because another program is using it. TypeWhisper tries again with the next entry."
+            : "The diagnostic log is off, but the existing log could not be deleted because another program is using it. TypeWhisper tries again the next time it starts.";
     }
 
     internal static bool Clear() => _log?.Clear() ?? true;

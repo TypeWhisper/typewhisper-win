@@ -44,14 +44,15 @@ public sealed class DiagnosticLogTests : IDisposable
     public void AdmitsOnlyContentFreeValues()
     {
         var line = DiagnosticLogFile.Admit(new(_now, "Please paste my secret sentence", Guid.Empty, -5,
-            new Dictionary<string, string> { ["engine"] = "parakeet-tdt-0.6b", ["title"] = "Inbox - Outlook", ["bad key"] = "x" },
+            new Dictionary<string, string> { ["engine"] = "parakeet-tdt-0.6b", ["title"] = "Inbox - Outlook", ["bad key"] = "x",
+                ["text"] = "hunter2", ["target"] = "maybe", ["control"] = "50004a", ["streaming"] = "False" },
             "System.IO.IOException: C:\\Users\\someone\\notes.txt", "E_FAIL",
             ["TypeWhisper.WinUI.App.<LaunchAsync>b__0_1", "at C:\\Users\\someone\\file.cs line 3"]));
 
         Assert.Equal("diagnostics.invalid-event", line.Event);
         Assert.Null(line.DictationId);
         Assert.Null(line.ElapsedMs);
-        Assert.Equal(new Dictionary<string, string> { ["engine"] = "parakeet-tdt-0.6b" }, line.Data);
+        Assert.Equal(new Dictionary<string, string> { ["engine"] = "parakeet-tdt-0.6b", ["streaming"] = "False" }, line.Data);
         Assert.Null(line.Error);
         Assert.Null(line.HResult);
         Assert.Equal(["TypeWhisper.WinUI.App.<LaunchAsync>b__0_1"], line.Stack);
@@ -110,12 +111,12 @@ public sealed class DiagnosticLogTests : IDisposable
     public void TrimsToTheNewestLinesWhenTheFileGrowsTooLarge()
     {
         var log = Log();
-        var padding = Enumerable.Range(0, 15).ToDictionary(key => "pad" + key, _ => new string('x', 64));
+        var padding = new[] { "arch", "build", "decision", "engine", "model", "os", "plugin", "task", "version" }.ToDictionary(key => key, _ => new string('x', 64));
         for (var index = 0; index < 3_000; index++)
-            log.Write(new(_now, "dictation.step", Data: new Dictionary<string, string>(padding) { ["index"] = index.ToString() }));
+            log.Write(new(_now, "dictation.step", Data: new Dictionary<string, string>(padding) { ["control"] = index.ToString() }));
 
         Assert.True(new FileInfo(LogPath).Length <= DiagnosticLogFile.MaximumBytes);
-        Assert.Contains("\"index\":\"2999\"", Lines()[^1]);
+        Assert.Contains("\"control\":\"2999\"", Lines()[^1]);
     }
 
     [Fact]
@@ -143,12 +144,12 @@ public sealed class DiagnosticLogTests : IDisposable
         var log = Log();
         log.Write(Line("app.start"));
         using var editor = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var padding = Enumerable.Range(0, 15).ToDictionary(key => "pad" + key, _ => new string('x', 64));
+        var padding = new[] { "arch", "build", "decision", "engine", "model", "os", "plugin", "task", "version" }.ToDictionary(key => key, _ => new string('x', 64));
         for (var index = 0; index < 3_000; index++)
-            log.Write(new(_now, "dictation.step", Data: new Dictionary<string, string>(padding) { ["index"] = index.ToString() }));
+            log.Write(new(_now, "dictation.step", Data: new Dictionary<string, string>(padding) { ["control"] = index.ToString() }));
 
         Assert.True(new FileInfo(LogPath).Length <= DiagnosticLogFile.MaximumBytes);
-        Assert.Contains("\"index\":\"2999\"", Lines()[^1]);
+        Assert.Contains("\"control\":\"2999\"", Lines()[^1]);
     }
 
     [Fact]
@@ -183,6 +184,21 @@ public sealed class DiagnosticLogTests : IDisposable
     }
 
     [Fact]
+    public void ReportsAFailedPruneAndRetriesItWithTheNextWrite()
+    {
+        var log = Log(new(RetentionDays: 7));
+        log.Write(Line("old"));
+        _now = _now.AddDays(3);
+        log.Write(Line("recent"));
+        using (new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.False(log.Configure(new(RetentionDays: 1)));
+
+        // Within the hourly prune interval of the last successful prune.
+        log.Write(Line("new"));
+        Assert.Equal(["recent", "new"], Lines().Select(json => JsonDocument.Parse(json).RootElement.GetProperty("event").GetString()));
+    }
+
+    [Fact]
     public void ClearDeletesEveryLine()
     {
         var log = Log();
@@ -205,7 +221,7 @@ public sealed class DiagnosticLogTests : IDisposable
 
         File.WriteAllText(path, "{\"Enabled\":true,\"RetentionDays\":999}");
         var invalid = new DiagnosticLogPreferencesStore(path);
-        Assert.Equal(new DiagnosticLogPreferences(), invalid.Current);
+        Assert.Equal(new DiagnosticLogPreferences(Enabled: false), invalid.Current);
         Assert.NotNull(invalid.Error);
     }
 

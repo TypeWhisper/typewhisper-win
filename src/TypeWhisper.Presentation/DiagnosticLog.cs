@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -7,7 +8,7 @@ namespace TypeWhisper.Presentation;
 
 /// <summary>One line of the local diagnostic log. Every field is an allowlisted, content-free value.</summary>
 /// <remarks>
-/// Events are dotted names, data values are short tokens without spaces, and errors are exception
+/// Events are dotted names, data uses known keys with flag, number or short token values, and errors are exception
 /// type names and HRESULTs. None of these can carry a dictated sentence, clipboard contents, a window
 /// title, a path or an exception message; <see cref="DiagnosticLogFile.Admit"/> drops anything else.
 /// </remarks>
@@ -36,12 +37,12 @@ public sealed record DiagnosticLogPreferences(bool Enabled = true, int Retention
 public sealed class DiagnosticLogPreferencesStore
 {
     private readonly string _path;
-    /// <summary>The last successfully loaded or saved choice.</summary>
+    /// <summary>The active choice: the saved one, the defaults when none is saved, or off when it cannot be read.</summary>
     public DiagnosticLogPreferences Current { get; private set; } = new();
-    /// <summary>A visible settings error. Failed loads use the defaults; failed saves keep the previous choice.</summary>
+    /// <summary>A visible settings error. Failed loads keep the log off; failed saves keep the previous choice.</summary>
     public string? Error { get; private set; }
 
-    /// <summary>Missing settings use the defaults without creating a file.</summary>
+    /// <summary>Missing settings use the defaults without creating a file; unreadable settings turn the log off.</summary>
     public DiagnosticLogPreferencesStore(string path)
     {
         _path = path;
@@ -55,7 +56,9 @@ public sealed class DiagnosticLogPreferencesStore
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            Error = "Diagnostic log settings could not be loaded. The default settings apply until you change them.";
+            // The saved choice may have been off; never turn logging back on from settings that cannot be read.
+            Current = new(Enabled: false);
+            Error = "Diagnostic log settings could not be loaded, so the log is off. Turn it on to record again.";
         }
     }
 
@@ -98,6 +101,21 @@ public sealed partial class DiagnosticLogFile
     private const int MaximumDataEntries = 16;
     private const int MaximumStackFrames = 12;
     private static readonly TimeSpan PruneInterval = TimeSpan.FromHours(1);
+    // Only these keys are recorded, each with its own value domain, so a new key cannot carry
+    // content by accident: it is dropped until it is added here.
+    private static readonly FrozenDictionary<string, Func<string, bool>> DataKeys = new Dictionary<string, Func<string, bool>>
+    {
+        // Focus, target and capture state.
+        ["accepted"] = Flag, ["current"] = Flag, ["empty"] = Flag, ["focusable"] = Flag, ["foreground"] = Flag,
+        ["originalElement"] = Flag, ["ownProcess"] = Flag, ["setup"] = Flag, ["streaming"] = Flag, ["target"] = Flag,
+        ["targetProcess"] = Flag, ["targetWindow"] = Flag, ["writable"] = Flag,
+        // UI Automation control type ids and settings values.
+        ["control"] = Number, ["retentionDays"] = Number,
+        // Setting and plugin identifiers, capture decisions, and app and OS versions.
+        ["arch"] = Token, ["build"] = Token, ["decision"] = Token, ["engine"] = Token, ["model"] = Token,
+        ["os"] = Token, ["plugin"] = Token, ["task"] = Token, ["version"] = Token,
+        ["inner"] = value => TypeName().IsMatch(value),
+    }.ToFrozenDictionary(StringComparer.Ordinal);
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -197,7 +215,7 @@ public sealed partial class DiagnosticLogFile
     {
         // Lines read back from disk can hold JSON nulls anywhere; they are invalid values, not errors.
         var data = line.Data?
-            .Where(entry => entry.Key is not null && DataKey().IsMatch(entry.Key) && entry.Value is not null && DataValue().IsMatch(entry.Value))
+            .Where(entry => entry.Key is not null && DataKeys.TryGetValue(entry.Key, out var valid) && entry.Value is not null && valid(entry.Value))
             .Take(MaximumDataEntries)
             .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
         var stack = line.Stack?.Where(frame => frame is not null && StackFrame().IsMatch(frame)).Take(MaximumStackFrames).ToArray();
@@ -216,10 +234,14 @@ public sealed partial class DiagnosticLogFile
     // so an edited or corrupted line can never survive a prune or reach an export.
     private void PruneUnsafe()
     {
+        // A failed prune is retried with the next write instead of an hour later.
+        _nextPrune = DateTimeOffset.MinValue;
+        if (File.Exists(FilePath))
+        {
+            var cutoff = _clock() - TimeSpan.FromDays(_preferences.RetentionDays);
+            RewriteUnsafe(line => line.Time >= cutoff, long.MaxValue);
+        }
         _nextPrune = _clock() + PruneInterval;
-        if (!File.Exists(FilePath)) return;
-        var cutoff = _clock() - TimeSpan.FromDays(_preferences.RetentionDays);
-        RewriteUnsafe(line => line.Time >= cutoff, long.MaxValue);
     }
 
     private void RewriteUnsafe(Func<DiagnosticLogLine, bool> keep, long maximumBytes)
@@ -291,10 +313,14 @@ public sealed partial class DiagnosticLogFile
 
     [GeneratedRegex(@"^(?=.{1,80}$)[a-z0-9]+(?:[.\-][a-z0-9]+)*$")]
     private static partial Regex EventName();
-    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9]{0,31}$")]
-    private static partial Regex DataKey();
+    private static bool Flag(string value) => value is "True" or "False";
+    private static bool Number(string value) => NumberValue().IsMatch(value);
+    private static bool Token(string value) => TokenValue().IsMatch(value);
+
+    [GeneratedRegex(@"^[0-9]{1,10}$")]
+    private static partial Regex NumberValue();
     [GeneratedRegex(@"^[A-Za-z0-9_.:+\-]{1,64}$")]
-    private static partial Regex DataValue();
+    private static partial Regex TokenValue();
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_.+`]{0,127}$")]
     private static partial Regex TypeName();
     [GeneratedRegex(@"^0x[0-9A-F]{8}$")]
