@@ -131,14 +131,23 @@ public static class UserDataExport
             File.Move(temporary, target, overwrite: true);
             return result;
         }
-        finally
+        catch (Exception ex)
         {
-            try { File.Delete(temporary); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // The export already succeeded or failed on its own terms; a leftover temporary is dot-named and harmless.
-            }
+            // The partial archive holds the same data as a finished one, so a copy that stays behind is named.
+            if (!TryDelete(temporary))
+                throw new IOException($"The export did not finish, and its partial file could not be removed. Delete it yourself: {temporary}", ex);
+            throw;
         }
+    }
+
+    private static bool TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return !File.Exists(path); }
     }
 
     /// <summary>Whether a data-folder entry stays out of the export.</summary>

@@ -113,18 +113,37 @@ internal static class StableImportCopy
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
-    /// <summary>Scratch folders this app created in <paramref name="parent"/>, in use or abandoned; never links.</summary>
-    internal static string[] ScratchFolders(string? parent = null)
+    /// <summary>
+    /// For "Delete all data": deletes every scratch copy no import holds, whatever its age.
+    /// </summary>
+    /// <returns>How many copies are left; a temp folder that cannot be listed counts as one.</returns>
+    internal static int DeleteCopies(string? parent = null)
     {
+        string[] folders;
         try
         {
-            return new DirectoryInfo(parent ?? Path.GetTempPath()).EnumerateDirectories(ScratchPrefix + "*")
+            folders = new DirectoryInfo(parent ?? Path.GetTempPath()).EnumerateDirectories(ScratchPrefix + "*")
                 .Where(info => Guid.TryParseExact(info.Name[ScratchPrefix.Length..], "N", out _) &&
                     !info.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 .Select(info => info.FullName).ToArray();
         }
-        catch (IOException) { return []; }
-        catch (UnauthorizedAccessException) { return []; }
+        catch (IOException) { return 1; }
+        catch (UnauthorizedAccessException) { return 1; }
+
+        var left = 0;
+        foreach (var path in folders)
+        {
+            // Same lease rule as the cleanup below: a running import holds it, so its copy is left and counted.
+            try
+            {
+                using (new FileStream(Path.Combine(path, ".lease"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) { }
+                TryDelete(path);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            if (Directory.Exists(path)) left++;
+        }
+        return left;
     }
 
     // Retry cleanup on launch and later imports. Age protects folder creation; the lease protects active imports.

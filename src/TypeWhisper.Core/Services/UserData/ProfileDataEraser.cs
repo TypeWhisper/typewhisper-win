@@ -106,7 +106,21 @@ public static class ProfileDataEraser
         if (Classify(fullRoot) == RootKind.Refused)
             throw new IOException("The TypeWhisper data folder is a link or not a folder, so it is never deleted automatically.");
         Directory.CreateDirectory(fullRoot);
-        File.WriteAllText(Path.Join(fullRoot, PendingMarkerName), DateTimeOffset.UtcNow.ToString("O"));
+        var marker = Path.Join(fullRoot, PendingMarkerName);
+        // Whatever already has the marker's name, a link included, is removed as itself, and CreateNew never opens
+        // an existing entry, so writing the marker cannot reach a file outside the folder.
+        try
+        {
+            // The attributes of the entry itself: a link, even one pointing nowhere, is not followed.
+            if (File.GetAttributes(marker).HasFlag(FileAttributes.Directory)) Directory.Delete(marker, recursive: false);
+            else File.Delete(marker);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // No marker yet, the usual case.
+        }
+        using var stream = new FileStream(marker, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        stream.Write(System.Text.Encoding.UTF8.GetBytes(DateTimeOffset.UtcNow.ToString("O")));
     }
 
     /// <summary>Whether a confirmed erasure of <paramref name="root"/> has not finished yet.</summary>

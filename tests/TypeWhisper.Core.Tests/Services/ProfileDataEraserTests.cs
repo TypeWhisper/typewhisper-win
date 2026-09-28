@@ -210,6 +210,29 @@ public sealed class ProfileDataEraserTests : IDisposable
     }
 
     [Fact]
+    public void RequestErasureReplacesALinkedMarkerWithoutWritingThroughIt()
+    {
+        Directory.CreateDirectory(Root);
+        var precious = Path.Join(Outside, "precious.txt");
+        File.WriteAllText(precious, "keep me");
+        var marker = Path.Join(Root, ProfileDataEraser.PendingMarkerName);
+        LegacyDailyProfileMigrationTests.Link(marker, Outside);
+
+        ProfileDataEraser.RequestErasure(Root);
+
+        Assert.Equal("keep me", File.ReadAllText(precious));
+        Assert.False(File.GetAttributes(marker).HasFlag(FileAttributes.ReparsePoint));
+        Assert.True(ProfileDataEraser.IsErasurePending(Root));
+
+        File.Delete(marker);
+        try { File.CreateSymbolicLink(marker, precious); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; } // File links need a privilege on Windows.
+        ProfileDataEraser.RequestErasure(Root);
+        Assert.Equal("keep me", File.ReadAllText(precious));
+        Assert.False(File.GetAttributes(marker).HasFlag(FileAttributes.ReparsePoint));
+    }
+
+    [Fact]
     public void NoPendingErasureLeavesTheFolderAlone()
     {
         Seed();

@@ -6,8 +6,8 @@ namespace TypeWhisper.WinUI;
 // which still hold the old history, models and keys: the whole 1.0 data folder, and the data entries 1.0 kept in
 // its install folder. That install folder (LocalAppData\TypeWhisper) also holds the installed app, so only the
 // named data entries go; Update.exe, current and packages stay. Export all data copies those places too. The
-// unhandled-exception log and interrupted Wispr Flow import copies in the temp folder are outside the profile and
-// hold exception details or a copied transcript database, so they go too.
+// unhandled-exception log and Wispr Flow import copies in the temp folder are outside the profile and hold
+// exception details or a copied transcript database, so they go too.
 internal static class UserDataDeletion
 {
     private const int Passes = 3;
@@ -41,8 +41,6 @@ internal static class UserDataDeletion
     [
         .. PreviousVersionData,
         ErasureTarget.Entry(Path.Join(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log")),
-        // An import still running holds its lease file open, so its copy stays and is counted until it ends.
-        .. StableImportCopy.ScratchFolders().Select(ErasureTarget.Entry),
     ];
 
     // The previous process lets go of its files a moment after it ends, so a few passes a moment apart.
@@ -52,8 +50,18 @@ internal static class UserDataDeletion
         for (var pass = 0; pass < Passes; pass++)
         {
             if (pass > 0) Thread.Sleep(PassDelay);
+            if (!ProfileDataEraser.IsErasurePending(WinUIProfile.Root)) break;
+            // Import copies follow their own lease, so they are deleted here rather than as an erasure target.
+            var copiesLeft = StableImportCopy.DeleteCopies();
             report = ProfileDataEraser.CompletePendingErasure(WinUIProfile.Root, Targets);
-            if (report is null or { Complete: true }) break;
+            if (report is null) break;
+            if (copiesLeft > 0)
+            {
+                // The eraser ends the deletion once its own targets are empty; copies still left keep it pending.
+                if (report.Complete) ProfileDataEraser.RequestErasure(WinUIProfile.Root);
+                report = report with { Remaining = report.Remaining + copiesLeft };
+            }
+            if (report.Complete) break;
         }
         return report ?? new(0, 0, false);
     }
