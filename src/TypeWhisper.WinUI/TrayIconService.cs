@@ -24,7 +24,7 @@ internal sealed class TrayIconService : IDisposable
     private string? _pauseError;
 
     internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates,
-        Action pasteLast, Action copyLast, Action readLast)
+        Action pasteLast, Action copyLast, Action readLast, Action diagnostics)
     {
         var menu = new MenuFlyout();
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
@@ -50,7 +50,7 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(CreateItem("Quick Launch", "\uE80F", show));
         menu.Items.Add(CreateItem("Settings", "\uE713", settings));
         menu.Items.Add(CreateItem("History", "\uE81C", history));
-        menu.Items.Add(Unavailable("Error log", "\uE9CE"));
+        menu.Items.Add(CreateItem("Diagnostics", "\uE9D9", diagnostics));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Label("Transcription"));
         _pauseHotkeys = CreateItem("Pause dictation hotkeys", "\uE769", togglePause);
@@ -136,14 +136,6 @@ internal sealed class TrayIconService : IDisposable
         Text = text, IsEnabled = false, FontSize = 12,
         FontFamily = (FontFamily)Application.Current.Resources["InterfaceFont"],
     };
-
-    private static MenuFlyoutItem Unavailable(string text, string glyph)
-    {
-        var item = CreateItem(text, glyph, () => { });
-        item.IsEnabled = false;
-        ToolTipService.SetToolTip(item, "Not connected in this UI migration yet.");
-        return item;
-    }
 
     private static MenuFlyoutItem CreateItem(string text, string glyph, Action action) => new()
     {

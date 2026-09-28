@@ -610,7 +610,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             StopSilenceMonitoring();
             _livePreview.Cancel();
             _cloudStream?.Cancel();
-            if (_audio.IsRecording) await _audio.StopRecordingAsync();
+            if (_audio.IsRecording)
+            {
+                await _audio.StopRecordingAsync();
+                AppDiagnostics.Write("dictation.canceled");
+            }
             await StopCloudStreamAsync();
             _effects.End();
             await _livePreview.StopAsync();
@@ -619,7 +623,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 ? $"Shortcut cancelled · {ActiveModelName} ready · {notice}" : $"Shortcut cancelled · {ActiveModelName} ready");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { SetStatus("Could not cancel recording: " + ex.Message); }
-        finally { _effects.End(); _gate.Release(); }
+        finally
+        {
+            // A canceled recording never reaches the stop path that ends its dictation context.
+            if (!_audio.IsRecording) AppDiagnostics.EndDictation();
+            _effects.End(); _gate.Release();
+        }
     }
 
     private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null,
@@ -666,7 +675,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         try
         {
             if (recording.HasValue && recording.Value == _audio.IsRecording) return;
-            if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
+            if (!IsReady)
+            {
+                AppDiagnostics.Write("dictation.not-ready");
+                SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation.");
+                return;
+            }
             if (!_audio.IsRecording)
             {
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
@@ -686,6 +700,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
                 if (_target == IntPtr.Zero || (processId == Environment.ProcessId && _setupOutputAtStart is null))
                 {
+                    AppDiagnostics.Write("dictation.no-target");
                     SetStatus($"Focus a text field in another app, then press {Shortcut}.");
                     return;
                 }
@@ -738,17 +753,19 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _silence = new(TimeSpan.FromSeconds(preferences.SilenceAutoStopSeconds));
                     _silenceTimer.Start();
                 }
-                PasteDiagnostics.Write("dictation.capture.start");
+                AppDiagnostics.BeginDictation();
+                AppDiagnostics.Write($"dictation.capture.start engine={_engineAtStart} model={_modelAtStart} task={_taskAtStart} setup={_setupOutputAtStart is not null}");
                 _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
                 if (!_audio.IsRecording)
                 {
+                    AppDiagnostics.Write("dictation.capture.failed");
                     await previousRecordingWork;
                     // Cache what is shown so a later recovery rewrites this failure.
                     _microphoneNotice = MicrophoneNotice() ?? MicrophoneFailure.Generic;
                     SetStatus(_microphoneStatus = _microphoneNotice);
                     return;
                 }
-                PasteDiagnostics.Write("dictation.capture.active");
+                AppDiagnostics.Write("dictation.capture.active");
                 _targetProcessId = processId;
                 _targetApp = TargetProcessName(processId);
                 BeginApiDictationGeneration();
@@ -764,7 +781,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 await previousRecordingWork;
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
-                PasteDiagnostics.Write("dictation.start");
+                AppDiagnostics.Write("dictation.start");
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
                     _originalField = await OriginalDictationField.CaptureAsync(_target, processId, _operationCancellation.Token);
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
@@ -772,7 +789,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
                 var resolvedTask = WorkflowTranscriptionTask.Resolve(WorkflowTranscriptionTask.SelectedTaskFor(_workflowAtStart), globalTaskAtStart, SupportsTranslation);
                 // The overlay configured live preview for the global task when recording began.
-                if (resolvedTask != _taskAtStart) { _taskAtStart = resolvedTask; Changed?.Invoke(); }
+                if (resolvedTask != _taskAtStart)
+                {
+                    _taskAtStart = resolvedTask; Changed?.Invoke();
+                    AppDiagnostics.Write($"dictation.task-resolved task={resolvedTask}");
+                }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();
@@ -780,6 +801,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 GetWindowThreadProcessId(_target, out var currentTargetProcessId);
                 if (!DictationStartupTarget.IsValid(_target, GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
                 {
+                    AppDiagnostics.Write("dictation.target-changed");
                     SetStatus("The target changed during recording setup. Focus your text field and try again.", DictationPhase.Idle);
                     return;
                 }
@@ -791,6 +813,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (!DictationStartupTarget.IsValid(_target, GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
                 {
                     await StopCloudStreamAsync();
+                    AppDiagnostics.Write("dictation.target-changed");
                     SetStatus("The target changed during recording setup. Focus your text field and try again.", DictationPhase.Idle);
                     return;
                 }
@@ -803,12 +826,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         DecodeAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
                         error => { LivePreviewText = "Live preview unavailable · final transcription will continue."; LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
-                PasteDiagnostics.Write("dictation.startup.complete");
+                AppDiagnostics.Write("dictation.startup.complete");
                 preparingRecording = false;
                 return;
             }
 
             finishingRecording = true;
+            AppDiagnostics.Write("dictation.stop");
             StopSilenceMonitoring();
             _livePreview.Cancel();
             _lastDuration = _audio.RecordingDuration;
@@ -827,6 +851,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var rawDuration = (samples?.Length ?? 0) / 16000.0;
             var captureDecision = ShortClipCapturePolicy.Classify(rawDuration, preGainPeakRms,
                 _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively);
+            AppDiagnostics.Write($"dictation.captured decision={captureDecision} streaming={_cloudStream is not null}");
             if (samples is null || captureDecision == ShortClipCaptureDecision.TooShort)
             { SetStatus("Recording was too short. Hold the shortcut a little longer."); return; }
             if (captureDecision == ShortClipCaptureDecision.NoSpeech)
@@ -839,9 +864,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 : (Text: streamedText, Timings: Array.Empty<VocabularyTokenTiming>(), DetectedLanguage: _cloudStream?.DetectedLanguage, NoSpeechProbability: (float?)null);
             _operationCancellation.Token.ThrowIfCancellationRequested();
             var rawText = decoded.Text;
+            AppDiagnostics.Write($"dictation.transcribed empty={string.IsNullOrWhiteSpace(rawText)}");
             if (FinalSpeechPolicy.ShouldReject(rawText, decoded.NoSpeechProbability,
                 _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively))
-            { SetStatus("No speech recognized. Ready to try again."); return; }
+            { AppDiagnostics.Write("dictation.no-speech"); SetStatus("No speech recognized. Ready to try again."); return; }
             // Empty final output does not reuse preview text or its unrelated token timings.
             if (string.IsNullOrWhiteSpace(rawText)) { SetStatus("No speech recognized. Ready to try again."); return; }
             if (_setupOutputAtStart is { } setupOutput)
@@ -897,7 +923,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 AppUrl = _targetHostAtStart
             };
             var delivery = new DictationOutputDelivery(_history);
-            PasteDiagnostics.Write("delivery.begin");
+            AppDiagnostics.Write("delivery.begin");
             var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null ? _outputAtStart : _outputAtStart with { AutoPaste = false },
                 () => OutputPreferences.Current, async () =>
                 {
@@ -905,16 +931,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     for (var attempt = 0; attempt < 40 && ModifiersHeld(); attempt++) await Task.Delay(25, _operationCancellation.Token);
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
-                        ModifiersHeld()) { PasteDiagnostics.Write("delivery.blocked-settings-modifiers-or-disposed"); return false; }
+                        ModifiersHeld()) { AppDiagnostics.Write("delivery.blocked-settings-modifiers-or-disposed"); return false; }
                     var lockField = _outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField;
                     if (lockField)
                     {
-                        if (_originalField is null) { PasteDiagnostics.Write("delivery.no-captured-field"); return false; }
+                        if (_originalField is null) { AppDiagnostics.Write("delivery.no-captured-field"); return false; }
                         if (OutputPreferences.Current.LockPasteToFocusedField &&
-                            !await _originalField.RestoreAsync(_operationCancellation.Token)) { PasteDiagnostics.Write("delivery.restore-failed"); return false; }
-                        if (!_originalField.IsCurrent()) { PasteDiagnostics.Write("delivery.field-not-current"); return false; }
+                            !await _originalField.RestoreAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.restore-failed"); return false; }
+                        if (!_originalField.IsCurrent()) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
-                    if (GetForegroundWindow() != _target) { PasteDiagnostics.Write("delivery.target-not-foreground"); return false; }
+                    if (GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
                     var inserted = await _inserter.InsertAsync(text, _target, () =>
                         !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
@@ -927,7 +953,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _workflowActionAtStart, text, new TypeWhisper.PluginSDK.Models.ActionContext(record.AppName, record.AppProcessName,
                         record.AppUrl, record.Language, rawText), ct));
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
-            PasteDiagnostics.Write(outcome.NeedsReview ? "delivery.review" : "delivery.completed");
+            AppDiagnostics.Write(outcome.NeedsReview ? "delivery.review" : "delivery.completed");
             if (_disposed) return;
             if (!outcome.Committed) _operationCancellation.Token.ThrowIfCancellationRequested();
             if (_lastCompletedDictation.TryPublish(outcome, outcome.Committed ? CancellationToken.None : _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
@@ -953,6 +979,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && _operationCancellation.Token.IsCancellationRequested)
         {
+            AppDiagnostics.Write("dictation.canceled");
             preserveRecovery = _disposed && !preparingRecording;
             StopSilenceMonitoring();
             await StopRecoveryCaptureAsync(preserve: preserveRecovery);
@@ -962,6 +989,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            AppDiagnostics.Write("dictation.failed", ex);
             preserveRecovery = !preparingRecording;
             StopSilenceMonitoring();
             _livePreview.Cancel();
@@ -990,6 +1018,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
                 if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }
                 if (finishingRecording) PublishMicrophoneNoticeAfterDictation();
+                if (!_audio.IsRecording) AppDiagnostics.EndDictation();
             }
             finally { _gate.Release(); }
         }

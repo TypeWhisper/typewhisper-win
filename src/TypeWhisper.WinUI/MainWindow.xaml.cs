@@ -1276,6 +1276,8 @@ public sealed partial class MainWindow : Window
                     content.Children.Add(SectionDivider());
                     content.Children.Add(new CliSettingsView());
                     content.Children.Add(SectionDivider());
+                    content.Children.Add(new DiagnosticsSettingsView());
+                    content.Children.Add(SectionDivider());
                     content.Children.Add(new TextBlock { Text = "Integrations", FontSize = 18 });
                     content.Children.Add(new RaycastIntegrationView());
                 }
