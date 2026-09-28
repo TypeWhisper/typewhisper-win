@@ -213,6 +213,32 @@ public sealed class AppImportTests : IDisposable
         Assert.False(Directory.Exists(active));
     }
 
+    [Fact]
+    public void DeletingAllCopiesIgnoresAgeKeepsActiveImportsAndCountsThem()
+    {
+        string Create(string name)
+        {
+            var path = Path.Join(_directory, name);
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Join(path, ".lease"), "");
+            File.WriteAllText(Path.Join(path, "flow.sqlite"), "private copied data");
+            return path;
+        }
+        var recent = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"));
+        var active = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"));
+        var unrelated = Create("typewhisper-import-user-notes");
+        using (new FileStream(Path.Join(active, ".lease"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.Equal(1, StableImportCopy.DeleteCopies(_directory));
+            Assert.False(Directory.Exists(recent));
+            Assert.True(File.Exists(Path.Join(active, "flow.sqlite")));
+            Assert.True(Directory.Exists(unrelated));
+        }
+        Assert.Equal(0, StableImportCopy.DeleteCopies(_directory));
+        Assert.False(Directory.Exists(active));
+        Assert.Equal(1, StableImportCopy.DeleteCopies(Path.Join(_directory, "missing")));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

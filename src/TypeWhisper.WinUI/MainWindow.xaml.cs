@@ -67,7 +67,7 @@ public sealed partial class MainWindow : Window
         new("Suggested", "text", "Snippets", "Reusable text with spoken triggers", "", "Create and edit text snippets."),
         new("Suggested", "file", "Copy last transcription", "Copy the last completed dictation from this session", "", "Copies final dictated text, including when History is off. Configure its global shortcut in Settings > Shortcuts."),
         new("Suggested", "audio", "Read last transcription", "Read the last dictation aloud; run again to stop", "", "Uses the selected Windows voice and audio output. Works independently of automatic spoken feedback."),
-        new("Suggested", "devices", "Sync & backup", "Export or restore your TypeWhisper data", "", "Create local backups and review data before restoring."),
+        new("Suggested", "devices", "Sync & backup", "Back up, export or delete your TypeWhisper data", "", "Create local backups, review data before restoring, export all data or delete it."),
         new("Suggested", "stats", "Statistics", "Words, streaks, apps, and models", "", "Explore your usage over time."),
     ];
 

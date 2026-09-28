@@ -106,6 +106,25 @@ public sealed class CliInstallation
         Save(previous);
     }
 
+    /// <summary>Whether the installed CLI is bound to <paramref name="profileDirectory"/>, the profile that installed it.</summary>
+    /// <remarks>Development and release builds share the install folder, so a reset removes only its own profile's CLI.</remarks>
+    /// <returns>False when there is no binding or it names another profile; null when it exists but cannot be read.</returns>
+    public bool? IsBoundTo(string profileDirectory)
+    {
+        try
+        {
+            using var binding = JsonDocument.Parse(File.ReadAllBytes(Path.Join(_destination, "cli-profile.json")));
+            if (!binding.RootElement.TryGetProperty("profile_directory", out var bound) || bound.ValueKind != JsonValueKind.String) return null;
+            return string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(bound.GetString()!)),
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(profileDirectory)), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return false; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Removes unchanged owned files and the PATH entry added by this installation.</summary>
     public void Remove()
     {

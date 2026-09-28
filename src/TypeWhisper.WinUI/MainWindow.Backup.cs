@@ -6,6 +6,7 @@ public sealed partial class MainWindow
 {
     internal Func<PersistedProfileBackup, PersistedProfileBackupPreview, Task>? RestoreProfile { get; set; }
     internal Func<PersistedProfileBackup, PersistedProfileBackupPreview, Task>? RestoreApiProfile { get; set; }
+    internal Func<Task>? DeleteAllData { get; set; }
     private bool _profileRestoreClosing;
     private Task? _profileUiDrain;
 

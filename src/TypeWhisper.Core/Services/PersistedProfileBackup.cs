@@ -324,7 +324,8 @@ public sealed class PersistedProfileBackup
     private static byte[] ReadBounded(string path)
     {
         RejectLink(path);
-        using var stream = File.OpenRead(path);
+        // Opened without following a link, so a file swapped for one after the check is refused rather than read.
+        using var stream = UserData.ProfileDataEraser.OpenFileWithoutFollowing(path);
         if (stream.Length > MaximumBytes) throw new InvalidDataException("A backup or profile file exceeds the 64 MiB limit.");
         var bytes = new byte[checked((int)stream.Length)]; stream.ReadExactly(bytes); return bytes;
     }

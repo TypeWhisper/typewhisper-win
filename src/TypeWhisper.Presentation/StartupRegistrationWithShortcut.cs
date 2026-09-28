@@ -9,7 +9,7 @@ public sealed class StartupRegistrationWithShortcut(IStartupRegistration registr
         var state = await registry.ReadAsync();
         try { return state with { IsEnabled = state.IsEnabled || hasShortcut() }; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return state with { CanChange = false, Error = "The existing startup shortcut could not be read. " + ex.Message }; }
+        { return state with { CanChange = false, Error = "The existing startup shortcut could not be read. " + ex.Message, Unknown = true }; }
     }
 
     /// <inheritdoc />

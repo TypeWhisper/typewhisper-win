@@ -113,6 +113,59 @@ internal static class StableImportCopy
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
+    /// <summary>
+    /// For "Delete all data": deletes every scratch copy no import holds, whatever its age.
+    /// </summary>
+    /// <returns>How many copies are left; a temp folder that cannot be listed counts as one.</returns>
+    internal static int DeleteCopies(string? parent = null)
+    {
+        string[] folders;
+        try
+        {
+            folders = new DirectoryInfo(parent ?? Path.GetTempPath()).EnumerateDirectories(ScratchPrefix + "*")
+                .Where(info => Guid.TryParseExact(info.Name[ScratchPrefix.Length..], "N", out _) &&
+                    !info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                .Select(info => info.FullName).ToArray();
+        }
+        catch (IOException) { return 1; }
+        catch (UnauthorizedAccessException) { return 1; }
+
+        var left = 0;
+        foreach (var path in folders)
+        {
+            // Same lease rule as the cleanup below: a running import holds it, so its copy is left and counted.
+            try
+            {
+                using (new FileStream(Path.Join(path, ".lease"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) { }
+                TryDelete(path);
+            }
+            catch (IOException)
+            {
+                // Held by an import or in use: the copy stays and is counted below.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Denied: the copy stays and is counted below.
+            }
+            if (!IsGone(path)) left++;
+        }
+        return left;
+    }
+
+    // Only "not found" proves a copy is gone; a folder that cannot be read may still hold the database.
+    private static bool IsGone(string path)
+    {
+        try
+        {
+            File.GetAttributes(path);
+            return false;
+        }
+        catch (FileNotFoundException) { return true; }
+        catch (DirectoryNotFoundException) { return true; }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
     // Retry cleanup on launch and later imports. Age protects folder creation; the lease protects active imports.
     internal static void CleanupAbandonedCopies(string? parent = null)
     {

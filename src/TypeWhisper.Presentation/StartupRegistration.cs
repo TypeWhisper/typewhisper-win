@@ -12,7 +12,11 @@ public interface IStartupRegistrationBackend
 }
 
 /// <summary>The actual registration state and a visible explanation of unavailable or failed changes.</summary>
-public sealed record StartupRegistrationState(bool IsEnabled, bool CanChange, string? Error);
+/// <param name="IsEnabled">Whether Windows starts TypeWhisper at sign-in, as far as it could be read.</param>
+/// <param name="CanChange">Whether this build can change it.</param>
+/// <param name="Error">Why it cannot be changed, or why the last change failed.</param>
+/// <param name="Unknown">True when the registration could not be read, so it may still be enabled.</param>
+public sealed record StartupRegistrationState(bool IsEnabled, bool CanChange, string? Error, bool Unknown = false);
 
 /// <summary>Reads and changes startup using the host distribution's registration mechanism.</summary>
 public interface IStartupRegistration
@@ -60,7 +64,7 @@ public sealed class StartupRegistration(IStartupRegistrationBackend backend, str
             return new(true, true, null);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return new(false, false, "Startup registration could not be read: " + ex.Message); }
+        { return new(false, false, "Startup registration could not be read: " + ex.Message, Unknown: true); }
     }
 
     /// <summary>Applies an explicit choice and reads it back; failed writes never report the requested state as saved.</summary>

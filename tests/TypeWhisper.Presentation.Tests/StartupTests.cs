@@ -71,6 +71,17 @@ public sealed class StartupTests
     }
 
     [Fact]
+    public void UnreadableRegistrationIsReportedAsUnknownRatherThanOff()
+    {
+        var registration = new StartupRegistration(new Backend { FailEveryAccess = true }, StartupPublication.DevelopmentIdentity, Executable);
+        var result = registration.SetEnabled(false);
+        Assert.False(result.IsEnabled);
+        Assert.True(result.Unknown);
+        Assert.NotNull(result.Error);
+        Assert.False(new StartupRegistration(new Backend(), StartupPublication.DevelopmentIdentity, Executable).SetEnabled(false).Unknown);
+    }
+
+    [Fact]
     public void ForeignCommandIsNeitherOverwrittenNorDeleted()
     {
         var backend = new Backend(); backend.Values[StartupPublication.DevelopmentIdentity] = "another command";

@@ -29,6 +29,24 @@ public sealed class CliInstallationTests : IDisposable
     }
 
     [Fact]
+    public void InstallationIsBoundOnlyToTheProfileThatInstalledIt()
+    {
+        var service = Service();
+        var profile = Path.Join(_root, "profile");
+        Assert.False(service.IsBoundTo(profile));
+        service.Install();
+        Assert.True(service.IsBoundTo(profile + Path.DirectorySeparatorChar));
+        Assert.False(service.IsBoundTo(Path.Join(_root, "other-profile")));
+        var binding = Path.Join(_install, "cli-profile.json");
+        var original = File.ReadAllText(binding);
+        File.WriteAllText(binding, "not json");
+        Assert.Null(service.IsBoundTo(profile));
+        File.WriteAllText(binding, original);
+        service.Remove();
+        Assert.False(service.IsBoundTo(profile));
+    }
+
+    [Fact]
     public void SharedRuntimeIsCopiedIntoIndependentInstallationAndRemovedAsOwned()
     {
         Shared("coreclr.dll", "shared runtime");
