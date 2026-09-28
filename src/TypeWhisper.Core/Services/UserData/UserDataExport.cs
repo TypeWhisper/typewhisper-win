@@ -306,7 +306,7 @@ public static class UserDataExport
             .Append("dictionary, snippets, workflows, preferences and plugin settings.\r\n");
         if (hasPreviousVersion)
             text.Append(PreviousVersionFolderName).Append("/: data an earlier TypeWhisper version kept in its own folders, ")
-                .Append("such as archived audio and recordings.\r\n");
+                .Append("such as archived audio and recordings. Its settings and license files are left out because they can hold API keys.\r\n");
         text.Append("\r\nNot included: API keys and other stored secrets, licenses and account sign-ins, the local API token, ")
             .Append("downloaded models, installed plugins, folders inside a plugin's folder (models, runtimes and sign-ins ")
             .Append("of tools a plugin uses) and temporary files.\r\n");
