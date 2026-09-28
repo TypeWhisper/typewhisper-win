@@ -62,6 +62,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal bool ApiKeyConfigured;
         internal CancellationTokenSource? Request;
         internal Task CancellationCallbacks = Task.CompletedTask;
+        internal string? Directory;
+        // Worker adapters for this activation, keyed by the in-process engine they present. Locked for readers
+        // outside the gate; only gate holders change it.
+        internal readonly Dictionary<ITranscriptionEnginePlugin, IsolatedTranscriptionEngine> Isolated = new(ReferenceEqualityComparer.Instance);
     }
     private sealed record TranscriptionRole(Slot Owner, ITranscriptionEnginePlugin Engine);
     private sealed record LlmRole(Slot Owner, ILlmProviderPlugin Provider);
@@ -84,6 +88,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
 
     /// <summary>Raised after state changes; UI subscribers must dispatch to their UI thread.</summary>
     public event Action? Changed;
+    /// <summary>Runs selected local engines in worker processes; null keeps every engine in process.</summary>
+    public TranscriptionIsolation? TranscriptionIsolation { get; init; }
     /// <summary>Whether a serialized runtime operation is currently executing.</summary>
     public bool IsBusy => _gate.CurrentCount == 0;
 
@@ -191,7 +197,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var old = slot.Package; slot.Package = null;
                 try { Publish(BuildIndex()); }
                 catch { Publish(new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], [])); throw; }
-                finally { if (old is not null) await old.DisposeAsync(); }
+                finally { if (old is not null) await ReleasePackageAsync(slot, old); }
                 lock (_sync) slot.Error = null;
                 return null;
             }
@@ -202,6 +208,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             var loadedHere = slot.Package is null;
             var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, slot.Services, hostVersion);
             slot.Package = package;
+            slot.Directory = directory;
             slot.IsLocal = inspection.Manifest.IsLocal;
             try
             {
@@ -218,7 +225,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             catch
             {
                 slot.Package = null;
-                if (loadedHere) await package.DisposeAsync();
+                if (loadedHere) await ReleasePackageAsync(slot, package);
                 else slot.Package = package;
                 throw;
             }
@@ -379,6 +386,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         }
     }
 
+    /// <summary>What a plugin's transcription worker last reported about how it runs, or null before a worker ran.</summary>
+    public TranscriptionAccelerationStatus? IsolatedAccelerationStatus(string pluginId)
+    {
+        Slot? slot;
+        lock (_sync) _slots.TryGetValue(pluginId, out slot);
+        if (slot is null) return null;
+        lock (slot.Isolated) return slot.Isolated.Values.Select(engine => engine.ReportedAccelerationStatus).FirstOrDefault(status => status is not null);
+    }
+
     /// <summary>Refreshes capability indices after plugin notifications without invoking plugins under the state lock.</summary>
     public async Task RefreshCapabilitiesAsync()
     {
@@ -439,7 +455,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             var engines = (plugin is ITranscriptionEnginePlugin direct ? new[] { direct } : [])
                 .Concat(plugin is IAdditionalTranscriptionEnginesProvider additional ? additional.AdditionalTranscriptionEngines : [])
                 .Distinct(ReferenceEqualityComparer.Instance).Cast<ITranscriptionEnginePlugin>();
-            foreach (var engine in engines)
+            foreach (var engine in engines.Select(candidate => Isolate(slot, candidate)))
             {
                 var id = engine.GetTranscriptionSelectionId();
                 if (string.IsNullOrWhiteSpace(id) || engine.PluginId != slot.Id || !transcription.TryAdd(id, new(slot, engine)))
@@ -464,6 +480,29 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     }
 
     private void Publish(Index index) { lock (_sync) _index = index; }
+
+    // Callers hold _gate. The adapter is created once per activation so model state identities stay stable.
+    private ITranscriptionEnginePlugin Isolate(Slot slot, ITranscriptionEnginePlugin engine)
+    {
+        lock (slot.Isolated) if (slot.Isolated.TryGetValue(engine, out var existing)) return existing;
+        if (TranscriptionIsolation is not { } isolation || slot.Directory is null
+            || isolation.TryIsolate(engine, slot.Directory, slot.Services) is not { } isolated) return engine;
+        lock (slot.Isolated) slot.Isolated.Add(engine, isolated);
+        return isolated;
+    }
+
+    // Ends the package's workers before its in-process instances are deactivated.
+    private static async Task ReleasePackageAsync(Slot slot, PortablePluginPackage package)
+    {
+        IsolatedTranscriptionEngine[] isolated;
+        lock (slot.Isolated) { isolated = slot.Isolated.Values.ToArray(); slot.Isolated.Clear(); }
+        try
+        {
+            foreach (var engine in isolated)
+                try { await engine.DisposeAsync(); } catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        }
+        finally { await package.DisposeAsync(); }
+    }
     private sealed class CapabilityCollisionException(string message) : Exception(message);
     private void QueueRefresh()
     {
@@ -511,7 +550,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             {
                 var package = slot.Package; slot.Package = null;
                 if (package is not null)
-                    try { await package.DisposeAsync(); } catch (Exception ex) when (ex is not OutOfMemoryException) { slot.Error = "Plugin shutdown failed: " + ex.GetType().Name; }
+                    try { await ReleasePackageAsync(slot, package); } catch (Exception ex) when (ex is not OutOfMemoryException) { slot.Error = "Plugin shutdown failed: " + ex.GetType().Name; }
             }
             Publish(new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], []));
         }

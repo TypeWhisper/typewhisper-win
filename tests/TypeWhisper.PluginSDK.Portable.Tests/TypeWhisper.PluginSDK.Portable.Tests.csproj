@@ -13,6 +13,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
     <PackageReference Include="Moq" Version="4.*" />
     <ProjectReference Include="../TypeWhisper.PluginSDK.PortableFixture/TypeWhisper.PluginSDK.PortableFixture.csproj" />
+    <ProjectReference Include="../TypeWhisper.TranscriptionWorker.TestHost/TypeWhisper.TranscriptionWorker.TestHost.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />

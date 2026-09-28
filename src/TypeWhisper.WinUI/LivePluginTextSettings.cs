@@ -89,6 +89,11 @@ internal sealed partial class LivePluginTextSettings : UserControl
                     AddProfile: (plugin as IPluginProfileSettings)?.AddProfileActionId,
                     RemoveProfile: (plugin as IPluginProfileSettings)?.RemoveProfileActionId)), _lifetime.Token);
             if (!IsLoaded || generation != _generation) return;
+            // A worker process runs the engine, so the in-process plugin cannot tell which device it uses.
+            if (_session.PluginRuntime.IsolatedAccelerationStatus(_id) is { } running)
+                snapshot.Fields = snapshot.Fields.Select(field => field.Id == "acceleration"
+                    ? field with { Description = field.Description + " In use: " + running.DisplayText + (running.Detail is { } detail ? " · " + detail : "") }
+                    : field).ToArray();
             if (_models is LivePortableModelSettings modelSettings)
             {
                 modelSettings.HasLocalTtsModels = snapshot.LocalTtsModel;

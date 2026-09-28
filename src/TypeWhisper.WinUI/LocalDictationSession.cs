@@ -473,10 +473,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         _audio = new(_recoveryAudio) { ReleaseCaptureBetweenRecordings = Platform.RemoteSession.IsActive };
         Recovery = new(_recoveryAudio, DecodeRecoveryAudioAsync);
-        _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId));
+        var isolation = CreateTranscriptionIsolation();
+        _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), isolation: isolation);
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
         PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
-            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId));
+            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId)) { TranscriptionIsolation = isolation };
         _speechBackend = new(PluginRuntime, new WindowsSystemVoiceBackend());
         SpokenFeedback = new(_speechBackend);
         PluginRuntime.Changed += () => Changed?.Invoke();

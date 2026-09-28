@@ -480,6 +480,12 @@ public sealed partial class MainWindow : Window
             OutputStorageNotice.Message = message;
             OutputStorageNotice.IsOpen = true;
         });
+        _dictation.EngineNotice += message => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closing) return;
+            EngineNotice.Message = message;
+            EngineNotice.IsOpen = true;
+        });
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
         {
