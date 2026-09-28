@@ -41,6 +41,24 @@ public class HybridHotkeyStateTests
     }
 
     [Fact]
+    public void TypingWithAltGrAndShiftDoesNotStartAModifierOnlyAltShiftShortcut()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "ALT+SHIFT" };
+        // AltGr+Shift+S types "Ś" on a Polish keyboard.
+        Assert.Null(state.Key(HybridHotkeyState.AltGrControl, true, 0, bindings));
+        Assert.Null(state.Key(0xA5, true, 0, bindings));
+        Assert.Null(state.Key(0xA0, true, 10, bindings));
+        Assert.Null(state.Key('S', true, 20, bindings));
+        Assert.Null(state.Key('S', false, 30, bindings));
+        Assert.Null(state.Key(0xA0, false, 40, bindings));
+        Assert.Null(state.Key(HybridHotkeyState.AltGrControl, false, 50, bindings));
+        Assert.Null(state.Key(0xA5, false, 50, bindings));
+        Assert.Null(state.Key(0xA4, true, 60, bindings));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 60, bindings));
+    }
+
+    [Fact]
     public void AltGrStillCountsAsCtrlAltWithAMainKey()
     {
         var state = new HybridHotkeyState();

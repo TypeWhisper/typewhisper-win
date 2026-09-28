@@ -35,7 +35,9 @@ internal sealed class DictationHotkeyRegistration : IDisposable
             {
                 var key = Marshal.PtrToStructure<KeyData>(data);
                 var altGr = ShortcutKeys.IsAltGrControl(key.Key, key.Scan);
-                if (altGr) AltGrControlDown = message.ToInt64() is 0x100 or 0x104;
+                var pressed = message.ToInt64() is 0x100 or 0x104;
+                // A real left Ctrl or the right Alt release also ends AltGr, in case its Ctrl release was missed.
+                if (key.Key == 0xA2 || key.Key == 0xA5 && !pressed) AltGrControlDown = altGr && pressed;
                 var acceptInjectedProbeInput = false;
 #if DEBUG
                 // Computer Use emits injected keys. Accept them only in the explicit
@@ -65,6 +67,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
     internal void Interrupt()
     {
         _interrupted = true;
+        AltGrControlDown = false;
         _state.ResetAfterInterruption([]);
     }
 

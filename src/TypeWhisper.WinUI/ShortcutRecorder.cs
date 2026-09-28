@@ -46,7 +46,7 @@ public sealed class ShortcutRecorder : UserControl
     private string _heldModifiers = "";
     private readonly HashSet<string> _downModifiers = [];
     private bool _hasMainKey;
-    private bool _altGrControl;
+    private bool _altGr;
     private bool _startingCapture;
     private bool _commitRefreshQueued;
     internal bool IsCapturing { get; private set; }
@@ -229,7 +229,7 @@ public sealed class ShortcutRecorder : UserControl
         _active = new(this);
         _editingIndex = index;
         _startingCapture = true;
-        IsEditing = IsCapturing = true; _candidate = _heldModifiers = ""; _hasMainKey = _altGrControl = false;
+        IsEditing = IsCapturing = true; _candidate = _heldModifiers = ""; _hasMainKey = _altGr = false;
         _downModifiers.Clear();
         _value.Text = "Press shortcut…";
         _record.Visibility = Visibility.Visible;
@@ -298,15 +298,19 @@ public sealed class ShortcutRecorder : UserControl
         _apply.IsEnabled = error is null;
     }
     private static bool Down(VirtualKey key) => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
-    // AltGr also sets the left Ctrl state. Like the dictation hook, count it only with a main key.
-    private static string Modifiers(bool mainKey = true) => string.Join("+", new[]
+    // AltGr sets left Ctrl and right Alt. Like the dictation hook, count it only with a main key.
+    private static string Modifiers(bool mainKey = true)
     {
-        Down(VirtualKey.RightControl) || Down(VirtualKey.Control) && (mainKey || !DictationHotkeyRegistration.AltGrControlDown) ? "Ctrl" : "",
-        Down(VirtualKey.Menu) ? "Alt" : "", Down(VirtualKey.Shift) ? "Shift" : "",
-        Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows) ? "Win" : ""
-    }.Where(value => value.Length > 0));
-    private static bool AltGrControl(KeyRoutedEventArgs e) => e.Key is VirtualKey.Control or VirtualKey.LeftControl
-        && !e.KeyStatus.IsExtendedKey && DictationHotkeyRegistration.AltGrControlDown;
+        var altGr = !mainKey && DictationHotkeyRegistration.AltGrControlDown;
+        return string.Join("+", new[]
+        {
+            Down(VirtualKey.RightControl) || Down(VirtualKey.Control) && !altGr ? "Ctrl" : "",
+            Down(VirtualKey.LeftMenu) || Down(VirtualKey.Menu) && !altGr ? "Alt" : "", Down(VirtualKey.Shift) ? "Shift" : "",
+            Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows) ? "Win" : ""
+        }.Where(value => value.Length > 0));
+    }
+    private static bool AltGrKey(KeyRoutedEventArgs e) => e.Key is VirtualKey.Control or VirtualKey.LeftControl && !e.KeyStatus.IsExtendedKey
+        || e.Key is VirtualKey.Menu or VirtualKey.RightMenu && e.KeyStatus.IsExtendedKey;
     private static bool Modifier(VirtualKey key) => key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
         or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
         or VirtualKey.LeftWindows or VirtualKey.RightWindows;
@@ -324,7 +328,11 @@ public sealed class ShortcutRecorder : UserControl
         e.Handled = true;
         var modifiers = Modifiers();
         if (e.Key == VirtualKey.Enter && modifiers.Length == 0 && _apply.IsEnabled) { Apply(); return; }
-        if (AltGrControl(e)) { _altGrControl = true; return; }
+        if (AltGrKey(e))
+        {
+            _altGr = DictationHotkeyRegistration.AltGrControlDown;
+            if (_altGr) return;
+        }
         if (Modifier(e.Key))
         {
             if (!_hasMainKey)
@@ -348,9 +356,11 @@ public sealed class ShortcutRecorder : UserControl
     {
         if (!IsCapturing) return;
         // The hook has already seen AltGr's release here, so use the state from its key-down.
-        if (_altGrControl && e.Key is VirtualKey.Control or VirtualKey.LeftControl && !e.KeyStatus.IsExtendedKey)
+        // Windows releases AltGr's Ctrl before its right Alt.
+        if (_altGr && AltGrKey(e))
         {
-            _altGrControl = false; e.Handled = true; return;
+            _altGr = e.Key is VirtualKey.Control or VirtualKey.LeftControl;
+            e.Handled = true; return;
         }
         if (Modifier(e.Key))
         {
