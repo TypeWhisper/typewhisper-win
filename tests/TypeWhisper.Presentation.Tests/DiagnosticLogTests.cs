@@ -138,7 +138,7 @@ public sealed class DiagnosticLogTests : IDisposable
         Assert.DoesNotContain(exported, line => line.Contains("hello"));
     }
 
-    [Fact]
+    [WindowsFileSharingFact]
     public void TrimsInPlaceWhileAnotherProgramHoldsTheLogWithoutSharingDeletion()
     {
         var log = Log();
@@ -167,7 +167,7 @@ public sealed class DiagnosticLogTests : IDisposable
             Stack: [null!])).Event);
     }
 
-    [Fact]
+    [WindowsFileSharingFact]
     public void ReportsAFailedDeletionAndRetriesItWhenConfiguredAgain()
     {
         var log = Log();
@@ -183,7 +183,7 @@ public sealed class DiagnosticLogTests : IDisposable
         Assert.False(File.Exists(LogPath));
     }
 
-    [Fact]
+    [WindowsFileSharingFact]
     public void ReportsAFailedPruneAndRetriesItWithTheNextWrite()
     {
         var log = Log(new(RetentionDays: 7));
@@ -198,7 +198,7 @@ public sealed class DiagnosticLogTests : IDisposable
         Assert.Equal(["recent", "new"], Lines().Select(json => JsonDocument.Parse(json).RootElement.GetProperty("event").GetString()));
     }
 
-    [Fact]
+    [WindowsFileSharingFact]
     public void ExportSkipsExpiredEntriesWhileTheLogCannotBePruned()
     {
         var log = Log(new(RetentionDays: 1));
@@ -253,5 +253,13 @@ public sealed class DiagnosticLogTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_directory, true); } catch (DirectoryNotFoundException) { }
+    }
+}
+
+public sealed class WindowsFileSharingFactAttribute : FactAttribute
+{
+    public WindowsFileSharingFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Requires Windows file sharing modes to hold the log open.";
     }
 }
