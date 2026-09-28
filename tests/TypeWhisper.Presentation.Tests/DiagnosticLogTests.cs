@@ -199,6 +199,31 @@ public sealed class DiagnosticLogTests : IDisposable
     }
 
     [Fact]
+    public void ExportSkipsExpiredEntriesWhileTheLogCannotBePruned()
+    {
+        var log = Log(new(RetentionDays: 1));
+        log.Write(Line("old"));
+        _now = _now.AddDays(2);
+        var destination = Path.Combine(_directory, "export.jsonl");
+        using (new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.Equal(0, log.Export(destination, Line("diagnostics.export")));
+
+        Assert.Contains("diagnostics.export", Assert.Single(File.ReadAllLines(destination)));
+    }
+
+    [Fact]
+    public void ReadsOnlyTheNewestPartOfAnOversizedLog()
+    {
+        var log = Log();
+        log.Write(Line("old"));
+        File.AppendAllText(LogPath, new string('x', 3 * 1024 * 1024) + "\n");
+        File.AppendAllText(LogPath, "{\"time\":\"2026-09-27T12:00:00+00:00\",\"event\":\"recent\"}\n");
+
+        Assert.True(log.Configure(new()));
+        Assert.Contains("recent", Assert.Single(Lines()));
+    }
+
+    [Fact]
     public void ClearDeletesEveryLine()
     {
         var log = Log();

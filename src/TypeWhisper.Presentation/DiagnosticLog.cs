@@ -187,7 +187,9 @@ public sealed partial class DiagnosticLogFile
         lock (_lock)
         {
             BestEffort(PruneUnsafe);
-            lines = ReadUnsafe(_ => true);
+            // Filter again: the prune fails while another program keeps the file from being rewritten.
+            var cutoff = _clock() - TimeSpan.FromDays(_preferences.RetentionDays);
+            lines = ReadUnsafe(line => line.Time >= cutoff);
         }
         var temporary = destination + $".{Guid.NewGuid():N}.tmp";
         try
@@ -282,7 +284,12 @@ public sealed partial class DiagnosticLogFile
     {
         if (!File.Exists(FilePath)) return [];
         using var stream = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        // A file larger than the cap was edited or left behind; read only its newest part so memory
+        // stays bounded, and drop the line the cut lands in.
+        var cut = stream.Length > MaximumBytes;
+        if (cut) stream.Seek(-MaximumBytes, SeekOrigin.End);
         using var reader = new StreamReader(stream, Utf8);
+        if (cut) reader.ReadLine();
         var lines = new List<DiagnosticLogLine>();
         while (reader.ReadLine() is { } text)
         {
