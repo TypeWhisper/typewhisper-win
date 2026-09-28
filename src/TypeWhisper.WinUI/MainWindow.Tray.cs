@@ -44,6 +44,13 @@ public sealed partial class MainWindow
         TrayActionsChanged?.Invoke();
     }
 
+    internal void ShowDiagnosticsFromTray()
+    {
+        if (_closing || _profileRestoreClosing) return;
+        OpenSettings();
+        _settingsWindow?.ShowSetting("Advanced", DiagnosticsSettingsView.SettingKey);
+    }
+
     internal void OpenRecoveryFromTray()
     {
         if (_closing || _profileRestoreClosing) return;

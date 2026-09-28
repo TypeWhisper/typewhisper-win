@@ -31,13 +31,13 @@ internal sealed class OriginalDictationField : IDisposable
             {
                 target._automation.ConnectionTimeout = 200;
                 target._automation.TransactionTimeout = 200;
-                PasteDiagnostics.Write("field.capture.success");
+                AppDiagnostics.Write("field.capture.success");
                 return target;
             }
         }
         catch (OperationCanceledException) { target?.Dispose(); throw; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { PasteDiagnostics.Write("field.capture.exception", ex); }
-        PasteDiagnostics.Write("field.capture.failed");
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.exception", ex); }
+        AppDiagnostics.Write("field.capture.failed");
         target?.Dispose(); return null;
     }
 
@@ -46,15 +46,15 @@ internal sealed class OriginalDictationField : IDisposable
         Release(_element); _element = null;
         try { _element = _automation.GetFocusedElement(); }
         // UIA_E_ELEMENTNOTAVAILABLE and similar races are transient while focus settles: retry.
-        catch (COMException ex) { PasteDiagnostics.Write("field.capture.transient", ex); return false; }
+        catch (COMException ex) { AppDiagnostics.Write("field.capture.transient", ex); return false; }
         finally
         {
             // The first query may wait for a cold provider; retries must stay short.
             _automation.ConnectionTimeout = 250; _automation.TransactionTimeout = 250;
         }
-        PasteDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.type={_element.CurrentControlType}");
+        AppDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.element control={_element.CurrentControlType}");
         if (_element?.CurrentControlType is 50025 or 50026)
-            PasteDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");
+            AppDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");
         return IsCurrent();
     }
 
@@ -97,18 +97,18 @@ internal sealed class OriginalDictationField : IDisposable
     {
         try
         {
-            if (GetForegroundWindow() != _window) { PasteDiagnostics.Write("field.verify.other-window"); return false; }
-            if (!IsValid()) { PasteDiagnostics.Write("field.verify.invalid-element"); return false; }
+            if (GetForegroundWindow() != _window) { AppDiagnostics.Write("field.verify.other-window"); return false; }
+            if (!IsValid()) { AppDiagnostics.Write("field.verify.invalid-element"); return false; }
             var focused = _automation.GetFocusedElement();
             try
             {
                 var matches = _automation.CompareElements(_element, focused) != 0;
-                if (!matches) PasteDiagnostics.Write("field.verify.different-element");
+                if (!matches) AppDiagnostics.Write("field.verify.different-element");
                 return matches;
             }
             finally { Release(focused); }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { PasteDiagnostics.Write("field.verify.exception", ex); return false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.verify.exception", ex); return false; }
     }
 
     private bool HasWritableTextPattern()
@@ -151,13 +151,13 @@ internal sealed class OriginalDictationField : IDisposable
                     // Do not require foreground ownership before requesting it.
                     if (IsValid() && !expired())
                     {
-                        PasteDiagnostics.Write("field.restore.request-element-focus");
+                        AppDiagnostics.Write("field.restore.request-element-focus");
                         _element!.SetFocus();
                     }
                 },
                 ct => Task.Delay(25, ct), cancellation, expired))
             {
-                PasteDiagnostics.Write("field.restore.window-activation-failed");
+                AppDiagnostics.Write("field.restore.window-activation-failed");
                 DiagnoseFocus();
                 return false;
             }
@@ -165,7 +165,7 @@ internal sealed class OriginalDictationField : IDisposable
                 () => GetForegroundWindow() == _window && IsValid(),
                 () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation, expired);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { PasteDiagnostics.Write("field.restore.exception", ex); return false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { AppDiagnostics.Write("field.restore.exception", ex); return false; }
     }
 
     private void ActivateWithInputThread(Func<bool> expired)
@@ -185,12 +185,12 @@ internal sealed class OriginalDictationField : IDisposable
             // only to the window being left does not activate the original queue.
             targetAttached = targetThread != currentThread && targetThread != foregroundThread &&
                 AttachThreadInput(currentThread, targetThread, true);
-            PasteDiagnostics.Write($"field.restore.queues foreground={foregroundAttached} target={targetAttached}");
+            AppDiagnostics.Write($"field.restore.queues foreground={foregroundAttached} target={targetAttached}");
             if (expired()) return;
             var requested = SetForegroundWindow(_window);
             if (!expired() && (targetAttached || targetThread == currentThread || (targetThread == foregroundThread && foregroundAttached)))
                 SetActiveWindow(_window);
-            PasteDiagnostics.Write($"field.restore.activation accepted={requested} current={GetForegroundWindow() == _window}");
+            AppDiagnostics.Write($"field.restore.activation accepted={requested} current={GetForegroundWindow() == _window}");
         }
         finally
         {
@@ -203,9 +203,9 @@ internal sealed class OriginalDictationField : IDisposable
     {
         var foreground = GetForegroundWindow();
         GetWindowThreadProcessId(foreground, out var process);
-        PasteDiagnostics.Write($"field.restore.observed targetWindow={foreground == _window} targetProcess={process == _process} ownProcess={process == Environment.ProcessId}");
+        AppDiagnostics.Write($"field.restore.observed targetWindow={foreground == _window} targetProcess={process == _process} ownProcess={process == Environment.ProcessId}");
         var focused = _automation.GetFocusedElement();
-        try { PasteDiagnostics.Write($"field.restore.observed originalElement={_automation.CompareElements(_element, focused) != 0}"); }
+        try { AppDiagnostics.Write($"field.restore.observed originalElement={_automation.CompareElements(_element, focused) != 0}"); }
         finally { Release(focused); }
     }
 

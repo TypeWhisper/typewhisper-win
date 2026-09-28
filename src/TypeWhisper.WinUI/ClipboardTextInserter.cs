@@ -18,13 +18,13 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         try
         {
             var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text);
-            PasteDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
+            AppDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
             _restored = ReleaseAfterRestoreAsync(result.Restored);
             releaseNow = false;
             return result.Inserted;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { PasteDiagnostics.Write("clipboard.paste.exception", ex); throw; }
+        { AppDiagnostics.Write("clipboard.paste.exception", ex); throw; }
         finally { if (releaseNow) TransactionGate.Release(); }
     }
     private static async Task ReleaseAfterRestoreAsync(Task restored)
@@ -33,7 +33,7 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // The paste was already sent; a failed restore must not turn it into a delivery failure.
-            PasteDiagnostics.Write("clipboard.restore.exception", ex);
+            AppDiagnostics.Write("clipboard.restore.exception", ex);
             System.Diagnostics.Trace.TraceWarning("Clipboard restore after paste failed: {0}", ex.GetType().Name);
         }
         finally { TransactionGate.Release(); }

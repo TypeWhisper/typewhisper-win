@@ -19,15 +19,14 @@ public partial class App : Application
         UnhandledException += (_, args) =>
         {
             System.Diagnostics.Debug.WriteLine(args.Exception);
-            try
-            {
-                File.AppendAllText(Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log"),
-                    $"{DateTimeOffset.Now:O} {args.Exception}\n");
-            }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            AppDiagnostics.WriteFailure("app.unhandled-exception", args.Exception);
             args.Handled = true;
         };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception error) AppDiagnostics.WriteFailure("app.crash", error);
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) => AppDiagnostics.WriteFailure("task.unobserved-exception", args.Exception);
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -168,6 +167,7 @@ public partial class App : Application
 
     private async Task StartWithProfileAsync(TypeWhisper.Presentation.ApplicationActivationRequest request, Task initialShare)
     {
+        AppDiagnostics.Start();
         var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
@@ -192,7 +192,8 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowApplicationUpdates),
             () => _window.DispatcherQueue.TryEnqueue(_window.PasteLastTranscriptionFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.CopyLastTranscriptionFromTray),
-            () => _window.DispatcherQueue.TryEnqueue(_window.ReadLastTranscriptionFromTray));
+            () => _window.DispatcherQueue.TryEnqueue(_window.ReadLastTranscriptionFromTray),
+            () => _window.DispatcherQueue.TryEnqueue(_window.ShowDiagnosticsFromTray));
         _window.TrayMenuHandle = _tray.WindowHandle;
         void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,
             _window.CanChangeDictationHotkeyPause, _window.DictationHotkeyPauseError);

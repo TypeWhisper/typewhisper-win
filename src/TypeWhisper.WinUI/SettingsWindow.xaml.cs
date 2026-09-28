@@ -501,6 +501,7 @@ public sealed partial class SettingsWindow : Window
         else SessionHint.Text = "Open Files & recovery from the sidebar to review saved audio. Your current settings are kept intact.";
     }
     internal void ShowAccount() => ShowCategory("Account & about");
+    internal void ShowSetting(string category, string key) => OpenSearchResult(new(category, key, "", "", ""));
 
     internal void ShowHistoryNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open History. Your current workspace is kept intact.";
 
@@ -555,6 +556,7 @@ public sealed partial class SettingsWindow : Window
         new("Overlay editor", "", "Customize layout", "Choose screen position and arrange the left and right widgets.", "layout", "appearance monitor top bottom drag"),
         new("Integrations", "", "Integrations", "Manage installed plugins, accounts, models and updates.", "plugin", "OpenAI ChatGPT Groq ElevenLabs API key login discover marketplace"),
         new("Advanced", "", "HTTP API", "Connect local scripts and apps, configure the port, and copy the API token.", "settings", "advanced server localhost auto-discovery automation"),
+        new("Advanced", DiagnosticsSettingsView.SettingKey, "Diagnostics", "Keep a local log without dictated text and export it for support.", "settings", "error log crash troubleshooting support export retention"),
         new("Premium", "", "Premium", "Premium access, commercial license and development activation.", "lock", "supporter calendar correction learning cloud sync"),
         new("Account & about", "", "Account & about", "License, Premium, updates and app information.", "info")
     ];
