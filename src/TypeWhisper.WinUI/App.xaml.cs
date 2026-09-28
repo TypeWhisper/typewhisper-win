@@ -353,10 +353,12 @@ public partial class App : Application
             // Start with Windows lives in the registration, not the profile; a new installation starts with it off.
             var startupError = await TurnOffStartupAsync();
             ProfileDataEraser.RequestErasure(WinUIProfile.Root);
-            await Task.Run(UserDataDeletion.FinishPending);
+            var report = await Task.Run(UserDataDeletion.FinishPending);
             if (startupError is not null)
             {
-                ShowProfileFailure("Your data was deleted, but Start with Windows could not be turned off. Reopen TypeWhisper and turn it off under General, or remove TypeWhisper from the startup apps in Windows Settings.", startupError);
+                ShowProfileFailure(report.Complete
+                    ? "Your data was deleted, but Start with Windows could not be turned off. Reopen TypeWhisper and turn it off under General, or remove TypeWhisper from the startup apps in Windows Settings."
+                    : "Not all data could be deleted yet, and Start with Windows could not be turned off. Reopen TypeWhisper to finish deleting your data, then turn off Start with Windows under General.", startupError);
                 return;
             }
             _mainInstance?.UnregisterKey();

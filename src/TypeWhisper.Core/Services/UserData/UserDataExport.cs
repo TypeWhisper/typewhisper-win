@@ -175,7 +175,8 @@ public static class UserDataExport
             if (modified.Year is >= 1980 and <= 2107) entry.LastWriteTime = modified;
             await using var target = entry.Open();
             await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
-            return source.Length;
+            // What was read, not the current length: another writer may change the file during the copy.
+            return source.Position;
         }
     }
 
