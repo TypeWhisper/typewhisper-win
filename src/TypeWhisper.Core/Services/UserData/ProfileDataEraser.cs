@@ -248,13 +248,7 @@ public static class ProfileDataEraser
             return null;
         }
 
-        var handle = CreateFile(path, ListFolder | ReadAttributes, FileShare.ReadWrite, 0, FileMode.Open, BackupSemantics | OpenReparsePoint, 0);
-        if (handle.IsInvalid)
-        {
-            var error = Marshal.GetLastPInvokeError();
-            handle.Dispose();
-            throw new IOException($"'{path}' could not be opened (Windows error {error}).");
-        }
+        var handle = OpenWithoutFollowing(path, ListFolder | ReadAttributes, FileShare.ReadWrite, BackupSemantics);
         try
         {
             if (!IsPlainFolder(File.GetAttributes(handle))) throw new IOException($"'{path}' is no longer a plain folder.");
@@ -267,12 +261,49 @@ public static class ProfileDataEraser
         }
     }
 
+    /// <summary>Opens a file for asynchronous reading, failing when <paramref name="path"/> is a link or a folder.</summary>
+    /// <remarks>A file replaced by a link after it was listed is not read through the link.</remarks>
+    internal static FileStream OpenFileWithoutFollowing(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            if (File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint)) throw new IOException($"'{path}' is a link.");
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, useAsync: true);
+        }
+
+        var handle = OpenWithoutFollowing(path, GenericRead, FileShare.ReadWrite | FileShare.Delete, Overlapped | SequentialScan);
+        try
+        {
+            var attributes = File.GetAttributes(handle);
+            if (attributes.HasFlag(FileAttributes.ReparsePoint) || attributes.HasFlag(FileAttributes.Directory))
+                throw new IOException($"'{path}' is not a plain file.");
+            return new FileStream(handle, FileAccess.Read, 81920, isAsync: true);
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
+    }
+
+    private static SafeFileHandle OpenWithoutFollowing(string path, uint access, FileShare share, uint flags)
+    {
+        var handle = CreateFile(path, access, share, 0, FileMode.Open, flags | OpenReparsePoint, 0);
+        if (!handle.IsInvalid) return handle;
+        var error = Marshal.GetLastPInvokeError();
+        handle.Dispose();
+        throw new IOException($"'{path}' could not be opened (Windows error {error}).");
+    }
+
     private static bool IsPlainFolder(FileAttributes attributes) =>
         attributes.HasFlag(FileAttributes.Directory) && !attributes.HasFlag(FileAttributes.ReparsePoint);
 
     // Windows enforces sharing only against handles with data access, so attribute access alone would not pin the folder.
     private const uint ListFolder = 0x01;
     private const uint ReadAttributes = 0x80;
+    private const uint GenericRead = 0x80000000;
+    private const uint Overlapped = 0x40000000;
+    private const uint SequentialScan = 0x08000000;
     private const uint BackupSemantics = 0x02000000;
     private const uint OpenReparsePoint = 0x00200000;
 

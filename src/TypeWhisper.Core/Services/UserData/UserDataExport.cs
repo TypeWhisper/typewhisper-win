@@ -48,6 +48,10 @@ public static class UserDataExport
     // Downloads and binaries in an earlier version's folders, reinstalled from Integrations rather than restored.
     private static readonly HashSet<string> PreviousVersionDownloads = new(StringComparer.OrdinalIgnoreCase) { "Models", "Plugins" };
 
+    // An earlier version kept API keys in its settings files (early versions without encryption) and the license in
+    // license.json. The upgrade already moved the preferences into the current profile, so these files stay out.
+    private static readonly HashSet<string> PreviousVersionCredentialFiles = new(StringComparer.OrdinalIgnoreCase) { "settings.json", "license.json" };
+
     private static readonly HashSet<string> ExcludedTopLevel = new(StringComparer.OrdinalIgnoreCase)
     {
         // Installed plugin packages and the local API's upload scratch space.
@@ -92,6 +96,9 @@ public static class UserDataExport
         // An archive inside the data folder would be copied into itself and removed by "Delete all data".
         if (IsSameOrInside(root, target))
             throw new ArgumentException("Choose a location outside the TypeWhisper data folder.", nameof(destination));
+        // The same for an earlier version's data: it is copied into the archive and removed by "Delete all data" too.
+        if ((previousVersionData ?? []).SelectMany(PlacePaths).Any(path => IsSameOrInside(path, target)))
+            throw new ArgumentException("Choose a location outside the folders of earlier TypeWhisper versions.", nameof(destination));
         var folder = Path.GetDirectoryName(target) ?? throw new IOException("The export destination has no folder.");
 
         var temporary = Path.Join(folder, ".typewhisper-export-" + Guid.NewGuid().ToString("N") + ".tmp");
@@ -156,22 +163,31 @@ public static class UserDataExport
         foreach (var (path, relative) in EnumerateFolder(root, root, IsExcluded, "", skipped, required: true))
             yield return (path, ProfileFolderName + "/" + relative, relative);
 
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var place in previousVersionData)
         {
             var placeRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(place.Root));
             // Nothing to copy when the earlier version never used this place, or it was already deleted.
             if (!Directory.Exists(placeRoot) || IsSameOrInside(root, placeRoot)) continue;
-            var prefix = PreviousVersionFolderName + "/" + Path.GetFileName(placeRoot) + "/";
+            // Two places with the same folder name must not write the same entries.
+            var name = Path.GetFileName(placeRoot);
+            for (var number = 2; !names.Add(name); number++) name = Path.GetFileName(placeRoot) + "-" + number;
+            var prefix = PreviousVersionFolderName + "/" + name + "/";
             var entries = place.Entries is null ? null : new HashSet<string>(place.Entries, StringComparer.OrdinalIgnoreCase);
             bool Excluded(string relative, bool isDirectory)
             {
-                var first = relative.Split('/')[0];
-                return entries?.Contains(first) == false || PreviousVersionDownloads.Contains(first) || IsExcluded(relative, isDirectory);
+                var segments = relative.Split('/');
+                return entries?.Contains(segments[0]) == false || PreviousVersionDownloads.Contains(segments[0]) ||
+                    !isDirectory && (PreviousVersionCredentialFiles.Contains(segments[^1]) || ExcludedTopLevel.Contains(segments[^1])) ||
+                    IsExcluded(relative, isDirectory);
             }
             foreach (var (path, relative) in EnumerateFolder(placeRoot, placeRoot, Excluded, prefix, skipped, required: false))
                 yield return (path, prefix + relative, prefix + relative);
         }
     }
+
+    private static IEnumerable<string> PlacePaths(ErasureTarget place) =>
+        place.Entries is null ? [place.Root] : place.Entries.Select(name => Path.Join(place.Root, name));
 
     // Recursive so every folder on the way stays open while anything below it is read: an open folder cannot be
     // renamed or replaced by a link, which keeps each path inside the data folder until its file is copied.
@@ -232,7 +248,7 @@ public static class UserDataExport
     {
         FileStream source;
         // Opened before the entry exists, so a file that cannot be read never leaves an empty entry behind.
-        try { source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, useAsync: true); }
+        try { source = ProfileDataEraser.OpenFileWithoutFollowing(path); }
         catch (Exception ex) when (IsFileSystemFailure(ex)) { return null; }
         await using (source)
         {

@@ -194,7 +194,10 @@ public sealed class UserDataExportTests : IDisposable
         WriteAt(userData, "Audio/archived.wav", "audio");
         WriteAt(userData, "Models/model.bin", "weights");
         WriteAt(userData, "licenses.dat", "cipher");
-        WriteAt(install, "settings.json", "{}");
+        WriteAt(userData, "Data/license.json", "{\"key\":\"license\"}");
+        WriteAt(userData, "PluginData/com.example/settings.json", "{\"secret:api-key\":\"sk-plain\"}");
+        WriteAt(userData, "PluginData/com.example/memories.json", "[]");
+        WriteAt(install, "settings.json", "{\"OpenAiApiKey\":\"sk-plain\"}");
         WriteAt(install, "DictationRecovery/take.wav", "audio");
         WriteAt(install, "Plugins/plugin.dll", "binary");
         WriteAt(install, "current/TypeWhisper.exe", "app");
@@ -213,14 +216,42 @@ public sealed class UserDataExportTests : IDisposable
             "README.txt",
             "previous-version/TypeWhisper-UserData/Audio/archived.wav",
             "previous-version/TypeWhisper-UserData/Data/history.json",
+            "previous-version/TypeWhisper-UserData/PluginData/com.example/memories.json",
             "previous-version/TypeWhisper/DictationRecovery/take.wav",
-            "previous-version/TypeWhisper/settings.json",
             "profile/history.json",
             UserDataExport.BackupEntryName,
         ], Entries());
         using var archive = ZipFile.OpenRead(Destination);
         using var readMe = new StreamReader(archive.GetEntry(UserDataExport.ReadMeEntryName)!.Open());
         Assert.Contains("previous-version/", await readMe.ReadToEndAsync());
+    }
+
+    [Fact]
+    public async Task PlacesWithTheSameFolderNameGetTheirOwnArchiveFolders()
+    {
+        var first = Path.Join(_directory, "a", "TypeWhisper");
+        var second = Path.Join(_directory, "b", "TypeWhisper");
+        WriteAt(first, "Audio/one.wav", "audio");
+        WriteAt(second, "Audio/two.wav", "audio");
+
+        await UserDataExport.ExportAsync(Root, Destination, [new ErasureTarget(first), new ErasureTarget(second)]);
+
+        Assert.Contains("previous-version/TypeWhisper/Audio/one.wav", Entries());
+        Assert.Contains("previous-version/TypeWhisper-2/Audio/two.wav", Entries());
+    }
+
+    [Fact]
+    public async Task DestinationInsideAnEarlierVersionsDataIsRefused()
+    {
+        var userData = Path.Join(_directory, "TypeWhisper-UserData");
+        var install = Path.Join(_directory, "TypeWhisper");
+        Directory.CreateDirectory(Path.Join(install, "Data"));
+        ErasureTarget[] places = [new(userData), new(install, ["Data"])];
+
+        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Path.Join(userData, "export.zip"), places));
+        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Path.Join(install, "Data", "export.zip"), places));
+        // Beside the named entries is fine: that folder is not deleted.
+        await UserDataExport.ExportAsync(Root, Path.Join(install, "export.zip"), places);
     }
 
     private static void WriteAt(string root, string relative, string content)
