@@ -186,7 +186,16 @@ public static class ProfileDataEraser
             using (PinFolder(fullRoot))
             {
                 var marker = Path.Join(fullRoot, PendingMarkerName);
-                if (File.Exists(marker)) File.Delete(marker);
+                // Probed like IsErasurePending: only "not found" proves it gone; anything else is removed as itself or fails.
+                try
+                {
+                    if (File.GetAttributes(marker).HasFlag(FileAttributes.Directory)) Directory.Delete(marker, recursive: false);
+                    else File.Delete(marker);
+                }
+                catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    // Already gone.
+                }
             }
             return true;
         }

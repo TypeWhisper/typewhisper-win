@@ -251,6 +251,23 @@ public sealed class ProfileDataEraserTests : IDisposable
     }
 
     [Fact]
+    public void CancelReportsSuccessOnlyWhenTheMarkerIsGone()
+    {
+        Directory.CreateDirectory(Root);
+        var marker = Path.Join(Root, ProfileDataEraser.PendingMarkerName);
+        Directory.CreateDirectory(marker);
+        Assert.True(ProfileDataEraser.CancelPendingErasure(Root));
+        Assert.False(Directory.Exists(marker));
+
+        Directory.CreateDirectory(marker);
+        File.WriteAllText(Path.Join(marker, "blocking.txt"), "x");
+        Assert.False(ProfileDataEraser.CancelPendingErasure(Root));
+        Assert.True(ProfileDataEraser.IsErasurePending(Root));
+
+        Assert.True(ProfileDataEraser.CancelPendingErasure(Path.Join(_directory, "missing")));
+    }
+
+    [Fact]
     public void NoPendingErasureLeavesTheFolderAlone()
     {
         Seed();
