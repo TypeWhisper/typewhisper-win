@@ -7,9 +7,9 @@ namespace TypeWhisper.Core.Tests.Services;
 
 public sealed class UserDataExportTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "TypeWhisper-export-tests-" + Guid.NewGuid().ToString("N"));
-    private string Root => Path.Combine(_directory, "profile");
-    private string Destination => Path.Combine(_directory, "out", "export.zip");
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "TypeWhisper-export-tests-" + Guid.NewGuid().ToString("N"));
+    private string Root => Path.Join(_directory, "profile");
+    private string Destination => Path.Join(_directory, "out", "export.zip");
 
     public UserDataExportTests()
     {
@@ -25,7 +25,7 @@ public sealed class UserDataExportTests : IDisposable
 
     private void Write(string relative, string content = "x")
     {
-        var path = Path.Combine(Root, relative);
+        var path = Path.Join(Root, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
     }
@@ -39,7 +39,7 @@ public sealed class UserDataExportTests : IDisposable
     [Fact]
     public async Task ArchiveHoldsUserDataAndLeavesSecretsModelsAndInternalsOut()
     {
-        new HistoryService(Path.Combine(Root, "history.json")).AddRecord(new TranscriptionRecord
+        new HistoryService(Path.Join(Root, "history.json")).AddRecord(new TranscriptionRecord
         { Id = "record", Timestamp = DateTime.UtcNow, RawText = "raw", FinalText = "hello export" });
         Write("history-audio/history-1.wav", "audio");
         Write("recordings/meeting.wav", "audio");
@@ -95,7 +95,7 @@ public sealed class UserDataExportTests : IDisposable
     {
         Write("history.json", "[]");
 
-        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Path.Combine(Root, "export.zip")));
+        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Path.Join(Root, "export.zip")));
         await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Root));
         Assert.Equal(["history.json"], Directory.EnumerateFileSystemEntries(Root).Select(Path.GetFileName));
     }
@@ -103,10 +103,10 @@ public sealed class UserDataExportTests : IDisposable
     [Fact]
     public async Task DestinationReachedThroughALinkIntoTheDataFolderIsRefused()
     {
-        var link = Path.Combine(_directory, "shortcut");
+        var link = Path.Join(_directory, "shortcut");
         LegacyDailyProfileMigrationTests.Link(link, Root);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Path.Combine(link, "export.zip")));
+        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Path.Join(link, "export.zip")));
         Assert.Empty(Directory.EnumerateFileSystemEntries(Root));
         Directory.Delete(link);
     }
@@ -114,15 +114,15 @@ public sealed class UserDataExportTests : IDisposable
     [Fact]
     public async Task LinksInsideTheDataFolderAreNotFollowed()
     {
-        var outside = Path.Combine(_directory, "outside");
+        var outside = Path.Join(_directory, "outside");
         Directory.CreateDirectory(outside);
-        File.WriteAllText(Path.Combine(outside, "private.txt"), "not TypeWhisper data");
-        LegacyDailyProfileMigrationTests.Link(Path.Combine(Root, "linked"), outside);
+        File.WriteAllText(Path.Join(outside, "private.txt"), "not TypeWhisper data");
+        LegacyDailyProfileMigrationTests.Link(Path.Join(Root, "linked"), outside);
 
         await UserDataExport.ExportAsync(Root, Destination);
 
         Assert.DoesNotContain(Entries(), entry => entry.Contains("private.txt", StringComparison.Ordinal));
-        Directory.Delete(Path.Combine(Root, "linked"));
+        Directory.Delete(Path.Join(Root, "linked"));
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class UserDataExportTests : IDisposable
         Write("recordings/locked.wav", "audio");
 
         UserDataExportResult result;
-        using (new FileStream(Path.Combine(Root, "recordings", "locked.wav"), FileMode.Open, FileAccess.Read, FileShare.None))
+        using (new FileStream(Path.Join(Root, "recordings", "locked.wav"), FileMode.Open, FileAccess.Read, FileShare.None))
             result = await UserDataExport.ExportAsync(Root, Destination);
 
         Assert.Equal(["recordings/locked.wav"], result.Skipped);
@@ -148,7 +148,7 @@ public sealed class UserDataExportTests : IDisposable
     {
         Write("history.json", "[]");
         Write("recordings/meeting.wav", "audio");
-        var recordings = Path.Combine(Root, "recordings");
+        var recordings = Path.Join(Root, "recordings");
         DenyListing(recordings, deny: true);
         UserDataExportResult result;
         try

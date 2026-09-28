@@ -4,9 +4,9 @@ namespace TypeWhisper.Core.Tests.Services;
 
 public sealed class ProfileDataEraserTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "TypeWhisper-eraser-tests-" + Guid.NewGuid().ToString("N"));
-    private string Root => Path.Combine(_directory, "profile");
-    private string Outside => Path.Combine(_directory, "outside");
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "TypeWhisper-eraser-tests-" + Guid.NewGuid().ToString("N"));
+    private string Root => Path.Join(_directory, "profile");
+    private string Outside => Path.Join(_directory, "outside");
 
     public ProfileDataEraserTests()
     {
@@ -24,12 +24,12 @@ public sealed class ProfileDataEraserTests : IDisposable
 
     private void Seed()
     {
-        File.WriteAllText(Path.Combine(Root, "history.json"), "[]");
-        Directory.CreateDirectory(Path.Combine(Root, "history-audio"));
-        File.WriteAllText(Path.Combine(Root, "history-audio", "one.wav"), "audio");
-        Directory.CreateDirectory(Path.Combine(Root, "PluginData", "plugin", "Models"));
-        File.WriteAllText(Path.Combine(Root, "PluginData", "plugin", "Models", "model.bin"), "model");
-        var readOnly = Path.Combine(Root, "PluginData", "plugin", "key.secret");
+        File.WriteAllText(Path.Join(Root, "history.json"), "[]");
+        Directory.CreateDirectory(Path.Join(Root, "history-audio"));
+        File.WriteAllText(Path.Join(Root, "history-audio", "one.wav"), "audio");
+        Directory.CreateDirectory(Path.Join(Root, "PluginData", "plugin", "Models"));
+        File.WriteAllText(Path.Join(Root, "PluginData", "plugin", "Models", "model.bin"), "model");
+        var readOnly = Path.Join(Root, "PluginData", "plugin", "key.secret");
         File.WriteAllText(readOnly, "secret");
         File.SetAttributes(readOnly, FileAttributes.ReadOnly | FileAttributes.Hidden);
     }
@@ -51,8 +51,8 @@ public sealed class ProfileDataEraserTests : IDisposable
     public void EraseKeepsNamedTopLevelEntriesOnly()
     {
         Seed();
-        File.WriteAllText(Path.Combine(Root, "keep.txt"), "kept");
-        File.WriteAllText(Path.Combine(Root, "history-audio", "keep.txt"), "nested");
+        File.WriteAllText(Path.Join(Root, "keep.txt"), "kept");
+        File.WriteAllText(Path.Join(Root, "history-audio", "keep.txt"), "nested");
 
         var report = ProfileDataEraser.Erase(Root, "keep.txt");
 
@@ -63,21 +63,21 @@ public sealed class ProfileDataEraserTests : IDisposable
     [Fact]
     public void LinkedFolderIsRemovedWithoutTouchingItsTarget()
     {
-        File.WriteAllText(Path.Combine(Outside, "precious.txt"), "keep me");
-        LegacyDailyProfileMigrationTests.Link(Path.Combine(Root, "linked"), Outside);
+        File.WriteAllText(Path.Join(Outside, "precious.txt"), "keep me");
+        LegacyDailyProfileMigrationTests.Link(Path.Join(Root, "linked"), Outside);
 
         var report = ProfileDataEraser.Erase(Root);
 
         Assert.True(report.Complete);
-        Assert.False(Directory.Exists(Path.Combine(Root, "linked")));
-        Assert.Equal("keep me", File.ReadAllText(Path.Combine(Outside, "precious.txt")));
+        Assert.False(Directory.Exists(Path.Join(Root, "linked")));
+        Assert.Equal("keep me", File.ReadAllText(Path.Join(Outside, "precious.txt")));
     }
 
     [Fact]
     public void LinkedRootIsRefusedAndNothingIsDeleted()
     {
-        File.WriteAllText(Path.Combine(Outside, "precious.txt"), "keep me");
-        var linkedRoot = Path.Combine(_directory, "linked-root");
+        File.WriteAllText(Path.Join(Outside, "precious.txt"), "keep me");
+        var linkedRoot = Path.Join(_directory, "linked-root");
         LegacyDailyProfileMigrationTests.Link(linkedRoot, Outside);
 
         var report = ProfileDataEraser.Erase(linkedRoot);
@@ -86,14 +86,14 @@ public sealed class ProfileDataEraserTests : IDisposable
         Assert.False(report.Complete);
         Assert.False(ProfileDataEraser.CanErase(linkedRoot));
         Assert.Throws<IOException>(() => ProfileDataEraser.RequestErasure(linkedRoot));
-        Assert.True(File.Exists(Path.Combine(Outside, "precious.txt")));
+        Assert.True(File.Exists(Path.Join(Outside, "precious.txt")));
         Directory.Delete(linkedRoot);
     }
 
     [Fact]
     public void FileRootAndDriveRootAreRefused()
     {
-        var file = Path.Combine(_directory, "file-root");
+        var file = Path.Join(_directory, "file-root");
         File.WriteAllText(file, "not a folder");
 
         Assert.True(ProfileDataEraser.Erase(file).Refused);
@@ -104,7 +104,7 @@ public sealed class ProfileDataEraserTests : IDisposable
     [Fact]
     public void MissingRootIsAlreadyEmpty()
     {
-        var report = ProfileDataEraser.Erase(Path.Combine(_directory, "missing"));
+        var report = ProfileDataEraser.Erase(Path.Join(_directory, "missing"));
 
         Assert.True(report.Complete);
         Assert.Equal(0, report.Removed);
@@ -116,7 +116,7 @@ public sealed class ProfileDataEraserTests : IDisposable
         if (!OperatingSystem.IsWindows()) return; // Only Windows refuses to delete an open file.
         Seed();
         ProfileDataEraser.RequestErasure(Root);
-        var held = Path.Combine(Root, "history-audio", "one.wav");
+        var held = Path.Join(Root, "history-audio", "one.wav");
 
         using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
@@ -125,7 +125,7 @@ public sealed class ProfileDataEraserTests : IDisposable
             Assert.False(report.Complete);
             Assert.Equal(2, report.Remaining); // The folder and the file inside it.
             Assert.True(ProfileDataEraser.IsErasurePending(Root));
-            Assert.False(File.Exists(Path.Combine(Root, "history.json")));
+            Assert.False(File.Exists(Path.Join(Root, "history.json")));
         }
 
         var finished = ProfileDataEraser.CompletePendingErasure(Root);
@@ -139,9 +139,9 @@ public sealed class ProfileDataEraserTests : IDisposable
     public void PendingErasureAlsoEmptiesAdditionalFolders()
     {
         Seed();
-        var legacy = Path.Combine(_directory, "legacy");
-        Directory.CreateDirectory(Path.Combine(legacy, "Data"));
-        File.WriteAllText(Path.Combine(legacy, "Data", "history.json"), "[]");
+        var legacy = Path.Join(_directory, "legacy");
+        Directory.CreateDirectory(Path.Join(legacy, "Data"));
+        File.WriteAllText(Path.Join(legacy, "Data", "history.json"), "[]");
         ProfileDataEraser.RequestErasure(Root);
 
         var report = ProfileDataEraser.CompletePendingErasure(Root, new ErasureTarget(legacy));
@@ -162,27 +162,27 @@ public sealed class ProfileDataEraserTests : IDisposable
         Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, new ErasureTarget(Root)));
         Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, new ErasureTarget(_directory, ["profile"])));
         Assert.Throws<ArgumentException>(() => ProfileDataEraser.CompletePendingErasure(Root, ErasureTarget.Entry(Root)));
-        Assert.True(File.Exists(Path.Combine(Root, "history.json")));
+        Assert.True(File.Exists(Path.Join(Root, "history.json")));
         Assert.True(ProfileDataEraser.IsErasurePending(Root));
     }
 
     [Fact]
     public void NamedEntriesAreDeletedAndEverythingElseInTheFolderStays()
     {
-        var install = Path.Combine(_directory, "install");
-        Directory.CreateDirectory(Path.Combine(install, "Data"));
-        File.WriteAllText(Path.Combine(install, "Data", "history.json"), "[]");
-        File.WriteAllText(Path.Combine(install, "settings.json"), "{}");
-        Directory.CreateDirectory(Path.Combine(install, "current"));
-        File.WriteAllText(Path.Combine(install, "current", "TypeWhisper.exe"), "app");
-        File.WriteAllText(Path.Combine(install, "Update.exe"), "updater");
+        var install = Path.Join(_directory, "install");
+        Directory.CreateDirectory(Path.Join(install, "Data"));
+        File.WriteAllText(Path.Join(install, "Data", "history.json"), "[]");
+        File.WriteAllText(Path.Join(install, "settings.json"), "{}");
+        Directory.CreateDirectory(Path.Join(install, "current"));
+        File.WriteAllText(Path.Join(install, "current", "TypeWhisper.exe"), "app");
+        File.WriteAllText(Path.Join(install, "Update.exe"), "updater");
 
         var report = ProfileDataEraser.EraseEntries(install, ["Data", "settings.json", "Models"]);
 
         Assert.True(report.Complete);
         Assert.Equal(3, report.Removed);
         Assert.Equal(["Update.exe", "current"], Directory.EnumerateFileSystemEntries(install).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-        Assert.True(File.Exists(Path.Combine(install, "current", "TypeWhisper.exe")));
+        Assert.True(File.Exists(Path.Join(install, "current", "TypeWhisper.exe")));
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public sealed class ProfileDataEraserTests : IDisposable
     {
         if (!OperatingSystem.IsWindows()) return; // Only Windows refuses to delete an open file.
         Seed();
-        var log = Path.Combine(Outside, "errors.log");
+        var log = Path.Join(Outside, "errors.log");
         File.WriteAllText(log, "exception details");
         ProfileDataEraser.RequestErasure(Root);
 
@@ -215,7 +215,7 @@ public sealed class ProfileDataEraserTests : IDisposable
         Seed();
 
         Assert.Null(ProfileDataEraser.CompletePendingErasure(Root));
-        Assert.True(File.Exists(Path.Combine(Root, "history.json")));
+        Assert.True(File.Exists(Path.Join(Root, "history.json")));
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public sealed class ProfileDataEraserTests : IDisposable
 
         Assert.False(ProfileDataEraser.IsErasurePending(Root));
         Assert.Null(ProfileDataEraser.CompletePendingErasure(Root));
-        Assert.True(File.Exists(Path.Combine(Root, "history.json")));
+        Assert.True(File.Exists(Path.Join(Root, "history.json")));
     }
 
     [Theory]
@@ -238,6 +238,6 @@ public sealed class ProfileDataEraserTests : IDisposable
     [InlineData("profile", "profile/../outside", false)]
     public void StrictlyInsideRejectsTheRootSiblingsAndClimbs(string root, string candidate, bool expected)
     {
-        Assert.Equal(expected, ProfileDataEraser.IsStrictlyInside(Path.Combine(_directory, root), Path.Combine(_directory, candidate)));
+        Assert.Equal(expected, ProfileDataEraser.IsStrictlyInside(Path.Join(_directory, root), Path.Join(_directory, candidate)));
     }
 }
