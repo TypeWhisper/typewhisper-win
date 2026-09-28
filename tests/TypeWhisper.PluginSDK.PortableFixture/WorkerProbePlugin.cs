@@ -37,7 +37,8 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
     public TranscriptionAccelerationPreference AccelerationPreference => _acceleration;
     /// <inheritdoc />
     public TranscriptionAccelerationStatus AccelerationStatus => new(
-        _acceleration == TranscriptionAccelerationPreference.Cpu ? TranscriptionAccelerationBackend.Cpu : TranscriptionAccelerationBackend.NvidiaCuda,
+        _acceleration == TranscriptionAccelerationPreference.Cpu || _acceleration == TranscriptionAccelerationPreference.Auto && _host?.GetSetting<bool>("NoGpu") == true
+            ? TranscriptionAccelerationBackend.Cpu : TranscriptionAccelerationBackend.NvidiaCuda,
         "Fixture " + _acceleration);
     /// <inheritdoc />
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) => _acceleration = preference;

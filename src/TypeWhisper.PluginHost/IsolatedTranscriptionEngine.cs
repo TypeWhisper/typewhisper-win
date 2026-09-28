@@ -206,7 +206,9 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
             try { ((Action<string>)subscriber)(message); } catch (Exception ex) when (ex is not OutOfMemoryException) { }
     }
 
+    // With Auto on a machine without a supported graphics card the engine already runs on the CPU.
     private bool CanFallBackToCpu() => EffectivePreference() != TranscriptionAccelerationPreference.Cpu
+        && _state?.Status.ActiveBackend != TranscriptionAccelerationBackend.Cpu
         && _inner.SupportedAccelerationBackends.Contains(TranscriptionAccelerationBackend.Cpu)
         && _inner.SupportedAccelerationBackends.Any(backend => backend != TranscriptionAccelerationBackend.Cpu);
 

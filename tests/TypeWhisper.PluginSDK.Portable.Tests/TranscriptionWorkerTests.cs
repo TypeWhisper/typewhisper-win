@@ -117,6 +117,17 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CrashesOnTheCpuUnderAutoDoNotClaimAGraphicsCardFallback()
+    {
+        _host.SetSetting("NoGpu", true);
+        await _engine.LoadModelAsync("small", default);
+        Assert.Equal(TranscriptionAccelerationBackend.Cpu, _engine.AccelerationStatus.ActiveBackend);
+        await Assert.ThrowsAsync<TranscriptionWorkerFaultedException>(() => _engine.TranscribePcmAsync(new float[] { 0 }, "crash", false, default));
+        Assert.False(_engine.UsesCpuFallback);
+        Assert.Contains("paused", Assert.Single(_notices));
+    }
+
+    [Fact]
     public async Task RepeatedCrashesPauseTheEngineUntilAModelIsLoadedAgain()
     {
         _engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
