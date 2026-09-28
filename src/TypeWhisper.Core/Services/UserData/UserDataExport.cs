@@ -230,7 +230,7 @@ public static class UserDataExport
         var current = Path.GetPathRoot(full) ?? "";
         foreach (var segment in full[current.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
         {
-            current = Path.Combine(current, segment);
+            current = Path.Join(current, segment);
             try
             {
                 FileSystemInfo info = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);

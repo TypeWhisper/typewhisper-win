@@ -153,8 +153,7 @@ public sealed class UserDataExportTests : IDisposable
         UserDataExportResult result;
         try
         {
-            try { Directory.EnumerateFileSystemEntries(recordings).ToArray(); return; } // Elevated or root runs can still list it.
-            catch (UnauthorizedAccessException) { }
+            if (CanList(recordings)) return; // Elevated or root runs can still list it.
             result = await UserDataExport.ExportAsync(Root, Destination);
         }
         finally { DenyListing(recordings, deny: false); }
@@ -163,6 +162,12 @@ public sealed class UserDataExportTests : IDisposable
         using var archive = ZipFile.OpenRead(Destination);
         using var readMe = new StreamReader(archive.GetEntry(UserDataExport.ReadMeEntryName)!.Open());
         Assert.Contains("recordings/", await readMe.ReadToEndAsync());
+    }
+
+    private static bool CanList(string directory)
+    {
+        try { _ = Directory.EnumerateFileSystemEntries(directory).ToArray(); return true; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
     private static void DenyListing(string directory, bool deny)
