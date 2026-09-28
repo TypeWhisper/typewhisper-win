@@ -83,12 +83,33 @@ internal static class ShortcutKeys
         return count != 0 && !char.IsControl(buffer[0]) && !char.IsWhiteSpace(buffer[0]) ? buffer[0] : null;
     }
 
+    // AltGr arrives as Ctrl+Alt, so a global Ctrl+Alt+S would swallow "ś" on a Polish keyboard.
+    // Checks every installed layout, since the user can switch layouts after recording.
+    internal static char? AltGrCharacter(int key, bool shift)
+    {
+        var state = new byte[256];
+        state[0x11] = state[0x12] = state[0xA2] = state[0xA5] = 0x80;
+        if (shift) state[0x10] = state[0xA0] = 0x80;
+        var layouts = new IntPtr[Math.Max(GetKeyboardLayoutList(0, null), 0)];
+        GetKeyboardLayoutList(layouts.Length, layouts);
+        var buffer = new char[4];
+        foreach (var layout in layouts)
+            if (ToUnicodeEx((uint)key, MapVirtualKeyEx((uint)key, 0, layout), state, buffer, buffer.Length, 4, layout) != 0
+                && !char.IsControl(buffer[0]) && buffer[0] != ' ') return buffer[0];
+        return null;
+    }
+
     private static bool IsLayoutKey(int key) => key is >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint mapType);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint MapVirtualKeyEx(uint code, uint mapType, IntPtr layout);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetKeyboardLayoutList(int count, IntPtr[]? layouts);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetKeyboardLayout(uint thread);
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
     private static extern int ToUnicodeEx(uint key, uint scan, byte[] state, [System.Runtime.InteropServices.Out] char[] buffer, int size, uint flags, IntPtr layout);
+
+    // AltGr sends a synthetic left Ctrl with this scan code before right Alt.
+    internal static bool IsAltGrControl(uint key, uint scan) => key == 0xA2 && scan == 0x21D;
 
     internal static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
 }

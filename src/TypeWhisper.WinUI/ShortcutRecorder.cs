@@ -46,6 +46,7 @@ public sealed class ShortcutRecorder : UserControl
     private string _heldModifiers = "";
     private readonly HashSet<string> _downModifiers = [];
     private bool _hasMainKey;
+    private bool _altGr;
     private bool _startingCapture;
     private bool _commitRefreshQueued;
     internal bool IsCapturing { get; private set; }
@@ -228,7 +229,7 @@ public sealed class ShortcutRecorder : UserControl
         _active = new(this);
         _editingIndex = index;
         _startingCapture = true;
-        IsEditing = IsCapturing = true; _candidate = _heldModifiers = ""; _hasMainKey = false;
+        IsEditing = IsCapturing = true; _candidate = _heldModifiers = ""; _hasMainKey = _altGr = false;
         _downModifiers.Clear();
         _value.Text = "Press shortcut…";
         _record.Visibility = Visibility.Visible;
@@ -286,6 +287,7 @@ public sealed class ShortcutRecorder : UserControl
     // Cancellation uses RegisterHotKey rather than the dictation modifier-only hook.
     private string? Validate(string candidate) => ShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys" or "CopyLastTranscriptionHotkeys" or "PasteLastTranscriptionHotkeys" or "ReadLastTranscriptionHotkeys" or "WorkflowPaletteHotkeys" or "RecorderToggleHotkeys"))
         ?? ShortcutRules.Duplicate(candidate, Current, _editingIndex)
+        ?? ShortcutRules.AltGrConflict(candidate, ShortcutKeys.AltGrCharacter)
         ?? ShortcutRules.Conflict(candidate, _key, _bindings());
     private void Candidate(string candidate)
     {
@@ -296,11 +298,19 @@ public sealed class ShortcutRecorder : UserControl
         _apply.IsEnabled = error is null;
     }
     private static bool Down(VirtualKey key) => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
-    private static string Modifiers() => string.Join("+", new[]
+    // AltGr sets left Ctrl and right Alt. Like the dictation hook, count it only with a main key.
+    private static string Modifiers(bool mainKey = true)
     {
-        Down(VirtualKey.Control) ? "Ctrl" : "", Down(VirtualKey.Menu) ? "Alt" : "", Down(VirtualKey.Shift) ? "Shift" : "",
-        Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows) ? "Win" : ""
-    }.Where(value => value.Length > 0));
+        var altGr = !mainKey && DictationHotkeyRegistration.AltGrControlDown;
+        return string.Join("+", new[]
+        {
+            Down(VirtualKey.RightControl) || Down(VirtualKey.Control) && !altGr ? "Ctrl" : "",
+            Down(VirtualKey.LeftMenu) || Down(VirtualKey.Menu) && !altGr ? "Alt" : "", Down(VirtualKey.Shift) ? "Shift" : "",
+            Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows) ? "Win" : ""
+        }.Where(value => value.Length > 0));
+    }
+    private static bool AltGrKey(KeyRoutedEventArgs e) => e.Key is VirtualKey.Control or VirtualKey.LeftControl && !e.KeyStatus.IsExtendedKey
+        || e.Key is VirtualKey.Menu or VirtualKey.RightMenu && e.KeyStatus.IsExtendedKey;
     private static bool Modifier(VirtualKey key) => key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
         or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
         or VirtualKey.LeftWindows or VirtualKey.RightWindows;
@@ -318,6 +328,11 @@ public sealed class ShortcutRecorder : UserControl
         e.Handled = true;
         var modifiers = Modifiers();
         if (e.Key == VirtualKey.Enter && modifiers.Length == 0 && _apply.IsEnabled) { Apply(); return; }
+        if (AltGrKey(e))
+        {
+            _altGr = DictationHotkeyRegistration.AltGrControlDown;
+            if (_altGr) return;
+        }
         if (Modifier(e.Key))
         {
             if (!_hasMainKey)
@@ -327,7 +342,7 @@ public sealed class ShortcutRecorder : UserControl
                 var pressed = ModifierName(e.Key);
                 if (_downModifiers.Count == 0) { _heldModifiers = ""; _candidate = ""; _apply.IsEnabled = false; }
                 _downModifiers.Add(pressed);
-                _heldModifiers = string.Join("+", (_heldModifiers + "+" + modifiers + "+" + pressed)
+                _heldModifiers = string.Join("+", (_heldModifiers + "+" + Modifiers(mainKey: false) + "+" + pressed)
                     .Split('+', StringSplitOptions.RemoveEmptyEntries).Distinct());
                 _value.Text = _heldModifiers.Replace("+", " + ") + " + …";
             }
@@ -340,6 +355,13 @@ public sealed class ShortcutRecorder : UserControl
     internal void CaptureKeyUp(KeyRoutedEventArgs e)
     {
         if (!IsCapturing) return;
+        // The hook has already seen AltGr's release here, so use the state from its key-down.
+        // Windows releases AltGr's Ctrl before its right Alt.
+        if (_altGr && AltGrKey(e))
+        {
+            _altGr = e.Key is VirtualKey.Control or VirtualKey.LeftControl;
+            e.Handled = true; return;
+        }
         if (Modifier(e.Key))
         {
             _downModifiers.Remove(ModifierName(e.Key));
