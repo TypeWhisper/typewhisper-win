@@ -501,7 +501,11 @@ public sealed partial class SettingsWindow : Window
         else SessionHint.Text = "Open Files & recovery from the sidebar to review saved audio. Your current settings are kept intact.";
     }
     internal void ShowAccount() => ShowCategory("Account & about");
-    internal void ShowSetting(string category, string key) => OpenSearchResult(new(category, key, "", "", ""));
+    // The setup wizard covers the settings; it stays in front until the user finishes or leaves it.
+    internal void ShowSetting(string category, string key)
+    {
+        if (SetupHost.Child is null) OpenSearchResult(new(category, key, "", "", ""));
+    }
 
     internal void ShowHistoryNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open History. Your current workspace is kept intact.";
 

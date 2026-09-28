@@ -29,6 +29,9 @@ internal static class AppDiagnostics
             // Unreadable settings only pause the log; they do not delete what it already holds.
             if (Preferences.Error is null) _log.Configure(Preferences.Current);
         }
+        // Earlier builds wrote full exception text here; this log replaces it.
+        try { File.Delete(Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log")); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         Write($"app.start version={WindowsApplicationUpdates.CurrentVersion} os={Environment.OSVersion.Version} " +
             $"arch={RuntimeInformation.ProcessArchitecture} build={(WinUIProfile.DevelopmentBuild ? "debug" : "release")}");
     }

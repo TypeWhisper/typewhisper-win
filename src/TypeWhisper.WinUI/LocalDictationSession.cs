@@ -609,7 +609,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             StopSilenceMonitoring();
             _livePreview.Cancel();
             _cloudStream?.Cancel();
-            if (_audio.IsRecording) await _audio.StopRecordingAsync();
+            if (_audio.IsRecording)
+            {
+                await _audio.StopRecordingAsync();
+                AppDiagnostics.Write("dictation.canceled");
+            }
             await StopCloudStreamAsync();
             _effects.End();
             await _livePreview.StopAsync();
@@ -618,7 +622,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 ? $"Shortcut cancelled · {ActiveModelName} ready · {notice}" : $"Shortcut cancelled · {ActiveModelName} ready");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { SetStatus("Could not cancel recording: " + ex.Message); }
-        finally { _effects.End(); _gate.Release(); }
+        finally
+        {
+            // A canceled recording never reaches the stop path that ends its dictation context.
+            if (!_audio.IsRecording) AppDiagnostics.EndDictation();
+            _effects.End(); _gate.Release();
+        }
     }
 
     private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null,
