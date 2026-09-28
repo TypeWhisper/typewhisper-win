@@ -386,7 +386,8 @@ public partial class App : Application
         try
         {
             var state = await WindowsStartupRegistration.Create().SetEnabledAsync(false);
-            return state.IsEnabled ? state.Error ?? "Windows still lists TypeWhisper as a startup app." : null;
+            // A registration that cannot be read may still be on, so it is reported like one that stayed on.
+            return state.IsEnabled || state.Unknown ? state.Error ?? "Windows still lists TypeWhisper as a startup app." : null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
     }
@@ -397,11 +398,16 @@ public partial class App : Application
         try
         {
             var cli = new TypeWhisper.Presentation.CliInstallation(WinUIProfile.Root);
-            // Another profile's tool, such as the release app's next to a development build, stays.
-            if (!cli.GetState().CanRemove || !cli.IsBoundTo(WinUIProfile.Root)) return null;
+            if (!cli.GetState().CanRemove) return null;
+            switch (cli.IsBoundTo(WinUIProfile.Root))
+            {
+                // Another profile's tool, such as the release app's next to a development build, stays.
+                case false: return null;
+                case null: return "The command line tool's profile setting could not be read, so it was left installed.";
+            }
             cli.Remove();
             // A changed file stays; a binding left behind would still point a terminal at this profile.
-            return cli.GetState() is { Installed: false, CanRemove: false } && !cli.IsBoundTo(WinUIProfile.Root)
+            return cli.GetState() is { Installed: false, CanRemove: false } && cli.IsBoundTo(WinUIProfile.Root) is false
                 ? null : "Some files of the command line tool were changed and stayed.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
@@ -420,14 +426,20 @@ public partial class App : Application
         var message = report.Refused
             ? "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched."
             : $"{report.Remaining:N0} {(report.Remaining == 1 ? "item" : "items")} of your TypeWhisper data could not be deleted, usually because another program is using them. Close other programs that may use these files, then retry.";
-        ShowProfileFailure(message, TypeWhisper.WinUI.Platform.AppDistribution.ResolveShellVisiblePath(WinUIProfile.Root), keepStartupPending: true);
-        _profileOperation.OfferActions(
+        var folder = TypeWhisper.WinUI.Platform.AppDistribution.ResolveShellVisiblePath(WinUIProfile.Root);
+        ShowProfileFailure(message, folder, keepStartupPending: true);
+        void Offer() => _profileOperation.OfferActions(
             "Retry", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport)),
             "Open TypeWhisper anyway", () =>
             {
-                ProfileDataEraser.CancelPendingErasure(WinUIProfile.Root);
-                return ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport));
+                // Opening while the marker stays would erase the profile again on this or the next launch.
+                if (ProfileDataEraser.CancelPendingErasure(WinUIProfile.Root))
+                    return ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport));
+                ShowProfileFailure("The deletion could not be canceled because another program is using your TypeWhisper data folder. Close it, then try again.", folder, keepStartupPending: true);
+                Offer();
+                return Task.CompletedTask;
             });
+        Offer();
         return false;
     }
 

@@ -33,11 +33,11 @@ public sealed class PackagedStartupRegistration(
                 PackagedStartupState.DisabledByUser => new(false, false, "Startup was disabled in Windows. Enable TypeWhisper in Settings > Apps > Startup."),
                 PackagedStartupState.DisabledByPolicy => new(false, false, "Startup is disabled by your organization's policy."),
                 PackagedStartupState.EnabledByPolicy => new(true, false, "Startup is enabled by your organization's policy."),
-                _ => new(false, false, "Windows returned an unsupported startup state.")
+                _ => new(false, false, "Windows returned an unsupported startup state.", Unknown: true)
             };
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return new(false, false, "Startup registration could not be read: " + ex.Message); }
+        { return new(false, false, "Startup registration could not be read: " + ex.Message, Unknown: true); }
     }
 
     /// <inheritdoc />

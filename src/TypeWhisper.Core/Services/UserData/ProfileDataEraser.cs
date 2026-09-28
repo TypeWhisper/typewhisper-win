@@ -85,14 +85,16 @@ public static class ProfileDataEraser
 
     private static ProfileErasureReport EraseSelected(string fullRoot, Func<string, bool> selects)
     {
-        int removed;
-        try
-        {
-            using (PinFolder(fullRoot)) removed = EmptyDirectory(fullRoot, fullRoot, selects);
-        }
+        IDisposable? pin;
+        try { pin = PinFolder(fullRoot); }
         // Replaced by a link or a file since it was classified.
         catch (Exception ex) when (IsFileSystemFailure(ex)) { return new(0, 0, true); }
-        return new(removed, CountRemaining(fullRoot, fullRoot, selects), false);
+        // Held through the check afterwards too, so the walk that decides completion reads the same folder.
+        using (pin)
+        {
+            var removed = EmptyDirectory(fullRoot, fullRoot, selects);
+            return new(removed, CountRemaining(fullRoot, fullRoot, selects), false);
+        }
     }
 
     /// <summary>True when the folder is a plain folder or absent, the two cases <see cref="Erase"/> acts on.</summary>
@@ -156,7 +158,8 @@ public static class ProfileDataEraser
             .Append(new(0, eraseElsewhere(), false))
             .Append(Erase(root, PendingMarkerName))
             .Aggregate((first, second) => new(first.Removed + second.Removed, first.Remaining + second.Remaining, first.Refused || second.Refused));
-        if (report.Complete) CancelPendingErasure(root);
+        // A marker that cannot be removed still counts: the next launch would erase whatever is there by then.
+        if (report.Complete && !CancelPendingErasure(root)) report = report with { Remaining = report.Remaining + 1 };
         return report;
     }
 
@@ -164,19 +167,22 @@ public static class ProfileDataEraser
         target.Entries is null ? [target.Root] : target.Entries.Select(name => Path.Join(target.Root, name));
 
     /// <summary>Drops the pending marker, so the next launch opens the folder as it is.</summary>
-    public static void CancelPendingErasure(string root)
+    /// <returns>False when the marker may still be there because the folder could not be held or the marker not deleted.</returns>
+    public static bool CancelPendingErasure(string root)
     {
         var fullRoot = Normalize(root);
-        if (Classify(fullRoot) != RootKind.PlainFolder) return;
-        IDisposable? pin;
-        // Held open, so the folder cannot be swapped for a link before the marker inside it is deleted.
-        try { pin = PinFolder(fullRoot); }
-        catch (Exception ex) when (IsFileSystemFailure(ex)) { return; }
-        using (pin)
+        if (Classify(fullRoot) != RootKind.PlainFolder) return true;
+        try
         {
-            var marker = Path.Join(fullRoot, PendingMarkerName);
-            if (File.Exists(marker)) File.Delete(marker);
+            // Held open, so the folder cannot be swapped for a link before the marker inside it is deleted.
+            using (PinFolder(fullRoot))
+            {
+                var marker = Path.Join(fullRoot, PendingMarkerName);
+                if (File.Exists(marker)) File.Delete(marker);
+            }
+            return true;
         }
+        catch (Exception ex) when (IsFileSystemFailure(ex)) { return false; }
     }
 
     /// <summary>True when <paramref name="candidate"/> is inside <paramref name="root"/>, never the root itself or a sibling sharing its prefix.</summary>
@@ -330,7 +336,14 @@ public static class ProfileDataEraser
         if (!handle.IsInvalid) return handle;
         var error = Marshal.GetLastPInvokeError();
         handle.Dispose();
-        throw new IOException($"'{path}' could not be opened (Windows error {error}).");
+        // The same exception types File.Open raises, so callers that tell "missing" from "denied" keep working.
+        throw error switch
+        {
+            2 => new FileNotFoundException($"'{path}' was not found.", path),
+            3 => new DirectoryNotFoundException($"A folder in '{path}' was not found."),
+            5 => new UnauthorizedAccessException($"Access to '{path}' was denied."),
+            _ => new IOException($"'{path}' could not be opened (Windows error {error}).", Marshal.GetHRForLastWin32Error()),
+        };
     }
 
     private static bool IsPlainFolder(FileAttributes attributes) =>
