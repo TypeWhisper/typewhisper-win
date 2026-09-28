@@ -233,6 +233,24 @@ public sealed class ProfileDataEraserTests : IDisposable
     }
 
     [Fact]
+    public void EntriesLeftElsewhereKeepTheErasurePending()
+    {
+        Seed();
+        ProfileDataEraser.RequestErasure(Root);
+        var left = 2;
+
+        var report = ProfileDataEraser.CompletePendingErasure(Root, () => left);
+        Assert.NotNull(report);
+        Assert.Equal(2, report.Remaining);
+        Assert.True(ProfileDataEraser.IsErasurePending(Root));
+
+        left = 0;
+        Assert.True(ProfileDataEraser.CompletePendingErasure(Root, () => left)!.Complete);
+        Assert.False(ProfileDataEraser.IsErasurePending(Root));
+        Assert.Null(ProfileDataEraser.CompletePendingErasure(Root, () => throw new InvalidOperationException("Not called when nothing is pending.")));
+    }
+
+    [Fact]
     public void NoPendingErasureLeavesTheFolderAlone()
     {
         Seed();

@@ -254,6 +254,14 @@ public sealed class UserDataExportTests : IDisposable
         await UserDataExport.ExportAsync(Root, Path.Join(install, "export.zip"), places);
     }
 
+    [Fact]
+    public async Task EarlierVersionFolderOverlappingTheDataFolderIsRefused()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Destination, [new ErasureTarget(Path.Join(Root, "legacy"))]));
+        await Assert.ThrowsAsync<ArgumentException>(() => UserDataExport.ExportAsync(Root, Destination, [new ErasureTarget(_directory)]));
+        Assert.False(File.Exists(Destination));
+    }
+
     private static void WriteAt(string root, string relative, string content)
     {
         var path = Path.Join(root, relative);

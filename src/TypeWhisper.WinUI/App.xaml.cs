@@ -400,7 +400,9 @@ public partial class App : Application
             // Another profile's tool, such as the release app's next to a development build, stays.
             if (!cli.GetState().CanRemove || !cli.IsBoundTo(WinUIProfile.Root)) return null;
             cli.Remove();
-            return cli.GetState() is { Installed: false, CanRemove: false } ? null : "Some files of the command line tool were changed and stayed.";
+            // A changed file stays; a binding left behind would still point a terminal at this profile.
+            return cli.GetState() is { Installed: false, CanRemove: false } && !cli.IsBoundTo(WinUIProfile.Root)
+                ? null : "Some files of the command line tool were changed and stayed.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
     }

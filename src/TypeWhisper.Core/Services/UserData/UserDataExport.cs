@@ -83,7 +83,9 @@ public static class UserDataExport
     /// <param name="previousVersionData">Places an earlier version kept data in; missing ones are left out.</param>
     /// <param name="progress">Receives the running totals.</param>
     /// <param name="cancellationToken">Stops the export without leaving a file at the destination.</param>
-    /// <exception cref="ArgumentException">The destination is inside the data folder.</exception>
+    /// <exception cref="ArgumentException">
+    /// The destination is inside the data folder or an earlier version's data, or an earlier version's folder overlaps the data folder.
+    /// </exception>
     public static async Task<UserDataExportResult> ExportAsync(string profileRoot, string destination,
         IReadOnlyList<ErasureTarget>? previousVersionData = null, IProgress<UserDataExportProgress>? progress = null,
         CancellationToken cancellationToken = default)
@@ -96,6 +98,9 @@ public static class UserDataExport
         // An archive inside the data folder would be copied into itself and removed by "Delete all data".
         if (IsSameOrInside(root, target))
             throw new ArgumentException("Choose a location outside the TypeWhisper data folder.", nameof(destination));
+        // Its own rules keep an earlier version's settings out, which the data folder's rules would copy.
+        if ((previousVersionData ?? []).Any(place => IsSameOrInside(root, place.Root) || IsSameOrInside(place.Root, root)))
+            throw new ArgumentException("An earlier version's folder must not overlap the data folder.", nameof(previousVersionData));
         // The same for an earlier version's data: it is copied into the archive and removed by "Delete all data" too.
         if ((previousVersionData ?? []).SelectMany(PlacePaths).Any(path => IsSameOrInside(path, target)))
             throw new ArgumentException("Choose a location outside the folders of earlier TypeWhisper versions.", nameof(destination));
@@ -178,7 +183,6 @@ public static class UserDataExport
         foreach (var place in previousVersionData)
         {
             var placeRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(place.Root));
-            if (IsSameOrInside(root, placeRoot)) continue;
             // Two places with the same folder name must not write the same entries.
             var name = Path.GetFileName(placeRoot);
             for (var number = 2; !names.Add(name); number++) name = Path.GetFileName(placeRoot) + "-" + number;

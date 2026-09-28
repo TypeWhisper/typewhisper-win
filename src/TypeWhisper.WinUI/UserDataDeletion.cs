@@ -50,18 +50,9 @@ internal static class UserDataDeletion
         for (var pass = 0; pass < Passes; pass++)
         {
             if (pass > 0) Thread.Sleep(PassDelay);
-            if (!ProfileDataEraser.IsErasurePending(WinUIProfile.Root)) break;
-            // Import copies follow their own lease, so they are deleted here rather than as an erasure target.
-            var copiesLeft = StableImportCopy.DeleteCopies();
-            report = ProfileDataEraser.CompletePendingErasure(WinUIProfile.Root, Targets);
-            if (report is null) break;
-            if (copiesLeft > 0)
-            {
-                // The eraser ends the deletion once its own targets are empty; copies still left keep it pending.
-                if (report.Complete) ProfileDataEraser.RequestErasure(WinUIProfile.Root);
-                report = report with { Remaining = report.Remaining + copiesLeft };
-            }
-            if (report.Complete) break;
+            // Import copies follow their own lease, so they are deleted by their owner; copies left keep the marker.
+            report = ProfileDataEraser.CompletePendingErasure(WinUIProfile.Root, () => StableImportCopy.DeleteCopies(), Targets);
+            if (report is null or { Complete: true }) break;
         }
         return report ?? new(0, 0, false);
     }

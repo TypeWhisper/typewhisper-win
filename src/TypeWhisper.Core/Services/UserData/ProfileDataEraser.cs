@@ -136,14 +136,24 @@ public static class ProfileDataEraser
     /// <param name="root">The folder holding the marker.</param>
     /// <param name="others">Other places cleared with it, such as an older version's data folder or a log outside the folder.</param>
     /// <returns>Null when no erasure was pending.</returns>
-    public static ProfileErasureReport? CompletePendingErasure(string root, params ErasureTarget[] others)
+    public static ProfileErasureReport? CompletePendingErasure(string root, params ErasureTarget[] others) =>
+        CompletePendingErasure(root, () => 0, others);
+
+    /// <summary>Finishes a pending erasure that also clears something with its own rules.</summary>
+    /// <param name="root">The folder holding the marker.</param>
+    /// <param name="eraseElsewhere">Deletes what the caller owns elsewhere and returns how many entries are left there.</param>
+    /// <param name="others">Other places cleared with it, such as an older version's data folder or a log outside the folder.</param>
+    /// <returns>Null when no erasure was pending.</returns>
+    public static ProfileErasureReport? CompletePendingErasure(string root, Func<int> eraseElsewhere, params ErasureTarget[] others)
     {
+        ArgumentNullException.ThrowIfNull(eraseElsewhere);
         if (!IsErasurePending(root)) return null;
         var fullRoot = Normalize(root);
         // A target holding the marker's folder would take the marker with it and end the erasure half done.
         if (others.SelectMany(TargetPaths).Any(path => string.Equals(Normalize(path), fullRoot, PathComparison) || IsStrictlyInside(path, fullRoot)))
             throw new ArgumentException("Another erasure target must not contain the data folder.", nameof(others));
         var report = others.Select(other => other.Entries is null ? Erase(other.Root) : EraseEntries(other.Root, other.Entries))
+            .Append(new(0, eraseElsewhere(), false))
             .Append(Erase(root, PendingMarkerName))
             .Aggregate((first, second) => new(first.Removed + second.Removed, first.Remaining + second.Remaining, first.Refused || second.Refused));
         if (report.Complete) CancelPendingErasure(root);
@@ -158,8 +168,15 @@ public static class ProfileDataEraser
     {
         var fullRoot = Normalize(root);
         if (Classify(fullRoot) != RootKind.PlainFolder) return;
-        var marker = Path.Join(fullRoot, PendingMarkerName);
-        if (File.Exists(marker)) File.Delete(marker);
+        IDisposable? pin;
+        // Held open, so the folder cannot be swapped for a link before the marker inside it is deleted.
+        try { pin = PinFolder(fullRoot); }
+        catch (Exception ex) when (IsFileSystemFailure(ex)) { return; }
+        using (pin)
+        {
+            var marker = Path.Join(fullRoot, PendingMarkerName);
+            if (File.Exists(marker)) File.Delete(marker);
+        }
     }
 
     /// <summary>True when <paramref name="candidate"/> is inside <paramref name="root"/>, never the root itself or a sibling sharing its prefix.</summary>
@@ -227,9 +244,14 @@ public static class ProfileDataEraser
         foreach (var entry in entries.Where(entry => selects?.Invoke(entry.Name) != false))
         {
             count++;
-            if (entry.Attributes.HasFlag(FileAttributes.Directory) && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint) &&
-                IsStrictlyInside(root, entry.FullName))
-                count += CountRemaining(root, Path.GetFullPath(entry.FullName), null);
+            if (!entry.Attributes.HasFlag(FileAttributes.Directory) || entry.Attributes.HasFlag(FileAttributes.ReparsePoint) ||
+                !IsStrictlyInside(root, entry.FullName)) continue;
+            var path = Path.GetFullPath(entry.FullName);
+            IDisposable? pin;
+            // Checked again and held open: a folder swapped for a link since the listing is counted, never walked.
+            try { pin = PinFolder(path); }
+            catch (Exception ex) when (IsFileSystemFailure(ex)) { continue; }
+            using (pin) count += CountRemaining(root, path, null);
         }
         return count;
     }
