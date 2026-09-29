@@ -317,7 +317,7 @@ public sealed partial class MainWindow : Window
             || _dictation.OverlayState.ShowsCancelled || _dictation.OverlayState.ShowsCancelWarning)
         {
             HideOverlayPreview();
-            var showTranscript = _dictation.OverlayState.ShouldShowTranscript(_transcriptPreviewEnabled, _dictation.SupportsLiveTranscription);
+            var showTranscript = _dictation.OverlayState.ShouldShowTranscript(_overlayMode, _transcriptPreviewEnabled, _dictation.SupportsLiveTranscription);
             if (_liveOverlay is null)
                 _liveOverlay = new OverlayWindow(showTranscript, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0, () => _dictation.OverlayState, () => _dictation.LivePreviewText);
             // Apply before showing a reused overlay, so a cloud recording cannot flash its old text window.
@@ -1591,7 +1591,8 @@ public sealed partial class MainWindow : Window
         TranscriptToggleButton.Foreground = (Brush)Application.Current.Resources[
             _transcriptPreviewEnabled ? "AccentBrush" : "MutedBrush"];
         _overlay?.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
-        _liveOverlay?.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
+        _liveOverlay?.SetTranscriptPreviewEnabled(_dictation.OverlayState.ShouldShowTranscript(
+            _overlayMode, _transcriptPreviewEnabled, _dictation.SupportsLiveTranscription));
         UpdateOverlayControls();
         MetricsText.Text = _transcriptPreviewEnabled
             ? "Live transcript preview enabled"

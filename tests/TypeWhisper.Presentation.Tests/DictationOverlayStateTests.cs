@@ -30,7 +30,30 @@ public sealed class DictationOverlayStateTests
     public void TranscriptWindowRespectsLiveCapabilityWithoutHidingCompletedOutput(int phase, bool enabled, bool supported, bool visible)
     {
         var state = new DictationOverlayState((DictationPhase)phase, TimeSpan.Zero, "Status", "Notepad");
-        Assert.Equal(visible, state.ShouldShowTranscript(enabled, supported));
+        Assert.Equal(visible, state.ShouldShowTranscript(OverlayMode.Standard, enabled, supported));
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    public void CompactTranscriptHidesWhenRecordingStops(bool enabled, bool supported, bool visibleWhileRecording)
+    {
+        var state = new DictationOverlayState(DictationPhase.Recording, TimeSpan.Zero, "Recording", "Notepad");
+        Assert.Equal(visibleWhileRecording, state.ShouldShowTranscript(OverlayMode.Compact, enabled, supported));
+
+        foreach (var phase in Enum.GetValues<DictationPhase>().Where(phase => phase != DictationPhase.Recording))
+            Assert.False((state with { Phase = phase }).ShouldShowTranscript(OverlayMode.Compact, enabled, supported));
+    }
+
+    [Fact]
+    public void MinimalTranscriptStaysHiddenThroughoutDictation()
+    {
+        foreach (var phase in Enum.GetValues<DictationPhase>())
+        {
+            var state = new DictationOverlayState(phase, TimeSpan.Zero, "Status", "Notepad");
+            Assert.False(state.ShouldShowTranscript(OverlayMode.Minimal, true, true));
+        }
     }
 
     [Theory]
