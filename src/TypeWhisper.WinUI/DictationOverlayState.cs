@@ -17,7 +17,8 @@ internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Dura
     internal static DictationPhase VisiblePhase(DictationPhase phase, bool dictationAttempted) =>
         phase == DictationPhase.LoadingModel && !dictationAttempted ? DictationPhase.Configuring : phase;
 
-    internal bool ShouldShowTranscript(bool enabled, bool supportsLiveTranscription) => enabled &&
+    internal bool ShouldShowTranscript(OverlayMode mode, bool enabled, bool supportsLiveTranscription) => enabled &&
+        mode != OverlayMode.Minimal && (mode != OverlayMode.Compact || Phase == DictationPhase.Recording) &&
         (Phase == DictationPhase.Completed || supportsLiveTranscription &&
             Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error);
 
