@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wave;
@@ -48,6 +47,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
     public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
 
     public bool CanRestartAfterStop => true;
+    public bool HasWindowsPacketFlags => true;
 
     public WaveFormat WaveFormat
     {
@@ -361,6 +361,8 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
     {
         var packetSize = captureClient.GetNextPacketSize();
         var recordBufferOffset = 0;
+        var packetCounts = new AudioPacketCounts();
+        var waveFormat = WaveFormat;
 
         while (packetSize != 0)
         {
@@ -373,8 +375,9 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
                 var spaceRemaining = Math.Max(0, recordBuffer.Length - recordBufferOffset);
                 if (spaceRemaining < bytesAvailable && recordBufferOffset > 0)
                 {
-                    RaiseDataAvailable(recordBuffer, recordBufferOffset);
+                    RaiseDataAvailable(recordBuffer, recordBufferOffset, packetCounts);
                     recordBufferOffset = 0;
+                    packetCounts = default;
                 }
 
                 if (bytesAvailable > recordBuffer.Length)
@@ -383,10 +386,12 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
                         "WASAPI returned more audio data than the initialized capture buffer can hold.");
                 }
 
-                if ((flags & AudioClientBufferFlags.Silent) == 0)
-                    Marshal.Copy(buffer, recordBuffer, recordBufferOffset, bytesAvailable);
-                else
-                    Array.Clear(recordBuffer, recordBufferOffset, bytesAvailable);
+                if (bytesAvailable > 0)
+                {
+                    var kind = AudioPacketDiagnostics.CopyPacket(buffer, recordBuffer,
+                        recordBufferOffset, bytesAvailable, (flags & AudioClientBufferFlags.Silent) != 0, waveFormat);
+                    packetCounts = packetCounts.Add(kind);
+                }
 
                 recordBufferOffset += bytesAvailable;
             }
@@ -398,13 +403,13 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
         }
 
         if (recordBufferOffset > 0)
-            RaiseDataAvailable(recordBuffer, recordBufferOffset);
+            RaiseDataAvailable(recordBuffer, recordBufferOffset, packetCounts);
     }
 
-    private void RaiseDataAvailable(byte[] buffer, int bytesRecorded) =>
+    private void RaiseDataAvailable(byte[] buffer, int bytesRecorded, AudioPacketCounts packetCounts) =>
         DataAvailable?.Invoke(
             this,
-            new AudioInputDataAvailableEventArgs(buffer, bytesRecorded));
+            new AudioInputDataAvailableEventArgs(buffer, bytesRecorded, packetCounts));
 
     private static Exception? StopAndResetClient(AudioClient audioClient)
     {

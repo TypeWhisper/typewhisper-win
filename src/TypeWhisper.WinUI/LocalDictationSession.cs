@@ -370,6 +370,21 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal string SelectedMicrophoneId => _microphones.FirstOrDefault()?.Id ?? "default";
     internal string SelectedMicrophoneName => _microphones.FirstOrDefault()?.Name ?? "System default";
     internal IReadOnlyList<AudioInputDeviceInfo> GetMicrophones() => _audio.GetAvailableInputDeviceInfos();
+    internal MicrophoneTestSnapshot? MicrophoneTest => _audio.MicrophoneTest;
+    internal string? StartMicrophoneTest()
+    {
+        if (!_gate.Wait(0)) return "Please wait until dictation is ready.";
+        try
+        {
+            if (!CanStartSessionOperation) return "Finish the current operation before testing the microphone.";
+            if (_audio.IsPreviewing) return "A microphone test is already running.";
+            _audio.StartPreview(null);
+            return _audio.MicrophoneTest?.Error;
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex)) { return MicrophoneFailure.Describe(ex); }
+        finally { _gate.Release(); }
+    }
+    internal void StopMicrophoneTest() => _audio.StopPreview();
     // Raised on the UI thread when microphones are connected, removed or switched.
     internal event Action? MicrophonesChanged;
     // The notice last reflected in a status. A change that could not be shown yet still differs from it.
@@ -455,6 +470,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         try
         {
             if (_audio.IsRecording) return "Finish the current recording before changing microphones.";
+            _audio.StopPreview();
             var selected = devices.DistinctBy(item => item.Id).ToList();
             Directory.CreateDirectory(Path.GetDirectoryName(MicrophonePath)!);
             var pending = MicrophonePath + ".tmp";

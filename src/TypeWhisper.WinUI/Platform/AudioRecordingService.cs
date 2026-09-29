@@ -47,6 +47,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private readonly object _captureLifecycleLock = new();
     private IAudioInputCapture? _waveIn;
     private IAudioInputCapture? _previewWaveIn;
+    private MicrophoneTestDiagnostics? _previewDiagnostics;
+    internal MicrophoneTestSnapshot? MicrophoneTest => _previewDiagnostics?.Snapshot();
     private List<float>? _sampleBuffer;
     private readonly object _bufferLock = new();
     private bool _isRecording;
@@ -1489,21 +1491,38 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         lock (_captureLifecycleLock)
         {
             StopPreview();
-            if (_isRecording || _disposed || _deviceProvider.DeviceCount == 0) return;
+            _previewDiagnostics = null;
+            if (_isRecording || _disposed) return;
+            if (_deviceProvider.DeviceCount == 0)
+            {
+                _previewDiagnostics = new("No microphone", false);
+                _previewDiagnostics.Stop("No microphone is connected. Connect a microphone and try again.");
+                return;
+            }
 
             var deviceIndex = deviceNumber.HasValue
                 ? TryGetDeviceName(deviceNumber.Value) is not null
                     ? deviceNumber.Value
                     : ResolvePreferredDeviceNumber()
-                : FindBestMicrophoneDevice();
-            if (deviceIndex < 0) return;
+                : ResolvePreferredDeviceNumber();
+            if (deviceIndex < 0)
+            {
+                _previewDiagnostics = new("Preferred microphone unavailable", false);
+                _previewDiagnostics.Stop("No preferred microphone is connected. Reconnect one or change the priority list.");
+                return;
+            }
 
             var captureSelection = TryGetDeviceInfo(deviceIndex) is { } info
                 ? new AudioInputDeviceSelection(info.Id, info.Name, info.DeviceNumber)
                 : TryGetDeviceName(deviceIndex) is { } name
                     ? new AudioInputDeviceSelection(StableDeviceIdFromName(name), name, deviceIndex)
                     : null;
-            if (captureSelection is null) return;
+            if (captureSelection is null)
+            {
+                _previewDiagnostics = new("Microphone unavailable", false);
+                _previewDiagnostics.Stop("The selected microphone is no longer available. Refresh microphones and try again.");
+                return;
+            }
 
             try
             {
@@ -1512,13 +1531,18 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                     new WaveFormat(SampleRate, BitsPerSample, Channels),
                     bufferMilliseconds: 50);
                 _previewWaveIn.DataAvailable += OnPreviewDataAvailable;
+                _previewWaveIn.RecordingStopped += OnPreviewRecordingStopped;
                 _previewWaveIn.Prepare();
-                _previewWaveIn.StartRecording();
+                _previewDiagnostics = new(captureSelection.Name, _previewWaveIn.HasWindowsPacketFlags);
                 _isPreviewing = true;
+                _previewWaveIn.StartRecording();
+                _previewDiagnostics.SetWindowsFlags(_previewWaveIn.HasWindowsPacketFlags);
             }
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
                 System.Diagnostics.Debug.WriteLine($"StartPreview failed: {ex.Message}");
+                _previewDiagnostics ??= new(captureSelection.Name, false);
+                _previewDiagnostics.Stop(MicrophoneFailure.Describe(ex));
                 StopPreview();
             }
         }
@@ -1531,14 +1555,17 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         lock (_captureLifecycleLock)
         {
-            if (_previewWaveIn is not null)
-            {
-                _previewWaveIn.DataAvailable -= OnPreviewDataAvailable;
-                StopRecordingForCleanup(_previewWaveIn);
-                _previewWaveIn.Dispose();
-                _previewWaveIn = null;
-            }
+            var capture = _previewWaveIn;
+            _previewWaveIn = null;
             _isPreviewing = false;
+            _previewDiagnostics?.Stop();
+            if (capture is not null)
+            {
+                capture.DataAvailable -= OnPreviewDataAvailable;
+                capture.RecordingStopped -= OnPreviewRecordingStopped;
+                StopRecordingForCleanup(capture);
+                capture.Dispose();
+            }
         }
     }
 
@@ -1559,18 +1586,33 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public bool IsPreviewing => _isPreviewing;
 
+    private void OnPreviewRecordingStopped(object? sender, AudioInputRecordingStoppedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, _previewWaveIn)) return;
+        _previewDiagnostics?.Stop(e.Exception is null ? null : MicrophoneFailure.Describe(e.Exception));
+        _isPreviewing = false;
+    }
+
     private void OnPreviewDataAvailable(object? sender, AudioInputDataAvailableEventArgs e)
     {
         var capture = _previewWaveIn;
-        if (capture is null || !ReferenceEquals(sender, capture))
+        var diagnostics = _previewDiagnostics;
+        if (capture is null || diagnostics is null || !ReferenceEquals(sender, capture) || e.BytesRecorded <= 0)
             return;
+
+        var packets = e.PacketCounts ?? new AudioPacketCounts().Add(
+            AudioPacketDiagnostics.Classify(e.Buffer.AsSpan(0, e.BytesRecorded), capture.WaveFormat));
 
         var samples = SystemAudioCaptureService.ConvertToTranscriptionSamples(
             e.Buffer,
             e.BytesRecorded,
             capture.WaveFormat);
         var sampleCount = samples.Length;
-        if (sampleCount == 0) return;
+        if (sampleCount == 0)
+        {
+            diagnostics.Observe(packets, 0);
+            return;
+        }
 
         float peak = 0;
         float sumSquares = 0;
@@ -1583,6 +1625,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
 
         var rms = MathF.Sqrt(sumSquares / sampleCount);
+        diagnostics.Observe(packets, peak);
         RaisePreviewLevelChanged(peak, rms);
     }
 
@@ -1881,14 +1924,16 @@ internal interface IAudioInputCapture : IDisposable
     event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
     event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
     bool CanRestartAfterStop { get; }
+    bool HasWindowsPacketFlags => false;
     WaveFormat WaveFormat { get; }
     void Prepare();
     void StartRecording();
     void StopRecording();
 }
 
-internal sealed class AudioInputDataAvailableEventArgs(byte[] buffer, int bytesRecorded) : EventArgs
+internal sealed class AudioInputDataAvailableEventArgs(byte[] buffer, int bytesRecorded, AudioPacketCounts? packetCounts = null) : EventArgs
 {
+    internal AudioPacketCounts? PacketCounts { get; } = packetCounts;
     /// <summary>
     /// Gets the buffer.
     /// </summary>
@@ -2419,6 +2464,7 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
     public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
 
     public bool CanRestartAfterStop => _capture?.CanRestartAfterStop ?? false;
+    public bool HasWindowsPacketFlags => _capture?.HasWindowsPacketFlags ?? false;
 
     public WaveFormat WaveFormat =>
         _capture?.WaveFormat ?? throw new ObjectDisposedException(nameof(FallbackAudioInputCapture));
