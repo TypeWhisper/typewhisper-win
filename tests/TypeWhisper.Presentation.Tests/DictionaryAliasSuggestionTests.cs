@@ -41,6 +41,14 @@ public sealed class DictionaryAliasSuggestionTests : IDisposable
     public void AcceptsUnicodeAndFencedJson(string response) =>
         Assert.Equal(new[] { "groesse", "Grösse" }, DictionaryAliasSuggestions.Parse("Größe", response));
 
+    [Fact]
+    public void NormalizesSpacesBeforeExcludingCorrectSpellingAndValidatingAliases()
+    {
+        var response = JsonSerializer.Serialize(new[] { "Visual Studio", " visual   studio ",
+            "Visuell" + new string(' ', 160) + "Studio", "Wissual  Studio", "wissual studio" });
+        Assert.Equal(new[] { "Visuell Studio", "Wissual Studio" }, DictionaryAliasSuggestions.Parse(" Visual  Studio ", response));
+    }
+
     [Theory]
     [InlineData("Here are your suggestions: [\"wrong\"]")]
     [InlineData("{\"aliases\":[\"wrong\"]}")]

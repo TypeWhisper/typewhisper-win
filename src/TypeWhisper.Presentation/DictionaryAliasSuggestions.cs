@@ -62,13 +62,12 @@ public static class DictionaryAliasSuggestions
             if (document.RootElement.ValueKind != JsonValueKind.Array
                 || document.RootElement.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String))
                 throw new JsonException();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { word.Trim().Normalize() };
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Regex.Replace(word.Trim().Normalize(), " +", " ") };
             var result = new List<string>();
             foreach (var item in document.RootElement.EnumerateArray())
             {
-                var alias = item.GetString()!.Trim().Normalize();
+                var alias = Regex.Replace(item.GetString()!.Trim().Normalize(), " +", " ");
                 if (!IsAlias(alias)) continue;
-                alias = Regex.Replace(alias, " +", " ");
                 if (seen.Add(alias)) result.Add(alias);
                 if (result.Count == MaximumSuggestions) break;
             }
