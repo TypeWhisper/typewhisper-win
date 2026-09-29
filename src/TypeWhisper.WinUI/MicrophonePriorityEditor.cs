@@ -104,6 +104,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         AutomationProperties.SetName(refresh, "Refresh microphones"); ToolTipService.SetToolTip(refresh, "Refresh microphones");
         refresh.Click += (_, _) => Refresh(); Grid.SetColumn(refresh, 1); addRow.Children.Add(refresh);
         Children.Add(addRow); Children.Add(_hint);
+        Children.Add(new MicrophoneTestControl(session));
         Loaded += (_, _) => session.MicrophonesChanged += Refresh;
         Unloaded += (_, _) => session.MicrophonesChanged -= Refresh;
         Refresh();

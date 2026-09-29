@@ -25,6 +25,27 @@ Observed locally with Microsoft David Desktop:
 - Delayed: `are yellow. This is a test of immediate recording.`
 
 This covers the state machine, audio buffering/conversion and local recognizer. It does not measure real WASAPI/device startup latency, keyboard-hook dispatch timing, or target-app paste behavior. Those still require a separate device/virtual-input end-to-end test.
+
+## Microphone test diagnostics
+
+Audio settings and the setup microphone step offer **Test microphone**. The test uses the same microphone priority resolver as dictation, shows the actual input name and level, and stops after 15 seconds or when you leave the page, change the microphone priority, or start dictation. It keeps only packet counts and levels in memory; audio is neither saved nor sent to a transcription provider.
+
+The diagnostics distinguish:
+
+- **No audio received:** no packet has arrived for at least one second, including when a previously active stream stalls. The level clears.
+- **Windows reports silence:** WASAPI delivered a packet with `AUDCLNT_BUFFERFLAGS_SILENT`. The capture preserves this origin before filling its audio buffer with silence; it does not dereference the packet's data pointer.
+- **Microphone sends only silence:** an unflagged packet contains only numeric zero samples, checked in every original channel before downmixing or resampling. Both signs of floating-point zero count as zero, and even tiny nonzero samples count as signal.
+
+The UI shows the input name, level, a plain-language result and a troubleshooting hint. Technical packet counters stay internal: they count original WASAPI packets, including when several packets share one data callback. WaveIn fallback does not expose Windows silence flags and counts its data callbacks instead; it can still report missing or silent input.
+
+`MicrophoneTestDiagnosticsTests` covers packet copying/classification, mixed packet batches, startup and stalled-stream timeouts, stopped snapshots, priority selection, synchronous first packets, fallback metadata and capture errors. It opens no real microphone. Run these checks with:
+
+```powershell
+dotnet test tests/TypeWhisper.Dictation.AudioTests/TypeWhisper.Dictation.AudioTests.csproj --filter FullyQualifiedName~MicrophoneTestDiagnosticsTests
+```
+
+WASAPI packet handling follows Microsoft's [IAudioCaptureClient::GetBuffer documentation](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudiocaptureclient-getbuffer).
+
 # Portable plugin inference
 
 `PortableParakeetTests` exercises the published 1.1 sherpa-onnx plugin through the portable loader and PCM contract. Set `TYPEWHISPER_TEST_PARAKEET_PACKAGE` to its published package directory and `TYPEWHISPER_TEST_PARAKEET_MODEL` to the existing `parakeet-tdt-0.6b` model directory. It generates local English speech, checks transcription/token intervals, then verifies unload behavior. It never downloads models or migrates production data.
