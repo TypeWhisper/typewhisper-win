@@ -236,15 +236,25 @@ internal sealed class Lexicon
     }
 
     internal string? SaveTraining(string word, IReadOnlyList<string> approved)
+        => SaveVariants(word, approved, suggestions: false);
+
+    internal string? SaveSuggestedAliases(string word, IReadOnlyList<string> approved)
+        => SaveVariants(word, approved, suggestions: true);
+
+    private string? SaveVariants(string word, IReadOnlyList<string> approved, bool suggestions)
     {
         word = word.Trim();
-        if (!DictionaryTrainingPlan.IsWord(word)) return "Enter one word, using letters, numbers, apostrophes or hyphens.";
+        if (suggestions ? !DictionaryAliasSuggestions.IsTerm(word) : !DictionaryTrainingPlan.IsWord(word))
+            return suggestions ? "Enter a word or short phrase on one line, up to 160 characters."
+                : "Enter one word, using letters, numbers, apostrophes or hyphens.";
+        if (suggestions && approved.Count == 0) return "Select at least one alias to save.";
         ReloadDictionary();
         if (_loadError is not null) return _loadError;
         var additions = new List<DictionaryEntry>();
         foreach (var original in approved.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (!DictionaryTrainingPlan.IsWord(original) || original.Equals(word, StringComparison.OrdinalIgnoreCase))
+            if ((suggestions ? !DictionaryAliasSuggestions.IsAlias(original) : !DictionaryTrainingPlan.IsWord(original))
+                || original.Equals(word, StringComparison.OrdinalIgnoreCase))
                 return "Review the selected variants before saving.";
             var existing = _entries.Where(entry => entry.Kind == LexiconKind.Correction &&
                 entry.Key.Equals(original, StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -260,7 +270,7 @@ internal sealed class Lexicon
         if (_dictionary is not null)
         {
             if (additions.Count > 0 && !_dictionary.TryReplaceAll(_dictionary.Entries.Concat(additions).ToArray()))
-                return "Could not save training. Your dictionary was kept unchanged.";
+                return "Could not save variants. Your dictionary was kept unchanged.";
             RefreshDictionary();
         }
         else foreach (var entry in additions)

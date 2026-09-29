@@ -55,6 +55,21 @@ wizard's welcome introduction. You can also use **Import → From another app…
 in Dictionary or Snippets to review and add your existing entries. See the
 [import guide](IMPORT-FROM-OTHER-APPS.md) for supported content and formats.
 
+## Suggest dictionary aliases
+
+In Dictionary, choose **Suggest aliases…**, or use a word's or correction group's
+context menu to start with its spelling. Enter the correct term, choose German
+or English as the spoken language, and generate suggestions with a loaded local
+language model. For example, enable Gemma in Plugins and download and load a
+model first. This feature only uses local LLMs, even if your default workflow
+provider is a cloud service.
+
+Select the misheard variants you want to replace, then choose **Save aliases**.
+The correct spelling is added under Words when needed; selected aliases are
+saved under Corrections and apply to subsequent dictations. Existing corrections
+are kept, including disabled entries. Review suggestions carefully because each
+saved alias becomes an automatic replacement. Canceling adds no entries.
+
 ## Workflows and automation
 
 A workflow can choose transcription options, process text with an explicitly
