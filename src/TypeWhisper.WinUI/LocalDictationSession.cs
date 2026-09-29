@@ -379,7 +379,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!CanStartSessionOperation) return "Finish the current operation before testing the microphone.";
             if (_audio.IsPreviewing) return "A microphone test is already running.";
             _audio.StartPreview(null);
-            return _audio.MicrophoneTest?.Error;
+            var error = _audio.MicrophoneTest?.Error;
+            if (error is not null) _audio.StopPreview();
+            return error;
         }
         catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex)) { return MicrophoneFailure.Describe(ex); }
         finally { _gate.Release(); }

@@ -212,6 +212,39 @@ public sealed class MicrophoneTestDiagnosticsTests
         Assert.True(input.Disposed);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UnexpectedStopWhileStartingPreviewIsReleasedWithoutUiCleanup(bool withError)
+    {
+        var input = new TestInput
+        {
+            StopDuringStart = true,
+            StartStopError = withError ? new UnauthorizedAccessException() : null
+        };
+        using var audio = new AudioRecordingService(new Devices(), input, Timeout.InfiniteTimeSpan);
+        audio.StartPreview(null);
+        Assert.False(audio.IsPreviewing);
+        Assert.False(audio.MicrophoneTest?.Running);
+        Assert.Equal(withError ? MicrophoneTestState.Failed : MicrophoneTestState.Signal, audio.MicrophoneTest?.State);
+        Assert.True(input.Disposed);
+    }
+
+    [Fact]
+    public void StoppedPreviewIsReleasedBeforeDictationOpensItsCapture()
+    {
+        var input = new TestInput();
+        using var audio = new AudioRecordingService(new Devices(), input, Timeout.InfiniteTimeSpan)
+            { ReleaseCaptureBetweenRecordings = () => true };
+        audio.StartPreview(null);
+        input.Fail(new UnauthorizedAccessException());
+        Assert.False(audio.IsPreviewing);
+        input.BeforeCreate = () => Assert.True(input.Disposed, "The stopped preview must release its handle before dictation opens the microphone.");
+        audio.StartRecording(enableRecovery: false);
+        Assert.True(audio.IsRecording);
+        audio.StopRecording();
+    }
+
     private sealed class TestClock : TimeProvider
     {
         private long _ticks;
@@ -236,22 +269,26 @@ public sealed class MicrophoneTestDiagnosticsTests
         internal bool ImmediateSignal = true;
         internal WaveFormat Format = new(16000, 16, 1);
         internal Exception? StartError;
+        internal bool StopDuringStart;
+        internal Exception? StartStopError;
+        internal Action? BeforeCreate;
         public bool CanRestartAfterStop => true;
         public bool HasWindowsPacketFlags { get; init; } = true;
         public WaveFormat WaveFormat => Format;
         public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
         public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
         public IAudioInputCapture Create(AudioInputDeviceSelection selection, WaveFormat format, int bufferMilliseconds)
-        { Selection = selection; Disposed = false; return this; }
+        { BeforeCreate?.Invoke(); Selection = selection; Disposed = false; return this; }
         public void Prepare() { }
         public void StartRecording()
         {
             if (StartError is not null) throw StartError;
             if (ImmediateSignal) Emit([1, 0, 2, 0], new AudioPacketCounts().Add(AudioPacketKind.Signal));
+            if (StopDuringStart) Fail(StartStopError);
         }
         public void StopRecording() => RecordingStopped?.Invoke(this, new());
         public void Dispose() => Disposed = true;
         internal void Emit(byte[] data, AudioPacketCounts? counts) => DataAvailable?.Invoke(this, new(data, data.Length, counts));
-        internal void Fail(Exception error) => RecordingStopped?.Invoke(this, new(error));
+        internal void Fail(Exception? error) => RecordingStopped?.Invoke(this, new(error));
     }
 }

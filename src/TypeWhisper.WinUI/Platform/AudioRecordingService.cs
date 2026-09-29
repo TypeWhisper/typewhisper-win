@@ -423,7 +423,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             // The settings microphone preview uses its own WaveIn instance and can
             // block real capture while the settings window stays open on Dictation.
             // Always stop preview before entering recording mode.
-            if (_isPreviewing)
+            if (_previewWaveIn is not null)
                 StopPreview();
 
             RefreshPreparedCaptureSelection();
@@ -1537,6 +1537,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _isPreviewing = true;
                 _previewWaveIn.StartRecording();
                 _previewDiagnostics.SetWindowsFlags(_previewWaveIn.HasWindowsPacketFlags);
+                if (!_isPreviewing)
+                    StopPreview();
             }
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {

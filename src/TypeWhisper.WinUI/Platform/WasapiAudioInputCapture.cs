@@ -160,6 +160,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
             var frameEvent = _frameEvent!;
             var recordBuffer = _recordBuffer!;
             var bytesPerFrame = _bytesPerFrame;
+            var waveFormat = _waveFormat!.AsStandardWaveFormat();
             var waitMilliseconds = _waitMilliseconds;
             captureThread = new Thread(() => CaptureThread(
                 audioClient,
@@ -167,6 +168,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
                 frameEvent,
                 recordBuffer,
                 bytesPerFrame,
+                waveFormat,
                 waitMilliseconds))
             {
                 IsBackground = true,
@@ -290,6 +292,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
         EventWaitHandle frameEvent,
         byte[] recordBuffer,
         int bytesPerFrame,
+        WaveFormat waveFormat,
         int waitMilliseconds)
     {
         Exception? captureException = null;
@@ -301,7 +304,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
                 if (!IsCapturing())
                     break;
 
-                ReadNextPacket(captureClient, recordBuffer, bytesPerFrame);
+                ReadNextPacket(captureClient, recordBuffer, bytesPerFrame, waveFormat);
             }
         }
         catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
@@ -357,12 +360,12 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
     private void ReadNextPacket(
         AudioCaptureClient captureClient,
         byte[] recordBuffer,
-        int bytesPerFrame)
+        int bytesPerFrame,
+        WaveFormat waveFormat)
     {
         var packetSize = captureClient.GetNextPacketSize();
         var recordBufferOffset = 0;
         var packetCounts = new AudioPacketCounts();
-        var waveFormat = WaveFormat;
 
         while (packetSize != 0)
         {
