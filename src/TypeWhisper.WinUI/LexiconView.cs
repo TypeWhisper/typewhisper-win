@@ -18,10 +18,13 @@ public sealed partial class LexiconView : UserControl
         _closing = true;
         IsEnabled = false;
         _trainingDialog?.Hide();
+        _aliasCancellation?.Cancel();
+        _aliasDialog?.Hide();
         _appImportFlow?.Cancel();
         try { _cancelPicker?.Invoke(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
-        return Task.WhenAll(_transferCompletion?.Task ?? Task.CompletedTask, _trainingTask ?? Task.CompletedTask);
+        return Task.WhenAll(_transferCompletion?.Task ?? Task.CompletedTask, _trainingTask ?? Task.CompletedTask,
+            _aliasTask ?? Task.CompletedTask);
     }
 
     private readonly Lexicon _store = new(DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath);
@@ -271,6 +274,9 @@ public sealed partial class LexiconView : UserControl
             MenuFlyout GroupMenu()
             {
                 var menu = new MenuFlyout();
+                var suggest = new MenuFlyoutItem { Text = "Suggest aliases…" };
+                suggest.Click += (_, _) => StartAliasSuggestions(group.Key);
+                menu.Items.Add(suggest);
                 var delete = new MenuFlyoutItem { Text = "Delete group…" };
                 delete.Click += async (_, _) =>
                 {
@@ -305,6 +311,7 @@ public sealed partial class LexiconView : UserControl
             return EntryActionMenu.Create([new("Show term pack", () => { _showPacks = true; Render(); })]);
         return EntryActionMenu.Create([
             new("Edit", () => OpenEditor(entry)),
+            .. entry.Kind == LexiconKind.Word ? new EntryActionMenu.Action[] { new("Suggest aliases…", () => StartAliasSuggestions(entry.Key)) } : [],
             new(entry.Enabled ? "Disable" : "Enable", () =>
             {
                 var error = _store.Save(entry with { Enabled = !entry.Enabled });
@@ -421,10 +428,13 @@ public sealed partial class LexiconView : UserControl
         if (_draft is null)
         {
             if (_kind != LexiconKind.Snippet)
+            {
+                _actions.Children.Add(Button("Suggest aliases…", () => StartAliasSuggestions()));
                 _actions.Children.Add(Button("Train word…", () =>
                 {
                     if (_trainingTask is null || _trainingTask.IsCompleted) _trainingTask = TrainWordAsync();
                 }));
+            }
             var import = Button("Import", () => { });
             var importMenu = new MenuFlyout();
             var jsonImport = new MenuFlyoutItem { Text = "TypeWhisper JSON…" };

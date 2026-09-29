@@ -20,7 +20,11 @@ public sealed record PortableTranscriptionProvider(string PluginId, string Selec
 }
 /// <summary>An LLM role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableLlmProvider(string PluginId, string SelectionId, string Name,
-    bool Ready, IReadOnlyList<PluginModelInfo> Models);
+    bool Ready, IReadOnlyList<PluginModelInfo> Models)
+{
+    /// <summary>Whether the owning package declares local processing.</summary>
+    public bool IsLocal { get; init; }
+}
 
 /// <summary>An enabled text processor bound to one exact package activation.</summary>
 public sealed record PortablePostProcessor(string PluginId, string Name, string Version, int Priority, long Generation);
@@ -260,6 +264,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>Uses an LLM role within its owning package's serialized request lifetime.</summary>
     public Task<T> UseLlmAsync<T>(string selectionId,
         Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default)
+        => UseLlmCoreAsync(selectionId, use, false, cancellationToken);
+
+    /// <summary>Uses an LLM only when its active package declares local processing; never falls back to cloud.</summary>
+    public Task<T> UseLocalLlmAsync<T>(string selectionId,
+        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default)
+        => UseLlmCoreAsync(selectionId, use, true, cancellationToken);
+
+    private Task<T> UseLlmCoreAsync<T>(string selectionId,
+        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, bool requireLocal, CancellationToken cancellationToken)
     {
         Slot owner;
         lock (_sync)
@@ -267,8 +280,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_index.Llm.TryGetValue(selectionId, out var role)) throw new InvalidOperationException("LLM provider is unavailable.");
             owner = role.Owner;
         }
-        return UseAsync(owner, token => _index.Llm.TryGetValue(selectionId, out var current) && current.Owner == owner
-            ? use(current.Provider, token) : throw new InvalidOperationException("LLM provider changed."), cancellationToken);
+        return UseAsync(owner, token =>
+        {
+            if (!_index.Llm.TryGetValue(selectionId, out var current) || current.Owner != owner)
+                throw new InvalidOperationException("LLM provider changed.");
+            if (requireLocal && !owner.IsLocal)
+                throw new InvalidOperationException("Choose a local LLM for alias suggestions.");
+            return use(current.Provider, token);
+        }, cancellationToken);
     }
 
     /// <summary>Processes text only with the exact activation captured at operation start.</summary>
@@ -484,7 +503,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var id = provider.GetLlmSelectionId();
                 if (string.IsNullOrWhiteSpace(id) || provider.PluginId != slot.Id || !llm.TryAdd(id, new(slot, provider)))
                     throw new CapabilityCollisionException("LLM capability identity collision or invalid owner: " + id);
-                llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable, Array.AsReadOnly(provider.SupportedModels.ToArray())));
+                llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable, Array.AsReadOnly(provider.SupportedModels.ToArray()))
+                    { IsLocal = slot.IsLocal });
             }
         }
         return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray() };
