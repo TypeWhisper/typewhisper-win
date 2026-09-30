@@ -9,25 +9,6 @@ namespace TypeWhisper.Presentation.Tests;
 public sealed class HistoryIntegrationTests
 {
     [Fact]
-    public void ProjectionPreservesTextAndDoesNotInventOriginOrKind()
-    {
-        var record = new TranscriptionRecord
-        {
-            Id = "opaque-record-id", Timestamp = new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc),
-            RawText = "Original", FinalText = "", AudioFileName = "recording.wav", EngineUsed = "parakeet"
-        };
-        var projected = HistoryEntryAdapter.FromRecord(record);
-        projected.Validate();
-        Assert.Equal("Original", projected.Content.Transcript!.FinalText);
-        Assert.Equal(HistoryEntryKind.Unknown, projected.Content.Kind);
-        Assert.Equal("unknown", projected.Content.Origin.DeviceId);
-        Assert.Equal("parakeet", projected.Content.EngineName);
-        Assert.Equal(projected.RecordId, HistoryEntryAdapter.FromRecord(record).RecordId);
-        Assert.False(projected.LocalState.IsSample);
-        Assert.Equal("opaque-record-id", record.Id);
-    }
-
-    [Fact]
     public async Task StrictMissingHistoryIsEmptyWithoutCreatingFiles()
     {
         var path = Path.Combine(Path.GetTempPath(), "typewhisper-history-test-" + Guid.NewGuid(), "history.json");

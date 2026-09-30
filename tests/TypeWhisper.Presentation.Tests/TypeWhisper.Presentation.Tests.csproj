@@ -24,9 +24,6 @@
     <Compile Include="../../src/TypeWhisper.WinUI/TargetAppCorrectionLearningService.cs" Link="TargetAppCorrectionLearningService.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PremiumAccessState.cs" Link="PremiumAccessState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/HistoryStore.cs" Link="HistoryStore.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs" Link="HistoryEntryAdapter.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HotkeyRecoveryState.cs" Link="HotkeyRecoveryState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />
@@ -46,7 +43,6 @@
     <Compile Include="../../src/TypeWhisper.WinUI/DictationLexiconSnapshot.cs" Link="DictationLexiconSnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutKeys.cs" Link="ShortcutKeys.cs" />
-    <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntry.cs" Link="HistoryEntry.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
   </ItemGroup>
 </Project>

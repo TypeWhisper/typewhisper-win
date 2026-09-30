@@ -129,11 +129,6 @@ public sealed class HistoryActionsTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => actions.EditAsync(Record.Id, "  "));
         Assert.Null(await actions.EditAsync("missing", "text"));
         Assert.Equal(Record, Assert.Single(service.Records));
-        var projected = HistoryEntryAdapter.FromRecord(Record);
-        Assert.Equal(Record.Id, projected.PersistedRecordId);
-        Assert.Equal(Record.AppName, projected.Content.AppName);
-        Assert.Equal(Record.AppProcessName, projected.Content.AppProcessName);
-        Assert.Equal(Record.TranscriptionTaskUsed, projected.Content.TranscriptionTaskUsed);
     }
 
     public void Dispose()

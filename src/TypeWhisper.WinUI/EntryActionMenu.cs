@@ -91,12 +91,10 @@ internal static class EntryActionMenu
         {
             var parts = action.Label.Split(" · ", 2, StringSplitOptions.TrimEntries);
             var label = parts[0];
-            if (menu.Items.Count > 0 && (label == "Set shortcut…" || label.StartsWith("Delete", StringComparison.Ordinal)))
+            if (menu.Items.Count > 0 && label.StartsWith("Delete", StringComparison.Ordinal))
                 menu.Items.Add(new MenuFlyoutSeparator());
             var glyph = label switch
             {
-                var text when text.StartsWith("Unpin", StringComparison.Ordinal) => "\uE77A",
-                var text when text.StartsWith("Pin", StringComparison.Ordinal) => "\uE718",
                 var text when text.StartsWith("Set shortcut", StringComparison.Ordinal) => "\uE765",
                 var text when text.StartsWith("Copy", StringComparison.Ordinal) => "\uE8C8",
                 var text when text.StartsWith("Edit", StringComparison.Ordinal) => "\uE70F",

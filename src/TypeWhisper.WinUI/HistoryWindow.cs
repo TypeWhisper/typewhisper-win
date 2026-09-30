@@ -167,8 +167,6 @@ public sealed partial class HistoryWindow : Window
         _ = RefreshAsync();
     }
 
-    internal void ShowSource(string source) => SelectScope(new HistoryScope(null, source));
-
     // Shutdown already drained pending work; unsaved edits cannot be kept at this point.
     internal void CloseForShutdown()
     {

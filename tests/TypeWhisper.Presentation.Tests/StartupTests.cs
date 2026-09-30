@@ -7,21 +7,6 @@ public sealed class StartupTests
 {
     private static string Executable => Path.Combine(Path.GetTempPath(), "published output", "TypeWhisper.exe");
 
-    [Theory]
-    [InlineData(false, "", true)]
-    [InlineData(false, "--minimized", false)]
-    [InlineData(false, "--MINIMIZED", false)]
-    [InlineData(true, "", false)]
-    [InlineData(true, "--settings", true)]
-    [InlineData(false, "--minimized --files", true)]
-    [InlineData(false, "\"C:/some --minimized folder/app.exe\"", true)]
-    public void LaunchPolicyDoesNotRaiseExistingWindowForSilentStartup(bool startup, string commandLine, bool visible)
-    {
-        var decision = StartupLaunchPolicy.EvaluateCommandLine(commandLine, startup);
-        Assert.Equal(visible, decision.ShowWindow);
-        Assert.Equal(visible, decision.NotifyExisting);
-    }
-
     [Fact]
     public void MissingRegistrationStaysOffUntilExplicitChoiceAndOnlyChangesItsOwnIdentity()
     {

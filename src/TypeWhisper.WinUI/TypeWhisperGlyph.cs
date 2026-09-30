@@ -361,15 +361,6 @@ public sealed class TypeWhisperGlyph : UserControl
                 drawing.FillCircle(10, 10, 1.5f, Accent);
                 drawing.FillCircle(15, 10, 1.5f, Accent);
                 break;
-            case "pin":
-                Line(drawing, 7, 3, 15.5f, 11.5f);
-                Line(drawing, 11.5f, 3.5f, 15, 7);
-                Line(drawing, 15, 7, 12, 10);
-                Line(drawing, 12, 10, 13.5f, 13.5f);
-                Line(drawing, 13.5f, 13.5f, 6.5f, 6.5f);
-                Line(drawing, 6.5f, 6.5f, 10, 8);
-                Line(drawing, 10, 8, 3, 17);
-                break;
             case "search":
                 drawing.DrawCircle(8.5f, 8.5f, 5, Accent, 1.5f);
                 Line(drawing, 12.2f, 12.2f, 17, 17);

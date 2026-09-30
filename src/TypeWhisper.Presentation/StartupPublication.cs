@@ -1,30 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 
 namespace TypeWhisper.Presentation;
-
-/// <summary>Whether this activation should present a window or notify an existing instance.</summary>
-public sealed record StartupLaunchDecision(bool ShowWindow, bool NotifyExisting);
-
-/// <summary>Separates silent login activation from explicit navigation without performing platform operations.</summary>
-public static class StartupLaunchPolicy
-{
-    private static readonly string[] Routes = ["--account", "--sync-backup", "--dashboard", "--statistics", "--dictionary", "--snippets", "--files", "--setup", "--compare-selects", "--settings"];
-
-    /// <summary>Explicit routes open the app; login and minimized activation otherwise stay in the tray.</summary>
-    public static StartupLaunchDecision Evaluate(IEnumerable<string> arguments, bool startupActivation = false)
-    {
-        var options = arguments.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var visible = Routes.Any(options.Contains) || !(startupActivation || options.Contains("--minimized"));
-        return new(visible, visible);
-    }
-
-    /// <summary>Reads option tokens from redirected Windows activation arguments, preserving quoted paths as single tokens.</summary>
-    public static StartupLaunchDecision EvaluateCommandLine(string commandLine, bool startupActivation = false) =>
-        Evaluate(Regex.Matches(commandLine, "(?:[^\\s\"]|\"[^\"]*\")+", RegexOptions.CultureInvariant)
-            .Select(match => match.Value.Trim('"')), startupActivation);
-}
 
 /// <summary>Validates the development launcher's publication receipt without inferring production identity from build configuration.</summary>
 public static class StartupPublication

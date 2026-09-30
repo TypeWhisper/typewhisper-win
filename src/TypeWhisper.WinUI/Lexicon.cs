@@ -317,16 +317,4 @@ internal sealed class Lexicon
         }
         return _entries.RemoveAll(e => e.Id == id) == 1;
     }
-
-    internal static Lexicon CreateSamples()
-    {
-        var result = new Lexicon();
-        foreach (var word in new[] { "TypeWhisper", "WinUI", "Parakeet" }) result.Save(new(Guid.NewGuid(), LexiconKind.Word, word));
-        result.Save(new(Guid.NewGuid(), LexiconKind.Correction, "type whisper", "TypeWhisper"));
-        result.Save(new(Guid.NewGuid(), LexiconKind.Correction, "get hub", "GitHub"));
-        result.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "my signature", "Best regards,\nAlex", "email, personal"));
-        result.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "meeting notes", "Meeting: {date}\n\nSummary\n\nNext steps", "work"));
-        result.Save(new(Guid.NewGuid(), LexiconKind.Snippet, "quick thanks", "Thanks for your message. I'll get back to you shortly.", "email"));
-        return result;
-    }
 }

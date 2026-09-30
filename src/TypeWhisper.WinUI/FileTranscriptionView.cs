@@ -80,7 +80,6 @@ public sealed partial class FileTranscriptionView : UserControl
     internal void Stop() { _queue.Cancel(); _recoveryDialog?.Hide(); }
     internal bool ContainsSource(string path) => _queue.Jobs.Any(job =>
         string.Equals(job.Path, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
-    internal Task CancelAndDrainAsync() => _queue.CancelAndDrainAsync();
     internal async Task ShutdownAsync()
     {
         IsEnabled = false;

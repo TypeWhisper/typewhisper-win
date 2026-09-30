@@ -14,8 +14,7 @@ public sealed partial class MainWindow
 
     internal void ShowHistoryFromTray() => OpenHistory();
 
-    // Opens History, optionally showing only one local source (dictation or recording).
-    private void OpenHistory(string? source = null)
+    private void OpenHistory()
     {
         if (_closing || _profileRestoreClosing || _historyService is null) return;
         if (_historyWindow is null)
@@ -39,6 +38,5 @@ public sealed partial class MainWindow
             window.ShowOn(ResolveInvocationDisplayArea());
         }
         else _historyWindow.BringToFront();
-        if (source is not null) _historyWindow.ShowSource(source);
     }
 }
