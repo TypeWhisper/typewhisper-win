@@ -42,6 +42,37 @@ public sealed class HistoryAudioStore
         }
     }
 
+    /// <summary>
+    /// Copies a synchronized WAV file into the store after checking its size and SHA-256. The copy stays pending
+    /// until a History entry references it, like newly recorded audio.
+    /// </summary>
+    internal string Import(string sourcePath, string expectedSha256, long expectedBytes, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (expectedBytes is <= 44 or > MaximumWaveBytes) throw new InvalidDataException("Synchronized audio is empty or too large.");
+            CheckOrdinaryFile(sourcePath);
+            var bytes = File.ReadAllBytes(sourcePath);
+            var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            if (bytes.LongLength != expectedBytes || !hash.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Synchronized audio does not match its description.");
+            if (bytes.AsSpan(0, 4).SequenceCompareTo("RIFF"u8) != 0 || bytes.AsSpan(8, 4).SequenceCompareTo("WAVE"u8) != 0)
+                throw new InvalidDataException("Synchronized audio is not a WAV file.");
+            var index = ReadIndex();
+            var name = "history-" + Guid.NewGuid().ToString("N") + ".wav";
+            index.Owned.Add(name, hash);
+            index.Pending.Add(name);
+            WriteIndex(index);
+            var temporary = SafePath(name + ".tmp");
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            { stream.Write(bytes); stream.Flush(true); }
+            ct.ThrowIfCancellationRequested();
+            File.Move(temporary, SafePath(name), false);
+            return name;
+        }
+    }
+
     internal bool MarkDeletion(IEnumerable<string?> names)
     {
         lock (_gate)

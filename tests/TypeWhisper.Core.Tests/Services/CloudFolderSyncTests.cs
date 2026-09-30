@@ -113,6 +113,45 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task DictionarySyncKeepsTheHistoryDeviceName()
+    {
+        // History sync names the device first; the next dictionary sync must not erase what macOS shows.
+        HistoryFolderSync.Sync(_tempDir, "win-a", new HistorySyncState { Enabled = true, HistoryDeviceId = "history-a" }, [], "Test PC", "1.1.0", Date(10));
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, new InMemoryUserDataSyncStore(), new CloudFolderSyncState { DeviceId = "win-a" },
+            new PaidEntitlements(CanUseCloudFolderSync: true), now: Date(20));
+
+        var device = JsonDocument.Parse(File.ReadAllText(Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "devices", "win-a.json"))).RootElement;
+        Assert.Equal("Test PC", device.GetProperty("name").GetString());
+        Assert.Equal("history-a", device.GetProperty("historyOriginDeviceID").GetString());
+        Assert.Equal("win-a", device.GetProperty("deviceId").GetString());
+        Assert.Equal(Date(20), device.GetProperty("updatedAt").GetDateTime().ToUniversalTime(), TimeSpan.FromMilliseconds(1));
+    }
+
+    [Fact]
+    public void ChoosingTheSyncPackageItselfUsesItsParent()
+    {
+        var package = CloudFolderSyncEngine.PackagePath(_tempDir);
+        Directory.CreateDirectory(package);
+        // An empty folder of that name is not a package yet, so it is kept.
+        Assert.Equal(package, CloudFolderSyncEngine.SyncFolder(package));
+
+        File.WriteAllText(Path.Combine(package, "manifest.json"), "{}");
+        Assert.Equal(_tempDir, CloudFolderSyncEngine.SyncFolder(package));
+        Assert.Equal(_tempDir, CloudFolderSyncEngine.SyncFolder(package + Path.DirectorySeparatorChar));
+        Assert.Equal(_tempDir, CloudFolderSyncEngine.SyncFolder(_tempDir));
+    }
+
+    [Fact]
+    public async Task DictionaryOnlyDeviceIsNamed()
+    {
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, new InMemoryUserDataSyncStore(), new CloudFolderSyncState { DeviceId = "win-b" },
+            new PaidEntitlements(CanUseCloudFolderSync: true), now: Date(20));
+
+        var device = JsonDocument.Parse(File.ReadAllText(Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "devices", "win-b.json"))).RootElement;
+        Assert.Equal(Environment.MachineName, device.GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task MalformedOperationFileIsSkipped()
     {
         var remoteDirectory = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "remote-device");

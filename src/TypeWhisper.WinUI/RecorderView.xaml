@@ -22,7 +22,9 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+            <StackPanel x:Name="RecorderDefaults" Grid.Row="2" Spacing="20" Margin="0,28,0,8" Visibility="Collapsed" />
             <StackPanel Spacing="9">
                 <TextBox x:Name="RecordingName" Header="Recording name (optional)" PlaceholderText="Untitled recording" MaxLength="200" TextChanged="RecordingName_Changed" AutomationProperties.Name="Recording name" />
                 <Border x:Name="AudioSourceHelp" />
@@ -112,7 +114,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="1" Text="⌫ / Esc Back" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+                <TextBlock x:Name="RecorderNavigationHint" Grid.Column="1" Text="⌫ / Esc Back" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
                 <StackPanel x:Name="SessionActions" Grid.Row="1" Grid.ColumnSpan="3" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <TextBlock x:Name="LibraryRecordingStatus" Visibility="Collapsed" VerticalAlignment="Center" FontSize="12" MaxWidth="240" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
                     <local:HandCursorButton x:Name="LibraryQueueButton" Content="Transcribe &#x00B7; T" Click="LibraryQueue_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" />

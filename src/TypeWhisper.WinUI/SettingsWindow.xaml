@@ -9,8 +9,7 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel x:Name="SettingsBrand" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <local:TypeWhisperGlyph Kind="settings" Width="16" Height="16" />
-                <TextBlock Text="TYPEWHISPER" FontSize="11" FontWeight="SemiBold" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
-                <TextBlock Text="SETTINGS" FontSize="10" Foreground="{ThemeResource MutedBrush}" Opacity="0.65" />
+                <TextBlock Text="Settings" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource TextBrush}" VerticalAlignment="Center" />
             </StackPanel>
             <local:HandCursorButton Grid.Column="1" Content="×" Click="Close_Click" Style="{StaticResource IconButtonStyle}" AutomationProperties.Name="Close settings" />
         </Grid>
@@ -29,7 +28,7 @@
             </Grid>
         </Border>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="10,12,20,16">
-            <StackPanel x:Name="SettingsNavigation" Spacing="18" />
+            <StackPanel x:Name="SettingsNavigation" Spacing="16" />
         </ScrollViewer>
         </Grid>
         </Border>
@@ -105,7 +104,7 @@
                             <TextBlock x:Name="FloatingPositionLabel" Text="POSITION ON SCREEN" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
                             <Canvas x:Name="FloatingScreenCanvas" Height="156" SizeChanged="FloatingScreen_SizeChanged" IsHitTestVisible="False">
                                 <Border x:Name="FloatingScreenBounds" Background="{ThemeResource InkBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="4" />
-                                <Border x:Name="FloatingWindowThumb" Background="#FF12304A" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1" CornerRadius="3" />
+                                <Border x:Name="FloatingWindowThumb" Background="#FF123A63" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1" CornerRadius="3" />
                             </Canvas>
                             <TextBlock x:Name="FloatingPositionSummary" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                         </StackPanel>
@@ -122,16 +121,16 @@
             <StackPanel x:Name="CatalogContent" Spacing="20" Margin="24,16,24,20" />
         </ScrollViewer>
         <Border x:Name="IntegrationsHost" Grid.Column="1" Margin="16,16,16,0" Visibility="Collapsed" />
+        <Border x:Name="WorkspaceHost" Grid.Column="1" Margin="12,12,12,0" Visibility="Collapsed" />
         <ScrollViewer x:Name="ComparisonScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <local:SelectComparison x:Name="SelectComparison" Margin="24,16,24,20" />
         </ScrollViewer>
         </Grid>
-        <Border x:Name="SettingsFooter" Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="18,0">
+        <Border x:Name="SettingsFooter" Grid.Row="2" Visibility="Collapsed" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="18,0">
             <Grid MinHeight="58" ColumnSpacing="10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock x:Name="SessionHint" Text="Applies immediately · this session only" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="SessionHint" Text="" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <local:HandCursorButton x:Name="EditorPreviewButton" Grid.Column="1" Content="Preview overlay" Click="Preview_Click" Style="{StaticResource PrimaryButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Layout editor overlay preview" />
-                <local:HandCursorButton Grid.Column="2" Content="Done" Click="Close_Click" Style="{StaticResource SecondaryButtonStyle}" VerticalAlignment="Center" AutomationProperties.Name="Done with settings" />
             </Grid>
         </Border>
         <Border x:Name="SetupHost" Grid.Row="1" Grid.RowSpan="2" Visibility="Collapsed" />

@@ -6,6 +6,9 @@ namespace TypeWhisper.Presentation;
 /// <summary>Persists explicit history edits and deletions using the existing history store.</summary>
 public sealed class HistoryActions(IHistoryService history)
 {
+    /// <summary>Raised with the identities the user explicitly deleted, so History sync can remove them on other devices.</summary>
+    public event Action<IReadOnlyCollection<string>, DateTime>? ExplicitlyDeleted;
+
     /// <summary>Changes only final text, retaining raw text and capture metadata.</summary>
     public async Task<TranscriptionRecord?> EditAsync(string id, string text)
     {
@@ -13,8 +16,30 @@ public sealed class HistoryActions(IHistoryService history)
         await history.EnsureLoadedAsync().ConfigureAwait(false);
         var original = history.Records.FirstOrDefault(record => record.Id == id);
         if (original is null) return null;
-        var updated = original with { FinalText = text };
+        var updated = original with { FinalText = text, ContentUpdatedAt = DateTime.UtcNow };
         return history.TryReplaceRecord(updated) ? updated : null;
+    }
+
+    /// <summary>
+    /// Marks Inbox entries complete, or reopens completed ones. Entries outside the Inbox are left unchanged,
+    /// matching macOS. Returns how many entries changed.
+    /// </summary>
+    public async Task<int> SetInboxCompletedAsync(IReadOnlyCollection<string> ids, bool completed, DateTime? now = null)
+    {
+        var snapshot = ids.ToHashSet(StringComparer.Ordinal);
+        await history.EnsureLoadedAsync().ConfigureAwait(false);
+        var changed = 0;
+        foreach (var record in history.Records.Where(record => snapshot.Contains(record.Id)).ToArray())
+        {
+            var from = completed ? HistoryWorkspace.InboxOpen : HistoryWorkspace.InboxCompleted;
+            if (record.InboxState != from) continue;
+            var updated = completed
+                ? record with { InboxState = HistoryWorkspace.InboxCompleted, InboxCompletedAt = now ?? DateTime.UtcNow, InboxUpdatedAt = now ?? DateTime.UtcNow }
+                : record with { InboxState = HistoryWorkspace.InboxOpen, InboxCompletedAt = null, InboxUpdatedAt = now ?? DateTime.UtcNow };
+            if (!history.TryReplaceRecord(updated)) throw new IOException("The Inbox change could not be saved. Your history was not changed.");
+            changed++;
+        }
+        return changed;
     }
 
     /// <summary>Deletes an entry and verifies that persistence succeeded before reporting success.</summary>
@@ -22,7 +47,9 @@ public sealed class HistoryActions(IHistoryService history)
     {
         await history.EnsureLoadedAsync().ConfigureAwait(false);
         history.DeleteRecord(id);
-        return history.Records.All(record => record.Id != id);
+        var deleted = history.Records.All(record => record.Id != id);
+        if (deleted) ExplicitlyDeleted?.Invoke([id], DateTime.UtcNow);
+        return deleted;
     }
 
     /// <summary>Deletes the confirmed identity snapshot in one atomic history mutation.</summary>
@@ -30,7 +57,9 @@ public sealed class HistoryActions(IHistoryService history)
     {
         var snapshot = ids.Distinct(StringComparer.Ordinal).ToArray();
         await history.EnsureLoadedAsync().ConfigureAwait(false);
-        return history.TryDeleteRecords(snapshot);
+        var deleted = history.TryDeleteRecords(snapshot);
+        if (deleted) ExplicitlyDeleted?.Invoke(snapshot, DateTime.UtcNow);
+        return deleted;
     }
 
     /// <summary>Captures all current identities for an explicit clear-history confirmation.</summary>

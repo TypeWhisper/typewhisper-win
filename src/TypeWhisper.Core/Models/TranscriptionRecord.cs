@@ -114,6 +114,42 @@ public sealed record TranscriptionRecord
     /// Gets or sets the created at value.
     /// </summary>
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>
+    /// Gets the History Inbox state: <c>open</c> or <c>completed</c>. Missing means the entry was never in the
+    /// Inbox; as on macOS, local dictations start outside it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InboxState { get; init; }
+    /// <summary>Gets the UTC time an Inbox entry was marked complete.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTime? InboxCompletedAt { get; init; }
+    /// <summary>Gets when the Inbox state last changed; missing means it never changed.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTime? InboxUpdatedAt { get; init; }
+    /// <summary>Gets the Inbox kind reported by another device, kept so it can be sent back unchanged.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InboxKind { get; init; }
+    /// <summary>Gets the Inbox completion policy reported by another device.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InboxCompletionPolicy { get; init; }
+    /// <summary>Gets the suggested Inbox action reported by another device, as its original JSON.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public System.Text.Json.JsonElement? InboxSafeAction { get; init; }
+    /// <summary>Gets when the transcript text or its metadata last changed; missing means at <see cref="Timestamp"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTime? ContentUpdatedAt { get; init; }
+    /// <summary>Gets the history device identity of the device that created the entry; missing means this PC.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OriginDeviceId { get; init; }
+    /// <summary>Gets the platform of the originating device, such as macOS or iOS.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OriginPlatform { get; init; }
+    /// <summary>Gets the synchronized capture source of an entry from another device, such as mac or iPhone.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OriginSource { get; init; }
+    /// <summary>Gets the synchronized processing state of an entry from another device: importing, transcribing, ready or failed.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ProcessingState { get; init; }
 
     /// <summary>
     /// Returns final text when available, otherwise the preserved raw text.

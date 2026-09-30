@@ -11,40 +11,42 @@
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <Color x:Key="InkColor">#FF0B1018</Color>
-                    <Color x:Key="SurfaceColor">#FF111923</Color>
-                    <Color x:Key="ElevatedColor">#FF182433</Color>
-                    <Color x:Key="AccentColor">#FF3BA7FF</Color>
-                    <Color x:Key="FocusColor">#FF75C4FF</Color>
-                    <Color x:Key="TextColor">#FFF4F7FA</Color>
-                    <Color x:Key="MutedColor">#FF93A4B8</Color>
-                    <Color x:Key="HairlineColor">#FF273548</Color>
-                    <SolidColorBrush x:Key="InkBrush" Color="#FF0B1018" />
-                    <SolidColorBrush x:Key="SurfaceBrush" Color="#FF111923" />
-                    <SolidColorBrush x:Key="ElevatedBrush" Color="#FF182433" />
-                    <SolidColorBrush x:Key="AccentBrush" Color="#FF3BA7FF" />
-                    <SolidColorBrush x:Key="FocusBrush" Color="#FF75C4FF" />
-                    <SolidColorBrush x:Key="TextBrush" Color="#FFF4F7FA" />
-                    <SolidColorBrush x:Key="MutedBrush" Color="#FFA7B5C5" />
-                    <SolidColorBrush x:Key="HairlineBrush" Color="#FF273548" />
+                    <Color x:Key="InkColor">#FF1C1C1E</Color>
+                    <Color x:Key="SurfaceColor">#FF2A2A2C</Color>
+                    <Color x:Key="ElevatedColor">#FF333336</Color>
+                    <Color x:Key="AccentColor">#FF0A84FF</Color>
+                    <Color x:Key="FocusColor">#FF409CFF</Color>
+                    <Color x:Key="TextColor">#FFF5F5F7</Color>
+                    <Color x:Key="MutedColor">#FF98989D</Color>
+                    <Color x:Key="HairlineColor">#FF3A3A3C</Color>
+                    <SolidColorBrush x:Key="InkBrush" Color="#FF1C1C1E" />
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#FF2A2A2C" />
+                    <SolidColorBrush x:Key="ElevatedBrush" Color="#FF333336" />
+                    <SolidColorBrush x:Key="AccentBrush" Color="#FF0A84FF" />
+                    <SolidColorBrush x:Key="FocusBrush" Color="#FF409CFF" />
+                    <SolidColorBrush x:Key="TextBrush" Color="#FFF5F5F7" />
+                    <SolidColorBrush x:Key="MutedBrush" Color="#FFA1A1A6" />
+                    <SolidColorBrush x:Key="HairlineBrush" Color="#FF3A3A3C" />
+                    <SolidColorBrush x:Key="SelectionFillBrush" Color="#FF0A6BD6" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
-                    <Color x:Key="InkColor">#FFF3F6FA</Color>
-                    <Color x:Key="SurfaceColor">#FFF8FAFC</Color>
+                    <Color x:Key="InkColor">#FFF2F2F7</Color>
+                    <Color x:Key="SurfaceColor">#FFFFFFFF</Color>
                     <Color x:Key="ElevatedColor">#FFFFFFFF</Color>
-                    <Color x:Key="AccentColor">#FF0878D1</Color>
-                    <Color x:Key="FocusColor">#FF005EA8</Color>
-                    <Color x:Key="TextColor">#FF101820</Color>
-                    <Color x:Key="MutedColor">#FF526577</Color>
-                    <Color x:Key="HairlineColor">#FFD5DEE8</Color>
-                    <SolidColorBrush x:Key="InkBrush" Color="#FFF3F6FA" />
-                    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFF8FAFC" />
+                    <Color x:Key="AccentColor">#FF0066CC</Color>
+                    <Color x:Key="FocusColor">#FF0055AA</Color>
+                    <Color x:Key="TextColor">#FF1D1D1F</Color>
+                    <Color x:Key="MutedColor">#FF6E6E73</Color>
+                    <Color x:Key="HairlineColor">#FFD1D1D6</Color>
+                    <SolidColorBrush x:Key="InkBrush" Color="#FFF2F2F7" />
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="ElevatedBrush" Color="#FFFFFFFF" />
-                    <SolidColorBrush x:Key="AccentBrush" Color="#FF0878D1" />
-                    <SolidColorBrush x:Key="FocusBrush" Color="#FF005EA8" />
-                    <SolidColorBrush x:Key="TextBrush" Color="#FF101820" />
-                    <SolidColorBrush x:Key="MutedBrush" Color="#FF526577" />
-                    <SolidColorBrush x:Key="HairlineBrush" Color="#FFD5DEE8" />
+                    <SolidColorBrush x:Key="AccentBrush" Color="#FF0066CC" />
+                    <SolidColorBrush x:Key="FocusBrush" Color="#FF0055AA" />
+                    <SolidColorBrush x:Key="TextBrush" Color="#FF1D1D1F" />
+                    <SolidColorBrush x:Key="MutedBrush" Color="#FF6E6E73" />
+                    <SolidColorBrush x:Key="HairlineBrush" Color="#FFD1D1D6" />
+                    <SolidColorBrush x:Key="SelectionFillBrush" Color="#FF0066CC" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -263,16 +265,16 @@
 
             <Style x:Key="PrimaryButtonStyle" TargetType="Button"
                    BasedOn="{StaticResource ButtonStyle}">
-                <Setter Property="Background" Value="#FF12304A" />
-                <Setter Property="BorderBrush" Value="#FF2F83BD" />
+                <Setter Property="Background" Value="{ThemeResource SelectionFillBrush}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="Foreground" Value="#FFF1F8FD" />
+                <Setter Property="Foreground" Value="White" />
             </Style>
 
             <Style x:Key="SecondaryButtonStyle" TargetType="Button"
                    BasedOn="{StaticResource ButtonStyle}">
                 <Setter Property="Background" Value="#0FFFFFFF" />
-                <Setter Property="BorderBrush" Value="#FF2B4054" />
+                <Setter Property="BorderBrush" Value="#FF48484A" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
             </Style>
@@ -318,6 +320,12 @@
                 <Setter Property="CornerRadius" Value="6" />
                 <Setter Property="MinHeight" Value="32" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            </Style>
+
+            <Style x:Key="SidebarSelectedButtonStyle" TargetType="Button"
+                   BasedOn="{StaticResource MenuButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource SelectionFillBrush}" />
+                <Setter Property="Foreground" Value="White" />
             </Style>
 
             <Style x:Key="CommandItemStyle" TargetType="ListViewItem">

@@ -20,7 +20,16 @@ public sealed class TypeWhisperGlyph : UserControl
         typeof(TypeWhisperGlyph),
         new PropertyMetadata("signal", OnKindChanged));
 
-    private static readonly Color Accent = Color.FromArgb(255, 59, 167, 255);
+    private static readonly Color AccentColor = Color.FromArgb(255, 10, 132, 255);
+    // Drawn in white on an accent-filled surface, such as the selected sidebar row.
+    public static readonly DependencyProperty InverseProperty = DependencyProperty.Register(
+        nameof(Inverse), typeof(bool), typeof(TypeWhisperGlyph), new PropertyMetadata(false, OnKindChanged));
+    public bool Inverse
+    {
+        get => (bool)GetValue(InverseProperty);
+        set => SetValue(InverseProperty, value);
+    }
+    private Color Accent => Inverse ? Color.FromArgb(255, 255, 255, 255) : AccentColor;
     private readonly CanvasControl _canvas;
 
     public TypeWhisperGlyph()
@@ -190,7 +199,7 @@ public sealed class TypeWhisperGlyph : UserControl
             case "lock":
                 drawing.DrawRoundedRectangle(4, 9, 12, 9, 2, 2, Accent, 1.4f);
                 drawing.DrawRoundedRectangle(6.5f, 2, 7, 10, 3.5f, 3.5f, Accent, 1.4f);
-                drawing.FillRectangle(5, 10, 10, 6, global::Windows.UI.Color.FromArgb(255, 17, 25, 35));
+                drawing.FillRectangle(5, 10, 10, 6, global::Windows.UI.Color.FromArgb(255, 42, 42, 44));
                 drawing.FillCircle(10, 13, 1.2f, Accent);
                 break;
             case "info":
@@ -217,7 +226,7 @@ public sealed class TypeWhisperGlyph : UserControl
                 drawing.DrawRoundedRectangle(2, 3, 12, 9, 1, 1, Accent, 1.4f);
                 Line(drawing, 7, 12, 7, 16);
                 Line(drawing, 4, 16, 10, 16);
-                drawing.FillRoundedRectangle(11, 7, 8, 12, 1.5f, 1.5f, global::Windows.UI.Color.FromArgb(255, 17, 25, 35));
+                drawing.FillRoundedRectangle(11, 7, 8, 12, 1.5f, 1.5f, global::Windows.UI.Color.FromArgb(255, 42, 42, 44));
                 drawing.DrawRoundedRectangle(12, 8, 6, 10, 1, 1, Accent, 1.4f);
                 break;
             case "check":
@@ -373,7 +382,7 @@ public sealed class TypeWhisperGlyph : UserControl
         }
     }
 
-    private static void Line(CanvasDrawingSession drawing, float x1, float y1, float x2, float y2)
+    private void Line(CanvasDrawingSession drawing, float x1, float y1, float x2, float y2)
     {
         const float width = 1.5f;
         drawing.DrawLine(x1, y1, x2, y2, Accent, width);

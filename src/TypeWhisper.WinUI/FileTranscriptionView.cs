@@ -76,6 +76,7 @@ public sealed partial class FileTranscriptionView : UserControl
         if (_watcher.Settings?.StartWithApp == true) _watcher.Start();
         session.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !_watchTab && !_queue.Running && !_picking && _result is null) Render(); });
     }
+    internal void UseSettingsLayout() { _crumbs.OmitRoot = true; Render(); }
     internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
     internal void Stop() { _queue.Cancel(); _recoveryDialog?.Hide(); }
     internal bool ContainsSource(string path) => _queue.Jobs.Any(job =>
@@ -348,7 +349,7 @@ public sealed partial class FileTranscriptionView : UserControl
         && _recoveryDialog is null && _recoveryOperation.IsCompleted && _exportOperation.IsCompleted;
     internal string AddActivatedFiles(IReadOnlyList<string> paths)
     {
-        if (!CanAcceptActivation) return "Files were not added. Finish the current file operation or close the result, then retry.";
+        if (!CanAcceptActivation) return _notice.Text = "Files were not added. Finish the current file operation or close the result, then retry.";
         _watchTab = false; _tabs.SetSelected("queue");
         AddPaths(paths);
         return _notice.Text;

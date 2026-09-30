@@ -21,8 +21,7 @@ public sealed partial class MainWindow
         && !(_dictationInput?.IsRecordingOrStarting ?? _dictation.IsRecording);
     internal string? DictationHotkeyPauseError => _hotkeyRecoveryError ?? _hotkeyPause.Error;
     internal event Action? TrayActionsChanged;
-    private bool IsNormalLauncherStatus => !_closing && !_profileRestoreClosing && !_historyOpen && !_recorderOpen
-        && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen && !UtilityOpen
+    private bool IsNormalLauncherStatus => !_closing && !_profileRestoreClosing && !_pluginsOpen && !_marketplaceOpen
         && string.IsNullOrWhiteSpace(SearchBox.Text) && !(_workflowTask is { IsCompleted: false });
     private string DictationStatusForDisplay => _dictation.FileProcessingStatus is { } fileStatus ? fileStatus : DictationHotkeysPaused && _dictation.OverlayState.Phase == DictationPhase.Idle
         ? "Dictation hotkeys paused. Resume them from the tray menu." : _dictation.Status;
@@ -43,6 +42,24 @@ public sealed partial class MainWindow
         }
         TrayActionsChanged?.Invoke();
     }
+
+    internal bool RecorderRecording => RecorderView.IsRecording;
+    internal bool CanToggleRecorder => !_closing && !_profileRestoreClosing && RecorderView.CanToggleRecording;
+    internal event Action? RecorderChanged
+    {
+        add => RecorderView.RecordingStateChanged += value;
+        remove => RecorderView.RecordingStateChanged -= value;
+    }
+
+    internal async void ToggleRecorderFromTray()
+    {
+        if (!CanToggleRecorder) return;
+        // A refused start or failed save is explained on the Recorder page.
+        if (!await RecorderView.ToggleRecordingAsync() && !_closing) OpenRecorder(() => RecorderView.FocusEntry());
+    }
+
+    // The tray menu took the foreground, so insert into the app used before it opened.
+    internal void ShowRecentTranscriptionsFromTray() => OpenRecentTranscriptions(_foregroundHistory?.LastTarget);
 
     internal void ShowDiagnosticsFromTray()
     {

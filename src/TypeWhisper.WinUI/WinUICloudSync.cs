@@ -3,7 +3,7 @@ using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.WinUI;
 
-internal static class WinUICloudSync
+internal static partial class WinUICloudSync
 {
     private static PersistedCloudFolderSync? _service;
     private static DispatcherQueue? _dispatcher;
@@ -71,6 +71,7 @@ internal static class WinUICloudSync
                 return completion.Task;
             }, Lifetime.Token);
             Status = $"Synced at {result.SyncedAt.ToLocalTime():t} · {result.OperationsWritten} sent · {result.MutationsApplied} applied";
+            if (await SyncHistoryAsync() is { } history) Status += " · " + history;
         }
         catch (OperationCanceledException) { Status = "Sync canceled."; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Status = "Sync could not finish: " + ex.Message; }

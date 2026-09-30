@@ -225,7 +225,7 @@ public sealed partial class OverlayWindow : Window
             }
             StatusText.Text = state.Label;
             StatusText.Foreground = new SolidColorBrush(state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130)
-                : state.Phase == DictationPhase.Copied ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 59, 167, 255));
+                : state.Phase == DictationPhase.Copied ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 10, 132, 255));
             var notice = HasNotice(state);
             if (!IsCorrectionFeedbackVisible)
             {
@@ -244,7 +244,7 @@ public sealed partial class OverlayWindow : Window
         }
         StatusText.Text = _paused ? "PAUSED" : "RECORDING";
         StatusText.Foreground = new SolidColorBrush(_paused
-            ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 59, 167, 255));
+            ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 10, 132, 255));
         RecordingDot.Visibility = _paused ? Visibility.Collapsed : Visibility.Visible;
         if (_mode != OverlayMode.Minimal)
         {
@@ -528,7 +528,7 @@ public sealed partial class OverlayWindow : Window
             var alpha = (byte)(150 + envelope * 105);
             args.DrawingSession.FillRoundedRectangle(
                 x, y, barWidth, barHeight, barWidth / 2, barWidth / 2,
-                _paused ? Color.FromArgb(alpha, 244, 188, 106) : Color.FromArgb(alpha, 59, 167, 255));
+                _paused ? Color.FromArgb(alpha, 244, 188, 106) : Color.FromArgb(alpha, 10, 132, 255));
         }
     }
 

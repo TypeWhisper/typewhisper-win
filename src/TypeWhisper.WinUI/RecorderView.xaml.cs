@@ -68,8 +68,35 @@ public sealed partial class RecorderView : UserControl
         _recorder.Changed += Refresh;
         Refresh();
     }
+    internal void UseSettingsLayout()
+    {
+        RecorderBreadcrumbs.OmitRoot = true;
+        RecorderBreadcrumbs.SetItems(new("Quick Launch", null), new("Recorder"));
+        RecorderDefaults.Visibility = Visibility.Visible;
+        // Esc closes Settings rather than leaving the recorder.
+        RecorderNavigationHint.Visibility = Visibility.Collapsed;
+    }
+    // Settings render the saved recorder defaults below the session controls, as on macOS.
+    internal StackPanel DefaultsPanel => RecorderDefaults;
     internal void SetPresented(bool presented) { _presented = presented; if (!presented) StopAudioPlayback(); Refresh(); if (presented) { if (_libraryOpen) BeginLibraryRefresh(); } }
     internal void FocusEntry() { if (_libraryOpen) LibraryEntries.Focus(FocusState.Programmatic); else PrimaryButton.Focus(FocusState.Programmatic); }
+    internal bool IsRecording { get; private set; }
+    internal bool CanToggleRecording { get; private set; }
+    internal event Action? RecordingStateChanged;
+
+    // The tray's primary action, as in the macOS menu bar: starts with the saved sources or stops and saves.
+    internal async Task<bool> ToggleRecordingAsync()
+    {
+        if (_recorder is null || _recorder.Busy || !CanToggleRecording) return false;
+        try
+        {
+            if (_recorder.State is RecorderState.Recording or RecorderState.Paused) await StopAsync();
+            else await StartRecordingAsync(_recorderPreferences?.Current ?? new RecorderPreferences());
+            return _recorder.Error is null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder operation failed: {0}", ex); return false; }
+        finally { Refresh(); }
+    }
     internal void GoBack()
     {
         ExitRequested?.Invoke(this, EventArgs.Empty);
@@ -137,6 +164,13 @@ public sealed partial class RecorderView : UserControl
         ViewHistoryButton.Visibility = OpenFolderButton.Visibility = Visibility.Collapsed;
         RefreshLibraryActions();
         if (_presented) SignalCanvas.Invalidate();
+        var toggle = (active, _recorder is not null && !busy && (active || state != RecorderState.SaveFailed
+            && (MicrophoneSource.IsChecked == true || SystemSource.IsChecked == true)));
+        if (toggle != (IsRecording, CanToggleRecording))
+        {
+            (IsRecording, CanToggleRecording) = toggle;
+            RecordingStateChanged?.Invoke();
+        }
     }
     private async void Primary_Click(object sender, RoutedEventArgs e)
     {
@@ -224,6 +258,6 @@ public sealed partial class RecorderView : UserControl
     {
         var level = _recorder?.State == RecorderState.Recording ? _capture?.Level ?? 0 : 0;
         args.DrawingSession.FillRoundedRectangle(0, 20, Math.Max(0, (float)sender.ActualWidth) * level, 10, 3, 3,
-            global::Windows.UI.Color.FromArgb(255, 59, 167, 255));
+            global::Windows.UI.Color.FromArgb(255, 10, 132, 255));
     }
 }

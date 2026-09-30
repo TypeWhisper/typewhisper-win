@@ -165,6 +165,13 @@ public sealed class HistoryService : IHistoryAudioService
     /// <inheritdoc />
     public string? ResolveAudioPath(string? fileName) => _audioStore?.Resolve(fileName);
 
+    /// <summary>
+    /// Copies synchronized audio into the History audio store and returns its file name for an entry to reference.
+    /// Unreferenced imports are removed by the next cleanup. Returns null when this History has no audio store.
+    /// </summary>
+    public string? ImportSyncedAudio(string sourcePath, string sha256, long byteCount, CancellationToken cancellationToken = default) =>
+        _audioStore?.Import(sourcePath, sha256, byteCount, cancellationToken);
+
     private string[] AudioReferences() => _cache.Select(record => record.AudioFileName)
         .Where(name => !string.IsNullOrWhiteSpace(name)).Cast<string>().Distinct(StringComparer.Ordinal).ToArray();
 

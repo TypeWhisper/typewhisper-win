@@ -80,6 +80,16 @@ public sealed partial class LexiconView : UserControl
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(_actions));
     }
 
+    private bool _settingsLayout;
+
+    // Settings list Dictionary and Snippets as separate pages, so only the dictionary keeps tabs.
+    internal void UseSettingsLayout()
+    {
+        _settingsLayout = true;
+        _crumbs.OmitRoot = true;
+        _tabs.SetItems([new("Word", "Words"), new("Correction", "Corrections"), new("packs", "Term packs")], "Word");
+    }
+
     internal void Present(bool snippets, string? section = null)
     {
         _store.ReloadDictionary();
@@ -114,7 +124,7 @@ public sealed partial class LexiconView : UserControl
     private void Render()
     {
         _body.Children.Clear(); _rows.Children.Clear();
-        _tabs.Visibility = _draft is null ? Visibility.Visible : Visibility.Collapsed;
+        _tabs.Visibility = _draft is null && !(_settingsLayout && _kind == LexiconKind.Snippet && !_showPacks) ? Visibility.Visible : Visibility.Collapsed;
         if (_draft is null) RenderTabs();
         if (_showPacks) { RenderPacks(); return; }
         _heading.Text = _draft is null ? (_kind == LexiconKind.Snippet ? "Snippets" : "Dictionary") :
@@ -472,7 +482,9 @@ public sealed partial class LexiconView : UserControl
         AutomationProperties.SetName(_headingHelp, "About term packs");
         _crumbs.SetItems(new("Quick Launch", () => ExitRequested?.Invoke()), new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
         _actions.Children.Clear();
-        _actions.Children.Add(Button("Back to Quick Launch", () => ExitRequested?.Invoke()));
+        _actions.Children.Add(_settingsLayout
+            ? Button("Back to Dictionary", () => { _showPacks = false; _kind = LexiconKind.Word; Render(); })
+            : Button("Back to Quick Launch", () => ExitRequested?.Invoke()));
         _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
             ? "Saved packs provide dictionary terms for enabled vocabulary processing."
             : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");

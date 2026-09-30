@@ -1,6 +1,6 @@
 # Import words and snippets from another app
 
-In the Windows app, open **Dictionary** or **Snippets** from Quick Launch, then
+In the Windows app, open **Dictionary** or **Snippets** in Settings, then
 choose **Import → From another app…**.
 
 The setup wizard has an **Import from Wispr Flow or Handy…** text link below its

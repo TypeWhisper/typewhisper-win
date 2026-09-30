@@ -50,12 +50,10 @@ public sealed partial class MainWindow
         if (_closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing) return;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || WorkflowsView.IsBusy || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
-        // Settings has its own window; opening the recorder here does not replace its draft.
-        var otherWorkspace = _workflowsOpen || _historyOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen;
-        if (RecorderShortcutAdmission.Rejection(false, busy, otherWorkspace) is { } refusal)
+        // The recorder is a settings page, so no Quick Launch workspace can block it.
+        if (RecorderShortcutAdmission.Rejection(false, busy, otherWorkspaceOpen: false) is { } refusal)
         { ShowFromActivation(); ShowActivationNotice(refusal); return; }
-        ShowFromActivation();
-        if (!_recorderOpen) OpenRecorder();
+        OpenRecorder(() => RecorderView.FocusEntry());
     }
 
     private sealed class RecorderShortcutBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend

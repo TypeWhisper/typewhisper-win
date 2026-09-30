@@ -258,11 +258,11 @@ public sealed partial class MainWindow : Window
         var api = _httpApi.ShutdownAsync();
         var session = _dictation.ShutdownAsync();
         var files = _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask;
-        var history = HistoryView.ShutdownAsync();
+        _historyWindow?.CloseForShutdown();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
         var setupImport = ShutdownSettingsImportsAsync();
-        await Task.WhenAll(WinUIPremiumAccount.ShutdownAsync(), WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
+        await Task.WhenAll(WinUIPremiumAccount.ShutdownAsync(), WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
             _dictationInitialization ?? Task.CompletedTask, setupImport);
         _liveOverlay?.Close();
     });
@@ -271,7 +271,7 @@ public sealed partial class MainWindow : Window
         ShowFromActivation();
         if (RecorderView.NeedsSaveRetry)
         {
-            if (!_recorderOpen) OpenRecorder();
+            OpenRecorder();
             MetricsText.Text = "Recording could not be saved. Retry saving in Recorder, then choose Exit again.";
             return;
         }
@@ -332,7 +332,6 @@ public sealed partial class MainWindow : Window
         else
         {
             _liveOverlay?.HidePreview();
-            if (_historyOpen) _ = HistoryView.RefreshAsync();
         }
     }
     private int _overlayRevision;
@@ -365,16 +364,11 @@ public sealed partial class MainWindow : Window
     private bool _transcriptPreviewEnabled = true;
     private uint _appliedWindowDpi;
     private OverlayMode _overlayMode = OverlayMode.Standard;
-    private bool _historyOpen;
-    private bool _recorderOpen;
-    private bool _workflowsOpen;
     private bool _pluginsOpen;
     private bool _marketplaceOpen;
     private string _launcherQuery = string.Empty;
     private FileTranscriptionView? _fileTranscription;
-    private bool FileTranscriptionOpen => FileTranscriptionHost.Visibility == Visibility.Visible;
     private LexiconView? _lexicon;
-    private bool LexiconOpen => LexiconHost.Visibility == Visibility.Visible;
 
     internal void ShowOutputReview(TypeWhisper.Presentation.DictationOutputResult result)
     {
@@ -397,8 +391,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         PageKeyboardNavigation.Attach(WindowRoot, node => ReferenceEquals(node, SearchBox) && !_isSearchEditing &&
-            (_historyOpen && HistoryView.IsReading || _workflowsOpen && WorkflowsView.IsDetail ||
-             _pluginsOpen && PluginsView.IsDetail || _marketplaceOpen && MarketplaceView.IsDetail || UtilityOpen));
+            (_pluginsOpen && PluginsView.IsDetail || _marketplaceOpen && MarketplaceView.IsDetail));
         CorrectionLearning.CorrectionsLearned += ShowLearnedCorrections;
         CorrectionLearning.ObservationCancelled += HideLearnedCorrections;
         Closed += (_, _) =>
@@ -449,7 +442,8 @@ public sealed partial class MainWindow : Window
             else historyService.TryAddRecord(fixtureRecord);
         }
 #endif
-        HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService), historyService);
+        _historyService = historyService;
+        WinUICloudSync.History = historyService;
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         _httpApi = new WinUIHttpApi(_dictation, DispatcherQueue);
         _httpApi.DataChanged += () =>
@@ -458,21 +452,15 @@ public sealed partial class MainWindow : Window
             WorkflowsView.RefreshApiData();
             if (_workflowShortcuts?.Initialize() is { } error) MetricsText.Text = error;
         };
-        HistoryView.ReadTranscript = _dictation.ReadHistoryAsync;
-        HistoryView.StopReading = _dictation.StopHistoryReadbackAsync;
-        _dictation.StopHistoryPlayback = () => { HistoryView.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
-        HistoryView.CanPlayAudio = () => !_closing && !_profileRestoreClosing && _dictation.CanChangeProvider && !_dictation.Models.Busy
-            && _dictationInput?.IsRecordingOrStarting != true && _workflowTask is not { IsCompleted: false };
-        HistoryView.PrepareAudioPlayback = _dictation.SpokenFeedback.CancelAndDrainAsync;
-        RecorderView.CanPlayAudio = HistoryView.CanPlayAudio;
+        _dictation.StopHistoryPlayback = () => { _historyWindow?.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
+        RecorderView.CanPlayAudio = CanPlayHistoryAudio;
         RecorderView.PrepareAudioPlayback = async () =>
         {
-            HistoryView.StopAudioPlayback();
+            _historyWindow?.StopAudioPlayback();
             await _dictation.SpokenFeedback.CancelAndDrainAsync();
         };
         WorkflowsView.Connect(_dictation);
-        WorkflowsView.IsPinned = id => _pinnedCommands.Contains("workflow:" + id);
-        WorkflowsView.TogglePin = command => ToggleLauncherPin(command);
+        InitializeSettingsPages();
         _dictation.ReviewRequested += ShowOutputReview;
         _dictation.OutputWarning += message => DispatcherQueue.TryEnqueue(() =>
         {
@@ -489,29 +477,16 @@ public sealed partial class MainWindow : Window
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
         {
-            if (_historyOpen) await HistoryView.RefreshAsync();
-            if (UtilityOpen && _utilityActivity is not null) await _utilityActivity.RefreshAsync();
+            if (_historyWindow is not null) await _historyWindow.RefreshAsync();
+            await RefreshSettingsPagesAsync();
         });
         PluginsView.ConfigureRuntime(_dictation);
         _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
-        HistoryView.ExitRequested += (_, _) => CloseHistory();
-        RecorderView.ExitRequested += (_, _) => CloseRecorder();
         RecorderView.Connect(_dictation);
         _httpApi.RecorderRequest = RecorderView.HandleApiAsync;
         _httpApi.ImportSettings = (store, preview) => RestoreApiProfile?.Invoke(store, preview) ?? Task.CompletedTask;
         RecorderView.IsQueuedSource = path => _fileTranscription?.ContainsSource(path) == true;
-        RecorderView.TranscribeRequested += path =>
-        {
-            CloseRecorder();
-            OpenFileTranscription();
-            _fileTranscription?.AddRecording(path);
-        };
-        HistoryView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
-        WorkflowsView.ExitRequested += (_, _) => CloseWorkflows();
-        WorkflowsView.LauncherRequested += (_, _) => { CloseWorkflows(); SearchBox.Text = string.Empty; };
-        HistoryView.LauncherRequested += (_, _) => { CloseHistory(); SearchBox.Text = string.Empty; };
-        RecorderView.LauncherRequested += (_, _) => { CloseRecorder(); SearchBox.Text = string.Empty; };
-        WorkflowsView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
+        RecorderView.TranscribeRequested += path => OpenFileTranscription(() => _fileTranscription?.AddRecording(path));
         MarketplaceView.ConfigureRuntime(_dictation);
         PluginsView.UseSettingsLayout();
         MarketplaceView.UseSettingsLayout();
@@ -523,12 +498,6 @@ public sealed partial class MainWindow : Window
         MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
         PluginsView.RestartRequested = RestartForPluginUpdateAsync;
         InitializeIntegrationSettings();
-        WorkflowsView.ConfigurationModeChanged += editing =>
-        {
-            SearchBox.IsEnabled = !editing;
-            SearchSurface.IsHitTestVisible = !editing;
-            SearchSurface.Opacity = editing ? 0.5 : 1;
-        };
         SearchSurface.AddHandler(
             UIElement.PointerPressedEvent,
             new PointerEventHandler(SearchSurface_PointerPressed),
@@ -584,8 +553,7 @@ public sealed partial class MainWindow : Window
     {
         if (_profileRestoreClosing) return;
         RememberPreviousApp();
-        if (!_closing && !_historyOpen && !_recorderOpen && !_workflowsOpen &&
-            !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen && !UtilityOpen)
+        if (!_closing && !_pluginsOpen && !_marketplaceOpen)
         {
             var selectedKey = _selected?.Key;
             SearchBox_TextChanged(SearchBox, null!);
@@ -637,20 +605,15 @@ public sealed partial class MainWindow : Window
         NativeWindowAppearance.RemoveSystemBorder(this, resizable: true);
         // Closing a settings picker reactivates the window. Keep its current
         // field focused instead of jumping back to the name and scrolling up.
-        if (UtilityOpen || WindowRoot.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
-        if (_workflowsOpen && WorkflowsView.IsConfiguring) return;
+        if (WindowRoot.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
         if (_pluginsOpen && PluginsView.IsDetail) return;
         if (_marketplaceOpen && MarketplaceView.IsDetail) return;
-        if (_recorderOpen) RecorderView.FocusEntry();
-        else if (_workflowsOpen && WorkflowsView.IsDetail) WorkflowsView.FocusEntry();
         // ShowFromActivation focuses search explicitly. Reactivation must retain the current scroll position.
     }
 
     private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
     {
         if (_closing || _profileRestoreClosing) return;
-        if (args.DidVisibilityChange)
-            RecorderView.SetPresented(_recorderOpen && sender.IsVisible);
         if (args.DidPositionChange || args.DidSizeChange)
         {
             _appliedWindowDpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
@@ -757,23 +720,6 @@ public sealed partial class MainWindow : Window
             _isSearchEditing = true;
         UpdateSearchPresentation();
 
-        if (_recorderOpen)
-        {
-            return;
-        }
-
-        if (_historyOpen)
-        {
-            HistoryView.Filter(query);
-            return;
-        }
-
-        if (_workflowsOpen)
-        {
-            WorkflowsView.Filter(query);
-            return;
-        }
-
         if (_pluginsOpen)
         {
             PluginsView.Filter(query);
@@ -873,27 +819,18 @@ public sealed partial class MainWindow : Window
 
     private void RunSelected()
     {
-        if (FileTranscriptionOpen || LexiconOpen || UtilityOpen) return;
         if (LauncherCommandsVisible && _selected?.IsSuggestionsToggle == true) { ToggleSuggestions(); return; }
         ActionPanel.Visibility = Visibility.Collapsed;
-        if (_recorderOpen) return;
-        if (!_marketplaceOpen && !_pluginsOpen && !_workflowsOpen && !_historyOpen && _selected is { } command)
+        if (!_marketplaceOpen && !_pluginsOpen && _selected is { } command)
             RecordLauncherUsage(command);
         if (_marketplaceOpen)
             MarketplaceView.OpenSelected();
         else if (_pluginsOpen)
             PluginsView.OpenSelected();
-        else if (_workflowsOpen)
-            WorkflowsView.OpenSelected();
-        else if (_historyOpen)
-            HistoryView.OpenSelected();
         else if (_selected?.Route is { } route)
             OpenWorkspaceCommand(route);
         else if (_selected?.WorkflowId is { } workflowId)
-        {
-            OpenWorkflows();
-            WorkflowsView.OpenWorkflow(workflowId);
-        }
+            OpenWorkflows(() => WorkflowsView.OpenWorkflow(workflowId));
         else if (_selected?.Title == "Read last transcription")
             ReadLastTranscription();
         else if (_selected?.Title == "Copy last transcription")
@@ -926,8 +863,7 @@ public sealed partial class MainWindow : Window
 
     private void ToggleActions()
     {
-        if (_historyOpen || _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen) return;
-        if (UtilityOpen || LexiconOpen || FileTranscriptionOpen) return;
+        if (_pluginsOpen || _marketplaceOpen) return;
         EntryActionMenu.Create(LauncherActions()).ShowAt(CompactResults);
     }
 
@@ -967,38 +903,10 @@ public sealed partial class MainWindow : Window
     {
         if (VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
         if (HandleCommandShortcut(e)) { e.Handled = true; return; }
-        if (UtilityOpen)
-        {
-            if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox and not PasswordBox and not RichEditBox)
-            { CloseUtility(); e.Handled = true; }
-            return;
-        }
-        if (_historyOpen)
-        {
-            HistoryView.HandleActionKey(e);
-            if (e.Handled) return;
-        }
-        if (LexiconOpen)
-        {
-            if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)
-            { _lexicon?.GoBack(); e.Handled = true; }
-            return;
-        }
-        if (FileTranscriptionOpen)
-        {
-            _fileTranscription?.HandleActionKey(e);
-            if (e.Handled) return;
-            if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)
-            {
-                _fileTranscription?.GoBack(); e.Handled = true;
-            }
-            return;
-        }
-        if ((!_historyOpen && !_recorderOpen && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen) || e.Key != global::Windows.System.VirtualKey.Back) return;
+        if ((!_pluginsOpen && !_marketplaceOpen) || e.Key != global::Windows.System.VirtualKey.Back) return;
         // Inspect before the editor processes deletion: deleting the last character
         // must not also navigate away from the current page.
         var focused = FocusManager.GetFocusedElement(WindowRoot.XamlRoot);
-        if (_workflowsOpen && WorkflowsView.IsConfiguring && focused is TextBox) return;
         if (focused is TextBox { Text.Length: > 0 } or TextBox { AcceptsReturn: true } or PasswordBox or RichEditBox) return;
         foreach (var modifier in new[] { global::Windows.System.VirtualKey.Control, global::Windows.System.VirtualKey.Menu,
                      global::Windows.System.VirtualKey.Shift, global::Windows.System.VirtualKey.LeftWindows, global::Windows.System.VirtualKey.RightWindows })
@@ -1006,34 +914,14 @@ public sealed partial class MainWindow : Window
             if (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(modifier)
                 .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
         }
-        if (_recorderOpen) RecorderView.GoBack();
-        else if (_marketplaceOpen) MarketplaceView.GoBack();
-        else if (_pluginsOpen) PluginsView.GoBack();
-        else if (_workflowsOpen) WorkflowsView.GoBack();
-        else HistoryView.GoBack();
+        if (_marketplaceOpen) MarketplaceView.GoBack();
+        else PluginsView.GoBack();
         e.Handled = true;
     }
 
     private void WindowRoot_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
-        if (UtilityOpen)
-        {
-            if (e.Key == global::Windows.System.VirtualKey.Escape) { CloseUtility(); e.Handled = true; }
-            return;
-        }
-        if (LexiconOpen)
-        {
-            if (e.Key == global::Windows.System.VirtualKey.Escape) { _lexicon?.GoBack(); e.Handled = true; }
-            return;
-        }
-        if (FileTranscriptionOpen)
-        {
-            _fileTranscription?.HandleActionKey(e);
-            if (e.Handled) return;
-            if (e.Key == global::Windows.System.VirtualKey.Escape) { _fileTranscription?.GoBack(); e.Handled = true; }
-            return;
-        }
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
             .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down);
 
@@ -1053,16 +941,10 @@ public sealed partial class MainWindow : Window
 
         if (e.Key == global::Windows.System.VirtualKey.Escape)
         {
-            if (_recorderOpen)
-                RecorderView.GoBack();
-            else if (_marketplaceOpen && MarketplaceView.IsDetail)
+            if (_marketplaceOpen && MarketplaceView.IsDetail)
                 MarketplaceView.GoBack();
             else if (_pluginsOpen && PluginsView.IsDetail)
                 PluginsView.GoBack();
-            else if (_workflowsOpen && WorkflowsView.IsDetail)
-                WorkflowsView.GoBack();
-            else if (_historyOpen && (HistoryView.IsReading || HistoryView.IsSelecting))
-                HistoryView.GoBack();
             else if (ActionPanel.Visibility == Visibility.Visible)
                 ActionPanel.Visibility = Visibility.Collapsed;
             else if (!string.IsNullOrEmpty(SearchBox.Text))
@@ -1070,32 +952,12 @@ public sealed partial class MainWindow : Window
                 _isSearchEditing = false;
                 SearchBox.Text = string.Empty;
             }
-            else if (_historyOpen)
-                CloseHistory();
-            else if (_workflowsOpen)
-                CloseWorkflows();
             else if (_pluginsOpen)
                 ClosePlugins();
             else if (_marketplaceOpen)
                 CloseMarketplace();
             else
                 AppWindow.Hide();
-            e.Handled = true;
-            return;
-        }
-
-        if (_historyOpen && !HistoryView.IsReading && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
-        {
-            HistoryView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
-            e.Handled = true;
-            return;
-        }
-
-        if (_workflowsOpen && !WorkflowsView.IsDetail && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
-        {
-            WorkflowsView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
             e.Handled = true;
             return;
         }
@@ -1116,7 +978,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (!_historyOpen && !_recorderOpen && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
+        if (!_pluginsOpen && !_marketplaceOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
             && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             if (FilteredItems.Count > 0)
@@ -1172,49 +1034,6 @@ public sealed partial class MainWindow : Window
     {
         OpenSettings();
         _settingsWindow?.ShowSetup(returnToTray);
-    }
-
-    internal void OpenLexicon(bool snippets = false, string? section = null)
-    {
-        if (_lexicon is null)
-        {
-            _lexicon = new LexiconView();
-            _lexicon.ConnectTraining(_dictation);
-            _lexicon.ExitRequested += () =>
-            {
-                LexiconHost.Visibility = Visibility.Collapsed;
-                SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-                SearchBox.Focus(FocusState.Programmatic);
-            };
-            LexiconHost.Child = _lexicon;
-        }
-        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Collapsed;
-        LexiconHost.Visibility = Visibility.Visible;
-        _lexicon.Present(snippets, section);
-    }
-
-    private void EnsureFileTranscription()
-    {
-        if (_fileTranscription is null)
-        {
-            _fileTranscription = new FileTranscriptionView();
-            _fileTranscription.Connect(_dictation);
-            _fileTranscription.ExitRequested += () =>
-            {
-                FileTranscriptionHost.Visibility = Visibility.Collapsed;
-                SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-                SearchBox.Focus(FocusState.Programmatic);
-            };
-            FileTranscriptionHost.Child = _fileTranscription;
-        }
-    }
-
-    internal void OpenFileTranscription()
-    {
-        EnsureFileTranscription();
-        SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Collapsed;
-        FileTranscriptionHost.Visibility = Visibility.Visible;
-        _fileTranscription!.Present();
     }
 
     internal void OpenSettings()
@@ -1290,8 +1109,12 @@ public sealed partial class MainWindow : Window
                     content.Children.Add(recoveryView);
                     _ = recoveryView.PresentAsync();
                 }
+                if (category == "Privacy") content.Children.Insert(Math.Min(1, content.Children.Count), HistoryWorkspaceSection());
             };
-            _settingsWindow.WorkspaceRequested += OpenUtility;
+            _settingsWindow.WorkspaceChanged += SettingsPageChanged;
+            _settingsWindow.WorkspaceBack = SettingsPageBack;
+            _settingsWindow.WorkspaceKey = SettingsPageKey;
+            _settingsWindow.WorkspacePage = SettingsPage;
             _settingsWindow.Closed += (_, _) =>
             {
                 // Preserve direct-close drains after the window reference is cleared.
@@ -1343,16 +1166,6 @@ public sealed partial class MainWindow : Window
         _settingsWindow.SetPreferences(OverlayPreferences);
         _settingsWindow.SetPreviewVisible(_overlay?.IsPreviewVisible == true, _overlay?.IsPaused == true);
         _settingsWindow.ShowOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
-    }
-
-    internal void OpenStatistics()
-    {
-        OpenUtility("Statistics");
-    }
-
-    internal void OpenSyncBackup()
-    {
-        OpenUtility("Sync & backup");
     }
 
     internal void OpenAccount()
@@ -1409,125 +1222,6 @@ public sealed partial class MainWindow : Window
         SearchBox.Text = _launcherQuery;
         var command = FilteredItems.FirstOrDefault(item => item.Title == "Integrations");
         if (command is not null) { CompactResults.SelectedItem = command; UpdateDetail(command); }
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-
-    private void OpenWorkflows()
-    {
-        _launcherQuery = SearchBox.Text;
-        _workflowsOpen = true;
-        CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Collapsed;
-        WorkflowsView.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search workflows by name or purpose…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Workflow search");
-        SearchBox.Text = string.Empty;
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        WorkflowsView.Filter(string.Empty);
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-
-    private void CloseWorkflows()
-    {
-        _workflowsOpen = false;
-        WorkflowsView.Visibility = Visibility.Collapsed;
-        CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search commands, recordings, workflows…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
-        SearchBox.Text = _launcherQuery;
-        SearchBox_TextChanged(SearchBox, null!);
-        var command = FilteredItems.FirstOrDefault(item => item.WorkflowId is null && item.Title == "Workflows");
-        if (command is not null) { CompactResults.SelectedItem = command; UpdateDetail(command); }
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-
-    internal void ShowHistoryFromTray()
-    {
-        ShowFromActivation();
-        if (_historyOpen) return;
-        if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen)
-        {
-            MetricsText.Text = "Return to Quick Launch before opening History.";
-            return;
-        }
-        OpenHistory();
-    }
-
-    private void OpenHistory()
-    {
-        _ = HistoryView.RefreshAsync();
-        _launcherQuery = SearchBox.Text;
-        _historyOpen = true;
-        CommandSurface.Visibility = Visibility.Collapsed;
-        QuickLaunchFooter.Visibility = Visibility.Collapsed;
-        HistoryView.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search history by title or transcript…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "History search");
-        SearchBox.Text = string.Empty;
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        HistoryView.Filter(string.Empty);
-        NavigationHint.Text = "↑↓ Navigate   Enter Open   ⌫ / Esc Back";
-        MetricsText.Text = "History · local data";
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-
-    private void CloseHistory()
-    {
-        HistoryView.StopAudioPlayback();
-        HistoryView.StopReadback();
-        _historyOpen = false;
-        HistoryView.Visibility = Visibility.Collapsed;
-        CommandSurface.Visibility = Visibility.Visible;
-        QuickLaunchFooter.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search commands, recordings, workflows…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
-        SearchBox.Text = _launcherQuery;
-        var historyCommand = FilteredItems.FirstOrDefault(command => command.Title == "History");
-        if (historyCommand is not null)
-        {
-            CompactResults.SelectedItem = historyCommand;
-            UpdateDetail(historyCommand);
-        }
-        NavigationHint.Text = "↑↓ Navigate   Enter Run   Ctrl K Actions   Esc Hide";
-        MetricsText.Text = "Quick Launch";
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-
-    private void OpenRecorder()
-    {
-        _launcherQuery = SearchBox.Text;
-        _recorderOpen = true;
-        CommandSurface.Visibility = Visibility.Collapsed;
-        QuickLaunchFooter.Visibility = Visibility.Collapsed;
-        RecorderView.Visibility = Visibility.Visible;
-        RecorderView.SetPresented(true);
-        SearchSurface.Visibility = Visibility.Collapsed;
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        RecorderView.FocusEntry();
-    }
-
-    private void CloseRecorder()
-    {
-        SearchSurface.Visibility = Visibility.Visible;
-        _recorderOpen = false;
-        RecorderView.SetPresented(false);
-        RecorderView.Visibility = Visibility.Collapsed;
-        CommandSurface.Visibility = Visibility.Visible;
-        QuickLaunchFooter.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search commands, recordings, workflows…";
-        SearchGlyph.Kind = "search";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
-        SearchBox.Text = _launcherQuery;
-        var recorder = FilteredItems.FirstOrDefault(command => command.Title == "Recorder");
-        if (recorder is not null) CompactResults.SelectedItem = recorder;
         _isSearchEditing = false;
         UpdateSearchPresentation();
         SearchBox.Focus(FocusState.Programmatic);

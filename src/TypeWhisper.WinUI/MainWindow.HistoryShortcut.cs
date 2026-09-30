@@ -48,14 +48,14 @@ public sealed partial class MainWindow
     private void OpenHistoryFromShortcut()
     {
         if (_closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing) return;
+        // The shortcut toggles the panel, as on macOS.
+        if (_workflowPalette is { } open) { open.Dismiss(); return; }
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
-        // Settings has its own window; opening History here does not replace its draft.
-        var otherWorkspace = _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen;
-        if (HistoryShortcutAdmission.Rejection(false, busy, otherWorkspace) is { } refusal)
+        if (HistoryShortcutAdmission.Rejection(false, busy, otherWorkspaceOpen: false) is { } refusal)
         { ShowFromActivation(); ShowActivationNotice(refusal); return; }
-        ShowFromActivation();
-        if (!_historyOpen) OpenHistory();
+        // As on macOS, this opens the recent-transcriptions palette for the app in front; History has its own window.
+        OpenRecentTranscriptions(ForegroundWindowHistory.CurrentTarget);
     }
 
     private sealed class HistoryShortcutBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend

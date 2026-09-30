@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services.Sync;
@@ -137,11 +139,13 @@ public sealed record CloudFolderSyncManifest(int SchemaVersion, string CreatedBy
 /// <param name="Platform">Platform supplied to the member.</param>
 /// <param name="AppVersion">App version supplied to the member.</param>
 /// <param name="UpdatedAt">Updated at supplied to the member.</param>
+/// <param name="Name">The name macOS shows for this device.</param>
 public sealed record CloudFolderSyncDeviceRecord(
     string DeviceId,
     string Platform,
     string AppVersion,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? Name = null);
 
 /// <summary>
 /// Lists the supported cloud folder sync operation kind values.
@@ -298,6 +302,18 @@ public static class CloudFolderSyncEngine
     /// </summary>
     public static string PackagePath(string folderPath) =>
         Path.Combine(folderPath, EnsureRelativePathSegment(PackageDirectoryName, nameof(PackageDirectoryName)));
+
+    /// <summary>
+    /// Returns the folder to sync with when the user picked an existing sync package itself. Both apps add the
+    /// package folder, so syncing the package directly would create a nested package the Mac never reads.
+    /// </summary>
+    public static string SyncFolder(string chosenFolder)
+    {
+        var trimmed = Path.TrimEndingDirectorySeparator(chosenFolder);
+        return string.Equals(Path.GetFileName(trimmed), PackageDirectoryName, StringComparison.OrdinalIgnoreCase)
+            && File.Exists(Path.Combine(trimmed, ManifestFileName)) && Path.GetDirectoryName(trimmed) is { Length: > 0 } parent
+                ? parent : chosenFolder;
+    }
 
     /// <summary>
     /// Performs sync asynchronously.
@@ -603,9 +619,22 @@ public static class CloudFolderSyncEngine
             new CloudFolderSyncManifest(1, "TypeWhisper", now),
             Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName))));
 
-        WriteJson(
-            new CloudFolderSyncDeviceRecord(deviceId, "Windows", CurrentAppVersion(), now),
-            Path.Combine(devicesPath, $"{EnsureRelativePathSegment(deviceId, nameof(deviceId))}.json"));
+        var devicePath = Path.Combine(devicesPath, $"{EnsureRelativePathSegment(deviceId, nameof(deviceId))}.json");
+        var existing = ReadDevice(devicePath);
+        // macOS lists every device file, so an unnamed one appears as "Device"; History sync may have named it already.
+        var name = existing?["name"] is JsonValue saved && saved.TryGetValue<string>(out var savedName) && savedName.Length > 0 ? savedName : Environment.MachineName;
+        var device = JsonSerializer.SerializeToNode(new CloudFolderSyncDeviceRecord(deviceId, "Windows", CurrentAppVersion(), now, name), CloudFolderSyncJson.Options)!.AsObject();
+        // Keep what History sync adds, such as the History id macOS uses to group this device's entries.
+        if (existing is not null)
+            foreach (var (key, value) in existing)
+                if (!device.ContainsKey(key)) device[key] = value?.DeepClone();
+        WriteJson(device, devicePath);
+    }
+
+    private static JsonObject? ReadDevice(string path)
+    {
+        try { return File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject : null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
 
     private static void Write(IReadOnlyList<CloudFolderSyncOperation> operations, string directory, DateTime now)

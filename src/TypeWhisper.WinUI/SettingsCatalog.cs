@@ -138,7 +138,7 @@ internal static partial class SettingsCatalog
     internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitPasteLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null, Func<string, string, string?>? commitRecordingShortcut = null, Func<string, string?>? commitRecorderHotkeys = null)
     {
         target.Children.Clear();
-        var title = Label(category, 24);
+        var title = Label(SettingsWindow.DisplayName(category), 24);
         title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         titleRow.Children.Add(title);

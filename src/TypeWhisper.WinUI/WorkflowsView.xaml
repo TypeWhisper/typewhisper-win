@@ -72,8 +72,8 @@
             </local:HandCursorListView>
             <StackPanel x:Name="WorkflowEmptyState" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                 <local:TypeWhisperGlyph Kind="search" Width="28" Height="28" />
-                <TextBlock Text="No workflows found" FontSize="18" FontWeight="SemiBold" />
-                <local:HandCursorButton Content="Clear search" Click="ClearSearch_Click" Style="{StaticResource SecondaryButtonStyle}"
+                <TextBlock x:Name="WorkflowEmptyTitle" Text="No workflows found" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <local:HandCursorButton x:Name="WorkflowEmptyAction" Content="Clear search" Click="ClearSearch_Click" Style="{StaticResource SecondaryButtonStyle}"
                     HorizontalAlignment="Center" AutomationProperties.Name="Clear workflow search" />
             </StackPanel>
         </Grid>

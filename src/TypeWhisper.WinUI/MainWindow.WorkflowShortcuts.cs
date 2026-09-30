@@ -161,6 +161,7 @@ public sealed partial class MainWindow
         _workflowHotkeys?.Dispose();
         RequestWorkflowCancellation();
         if (_workflowTask is not null) await _workflowTask;
+        _workflowPalette?.Dismiss();
         await Task.WhenAll(_workflowWindows.ToArray().Select(w => w.ShutdownAsync()));
     }
     private sealed class WorkflowHotkeyBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend

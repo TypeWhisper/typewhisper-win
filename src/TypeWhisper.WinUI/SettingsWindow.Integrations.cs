@@ -25,16 +25,16 @@ public sealed partial class SettingsWindow
         row.Children.Add(category.StartsWith("plugin:", StringComparison.Ordinal)
             ? new PluginBrandIcon(category["plugin:".Length..]) { Width = 18, Height = 18 }
             : new TypeWhisperGlyph { Kind = icon, Width = 18, Height = 18 });
-        var label = new TextBlock { Text = title, FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+        var label = new TextBlock { Text = title, FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis };
         Grid.SetColumn(label, 1); row.Children.Add(label);
         var selected = _currentCategory == category;
         var button = new HandCursorButton { Content = row, Tag = category,
             HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            MinHeight = 34, Padding = new Thickness(10, 7, 10, 7),
-            Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "MenuButtonStyle"] };
+            MinHeight = 36, Padding = new Thickness(10, 7, 10, 7),
+            Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
         AutomationProperties.SetName(button, "Settings integration " + title);
-        AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+        SetNavigationSelected(button, selected);
         ToolTipService.SetToolTip(button, title);
         button.Click += (_, _) => ShowCategory(category);
         _pluginNavigationButtons.Add(button); _navigationButtons.Add(button);
