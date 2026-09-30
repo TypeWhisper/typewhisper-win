@@ -27,8 +27,6 @@ public sealed partial class MainWindow
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the History shortcut again using the shortcut editor.";
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-            return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
@@ -52,8 +50,8 @@ public sealed partial class MainWindow
         if (_workflowPalette is { } open) { open.Dismiss(); return; }
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
-        if (HistoryShortcutAdmission.Rejection(false, busy, otherWorkspaceOpen: false) is { } refusal)
-        { ShowFromActivation(); ShowActivationNotice(refusal); return; }
+        if (HistoryShortcutAdmission.Rejection(false, busy) is { } refusal)
+        { ShowActivationNotice(refusal); return; }
         // As on macOS, this opens the recent-transcriptions palette for the app in front; History has its own window.
         OpenRecentTranscriptions(ForegroundWindowHistory.CurrentTarget);
     }

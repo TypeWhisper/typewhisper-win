@@ -5,45 +5,75 @@ namespace TypeWhisper.WinUI;
 public sealed partial class MainWindow
 {
     internal void OpenFilesFromTray() => HandleActivation(ApplicationActivationRequest.Parse(["--files"]));
+    private NoticeWindow? _notice;
     private string? _noticeWorkflowId;
     private bool _noticeUsesDefault;
+
+    // Notices appear in a card at the overlay position and never take focus from the app in front.
+    internal void ShowNotice(AppNotice notice)
+    {
+        if (_profileRestoreClosing) return;
+        try
+        {
+            if (_notice is null)
+            {
+                var window = _notice = new NoticeWindow();
+                window.Closed += (_, _) => { if (ReferenceEquals(_notice, window)) _notice = null; };
+            }
+            // Keep a visible recording overlay uncovered.
+            var overlay = _liveOverlay?.IsPreviewVisible == true ? _overlayMode switch
+            {
+                OverlayMode.Minimal => 22 + 8, OverlayMode.Compact => 36 + 8, _ => OverlayWindow.WindowHeight + 8
+            } : 0;
+            _notice.Show(notice, ResolveOverlayDisplayArea(), OverlayPreferences, overlay);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Trace.TraceError("Notice could not be shown: {0}; {1}", ex, notice.Text);
+        }
+    }
+
     private void ShowActivationNotice(string message, string? workflowId = null)
     {
         _noticeWorkflowId = workflowId;
         _noticeUsesDefault = false;
-        ActivationNoticeTitle.Text = workflowId is null ? "Action needed" : "Workflow could not start";
-        ActivationNoticeAction.Visibility = workflowId is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
-        ActivationNoticeText.Text = message;
-        ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        ShowNotice(workflowId is null
+            ? new AppNotice(message)
+            : new AppNotice(message, "Workflow could not start", ActionLabel: "Edit workflow", Action: () => EditNoticeWorkflow(workflowId)));
     }
+
+    // Closes the notice once the workflow it reported has been fixed.
+    private void DismissWorkflowNotice()
+    {
+        _noticeWorkflowId = null;
+        _noticeUsesDefault = false;
+        _notice?.Dismiss();
+    }
+
     // A rejected transcription task stops before recording, so the overlay cannot explain it.
     private void ShowTaskStartError(string? error, TypeWhisper.Core.Models.Workflow? workflow = null)
     {
         if (_closing || _profileRestoreClosing || error is null) return;
-        ShowFromActivation();
         ShowActivationNotice(workflow is null ? error : workflow.Name + "\n" + error, workflow?.Id);
     }
-    private void DismissActivationNotice_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+
+    private void EditNoticeWorkflow(string id)
     {
-        _noticeWorkflowId = null;
-        ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-    }
-    private void ActivationNoticeAction_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_closing || _profileRestoreClosing || _noticeWorkflowId is not { } id) return;
+        if (_closing || _profileRestoreClosing) return;
         OpenWorkflows(() =>
         {
             if (!WorkflowsView.EditWorkflow(id))
-                ActivationNoticeText.Text = "Finish your current workflow action first. If this workflow was deleted, dismiss this notice.";
+                ShowNotice(new AppNotice("Finish your current workflow action first. If this workflow was deleted, you can ignore this notice."));
         });
     }
+
     internal void ShowActivationFailure(Exception error)
     {
         System.Diagnostics.Trace.TraceError("Activation request failed: {0}", error);
         if (_closing || _profileRestoreClosing) return;
-        ShowFromActivation();
         ShowActivationNotice("An activation request could not be opened. Retry that request; other queued requests will continue.");
     }
+
     internal void HandleActivation(ApplicationActivationRequest request)
     {
         if (_closing || _profileRestoreClosing) return;
@@ -54,7 +84,7 @@ public sealed partial class MainWindow
             OpenSettings();
             return;
         }
-        if (request.Error is { } error) { ShowFromActivation(); ShowActivationNotice(error); return; }
+        if (request.Error is { } error) { ShowActivationNotice(error); return; }
         // Every route opens a settings page; the page keeps any unsaved work of its own.
         switch (request.Route)
         {
@@ -70,8 +100,8 @@ public sealed partial class MainWindow
                 break;
             case "--setup": OpenSetup(); break;
             case "--compare-selects": OpenSelectComparison(); break;
-            case "--settings": OpenSettings(); break;
-            default: ShowFromActivation(); break;
+            // Starting TypeWhisper again while it runs opens Settings, as on macOS.
+            default: OpenSettings(); break;
         }
     }
 }

@@ -69,7 +69,7 @@ public sealed partial class MainWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("Escape cancellation failed: {0}", ex);
-            if (!_closing) MetricsText.Text = "Could not finish cancellation. Try again.";
+            if (!_closing) ShowNotice(new AppNotice("Could not finish cancellation. Try again."));
             return;
         }
         // Escape cancels dictation only; a selected-text workflow keeps its own cancel shortcut.

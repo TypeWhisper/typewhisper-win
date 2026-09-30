@@ -207,9 +207,6 @@ public partial class App : Application
         void UpdateTrayRecorder() => _tray?.UpdateRecorder(_window.RecorderRecording, _window.CanToggleRecorder);
         _window.RecorderChanged += UpdateTrayRecorder;
         UpdateTrayRecorder();
-#if DEBUG
-        _window.TrayProbeRequested += () => _tray?.PresentProbe();
-#endif
         UpdateTrayActions();
         _window.DictationChanged += (status, recording) =>
         {

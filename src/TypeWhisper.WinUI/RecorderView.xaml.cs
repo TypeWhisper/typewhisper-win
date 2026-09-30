@@ -24,8 +24,6 @@ public sealed partial class RecorderView : UserControl
     private RecorderPreferences _preferencesAtStart = new();
     private bool _updatingRecorderPreferences;
     internal string SessionTitle { get; set; } = "";
-    internal event EventHandler? ExitRequested;
-    internal event EventHandler? LauncherRequested;
     internal event Action<string>? TranscribeRequested;
     internal bool NeedsSaveRetry => _recorder?.State == RecorderState.SaveFailed || _recorder?.State is (RecorderState.Recording or RecorderState.Paused) && _recorder.Error is not null;
 
@@ -39,7 +37,6 @@ public sealed partial class RecorderView : UserControl
         AudioSourceHelp.Child = sourceLabel;
         RecorderTabs.SetItems([new("record", "Record"), new("recordings", "Recordings")], "record");
         RecorderTabs.SelectionChanged += id => ShowLibrary(id == "recordings");
-        RecorderBreadcrumbs.SetItems(new("Quick Launch", () => LauncherRequested?.Invoke(this, EventArgs.Empty), "Back from recorder"), new("Recorder"));
         MicrophoneSource.IsChecked = true;
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(200);
@@ -68,14 +65,6 @@ public sealed partial class RecorderView : UserControl
         _recorder.Changed += Refresh;
         Refresh();
     }
-    internal void UseSettingsLayout()
-    {
-        RecorderBreadcrumbs.OmitRoot = true;
-        RecorderBreadcrumbs.SetItems(new("Quick Launch", null), new("Recorder"));
-        RecorderDefaults.Visibility = Visibility.Visible;
-        // Esc closes Settings rather than leaving the recorder.
-        RecorderNavigationHint.Visibility = Visibility.Collapsed;
-    }
     // Settings render the saved recorder defaults below the session controls, as on macOS.
     internal StackPanel DefaultsPanel => RecorderDefaults;
     internal void SetPresented(bool presented) { _presented = presented; if (!presented) StopAudioPlayback(); Refresh(); if (presented) { if (_libraryOpen) BeginLibraryRefresh(); } }
@@ -96,10 +85,6 @@ public sealed partial class RecorderView : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder operation failed: {0}", ex); return false; }
         finally { Refresh(); }
-    }
-    internal void GoBack()
-    {
-        ExitRequested?.Invoke(this, EventArgs.Empty);
     }
     internal async Task ShutdownAsync()
     {
@@ -158,10 +143,8 @@ public sealed partial class RecorderView : UserControl
         PauseButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
         PauseButton.Content = state == RecorderState.Paused ? "Resume" : "Pause";
         PauseButton.IsEnabled = active && !busy && !_automaticStop;
-        DiscardButton.Visibility = DiscardConfirmation.Visibility = Visibility.Collapsed;
         SessionPanel.Visibility = Visibility.Visible;
         if (saved) { RecorderStatus.Text = "Ready for a new recording"; RecorderDuration.Text = "00:00:00"; }
-        ViewHistoryButton.Visibility = OpenFolderButton.Visibility = Visibility.Collapsed;
         RefreshLibraryActions();
         if (_presented) SignalCanvas.Invalidate();
         var toggle = (active, _recorder is not null && !busy && (active || state != RecorderState.SaveFailed
@@ -226,14 +209,6 @@ public sealed partial class RecorderView : UserControl
         if (DispatcherQueue.HasThreadAccess) Refresh();
         else DispatcherQueue.TryEnqueue(Refresh);
     }
-    private void ViewHistory_Click(object sender, RoutedEventArgs e)
-    { if (_recorder?.FilePath is { } path) RequestTranscribe(path); }
-    private void OpenFolder_Click(object sender, RoutedEventArgs e)
-    {
-        if (_recorder?.FilePath is not { } path) return;
-        try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true }); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { RecorderStatus.Text = "Could not open the folder: " + ex.Message; }
-    }
     private async void Pause_Click(object sender, RoutedEventArgs e)
     {
         if (_recorder is null || _recorder.Busy) return;
@@ -250,10 +225,6 @@ public sealed partial class RecorderView : UserControl
         { Trace.TraceError("Recorder pause or resume failed: {0}", ex); }
         finally { Refresh(); }
     }
-    private void Discard_Click(object sender, RoutedEventArgs e) { }
-    private void KeepSession_Click(object sender, RoutedEventArgs e) { }
-    private void ConfirmDiscard_Click(object sender, RoutedEventArgs e) { }
-    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
     private void SignalCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         var level = _recorder?.State == RecorderState.Recording ? _capture?.Level ?? 0 : 0;

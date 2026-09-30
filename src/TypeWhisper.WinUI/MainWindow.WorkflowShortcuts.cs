@@ -19,8 +19,6 @@ public sealed partial class MainWindow
         _workflowHotkeys = new HotkeyRegistration(this, RunWorkflowShortcut, 0x7800);
         _workflowShortcuts = new(new(WinUIProfile.DataPath("workflows.json")), new WorkflowHotkeyBackend(_workflowHotkeys), value =>
         {
-            if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-                return "Already used by Quick Launch.";
             if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
                 return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
             if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
@@ -30,18 +28,13 @@ public sealed partial class MainWindow
         WorkflowsView.Shortcuts = _workflowShortcuts;
         WorkflowsView.ConfigurationSaved += id =>
         {
-            if (_noticeWorkflowId != id) return;
-            _noticeWorkflowId = null;
-            ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            if (_noticeWorkflowId == id) DismissWorkflowNotice();
         };
         WorkflowsView.DefaultsSaved += () =>
         {
-            if (!_noticeUsesDefault) return;
-            _noticeUsesDefault = false;
-            _noticeWorkflowId = null;
-            ActivationNotice.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            if (_noticeUsesDefault) DismissWorkflowNotice();
         };
-        if (_workflowShortcuts.Initialize() is { } error) MetricsText.Text = error;
+        if (_workflowShortcuts.Initialize() is { } error) ShowNotice(new AppNotice(error));
     }
 
     private void RunWorkflowShortcut(string chord)
@@ -61,7 +54,6 @@ public sealed partial class MainWindow
         try { workflow = _dictation.WorkflowDefaults.Resolve(workflow); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowFromActivation();
             ShowActivationNotice("Default LLM settings could not be loaded. Open Default LLM in Workflows and save the selection again.", workflow.Id);
             _noticeUsesDefault = true;
             return;
@@ -72,7 +64,6 @@ public sealed partial class MainWindow
                 (provider, model) => _dictation.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)));
             if (error is not null)
             {
-                ShowFromActivation();
                 ShowActivationNotice(workflow.Name + "\n" + (usesDefault
                     ? "The default LLM is missing or unavailable. Open Default LLM in Workflows, or choose a provider and model for this workflow."
                     : error), workflow.Id);

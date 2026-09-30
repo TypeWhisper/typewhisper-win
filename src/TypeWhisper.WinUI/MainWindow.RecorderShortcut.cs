@@ -27,8 +27,6 @@ public sealed partial class MainWindow
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the recorder shortcut again using the shortcut editor.";
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-            return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
@@ -50,9 +48,8 @@ public sealed partial class MainWindow
         if (_closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing) return;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || WorkflowsView.IsBusy || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
-        // The recorder is a settings page, so no Quick Launch workspace can block it.
-        if (RecorderShortcutAdmission.Rejection(false, busy, otherWorkspaceOpen: false) is { } refusal)
-        { ShowFromActivation(); ShowActivationNotice(refusal); return; }
+        if (RecorderShortcutAdmission.Rejection(false, busy) is { } refusal)
+        { ShowActivationNotice(refusal); return; }
         OpenRecorder(() => RecorderView.FocusEntry());
     }
 

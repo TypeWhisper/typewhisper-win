@@ -31,8 +31,6 @@ public sealed partial class MainWindow
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the workflow palette shortcut again using the shortcut editor.";
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-            return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
@@ -56,8 +54,8 @@ public sealed partial class MainWindow
         if (_workflowPalette is { } open) { open.Dismiss(); return; }
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || WorkflowsView.IsBusy || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
-        if (WorkflowPaletteShortcutAdmission.Rejection(false, busy, otherWorkspaceOpen: false) is { } refusal)
-        { ShowFromActivation(); ShowActivationNotice(refusal); return; }
+        if (WorkflowPaletteShortcutAdmission.Rejection(false, busy) is { } refusal)
+        { ShowActivationNotice(refusal); return; }
         var target = ForegroundWindowHistory.CurrentTarget;
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _workflowTask = completion.Task;
@@ -92,7 +90,6 @@ public sealed partial class MainWindow
         var hasText = !string.IsNullOrWhiteSpace(text);
         if (!hasText && recent.Length == 0)
         {
-            ShowFromActivation();
             ShowActivationNotice(recentOnly ? "No transcriptions yet. Dictate once, then try again." : "Please select or copy some text first.");
             return;
         }

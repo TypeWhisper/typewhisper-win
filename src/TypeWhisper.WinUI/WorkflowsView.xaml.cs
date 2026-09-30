@@ -104,7 +104,6 @@ public sealed partial class WorkflowsView : UserControl
     private bool Available(string provider, string model) => _session?.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)) == true;
     internal ObservableCollection<WorkflowDraft> FilteredWorkflows { get; } = [];
     internal event EventHandler? ExitRequested;
-    internal event EventHandler? LauncherRequested;
     internal event EventHandler? ClearSearchRequested;
     internal event Action<bool>? ConfigurationModeChanged;
     internal event Action<bool>? DetailModeChanged;
@@ -201,11 +200,6 @@ public sealed partial class WorkflowsView : UserControl
         WorkflowList.ScrollIntoView(WorkflowList.SelectedItem);
     }
 
-    internal Func<string, bool>? IsPinned { get; set; }
-    internal Action<Command>? TogglePin { get; set; }
-    internal IEnumerable<Command> LauncherEntries => _workflows.Select(workflow => new Command(
-        "Workflow", workflow.IconKind, workflow.Title, workflow.Description, "", "Open workflow") { WorkflowId = workflow.Id });
-
     internal void OpenWorkflow(string id)
     {
         if (_closing || IsBusy) return;
@@ -246,9 +240,8 @@ public sealed partial class WorkflowsView : UserControl
         WorkflowSummary.Text = page == Page.List
             ? $"{FilteredWorkflows.Count} workflow{(FilteredWorkflows.Count == 1 ? "" : "s")}" : "Workflow";
         UpdateBreadcrumbs();
-        WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "\u232b / Esc Back", _ => "\u232b / Esc Back   \u2191\u2193 Navigate   Enter Open" };
         // Settings has no Backspace navigation, and Esc on the list closes the window.
-        if (WorkflowBreadcrumbs.OmitRoot) WorkflowNavigationHint.Text = page switch { Page.Result => "Esc Back", Page.List => "\u2191\u2193 Navigate   Enter Open", _ => WorkflowNavigationHint.Text };
+        WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "Esc Back", _ => "\u2191\u2193 Navigate   Enter Open" };
         WorkflowPrimaryButton.Visibility = page == Page.List ? Visibility.Collapsed : Visibility.Visible;
         WorkflowPrimaryButton.Content = page == Page.Configuration ? (_creating ? "Create workflow" : "Save changes") : page == Page.Result ? "Copy result" : RunButtonLabel;
         UpdateExecutionSummary();
@@ -403,7 +396,6 @@ public sealed partial class WorkflowsView : UserControl
     }
 
     private void Workflow_Click(object sender, ItemClickEventArgs e) { WorkflowList.SelectedItem = e.ClickedItem; OpenSelected(); }
-    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
     private void ClearSearch_Click(object sender, RoutedEventArgs e)
     {
         if (_workflows.Count == 0) { NewWorkflow_Click(sender, e); return; }
@@ -474,14 +466,6 @@ public sealed partial class WorkflowsView : UserControl
         foreach (var action in EntryActionMenu.FromButtons(ContextActionsFooter)) yield return action;
         var workflow = _page == Page.List ? WorkflowList.SelectedItem as WorkflowDraft : _opened;
         if (_page is not (Page.List or Page.Editor) || workflow?.IsEditable != true) yield break;
-        if (TogglePin is { } togglePin) yield return new(IsPinned?.Invoke(workflow.Id) == true ? "Unpin from Quick Launch" : "Pin to Quick Launch", () =>
-        {
-            var wasPinned = IsPinned?.Invoke(workflow.Id) == true;
-            togglePin(LauncherEntries.First(entry => entry.WorkflowId == workflow.Id));
-            WorkflowSummary.Text = (IsPinned?.Invoke(workflow.Id) == true) != wasPinned
-                ? (wasPinned ? "Removed from pinned workflows." : "Pinned to Quick Launch.")
-                : "The pin could not be saved. Please try again.";
-        }, !IsBusy);
         yield return new("Set shortcut for selected text…", () => ConfigureShortcut("Hotkey"), !IsBusy);
         yield return new("Set shortcut for dictation…", () => ConfigureShortcut("DictationHotkey"), !IsBusy);
     }
@@ -746,43 +730,30 @@ public sealed partial class WorkflowsView : UserControl
     }
     private void KeepEditing_Click(object sender, RoutedEventArgs e) { _afterConfigurationExit = null; DismissDiscard(); FocusEntry(); }
     private void DiscardConfiguration_Click(object sender, RoutedEventArgs e) => LeaveConfiguration();
-    private void NavigateToAncestor(bool launcher)
+    private void NavigateToList()
     {
         if (_closing) return;
         if (_run is not null) { _run.Cancel(); return; }
         if (_page == Page.Configuration)
         {
-            _afterConfigurationExit = () => NavigateToAncestor(launcher);
+            _afterConfigurationExit = NavigateToList;
             GoBack();
             return;
         }
         ShowPage(Page.List);
-        if (launcher) LauncherRequested?.Invoke(this, EventArgs.Empty);
-        else
-        {
-            Filter(string.Empty);
-            ClearSearchRequested?.Invoke(this, EventArgs.Empty);
-            WorkflowList.Focus(FocusState.Programmatic);
-        }
-    }
-
-    internal void UseSettingsLayout()
-    {
-        WorkflowBreadcrumbs.OmitRoot = true;
-        ShowPage(_page);
+        Filter(string.Empty);
+        ClearSearchRequested?.Invoke(this, EventArgs.Empty);
+        WorkflowList.Focus(FocusState.Programmatic);
     }
 
     private void UpdateBreadcrumbs()
     {
-        var crumbs = new List<Crumb>
-        {
-            new("Quick Launch", () => NavigateToAncestor(true), _page == Page.List ? "Back from workflows" : "Workflow breadcrumb Quick Launch")
-        };
+        var crumbs = new List<Crumb>();
         if (_page == Page.List) crumbs.Add(new("Workflows"));
         else
         {
             var directParent = _page == Page.Editor || _page == Page.Configuration && _configurationReturnPage == Page.List;
-            crumbs.Add(new("Workflows", () => NavigateToAncestor(false), directParent ? "Back from workflows" : "Workflow breadcrumb Workflows"));
+            crumbs.Add(new("Workflows", NavigateToList, directParent ? "Back from workflows" : "Workflow breadcrumb Workflows"));
             if (_page == Page.Editor) crumbs.Add(new(_opened?.Title ?? "Source text"));
             else if (_page == Page.Result)
             {

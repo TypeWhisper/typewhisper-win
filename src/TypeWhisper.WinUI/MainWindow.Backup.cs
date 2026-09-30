@@ -16,7 +16,6 @@ public sealed partial class MainWindow
     {
         _profileRestoreClosing = true;
         _closing = true;
-        _hotkeyRegistration?.Dispose();
         _dictationHotkey?.Dispose();
         _cancelProcessingHotkey?.Dispose();
         _historyHotkey?.Dispose();

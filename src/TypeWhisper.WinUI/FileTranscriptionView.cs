@@ -76,7 +76,6 @@ public sealed partial class FileTranscriptionView : UserControl
         if (_watcher.Settings?.StartWithApp == true) _watcher.Start();
         session.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !_watchTab && !_queue.Running && !_picking && _result is null) Render(); });
     }
-    internal void UseSettingsLayout() { _crumbs.OmitRoot = true; Render(); }
     internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
     internal void Stop() { _queue.Cancel(); _recoveryDialog?.Hide(); }
     internal bool ContainsSource(string path) => _queue.Jobs.Any(job =>
@@ -138,8 +137,7 @@ public sealed partial class FileTranscriptionView : UserControl
             ? "Watch a folder for audio and video files. Finished files are transcribed and exported automatically while TypeWhisper is running, using the model selected in Dictation."
             : "Choose audio or video files to transcribe using the model selected in Dictation. Up to 20 files, maximum 60 minutes per file. Turn on queue recovery to keep results after closing the app.");
         if (_watchTab) { RenderWatcher(); return; }
-        _crumbs.SetItems(new("Quick Launch", () => { if (!_picking) ExitRequested?.Invoke(); }),
-            new("Files", _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? "Queue" : "Result"));
+        _crumbs.SetItems(new("Files", _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? "Queue" : "Result"));
         if (_result is not null) { RenderResult(_result); return; }
         var recovery = new CheckBox
         {

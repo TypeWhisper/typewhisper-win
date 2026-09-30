@@ -55,8 +55,6 @@ public sealed partial class MainWindow
             if (ShortcutRules.Validate(chord, true) is { } error) return error;
         if (RecordingShortcutConflicts.Overlap(value, true, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
             return "Already used by Main dictation. Choose a different combination.";
-        if (RecordingShortcutConflicts.Overlap(value, true, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-            return "Already used by Quick Launch.";
         if (RecordingShortcutConflicts.Overlap(value, true, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
             return "Already used by Cancel processing.";
         return RecordingShortcutConflict(value, true, key) ?? RecorderShortcutConflict(value, true)

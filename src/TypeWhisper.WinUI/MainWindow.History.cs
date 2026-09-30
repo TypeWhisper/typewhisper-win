@@ -36,7 +36,7 @@ public sealed partial class MainWindow
                 WinUICloudSync.HistoryDevicesChanged -= DevicesChanged;
                 if (ReferenceEquals(_historyWindow, window)) _historyWindow = null;
             };
-            window.ShowOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
+            window.ShowOn(ResolveInvocationDisplayArea());
         }
         else _historyWindow.BringToFront();
         if (source is not null) _historyWindow.ShowSource(source);

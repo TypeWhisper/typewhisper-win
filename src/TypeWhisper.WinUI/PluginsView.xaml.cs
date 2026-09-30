@@ -119,7 +119,6 @@ public sealed partial class PluginsView : UserControl
     [new("auto", "Detect automatically", "Use the language spoken"), new("de", "German", "Prefer German transcription"), new("en", "English", "Prefer English transcription")];
     internal ObservableCollection<Plugin> FilteredPlugins { get; } = [];
     internal event EventHandler? ExitRequested;
-    internal event EventHandler? LauncherRequested;
     internal event EventHandler? ClearSearchRequested;
     internal event Action<bool>? DetailModeChanged;
     internal event EventHandler? MarketplaceRequested;
@@ -315,11 +314,7 @@ public sealed partial class PluginsView : UserControl
     private void UpdateBreadcrumbs()
     {
         if (_settingsLayout) { PluginBreadcrumbs.Visibility = Visibility.Collapsed; return; }
-        var crumbs = new List<Crumb> { new("Quick Launch", () => Navigate(() =>
-        {
-            ShowList(true);
-            LauncherRequested?.Invoke(this, EventArgs.Empty);
-        }), "Plugin breadcrumb Quick Launch") };
+        var crumbs = new List<Crumb>();
         if (_page == Page.List) crumbs.Add(new("Integrations"));
         else
         {

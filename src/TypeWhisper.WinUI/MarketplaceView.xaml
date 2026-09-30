@@ -3,16 +3,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:TypeWhisper.WinUI">
     <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <local:Breadcrumbs x:Name="MarketBreadcrumbs" Margin="12,4,12,12" />
-        <Grid Grid.Row="1">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid Grid.Row="1" Margin="12,0,12,12" MinHeight="32" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <TextBlock x:Name="MarketTitle" Text="Plugins" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="MarketTitle" Text="Discover plugins" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="MarketSummary" Grid.Column="1" Text="Discover" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
         </Grid>
-        <local:TabBar x:Name="IntegrationTabs" Grid.Row="0" Margin="8,0,8,12" />
         <Grid x:Name="MarketListPage" Grid.Row="2" RowSpacing="10">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <local:TabBar x:Name="CatalogFilters" Margin="8,0" />
@@ -71,6 +67,5 @@
                 </StackPanel>
             </Grid>
         </Border>
-    </Grid>
     </Grid>
 </UserControl>

@@ -91,7 +91,7 @@ internal static partial class SettingsCatalog
         var vocabularyToggle = AppToggleSwitch.Create(DictionaryBoostingPreferences.Load());
         AutomationProperties.SetName(vocabularyToggle, "Vocabulary boosting");
         var vocabularyRow = new Grid(); vocabularyRow.ColumnDefinitions.Add(new()); vocabularyRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        vocabularyRow.Children.Add(SettingsHelp.Label("Vocabulary boosting", "Uses text-based matching. Manage words and Term packs in Quick Launch > Dictionary. Acoustic vocabulary support depends on the selected plugin."));
+        vocabularyRow.Children.Add(SettingsHelp.Label("Vocabulary boosting", "Uses text-based matching. Manage words and Term packs in Settings > Dictionary. Acoustic vocabulary support depends on the selected plugin."));
         Grid.SetColumn(vocabularyToggle, 1); vocabularyRow.Children.Add(vocabularyToggle); vocabulary.Children.Add(vocabularyRow);
         var vocabularyHint = Label("Saved for dictation.", 12, true);
         vocabulary.Children.Add(vocabularyHint);

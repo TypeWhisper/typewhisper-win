@@ -35,10 +35,6 @@ public sealed partial class MarketplaceView : UserControl
         return true;
     }
     internal ObservableCollection<MarketplaceItem> FilteredItems { get; } = [];
-    internal event EventHandler? InstalledRequested;
-    private void Installed_Click(object sender, RoutedEventArgs e) => InstalledRequested?.Invoke(this, EventArgs.Empty);
-    internal event EventHandler? ExitRequested;
-    internal event EventHandler? LauncherRequested;
     internal event EventHandler? ClearSearchRequested;
     internal event Action<bool>? DetailModeChanged;
     internal event Action<string>? ManageRequested;
@@ -47,9 +43,6 @@ public sealed partial class MarketplaceView : UserControl
     {
         InitializeComponent();
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
-        IntegrationTabs.SetItems([new("installed", "Installed"), new("discover", "Discover")], "discover");
-        IntegrationTabs.SelectionChanged += id =>
-        { IntegrationTabs.SetSelected("discover"); if (id == "installed") Installed_Click(this, new RoutedEventArgs()); };
         CatalogFilters.SelectionChanged += id => { _categoriesFilter = id == "all" ? "" : id; Filter(_query); };
         UpdateCategories();
         Filter(string.Empty);
@@ -119,7 +112,6 @@ public sealed partial class MarketplaceView : UserControl
                 ? "Open an installed plugin in the sidebar to change its settings. Check again later for new plugins."
                 : "Try another search or category.";
         }
-        UpdateBreadcrumbs();
     }
 
     internal void MoveSelection(int delta)
@@ -136,7 +128,6 @@ public sealed partial class MarketplaceView : UserControl
         _opened = item; _error = null;
         IsDetail = true;
         UpdateAllAction();
-        IntegrationTabs.Visibility = Visibility.Collapsed;
         MarketListPage.Visibility = Visibility.Collapsed;
         MarketDetailPage.Visibility = Visibility.Visible;
         DetailModeChanged?.Invoke(true);
@@ -150,7 +141,7 @@ public sealed partial class MarketplaceView : UserControl
     private bool HasUpdate(MarketplaceItem item) => _runtime?.Packages.Store.InstalledVersion(item.Plugin.Id) is { } current &&
         Version.TryParse(current, out var installed) && Version.TryParse(item.Plugin.Version, out var available) && available > installed;
 
-    private void UpdateDetail(bool updateBreadcrumbs = true)
+    private void UpdateDetail()
     {
         if (_opened is not { } item || _runtime is null) return;
         var installed = _isInstalled(item.Plugin.Id);
@@ -176,40 +167,6 @@ public sealed partial class MarketplaceView : UserControl
         MarketCancelButton.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
         InstallProgress.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
         MarketNavigationHint.Text = busy ? "Esc Cancel" : "⌫ / Esc Back";
-        if (updateBreadcrumbs) UpdateBreadcrumbs();
-    }
-
-    private bool _settingsLayout;
-    internal void UseSettingsLayout()
-    {
-        _settingsLayout = true;
-        IntegrationTabs.Visibility = Visibility.Collapsed;
-        MarketTitle.Text = "Discover plugins";
-        UpdateBreadcrumbs();
-    }
-
-    private void UpdateBreadcrumbs()
-    {
-        // Settings already provide navigation through their persistent sidebar.
-        MarketBreadcrumbs.Visibility = _settingsLayout ? Visibility.Collapsed : Visibility.Visible;
-        if (_settingsLayout) return;
-        var crumbs = new List<Crumb> { new(_settingsLayout ? "Settings" : "Quick Launch", () =>
-        {
-            ShowList(true);
-            LauncherRequested?.Invoke(this, EventArgs.Empty);
-        }, _settingsLayout ? "Marketplace breadcrumb Settings" : "Marketplace breadcrumb Quick Launch") };
-        if (!IsDetail) crumbs.Add(new("Plugins"));
-        else
-        {
-            crumbs.Add(new("Plugins", () => ShowList(true), "Marketplace breadcrumb catalog"));
-            if (_reviewing)
-            {
-                crumbs.Add(new(_opened?.Title ?? "Plugin", CancelInstall, "Marketplace breadcrumb detail"));
-                crumbs.Add(new("Install"));
-            }
-            else crumbs.Add(new(_opened?.Title ?? "Plugin"));
-        }
-        MarketBreadcrumbs.SetItems(crumbs.ToArray());
     }
 
     private void ShowList(bool reset)
@@ -217,8 +174,6 @@ public sealed partial class MarketplaceView : UserControl
         CancelPending();
         _reviewing = false;
         IsDetail = false;
-        IntegrationTabs.Visibility = _settingsLayout ? Visibility.Collapsed : Visibility.Visible;
-        MarketTitle.Text = _settingsLayout ? "Discover plugins" : "Plugins";
         MarketListPage.Visibility = Visibility.Visible;
         MarketDetailPage.Visibility = Visibility.Collapsed;
         MarketPrimaryButton.Visibility = MarketCancelButton.Visibility = Visibility.Collapsed;
@@ -238,7 +193,6 @@ public sealed partial class MarketplaceView : UserControl
     {
         if (_reviewing || _installation is not null) CancelInstall();
         else if (IsDetail) ShowList(false);
-        else ExitRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void CancelPending()
@@ -262,11 +216,11 @@ public sealed partial class MarketplaceView : UserControl
         if (_runtime.Packages.Store.PendingRestart(item.Plugin.Id))
         {
             if (RestartRequested is null) return;
-            _restarting = true; _error = null; UpdateDetail(false);
+            _restarting = true; _error = null; UpdateDetail();
             try { _error = await RestartRequested(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { _error = "Restart could not finish. Close and reopen TypeWhisper to apply the update."; }
-            finally { _restarting = false; if (IsDetail) UpdateDetail(false); }
+            finally { _restarting = false; if (IsDetail) UpdateDetail(); }
             return;
         }
         if (_isInstalled(item.Plugin.Id) && !HasUpdate(item)) { ManageRequested?.Invoke(item.Plugin.Id); return; }
@@ -280,7 +234,7 @@ public sealed partial class MarketplaceView : UserControl
         var entry = _entries.Single(entry => entry.Id == item.Plugin.Id);
         using var operation = new CancellationTokenSource();
         _installation = operation; _error = null; _operationMessage = "Preparing installation…"; SetProgress(0);
-        UpdateDetail(updateBreadcrumbs: false);
+        UpdateDetail();
         var openSettings = false;
         try
         {

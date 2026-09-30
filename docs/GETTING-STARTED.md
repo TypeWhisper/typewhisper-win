@@ -53,8 +53,9 @@ The **Recent transcriptions** shortcut and tray entry open a small palette with
 your latest transcriptions. Choose one to insert it into the app you were using.
 Without selected or copied text, the workflow palette offers the same list.
 
-Quick Launch is still available through its own shortcut while it is being
-retired in favor of the layout above.
+Messages that need your attention, such as a shortcut that could not be
+registered, appear in a card at the position of the recording overlay. The card
+does not take focus from the app you are using and closes on its own.
 
 Use Integrations to manage installed plugins and their settings. Installing a
 plugin, configuring it, downloading a model and selecting that model are separate

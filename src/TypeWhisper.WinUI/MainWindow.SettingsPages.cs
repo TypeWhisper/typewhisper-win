@@ -24,8 +24,6 @@ public sealed partial class MainWindow
 
     private void InitializeSettingsPages()
     {
-        WorkflowsView.UseSettingsLayout();
-        RecorderView.UseSettingsLayout();
         var page = _workflowsPage = new Grid { RowSpacing = 12 };
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -45,7 +43,6 @@ public sealed partial class MainWindow
         // Search applies to the list only; detail pages have their own breadcrumb back to it.
         WorkflowsView.DetailModeChanged += detail => search.Visibility = detail ? Visibility.Collapsed : Visibility.Visible;
         WorkflowsView.ExitRequested += (_, _) => _settingsPageExited = true;
-        RecorderView.ExitRequested += (_, _) => _settingsPageExited = true;
     }
 
     private void OpenSettingsPage(string category, Action? afterShown = null)
@@ -187,7 +184,6 @@ public sealed partial class MainWindow
         if (_lexicon is not null) return;
         _lexicon = new LexiconView();
         _lexicon.ConnectTraining(_dictation);
-        _lexicon.UseSettingsLayout();
         _lexicon.ExitRequested += () => _settingsPageExited = true;
     }
 
@@ -196,7 +192,6 @@ public sealed partial class MainWindow
         if (_fileTranscription is not null) return;
         _fileTranscription = new FileTranscriptionView();
         _fileTranscription.Connect(_dictation);
-        _fileTranscription.UseSettingsLayout();
         _fileTranscription.ExitRequested += () => _settingsPageExited = true;
     }
 

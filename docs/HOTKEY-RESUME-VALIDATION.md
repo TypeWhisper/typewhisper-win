@@ -24,6 +24,6 @@ Marco also confirmed a physical USB microphone disconnect/reconnect using a USB 
 2. Repeat with the main modifier-only chord and configured alternate Hold/Toggle shortcuts.
 3. Lock/unlock without sleep, including a modifier held during unlock. No recording should start until the keys are released and a fresh chord is pressed.
 4. Pause dictation hotkeys from the tray, sleep/wake, then confirm they remain paused. Resume them explicitly and verify the next gesture.
-5. Repeat several cycles; check the workflow palette, Quick Launch and workflow shortcuts still respond and no duplicate dictation starts occur.
+5. Repeat several cycles; check the workflow palette and workflow shortcuts still respond and no duplicate dictation starts occur.
 
 Do not close issue #372 until the physical checks are recorded. Pending failures should be distinguished from microphone capture failures, where the hotkey fires but audio does not start.

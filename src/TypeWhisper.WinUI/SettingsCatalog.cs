@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Media;
 namespace TypeWhisper.WinUI;
 
 // UI inventory of the existing AppSettings and SettingsViewModel, not a settings migration.
-// Values live only in the launcher's session dictionary. No production services are called.
+// Values live only in the app's session dictionary. No production services are called.
 internal static partial class SettingsCatalog
 {
     private sealed record Field(string Category, string Key, string Label, string Value, string Hint, string[]? Choices = null);
@@ -58,7 +58,7 @@ internal static partial class SettingsCatalog
         Choice("Dictation", "EnglishOutputVariant", "English spelling", "As transcribed", "As transcribed|American|British"),
         Choice("Dictation", "GermanOutputVariant", "German spelling", "As transcribed", "As transcribed|Germany|Switzerland"),
         Toggle("Dictation", "VocabularyBoostingEnabled", "Vocabulary boosting"),
-        Choice("Dictation", "VocabularyBoostingEnabledPackIds", "Vocabulary packs", "None", "None|Sample technical vocabulary|Sample medical vocabulary", "Sample packs. Manage your own words in Quick Launch."),
+        Choice("Dictation", "VocabularyBoostingEnabledPackIds", "Vocabulary packs", "None", "None|Sample technical vocabulary|Sample medical vocabulary", "Sample packs. Manage your own words in Dictionary."),
         Choice("Dictation", "VocabularyBoostingSelectedIndustryPresetId", "Industry", "General", "General|Technology|Medicine|Legal", "Sample industry presets."),
         Choice("Dictation", "SpokenFormattingProfiles", "Spoken formatting", "Engine defaults", "Engine defaults|Sample punctuation rules", "Engine-specific formatting is a sample here."),
 
@@ -77,7 +77,6 @@ internal static partial class SettingsCatalog
 
         Text("Shortcuts", "MainDictationHotkeys", "Main dictation", LocalDictationSession.DefaultShortcut),
         Text("Shortcuts", "CancelProcessingHotkeys", "Cancel processing", "", "Cancel final dictation processing or an active selected-text workflow. Does nothing while idle or recording."),
-        Text("Shortcuts", "QuickLaunchHotkeys", "Quick Launch", "Alt+Space"),
         Text("Shortcuts", "PushToTalkHotkey", "Push to talk"),
         Text("Shortcuts", "ToggleOnlyHotkeys", "Toggle recording"),
         Text("Shortcuts", "HoldOnlyHotkeys", "Hold to record"),
@@ -135,7 +134,7 @@ internal static partial class SettingsCatalog
     internal static IEnumerable<(string Key, string Label, string Value)> ShortcutBindings(Dictionary<string, string> values) =>
         Fields.Where(field => field.Category == "Shortcuts").Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
 
-    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitPasteLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null, Func<string, string, string?>? commitRecordingShortcut = null, Func<string, string?>? commitRecorderHotkeys = null)
+    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitPasteLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null, Func<string, string, string?>? commitRecordingShortcut = null, Func<string, string?>? commitRecorderHotkeys = null)
     {
         target.Children.Clear();
         var title = Label(SettingsWindow.DisplayName(category), 24);
@@ -161,12 +160,11 @@ internal static partial class SettingsCatalog
         if (category == "Shortcuts")
         {
             var guide = Label("Your actions, your keys. Add alternatives with + or click a key to change it.", 13, true);
-            ToolTipService.SetToolTip(guide, "Quick Launch, main dictation and cancel processing shortcuts are global and saved for this development profile. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable.");
+            ToolTipService.SetToolTip(guide, "Main dictation and cancel processing shortcuts are global and saved for this development profile. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable.");
             target.Children.Add(guide);
             var list = new StackPanel { Spacing = 24 };
             (string Title, string[] Keys)[] groups =
             [
-                ("Quick Launch", ["QuickLaunchHotkeys"]),
                 ("Dictation", ["MainDictationHotkeys", "CancelProcessingHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
                 ("Recent transcriptions", ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys", "PasteLastTranscriptionHotkeys", "ReadLastTranscriptionHotkeys"]),
                 ("Workflow palette", ["WorkflowPaletteHotkeys"]),
@@ -190,7 +188,7 @@ internal static partial class SettingsCatalog
                     var field = Fields.Single(f => f.Key == key);
                     // Preserve field tags so search results still scroll to the exact action.
                     var item = new StackPanel { Tag = field.Key };
-                    var commit = field.Key switch { "QuickLaunchHotkeys" => commitLauncherHotkeys,
+                    var commit = field.Key switch {
                         "MainDictationHotkeys" => commitDictationHotkeys, "CancelProcessingHotkeys" => commitCancelProcessingHotkeys,
                         "RecentTranscriptionsHotkeys" => commitRecentTranscriptionsHotkeys,
                         "CopyLastTranscriptionHotkeys" => commitCopyLastTranscriptionHotkeys,

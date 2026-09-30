@@ -5,13 +5,12 @@ namespace TypeWhisper.Presentation.Tests;
 public sealed class WorkflowPaletteShortcutTests
 {
     [Theory]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(false, false, true)]
-    public void ExistingWorkAndShutdownPreventNavigation(bool closing, bool busy, bool otherWorkspace)
-        => Assert.NotNull(WorkflowPaletteShortcutAdmission.Rejection(closing, busy, otherWorkspace));
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void RunningWorkAndShutdownPreventThePalette(bool closing, bool busy)
+        => Assert.NotNull(WorkflowPaletteShortcutAdmission.Rejection(closing, busy));
 
     [Fact]
-    public void IdleLauncherAndExistingWorkflowCanBeFocused()
-        => Assert.Null(WorkflowPaletteShortcutAdmission.Rejection(false, false, false));
+    public void IdleAppOpensThePalette()
+        => Assert.Null(WorkflowPaletteShortcutAdmission.Rejection(false, false));
 }
