@@ -13,7 +13,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
     internal void Render(StackPanel content, List<ChoicePicker> pickers)
     {
         content.Children.Clear();
-        content.Children.Add(SettingsHelp.Label("Audio", "Audio preferences are saved in this development profile and used by dictation.", 24));
+        content.Children.Add(SettingsHelp.Label("Audio", "Audio preferences are saved automatically and used by dictation.", 24));
         var microphones = new MicrophonePriorityEditor(session);
         content.Children.Add(microphones);
         pickers.Add(microphones.AddPicker);

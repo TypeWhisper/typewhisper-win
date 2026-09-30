@@ -24,7 +24,7 @@ internal static class LiveHistoryRetentionSettings
         var oldNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("Automatic history deletion and"));
         if (oldNote is not null) oldNote.Text = "Personal memory is not available yet.";
         var previewNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("History saving is saved"));
-        if (previewNote is not null) previewNote.Text = "History saving and retention are saved for this development profile. Unavailable controls are disabled.";
+        if (previewNote is not null) previewNote.Text = "History saving and retention are saved automatically. Unavailable controls are disabled.";
 
         row.Children.Add(SettingsHelp.Label("History retention",
             "Forever keeps existing history. Age is measured from when an entry was created."));
