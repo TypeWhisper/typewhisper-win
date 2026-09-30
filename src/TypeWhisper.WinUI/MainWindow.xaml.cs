@@ -12,7 +12,6 @@ public sealed partial class MainWindow : Window
     internal nint TrayMenuHandle { set => _dictation.TrayMenuHandle = value; }
     private readonly WinUIHttpApi _httpApi;
     private DictationHotkeyRegistration? _dictationHotkey;
-    private ProcessingCancelHotkeyRegistration? _cancelProcessingHotkey;
     private TypeWhisper.Presentation.DictationInputCoordinator? _dictationInput;
     private Action? _observeInputMode;
     private static string DictationHotkeyPath => WinUIProfile.DataPath("dictation-hotkeys.txt");
@@ -20,15 +19,7 @@ public sealed partial class MainWindow : Window
     {
         if (_closing || _profileRestoreClosing) return "The app is shutting down.";
         if (_dictationHotkey is null) return "Dictation hotkeys are unavailable. Restart the app.";
-        if (_cancelProcessingHotkey?.ConflictWithDictation(value) is { } conflict) return conflict;
-        if (_workflowShortcuts?.Conflict(value, modifierOnly: true) is { } workflowConflict) return workflowConflict;
-        if (RecordingShortcutConflict(value, true) is { } recordingConflict) return recordingConflict;
-        if (RecorderShortcutConflict(value, true) is { } recorderConflict) return recorderConflict;
-        if (WorkflowPaletteShortcutConflict(value, modifierOnly: true) is { } paletteConflict) return paletteConflict;
-        if (HistoryShortcutConflict(value, modifierOnly: true) is { } historyConflict) return historyConflict;
-        if (CopyLastShortcutConflict(value, modifierOnly: true) is { } copyConflict) return copyConflict;
-        if (PasteLastShortcutConflict(value, modifierOnly: true) is { } pasteConflict) return pasteConflict;
-        if (ReadLastShortcutConflict(value, modifierOnly: true) is { } readConflict) return readConflict;
+        if (ShortcutConflict(TypeWhisper.Presentation.GlobalShortcuts.MainDictation, value) is { } conflict) return conflict;
         if (_dictation.IsRecording) return "Finish the recording before changing its shortcut.";
         var previous = _dictationHotkey.Value;
         var error = _dictationHotkey.TryChange(value);
@@ -90,21 +81,24 @@ public sealed partial class MainWindow : Window
             string? cancelError;
             try
             {
-                _cancelProcessingHotkey = new(this, () => CanCancelProcessing, RequestProcessingCancellation,
-                    () => _dictationHotkey?.Value ?? "");
-                cancelError = _cancelProcessingHotkey.Initialize();
+                _cancelProcessingShortcut = new(this, TypeWhisper.Presentation.GlobalShortcuts.CancelProcessing, () =>
+                {
+                    // Cancels only active final processing or a running workflow; never starts or retries work.
+                    if (CanCancelProcessing && !ShortcutRecorder.AnyEditing) RequestProcessingCancellation();
+                }, 0x7500, "cancel-processing-hotkeys.txt", "Cancel shortcuts", "cancel", ShortcutConflict);
+                cancelError = _cancelProcessingShortcut.Initialize();
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 System.Diagnostics.Trace.TraceError("Cancel shortcut registration failed: {0}", ex);
                 cancelError = "Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.";
             }
-            _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey?.Value ?? "";
+            _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingShortcut?.Value ?? "";
             await _dictation.InitializeAsync();
             if (!_closing) await _httpApi.InitializeAsync();
             EnsureFileTranscription();
             InitializeWorkflowShortcuts();
-            InitializeHistoryShortcut();
+            InitializeRecentTranscriptionsShortcut();
             InitializeCopyLastShortcut();
             InitializePasteLastShortcut();
             InitializeReadLastShortcut();
@@ -151,15 +145,8 @@ public sealed partial class MainWindow : Window
     internal async Task ShutdownDictationAsync()
     {
         _hotkeyRecovery?.Dispose();
-        _cancelProcessingHotkey?.Dispose();
-        _historyHotkey?.Dispose();
-        _workflowPaletteHotkey?.Dispose();
-        DisposeRecordingShortcuts();
-        _recorderHotkey?.Dispose();
-        _copyLastHotkey?.Dispose();
-        _pasteLastHotkey?.Dispose();
-        _foregroundHistory?.Dispose();
-        _readLastHotkey?.Dispose();
+        // Shortcuts stop before the recorder saves. Profile exits reach ShutdownCoreAsync directly, so it stops them too.
+        DisposeShortcutRegistrations();
         DisposeEscapeCancel();
         await StopWorkflowShortcutsAsync();
         // The recorder owns the session gate while capturing; save it before session shutdown waits for that gate.
@@ -172,15 +159,7 @@ public sealed partial class MainWindow : Window
         _closing = true;
         _hotkeyRecovery?.Dispose();
         await StopWorkflowShortcutsAsync();
-        _cancelProcessingHotkey?.Dispose();
-        _historyHotkey?.Dispose();
-        _workflowPaletteHotkey?.Dispose();
-        DisposeRecordingShortcuts();
-        _recorderHotkey?.Dispose();
-        _copyLastHotkey?.Dispose();
-        _pasteLastHotkey?.Dispose();
-        _foregroundHistory?.Dispose();
-        _readLastHotkey?.Dispose();
+        DisposeShortcutRegistrations();
         DisposeEscapeCancel();
         _dictationHotkey?.Dispose();
         _dictationInput?.Dispose();
@@ -540,7 +519,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.IntegrationDismissed += PluginsView.CloseSettingsPage;
             _settingsWindow.UpdateIntegrationNavigation(PluginsView.SettingsNavigationItems);
             _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
-            _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
+            _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeRecentTranscriptionsShortcut;
             _settingsWindow.CommitCopyLastTranscriptionHotkeys = ChangeCopyLastShortcut;
             _settingsWindow.CommitPasteLastTranscriptionHotkeys = ChangePasteLastShortcut;
             _settingsWindow.CommitReadLastTranscriptionHotkeys = ChangeReadLastShortcut;
@@ -548,22 +527,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.CommitRecordingShortcut = ChangeRecordingShortcut;
             _settingsWindow.CommitRecorderHotkeys = ChangeRecorderShortcut;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
-            _settingsWindow.CommitCancelProcessingHotkeys = value =>
-            {
-                if (_closing || _profileRestoreClosing) return "The app is shutting down.";
-                if (_cancelProcessingHotkey is null) return "Cancel shortcuts are unavailable. Wait for startup to finish or restart the app.";
-                if (_workflowShortcuts?.Conflict(value) is { } conflict) return conflict;
-                if (RecordingShortcutConflict(value) is { } recordingConflict) return recordingConflict;
-                if (RecorderShortcutConflict(value) is { } recorderConflict) return recorderConflict;
-                if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
-                if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
-                if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
-                if (PasteLastShortcutConflict(value) is { } pasteConflict) return pasteConflict;
-                if (ReadLastShortcutConflict(value) is { } readConflict) return readConflict;
-                var error = _cancelProcessingHotkey.TryChange(value);
-                _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey.Value;
-                return error;
-            };
+            _settingsWindow.CommitCancelProcessingHotkeys = value => ChangeActionShortcut(_cancelProcessingShortcut, "Cancel", value);
             _settingsWindow.CreateSetupWizard = exit => new SetupWizard(_settingsValues, exit,
                 value => _closing || _profileRestoreClosing ? "The app is shutting down." : ChangeDictationHotkeys(value),
                 _dictation);
@@ -590,7 +554,7 @@ public sealed partial class MainWindow : Window
                     content.Children.Add(new TextBlock { Text = "Integrations", FontSize = 18 });
                     content.Children.Add(new RaycastIntegrationView());
                 }
-                if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)
+                if (category == "Shortcuts" && _cancelProcessingShortcut?.Error is { } shortcutError)
                     content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });
                 if (category == "Files & recovery")
                 {

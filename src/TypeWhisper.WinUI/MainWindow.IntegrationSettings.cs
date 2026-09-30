@@ -34,11 +34,12 @@ public sealed partial class MainWindow
         PluginsView.SettingsNavigationChanged += () => _settingsWindow?.UpdateIntegrationNavigation(PluginsView.SettingsNavigationItems);
     }
 
-    private void ShowIntegrationSettings(bool discover)
+    // Opens the first plugin settings page, or Integrations when there is none.
+    private void ShowIntegrationSettings()
     {
         OpenSettings();
         var first = PluginsView.SettingsNavigationItems.FirstOrDefault();
-        _settingsWindow?.ShowCategory(discover || first.Id is null ? "Integrations" : "plugin:" + first.Id);
+        _settingsWindow?.ShowCategory(first.Id is null ? "Integrations" : "plugin:" + first.Id);
     }
 
     private async void ShowIntegrationPage(string? pluginId)
@@ -61,7 +62,7 @@ public sealed partial class MainWindow
         if (_discoverSettings && MarketplaceView.IsDetail) { MarketplaceView.GoBack(); return true; }
         if (_integrationSearch?.Text.Length > 0) { _integrationSearch.Text = ""; return true; }
         if (_discoverSettings && PluginsView.SettingsNavigationItems.Count > 0)
-        { ShowIntegrationSettings(false); return true; }
+        { ShowIntegrationSettings(); return true; }
         return false;
     }
 }

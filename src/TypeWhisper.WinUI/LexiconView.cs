@@ -122,7 +122,7 @@ public sealed partial class LexiconView : UserControl
             $"{(_store.Entries.Any(entry => entry.Id == _draft.Id) ? "Edit" : "New")} {Singular}";
         if (_draft is null) _crumbs.SetItems(new Crumb(Section));
         else _crumbs.SetItems(new(Section, () => Navigate(CloseEditor)), new("Editor"));
-        _notice.Text = _store.LastError ?? (_kind == LexiconKind.Snippet ? "Saved snippets are applied to your next dictation." : "Saved in this development profile · applied to the next dictation using existing Windows dictionary rules.");
+        _notice.Text = _store.LastError ?? (_kind == LexiconKind.Snippet ? "Saved snippets are applied to your next dictation." : "Saved · applied to the next dictation using existing Windows dictionary rules.");
         AutomationProperties.SetName(_headingHelp, "About " + (_draft is null ? Section : _heading.Text));
         if (_draft is null) RenderList(); else RenderEditor();
         RenderActions(); _scroll.ChangeView(null, 0, null, true);

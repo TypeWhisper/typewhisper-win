@@ -7,54 +7,19 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private HotkeyRegistration? _workflowPaletteHotkey;
-    private ProcessingCancelShortcut? _workflowPaletteShortcutSettings;
     private WorkflowPaletteWindow? _workflowPalette;
 
-    private void InitializeWorkflowPaletteShortcut()
-    {
-        if (_closing || _profileRestoreClosing) return;
-        _workflowPaletteHotkey = new(this, OpenWorkflowPaletteFromShortcut, 0x8000);
-        _workflowPaletteShortcutSettings = new(WinUIProfile.DataPath("workflow-palette-hotkeys.txt"),
-            new WorkflowPaletteShortcutBackend(_workflowPaletteHotkey), ValidateWorkflowPaletteShortcut, "Workflow palette shortcuts");
-        var error = _workflowPaletteShortcutSettings.Initialize();
-        _settingsValues["WorkflowPaletteHotkeys"] = _workflowPaletteHotkey.Value;
-        if (error is not null) ShowActivationNotice(error);
-    }
+    private void InitializeWorkflowPaletteShortcut() => _workflowPaletteShortcut = InitializeActionShortcut(GlobalShortcuts.WorkflowPalette,
+        OpenWorkflowPaletteFromShortcut, 0x8000, "workflow-palette-hotkeys.txt", "Workflow palette shortcuts", "workflow palette");
 
-    private string? WorkflowPaletteShortcutConflict(string value, bool modifierOnly = false) =>
-        ProcessingCancelShortcut.Conflicts(_workflowPaletteHotkey?.Value ?? "", WorkflowShortcutCatalog.Canonical(value), modifierOnly)
-            ? "Already used by Workflow palette. Change that shortcut first." : null;
-
-    private string? ValidateWorkflowPaletteShortcut(string value)
-    {
-        if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the workflow palette shortcut again using the shortcut editor.";
-        foreach (var chord in ShortcutRules.Split(value))
-            if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
-            return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
-            return "Already used by Cancel processing.";
-        return RecordingShortcutConflict(value) ?? RecorderShortcutConflict(value) ?? HistoryShortcutConflict(value) ?? ReadLastShortcutConflict(value) ?? CopyLastShortcutConflict(value) ?? PasteLastShortcutConflict(value) ?? _workflowShortcuts?.Conflict(value);
-    }
-
-    private string? ChangeWorkflowPaletteShortcut(string value)
-    {
-        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
-        if (_workflowPaletteShortcutSettings is null) return "Workflow palette shortcuts are unavailable. Wait for startup to finish or restart.";
-        var error = _workflowPaletteShortcutSettings.Save(WorkflowShortcutCatalog.Canonical(value));
-        _settingsValues["WorkflowPaletteHotkeys"] = _workflowPaletteShortcutSettings.Value;
-        return error;
-    }
+    private string? ChangeWorkflowPaletteShortcut(string value) => ChangeActionShortcut(_workflowPaletteShortcut, "Workflow palette", value);
 
     private void OpenWorkflowPaletteFromShortcut()
     {
         if (_closing || _profileRestoreClosing || _workflowShortcutsStopping || ShortcutRecorder.AnyEditing) return;
         // The shortcut toggles the panel, as on macOS.
         if (_workflowPalette is { } open) { open.Dismiss(); return; }
-        var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
-            || WorkflowsView.IsBusy || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
-        if (WorkflowPaletteShortcutAdmission.Rejection(false, busy) is { } refusal)
+        if (ShortcutAdmission.Rejection("the workflow palette", ShortcutActionBusy || WorkflowsView.IsBusy || _dictation.Models.Busy) is { } refusal)
         { ShowActivationNotice(refusal); return; }
         var target = ForegroundWindowHistory.CurrentTarget;
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -185,11 +150,5 @@ public sealed partial class MainWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { palette.ShowMessage("The text could not be inserted or copied. Try again."); }
-    }
-
-    private sealed class WorkflowPaletteShortcutBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
-    {
-        public string Value => registration.Value;
-        public string? TryChange(string value) => registration.TryChange(value);
     }
 }

@@ -51,7 +51,7 @@ public sealed class WorkflowShortcutCatalogTests : IDisposable
     public void CollisionAndReservedModifierPrefixAreRejectedBeforeRegistration()
     {
         Seed(Draft()); var backend = new Backend();
-        var catalog = Catalog(backend, reserved: chord => ProcessingCancelShortcut.Conflicts(chord, "CTRL+SHIFT", true) ? "Dictation prefix" : null);
+        var catalog = Catalog(backend, reserved: chord => GlobalShortcuts.Overlap(chord, false, "CTRL+SHIFT", true) ? "Dictation prefix" : null);
         Assert.Null(catalog.Initialize());
         var count = backend.Requests.Count;
         Assert.NotNull(catalog.ValidateDraft("other", "control+j", true));
@@ -61,7 +61,7 @@ public sealed class WorkflowShortcutCatalogTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => catalog.Save(Draft("other")));
         Assert.Equal(count, backend.Requests.Count);
         Assert.Single(new ManualWorkflowStore(PathName).Read());
-        Assert.NotNull(catalog.Conflict("CTRL", modifierOnly: true));
+        Assert.Equal("CTRL+J", catalog.ActiveValue);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public sealed class WorkflowShortcutCatalogTests : IDisposable
         Assert.Equal("first", restarted.Resolve("CTRL+K")?.Id);
     }
 
-    private sealed class Backend : IProcessingCancelShortcutBackend
+    private sealed class Backend : IShortcutRegistrationBackend
     {
         public string Value { get; private set; } = "";
         public List<string> Requests { get; } = [];

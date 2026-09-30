@@ -2,9 +2,9 @@ using Xunit;
 
 namespace TypeWhisper.Presentation.Tests;
 
-public sealed class HistoryShortcutTests
+public sealed class RecentTranscriptionsShortcutTests
 {
-    private sealed class Backend : IProcessingCancelShortcutBackend
+    private sealed class Backend : IShortcutRegistrationBackend
     {
         public string Value { get; private set; } = "";
         internal string? Reject;
@@ -18,14 +18,14 @@ public sealed class HistoryShortcutTests
     [Fact]
     public void UnassignedDefaultAndSavedChordReloadWithoutRewriting()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "history-shortcut-" + Guid.NewGuid().ToString("N"));
-        var path = Path.Combine(folder, "history.txt");
+        var folder = Path.Combine(Path.GetTempPath(), "recent-transcriptions-shortcut-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(folder, "recent-transcriptions.txt");
         try
         {
-            var backend = new Backend(); var settings = new ProcessingCancelShortcut(path, backend, _ => null);
+            var backend = new Backend(); var settings = new PersistedShortcut(path, backend, _ => null, "Recent transcription shortcuts");
             Assert.Null(settings.Initialize()); Assert.Empty(settings.Value); Assert.False(File.Exists(path));
             Assert.Null(settings.Save("CTRL+ALT+H")); var before = File.ReadAllBytes(path);
-            var reloaded = new ProcessingCancelShortcut(path, new Backend(), _ => null);
+            var reloaded = new PersistedShortcut(path, new Backend(), _ => null, "Recent transcription shortcuts");
             Assert.Null(reloaded.Initialize()); Assert.Equal("CTRL+ALT+H", reloaded.Value);
             Assert.Equal(before, File.ReadAllBytes(path));
         }
@@ -35,11 +35,11 @@ public sealed class HistoryShortcutTests
     [Fact]
     public void PersistenceFailureRollsRegistrationBackAndRemovesTemporaryFile()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "history-shortcut-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder); var path = Path.Combine(folder, "history.txt");
+        var folder = Path.Combine(Path.GetTempPath(), "recent-transcriptions-shortcut-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder); var path = Path.Combine(folder, "recent-transcriptions.txt");
         try
         {
-            var backend = new Backend(); var settings = new ProcessingCancelShortcut(path, backend, _ => null);
+            var backend = new Backend(); var settings = new PersistedShortcut(path, backend, _ => null, "Recent transcription shortcuts");
             Assert.Null(settings.Save("CTRL+ALT+H")); File.Delete(path); Directory.CreateDirectory(path);
             Assert.NotNull(settings.Save("CTRL+ALT+J")); Assert.Equal("CTRL+ALT+H", settings.Value);
             Assert.Empty(Directory.GetFiles(folder)); Assert.True(Directory.Exists(path));
@@ -53,7 +53,7 @@ public sealed class HistoryShortcutTests
         var path = Path.GetTempFileName();
         try
         {
-            var backend = new Backend(); var settings = new ProcessingCancelShortcut(path, backend, _ => null);
+            var backend = new Backend(); var settings = new PersistedShortcut(path, backend, _ => null, "Recent transcription shortcuts");
             Assert.Null(settings.Save("CTRL+ALT+H")); backend.Reject = "CTRL+ALT+J";
             Assert.NotNull(settings.Save("CTRL+ALT+J")); Assert.Equal("CTRL+ALT+H", File.ReadAllText(path));
             Assert.Equal("CTRL+ALT+H", settings.Value);
@@ -68,8 +68,8 @@ public sealed class HistoryShortcutTests
         try
         {
             File.WriteAllText(path, "CTRL+ALT+H"); var backend = new Backend();
-            var settings = new ProcessingCancelShortcut(path, backend, chord =>
-                ProcessingCancelShortcut.Conflicts(chord, "CTRL+ALT", true) ? "Dictation conflict." : null);
+            var settings = new PersistedShortcut(path, backend, chord =>
+                GlobalShortcuts.Overlap(chord, false, "CTRL+ALT", true) ? "Dictation conflict." : null, "Recent transcription shortcuts");
             Assert.Equal("Dictation conflict.", settings.Initialize()); Assert.Empty(backend.Value);
             Assert.Equal("CTRL+ALT+H", File.ReadAllText(path));
         }
@@ -79,11 +79,11 @@ public sealed class HistoryShortcutTests
     [Fact]
     public void FailedRollbackReportsActualRegistrationWithoutClaimingPreviousValue()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "history-shortcut-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder); var path = Path.Combine(folder, "history.txt");
+        var folder = Path.Combine(Path.GetTempPath(), "recent-transcriptions-shortcut-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder); var path = Path.Combine(folder, "recent-transcriptions.txt");
         try
         {
-            var backend = new Backend(); var settings = new ProcessingCancelShortcut(path, backend, _ => null);
+            var backend = new Backend(); var settings = new PersistedShortcut(path, backend, _ => null, "Recent transcription shortcuts");
             Assert.Null(settings.Save("CTRL+ALT+H")); File.Delete(path); Directory.CreateDirectory(path);
             backend.Reject = "CTRL+ALT+H";
             Assert.Contains("could not be restored", settings.Save("CTRL+ALT+J"));
@@ -93,13 +93,13 @@ public sealed class HistoryShortcutTests
     }
 
     [Fact]
-    public void SharedControllerLabelsHistoryLoadAndSaveFailuresCorrectly()
+    public void SharedControllerLabelsRecentTranscriptionsLoadAndSaveFailuresCorrectly()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "history-shortcut-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(Path.GetTempPath(), "recent-transcriptions-shortcut-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {
-            var settings = new ProcessingCancelShortcut(folder, new Backend(), _ => null, "Recent transcription shortcuts");
+            var settings = new PersistedShortcut(folder, new Backend(), _ => null, "Recent transcription shortcuts");
             Assert.StartsWith("Recent transcription shortcuts", settings.Initialize());
             Assert.StartsWith("Recent transcription shortcuts", settings.Save("CTRL+ALT+H"));
         }
@@ -111,16 +111,6 @@ public sealed class HistoryShortcutTests
     [InlineData("CTRL+ALT+H", "CTRL+ALT", true, true)]
     [InlineData("CTRL+ALT+H", "CTRL+SHIFT", true, false)]
     [InlineData("CTRL+ALT+H", "CTRL+ALT+J", false, false)]
-    public void SharedConflictRulesCoverOrdinaryChordsAndDictationModifierPrefixes(string history, string other, bool modifiers, bool conflict)
-        => Assert.Equal(conflict, ProcessingCancelShortcut.Conflicts(history, other, modifiers));
-
-    [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public void ClosingOrRunningWorkRejectsNavigation(bool closing, bool busy)
-        => Assert.NotNull(HistoryShortcutAdmission.Rejection(closing, busy));
-
-    [Fact]
-    public void IdleAppAllowsNavigation()
-        => Assert.Null(HistoryShortcutAdmission.Rejection(false, false));
+    public void SharedConflictRulesCoverOrdinaryChordsAndDictationModifierPrefixes(string recent, string other, bool modifiers, bool conflict)
+        => Assert.Equal(conflict, GlobalShortcuts.Overlap(recent, false, other, modifiers));
 }

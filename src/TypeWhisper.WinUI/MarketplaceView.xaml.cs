@@ -166,7 +166,7 @@ public sealed partial class MarketplaceView : UserControl
             && (!pending || RestartRequested is not null);
         MarketCancelButton.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
         InstallProgress.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
-        MarketNavigationHint.Text = busy ? "Esc Cancel" : "⌫ / Esc Back";
+        MarketNavigationHint.Text = busy ? "Esc Cancel" : "Esc Back";
     }
 
     private void ShowList(bool reset)
@@ -177,7 +177,7 @@ public sealed partial class MarketplaceView : UserControl
         MarketListPage.Visibility = Visibility.Visible;
         MarketDetailPage.Visibility = Visibility.Collapsed;
         MarketPrimaryButton.Visibility = MarketCancelButton.Visibility = Visibility.Collapsed;
-        MarketNavigationHint.Text = "⌫ / Esc Back   ↑↓ Navigate   Enter Open";
+        MarketNavigationHint.Text = "Esc Back   ↑↓ Navigate   Enter Open";
         DetailModeChanged?.Invoke(false);
         if (reset)
         {

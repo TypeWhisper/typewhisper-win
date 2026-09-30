@@ -21,10 +21,10 @@ TypeWhisper for Windows follows the same product goals as TypeWhisper for macOS:
 | Cloud speech recognition | Supported | Cloud engines are supplied through the Windows plugin system and marketplace. |
 | AI text processing | Supported | Workflows use configured portable LLM providers. This does not depend on Apple Intelligence. |
 | Translation | Supported | Workflows use configured LLM providers. Some transcription providers also expose audio-to-English translation. Supporting Marian code does not establish an automatic local fallback in the WinUI host. |
-| Dictionary, snippets, and history | Supported | Windows-native settings and dashboard surfaces manage terms, corrections, snippets, and searchable transcription history. |
+| Dictionary, snippets, and history | Supported | The Dictionary and Snippets pages in Settings and the History window manage terms, corrections, snippets, and searchable transcription history. |
 | Backup and restore | Supported | A versioned portable JSON backup covers workflows, user dictionary data, snippets, hotkeys, registry plugin references, text-only history, and an explicit allowlist of portable preferences. Credentials, licenses, audio, hardware selections, and machine-local paths are excluded. The same safe-merge implementation is available in Settings, the authenticated HTTP API, and the CLI. |
 | Automation | Windows-native replacement | The local HTTP API and `typewhisper` CLI expose status, models, transcription, workflows, history, dictionary management, and dictation control. |
-| Compact status surfaces | Windows-native replacement | The WinUI recording overlay provides LED, timer, waveform, workflow, transcript preview, and microphone-level widgets. The app also provides a dashboard and system-tray controls. |
+| Compact status surfaces | Windows-native replacement | The WinUI recording overlay provides LED, timer, waveform, workflow, transcript preview, and microphone-level widgets. The app also provides a Home page in Settings and system-tray controls. |
 | Integrations | Windows-native replacement | The plugin marketplace, action plugins, HTTP API, and CLI replace launcher-specific integration contracts. |
 | Extensibility | Supported | The .NET plugin SDK supports transcription engines, LLM providers, post-processors, memory providers, TTS providers, event observers, and actions. |
 
@@ -36,7 +36,7 @@ TypeWhisper for Windows follows the same product goals as TypeWhisper for macOS:
 | Apple Intelligence | Platform-specific non-goal | AI processing uses explicit local or cloud provider plugins. TypeWhisper does not emulate or depend on Apple Intelligence services. |
 | SpeechAnalyzer | Platform-specific non-goal | SpeechAnalyzer is an Apple speech framework. Windows uses its own local and cloud transcription plugins. |
 | WhisperKit | Platform-specific non-goal | WhisperKit targets Apple platforms and Apple-native inference stacks. Windows offers whisper.cpp and other Windows-compatible local engines instead. |
-| WidgetKit | Platform-specific non-goal | WidgetKit extensions are not portable to Windows. The WinUI overlay, dashboard, and system tray are the supported TypeWhisper surfaces. A Windows Widgets integration is not required for parity. |
+| WidgetKit | Platform-specific non-goal | WidgetKit extensions are not portable to Windows. The WinUI overlay, the Home page in Settings, and the system tray are the supported TypeWhisper surfaces. A Windows Widgets integration is not required for parity. |
 
 Launcher integrations, including the previously tested Raycast integration, use
 the Windows HTTP API and CLI. They are separate clients rather than Apple-only

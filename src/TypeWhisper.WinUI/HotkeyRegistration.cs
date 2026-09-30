@@ -1,9 +1,10 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-internal sealed class HotkeyRegistration : IDisposable
+internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDisposable
 {
     private const uint WmHotkey = 0x0312;
     private const uint ModAlt = 0x0001;
@@ -18,7 +19,7 @@ internal sealed class HotkeyRegistration : IDisposable
     private readonly Dictionary<string, int> _bindings = new();
     private int _nextId;
 
-    internal string Value => string.Join(",", _bindings.Keys);
+    public string Value => string.Join(",", _bindings.Keys);
 
     internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase)
         : this(window, _ => callback(), idBase) { }
@@ -37,7 +38,7 @@ internal sealed class HotkeyRegistration : IDisposable
         _registered = true;
     }
 
-    internal string? TryChange(string value)
+    public string? TryChange(string value)
     {
         var requested = ShortcutRules.Split(value).Select(ShortcutRules.Normalize).Distinct().ToArray();
         var added = new Dictionary<string, int>();

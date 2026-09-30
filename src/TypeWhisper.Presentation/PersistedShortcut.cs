@@ -1,7 +1,7 @@
 namespace TypeWhisper.Presentation;
 
 /// <summary>Native registration boundary, whose current value is authoritative after a failed change.</summary>
-public interface IProcessingCancelShortcutBackend
+public interface IShortcutRegistrationBackend
 {
     /// <summary>The currently registered, canonical shortcuts.</summary>
     string Value { get; }
@@ -10,14 +10,14 @@ public interface IProcessingCancelShortcutBackend
 }
 
 /// <summary>Persists explicit shortcuts after successful registration; missing settings mean unassigned.</summary>
-public sealed class ProcessingCancelShortcut
+public sealed class PersistedShortcut
 {
     private readonly string _path;
-    private readonly IProcessingCancelShortcutBackend _backend;
+    private readonly IShortcutRegistrationBackend _backend;
     private readonly Func<string, string?> _validate;
     private readonly string _displayName;
     /// <summary>Creates an uninitialized controller; this does not register or write anything.</summary>
-    public ProcessingCancelShortcut(string path, IProcessingCancelShortcutBackend backend, Func<string, string?> validate, string displayName = "Cancel shortcuts")
+    public PersistedShortcut(string path, IShortcutRegistrationBackend backend, Func<string, string?> validate, string displayName)
     { _path = Path.GetFullPath(path); _backend = backend; _validate = validate; _displayName = displayName; }
     /// <summary>The actually registered shortcuts, not a failed draft.</summary>
     public string Value => _backend.Value;
@@ -82,21 +82,4 @@ public sealed class ProcessingCancelShortcut
         var right = requested.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return left.Length == right.Length && left.ToHashSet(StringComparer.Ordinal).SetEquals(right);
     }
-
-    /// <summary>Checks canonical cancel chords against ordinary shortcuts and modifier-only dictation prefixes.</summary>
-    public static bool Conflicts(string cancelValue, string otherValue, bool otherAllowsModifierOnly)
-    {
-        foreach (var cancel in cancelValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        foreach (var other in otherValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (cancel == other) return true;
-            var parts = other.Split('+');
-            if (otherAllowsModifierOnly && parts.Length > 0 && parts.All(IsModifier) && parts.All(cancel.Split('+').Contains)) return true;
-        }
-        return false;
-    }
-    private static bool IsModifier(string value) => value is "CTRL" or "ALT" or "SHIFT" or "WIN";
-    /// <summary>Requests cancellation only for an active final-processing operation; never starts or retries work.</summary>
-    public static void Invoke(bool processingCanBeCanceled, bool shortcutEditorOpen, Action requestCancel)
-    { if (processingCanBeCanceled && !shortcutEditorOpen) requestCancel(); }
 }

@@ -4,44 +4,10 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private HotkeyRegistration? _readLastHotkey;
-    private ProcessingCancelShortcut? _readLastShortcutSettings;
+    private void InitializeReadLastShortcut() => _readLastShortcut = InitializeActionShortcut(GlobalShortcuts.ReadLastTranscription,
+        () => ReadLastTranscription(), 0x7E00, "read-last-transcription-hotkeys.txt", "Read last transcription shortcuts", "read-last");
 
-    private void InitializeReadLastShortcut()
-    {
-        if (_closing || _profileRestoreClosing) return;
-        _readLastHotkey = new(this, () => ReadLastTranscription(), 0x7E00);
-        _readLastShortcutSettings = new(WinUIProfile.DataPath("read-last-transcription-hotkeys.txt"),
-            new ReadLastShortcutBackend(_readLastHotkey), ValidateReadLastShortcut, "Read last transcription shortcuts");
-        var error = _readLastShortcutSettings.Initialize();
-        _settingsValues["ReadLastTranscriptionHotkeys"] = _readLastHotkey.Value;
-        if (error is not null) ShowActivationNotice(error);
-    }
-
-    private string? ReadLastShortcutConflict(string value, bool modifierOnly = false) =>
-        ProcessingCancelShortcut.Conflicts(_readLastHotkey?.Value ?? "", WorkflowShortcutCatalog.Canonical(value), modifierOnly)
-            ? "Already used by Read last transcription. Change that shortcut first." : null;
-
-    private string? ValidateReadLastShortcut(string value)
-    {
-        if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the read-last shortcut again using the shortcut editor.";
-        foreach (var chord in ShortcutRules.Split(value))
-            if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
-            return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
-            return "Already used by Cancel processing.";
-        return RecordingShortcutConflict(value) ?? RecorderShortcutConflict(value) ?? WorkflowPaletteShortcutConflict(value) ?? CopyLastShortcutConflict(value) ?? PasteLastShortcutConflict(value) ?? HistoryShortcutConflict(value) ?? _workflowShortcuts?.Conflict(value);
-    }
-
-    private string? ChangeReadLastShortcut(string value)
-    {
-        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
-        if (_readLastShortcutSettings is null) return "Read-last shortcuts are unavailable. Wait for startup to finish or restart.";
-        var error = _readLastShortcutSettings.Save(WorkflowShortcutCatalog.Canonical(value));
-        _settingsValues["ReadLastTranscriptionHotkeys"] = _readLastShortcutSettings.Value;
-        return error;
-    }
+    private string? ChangeReadLastShortcut(string value) => ChangeActionShortcut(_readLastShortcut, "Read-last", value);
 
     private long _readLastRevision;
     private async void ReadLastTranscription()
@@ -62,11 +28,5 @@ public sealed partial class MainWindow
         {
             ShowActivationNotice(result.Message ?? "The last dictation could not be read aloud.");
         }
-    }
-
-    private sealed class ReadLastShortcutBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
-    {
-        public string Value => registration.Value;
-        public string? TryChange(string value) => registration.TryChange(value);
     }
 }
