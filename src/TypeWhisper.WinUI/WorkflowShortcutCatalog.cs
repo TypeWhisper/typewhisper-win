@@ -4,7 +4,7 @@ using TypeWhisper.Presentation;
 namespace TypeWhisper.WinUI;
 
 // UI-thread owner: native registration and the persisted workflow catalog change together.
-internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProcessingCancelShortcutBackend backend,
+internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IShortcutRegistrationBackend backend,
     Func<string, string?> reservedConflict)
 {
     private Dictionary<string, Workflow> _active = new(StringComparer.Ordinal);
@@ -21,10 +21,6 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IProces
 
     internal Workflow? Resolve(string chord) => _active.TryGetValue(ShortcutRules.Normalize(chord), out var workflow)
         ? Snapshot(workflow) : null;
-
-    internal string? Conflict(string value, bool modifierOnly = false) =>
-        ProcessingCancelShortcut.Conflicts(ActiveValue, Canonical(value), modifierOnly)
-            ? "Already used by a workflow. Change its shortcut in Workflows first." : null;
 
     internal string? ValidateDraft(string id, string value, bool enabled)
     {

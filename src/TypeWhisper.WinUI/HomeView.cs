@@ -27,7 +27,7 @@ public sealed class HomeView : UserControl
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition());
-        var title = Text("Dashboard", 22);
+        var title = Text("Home", 22);
         title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         AutomationProperties.SetHeadingLevel(title, AutomationHeadingLevel.Level1);
         root.Children.Add(new Border { Child = title, Padding = new Thickness(24, 14, 24, 16),

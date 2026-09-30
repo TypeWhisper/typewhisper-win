@@ -17,15 +17,7 @@ public sealed partial class MainWindow
         _profileRestoreClosing = true;
         _closing = true;
         _dictationHotkey?.Dispose();
-        _cancelProcessingHotkey?.Dispose();
-        _historyHotkey?.Dispose();
-        _workflowPaletteHotkey?.Dispose();
-        DisposeRecordingShortcuts();
-        _recorderHotkey?.Dispose();
-        _copyLastHotkey?.Dispose();
-        _pasteLastHotkey?.Dispose();
-        _foregroundHistory?.Dispose();
-        _readLastHotkey?.Dispose();
+        DisposeShortcutRegistrations();
         var workflowShortcuts = StopWorkflowShortcutsAsync();
         _dictationInput?.Dispose();
         _dictation.RequestCancel();

@@ -5,8 +5,8 @@ using Microsoft.UI.Xaml.Media;
 
 namespace TypeWhisper.WinUI;
 
-// UI inventory of the existing AppSettings and SettingsViewModel, not a settings migration.
-// Values live only in the app's session dictionary. No production services are called.
+// Settings page layout, row tags and search index. Generic rows write only to the in-memory values dictionary;
+// ConfigureLiveSettings replaces most of them with saved controls, and shortcut rows commit through the delegates passed to Render.
 internal static partial class SettingsCatalog
 {
     private sealed record Field(string Category, string Key, string Label, string Value, string Hint, string[]? Choices = null);

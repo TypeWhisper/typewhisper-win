@@ -4,7 +4,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private readonly Dictionary<string, (DictationHotkeyRegistration Registration, ProcessingCancelShortcut Settings)> _recordingShortcuts = [];
+    private readonly Dictionary<string, (DictationHotkeyRegistration Registration, PersistedShortcut Settings)> _recordingShortcuts = [];
 
     private void DispatchRecordingShortcut(HybridHotkeyAction action)
     {
@@ -27,13 +27,13 @@ public sealed partial class MainWindow
     {
         if (_closing || _profileRestoreClosing) return;
         var id = 0x8200;
-        foreach (var (key, mode) in new[] { ("PushToTalkHotkey", RecordingMode.Hold), ("ToggleOnlyHotkeys", RecordingMode.Toggle), ("HoldOnlyHotkeys", RecordingMode.Hold) })
+        foreach (var (key, mode) in new[] { (GlobalShortcuts.PushToTalk, RecordingMode.Hold), (GlobalShortcuts.ToggleOnly, RecordingMode.Toggle), (GlobalShortcuts.HoldOnly, RecordingMode.Hold) })
         {
             var registration = new DictationHotkeyRegistration(this, DispatchRecordingShortcut,
                 () => _dictationInput?.IsRecordingOrStarting == true, () => mode, () => DictationHotkeysPaused, id);
             id += 0x200;
-            var settings = new ProcessingCancelShortcut(WinUIProfile.DataPath(key + ".txt"),
-                new RecordingShortcutBackend(registration), value => ValidateRecordingShortcut(key, value), "Recording shortcuts");
+            var settings = new PersistedShortcut(WinUIProfile.DataPath(key + ".txt"),
+                registration, value => ValidateRecordingShortcut(key, value), "Recording shortcuts");
             _recordingShortcuts.Add(key, (registration, settings));
             var error = settings.Initialize();
             _settingsValues[key] = settings.Value;
@@ -41,26 +41,11 @@ public sealed partial class MainWindow
         }
     }
 
-    private string? RecordingShortcutConflict(string value, bool modifierOnly = false, string? except = null)
-    {
-        foreach (var (key, entry) in _recordingShortcuts)
-            if (key != except && RecordingShortcutConflicts.Overlap(value, modifierOnly, entry.Registration.Value, true))
-                return "Already used by another recording shortcut. Choose a different combination.";
-        return null;
-    }
-
     private string? ValidateRecordingShortcut(string key, string value)
     {
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, true) is { } error) return error;
-        if (RecordingShortcutConflicts.Overlap(value, true, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
-            return "Already used by Main dictation. Choose a different combination.";
-        if (RecordingShortcutConflicts.Overlap(value, true, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
-            return "Already used by Cancel processing.";
-        return RecordingShortcutConflict(value, true, key) ?? RecorderShortcutConflict(value, true)
-            ?? HistoryShortcutConflict(value, true) ?? CopyLastShortcutConflict(value, true) ?? PasteLastShortcutConflict(value, true)
-            ?? ReadLastShortcutConflict(value, true) ?? WorkflowPaletteShortcutConflict(value, true)
-            ?? _workflowShortcuts?.Conflict(value, modifierOnly: true);
+        return ShortcutConflict(key, value);
     }
 
     private string? ChangeRecordingShortcut(string key, string value)
@@ -77,11 +62,5 @@ public sealed partial class MainWindow
     {
         foreach (var entry in _recordingShortcuts.Values) entry.Registration.Dispose();
         _recordingShortcuts.Clear();
-    }
-
-    private sealed class RecordingShortcutBackend(DictationHotkeyRegistration registration) : IProcessingCancelShortcutBackend
-    {
-        public string Value => registration.Value;
-        public string? TryChange(string value) => registration.TryChange(value);
     }
 }

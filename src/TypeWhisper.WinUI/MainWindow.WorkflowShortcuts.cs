@@ -17,14 +17,8 @@ public sealed partial class MainWindow
     {
         if (_closing) return;
         _workflowHotkeys = new HotkeyRegistration(this, RunWorkflowShortcut, 0x7800);
-        _workflowShortcuts = new(new(WinUIProfile.DataPath("workflows.json")), new WorkflowHotkeyBackend(_workflowHotkeys), value =>
-        {
-            if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
-                return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
-            if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
-                return "Already used by Cancel processing.";
-            return RecordingShortcutConflict(value) ?? RecorderShortcutConflict(value) ?? WorkflowPaletteShortcutConflict(value) ?? HistoryShortcutConflict(value) ?? CopyLastShortcutConflict(value) ?? PasteLastShortcutConflict(value) ?? ReadLastShortcutConflict(value);
-        });
+        _workflowShortcuts = new(new(WinUIProfile.DataPath("workflows.json")), _workflowHotkeys,
+            chord => ShortcutConflict(GlobalShortcuts.Workflows, chord));
         WorkflowsView.Shortcuts = _workflowShortcuts;
         WorkflowsView.ConfigurationSaved += id =>
         {
@@ -154,11 +148,6 @@ public sealed partial class MainWindow
         if (_workflowTask is not null) await _workflowTask;
         _workflowPalette?.Dismiss();
         await Task.WhenAll(_workflowWindows.ToArray().Select(w => w.ShutdownAsync()));
-    }
-    private sealed class WorkflowHotkeyBackend(HotkeyRegistration registration) : IProcessingCancelShortcutBackend
-    {
-        public string Value => registration.Value;
-        public string? TryChange(string value) => registration.TryChange(value);
     }
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
 }

@@ -4,7 +4,7 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-internal sealed class DictationHotkeyRegistration : IDisposable
+internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend, IDisposable
 {
     private readonly HotkeyRegistration _regular;
     private readonly HookProc _callback;
@@ -13,7 +13,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
     private HashSet<string> _bindings = [];
     private HybridHotkeyState _state = new();
     private bool _disposed;
-    internal string Value { get; private set; } = "";
+    public string Value { get; private set; } = "";
     // Lets the shortcut recorder tell AltGr from a real Ctrl, which XAML key events cannot.
     internal static bool AltGrControlDown { get; private set; }
     internal DictationHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<HybridHotkeyAction> invoke, Func<bool> isRecording,
@@ -88,7 +88,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
         return null;
     }
 
-    internal string? TryChange(string value)
+    public string? TryChange(string value)
     {
         var chords = ShortcutRules.Split(value).Select(ShortcutRules.Normalize).Distinct().ToArray();
         foreach (var chord in chords)

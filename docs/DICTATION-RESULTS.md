@@ -30,7 +30,7 @@ unconfirmed external action without checking its destination first.
 
 A History or History-audio save failure no longer blocks delivery of successfully
 processed text. TypeWhisper still attempts the selected paste or workflow action.
-After successful delivery, a dismissible warning is kept in the main window,
+After successful delivery, a dismissible warning appears in the notice card at the overlay position,
 without opening a result window or taking focus from the target application.
 
 If delivery also fails, the result window keeps the text and reports the storage
