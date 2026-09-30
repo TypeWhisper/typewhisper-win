@@ -8,7 +8,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core;
 using Loc = TypeWhisper.WinUI.LicenseText;
 
@@ -18,7 +17,7 @@ namespace TypeWhisper.WinUI.Platform;
 /// Manages commercial and supporter licenses via Polar.sh.
 /// Mirrors the macOS split between business/commercial licensing and supporter status.
 /// </summary>
-public sealed partial class LicenseService : ObservableObject
+public sealed class LicenseService
 {
     private const string BaseUrl = "https://api.polar.sh/v1/customer-portal/license-keys";
     // Temporary compatibility pin. See docs/POLAR-API-VERSION-MAINTENANCE.md before upgrading.
@@ -67,73 +66,95 @@ public sealed partial class LicenseService : ObservableObject
     private string? _supporterActivationId;
     private DateTime? _supporterLastValidated;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPrivateUser))]
-    [NotifyPropertyChangedFor(nameof(IsBusinessUser))]
-    [NotifyPropertyChangedFor(nameof(ShouldShowReminder))]
-    private LicenseUserType _userType = LicenseUserType.PrivateUser;
+    /// <summary>Gets or sets whether TypeWhisper is used privately or for business.</summary>
+    public LicenseUserType UserType { get; set; } = LicenseUserType.PrivateUser;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasCommercialLicense))]
-    [NotifyPropertyChangedFor(nameof(CommercialTierDisplayName))]
-    private LicenseStatus _commercialStatus = LicenseStatus.Unlicensed;
+    /// <summary>Gets or sets the commercial license status.</summary>
+    public LicenseStatus CommercialStatus
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            OnLicenseStateChanged();
+        }
+    } = LicenseStatus.Unlicensed;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CommercialTierDisplayName))]
-    private CommercialLicenseTier? _commercialTier;
+    /// <summary>Gets or sets the commercial license tier.</summary>
+    public CommercialLicenseTier? CommercialTier
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            OnLicenseStateChanged();
+        }
+    }
 
-    [ObservableProperty]
-    private bool _commercialIsLifetime;
+    /// <summary>Gets or sets whether the commercial license is a lifetime license.</summary>
+    public bool CommercialIsLifetime { get; set; }
 
-    [ObservableProperty]
-    private bool _isLicenseActivating;
+    /// <summary>Gets or sets whether a license key is being activated.</summary>
+    public bool IsLicenseActivating { get; set; }
 
-    [ObservableProperty]
-    private string? _licenseActivationError;
+    /// <summary>Gets or sets the last license activation error.</summary>
+    public string? LicenseActivationError { get; set; }
 
-    [ObservableProperty]
-    private bool _isCommercialActivating;
+    /// <summary>Gets or sets whether a commercial license is being activated.</summary>
+    public bool IsCommercialActivating { get; set; }
 
-    [ObservableProperty]
-    private string? _commercialActivationError;
+    /// <summary>Gets or sets the last commercial activation error.</summary>
+    public string? CommercialActivationError { get; set; }
 
-    [ObservableProperty]
-    private string? _commercialDeactivationError;
+    /// <summary>Gets or sets the last commercial deactivation error.</summary>
+    public string? CommercialDeactivationError { get; set; }
 
-    [ObservableProperty]
-    private bool _isCommercialRefreshing;
+    /// <summary>Gets or sets whether the commercial license is being refreshed.</summary>
+    public bool IsCommercialRefreshing { get; set; }
 
-    [ObservableProperty]
-    private string? _commercialRefreshError;
+    /// <summary>Gets or sets the last commercial refresh error.</summary>
+    public string? CommercialRefreshError { get; set; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSupporterLicense))]
-    [NotifyPropertyChangedFor(nameof(IsSupporter))]
-    [NotifyPropertyChangedFor(nameof(SupporterBadgeTier))]
-    [NotifyPropertyChangedFor(nameof(SupporterTierDisplayName))]
-    private LicenseStatus _supporterStatus = LicenseStatus.Unlicensed;
+    /// <summary>Gets or sets the supporter license status.</summary>
+    public LicenseStatus SupporterStatus
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            OnLicenseStateChanged();
+        }
+    } = LicenseStatus.Unlicensed;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSupporterLicense))]
-    [NotifyPropertyChangedFor(nameof(IsSupporter))]
-    [NotifyPropertyChangedFor(nameof(SupporterBadgeTier))]
-    [NotifyPropertyChangedFor(nameof(SupporterTierDisplayName))]
-    private SupporterTier? _supporterTier;
+    /// <summary>Gets or sets the supporter tier.</summary>
+    public SupporterTier? SupporterTier
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            OnLicenseStateChanged();
+        }
+    }
 
-    [ObservableProperty]
-    private bool _isSupporterActivating;
+    /// <summary>Gets or sets whether a supporter license is being activated.</summary>
+    public bool IsSupporterActivating { get; set; }
 
-    [ObservableProperty]
-    private string? _supporterActivationError;
+    /// <summary>Gets or sets the last supporter activation error.</summary>
+    public string? SupporterActivationError { get; set; }
 
-    [ObservableProperty]
-    private string? _supporterDeactivationError;
+    /// <summary>Gets or sets the last supporter deactivation error.</summary>
+    public string? SupporterDeactivationError { get; set; }
 
-    [ObservableProperty]
-    private bool _isSupporterRefreshing;
+    /// <summary>Gets or sets whether the supporter license is being refreshed.</summary>
+    public bool IsSupporterRefreshing { get; set; }
 
-    [ObservableProperty]
-    private string? _supporterRefreshError;
+    /// <summary>Gets or sets the last supporter refresh error.</summary>
+    public string? SupporterRefreshError { get; set; }
 
     /// <summary>
     /// Raised when status changes.
@@ -1220,7 +1241,7 @@ public sealed partial class LicenseService : ObservableObject
 
     private void ApplyStore(LicenseStoreData data)
     {
-        _userType = Enum.TryParse<LicenseUserType>(data.UserType, out var userType)
+        UserType = Enum.TryParse<LicenseUserType>(data.UserType, out var userType)
             ? userType
             : LicenseUserType.PrivateUser;
 
@@ -1228,13 +1249,13 @@ public sealed partial class LicenseService : ObservableObject
         {
             _commercialLicenseKey = commercial.Key;
             _commercialActivationId = commercial.ActivationId;
-            _commercialStatus = Enum.TryParse<LicenseStatus>(commercial.Status, out var commercialStatus)
+            CommercialStatus = Enum.TryParse<LicenseStatus>(commercial.Status, out var commercialStatus)
                 ? commercialStatus
                 : LicenseStatus.Unlicensed;
-            _commercialTier = Enum.TryParse<CommercialLicenseTier>(commercial.Tier, out var commercialTier)
+            CommercialTier = Enum.TryParse<CommercialLicenseTier>(commercial.Tier, out var commercialTier)
                 ? commercialTier
                 : null;
-            _commercialIsLifetime = commercial.IsLifetime;
+            CommercialIsLifetime = commercial.IsLifetime;
             _commercialLastValidated = DateTime.TryParse(commercial.LastValidated, out var commercialLastValidated)
                 ? commercialLastValidated
                 : null;
@@ -1244,11 +1265,11 @@ public sealed partial class LicenseService : ObservableObject
         {
             _supporterLicenseKey = supporter.Key;
             _supporterActivationId = supporter.ActivationId;
-            _supporterStatus = Enum.TryParse<LicenseStatus>(supporter.Status, out var supporterStatus)
+            SupporterStatus = Enum.TryParse<LicenseStatus>(supporter.Status, out var supporterStatus)
                 ? supporterStatus
                 : LicenseStatus.Unlicensed;
-            _supporterTier = Enum.TryParse<SupporterTier>(supporter.Tier, out var supporterTier)
-                ? NormalizePersistedSupporterTier(supporterTier, _supporterStatus)
+            SupporterTier = Enum.TryParse<SupporterTier>(supporter.Tier, out var supporterTier)
+                ? NormalizePersistedSupporterTier(supporterTier, SupporterStatus)
                 : null;
             _supporterLastValidated = DateTime.TryParse(supporter.LastValidated, out var supporterLastValidated)
                 ? supporterLastValidated
@@ -1275,41 +1296,9 @@ public sealed partial class LicenseService : ObservableObject
             ? global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze
             : tier;
 
-    private void NotifyStateChanged()
-    {
-        OnPropertyChanged(nameof(HasCommercialLicense));
-        OnPropertyChanged(nameof(HasSupporterLicense));
-        OnPropertyChanged(nameof(HasCommercialActivation));
-        OnPropertyChanged(nameof(HasSupporterActivation));
-        OnPropertyChanged(nameof(IsSupporter));
-        OnPropertyChanged(nameof(SupporterBadgeTier));
-        OnPropertyChanged(nameof(IsPrivateUser));
-        OnPropertyChanged(nameof(IsBusinessUser));
-        OnPropertyChanged(nameof(ShouldShowReminder));
-        OnPropertyChanged(nameof(CommercialTierDisplayName));
-        OnPropertyChanged(nameof(SupporterTierDisplayName));
-        StatusChanged?.Invoke();
-    }
+    private void NotifyStateChanged() => StatusChanged?.Invoke();
 
-    partial void OnCommercialStatusChanged(LicenseStatus value)
-    {
-        if (!_suppressPersistence)
-            NotifyStateChanged();
-    }
-
-    partial void OnSupporterStatusChanged(LicenseStatus value)
-    {
-        if (!_suppressPersistence)
-            NotifyStateChanged();
-    }
-
-    partial void OnCommercialTierChanged(CommercialLicenseTier? value)
-    {
-        if (!_suppressPersistence)
-            NotifyStateChanged();
-    }
-
-    partial void OnSupporterTierChanged(SupporterTier? value)
+    private void OnLicenseStateChanged()
     {
         if (!_suppressPersistence)
             NotifyStateChanged();

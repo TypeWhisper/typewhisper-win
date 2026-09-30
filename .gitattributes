@@ -1,0 +1,35 @@
+# Store text with LF in the repository and check it out with the platform's
+# native line endings. This matches the existing index, which is LF-only.
+* text=auto
+
+# Shell scripts must keep LF, even in a Windows working tree.
+*.sh text eol=lf
+
+# Batch files need CRLF to run reliably with cmd.exe.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.wav binary
+*.mp3 binary
+*.zip binary
+*.7z binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.nupkg binary
+*.onnx binary
+*.gguf binary
+*.bin binary
+*.pfx binary
+*.snk binary
