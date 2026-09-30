@@ -11,14 +11,6 @@
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <Color x:Key="InkColor">#FF1C1C1E</Color>
-                    <Color x:Key="SurfaceColor">#FF2A2A2C</Color>
-                    <Color x:Key="ElevatedColor">#FF333336</Color>
-                    <Color x:Key="AccentColor">#FF0A84FF</Color>
-                    <Color x:Key="FocusColor">#FF409CFF</Color>
-                    <Color x:Key="TextColor">#FFF5F5F7</Color>
-                    <Color x:Key="MutedColor">#FF98989D</Color>
-                    <Color x:Key="HairlineColor">#FF3A3A3C</Color>
                     <SolidColorBrush x:Key="InkBrush" Color="#FF1C1C1E" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="#FF2A2A2C" />
                     <SolidColorBrush x:Key="ElevatedBrush" Color="#FF333336" />
@@ -30,14 +22,6 @@
                     <SolidColorBrush x:Key="SelectionFillBrush" Color="#FF0A6BD6" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
-                    <Color x:Key="InkColor">#FFF2F2F7</Color>
-                    <Color x:Key="SurfaceColor">#FFFFFFFF</Color>
-                    <Color x:Key="ElevatedColor">#FFFFFFFF</Color>
-                    <Color x:Key="AccentColor">#FF0066CC</Color>
-                    <Color x:Key="FocusColor">#FF0055AA</Color>
-                    <Color x:Key="TextColor">#FF1D1D1F</Color>
-                    <Color x:Key="MutedColor">#FF6E6E73</Color>
-                    <Color x:Key="HairlineColor">#FFD1D1D6</Color>
                     <SolidColorBrush x:Key="InkBrush" Color="#FFF2F2F7" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="ElevatedBrush" Color="#FFFFFFFF" />
@@ -83,31 +67,6 @@
                                               VerticalScrollBarVisibility="Hidden"
                                               ZoomMode="Disabled"
                                               IsTabStop="False"
-                                              AutomationProperties.AccessibilityView="Raw" />
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-
-            <Style x:Key="ApiKeyPasswordBoxStyle" TargetType="PasswordBox">
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
-                <Setter Property="FontFamily" Value="{StaticResource InterfaceFont}" />
-                <Setter Property="FontSize" Value="14" />
-                <Setter Property="Padding" Value="12,10" />
-                <Setter Property="MinHeight" Value="42" />
-                <Setter Property="PasswordRevealMode" Value="Hidden" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="PasswordBox">
-                            <Grid Background="{TemplateBinding Background}">
-                                <ScrollViewer x:Name="ContentElement" Margin="{TemplateBinding Padding}"
-                                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                                              HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Hidden"
-                                              VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Hidden"
-                                              ZoomMode="Disabled" IsTabStop="False"
                                               AutomationProperties.AccessibilityView="Raw" />
                             </Grid>
                         </ControlTemplate>

@@ -19,9 +19,7 @@ public sealed partial class MainWindow
         host.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var search = _integrationSearch = new TextBox { PlaceholderText = "Search integrations…", Margin = new Thickness(8, 0, 8, 0) };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search, "Search integrations");
-        search.TextChanged += (_, _) =>
-        { if (_discoverSettings) MarketplaceView.Filter(search.Text); else PluginsView.Filter(search.Text); };
-        PluginsView.ClearSearchRequested += (_, _) => search.Text = "";
+        search.TextChanged += (_, _) => { if (_discoverSettings) MarketplaceView.Filter(search.Text); };
         MarketplaceView.ClearSearchRequested += (_, _) => search.Text = "";
         MarketplaceView.DetailModeChanged += detail => search.IsEnabled = !detail;
         host.Children.Add(search);

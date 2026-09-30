@@ -268,11 +268,7 @@ internal static partial class SettingsCatalog
         {
             var value = values.GetValueOrDefault(field.Key, field.Value);
             var stack = new StackPanel { Spacing = 8, Tag = field.Key };
-            if (field.Key == "LocalModelStoragePath")
-            {
-                stack.Children.Add(new FolderPreference(field.Key, field.Label, value, values));
-            }
-            else if (field.Category == "Shortcuts")
+            if (field.Category == "Shortcuts")
             {
                 stack.Children.Add(new ShortcutRecorder(field.Key, field.Label, field.Value, values,
                     () => Fields.Where(setting => setting.Category == "Shortcuts").Select(setting =>
@@ -318,7 +314,7 @@ internal static partial class SettingsCatalog
                 input.TextChanged += (_, _) => values[field.Key] = input.Text;
                 stack.Children.Add(new Border { Background = (Brush)Application.Current.Resources["SurfaceBrush"], BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Child = input });
             }
-            if (field.Hint.Length > 0 && (field.Key == "LocalModelStoragePath" || field.Category == "Shortcuts"))
+            if (field.Hint.Length > 0 && field.Category == "Shortcuts")
                 stack.Children.Add(SettingsHelp.Button(field.Label, field.Hint));
             target.Children.Add(stack);
             if (field.Category != "Shortcuts") target.Children.Add(new Border { Tag = "SettingSeparator", Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });

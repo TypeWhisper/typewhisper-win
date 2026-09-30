@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace TypeWhisper.WinUI;
 
-// Isolated page composition. All choices stay in the existing preview session.
+// Page layout only. LiveDictationSettings and the other live settings bind each row to saved preferences.
 internal static partial class SettingsCatalog
 {
     private static void RenderDictation(StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers)
@@ -21,26 +21,8 @@ internal static partial class SettingsCatalog
             return panel;
         }
 
-        var models = new ModelSession(values);
-        var modelRow = new StackPanel { Spacing = 8, Tag = "DictationModel" };
-        modelRow.Children.Add(Label("Model", 14));
-        var modelPicker = new ChoicePicker();
-        modelPicker.Configure("Model", "chip", "Dictation model");
-        modelPicker.SetOptions(ModelSession.Models.Where(model => models.IsDownloaded(model.Id))
-            .Select(model => new Choice(model.Id, model.Title, model.Description)).ToArray(), models.Active,
-            "Choose a downloaded model");
-        var modelHint = Label("Shared with Models. Download more sample models there.", 12, true);
-        modelPicker.SelectionChanged += id =>
-        {
-            if (models.Activate(id)) modelHint.Text = "Default model updated for this session, including Recorder unless overridden.";
-        };
-        modelRow.Children.Add(modelPicker); modelRow.Children.Add(modelHint);
-        if (!ModelSession.Models.Any(model => models.IsDownloaded(model.Id)))
-        {
-            modelPicker.IsEnabled = false;
-            modelHint.Text = "No models available. Download a sample in Models first.";
-        }
-        pickers.Add(modelPicker); target.Children.Add(modelRow);
+        // LiveDictationSettings fills this row with the provider and model pickers.
+        target.Children.Add(new StackPanel { Spacing = 8, Tag = "DictationModel" });
         FieldsInto(target, "Language");
 
         var output = new StackPanel { Spacing = 8, Tag = "AutoPaste" };
@@ -105,7 +87,7 @@ internal static partial class SettingsCatalog
         };
         advanced.Children.Add(vocabulary);
         FieldsInto(advanced, "SpokenFormattingProfiles");
-        target.Children.Add(Label("Preview only · sample models, no recording or text insertion. Changes last for this session.", 12, true));
+        target.Children.Add(Label("Changes on this page are saved automatically.", 12, true));
         Update();
     }
 }

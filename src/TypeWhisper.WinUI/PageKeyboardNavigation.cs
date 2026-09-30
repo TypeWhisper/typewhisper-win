@@ -10,7 +10,7 @@ namespace TypeWhisper.WinUI;
 /// <summary>Fallback navigation after the focused control has handled its own keys.</summary>
 internal static class PageKeyboardNavigation
 {
-    internal static void Attach(FrameworkElement root, Func<DependencyObject, bool>? inactiveSearch = null)
+    internal static void Attach(FrameworkElement root)
     {
         root.KeyDown += (_, e) =>
         {
@@ -25,8 +25,7 @@ internal static class PageKeyboardNavigation
                  node is not null && node != root; node = VisualTreeHelper.GetParent(node))
             {
                 // Never repurpose caret movement, list selection, slider values or calendar navigation.
-                if (node is TextBox && inactiveSearch?.Invoke(node) != true) return;
-                if (node is PasswordBox or RichEditBox or ComboBox or NumberBox or Slider or
+                if (node is TextBox or PasswordBox or RichEditBox or ComboBox or NumberBox or Slider or
                     ListViewBase or CalendarView or CalendarDatePicker or DatePicker or TimePicker or MediaPlayerElement) return;
                 if (node is ScrollViewer scroll && scroll.ScrollableHeight > 0) containingScroll ??= scroll;
             }

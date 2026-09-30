@@ -7,7 +7,6 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class PluginsView
 {
-    private bool _settingsLayout;
     private string? _selectedSettingsPlugin;
     internal event Action? SettingsNavigationChanged;
     internal IReadOnlyList<(string Id, string Title)> SettingsNavigationItems => _plugins
@@ -17,15 +16,6 @@ public sealed partial class PluginsView
     internal Task<bool> CanLeaveSettingsAsync() => _settingsRows.Values
         .Select(row => row.Settings.Content).OfType<LivePortablePluginSettings>().FirstOrDefault()?.CanLeaveAsync()
         ?? Task.FromResult(true);
-
-    internal void UseSettingsLayout()
-    {
-        _settingsLayout = true;
-        PluginBreadcrumbs.Visibility = PluginList.Visibility = PluginNavigationHint.Visibility = Visibility.Collapsed;
-        PluginContentScroll.Visibility = Visibility.Visible;
-        IntegrationTabs.Visibility = PluginFilterTabs.Visibility = Visibility.Collapsed;
-        RefreshSettingsPages();
-    }
 
     private void RefreshSettingsPages()
     {

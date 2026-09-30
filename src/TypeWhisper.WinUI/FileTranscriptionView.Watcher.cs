@@ -43,9 +43,6 @@ public sealed partial class FileTranscriptionView
         _watchTimer.Start();
     }
 
-    internal void ShowWatchFolder()
-    { _watchTab = true; _tabs.SetSelected("watch"); _result = null; Render(); }
-
     private void RenderWatcher()
     {
         _watchRenderedState = WatchState;

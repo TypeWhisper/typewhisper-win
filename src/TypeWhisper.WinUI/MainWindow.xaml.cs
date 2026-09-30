@@ -406,8 +406,6 @@ public sealed partial class MainWindow : Window
         RecorderView.IsQueuedSource = path => _fileTranscription?.ContainsSource(path) == true;
         RecorderView.TranscribeRequested += path => OpenFileTranscription(() => _fileTranscription?.AddRecording(path));
         MarketplaceView.ConfigureRuntime(_dictation);
-        PluginsView.UseSettingsLayout();
-        PluginsView.MarketplaceRequested += (_, _) => SwitchIntegrationTab(discover: true);
         MarketplaceView.ManageRequested += id => OpenProviderSettings(id);
         MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
         PluginsView.RestartRequested = RestartForPluginUpdateAsync;
@@ -670,8 +668,6 @@ public sealed partial class MainWindow : Window
         OpenSettings();
         _settingsWindow!.ShowSelectComparison();
     }
-
-    private void SwitchIntegrationTab(bool discover) => ShowIntegrationSettings(discover);
 
     private void OpenProviderSettings(string pluginId)
     {
