@@ -8,7 +8,7 @@ the [functional journal](archive/winui/WINUI-FUNCTIONAL-STATUS.md).
 | --- | --- | --- |
 | Dictation | Global shortcuts, configured recording modes, text processing, optional History and automatic insertion. | Target restoration and clipboard delivery can fail; the result explains the manual next step. |
 | Result handling | Explicit insertion/processing/action reasons, copy feedback and optional plugin actions. | A storage warning does not prevent successful text delivery. See [dictation results](DICTATION-RESULTS.md). |
-| Settings and tray | A Settings window with the macOS sidebar, including Home, Dictionary, Snippets, Workflows, Recorder and File transcription. The tray menu mirrors the macOS menu bar. | Quick Launch still opens through its own shortcut and is being retired. |
+| Settings and tray | A Settings window with the macOS sidebar, including Home, Dictionary, Snippets, Workflows, Recorder and File transcription. The tray menu mirrors the macOS menu bar. | Starting TypeWhisper again while it runs opens Settings. Notices appear in a card at the overlay position. |
 | Workflow palette | Runs a workflow on the selected text and replaces the selection, or inserts a recent transcription. | The selection is copied with Ctrl+C; if the app does not provide it, the clipboard text is used. If insertion fails, the result is copied. |
 | Recorder | Microphone/system capture and saved recording management. | Meeting automation and calendar sign-in are not available. |
 | Files | Queue, result actions, exports and watched folders. | SRT/VTT require actual provider timings; failed exports and interrupted jobs have distinct recovery paths. |

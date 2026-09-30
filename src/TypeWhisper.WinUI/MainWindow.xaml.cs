@@ -1,12 +1,7 @@
-using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Microsoft.UI;
-using Microsoft.UI.Composition;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using global::Windows.Graphics;
 
@@ -16,70 +11,11 @@ public sealed partial class MainWindow : Window
 {
     internal nint TrayMenuHandle { set => _dictation.TrayMenuHandle = value; }
     private readonly WinUIHttpApi _httpApi;
-    private const int CompactWidth = 780;
-    private const int CompactHeight = 520;
-    private static string LauncherHotkeyPath => WinUIProfile.DataPath("quick-launch-hotkeys.txt");
-
-    private string? ChangeLauncherHotkeys(string value)
-    {
-        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
-        if (_hotkeyRegistration is null) return "Global hotkey service is unavailable. Restart the app.";
-        if (_cancelProcessingHotkey?.ConflictWithLauncher(value) is { } conflict) return conflict;
-        if (_workflowShortcuts?.Conflict(value) is { } workflowConflict) return workflowConflict;
-        if (RecordingShortcutConflict(value) is { } recordingConflict) return recordingConflict;
-        if (RecorderShortcutConflict(value) is { } recorderConflict) return recorderConflict;
-        if (WorkflowPaletteShortcutConflict(value) is { } paletteConflict) return paletteConflict;
-        if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
-        if (CopyLastShortcutConflict(value) is { } copyConflict) return copyConflict;
-        if (PasteLastShortcutConflict(value) is { } pasteConflict) return pasteConflict;
-        if (ReadLastShortcutConflict(value) is { } readConflict) return readConflict;
-        var previous = _hotkeyRegistration.Value;
-        var error = _hotkeyRegistration.TryChange(value);
-        if (error is not null) return error;
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(LauncherHotkeyPath)!);
-            File.WriteAllText(LauncherHotkeyPath, value);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            var rollbackError = _hotkeyRegistration.TryChange(previous);
-            _settingsValues["QuickLaunchHotkeys"] = _hotkeyRegistration.Value;
-            HotkeyHint.Text = _hotkeyRegistration.DisplayText;
-            return rollbackError ?? $"Could not save the shortcut: {ex.Message}";
-        }
-        HotkeyHint.Text = _hotkeyRegistration.DisplayText;
-        return null;
-    }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr hwnd);
-    private static readonly IReadOnlyList<Command> Commands =
-    [
-        new("Pinned", "microphone", "Dictation", "Return to your previous text field", "", "Return to the previous app, then use your dictation shortcut to record."),
-        new("Pinned", "history", "History", "Browse, search, copy, and export transcriptions", "H", "Opens History in workspace mode. Full transcript search remains inside this explicit scope."),
-        new("Pinned", "recorder", "Recorder", "Record microphone and system audio", "R", "Opens the recorder workspace without interrupting active dictation."),
-        new("Pinned", "workflow", "Workflows", "Run and manage reusable text workflows", "W", "Choose a workflow, inspect its provider, and run it against selected or dictated text."),
-        new("Suggested", "settings", "Settings", "Audio, hotkeys, privacy, account, and updates", "Ctrl ,", "Opens the dedicated Settings surface for global application configuration."),
-        new("Suggested", "file", "Transcribe file", "Drop or choose audio and video files", "", "Opens the file transcription queue in workspace mode."),
-        new("Suggested", "dictionary", "Dictionary", "Your words and preferred spellings", "D", "Manage words and correction rules used by TypeWhisper."),
-        new("Suggested", "text", "Snippets", "Reusable text with spoken triggers", "", "Create and edit text snippets."),
-        new("Suggested", "file", "Copy last transcription", "Copy the last completed dictation from this session", "", "Copies final dictated text, including when History is off. Configure its global shortcut in Settings > Shortcuts."),
-        new("Suggested", "audio", "Read last transcription", "Read the last dictation aloud; run again to stop", "", "Uses the selected Windows voice and audio output. Works independently of automatic spoken feedback."),
-        new("Suggested", "devices", "Sync & backup", "Back up, export or delete your TypeWhisper data", "", "Create local backups, review data before restoring, export all data or delete it."),
-        new("Suggested", "stats", "Statistics", "Words, streaks, apps, and models", "", "Explore your usage over time."),
-    ];
-
-    internal ObservableCollection<Command> FilteredItems { get; } = [];
-
-    private readonly Stopwatch _activationStopwatch = Stopwatch.StartNew();
-    private readonly HotkeyRegistration? _hotkeyRegistration;
     private DictationHotkeyRegistration? _dictationHotkey;
     private ProcessingCancelHotkeyRegistration? _cancelProcessingHotkey;
     private TypeWhisper.Presentation.DictationInputCoordinator? _dictationInput;
     private Action? _observeInputMode;
-    private static string DictationHotkeyPath => Path.Combine(Path.GetDirectoryName(LauncherHotkeyPath)!, "dictation-hotkeys.txt");
+    private static string DictationHotkeyPath => WinUIProfile.DataPath("dictation-hotkeys.txt");
     private string? ChangeDictationHotkeys(string value)
     {
         if (_closing || _profileRestoreClosing) return "The app is shutting down.";
@@ -150,12 +86,12 @@ public sealed partial class MainWindow : Window
             // A shortcut taken by another app must not block the session, API, licensing or the
             // other shortcuts; the user can assign a different chord in Settings without restarting.
             var hotkeyError = error is null ? null : error + " Assign a different dictation shortcut in Settings.";
-            if (hotkeyError is not null) { MetricsText.Text = hotkeyError; DictationChanged?.Invoke(hotkeyError, false); }
+            if (hotkeyError is not null) DictationChanged?.Invoke(hotkeyError, false);
             string? cancelError;
             try
             {
                 _cancelProcessingHotkey = new(this, () => CanCancelProcessing, RequestProcessingCancellation,
-                    () => _hotkeyRegistration?.Value ?? "", () => _dictationHotkey?.Value ?? "");
+                    () => _dictationHotkey?.Value ?? "");
                 cancelError = _cancelProcessingHotkey.Initialize();
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -184,9 +120,9 @@ public sealed partial class MainWindow : Window
                 WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
                 WinUICloudSync.Initialize(DispatcherQueue);
             }
-            if ((hotkeyError ?? cancelError) is { } notice && !_closing) MetricsText.Text = notice;
+            if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice("Dictation startup failed: " + ex.Message)); }
     }
 
     internal void FinishDictationFromTray()
@@ -201,7 +137,7 @@ public sealed partial class MainWindow : Window
         RequestWorkflowCancellation();
         try { if (_dictation.CanCancelProcessing) await _dictation.CancelAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) MetricsText.Text = "Could not finish cancellation. Try again."; }
+        { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) ShowNotice(new AppNotice("Could not finish cancellation. Try again.")); }
     }
     internal Func<Task<string?>>? RestartApplicationAsync { get; set; }
     private Task<string?> RestartForPluginUpdateAsync()
@@ -249,7 +185,6 @@ public sealed partial class MainWindow : Window
         _dictationHotkey?.Dispose();
         _dictationInput?.Dispose();
         if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
-        MetricsText.Text = "Finishing shutdown…";
         var reviews = DrainReviewWindowsAsync();
         // Finish settings confirmations, preference writes and recovery retries before
         // session shutdown disposes the recovery store they use.
@@ -268,14 +203,13 @@ public sealed partial class MainWindow : Window
     });
     internal void ShowShutdownFailure()
     {
-        ShowFromActivation();
         if (RecorderView.NeedsSaveRetry)
         {
             OpenRecorder();
-            MetricsText.Text = "Recording could not be saved. Retry saving in Recorder, then choose Exit again.";
+            ShowNotice(new AppNotice("Recording could not be saved. Retry saving in Recorder, then choose Exit again.", Duration: TimeSpan.FromSeconds(30)));
             return;
         }
-        MetricsText.Text = "Shutdown could not complete cleanly. Work is stopped; see the diagnostic log for details.";
+        ShowNotice(new AppNotice("Shutdown could not complete cleanly. Work is stopped; see the diagnostic log for details.", Duration: TimeSpan.FromSeconds(30)));
     }
     internal bool CanRetryRecorderShutdown => RecorderView.NeedsSaveRetry;
 
@@ -300,8 +234,7 @@ public sealed partial class MainWindow : Window
     {
         if (_closing) return;
         var revision = ++_overlayRevision;
-        if (IsNormalLauncherStatus) MetricsText.Text = DictationStatusForDisplay;
-        UpdateTranscriptToggle();
+        _settingsWindow?.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
         if (_liveOverlay?.IsCorrectionFeedbackVisible == true &&
             _dictation.OverlayState.Phase is not (DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Copied or DictationPhase.LoadingModel)) return;
@@ -353,20 +286,14 @@ public sealed partial class MainWindow : Window
         await Task.Delay(5000);
         if (_overlayRevision == revision) _liveOverlay?.HidePreview();
     }
-    private Command? _selected;
     private OverlayWindow? _overlay;
     private SettingsWindow? _settingsWindow;
     private Task _closedSettingsImports = Task.CompletedTask;
     private Task ShutdownSettingsImportsAsync() => Task.WhenAll(_closedSettingsImports,
         _settingsWindow?.ShutdownSetupImportAsync() ?? Task.CompletedTask);
     private bool _technicalDetailsEnabled;
-    private bool _isSearchEditing;
     private bool _transcriptPreviewEnabled = true;
-    private uint _appliedWindowDpi;
     private OverlayMode _overlayMode = OverlayMode.Standard;
-    private bool _pluginsOpen;
-    private bool _marketplaceOpen;
-    private string _launcherQuery = string.Empty;
     private FileTranscriptionView? _fileTranscription;
     private LexiconView? _lexicon;
 
@@ -390,8 +317,6 @@ public sealed partial class MainWindow : Window
     internal MainWindow()
     {
         InitializeComponent();
-        PageKeyboardNavigation.Attach(WindowRoot, node => ReferenceEquals(node, SearchBox) && !_isSearchEditing &&
-            (_pluginsOpen && PluginsView.IsDetail || _marketplaceOpen && MarketplaceView.IsDetail));
         CorrectionLearning.CorrectionsLearned += ShowLearnedCorrections;
         CorrectionLearning.ObservationCancelled += HideLearnedCorrections;
         Closed += (_, _) =>
@@ -399,11 +324,8 @@ public sealed partial class MainWindow : Window
             CorrectionLearning.CorrectionsLearned -= ShowLearnedCorrections;
             CorrectionLearning.ObservationCancelled -= HideLearnedCorrections;
         };
-#if DEBUG
-        ConfigureTrayProbe();
-#endif
-        NativeWindowAppearance.ApplyAppTitleBar(this);
         LoadOverlayPreferences();
+        RemoveRetiredQuickLaunchFiles();
         var historyPath = WinUIProfile.DataPath("history.json");
 #if DEBUG
         // Opt-in fixture uses an ephemeral history store, never the development profile's history.
@@ -450,7 +372,7 @@ public sealed partial class MainWindow : Window
         {
             _lexicon?.RefreshApiData();
             WorkflowsView.RefreshApiData();
-            if (_workflowShortcuts?.Initialize() is { } error) MetricsText.Text = error;
+            if (_workflowShortcuts?.Initialize() is { } error) ShowNotice(new AppNotice(error));
         };
         _dictation.StopHistoryPlayback = () => { _historyWindow?.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
         RecorderView.CanPlayAudio = CanPlayHistoryAudio;
@@ -464,15 +386,11 @@ public sealed partial class MainWindow : Window
         _dictation.ReviewRequested += ShowOutputReview;
         _dictation.OutputWarning += message => DispatcherQueue.TryEnqueue(() =>
         {
-            if (_closing) return;
-            OutputStorageNotice.Message = message;
-            OutputStorageNotice.IsOpen = true;
+            if (!_closing) ShowNotice(new AppNotice(message, "Dictation delivered with a warning"));
         });
         _dictation.EngineNotice += message => DispatcherQueue.TryEnqueue(() =>
         {
-            if (_closing) return;
-            EngineNotice.Message = message;
-            EngineNotice.IsOpen = true;
+            if (!_closing) ShowNotice(new AppNotice(message, "Speech engine"));
         });
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
@@ -489,175 +407,17 @@ public sealed partial class MainWindow : Window
         RecorderView.TranscribeRequested += path => OpenFileTranscription(() => _fileTranscription?.AddRecording(path));
         MarketplaceView.ConfigureRuntime(_dictation);
         PluginsView.UseSettingsLayout();
-        MarketplaceView.UseSettingsLayout();
         PluginsView.MarketplaceRequested += (_, _) => SwitchIntegrationTab(discover: true);
-        MarketplaceView.InstalledRequested += (_, _) => SwitchIntegrationTab(discover: false);
-        MarketplaceView.ExitRequested += (_, _) => SwitchIntegrationTab(discover: false);
-        MarketplaceView.LauncherRequested += (_, _) => SwitchIntegrationTab(discover: false);
         MarketplaceView.ManageRequested += id => OpenProviderSettings(id);
         MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
         PluginsView.RestartRequested = RestartForPluginUpdateAsync;
         InitializeIntegrationSettings();
-        SearchSurface.AddHandler(
-            UIElement.PointerPressedEvent,
-            new PointerEventHandler(SearchSurface_PointerPressed),
-            handledEventsToo: true);
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(TitleDragSurface);
-        TitleBreadcrumbs.IsTitleDestination = true;
-        WindowRoot.LayoutUpdated += (_, _) => UpdateTitleBreadcrumbs();
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-            presenter.SetBorderAndTitleBar(true, false);
-        }
-        ConfigureLauncherMinimumSize();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "app.ico"));
-        NativeWindowAppearance.RemoveSystemBorder(this, resizable: true);
         AppWindow.Closing += (_, args) =>
         {
             args.Cancel = true;
             AppWindow.Hide();
         };
-
-        try
-        {
-            _hotkeyRegistration = new HotkeyRegistration(this, ShowFromHotkey);
-            var savedHotkey = File.Exists(LauncherHotkeyPath) ? File.ReadAllText(LauncherHotkeyPath) : "Alt+Space";
-            var hotkeyError = _hotkeyRegistration.TryChange(savedHotkey);
-            if (hotkeyError is not null) MetricsText.Text = hotkeyError;
-            _settingsValues["QuickLaunchHotkeys"] = _hotkeyRegistration.Value;
-            HotkeyHint.Text = _hotkeyRegistration.DisplayText;
-        }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
-        {
-            MetricsDot.Fill = new SolidColorBrush(Colors.Orange);
-            MetricsText.Text = $"Alt+Space unavailable · {exception.Message}";
-        }
-
-        LoadLauncherPins();
-        EntryActionMenu.Attach(CompactResults, LauncherActions);
-        PopulateLauncherItems(LauncherCommands());
-        RebuildLauncherGroups();
-
-        Activated += MainWindow_Activated;
-        AppWindow.Changed += AppWindow_Changed;
-        ResizeForCurrentMonitor();
-        if (!RestoreLauncherPlacement()) PlaceOnInvocationMonitor();
-        _placementReady = true;
-        SelectFirstResult();
-    }
-
-    internal void ShowFromActivation()
-    {
-        if (_profileRestoreClosing) return;
-        RememberPreviousApp();
-        if (!_closing && !_pluginsOpen && !_marketplaceOpen)
-        {
-            var selectedKey = _selected?.Key;
-            SearchBox_TextChanged(SearchBox, null!);
-            if (selectedKey is not null)
-                CompactResults.SelectedItem = FilteredItems.FirstOrDefault(command => command.Key == selectedKey);
-            MetricsText.Text = DictationStatusForDisplay;
-        }
-        _isSearchEditing = LauncherCommandsVisible;
-        UpdateSearchPresentation();
-        KeepLauncherOnScreen();
-        AppWindow.Show();
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.Restore();
-            presenter.IsAlwaysOnTop = true;
-        }
-        Activate();
-        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-
-    private void ShowFromHotkey()
-    {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        if (AppWindow.IsVisible && GetForegroundWindow() == hwnd)
-        {
-            if (AppWindow.Presenter is OverlappedPresenter presenter)
-                presenter.IsAlwaysOnTop = false;
-            AppWindow.Hide();
-            return;
-        }
-        ShowFromActivation();
-    }
-
-    private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
-    {
-        if (_closing || _profileRestoreClosing) return;
-        if (args.WindowActivationState == WindowActivationState.Deactivated)
-        {
-            if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.IsAlwaysOnTop = false;
-            return;
-        }
-
-        if (_activationStopwatch.IsRunning)
-        {
-            _activationStopwatch.Stop();
-            Debug.WriteLine($"Main window first activation: {_activationStopwatch.Elapsed.TotalMilliseconds:0.0} ms");
-        }
-        NativeWindowAppearance.RemoveSystemBorder(this, resizable: true);
-        // Closing a settings picker reactivates the window. Keep its current
-        // field focused instead of jumping back to the name and scrolling up.
-        if (WindowRoot.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
-        if (_pluginsOpen && PluginsView.IsDetail) return;
-        if (_marketplaceOpen && MarketplaceView.IsDetail) return;
-        // ShowFromActivation focuses search explicitly. Reactivation must retain the current scroll position.
-    }
-
-    private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
-    {
-        if (_closing || _profileRestoreClosing) return;
-        if (args.DidPositionChange || args.DidSizeChange)
-        {
-            _appliedWindowDpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
-            SaveLauncherPlacement();
-        }
-    }
-
-    private void ResizeForCurrentMonitor(RectInt32? targetWorkArea = null)
-    {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        var dpi = GetDpiForWindow(hwnd);
-        if (dpi == 0)
-            dpi = 96;
-
-        _appliedWindowDpi = dpi;
-        var logicalWidth = CompactWidth;
-        var logicalHeight = CompactHeight;
-        var scale = dpi / 96d;
-        var width = (int)Math.Round(logicalWidth * scale);
-        var height = (int)Math.Round(logicalHeight * scale);
-        if (targetWorkArea is { } workArea)
-        {
-            var margin = (int)Math.Round(24 * scale);
-            width = Math.Min(width, Math.Max(320, workArea.Width - margin * 2));
-            height = Math.Min(height, Math.Max(360, workArea.Height - margin * 2));
-        }
-        AppWindow.Resize(new SizeInt32(
-            width,
-            height));
-    }
-
-    private void PlaceOnInvocationMonitor()
-    {
-        var area = ResolveInvocationDisplayArea();
-        if (area is null)
-            return;
-
-        // Move the hidden window into the target work area first so Windows
-        // reports that monitor's effective DPI before the final resize.
-        AppWindow.Move(new PointInt32(
-            area.WorkArea.X + area.WorkArea.Width / 2,
-            area.WorkArea.Y + 32));
-        ResizeForCurrentMonitor(area.WorkArea);
-        PositionNearTopCenter(area);
     }
 
     private DisplayArea ResolveOverlayDisplayArea()
@@ -674,11 +434,11 @@ public sealed partial class MainWindow : Window
         return DisplayArea.Primary;
     }
 
-    private DisplayArea? ResolveInvocationDisplayArea()
+    // Settings and History open on the display of the app in front, or under the pointer.
+    internal DisplayArea ResolveInvocationDisplayArea()
     {
-        var ownWindow = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var foregroundWindow = GetForegroundWindow();
-        if (foregroundWindow != IntPtr.Zero && foregroundWindow != ownWindow)
+        if (foregroundWindow != IntPtr.Zero)
         {
             var foregroundId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(foregroundWindow);
             var foregroundArea = DisplayArea.GetFromWindowId(foregroundId, DisplayAreaFallback.None);
@@ -695,176 +455,7 @@ public sealed partial class MainWindow : Window
                 return cursorArea;
         }
 
-        return DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
-    }
-
-    private void PositionNearTopCenter(DisplayArea? requestedArea = null)
-    {
-        var area = requestedArea ?? DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
-        if (area is null)
-            return;
-
-        var work = area.WorkArea;
-        var size = AppWindow.Size;
-        var x = work.X + Math.Max(0, (work.Width - size.Width) / 2);
-        var scale = Math.Max(1d, _appliedWindowDpi / 96d);
-        var y = work.Y + Math.Max((int)Math.Round(28 * scale), (work.Height - size.Height) / 7);
-        AppWindow.Move(new PointInt32(x, y));
-    }
-
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        var sw = Stopwatch.StartNew();
-        var query = SearchBox.Text.Trim();
-        if (query.Length > 0)
-            _isSearchEditing = true;
-        UpdateSearchPresentation();
-
-        if (_pluginsOpen)
-        {
-            PluginsView.Filter(query);
-            return;
-        }
-
-        if (_marketplaceOpen)
-        {
-            MarketplaceView.Filter(query);
-            return;
-        }
-
-        var matches = string.IsNullOrEmpty(query)
-            ? LauncherCommands().ToArray()
-            : LauncherCommands().Where(command =>
-                command.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                command.Subtitle.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                command.Category.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(command => string.Equals(command.Title, query, StringComparison.OrdinalIgnoreCase))
-                .ThenByDescending(command => command.Title.StartsWith(query, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-
-        PopulateLauncherItems(matches);
-        RebuildLauncherGroups();
-        sw.Stop();
-
-        CompactSectionLabel.Text = string.IsNullOrEmpty(query) ? "COMMANDS" : $"{FilteredItems.Count} RESULTS";
-        MetricsText.Text = $"Local search · {sw.Elapsed.TotalMilliseconds:0.00} ms · {FilteredItems.Count} results";
-        MetricsDot.Fill = new SolidColorBrush(sw.Elapsed.TotalMilliseconds <= 16 ? Colors.MediumSeaGreen : Colors.OrangeRed);
-        SelectFirstResult();
-    }
-
-    private void SearchSurface_PointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        BeginSearchEditing();
-    }
-
-    private void BeginSearchEditing()
-    {
-        _isSearchEditing = true;
-        UpdateSearchPresentation();
-        SearchBox.Focus(FocusState.Pointer);
-        SearchBox.SelectionStart = SearchBox.Text.Length;
-    }
-
-    private void SearchBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrEmpty(SearchBox.Text))
-            _isSearchEditing = false;
-        UpdateSearchPresentation();
-    }
-
-    private void UpdateSearchPresentation()
-    {
-        if (SearchPlaceholder is null)
-            return;
-
-        var showPlaceholder = string.IsNullOrEmpty(SearchBox.Text) && !_isSearchEditing;
-        SearchPlaceholder.Visibility = showPlaceholder ? Visibility.Visible : Visibility.Collapsed;
-        SearchBox.Opacity = showPlaceholder ? 0 : 1;
-    }
-
-    private void SelectFirstResult()
-    {
-        if (FilteredItems.Count == 0)
-        {
-            UpdateDetail(null);
-            return;
-        }
-
-        CompactResults.SelectedIndex = 0;
-    }
-
-    private void Results_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (sender is ListView { SelectedItem: Command command })
-        {
-            _selected = command;
-            UpdateDetail(command);
-        }
-    }
-
-    private void UpdateDetail(Command? command)
-    {
-        _selected = command;
-    }
-
-    private void Results_ItemClick(object sender, ItemClickEventArgs e)
-    {
-        if (_pinDragMoved) return;
-        if (e.ClickedItem is Command command)
-        {
-            _selected = command;
-            RunSelected();
-        }
-    }
-
-    private void RunSelected()
-    {
-        if (LauncherCommandsVisible && _selected?.IsSuggestionsToggle == true) { ToggleSuggestions(); return; }
-        ActionPanel.Visibility = Visibility.Collapsed;
-        if (!_marketplaceOpen && !_pluginsOpen && _selected is { } command)
-            RecordLauncherUsage(command);
-        if (_marketplaceOpen)
-            MarketplaceView.OpenSelected();
-        else if (_pluginsOpen)
-            PluginsView.OpenSelected();
-        else if (_selected?.Route is { } route)
-            OpenWorkspaceCommand(route);
-        else if (_selected?.WorkflowId is { } workflowId)
-            OpenWorkflows(() => WorkflowsView.OpenWorkflow(workflowId));
-        else if (_selected?.Title == "Read last transcription")
-            ReadLastTranscription();
-        else if (_selected?.Title == "Copy last transcription")
-            CopyLastTranscription();
-        else if (_selected?.Title == "History")
-            OpenHistory();
-        else if (_selected?.Title == "Recorder")
-            OpenRecorder();
-        else if (_selected?.Title == "Workflows")
-            OpenWorkflows();
-        else if (_selected?.Title == "Integrations")
-            OpenPlugins();
-        else if (_selected?.Title == "Transcribe file")
-            OpenFileTranscription();
-        else if (_selected?.Title == "Dictionary")
-            OpenLexicon();
-        else if (_selected?.Title == "Snippets")
-            OpenLexicon(true);
-        else if (_selected?.Title == "Settings")
-            OpenSettings();
-        else if (_selected?.Title == "Sync & backup")
-            OpenSyncBackup();
-        else if (_selected?.Title == "Statistics")
-            OpenStatistics();
-        else if (_selected?.Title == "Dictation")
-            ReturnToPreviousApp();
-        else if (_selected is not null)
-            MetricsText.Text = $"Executed {_selected.Title} · preview data only";
-    }
-
-    private void ToggleActions()
-    {
-        if (_pluginsOpen || _marketplaceOpen) return;
-        EntryActionMenu.Create(LauncherActions()).ShowAt(CompactResults);
+        return DisplayArea.Primary;
     }
 
     private void ShowWaveformOverlay()
@@ -885,120 +476,21 @@ public sealed partial class MainWindow : Window
             _overlay.SetTechnicalDetailsEnabled(_technicalDetailsEnabled);
             _overlay.ActivateWithoutTakingFocus();
             UpdateOverlayControls();
-            MetricsText.Text = _overlayMode == OverlayMode.Minimal
-                ? "Overlay active · minimal indicator"
-                : _transcriptPreviewEnabled
-                ? "Overlay active · live transcript preview on"
-                : "Overlay active · live transcript preview off";
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             _overlay = null;
-            MetricsDot.Fill = new SolidColorBrush(Colors.OrangeRed);
-            MetricsText.Text = $"Overlay error · {exception.GetType().Name}: {exception.Message}";
+            ShowNotice(new AppNotice($"The overlay preview could not open: {exception.Message}"));
         }
     }
 
-    private void WindowRoot_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    // Quick Launch was retired; its pins, usage, window and shortcut files are no longer read.
+    private static void RemoveRetiredQuickLaunchFiles()
     {
-        if (VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
-        if (HandleCommandShortcut(e)) { e.Handled = true; return; }
-        if ((!_pluginsOpen && !_marketplaceOpen) || e.Key != global::Windows.System.VirtualKey.Back) return;
-        // Inspect before the editor processes deletion: deleting the last character
-        // must not also navigate away from the current page.
-        var focused = FocusManager.GetFocusedElement(WindowRoot.XamlRoot);
-        if (focused is TextBox { Text.Length: > 0 } or TextBox { AcceptsReturn: true } or PasswordBox or RichEditBox) return;
-        foreach (var modifier in new[] { global::Windows.System.VirtualKey.Control, global::Windows.System.VirtualKey.Menu,
-                     global::Windows.System.VirtualKey.Shift, global::Windows.System.VirtualKey.LeftWindows, global::Windows.System.VirtualKey.RightWindows })
+        foreach (var name in new[] { "quick-launch-hotkeys.txt", "quick-launch-pins.json", "quick-launch-usage.json", "quick-launch-shortcuts.json", "quick-launch-window.json" })
         {
-            if (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(modifier)
-                .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
-        }
-        if (_marketplaceOpen) MarketplaceView.GoBack();
-        else PluginsView.GoBack();
-        e.Handled = true;
-    }
-
-    private void WindowRoot_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).Count > 0) return;
-        var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
-            .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down);
-
-        if (!LauncherCommandsVisible && ctrl && e.Key == (global::Windows.System.VirtualKey)0xBC) // VK_OEM_COMMA
-        {
-            OpenSettings();
-            e.Handled = true;
-            return;
-        }
-
-        if (ctrl && e.Key == global::Windows.System.VirtualKey.K)
-        {
-            ToggleActions();
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key == global::Windows.System.VirtualKey.Escape)
-        {
-            if (_marketplaceOpen && MarketplaceView.IsDetail)
-                MarketplaceView.GoBack();
-            else if (_pluginsOpen && PluginsView.IsDetail)
-                PluginsView.GoBack();
-            else if (ActionPanel.Visibility == Visibility.Visible)
-                ActionPanel.Visibility = Visibility.Collapsed;
-            else if (!string.IsNullOrEmpty(SearchBox.Text))
-            {
-                _isSearchEditing = false;
-                SearchBox.Text = string.Empty;
-            }
-            else if (_pluginsOpen)
-                ClosePlugins();
-            else if (_marketplaceOpen)
-                CloseMarketplace();
-            else
-                AppWindow.Hide();
-            e.Handled = true;
-            return;
-        }
-
-        if (_pluginsOpen && !PluginsView.IsDetail && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
-        {
-            PluginsView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
-            e.Handled = true;
-            return;
-        }
-
-        if (_marketplaceOpen && !MarketplaceView.IsDetail && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
-        {
-            MarketplaceView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
-            e.Handled = true;
-            return;
-        }
-
-        if (!_pluginsOpen && !_marketplaceOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
-        {
-            if (FilteredItems.Count > 0)
-            {
-                CompactResults.SelectedIndex = e.Key == global::Windows.System.VirtualKey.Down ? 0 : FilteredItems.Count - 1;
-                CompactResults.ScrollIntoView(CompactResults.SelectedItem);
-                _isSearchEditing = false;
-                if (CompactResults.ContainerFromItem(CompactResults.SelectedItem) is Control row)
-                    row.Focus(FocusState.Keyboard);
-                else CompactResults.Focus(FocusState.Keyboard);
-            }
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key == global::Windows.System.VirtualKey.Enter && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not Button)
-        {
-            if (FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is TextBox { AcceptsReturn: true }) return;
-            RunSelected();
-            e.Handled = true;
+            try { File.Delete(WinUIProfile.DataPath(name)); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.TraceWarning("Could not remove {0}: {1}", name, ex.Message); }
         }
     }
 
@@ -1006,6 +498,7 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, string> _settingsValues = new();
     private OverlayPreferences OverlayPreferences => _layoutPreferences with { Mode = _overlayMode, LiveText = _transcriptPreviewEnabled, TechnicalDetails = _technicalDetailsEnabled };
     private static readonly string OverlayPreferencesPath = WinUIProfile.DataPath("overlay.json");
+    private string? _overlayPreferencesError;
     private void LoadOverlayPreferences()
     {
         try
@@ -1017,7 +510,7 @@ public sealed partial class MainWindow : Window
             _technicalDetailsEnabled = preferences.TechnicalDetails;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        { MetricsText.Text = "Could not load overlay preferences: " + ex.Message; }
+        { _overlayPreferencesError = "Could not load overlay preferences: " + ex.Message; }
     }
     private bool SaveOverlayPreferences(OverlayPreferences? preferences = null)
     {
@@ -1027,7 +520,7 @@ public sealed partial class MainWindow : Window
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { MetricsText.Text = "Could not save overlay preferences: " + ex.Message; return false; }
+        { _overlayPreferencesError = "Could not save overlay preferences: " + ex.Message; return false; }
     }
 
     internal void OpenSetup(bool returnToTray = false)
@@ -1049,7 +542,6 @@ public sealed partial class MainWindow : Window
             _settingsWindow.IntegrationDismissed += PluginsView.CloseSettingsPage;
             _settingsWindow.UpdateIntegrationNavigation(PluginsView.SettingsNavigationItems);
             _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
-            _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
             _settingsWindow.CommitCopyLastTranscriptionHotkeys = ChangeCopyLastShortcut;
             _settingsWindow.CommitPasteLastTranscriptionHotkeys = ChangePasteLastShortcut;
@@ -1131,7 +623,7 @@ public sealed partial class MainWindow : Window
                 if (!SaveOverlayPreferences(preferences))
                 {
                     _settingsWindow.SetPreferences(OverlayPreferences);
-                    _settingsWindow.ShowOverlaySaveError(MetricsText.Text);
+                    _settingsWindow.ShowOverlaySaveError(_overlayPreferencesError ?? "Could not save overlay preferences.");
                     return;
                 }
                 var modeChanged = _overlayMode != preferences.Mode || _layoutPreferences.Screen != preferences.Screen || _layoutPreferences.Anchor != preferences.Anchor
@@ -1165,7 +657,7 @@ public sealed partial class MainWindow : Window
         _settingsWindow.SetFloatingPlacement(_overlay?.FloatingPlacement);
         _settingsWindow.SetPreferences(OverlayPreferences);
         _settingsWindow.SetPreviewVisible(_overlay?.IsPreviewVisible == true, _overlay?.IsPaused == true);
-        _settingsWindow.ShowOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
+        _settingsWindow.ShowOn(ResolveInvocationDisplayArea());
     }
 
     internal void OpenAccount()
@@ -1187,60 +679,8 @@ public sealed partial class MainWindow : Window
         _settingsWindow?.ShowCategory("plugin:" + pluginId);
     }
 
-    private void OpenMarketplace() => ShowIntegrationSettings(true);
 
-    private void CloseMarketplace()
-    {
-        MarketplaceView.ResetNavigation();
-        _marketplaceOpen = false;
-        MarketplaceView.Visibility = Visibility.Collapsed;
-        SearchBox.IsEnabled = SearchSurface.IsHitTestVisible = true;
-        SearchSurface.Opacity = 1;
-        CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search commands, recordings, workflows…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
-        SearchBox.Text = _launcherQuery;
-        var command = FilteredItems.FirstOrDefault(item => item.Title == "Integrations");
-        if (command is not null) { CompactResults.SelectedItem = command; UpdateDetail(command); }
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        SearchBox.Focus(FocusState.Programmatic);
-    }
 
-    private void OpenPlugins() => ShowIntegrationSettings(false);
-
-    private void ClosePlugins()
-    {
-        _pluginsOpen = false;
-        PluginsView.EndSetupNavigation();
-        PluginsView.Visibility = Visibility.Collapsed;
-        SearchBox.IsEnabled = SearchSurface.IsHitTestVisible = true;
-        SearchSurface.Opacity = 1;
-        CommandSurface.Visibility = QuickLaunchFooter.Visibility = Visibility.Visible;
-        SearchPlaceholder.Text = "Search commands, recordings, workflows…";
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
-        SearchBox.Text = _launcherQuery;
-        var command = FilteredItems.FirstOrDefault(item => item.Title == "Integrations");
-        if (command is not null) { CompactResults.SelectedItem = command; UpdateDetail(command); }
-        _isSearchEditing = false;
-        UpdateSearchPresentation();
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-
-    private void MinimizeButton_Click(object sender, RoutedEventArgs e) =>
-        ((OverlappedPresenter)AppWindow.Presenter).Minimize();
-    private void HideButton_Click(object sender, RoutedEventArgs e) => AppWindow.Hide();
-    private void TestWaveformButton_Click(object sender, RoutedEventArgs e)
-    {
-#if DEBUG
-        if (TrayProbeEnabled)
-        {
-            if (!_closing && !_profileRestoreClosing) TrayProbeRequested?.Invoke();
-            return;
-        }
-#endif
-        ShowWaveformOverlay();
-    }
     private void PausePreview_Click(object? sender, EventArgs e)
     {
         _overlay?.TogglePaused();
@@ -1256,7 +696,6 @@ public sealed partial class MainWindow : Window
     private void EndPreview_Click(object sender, RoutedEventArgs e)
     {
         HideOverlayPreview();
-        MetricsText.Text = "Overlay preview ended";
         UpdateOverlayControls();
     }
 
@@ -1264,48 +703,9 @@ public sealed partial class MainWindow : Window
     {
         _settingsWindow?.SetPreferences(OverlayPreferences);
         _settingsWindow?.SetPreviewVisible(_overlay?.IsPreviewVisible == true, _overlay?.IsPaused == true);
-        UpdateTranscriptToggle();
-    }
-    private void UpdateTranscriptToggle()
-    {
-        var minimal = _overlayMode == OverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
-        var available = _dictation.SupportsLiveTranscription;
-        TranscriptToggleButton.IsEnabled = !minimal && available;
-        TranscriptToggleButton.Content = !available ? "Live text · Unavailable" : minimal ? "Live text  —" : _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
-        ToolTipService.SetToolTip(TranscriptToggleButton, available ? "Show text during recording." :
-            "Live transcription is unavailable for the selected provider or task. Text arrives after recording stops.");
-        _settingsWindow?.SetLiveTranscriptionAvailability(available);
-    }
-    private void TranscriptToggleButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_dictation.SupportsLiveTranscription) return;
-        _transcriptPreviewEnabled = !_transcriptPreviewEnabled;
-        SaveOverlayPreferences();
-        TranscriptToggleButton.Content = _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
-        TranscriptToggleButton.Foreground = (Brush)Application.Current.Resources[
-            _transcriptPreviewEnabled ? "AccentBrush" : "MutedBrush"];
-        _overlay?.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
-        _liveOverlay?.SetTranscriptPreviewEnabled(_dictation.OverlayState.ShouldShowTranscript(
-            _overlayMode, _transcriptPreviewEnabled, _dictation.SupportsLiveTranscription));
-        UpdateOverlayControls();
-        MetricsText.Text = _transcriptPreviewEnabled
-            ? "Live transcript preview enabled"
-            : "Live transcript preview disabled";
-    }
-    private void RunSelectedButton_Click(object sender, RoutedEventArgs e) => RunSelected();
-    private void ShowActionsButton_Click(object sender, RoutedEventArgs e) => ToggleActions();
-    private void KeepOpenButton_Click(object sender, RoutedEventArgs e)
-    {
-        RunSelected();
-        SearchBox.Focus(FocusState.Programmatic);
-    }
-    private void PinButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_selected is { } command) ToggleLauncherPin(command);
+        _settingsWindow?.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
     }
 
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr hwnd);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();

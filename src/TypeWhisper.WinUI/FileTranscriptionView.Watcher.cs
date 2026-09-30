@@ -49,7 +49,7 @@ public sealed partial class FileTranscriptionView
     private void RenderWatcher()
     {
         _watchRenderedState = WatchState;
-        _crumbs.SetItems(new("Quick Launch", () => ExitRequested?.Invoke()), new("Files"), new("Watch folder"));
+        _crumbs.SetItems(new("Files"), new("Watch folder"));
         _watchStatus = Text(_watcher.Error ?? _watcher.Status, 14);
         AutomationProperties.SetLiveSetting(_watchStatus, AutomationLiveSetting.Polite);
         _body.Children.Add(_watchStatus);

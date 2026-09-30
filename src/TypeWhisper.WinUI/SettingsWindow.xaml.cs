@@ -14,7 +14,6 @@ public sealed partial class SettingsWindow : Window
 {
     private OverlayPreferences _preferences;
     internal Func<Action<bool>, SetupWizard>? CreateSetupWizard { get; set; }
-    internal Func<string, string?>? CommitLauncherHotkeys { get; set; }
     internal Func<string, string?>? CommitDictationHotkeys { get; set; }
     internal Func<string, string?>? CommitCancelProcessingHotkeys { get; set; }
     internal Func<string, string?>? CommitRecentTranscriptionsHotkeys { get; set; }
@@ -503,7 +502,7 @@ public sealed partial class SettingsWindow : Window
         if (catalog)
         {
             _catalogPickers.Clear();
-            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitPasteLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
+            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitPasteLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
             if (category == "General")
@@ -560,7 +559,6 @@ public sealed partial class SettingsWindow : Window
         if (SetupHost.Child is null) OpenSearchResult(new(category, key, "", "", ""));
     }
 
-    internal void ShowHistoryNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open History. Your current workspace is kept intact.";
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e)
     {

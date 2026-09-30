@@ -100,7 +100,6 @@ public sealed class ShortcutRecorder : UserControl
         _editActions.Children.Add(_apply); _editActions.Children.Add(cancel); panel.Children.Add(_editActions);
         var (icon, description) = key switch
         {
-            "QuickLaunchHotkeys" => ("search", "Open from any app · saved global shortcut"),
             "MainDictationHotkeys" => ("microphone", "Your everyday dictation"),
             "CancelProcessingHotkeys" => ("keyboard", "Cancel final dictation processing or an active selected-text workflow"),
             "PushToTalkHotkey" => ("run", "Speak while holding"),

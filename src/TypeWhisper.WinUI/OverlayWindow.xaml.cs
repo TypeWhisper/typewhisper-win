@@ -396,7 +396,7 @@ public sealed partial class OverlayWindow : Window
             OverlayWidget.Clock => DateTime.Now.ToString("HH:mm"),
             OverlayWidget.Profile => _runtimeState is null ? "Default profile" : "Parakeet",
             OverlayWidget.HotkeyMode => _runtimeState?.Invoke().RecordingModeLabel ?? "Toggle",
-            OverlayWidget.AppName => _runtimeState?.Invoke().TargetApp ?? "Quick Launch",
+            OverlayWidget.AppName => _runtimeState?.Invoke().TargetApp ?? "Notepad",
             OverlayWidget.Indicator => _runtimeState?.Invoke().Label ?? (_paused ? "Paused" : "Recording"),
             _ => ""
         };

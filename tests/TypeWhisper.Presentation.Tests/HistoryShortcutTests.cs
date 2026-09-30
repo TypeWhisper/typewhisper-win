@@ -115,13 +115,12 @@ public sealed class HistoryShortcutTests
         => Assert.Equal(conflict, ProcessingCancelShortcut.Conflicts(history, other, modifiers));
 
     [Theory]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(false, false, true)]
-    public void ClosingRunningWorkAndOtherWorkspacesRejectNavigation(bool closing, bool busy, bool workspace)
-        => Assert.NotNull(HistoryShortcutAdmission.Rejection(closing, busy, workspace));
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ClosingOrRunningWorkRejectsNavigation(bool closing, bool busy)
+        => Assert.NotNull(HistoryShortcutAdmission.Rejection(closing, busy));
 
     [Fact]
-    public void IdleLauncherAndExistingHistoryAllowNavigation()
-        => Assert.Null(HistoryShortcutAdmission.Rejection(false, false, false));
+    public void IdleAppAllowsNavigation()
+        => Assert.Null(HistoryShortcutAdmission.Rejection(false, false));
 }

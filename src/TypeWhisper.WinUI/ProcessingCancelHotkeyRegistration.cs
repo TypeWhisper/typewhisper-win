@@ -6,15 +6,14 @@ internal sealed class ProcessingCancelHotkeyRegistration : IDisposable
 {
     private readonly HotkeyRegistration _native;
     private readonly ProcessingCancelShortcut _settings;
-    private readonly Func<string> _launcher;
     private readonly Func<string> _dictation;
     private bool _disposed;
     internal string Value => _settings.Value;
     internal string? Error => _settings.Error;
     internal ProcessingCancelHotkeyRegistration(Microsoft.UI.Xaml.Window window, Func<bool> canCancel,
-        Action requestCancel, Func<string> launcherShortcuts, Func<string> dictationShortcuts)
+        Action requestCancel, Func<string> dictationShortcuts)
     {
-        _launcher = launcherShortcuts; _dictation = dictationShortcuts;
+        _dictation = dictationShortcuts;
         _native = new(window, () =>
         {
             if (!_disposed) ProcessingCancelShortcut.Invoke(canCancel(), ShortcutRecorder.AnyEditing, requestCancel);
@@ -23,8 +22,6 @@ internal sealed class ProcessingCancelHotkeyRegistration : IDisposable
     }
     internal string? Initialize() => _disposed ? "Cancel shortcuts are unavailable during shutdown." : _settings.Initialize();
     internal string? TryChange(string value) => _disposed ? "Cancel shortcuts are unavailable during shutdown." : _settings.Save(Canonical(value));
-    internal string? ConflictWithLauncher(string value) => ProcessingCancelShortcut.Conflicts(Value, Canonical(value), false)
-        ? "Already used by Cancel processing. Change that shortcut first." : null;
     internal string? ConflictWithDictation(string value) => ProcessingCancelShortcut.Conflicts(Value, Canonical(value), true)
         ? "This dictation shortcut overlaps Cancel processing. Change the cancel shortcut first." : null;
     private string? Validate(string value)
@@ -32,7 +29,6 @@ internal sealed class ProcessingCancelHotkeyRegistration : IDisposable
         if (value != Canonical(value)) return "Assign the cancel shortcut again using the shortcut editor.";
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, Canonical(_launcher()), false)) return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, Canonical(_dictation()), true)) return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         return null;
     }

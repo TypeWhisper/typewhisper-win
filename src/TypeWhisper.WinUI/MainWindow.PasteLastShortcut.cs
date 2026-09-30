@@ -30,8 +30,6 @@ public sealed partial class MainWindow
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the paste-last shortcut again using the shortcut editor.";
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-            return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
@@ -51,8 +49,8 @@ public sealed partial class MainWindow
 
     // The tray menu takes the foreground, so it pastes into the last app window used before.
     internal void PasteLastTranscriptionFromTray() => _ = PasteLastTranscriptionAsync(_foregroundHistory?.LastTarget, activate: true);
-    internal void CopyLastTranscriptionFromTray() => CopyLastTranscription(fromTray: true);
-    internal void ReadLastTranscriptionFromTray() => ReadLastTranscription(fromTray: true);
+    internal void CopyLastTranscriptionFromTray() => CopyLastTranscription();
+    internal void ReadLastTranscriptionFromTray() => ReadLastTranscription();
 
     private async Task PasteLastTranscriptionAsync(PasteTarget? target, bool activate)
     {
@@ -70,7 +68,6 @@ public sealed partial class MainWindow
         if (result == LastDictationPasteResult.Pasted)
         {
             // A global paste action must not steal focus from the destination app.
-            MetricsText.Text = "Last dictation pasted";
             return;
         }
         var message = result switch
@@ -80,7 +77,6 @@ public sealed partial class MainWindow
             LastDictationPasteResult.NoTarget => "Click into the app you want to paste into, then try again.",
             _ => "Could not paste the last dictation. Release all keys, click into a text field and try again, or use Copy last transcription."
         };
-        ShowFromActivation();
         ShowActivationNotice(message);
     }
 

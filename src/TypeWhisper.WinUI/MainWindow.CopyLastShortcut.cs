@@ -27,8 +27,6 @@ public sealed partial class MainWindow
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the copy-last shortcut again using the shortcut editor.";
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-            return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
@@ -45,7 +43,7 @@ public sealed partial class MainWindow
         return error;
     }
 
-    private void CopyLastTranscription(bool fromTray = false)
+    private void CopyLastTranscription()
     {
         var blocked = _closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
@@ -57,16 +55,10 @@ public sealed partial class MainWindow
             global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(content);
         });
         if (result == LastDictationCopyResult.Ignored) return;
-        // A shortcut keeps focus in the target app; the tray has no other place to show the refusal.
-        if (result == LastDictationCopyResult.Busy && !fromTray)
-        {
-            MetricsText.Text = "Finish the current operation before copying the last dictation.";
-            return;
-        }
         if (result == LastDictationCopyResult.Copied)
         {
             // A global copy action must not steal focus from the destination app.
-            MetricsText.Text = "Last dictation copied";
+            ShowNotice(new AppNotice("Last dictation copied.", IsError: false, Duration: TimeSpan.FromSeconds(3)));
             return;
         }
         var message = result switch
@@ -75,7 +67,6 @@ public sealed partial class MainWindow
             LastDictationCopyResult.Empty => "No completed dictation in this session yet. Dictate once, then use this shortcut.",
             _ => "Could not access the clipboard. Try copying the last dictation again."
         };
-        ShowFromActivation();
         ShowActivationNotice(message);
     }
 

@@ -5,12 +5,10 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class HotkeyRegistration : IDisposable
 {
-    private const int HotkeyId = 0x5457;
     private const uint WmHotkey = 0x0312;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
     private const uint ModNoRepeat = 0x4000;
-    private const uint VkSpace = 0x20;
     private readonly nuint SubclassId;
 
     private readonly IntPtr _hwnd;
@@ -18,12 +16,11 @@ internal sealed class HotkeyRegistration : IDisposable
     private readonly SubclassProc _subclassProc;
     private bool _registered;
     private readonly Dictionary<string, int> _bindings = new();
-    private int _nextId = HotkeyId;
+    private int _nextId;
 
-    internal string DisplayText { get; private set; } = "Not assigned";
     internal string Value => string.Join(",", _bindings.Keys);
 
-    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase = HotkeyId)
+    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase)
         : this(window, _ => callback(), idBase) { }
 
     internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string> callback, int idBase)
@@ -35,7 +32,7 @@ internal sealed class HotkeyRegistration : IDisposable
         _subclassProc = WindowSubclassProc;
 
         if (!SetWindowSubclass(_hwnd, _subclassProc, SubclassId, IntPtr.Zero))
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to subclass the preview window.");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to receive global shortcuts for this window.");
 
         _registered = true;
     }
@@ -69,7 +66,6 @@ internal sealed class HotkeyRegistration : IDisposable
             _bindings.Remove(old);
         }
         foreach (var pair in added) _bindings.Add(pair.Key, pair.Value);
-        DisplayText = requested.Length == 0 ? "Not assigned" : ShortcutKeys.Display(requested[0], ShortcutKeys.LayoutCharacter).Replace(" + ", " ");
         return null;
     }
 

@@ -58,7 +58,8 @@ public sealed partial class LexiconView : UserControl
         AutomationProperties.SetHeadingLevel(_heading, AutomationHeadingLevel.Level1);
         var header = new StackPanel { Spacing = 12 };
         _heading.FontSize = 20; _heading.MinHeight = 32; _heading.Margin = new Thickness(4, 0, 0, 0);
-        _tabs.SetItems([new("Word", "Words"), new("Correction", "Corrections"), new("Snippet", "Snippets"), new("packs", "Term packs")], "Word");
+        // Settings list Dictionary and Snippets as separate pages, so only the dictionary has tabs.
+        _tabs.SetItems([new("Word", "Words"), new("Correction", "Corrections"), new("packs", "Term packs")], "Word");
         _tabs.SelectionChanged += id =>
         {
             _showPacks = id == "packs";
@@ -78,16 +79,6 @@ public sealed partial class LexiconView : UserControl
         var border = new Border { Child = footer, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 1, 0, 0) };
         Grid.SetRow(border, 3); root.Children.Add(border); Content = root;
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(_actions));
-    }
-
-    private bool _settingsLayout;
-
-    // Settings list Dictionary and Snippets as separate pages, so only the dictionary keeps tabs.
-    internal void UseSettingsLayout()
-    {
-        _settingsLayout = true;
-        _crumbs.OmitRoot = true;
-        _tabs.SetItems([new("Word", "Words"), new("Correction", "Corrections"), new("packs", "Term packs")], "Word");
     }
 
     internal void Present(bool snippets, string? section = null)
@@ -124,14 +115,13 @@ public sealed partial class LexiconView : UserControl
     private void Render()
     {
         _body.Children.Clear(); _rows.Children.Clear();
-        _tabs.Visibility = _draft is null && !(_settingsLayout && _kind == LexiconKind.Snippet && !_showPacks) ? Visibility.Visible : Visibility.Collapsed;
+        _tabs.Visibility = _draft is null && !(_kind == LexiconKind.Snippet && !_showPacks) ? Visibility.Visible : Visibility.Collapsed;
         if (_draft is null) RenderTabs();
         if (_showPacks) { RenderPacks(); return; }
         _heading.Text = _draft is null ? (_kind == LexiconKind.Snippet ? "Snippets" : "Dictionary") :
             $"{(_store.Entries.Any(entry => entry.Id == _draft.Id) ? "Edit" : "New")} {Singular}";
-        var launch = new Crumb("Quick Launch", () => Navigate(() => { _draft = _original = null; ExitRequested?.Invoke(); }));
-        if (_draft is null) _crumbs.SetItems(launch, new(Section));
-        else _crumbs.SetItems(launch, new(Section, () => Navigate(CloseEditor)), new("Editor"));
+        if (_draft is null) _crumbs.SetItems(new Crumb(Section));
+        else _crumbs.SetItems(new(Section, () => Navigate(CloseEditor)), new("Editor"));
         _notice.Text = _store.LastError ?? (_kind == LexiconKind.Snippet ? "Saved snippets are applied to your next dictation." : "Saved in this development profile · applied to the next dictation using existing Windows dictionary rules.");
         AutomationProperties.SetName(_headingHelp, "About " + (_draft is null ? Section : _heading.Text));
         if (_draft is null) RenderList(); else RenderEditor();
@@ -480,11 +470,9 @@ public sealed partial class LexiconView : UserControl
     {
         _heading.Text = "Dictionary";
         AutomationProperties.SetName(_headingHelp, "About term packs");
-        _crumbs.SetItems(new("Quick Launch", () => ExitRequested?.Invoke()), new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
+        _crumbs.SetItems(new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
         _actions.Children.Clear();
-        _actions.Children.Add(_settingsLayout
-            ? Button("Back to Dictionary", () => { _showPacks = false; _kind = LexiconKind.Word; Render(); })
-            : Button("Back to Quick Launch", () => ExitRequested?.Invoke()));
+        _actions.Children.Add(Button("Back to Dictionary", () => { _showPacks = false; _kind = LexiconKind.Word; Render(); }));
         _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
             ? "Saved packs provide dictionary terms for enabled vocabulary processing."
             : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");

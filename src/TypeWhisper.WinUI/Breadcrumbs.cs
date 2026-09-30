@@ -7,30 +7,17 @@ namespace TypeWhisper.WinUI;
 
 internal sealed record Crumb(string Label, Action? Navigate = null, string? AutomationName = null);
 
-// Shared navigation content; the main shell can mirror it in the title bar.
+// Navigation within a settings page. The sidebar already leads to the page itself, so the trail hides
+// when none of its crumbs leads anywhere.
 public sealed class Breadcrumbs : UserControl
 {
     private readonly StackPanel _items = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-    internal static List<Breadcrumbs> LoadedSources { get; } = [];
     internal Crumb[] Items { get; private set; } = [];
-    internal bool IsTitleDestination { get; set; }
-    // Settings pages already navigate through the sidebar: drop the launcher root
-    // and hide the trail when none of the remaining crumbs leads anywhere.
-    internal bool OmitRoot { get; set; }
-    public Breadcrumbs()
-    {
-        Content = _items;
-        Loaded += (_, _) => { if (!LoadedSources.Contains(this)) LoadedSources.Add(this); };
-        Unloaded += (_, _) => LoadedSources.Remove(this);
-    }
+    public Breadcrumbs() => Content = _items;
 
     internal void SetItems(params Crumb[] items)
     {
-        if (OmitRoot)
-        {
-            items = items.Skip(1).ToArray();
-            Visibility = items.Any(item => item.Navigate is not null) ? Visibility.Visible : Visibility.Collapsed;
-        }
+        Visibility = items.Any(item => item.Navigate is not null) ? Visibility.Visible : Visibility.Collapsed;
         Items = items;
         _items.Children.Clear();
         foreach (var item in items)

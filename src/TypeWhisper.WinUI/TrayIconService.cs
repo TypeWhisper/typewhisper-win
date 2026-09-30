@@ -91,14 +91,6 @@ internal sealed class TrayIconService : IDisposable
         _menuWindow.Close();
     }
 
-#if DEBUG
-    internal void PresentProbe()
-    {
-        if (!_closing && WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_TRAY_PROBE") == "1")
-            _menuWindow.Present();
-    }
-#endif
-
     internal void UpdateDictation(string status, bool recording)
     {
         if (_closing) return;

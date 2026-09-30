@@ -14,10 +14,10 @@ public sealed class RecordingShortcutConflictsTests
         => Assert.Equal(expected, RecordingShortcutConflicts.Overlap(first, firstModifiers, second, secondModifiers));
 
     [Fact]
-    public void RecorderDoesNotReplaceAnotherWorkspaceOrInterruptRecording()
+    public void RecorderDoesNotInterruptRunningWork()
     {
-        Assert.NotNull(RecorderShortcutAdmission.Rejection(false, true, false));
-        Assert.NotNull(RecorderShortcutAdmission.Rejection(false, false, true));
-        Assert.Null(RecorderShortcutAdmission.Rejection(false, false, false));
+        Assert.NotNull(RecorderShortcutAdmission.Rejection(false, true));
+        Assert.NotNull(RecorderShortcutAdmission.Rejection(true, false));
+        Assert.Null(RecorderShortcutAdmission.Rejection(false, false));
     }
 }

@@ -27,8 +27,6 @@ public sealed partial class MainWindow
         if (value != WorkflowShortcutCatalog.Canonical(value)) return "Assign the read-last shortcut again using the shortcut editor.";
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
-        if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_hotkeyRegistration?.Value ?? ""), false))
-            return "Already used by Quick Launch.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_dictationHotkey?.Value ?? ""), true))
             return "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.";
         if (ProcessingCancelShortcut.Conflicts(value, WorkflowShortcutCatalog.Canonical(_cancelProcessingHotkey?.Value ?? ""), false))
@@ -46,7 +44,7 @@ public sealed partial class MainWindow
     }
 
     private long _readLastRevision;
-    private async void ReadLastTranscription(bool fromTray = false)
+    private async void ReadLastTranscription()
     {
         if (_closing || _profileRestoreClosing || ShortcutRecorder.AnyEditing) return;
         if (_dictationInitialization is not { IsCompleted: true } ||
@@ -54,17 +52,14 @@ public sealed partial class MainWindow
             _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false })
         {
             const string busy = "Finish the current operation before reading the last dictation.";
-            MetricsText.Text = busy;
-            if (fromTray) { ShowFromActivation(); ShowActivationNotice(busy); }
+            ShowActivationNotice(busy);
             return;
         }
         var revision = ++_readLastRevision;
         var result = await _dictation.ToggleReadLastDictationAsync();
         if (_closing || _profileRestoreClosing || revision != _readLastRevision) return;
-        MetricsText.Text = result.Message ?? (result.Status == SpokenFeedbackStatus.Completed ? "Finished reading last dictation" : "Read-back stopped");
         if (result.Status is SpokenFeedbackStatus.Failed or SpokenFeedbackStatus.Rejected)
         {
-            ShowFromActivation();
             ShowActivationNotice(result.Message ?? "The last dictation could not be read aloud.");
         }
     }

@@ -40,7 +40,7 @@ public sealed partial class MainWindow
         if (_closing || _profileRestoreClosing) return;
         _hotkeyRecoveryError = error;
         if (error is not null) System.Diagnostics.Trace.TraceError(error);
-        if (IsNormalLauncherStatus) MetricsText.Text = error ?? DictationStatusForDisplay;
+        if (error is not null) ShowNotice(new AppNotice(error));
         TrayActionsChanged?.Invoke();
     }
 }
