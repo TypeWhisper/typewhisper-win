@@ -28,6 +28,21 @@ internal sealed partial class LocalDictationSession
         finally { _gate.Release(); }
     }
 
+    // Brings back the window the workflow palette was opened from and pastes into it. Its selection is still
+    // active there, so the text replaces it. The previous clipboard is restored, as after dictation.
+    internal async Task<bool> InsertIntoAsync(string text, PasteTarget target)
+    {
+        if (_disposed || string.IsNullOrEmpty(text) || !await _gate.WaitAsync(0)) return false;
+        try
+        {
+            if (!target.IsCurrent || !await ActivateAsync(target.Window)) return false;
+            for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
+            if (_disposed || !target.IsCurrent) return false;
+            return await _inserter.InsertAsync(text, target.Window, () => !_disposed && target.IsCurrent);
+        }
+        finally { _gate.Release(); }
+    }
+
     private static async Task<bool> ActivateAsync(IntPtr target)
     {
         if (IsIconic(target)) ShowWindow(target, 9);

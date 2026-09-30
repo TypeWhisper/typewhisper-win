@@ -31,11 +31,32 @@ public sealed class HistoryActionsTests : IDisposable
     {
         var service = Create();
         var updated = await new HistoryActions(service).EditAsync(Record.Id, "corrected transcript");
-        Assert.Equal(Record with { FinalText = "corrected transcript" }, updated);
+        // Editing stamps the content so History sync can pick the newest text.
+        Assert.NotNull(updated!.ContentUpdatedAt);
+        Assert.Equal(Record with { FinalText = "corrected transcript", ContentUpdatedAt = updated.ContentUpdatedAt }, updated);
         var restarted = new HistoryService(HistoryPath) { ThrowOnLoadFailure = true };
         Assert.Equal(updated, Assert.Single(await new HistoryReader(restarted).ReadAsync("corrected")));
         Assert.True(await new HistoryActions(restarted).DeleteAsync(Record.Id));
         Assert.Empty(await new HistoryReader(new HistoryService(HistoryPath)).ReadAsync());
+    }
+
+    [Fact]
+    public async Task InboxCompletionOnlyChangesInboxEntriesAndPersists()
+    {
+        var service = Create();
+        var actions = new HistoryActions(service);
+        // A local entry was never in the Inbox, so neither action applies to it.
+        Assert.Equal(0, await actions.SetInboxCompletedAsync([Record.Id], completed: true));
+        Assert.Null(service.Records.Single().InboxState);
+        Assert.True(service.TryReplaceRecord(Record with { InboxState = HistoryWorkspace.InboxOpen }));
+        var at = new DateTime(2026, 9, 30, 8, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(1, await actions.SetInboxCompletedAsync([Record.Id], completed: true, at));
+        var restarted = new HistoryService(HistoryPath) { ThrowOnLoadFailure = true };
+        var completed = Assert.Single(await new HistoryReader(restarted).ReadAsync());
+        Assert.Equal((HistoryWorkspace.InboxCompleted, at), (completed.InboxState, completed.InboxCompletedAt));
+        Assert.Equal(1, await new HistoryActions(restarted).SetInboxCompletedAsync([Record.Id], completed: false));
+        Assert.Equal(HistoryWorkspace.InboxOpen, restarted.Records.Single().InboxState);
+        Assert.Null(restarted.Records.Single().InboxCompletedAt);
     }
 
     [Fact]

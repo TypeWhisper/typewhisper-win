@@ -185,7 +185,8 @@ public partial class App : Application
         _window.RestoreApiProfile = (store, preview) => RestoreProfileAsync(store, preview, true);
         _window.DeleteAllData = DeleteAllDataAsync;
         _tray = new TrayIconService(
-            () => _window.DispatcherQueue.TryEnqueue(_window.ShowFromActivation),
+            () => _window.DispatcherQueue.TryEnqueue(_window.ToggleRecorderFromTray),
+            () => _window.DispatcherQueue.TryEnqueue(_window.ShowRecentTranscriptionsFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenSettings),
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenFilesFromTray),
@@ -203,6 +204,9 @@ public partial class App : Application
         void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,
             _window.CanChangeDictationHotkeyPause, _window.DictationHotkeyPauseError);
         _window.TrayActionsChanged += UpdateTrayActions;
+        void UpdateTrayRecorder() => _tray?.UpdateRecorder(_window.RecorderRecording, _window.CanToggleRecorder);
+        _window.RecorderChanged += UpdateTrayRecorder;
+        UpdateTrayRecorder();
 #if DEBUG
         _window.TrayProbeRequested += () => _tray?.PresentProbe();
 #endif

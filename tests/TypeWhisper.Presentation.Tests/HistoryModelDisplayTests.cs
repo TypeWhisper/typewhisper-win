@@ -36,9 +36,7 @@ public sealed class HistoryModelDisplayTests
     public void UsesStoredProviderAndModelWithoutAssumingTheCurrentModel(string? provider, string? model, string expected)
     {
         var record = new TranscriptionRecord { Id = "historical-entry", Timestamp = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc), RawText = "dictated", FinalText = "Dictated.", EngineUsed = provider ?? "", ModelUsed = model };
-        var transcript = new Transcript(HistoryEntryAdapter.FromRecord(record), "Today");
-        Assert.Equal(expected, transcript.ModelLabel);
-        Assert.Equal("Model: " + expected, transcript.ModelMetadata);
+        Assert.Equal(expected, HistoryWorkspace.ModelLabel(record.EngineUsed, record.ModelUsed));
         Assert.Equal(model, record.ModelUsed);
     }
 }

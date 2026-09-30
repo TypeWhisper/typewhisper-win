@@ -11,8 +11,7 @@ public sealed partial class MainWindow
     private Dictionary<string, string> _commandShortcuts = new(StringComparer.Ordinal);
     private static string CommandShortcutsPath => WinUIProfile.DataPath("quick-launch-shortcuts.json");
     private string CommandShortcut(Command command) => _commandShortcuts.GetValueOrDefault(command.Key, command.Shortcut.Replace("Ctrl ,", "Ctrl+,"));
-    private bool LauncherCommandsVisible => !_historyOpen && !_recorderOpen && !_workflowsOpen &&
-        !_pluginsOpen && !_marketplaceOpen && !UtilityOpen && !LexiconOpen && !FileTranscriptionOpen;
+    private bool LauncherCommandsVisible => !_pluginsOpen && !_marketplaceOpen;
 
     private void LoadCommandShortcuts()
     {

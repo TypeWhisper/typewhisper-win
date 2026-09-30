@@ -107,6 +107,7 @@ public sealed partial class WorkflowsView : UserControl
     internal event EventHandler? LauncherRequested;
     internal event EventHandler? ClearSearchRequested;
     internal event Action<bool>? ConfigurationModeChanged;
+    internal event Action<bool>? DetailModeChanged;
     internal event Action<string>? ConfigurationSaved;
     internal bool EditWorkflow(string id)
     {
@@ -186,6 +187,11 @@ public sealed partial class WorkflowsView : UserControl
         WorkflowList.SelectedItem = FilteredWorkflows.FirstOrDefault(item => item.Id == selected?.Id) ?? FilteredWorkflows.FirstOrDefault();
         ShowPage(Page.List);
         WorkflowEmptyState.Visibility = FilteredWorkflows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        // Without any workflow, a search hint would be misleading; offer the first workflow instead.
+        var none = _workflows.Count == 0;
+        WorkflowEmptyTitle.Text = none ? "No workflows yet" : "No workflows found";
+        WorkflowEmptyAction.Content = none ? "Create first workflow" : "Clear search";
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(WorkflowEmptyAction, none ? "Create first workflow" : "Clear workflow search");
     }
 
     internal void MoveSelection(int offset)
@@ -241,6 +247,8 @@ public sealed partial class WorkflowsView : UserControl
             ? $"{FilteredWorkflows.Count} workflow{(FilteredWorkflows.Count == 1 ? "" : "s")}" : "Workflow";
         UpdateBreadcrumbs();
         WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "\u232b / Esc Back", _ => "\u232b / Esc Back   \u2191\u2193 Navigate   Enter Open" };
+        // Settings has no Backspace navigation, and Esc on the list closes the window.
+        if (WorkflowBreadcrumbs.OmitRoot) WorkflowNavigationHint.Text = page switch { Page.Result => "Esc Back", Page.List => "\u2191\u2193 Navigate   Enter Open", _ => WorkflowNavigationHint.Text };
         WorkflowPrimaryButton.Visibility = page == Page.List ? Visibility.Collapsed : Visibility.Visible;
         WorkflowPrimaryButton.Content = page == Page.Configuration ? (_creating ? "Create workflow" : "Save changes") : page == Page.Result ? "Copy result" : RunButtonLabel;
         UpdateExecutionSummary();
@@ -253,6 +261,7 @@ public sealed partial class WorkflowsView : UserControl
         ConfigureWorkflowButton.IsEnabled = page == Page.List
             ? WorkflowList.SelectedItem is WorkflowDraft { IsEditable: true } : _opened?.IsEditable == true;
         ConfigurationModeChanged?.Invoke(page == Page.Configuration);
+        DetailModeChanged?.Invoke(page != Page.List);
         UpdateSourceState();
     }
 
@@ -395,7 +404,11 @@ public sealed partial class WorkflowsView : UserControl
 
     private void Workflow_Click(object sender, ItemClickEventArgs e) { WorkflowList.SelectedItem = e.ClickedItem; OpenSelected(); }
     private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
-    private void ClearSearch_Click(object sender, RoutedEventArgs e) { Filter(string.Empty); ClearSearchRequested?.Invoke(this, EventArgs.Empty); }
+    private void ClearSearch_Click(object sender, RoutedEventArgs e)
+    {
+        if (_workflows.Count == 0) { NewWorkflow_Click(sender, e); return; }
+        Filter(string.Empty); ClearSearchRequested?.Invoke(this, EventArgs.Empty);
+    }
     private void Primary_Click(object sender, RoutedEventArgs e)
     {
         if (_page == Page.Configuration) { SaveConfiguration(); return; }
@@ -461,10 +474,10 @@ public sealed partial class WorkflowsView : UserControl
         foreach (var action in EntryActionMenu.FromButtons(ContextActionsFooter)) yield return action;
         var workflow = _page == Page.List ? WorkflowList.SelectedItem as WorkflowDraft : _opened;
         if (_page is not (Page.List or Page.Editor) || workflow?.IsEditable != true) yield break;
-        yield return new(IsPinned?.Invoke(workflow.Id) == true ? "Unpin from Quick Launch" : "Pin to Quick Launch", () =>
+        if (TogglePin is { } togglePin) yield return new(IsPinned?.Invoke(workflow.Id) == true ? "Unpin from Quick Launch" : "Pin to Quick Launch", () =>
         {
             var wasPinned = IsPinned?.Invoke(workflow.Id) == true;
-            TogglePin?.Invoke(LauncherEntries.First(entry => entry.WorkflowId == workflow.Id));
+            togglePin(LauncherEntries.First(entry => entry.WorkflowId == workflow.Id));
             WorkflowSummary.Text = (IsPinned?.Invoke(workflow.Id) == true) != wasPinned
                 ? (wasPinned ? "Removed from pinned workflows." : "Pinned to Quick Launch.")
                 : "The pin could not be saved. Please try again.";
@@ -751,6 +764,12 @@ public sealed partial class WorkflowsView : UserControl
             ClearSearchRequested?.Invoke(this, EventArgs.Empty);
             WorkflowList.Focus(FocusState.Programmatic);
         }
+    }
+
+    internal void UseSettingsLayout()
+    {
+        WorkflowBreadcrumbs.OmitRoot = true;
+        ShowPage(_page);
     }
 
     private void UpdateBreadcrumbs()

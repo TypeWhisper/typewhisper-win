@@ -14,6 +14,9 @@ public sealed class Breadcrumbs : UserControl
     internal static List<Breadcrumbs> LoadedSources { get; } = [];
     internal Crumb[] Items { get; private set; } = [];
     internal bool IsTitleDestination { get; set; }
+    // Settings pages already navigate through the sidebar: drop the launcher root
+    // and hide the trail when none of the remaining crumbs leads anywhere.
+    internal bool OmitRoot { get; set; }
     public Breadcrumbs()
     {
         Content = _items;
@@ -23,6 +26,11 @@ public sealed class Breadcrumbs : UserControl
 
     internal void SetItems(params Crumb[] items)
     {
+        if (OmitRoot)
+        {
+            items = items.Skip(1).ToArray();
+            Visibility = items.Any(item => item.Navigate is not null) ? Visibility.Visible : Visibility.Collapsed;
+        }
         Items = items;
         _items.Children.Clear();
         foreach (var item in items)

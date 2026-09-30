@@ -25,7 +25,30 @@ public sealed partial class SettingsWindow : Window
     internal Func<string, string, string?>? CommitRecordingShortcut { get; set; }
     internal Func<string, string?>? CommitRecorderHotkeys { get; set; }
     internal Action<string, StackPanel, List<ChoicePicker>>? ConfigureLiveSettings { get; set; }
-    internal event Action<string>? WorkspaceRequested;
+    // Pages that host an app view instead of catalog settings. The same view instance
+    // moves into whichever settings window is open.
+    internal static readonly string[] WorkspaceCategories = ["Home", "File transcription", "Recorder", "Statistics", "Dictionary", "Snippets", "Workflows", "Sync & backup"];
+    internal Func<string, FrameworkElement?>? WorkspacePage
+    {
+        get => _workspacePage;
+        set
+        {
+            _workspacePage = value;
+            // The window opens on Home before its owner connects the pages.
+            if (WorkspaceCategories.Contains(_currentCategory) && SetupHost.Child is null) ShowCategoryCore(_currentCategory);
+        }
+    }
+    private Func<string, FrameworkElement?>? _workspacePage;
+    internal Func<string, bool>? WorkspaceBack { get; set; }
+    internal Action<string, KeyRoutedEventArgs>? WorkspaceKey { get; set; }
+    // The workspace category now shown, or null when none is.
+    internal event Action<string?>? WorkspaceChanged;
+    internal static string DisplayName(string category) => category switch
+    {
+        "Privacy" => "History & Sync",
+        "Files & recovery" => "Recovery",
+        _ => category
+    };
     internal void SetIntegrationsContent(UIElement content) => IntegrationsHost.Child = content;
     internal void DetachIntegrationsContent() => IntegrationsHost.Child = null;
     internal Func<bool>? NavigateIntegrationBack { get; set; }
@@ -49,7 +72,7 @@ public sealed partial class SettingsWindow : Window
     private bool _positioning;
     private bool _changingSearch;
     private bool _searchActive;
-    private string _currentCategory = "Appearance";
+    private string _currentCategory = "Home";
     private readonly List<HandCursorButton> _searchButtons = [];
     internal event Action<OverlayPreferences>? PreferencesChanged;
     internal event EventHandler? PreviewRequested;
@@ -75,29 +98,30 @@ public sealed partial class SettingsWindow : Window
         AppToggleSwitch.Configure(LiveTextToggle);
         AppToggleSwitch.Configure(DetailsToggle);
         OverlayEditor.Changed += Publish;
-        (string Heading, (string Category, string Icon)[] Items)[] groups =
+        // Same order as the macOS settings sidebar. Groups are separated without headings;
+        // an empty group holds the plugin pages.
+        (string Category, string Icon)[][] groups =
         [
-            ("APP", [("General", "settings"), ("Shortcuts", "keyboard")]),
-            ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
-            ("PERSONALIZATION", [("Appearance", "desktop")]),
-            ("INTEGRATIONS", []),
-            ("DATA & SYSTEM", [("Privacy", "lock"), ("Advanced", "settings"), ("Premium", "lock"), ("Account & about", "info")])
+            [("Home", "home")],
+            [("General", "settings"), ("Appearance", "desktop"), ("Dictation", "microphone"), ("Audio", "speaker"), ("Files & recovery", "restore"),
+             ("Shortcuts", "keyboard"), ("File transcription", "file"), ("Recorder", "recorder")],
+            [("Privacy", "history"), ("Statistics", "stats"), ("Dictionary", "dictionary"), ("Snippets", "text"), ("Workflows", "workflow"), ("Premium", "lock")],
+            [],
+            [("Sync & backup", "devices"), ("Advanced", "settings"), ("Account & about", "info")]
         ];
         foreach (var group in groups)
         {
             var section = new StackPanel { Spacing = 2 };
-            section.Children.Add(new TextBlock { Text = group.Heading, FontSize = 10, CharacterSpacing = 70,
-                Foreground = (Brush)Application.Current.Resources["MutedBrush"], Margin = new Thickness(10, 0, 0, 6) });
-            if (group.Heading == "INTEGRATIONS") section.Children.Add(_integrationNavigation);
-            foreach (var (category, icon) in group.Items)
+            if (group.Length == 0) section.Children.Add(_integrationNavigation);
+            foreach (var (category, icon) in group)
             {
-                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
                 row.Children.Add(new TypeWhisperGlyph { Kind = icon, Width = 18, Height = 18 });
-                row.Children.Add(new TextBlock { Text = category, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.Normal, VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(new TextBlock { Text = DisplayName(category), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.Normal, VerticalAlignment = VerticalAlignment.Center });
                 var button = new HandCursorButton { Content = row, Tag = category, HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 34, Padding = new Thickness(10, 7, 10, 7),
+                    HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 36, Padding = new Thickness(10, 7, 10, 7),
                     Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
-                AutomationProperties.SetName(button, $"Settings category {category}");
+                AutomationProperties.SetName(button, $"Settings category {DisplayName(category)}");
                 button.Click += (_, _) => ShowCategory(category);
                 section.Children.Add(button);
                 _navigationButtons.Add(button);
@@ -121,7 +145,9 @@ public sealed partial class SettingsWindow : Window
                 if (!_updating) Publish(_preferences with { PreviewBubbleAutoHideMilliseconds = DurationChoices.First(c => c.Label == value).Milliseconds });
             };
         }
-        ShowCategory("Appearance");
+        SessionHint.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => UpdateFooter());
+        EditorPreviewButton.RegisterPropertyChangedCallback(UIElement.VisibilityProperty, (_, _) => UpdateFooter());
+        ShowCategory("Home");
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(SettingsDragRegion);
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
@@ -145,7 +171,13 @@ public sealed partial class SettingsWindow : Window
             if (currentDpi != _dpi) PlaceOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
         };
         SetPreferences(preferences);
-        Closed += (_, _) => _ = ShutdownSetupImportAsync();
+        Closed += (_, _) =>
+        {
+            _ = ShutdownSetupImportAsync();
+            // Release the hosted view so the next settings window can show it.
+            WorkspaceHost.Child = null;
+            WorkspaceChanged?.Invoke(null);
+        };
         AppWindow.Closing += async (_, args) =>
         {
             if (_allowClose) return;
@@ -381,6 +413,16 @@ public sealed partial class SettingsWindow : Window
             e.Handled = true;
             return;
         }
+        if (WorkspaceHost.Visibility == Visibility.Visible)
+        {
+            WorkspaceKey?.Invoke(_currentCategory, e);
+            if (e.Handled) return;
+            if (e.Key == global::Windows.System.VirtualKey.Escape && WorkspaceBack?.Invoke(_currentCategory) == true)
+            {
+                e.Handled = true;
+                return;
+            }
+        }
         if (e.Key == global::Windows.System.VirtualKey.Escape)
         {
             if ((_currentCategory == "Integrations" || _currentCategory.StartsWith("plugin:", StringComparison.Ordinal)) && !_searchActive && NavigateIntegrationBack?.Invoke() == true)
@@ -425,7 +467,6 @@ public sealed partial class SettingsWindow : Window
 
     private void ShowCategoryCore(string category)
     {
-        if (category is "Statistics" or "Sync & backup") { WorkspaceRequested?.Invoke(category); return; }
         if (category is not ("Appearance" or "Overlay editor")) PreviewDismissed?.Invoke();
         // TextChanged can arrive after the programmatic clear. It must not rebuild
         // this page again and remove the control focused by OpenSearchResult.
@@ -438,51 +479,33 @@ public sealed partial class SettingsWindow : Window
         ClearSettingsSearch.Visibility = Visibility.Collapsed;
         _searchButtons.Clear();
         ComparisonScroll.Visibility = Visibility.Collapsed;
+        // Status notes belong to the page that set them.
+        SessionHint.Text = "";
         foreach (var button in _navigationButtons)
-        {
-            var selected = (string)button.Tag == (category == "Overlay editor" ? "Appearance" : category);
-            button.Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "MenuButtonStyle"];
-            AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
-        }
+            SetNavigationSelected(button, (string)button.Tag == (category == "Overlay editor" ? "Appearance" : category));
         SettingsScroll.Visibility = category == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         EditorScroll.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
         if (category == "Overlay editor") RefreshPreviewSize();
         var integration = category == "Integrations" || category.StartsWith("plugin:", StringComparison.Ordinal);
         if (!integration) IntegrationDismissed?.Invoke();
         IntegrationsHost.Visibility = integration ? Visibility.Visible : Visibility.Collapsed;
-        var catalog = category != "Appearance" && category != "Overlay editor" && !integration;
+        var workspace = WorkspaceCategories.Contains(category);
+        WorkspaceHost.Child = workspace ? WorkspacePage?.Invoke(category) : null;
+        WorkspaceHost.Visibility = workspace ? Visibility.Visible : Visibility.Collapsed;
+        // The dashboard draws its own full-width header band.
+        WorkspaceHost.Margin = category == "Home" ? new Thickness(0) : new Thickness(12, 12, 12, 0);
+        WorkspaceChanged?.Invoke(workspace ? category : null);
+        if (WorkspaceHost.Child is RecorderView recorder) RenderRecorderDefaults(recorder.DefaultsPanel);
+        var catalog = category != "Appearance" && category != "Overlay editor" && !integration && !workspace;
         CatalogScroll.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;
         EditorPreviewButton.Visibility = category == "Overlay editor" ? Visibility.Visible : Visibility.Collapsed;
-        SessionHint.Text = catalog ? "UI preview only · no system changes" : "Overlay preferences are saved on this device";
-        if (integration)
-        {
-            SessionHint.Text = "Plugin settings are saved on this device";
-            IntegrationRequested?.Invoke(category == "Integrations" ? null : category[7..]);
-        }
+        if (integration) IntegrationRequested?.Invoke(category == "Integrations" ? null : category[7..]);
         if (catalog)
         {
             _catalogPickers.Clear();
             SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitPasteLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
-            if (category == "General" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Startup preferences are saved for this app";
-            if (category == "Premium")
-                SessionHint.Text = PremiumAccessState.CanOverride ? "Development access is saved in this profile only" : "Premium access and feature availability";
-            if (category == "Advanced") SessionHint.Text = "Advanced settings are saved in this profile";
-            if (category == "Account & about") SessionHint.Text = "TypeWhisper for Windows";
-            if (category == "Privacy" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "History saving and retention are connected · unavailable controls are disabled";
             SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
-            if (category == "Dictation" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Dictation, recording and text processing choices are saved";
-            if (category == "Audio" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Audio preferences are saved for your next dictation";
-            if (category == "Recorder" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Recorder source choices are saved · changes apply to the next recording";
-            if (category == "Files & recovery" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Recovery audio requires opt-in · retry and deletion are explicit";
-            if (category == "Shortcuts" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Global shortcuts are saved · selected-text shortcuts are configured in Workflows";
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,
@@ -492,6 +515,36 @@ public sealed partial class SettingsWindow : Window
             }
             CatalogScroll.ChangeView(null, 0, null, true);
         }
+    }
+
+    // Selected rows are filled with the accent color, as in the macOS sidebar.
+    internal static void SetNavigationSelected(HandCursorButton button, bool selected)
+    {
+        button.Style = (Style)Application.Current.Resources[selected ? "SidebarSelectedButtonStyle" : "MenuButtonStyle"];
+        AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+        if (button.Content is not Panel row) return;
+        foreach (var child in row.Children)
+        {
+            if (child is TypeWhisperGlyph glyph) glyph.Inverse = selected;
+            else if (child is TextBlock label) label.FontWeight = selected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+        }
+    }
+
+    // The footer only appears for a status message or a page action.
+    private void UpdateFooter() => SettingsFooter.Visibility =
+        SetupHost.Child is null && (SessionHint.Text.Length > 0 || EditorPreviewButton.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
+
+    private void RenderRecorderDefaults(StackPanel panel)
+    {
+        _catalogPickers.Clear();
+        SettingsCatalog.Render("Recorder", panel, _values, _catalogPickers, () => ShowCategory("Recorder"));
+        ConfigureLiveSettings?.Invoke("Recorder", panel, _catalogPickers);
+        // Replace the page title with a section heading below the session controls.
+        // Live settings wrap their controls, including the title, in one child panel.
+        var titled = panel.Children is [StackPanel live] ? live : panel;
+        if (titled.Children.Count > 0) titled.Children.RemoveAt(0);
+        panel.Children.Insert(0, new TextBlock { Text = "Defaults", FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        SettingsCatalog.UpdateTrailingSeparators(panel);
     }
 
     internal void ShowRecoveryFromTray(bool allowNavigation)
@@ -534,7 +587,8 @@ public sealed partial class SettingsWindow : Window
     {
         SetupHost.Child = null; SetupHost.Visibility = Visibility.Collapsed;
         if (_returnToTrayAfterSetup) { _returnToTrayAfterSetup = false; Close(); return; }
-        SettingsBrand.Visibility = SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Visible;
+        SettingsBrand.Visibility = SettingsBody.Visibility = Visibility.Visible;
+        UpdateFooter();
         ShowCategory(completed ? "Dictation" : "General");
     }
 
@@ -562,7 +616,15 @@ public sealed partial class SettingsWindow : Window
         new("Advanced", "", "HTTP API", "Connect local scripts and apps, configure the port, and copy the API token.", "settings", "advanced server localhost auto-discovery automation"),
         new("Advanced", DiagnosticsSettingsView.SettingKey, "Diagnostics", "Keep a local log without dictated text and export it for support.", "settings", "error log crash troubleshooting support export retention"),
         new("Premium", "", "Premium", "Premium access, commercial license and development activation.", "lock", "supporter calendar correction learning cloud sync"),
-        new("Account & about", "", "Account & about", "License, Premium, updates and app information.", "info")
+        new("Account & about", "", "Account & about", "License, Premium, updates and app information.", "info"),
+        new("Home", "", "Home", "Recent activity and transcriptions.", "home", "dashboard overview start"),
+        new("Workflows", "", "Workflows", "Create and edit workflows, triggers and their LLM.", "workflow", "prompt template automation selected text"),
+        new("Dictionary", "", "Dictionary", "Your words, corrections and term packs.", "dictionary", "vocabulary words corrections spelling"),
+        new("Snippets", "", "Snippets", "Reusable text with spoken triggers.", "text", "text expansion shortcut"),
+        new("Recorder", "", "Recorder", "Record microphone and system audio.", "recorder", "meeting session recordings"),
+        new("File transcription", "", "File transcription", "Transcribe audio and video files or watch a folder.", "file", "import audio video watch folder queue"),
+        new("Statistics", "", "Statistics", "Words, apps and models over time.", "stats", "activity usage streaks"),
+        new("Sync & backup", "", "Sync & backup", "Back up, restore, export or delete your data.", "devices", "backup restore export delete data")
     ];
 
     private void SettingsSearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -579,16 +641,15 @@ public sealed partial class SettingsWindow : Window
         PreviewDismissed?.Invoke();
         _searchActive = true;
         IntegrationsHost.Visibility = Visibility.Collapsed;
+        WorkspaceHost.Child = null;
+        WorkspaceHost.Visibility = Visibility.Collapsed;
+        WorkspaceChanged?.Invoke(null);
         SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
         CatalogScroll.Visibility = Visibility.Visible;
         _catalogPickers.Clear();
         _searchButtons.Clear();
         CatalogContent.Children.Clear();
-        foreach (var button in _navigationButtons)
-        {
-            button.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
-            AutomationProperties.SetItemStatus(button, "Not selected");
-        }
+        foreach (var button in _navigationButtons) SetNavigationSelected(button, false);
         var results = SettingsSearchIndex.Find(SettingsCatalog.SearchEntries.Concat(AppearanceSearchEntries), query);
         CatalogContent.Children.Add(SearchText("Search settings", 24));
         CatalogContent.Children.Add(SearchText(results.Count == 0 ? "No matching settings. Try a shorter term, such as microphone, language or overlay."
@@ -602,7 +663,7 @@ public sealed partial class SettingsWindow : Window
             row.Children.Add(new TypeWhisperGlyph { Kind = result.Icon, Width = 18, Height = 18 });
             var copy = new StackPanel { Spacing = 5 };
             copy.Children.Add(SearchText(result.Label, 14));
-            copy.Children.Add(SearchText(result.Category == "Overlay editor" ? "Appearance · Layout" : result.Category, 11, true));
+            copy.Children.Add(SearchText(result.Category == "Overlay editor" ? "Appearance · Layout" : DisplayName(result.Category), 11, true));
             if (result.Description.Length > 0) copy.Children.Add(SearchText(result.Description, 12, true));
             Grid.SetColumn(copy, 1); row.Children.Add(copy);
             var arrow = SearchText("→", 16, true); arrow.VerticalAlignment = VerticalAlignment.Center;
@@ -610,7 +671,7 @@ public sealed partial class SettingsWindow : Window
             var button = new HandCursorButton { Content = row, Tag = result, Padding = new Thickness(14),
                 HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
-            AutomationProperties.SetName(button, $"Open {result.Label} in {result.Category}");
+            AutomationProperties.SetName(button, $"Open {result.Label} in {DisplayName(result.Category)}");
             button.Click += (_, _) => OpenSearchResult(result);
             button.KeyDown += (_, key) =>
             {
@@ -622,7 +683,6 @@ public sealed partial class SettingsWindow : Window
             };
             _searchButtons.Add(button); CatalogContent.Children.Add(button);
         }
-        SessionHint.Text = "Search all settings · Esc clears · Enter opens";
         CatalogScroll.ChangeView(null, 0, null, true);
     }
 

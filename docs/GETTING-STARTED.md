@@ -32,19 +32,29 @@ If a result window opens, its heading explains why. See
 
 ## Find the main workspaces
 
-Open Quick Launch from the tray or your configured launcher shortcut. Search for
-a destination, or open **Suggestions** to see entries that are not pinned.
-Pinned commands can be reordered and removed through their action menu.
+Click the tray icon to open Settings. As in the macOS app, its sidebar holds
+every workspace: **Home** shows your activity and recent transcriptions, followed
+by the settings pages, Dictionary, Snippets, Workflows, installed plugins and
+your account. Right-click the tray icon for quick actions: start or stop a
+Recorder session, open Settings or History, pause dictation shortcuts,
+transcribe a file, and insert, copy or read back recent transcriptions.
 
 | Workspace | Use it to |
 | --- | --- |
-| History | Find, copy and export saved transcripts. |
+| History | Open its own window with the Inbox, all entries, entries with audio, failed entries and entries per device and source. Search, edit, copy, export and mark entries complete. |
+| Workflow palette | Run a workflow on the text selected in any app. The result replaces the selection; if that is not possible, it is copied. Assign the shortcut in **Settings → Shortcuts**. |
 | Recorder | Record microphone/system audio and manage saved recordings. |
-| Transcribe file | Queue audio/video files and export completed transcripts. |
+| File transcription | Queue audio/video files and export completed transcripts. |
 | Workflows | Configure reusable text processing and explicit output actions. |
 | Dictionary | Manage terms, corrections and term packs. |
 | Snippets | Expand spoken triggers into reusable text. |
-| Settings | Configure recording, shortcuts, appearance, account and updates. |
+
+The **Recent transcriptions** shortcut and tray entry open a small palette with
+your latest transcriptions. Choose one to insert it into the app you were using.
+Without selected or copied text, the workflow palette offers the same list.
+
+Quick Launch is still available through its own shortcut while it is being
+retired in favor of the layout above.
 
 Use Integrations to manage installed plugins and their settings. Installing a
 plugin, configuring it, downloading a model and selecting that model are separate
@@ -69,6 +79,20 @@ The correct spelling is added under Words when needed; selected aliases are
 saved under Corrections and apply to subsequent dictations. Existing corrections
 are kept, including disabled entries. Review suggestions carefully because each
 saved alias becomes an automatic replacement. Canceling adds no entries.
+
+## Sync History with your Mac
+
+Cloud-folder sync requires a commercial license. In **Settings → Sync & backup**,
+choose the same folder that TypeWhisper on your Mac uses, for example in iCloud
+Drive, OneDrive, Dropbox or a network share. Both apps create a
+`typewhisper-sync` folder inside it. If you pick that `typewhisper-sync` folder
+itself, Windows uses the folder that contains it.
+
+Turn on **Sync History & Inbox** to exchange the text and Inbox state of your
+entries. History then lists your Mac and iPhone as separate devices. Deleting an
+entry in History removes it on every device. An entry that is merely missing on
+another device is not deleted. **Sync Audio for New Entries** also copies audio for entries created after
+you turn it on, and requires **Keep dictation audio**.
 
 ## Workflows and automation
 

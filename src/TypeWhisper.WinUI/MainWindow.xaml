@@ -202,9 +202,6 @@
             </Border>
         </Grid>
 
-        <local:HistoryView x:Name="HistoryView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
-        <local:RecorderView x:Name="RecorderView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
-        <local:WorkflowsView x:Name="WorkflowsView" Grid.Row="2" Grid.RowSpan="3" Margin="14,0,14,0" Visibility="Collapsed" />
 
 
         <Viewbox Grid.Row="4" Visibility="{Binding Visibility, ElementName=QuickLaunchFooter}" Width="22" Height="22"
@@ -234,8 +231,5 @@
                        VerticalAlignment="Center" Margin="12,0,0,0" FontSize="10"
                        Foreground="{ThemeResource MutedBrush}" />
         </Grid>
-        <Border x:Name="FileTranscriptionHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
-        <Border x:Name="UtilityHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
-        <Border x:Name="LexiconHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
     </Grid>
 </Window>

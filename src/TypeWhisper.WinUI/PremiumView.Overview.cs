@@ -91,7 +91,7 @@ internal sealed partial class PremiumView
             _overview.Children.Add(heading);
         }
         var cards = new Grid { ColumnSpacing = 12, RowSpacing = 12 };
-        cards.Children.Add(OverviewFeature(PremiumFeature.CalendarMeetings, "Meeting Automation", "Reminds you before a scheduled meeting or starts recording automatically when you join.", "Calendar integration is not connected in this Windows build yet.", "\uE787", Color.FromArgb(255, 59, 167, 255)));
+        cards.Children.Add(OverviewFeature(PremiumFeature.CalendarMeetings, "Meeting Automation", "Reminds you before a scheduled meeting or starts recording automatically when you join.", "Calendar integration is not connected in this Windows build yet.", "\uE787", Color.FromArgb(255, 10, 132, 255)));
         cards.Children.Add(OverviewFeature(PremiumFeature.CorrectionLearning, "Learn from Corrections", "Remembers confident edits after insertion and improves future text.", "teh → the\nrecieve → receive", "\uE734", gold));
         cards.Children.Add(OverviewFeature(PremiumFeature.CloudSync, "Sync Dictionary & Snippets", "Keeps your personal terms and text snippets available across your devices.", "Choose a shared iCloud Drive, OneDrive or Dropbox folder.", "\uE753", Color.FromArgb(255, 67, 201, 220)));
         void Arrange(double width)

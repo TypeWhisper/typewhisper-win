@@ -214,6 +214,23 @@ public class HistoryServiceTests : IDisposable
     }
 
     [Fact]
+    public void TryReplaceRecords_SavesAllReplacementsOrNone()
+    {
+        var first = CreateRecord("first", DateTime.UtcNow.AddMinutes(-1));
+        var second = CreateRecord("second", DateTime.UtcNow);
+        Assert.True(_sut.TryAddRecord(first));
+        Assert.True(_sut.TryAddRecord(second));
+
+        // One unknown identity rejects the whole batch.
+        Assert.False(_sut.TryReplaceRecords([first with { FinalText = "changed" }, CreateRecord("missing", DateTime.UtcNow)]));
+        Assert.All(_sut.Records, record => Assert.NotEqual("changed", record.FinalText));
+
+        Assert.True(_sut.TryReplaceRecords([first with { FinalText = "one" }, second with { FinalText = "two" }]));
+        var saved = new HistoryService(_filePath).Records.ToDictionary(record => record.Id, record => record.FinalText);
+        Assert.Equal(("one", "two"), (saved["first"], saved["second"]));
+    }
+
+    [Fact]
     public void StatisticsFollowEachSavedChange()
     {
         Assert.True(_sut.TryAddRecord(CreateRecord("first", DateTime.UtcNow) with { FinalText = "one two", AppProcessName = "notepad" }));

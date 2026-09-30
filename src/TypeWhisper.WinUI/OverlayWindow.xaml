@@ -21,7 +21,7 @@
             </Grid.ColumnDefinitions>
 
             <Grid x:Name="DotHost" Width="34" Height="34">
-                <Ellipse Fill="#203BA7FF" />
+                <Ellipse Fill="#200A84FF" />
                 <Ellipse x:Name="RecordingDot" Width="9" Height="9"
                          Fill="{ThemeResource AccentBrush}" />
                 <StackPanel x:Name="PauseMark" Orientation="Horizontal" Spacing="3"

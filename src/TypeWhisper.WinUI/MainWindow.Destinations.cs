@@ -49,10 +49,10 @@ public sealed partial class MainWindow
             case "setup": OpenSetup(); break;
             case "corrections": OpenLexicon(section: "corrections"); break;
             case "packs": OpenLexicon(section: "packs"); break;
-            case "watch": OpenFileTranscription(); _fileTranscription?.ShowWatchFolder(); break;
-            case "recordings": OpenRecorder(); RecorderView.ShowLibrary(true); break;
-            case "history-dictation": OpenHistory(); HistoryView.SelectKind(HistoryEntryKind.Dictation); break;
-            case "history-recording": OpenHistory(); HistoryView.SelectKind(HistoryEntryKind.Recording); break;
+            case "watch": OpenFileTranscription(() => _fileTranscription?.ShowWatchFolder()); break;
+            case "recordings": OpenRecorder(() => RecorderView.ShowLibrary(true)); break;
+            case "history-dictation": OpenHistory("dictation"); break;
+            case "history-recording": OpenHistory("recording"); break;
             case "discover": OpenMarketplace(); break;
         }
     }
