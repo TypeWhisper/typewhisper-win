@@ -19,7 +19,8 @@ internal sealed partial class LocalDictationSession
     {
         var executable = Path.Combine(AppContext.BaseDirectory, "TypeWhisper.exe");
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_TRANSCRIPTION_WORKER") == "0" || !File.Exists(executable)) return null;
-        var isolation = new TranscriptionIsolation(executable, [TranscriptionWorkerServer.Argument], IsolatedTranscriptionPlugins, LocalCtcVocabulary.HostVersion);
+        var isolation = new TranscriptionIsolation(executable, [TranscriptionWorkerServer.Argument], IsolatedTranscriptionPlugins, LocalCtcVocabulary.HostVersion)
+            { IdleUnloadPolicy = ModelIdlePolicy };
         isolation.Notice += (_, message) => EngineNotice?.Invoke(message);
         return isolation;
     }

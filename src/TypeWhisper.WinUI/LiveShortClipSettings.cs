@@ -6,9 +6,9 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveShortClipSettings
 {
-    internal static void Configure(string category, StackPanel content, LocalDictationSession session)
+    // Fills the Advanced page's Recording row.
+    internal static void Configure(StackPanel content, LocalDictationSession session)
     {
-        if (category != "Dictation") return;
         var row = FindRow(content) ?? throw new InvalidOperationException("Short clip settings row is missing.");
         row.Children.Clear();
         var store = session.TextPreferences;

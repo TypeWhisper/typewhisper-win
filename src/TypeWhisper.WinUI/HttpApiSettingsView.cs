@@ -15,7 +15,8 @@ internal sealed class HttpApiSettingsView : UserControl
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var heading = Text("HTTP API", 18);
+        var heading = SettingsHelp.Label("Enable HTTP API",
+            "Lets local apps and scripts, such as Raycast and the typewhisper command, control TypeWhisper. Only apps on this PC can connect.");
         heading.VerticalAlignment = VerticalAlignment.Center;
         header.Children.Add(heading);
         var enabled = AppToggleSwitch.Create(api.Enabled);

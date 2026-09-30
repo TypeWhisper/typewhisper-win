@@ -17,9 +17,9 @@ internal sealed class DiagnosticsSettingsView : UserControl
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var heading = SettingsHelp.Label("Diagnostics",
+        var heading = SettingsHelp.Label("Keep diagnostic log",
             "Records dictation steps, timings, settings choices such as the engine, and error types on this device. " +
-            "It never contains dictated text, clipboard contents, window titles, file names or error messages, and it is never sent automatically.", 18);
+            "It never contains dictated text, clipboard contents, window titles, file names or error messages, and it is never sent automatically.");
         heading.VerticalAlignment = VerticalAlignment.Center;
         header.Children.Add(heading);
         var enabled = AppToggleSwitch.Create(false);

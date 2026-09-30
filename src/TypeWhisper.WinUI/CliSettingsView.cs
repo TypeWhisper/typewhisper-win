@@ -13,11 +13,11 @@ internal sealed class CliSettingsView : UserControl
     {
         var installation = new CliInstallation(WinUIProfile.Root);
         var body = new StackPanel { Spacing = 8 };
-        body.Children.Add(SettingsHelp.Label("Command Line Tool",
+        body.Children.Add(SettingsHelp.Label("typewhisper command",
             "Use typewhisper from your terminal. Commands that connect to TypeWhisper require its HTTP API to be running. " +
             "Installation adds it to your user PATH. Open a new terminal after installing. " +
             "If an older CLI appears earlier in PATH, Windows will still use that version. You can run this version directly:\n" +
-            installation.GetState().InstallPath, 18));
+            installation.GetState().InstallPath));
         var status = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap };
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         body.Children.Add(status);
@@ -30,7 +30,7 @@ internal sealed class CliSettingsView : UserControl
         ToolTipService.SetToolTip(install, "Adds typewhisper to your user PATH. Open a new terminal after installing.");
         var examples = new StackPanel { Spacing = 8 };
         examples.Children.Add(SettingsHelp.Label("PowerShell examples",
-            "Copy a command into a new PowerShell terminal. Enable the HTTP API above first. Replace the example audio path with your own file."));
+            "Copy a command into a new PowerShell terminal. Enable the HTTP API under API server first. Replace the example audio path with your own file."));
         void Example(string title, string command)
         {
             var row = new Grid { ColumnSpacing = 8 };

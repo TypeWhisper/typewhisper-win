@@ -63,30 +63,30 @@ internal static partial class SettingsCatalog
         var advanced = new StackPanel { Spacing = 16, Visibility = Visibility.Collapsed };
         var expandButton = new HandCursorButton
         {
-            Content = "Advanced  +", MinHeight = 40, HorizontalAlignment = HorizontalAlignment.Stretch,
+            Content = "More options  +", MinHeight = 40, HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"]
         };
         void ShowAdvanced(bool show)
         {
             advanced.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            expandButton.Content = show ? "Advanced  −" : "Advanced  +";
+            expandButton.Content = show ? "More options  −" : "More options  +";
             AutomationProperties.SetItemStatus(expandButton, show ? "Expanded" : "Collapsed");
         }
         // Search can reveal the disclosure without changing the preferences inside it.
         advanced.Tag = (Action)(() => ShowAdvanced(true));
         expandButton.Click += (_, _) => ShowAdvanced(advanced.Visibility != Visibility.Visible);
-        AutomationProperties.SetName(expandButton, "Advanced dictation settings");
+        AutomationProperties.SetName(expandButton, "More dictation options");
         AutomationProperties.SetHelpText(expandButton, "Show or hide recording, translation and formatting options.");
         ShowAdvanced(false);
         target.Children.Add(expandButton); target.Children.Add(advanced);
-        FieldsInto(advanced, "Mode", "CancellationBehavior");
+        FieldsInto(advanced, "Mode");
         advanced.Children.Add(Conditional(() => values.GetValueOrDefault("Language", "Automatic") == "Automatic", "LanguageHints"));
         FieldsInto(advanced, "TranscriptionTask");
         advanced.Children.Add(Conditional(() => values.GetValueOrDefault("TranscriptionTask", "Transcribe") == "Translate", "TranslationTargetLanguage"));
         advanced.Children.Add(Conditional(() => values.GetValueOrDefault("AutoPaste", "On") == "On", "LockPasteToFocusedField"));
         FieldsInto(advanced, "TranscriptionNumberNormalizationEnabled", "ShortUtterancePunctuationEnabled",
-            "EnglishOutputVariant", "GermanOutputVariant", "TranscribeShortQuietClipsAggressively");
+            "EnglishOutputVariant", "GermanOutputVariant");
         var vocabulary = new StackPanel { Spacing = 8, Tag = "VocabularyBoostingEnabled" };
         var vocabularyToggle = AppToggleSwitch.Create(DictionaryBoostingPreferences.Load());
         AutomationProperties.SetName(vocabularyToggle, "Vocabulary boosting");
