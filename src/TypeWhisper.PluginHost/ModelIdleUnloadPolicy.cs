@@ -36,7 +36,8 @@ public sealed class ModelIdleUnloadPolicy(int seconds = ModelIdleUnloadPolicy.De
     {
         if (Interlocked.Exchange(ref _seconds, value) == value) return;
         foreach (var subscriber in Changed?.GetInvocationList() ?? [])
-            try { ((Action)subscriber)(); } catch (Exception ex) when (ex is not OutOfMemoryException) { }
+            try { ((Action)subscriber)(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { /* One failing model owner must not keep the others from rescheduling. */ }
     }
 }
 

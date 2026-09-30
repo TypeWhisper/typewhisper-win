@@ -7,9 +7,9 @@ public sealed partial class PortablePluginRuntimeRegistryTests
 
     private async Task<PortablePluginStore> LocalLlmStore()
     {
-        var bundles = Path.Combine(_root, "bundles");
+        var bundles = Path.Join(_root, "bundles");
         Package(bundles, Id, typeof(LocalLlmProbePlugin), isLocal: true);
-        var store = new PortablePluginStore(Path.Combine(_root, "store"), Version, _http);
+        var store = new PortablePluginStore(Path.Join(_root, "store"), Version, _http);
         await store.InitializeAsync(bundles);
         return store;
     }

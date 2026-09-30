@@ -72,6 +72,7 @@ public sealed class ModelMemoryPreferencesStoreTests : IDisposable
     public void Dispose()
     {
         try { if (Directory.Exists(_directory)) Directory.Delete(_directory, true); }
-        catch (IOException) { } catch (UnauthorizedAccessException) { }
+        catch (IOException) { /* A leftover temp folder must not fail the test run. */ }
+        catch (UnauthorizedAccessException) { /* A leftover temp folder must not fail the test run. */ }
     }
 }

@@ -32,8 +32,8 @@ public sealed class ModelMemoryPreferencesStore
                 throw new JsonException("Invalid model memory preference.");
             AutoUnloadSeconds = seconds;
         }
-        catch (FileNotFoundException) { }
-        catch (DirectoryNotFoundException) { }
+        catch (FileNotFoundException) { /* Nothing saved yet: the default applies. */ }
+        catch (DirectoryNotFoundException) { /* Nothing saved yet: the default applies. */ }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             Error = "The model unload setting could not be loaded. Models are released after 10 minutes. Choose a setting to restore it.";
@@ -49,7 +49,7 @@ public sealed class ModelMemoryPreferencesStore
         {
             var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
             Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
+            temporary = Path.Join(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
             File.WriteAllText(temporary, JsonSerializer.Serialize(new { AutoUnloadSeconds = seconds }));
             File.Move(temporary, _path, overwrite: true);
             temporary = null;
@@ -63,7 +63,10 @@ public sealed class ModelMemoryPreferencesStore
         finally
         {
             if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                // A leftover dot-named temporary file is harmless and never read as the setting.
+                try { File.Delete(temporary); }
+                catch (IOException) { /* Left in place, see above. */ }
+                catch (UnauthorizedAccessException) { /* Left in place, see above. */ }
         }
     }
 }
