@@ -3,8 +3,8 @@ using Xunit;
 
 public sealed class ModelMemoryPreferencesStoreTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "typewhisper-model-memory-" + Guid.NewGuid().ToString("N"));
-    private string PreferencesPath => Path.Combine(_directory, "model-memory.json");
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "typewhisper-model-memory-" + Guid.NewGuid().ToString("N"));
+    private string PreferencesPath => Path.Join(_directory, "model-memory.json");
 
     [Fact]
     public void MissingProfileReleasesModelsAfterTenMinutesWithoutCreatingFiles()
