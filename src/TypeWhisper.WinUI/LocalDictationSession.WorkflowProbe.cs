@@ -1,5 +1,7 @@
 #if DEBUG
 using System.Text.Json;
+using TypeWhisper.Core.Services;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -20,8 +22,8 @@ internal sealed partial class LocalDictationSession
         string? error = null;
         try
         {
-            _target = GetForegroundWindow();
-            GetWindowThreadProcessId(_target, out var processId);
+            _target = NativeMethods.GetForegroundWindow();
+            NativeMethods.GetWindowThreadProcessId(_target, out var processId);
             _targetProcessId = processId;
             if (_target == IntPtr.Zero || processId == 0 || processId == Environment.ProcessId)
                 error = "external_target_required";
@@ -31,8 +33,8 @@ internal sealed partial class LocalDictationSession
                 _targetApp = process.ProcessName;
                 await CaptureWorkflowAtStartAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();
-                GetWindowThreadProcessId(_target, out var currentProcessId);
-                if (GetForegroundWindow() != _target || currentProcessId != processId)
+                NativeMethods.GetWindowThreadProcessId(_target, out var currentProcessId);
+                if (NativeMethods.GetForegroundWindow() != _target || currentProcessId != processId)
                 {
                     _targetHostAtStart = null;
                     _workflowAtStart = null;
@@ -46,7 +48,6 @@ internal sealed partial class LocalDictationSession
         { error = "capture_failed"; _targetHostAtStart = null; _workflowAtStart = null; }
         if (_disposed) return;
         var path = WinUIProfile.DataPath("workflow-probe.json");
-        var temporary = path + ".tmp";
         try
         {
             var payload = JsonSerializer.SerializeToUtf8Bytes(new
@@ -58,18 +59,11 @@ internal sealed partial class LocalDictationSession
                 AddressState = WindowsBrowserTargetReader.LastAddressState,
                 Error = error
             });
-            Directory.CreateDirectory(WinUIProfile.Root);
-            File.WriteAllBytes(temporary, payload);
-            File.Move(temporary, path, overwrite: true);
+            AtomicFileWriter.WriteAllBytes(path, payload);
             SetStatus("Workflow probe saved. No audio was recorded.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { SetStatus("Workflow probe could not be saved. No audio was recorded."); }
-        finally
-        {
-            try { if (File.Exists(temporary)) File.Delete(temporary); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        }
     }
 
     private static string? Bounded(string? value, int maximum) =>

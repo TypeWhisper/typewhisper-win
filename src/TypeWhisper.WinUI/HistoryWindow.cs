@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Media;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Graphics;
 using global::Windows.System;
 
@@ -157,13 +158,13 @@ public sealed partial class HistoryWindow : Window
         var work = area.WorkArea;
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         AppWindow.Move(new PointInt32(work.X + work.Width / 2, work.Y + work.Height / 2));
-        var scale = Math.Max(96u, GetDpiForWindow(hwnd)) / 96d;
+        var scale = Math.Max(96u, NativeMethods.GetDpiForWindow(hwnd)) / 96d;
         var width = Math.Min((int)(1180 * scale), work.Width - (int)(48 * scale));
         var height = Math.Min((int)(760 * scale), work.Height - (int)(48 * scale));
         AppWindow.MoveAndResize(new RectInt32(work.X + (work.Width - width) / 2, work.Y + (work.Height - height) / 2, width, height));
         AppWindow.Show();
         Activate();
-        SetForegroundWindow(hwnd);
+        NativeMethods.SetForegroundWindow(hwnd);
         _ = RefreshAsync();
     }
 
@@ -178,7 +179,7 @@ public sealed partial class HistoryWindow : Window
     {
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter) presenter.Restore();
         Activate();
-        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        NativeMethods.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
     }
 
     internal async Task RefreshAsync()
@@ -641,9 +642,4 @@ public sealed partial class HistoryWindow : Window
         Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Foreground = Brush(muted ? "MutedBrush" : "TextBrush"),
         FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal
     };
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr window);
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr window);
 }

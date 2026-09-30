@@ -1,3 +1,5 @@
+using TypeWhisper.Core.Services;
+
 namespace TypeWhisper.Presentation;
 
 /// <summary>Native registration boundary, whose current value is authoritative after a failed change.</summary>
@@ -47,25 +49,12 @@ public sealed class PersistedShortcut
         if (_backend.TryChange(value) is { } unavailable) return Error = unavailable;
         var registeredValue = Value;
         if (!SameBindings(registeredValue, value)) return RollBack(previous);
-        string? temporary = null;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                var bytes = System.Text.Encoding.UTF8.GetBytes(registeredValue);
-                stream.Write(bytes); stream.Flush(flushToDisk: true);
-            }
-            File.Move(temporary, _path, overwrite: true); temporary = null;
+            AtomicFileWriter.WriteAllText(_path, registeredValue);
             return Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return RollBack(previous); }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
     }
     private string? Validate(string value) => value.Length > 256 || value.Any(char.IsControl)
         ? $"{_displayName}: the shortcut value is invalid or too long." : _validate(value);

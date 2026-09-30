@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.WinUI;
 
@@ -14,9 +15,7 @@ internal static class DictionaryBoostingPreferences
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(PathName)!);
-            File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(new Options(enabled)));
-            File.Move(PathName + ".tmp", PathName, true);
+            AtomicFileWriter.WriteAllText(PathName, JsonSerializer.Serialize(new Options(enabled)));
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

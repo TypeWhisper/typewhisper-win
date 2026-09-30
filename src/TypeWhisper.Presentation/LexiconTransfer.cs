@@ -72,14 +72,7 @@ public static class LexiconTransfer
     }
 
     /// <summary>Atomically exports JSON; a failed write preserves an existing destination.</summary>
-    public static void WriteFile(string path, string json)
-    {
-        var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
-        Directory.CreateDirectory(directory);
-        var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try { File.WriteAllText(temporary, json); File.Move(temporary, path, overwrite: true); }
-        finally { try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
-    }
+    public static void WriteFile(string path, string json) => AtomicFileWriter.WriteAllText(path, json);
 
     private static JsonElement[] ReadArray(string json)
     {

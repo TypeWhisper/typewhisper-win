@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -92,27 +93,16 @@ public sealed class DictationTextPreferencesStore
     public string? Save(DictationTextPreferences next)
     {
         if (!next.IsValid) return Error = "Choose supported text-processing options and unique formatting profiles.";
-        string? temporary = null;
         try
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
             next = next.Snapshot();
-            File.WriteAllText(temporary, JsonSerializer.Serialize(next, JsonOptions));
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(next, JsonOptions));
             Current = next;
             return Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Error = "Text preferences could not be saved. Your previous choices still apply.";
-        }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 }

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Interop.UIAutomationClient;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -26,7 +27,7 @@ internal sealed class OriginalDictationField : IDisposable
         {
             target = new(window, process);
             var field = target;
-            if (await OriginalFieldFocus.CaptureAsync(field.CaptureFocused, () => GetForegroundWindow() == window,
+            if (await OriginalFieldFocus.CaptureAsync(field.CaptureFocused, () => NativeMethods.GetForegroundWindow() == window,
                 ct => Task.Delay(50, ct), cancellation))
             {
                 target._automation.ConnectionTimeout = 200;
@@ -71,7 +72,7 @@ internal sealed class OriginalDictationField : IDisposable
 
     private bool IsValid()
     {
-        GetWindowThreadProcessId(_window, out var process);
+        NativeMethods.GetWindowThreadProcessId(_window, out var process);
         if (process != _process || _element is null ||
             !OriginalFieldFocus.BelongsToWindowProcess(_element.CurrentProcessId, _process, WindowHostProcess) ||
             _element.CurrentIsEnabled == 0 || _element.CurrentIsPassword != 0 ||
@@ -108,7 +109,7 @@ internal sealed class OriginalDictationField : IDisposable
     {
         try
         {
-            if (GetForegroundWindow() != _window) { AppDiagnostics.Write("field.verify.other-window"); return false; }
+            if (NativeMethods.GetForegroundWindow() != _window) { AppDiagnostics.Write("field.verify.other-window"); return false; }
             if (!IsValid()) { AppDiagnostics.Write("field.verify.invalid-element"); return false; }
             var focused = _automation.GetFocusedElement();
             try
@@ -152,9 +153,9 @@ internal sealed class OriginalDictationField : IDisposable
             if (IsCurrent()) return true;
             if (!IsValid()) return false;
             if (expired()) return false;
-            if (IsIconic(_window)) ShowWindowAsync(_window, 9);
-            if (!await OriginalFieldFocus.RestoreWindowAsync(() => GetForegroundWindow() == _window, IsValid,
-                () => SetForegroundWindow(_window), () =>
+            if (NativeMethods.IsIconic(_window)) ShowWindowAsync(_window, 9);
+            if (!await OriginalFieldFocus.RestoreWindowAsync(() => NativeMethods.GetForegroundWindow() == _window, IsValid,
+                () => NativeMethods.SetForegroundWindow(_window), () =>
                 {
                     ActivateWithInputThread(expired);
                     // UIA providers (including Chromium/Electron) may activate the
@@ -173,7 +174,7 @@ internal sealed class OriginalDictationField : IDisposable
                 return false;
             }
             return await OriginalFieldFocus.RestoreAsync(IsCurrent,
-                () => GetForegroundWindow() == _window && IsValid(),
+                () => NativeMethods.GetForegroundWindow() == _window && IsValid(),
                 () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation, expired);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { AppDiagnostics.Write("field.restore.exception", ex); return false; }
@@ -184,8 +185,8 @@ internal sealed class OriginalDictationField : IDisposable
         // Input attachment must remain synchronous and be undone on the same thread.
         // No synthetic keystrokes and no replacement of the captured UIA element.
         var currentThread = GetCurrentThreadId();
-        var foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), out _);
-        var targetThread = GetWindowThreadProcessId(_window, out var process);
+        var foregroundThread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), out _);
+        var targetThread = NativeMethods.GetWindowThreadProcessId(_window, out var process);
         if (process != _process || targetThread == 0) return;
         var foregroundAttached = foregroundThread != 0 && foregroundThread != currentThread &&
             AttachThreadInput(currentThread, foregroundThread, true);
@@ -198,10 +199,10 @@ internal sealed class OriginalDictationField : IDisposable
                 AttachThreadInput(currentThread, targetThread, true);
             AppDiagnostics.Write($"field.restore.queues foreground={foregroundAttached} target={targetAttached}");
             if (expired()) return;
-            var requested = SetForegroundWindow(_window);
+            var requested = NativeMethods.SetForegroundWindow(_window);
             if (!expired() && (targetAttached || targetThread == currentThread || (targetThread == foregroundThread && foregroundAttached)))
                 SetActiveWindow(_window);
-            AppDiagnostics.Write($"field.restore.activation accepted={requested} current={GetForegroundWindow() == _window}");
+            AppDiagnostics.Write($"field.restore.activation accepted={requested} current={NativeMethods.GetForegroundWindow() == _window}");
         }
         finally
         {
@@ -212,8 +213,8 @@ internal sealed class OriginalDictationField : IDisposable
 
     private void DiagnoseFocus()
     {
-        var foreground = GetForegroundWindow();
-        GetWindowThreadProcessId(foreground, out var process);
+        var foreground = NativeMethods.GetForegroundWindow();
+        NativeMethods.GetWindowThreadProcessId(foreground, out var process);
         AppDiagnostics.Write($"field.restore.observed targetWindow={foreground == _window} targetProcess={process == _process} ownProcess={process == Environment.ProcessId}");
         var focused = _automation.GetFocusedElement();
         try { AppDiagnostics.Write($"field.restore.observed originalElement={_automation.CompareElements(_element, focused) != 0}"); }
@@ -226,9 +227,5 @@ internal sealed class OriginalDictationField : IDisposable
 
     public void Dispose() { Release(_element); _element = null; Release(_automation); }
     private static void Release(object? value) { if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
-    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
-    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr window, int command);
 }

@@ -1,4 +1,5 @@
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.WinUI;
@@ -31,13 +32,8 @@ internal static partial class WinUICloudSync
         }
     }
 
-    private static void SaveHistoryState(HistorySyncState state)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(HistoryStatePath)!);
-        var temporary = HistoryStatePath + ".tmp";
-        File.WriteAllText(temporary, CloudFolderSyncJson.Serialize(state));
-        File.Move(temporary, HistoryStatePath, overwrite: true);
-    }
+    private static void SaveHistoryState(HistorySyncState state) =>
+        AtomicFileWriter.WriteAllText(HistoryStatePath, CloudFolderSyncJson.Serialize(state));
 
     private static HistorySyncState CloneHistoryState() =>
         CloudFolderSyncJson.Deserialize<HistorySyncState>(CloudFolderSyncJson.Serialize(_history))!;

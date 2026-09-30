@@ -1,9 +1,9 @@
-using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using global::Windows.Graphics;
+using TypeWhisper.Core.Services;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -26,9 +26,7 @@ public sealed partial class MainWindow : Window
         if (error is not null) return error;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(DictationHotkeyPath)!);
-            File.WriteAllText(DictationHotkeyPath + ".tmp", _dictationHotkey.Value);
-            File.Move(DictationHotkeyPath + ".tmp", DictationHotkeyPath, true);
+            AtomicFileWriter.WriteAllText(DictationHotkeyPath, _dictationHotkey.Value);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -400,40 +398,24 @@ public sealed partial class MainWindow : Window
     private DisplayArea ResolveOverlayDisplayArea()
     {
         if (OverlayPreferences.Screen == OverlayScreen.PrimaryScreen) return DisplayArea.Primary;
-        var foreground = GetForegroundWindow();
-        if (foreground != IntPtr.Zero)
-        {
-            var area = DisplayArea.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(foreground), DisplayAreaFallback.None);
-            if (area is not null) return area;
-        }
-        if (GetCursorPos(out var cursor))
-            return DisplayArea.GetFromPoint(new PointInt32(cursor.X, cursor.Y), DisplayAreaFallback.Primary);
-        return DisplayArea.Primary;
+        return ForegroundDisplayArea() ?? CursorDisplayArea(DisplayAreaFallback.Primary) ?? DisplayArea.Primary;
     }
 
     // Settings and History open on the display of the app in front, or under the pointer.
-    internal DisplayArea ResolveInvocationDisplayArea()
+    internal DisplayArea ResolveInvocationDisplayArea() =>
+        ForegroundDisplayArea() ?? CursorDisplayArea(DisplayAreaFallback.None) ?? DisplayArea.Primary;
+
+    // The display of the window in front, or null when there is none or it is on no display.
+    private static DisplayArea? ForegroundDisplayArea()
     {
-        var foregroundWindow = GetForegroundWindow();
-        if (foregroundWindow != IntPtr.Zero)
-        {
-            var foregroundId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(foregroundWindow);
-            var foregroundArea = DisplayArea.GetFromWindowId(foregroundId, DisplayAreaFallback.None);
-            if (foregroundArea is not null)
-                return foregroundArea;
-        }
-
-        if (GetCursorPos(out var cursorPosition))
-        {
-            var cursorArea = DisplayArea.GetFromPoint(
-                new PointInt32(cursorPosition.X, cursorPosition.Y),
-                DisplayAreaFallback.None);
-            if (cursorArea is not null)
-                return cursorArea;
-        }
-
-        return DisplayArea.Primary;
+        var foreground = NativeMethods.GetForegroundWindow();
+        return foreground == IntPtr.Zero ? null
+            : DisplayArea.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(foreground), DisplayAreaFallback.None);
     }
+
+    // The display under the pointer, or null when the pointer position is unavailable.
+    private static DisplayArea? CursorDisplayArea(DisplayAreaFallback fallback) =>
+        NativeMethods.GetCursorPos(out var cursor) ? DisplayArea.GetFromPoint(cursor, fallback) : null;
 
     private void ShowWaveformOverlay()
     {
@@ -664,20 +646,5 @@ public sealed partial class MainWindow : Window
         _settingsWindow?.SetPreferences(OverlayPreferences);
         _settingsWindow?.SetPreviewVisible(_overlay?.IsPreviewVisible == true, _overlay?.IsPaused == true);
         _settingsWindow?.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
-    }
-
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out NativePoint point);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativePoint
-    {
-        internal int X;
-        internal int Y;
     }
 }

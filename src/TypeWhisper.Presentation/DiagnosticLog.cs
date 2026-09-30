@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -66,26 +67,15 @@ public sealed class DiagnosticLogPreferencesStore
     public string? Save(DiagnosticLogPreferences preferences)
     {
         if (!preferences.IsValid) return Error = "Choose one of the offered retention periods. Your previous choice still applies.";
-        string? temporary = null;
         try
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".diagnostics-{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(temporary, JsonSerializer.Serialize(preferences));
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(preferences));
             Current = preferences;
             return Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Error = "Diagnostic log settings could not be saved. Your previous choice still applies.";
-        }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 }
@@ -198,17 +188,8 @@ public sealed partial class DiagnosticLogFile
             var cutoff = _clock() - TimeSpan.FromDays(_preferences.RetentionDays);
             lines = ReadUnsafe(line => line.Time >= cutoff);
         }
-        var temporary = destination + $".{Guid.NewGuid():N}.tmp";
-        try
-        {
-            File.WriteAllText(temporary, string.Concat(new[] { Admit(header) }.Concat(lines)
-                .Select(line => JsonSerializer.Serialize(line, Options) + "\n")), Utf8);
-            File.Move(temporary, destination, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(temporary)) File.Delete(temporary);
-        }
+        AtomicFileWriter.WriteAllText(destination, string.Concat(new[] { Admit(header) }.Concat(lines)
+            .Select(line => JsonSerializer.Serialize(line, Options) + "\n")));
         return lines.Count;
     }
 

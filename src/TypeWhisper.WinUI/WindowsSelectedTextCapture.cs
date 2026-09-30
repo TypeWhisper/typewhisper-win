@@ -35,13 +35,13 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
     private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, uint processId) : ISelectedTextCapturePlatform
     {
         private static bool ModifiersReleased => !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }
-            .Any(key => (GetAsyncKeyState(key) & 0x8000) != 0);
+            .Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
         private bool SameTarget
         {
             get
             {
-                if (GetForegroundWindow() != target || !IsWindow(target)) return false;
-                GetWindowThreadProcessId(target, out var currentProcess);
+                if (NativeMethods.GetForegroundWindow() != target || !NativeMethods.IsWindow(target)) return false;
+                NativeMethods.GetWindowThreadProcessId(target, out var currentProcess);
                 return currentProcess == processId;
             }
         }
@@ -79,7 +79,7 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
         private bool VerifyOwner(IntPtr window)
         {
             if (!TargetStillCurrent || window == IntPtr.Zero) return false;
-            GetWindowThreadProcessId(window, out var ownerProcess);
+            NativeMethods.GetWindowThreadProcessId(window, out var ownerProcess);
             // Standard editors may publish through a hidden same-process OLE clipboard broker.
             // Bind ownership to the original process and unchanged foreground HWND/PID; this
             // does not lock a particular field or tab within that process.
@@ -107,9 +107,5 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
     }
     [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public UIntPtr Extra; }
     [StructLayout(LayoutKind.Sequential)] private struct MouseInput { public int X, Y; public uint Data, Flags, Time; public UIntPtr Extra; }
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
 }

@@ -1,10 +1,10 @@
-using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Graphics;
 using global::Windows.UI;
 
@@ -166,7 +166,7 @@ public sealed partial class SettingsWindow : Window
         AppWindow.Changed += (_, args) =>
         {
             if (_positioning || !args.DidPositionChange) return;
-            var currentDpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var currentDpi = NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
             if (currentDpi != _dpi) PlaceOn(DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
         };
         SetPreferences(preferences);
@@ -199,7 +199,7 @@ public sealed partial class SettingsWindow : Window
         {
             var work = area.WorkArea;
             AppWindow.Move(new PointInt32(work.X + work.Width / 2, work.Y + work.Height / 2));
-            _dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+            _dpi = NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
             var scale = (_dpi == 0 ? 96 : _dpi) / 96d;
             // Reproducible logical-viewport test, deliberately not an OS DPI override.
             var smallPreview = Environment.GetCommandLineArgs().Contains("--settings-small");
@@ -745,7 +745,4 @@ public sealed partial class SettingsWindow : Window
             foreach (var descendant in Descendants(child)) yield return descendant;
         }
     }
-
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr hwnd);
 }

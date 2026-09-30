@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -256,19 +257,15 @@ public sealed class WatchedFolderProcessor
 
     private bool Save()
     {
-        var temporary = _statePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_statePath))!);
             var serialized = JsonSerializer.SerializeToUtf8Bytes(new State(1, Settings, _files), Json);
             if (serialized.Length > 32 * 1024 * 1024) throw new IOException("Saved folder progress is too large.");
-            File.WriteAllBytes(temporary, serialized);
-            File.Move(temporary, _statePath, true);
+            AtomicFileWriter.WriteAllBytes(_statePath, serialized);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         { Error = "Folder progress could not be saved. Watching stopped to prevent duplicate processing."; Watching = false; return false; }
-        finally { try { if (File.Exists(temporary)) File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
 
 }

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Interop.UIAutomationClient;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -178,10 +179,8 @@ internal static class WindowsBrowserTargetReader
     { if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
     private static bool StillOriginalTarget(BrowserCaptureTarget target)
     {
-        if (GetForegroundWindow() != target.WindowHandle) return false;
-        GetWindowThreadProcessId(target.WindowHandle, out var processId);
+        if (NativeMethods.GetForegroundWindow() != target.WindowHandle) return false;
+        NativeMethods.GetWindowThreadProcessId(target.WindowHandle, out var processId);
         return processId == target.ProcessId;
     }
-    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
 }

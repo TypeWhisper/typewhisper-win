@@ -1,7 +1,7 @@
 using Microsoft.UI.Windowing;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Presentation;
-using global::Windows.Graphics;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -63,8 +63,8 @@ public sealed partial class MainWindow
         palette.InsertRecent = record => DeliverPaletteTextAsync(palette, record.DisplayText, target);
         palette.Cancel = RequestWorkflowCancellation;
         palette.Closed += (_, _) => { if (ReferenceEquals(_workflowPalette, palette)) _workflowPalette = null; };
-        GetCursorPos(out var cursor);
-        palette.ShowOn(DisplayArea.GetFromPoint(new PointInt32(cursor.X, cursor.Y), DisplayAreaFallback.Nearest));
+        NativeMethods.GetCursorPos(out var cursor);
+        palette.ShowOn(DisplayArea.GetFromPoint(cursor, DisplayAreaFallback.Nearest));
     }
 
     private async Task<string> PaletteSourceTextAsync(PasteTarget? target)

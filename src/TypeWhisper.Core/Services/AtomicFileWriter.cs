@@ -2,14 +2,31 @@ using System.Text;
 
 namespace TypeWhisper.Core.Services;
 
-internal static class AtomicFileWriter
+/// <summary>
+/// Replaces a file in one step, so readers see either the previous or the new contents and never a partial write.
+/// </summary>
+/// <remarks>
+/// The contents go to a uniquely named temporary file beside the target, are flushed to disk and then moved over
+/// the target. A missing directory is created, and the temporary file is removed when the write fails.
+/// </remarks>
+public static class AtomicFileWriter
 {
     private static readonly UTF8Encoding Utf8WithoutBom = new(false);
 
-    public static bool TryWriteAllText(string filePath, string contents) =>
-        TryWriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
+    /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/> as UTF-8 without a byte order mark.</summary>
+    /// <param name="filePath">The file to create or replace.</param>
+    /// <param name="contents">The new text of the file.</param>
+    /// <exception cref="IOException">The file could not be written or replaced.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to the file or its directory was denied.</exception>
+    public static void WriteAllText(string filePath, string contents) =>
+        WriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
 
-    public static bool TryWriteAllBytes(string filePath, byte[] contents)
+    /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/>.</summary>
+    /// <param name="filePath">The file to create or replace.</param>
+    /// <param name="contents">The new bytes of the file.</param>
+    /// <exception cref="IOException">The file could not be written or replaced.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to the file or its directory was denied.</exception>
+    public static void WriteAllBytes(string filePath, byte[] contents)
     {
         string? temporaryPath = null;
         try
@@ -36,11 +53,6 @@ internal static class AtomicFileWriter
 
             File.Move(temporaryPath, filePath, overwrite: true);
             temporaryPath = null;
-            return true;
-        }
-        catch
-        {
-            return false;
         }
         finally
         {
@@ -48,6 +60,22 @@ internal static class AtomicFileWriter
             {
                 try { File.Delete(temporaryPath); } catch { }
             }
+        }
+    }
+
+    internal static bool TryWriteAllText(string filePath, string contents) =>
+        TryWriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
+
+    internal static bool TryWriteAllBytes(string filePath, byte[] contents)
+    {
+        try
+        {
+            WriteAllBytes(filePath, contents);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -7,6 +6,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Graphics;
 using global::Windows.System;
 
@@ -99,7 +99,7 @@ internal sealed class WorkflowPaletteWindow : Window
         Place();
         AppWindow.Show();
         Activate();
-        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        NativeMethods.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
         _search.Focus(FocusState.Programmatic);
     }
 
@@ -108,7 +108,7 @@ internal sealed class WorkflowPaletteWindow : Window
     {
         if (_area is not { } area) return;
         var work = area.WorkArea;
-        var scale = Math.Max(96u, GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))) / 96d;
+        var scale = Math.Max(96u, NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))) / 96d;
         var width = (int)((_recentLevel ? RecentWidth : WorkflowWidth) * scale);
         var height = (int)((_recentLevel ? RecentHeight : WorkflowHeight) * scale);
         AppWindow.MoveAndResize(new RectInt32(work.X + (work.Width - width) / 2, work.Y + (work.Height - height) / 2 - (int)(60 * scale), width, height));
@@ -308,7 +308,7 @@ internal sealed class WorkflowPaletteWindow : Window
     {
         // Windows 11 rounds borderless windows only when asked.
         var preference = 2; // DWMWCP_ROUND
-        _ = DwmSetWindowAttribute(WinRT.Interop.WindowNative.GetWindowHandle(this), 33, ref preference, sizeof(int));
+        _ = NativeMethods.DwmSetWindowAttribute(WinRT.Interop.WindowNative.GetWindowHandle(this), 33, ref preference, sizeof(int));
     }
 
     private static IEnumerable<T> Descendants<T>(Panel? panel) where T : class
@@ -327,8 +327,4 @@ internal sealed class WorkflowPaletteWindow : Window
         Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Tag = muted ? "muted" : null,
         Foreground = Brush(muted ? "MutedBrush" : "TextBrush"), FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal
     };
-
-    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
-    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr window);
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 }

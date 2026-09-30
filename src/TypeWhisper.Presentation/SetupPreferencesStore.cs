@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -51,20 +52,12 @@ public sealed class SetupPreferencesStore
     {
         if (step is < 0 or > 4 || (completed && step != 4)) throw new ArgumentOutOfRangeException(nameof(step));
         var next = new SetupPreferences { Step = step, Completed = completed };
-        var temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
-            File.WriteAllText(temporary, JsonSerializer.Serialize(next));
-            File.Move(temporary, _path, true);
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(next));
             Current = next; Error = null; return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { return Error = "Setup progress could not be saved. Your actual settings remain saved separately."; }
-        finally
-        {
-            try { if (File.Exists(temporary)) File.Delete(temporary); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        }
     }
 }

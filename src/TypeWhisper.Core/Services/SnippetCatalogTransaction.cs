@@ -30,7 +30,7 @@ public static class SnippetCatalogTransaction
         Validate(current);
         var next = change(current).ToArray();
         Validate(next);
-        WriteAtomically(path, JsonSerializer.Serialize(next, Options));
+        AtomicFileWriter.WriteAllText(path, JsonSerializer.Serialize(next, Options));
         return next;
     }
 
@@ -51,14 +51,5 @@ public static class SnippetCatalogTransaction
         if (entries.Any(entry => entry is null || string.IsNullOrWhiteSpace(entry.Id) || !ids.Add(entry.Id) ||
             string.IsNullOrWhiteSpace(entry.Trigger) || entry.Replacement is null || entry.Tags is null || entry.UsageCount < 0))
             throw new JsonException("Invalid snippet catalog. No changes were saved.");
-    }
-
-    internal static void WriteAtomically(string path, string json)
-    {
-        var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
-        Directory.CreateDirectory(directory);
-        var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try { File.WriteAllText(temporary, json); File.Move(temporary, path, overwrite: true); }
-        finally { try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
 }

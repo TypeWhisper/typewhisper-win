@@ -4,6 +4,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using Microsoft.UI.Dispatching;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -58,8 +59,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             RemoveDiscovery();
             _preferences = new(enabled, port, requireAuthentication);
             Directory.CreateDirectory(WinUIProfile.Root);
-            File.WriteAllText(SettingsPath + ".tmp", JsonSerializer.Serialize(_preferences));
-            File.Move(SettingsPath + ".tmp", SettingsPath, true);
+            AtomicFileWriter.WriteAllText(SettingsPath, JsonSerializer.Serialize(_preferences));
             if (!enabled) { Status = "HTTP API is off."; return; }
             _token ??= await _secrets.LoadAsync("token");
             if (_token is null)

@@ -19,7 +19,6 @@ public sealed class SettingsService : ISettingsService
 
     private readonly string _filePath;
     private string BackupPath => _filePath + ".bak";
-    private string TempPath => _filePath + ".tmp";
 
     private AppSettings _current;
 
@@ -94,10 +93,9 @@ public sealed class SettingsService : ISettingsService
             catch { /* best effort */ }
         }
 
-        // Atomic write: serialize to .tmp, then move over primary
+        // Atomic write: serialize to a temporary file, then move over primary
         var json = JsonSerializer.Serialize(settings, JsonOptions);
-        File.WriteAllText(TempPath, json);
-        File.Move(TempPath, _filePath, overwrite: true);
+        AtomicFileWriter.WriteAllText(_filePath, json);
 
         SettingsChanged?.Invoke(settings);
     }

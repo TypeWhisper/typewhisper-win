@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -25,16 +26,16 @@ internal sealed class ForegroundWindowHistory : IDisposable
         _callback = (_, _, window, _, _, _, _) => _last = Eligible(window) ?? _last;
         // Out-of-context events are delivered on this (UI) thread through its message loop.
         _hook = SetWinEventHook(ForegroundEvent, ForegroundEvent, IntPtr.Zero, _callback, 0, 0, 0);
-        _last = Eligible(GetForegroundWindow());
+        _last = Eligible(NativeMethods.GetForegroundWindow());
     }
 
     internal PasteTarget? LastTarget => _last is { IsCurrent: true } last && IsWindowVisible(last.Window) ? last : null;
 
     // The shortcut pastes where it is pressed, but never into TypeWhisper or shell windows.
-    internal static PasteTarget? CurrentTarget => Eligible(GetForegroundWindow());
+    internal static PasteTarget? CurrentTarget => Eligible(NativeMethods.GetForegroundWindow());
 
     internal static uint ProcessOf(IntPtr window) =>
-        IsWindow(window) && GetWindowThreadProcessId(window, out var processId) != 0 ? processId : 0;
+        NativeMethods.IsWindow(window) && NativeMethods.GetWindowThreadProcessId(window, out var processId) != 0 ? processId : 0;
 
     private static PasteTarget? Eligible(IntPtr window)
     {
@@ -62,9 +63,6 @@ internal sealed class ForegroundWindowHistory : IDisposable
     private delegate void WinEventProc(IntPtr hook, uint eventType, IntPtr window, int objectId, int childId, uint thread, uint time);
     [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc callback, uint process, uint thread, uint flags);
     [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, StringBuilder name, int capacity);
 }

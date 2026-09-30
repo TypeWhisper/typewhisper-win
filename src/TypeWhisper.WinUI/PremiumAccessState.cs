@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -69,21 +70,14 @@ internal sealed class PremiumAccessState
     {
 #if DEBUG
         if (!Enum.IsDefined(scenario)) throw new ArgumentOutOfRangeException(nameof(scenario));
-        var temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             if (scenario == PremiumDevScenario.Actual) File.Delete(_path);
-            else
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
-                File.WriteAllText(temporary, scenario.ToString());
-                File.Move(temporary, _path, true);
-            }
+            else AtomicFileWriter.WriteAllText(_path, scenario.ToString());
             Scenario = scenario; Error = null; Changed?.Invoke(); return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         { Error = "Could not save development access. The previous access remains active."; Changed?.Invoke(); return false; }
-        finally { try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
 #else
         return false;
 #endif

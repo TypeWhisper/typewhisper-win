@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -70,18 +71,12 @@ public sealed class HistoryRetentionPreferencesStore
     public string? Save(HistoryRetentionPreferences preferences)
     {
         if (!preferences.IsValid) return Error = "Choose Forever or a duration between 1 minute and 10 years. Your previous choice still applies.";
-        string? temporary = null;
         try
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".history-retention-{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new
             {
                 HistoryRetentionMode = preferences.HistoryRetentionMode.ToString(), preferences.HistoryRetentionMinutes
             }));
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
             Current = preferences;
             CanApply = true;
             return Error = null;
@@ -92,11 +87,6 @@ public sealed class HistoryRetentionPreferencesStore
                 : Current.HistoryRetentionMode == HistoryRetentionMode.Forever ? "Forever remains active."
                 : $"Automatic deletion after {Current.HistoryRetentionMinutes:N0} minutes remains active.";
             return Error = "History retention could not be saved. " + active;
-        }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 }

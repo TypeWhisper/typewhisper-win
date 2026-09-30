@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -37,26 +38,15 @@ public sealed class DictationHotkeyPauseStore
     /// <summary>Persists the pause choice; failed writes preserve the previous selection.</summary>
     public string? Save(bool paused)
     {
-        string? temporary = null;
         try
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new { Paused = paused }));
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new { Paused = paused }));
             Current = paused;
             return Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Error = "Dictation hotkey pause choice could not be saved. Your previous choice still applies.";
-        }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 }

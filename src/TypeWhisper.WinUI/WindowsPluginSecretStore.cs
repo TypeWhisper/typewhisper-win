@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using TypeWhisper.Core.Services;
 using TypeWhisper.PluginHost;
 
 namespace TypeWhisper.WinUI;
@@ -17,10 +18,7 @@ internal sealed class WindowsPluginSecretStore(string directory) : IPluginSecret
         try
         {
             var ciphertext = ProtectedData.Protect(plaintext, Entropy, DataProtectionScope.CurrentUser);
-            Directory.CreateDirectory(directory);
-            var path = SecretPath(key);
-            File.WriteAllBytes(path + ".tmp", ciphertext);
-            File.Move(path + ".tmp", path, true);
+            AtomicFileWriter.WriteAllBytes(SecretPath(key), ciphertext);
         }
         finally { CryptographicOperations.ZeroMemory(plaintext); }
         return Task.CompletedTask;

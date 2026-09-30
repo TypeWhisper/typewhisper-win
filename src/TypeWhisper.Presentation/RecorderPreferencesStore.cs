@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -48,26 +49,15 @@ public sealed class RecorderPreferencesStore
     {
         ArgumentNullException.ThrowIfNull(value);
         if (!value.IsValid) { Error = "Choose a valid system audio device."; NotifyChanged(); return Error; }
-        string? temporary = null;
         try
         {
-            var directory = Path.GetDirectoryName(_path)!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
             var normalized = Normalize(value);
-            File.WriteAllText(temporary, JsonSerializer.Serialize(normalized));
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(normalized));
             Current = normalized;
             Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { Error = "Recorder preferences could not be saved. The previous source selection still applies."; }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
         NotifyChanged();
         return Error;
     }

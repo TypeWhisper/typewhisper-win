@@ -123,7 +123,7 @@ public sealed class HistoryRetentionTests : IDisposable
         Directory.Delete(SettingsPath);
         File.Move(SettingsPath + ".saved", SettingsPath);
         Assert.Equal(Duration(60), new HistoryRetentionPreferencesStore(SettingsPath).Current);
-        Assert.Empty(Directory.GetFiles(_directory, ".history-retention-*.tmp"));
+        Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
     }
 
     [Fact]

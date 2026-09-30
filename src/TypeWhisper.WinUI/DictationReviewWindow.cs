@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Media;
 using TypeWhisper.Presentation;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Graphics;
 
 namespace TypeWhisper.WinUI;
@@ -171,11 +172,8 @@ internal sealed class DictationReviewWindow : Window
     {
         if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) presenter.IsAlwaysOnTop = true;
         Activate();
-        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        NativeMethods.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
     }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr window);
 
     internal Task ShutdownAsync()
     {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.WinUI;
 
@@ -79,15 +80,6 @@ internal static class LiveTextPlacement
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
 
-    internal static void Save(string path, LiveTextPosition position)
-    {
-        var temporary = path + ".tmp";
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(temporary, JsonSerializer.Serialize(position));
-            File.Move(temporary, path, overwrite: true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
-    }
+    internal static void Save(string path, LiveTextPosition position) =>
+        AtomicFileWriter.WriteAllText(path, JsonSerializer.Serialize(position));
 }

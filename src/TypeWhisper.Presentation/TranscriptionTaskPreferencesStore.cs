@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -37,26 +38,15 @@ public sealed class TranscriptionTaskPreferencesStore
     public string? Save(TranscriptionTask task)
     {
         if (!Enum.IsDefined(task)) return Error = "Choose a valid transcription task.";
-        string? temporary = null;
         try
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new { Task = task.ToString() }));
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new { Task = task.ToString() }));
             Current = task;
             return Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Error = "Transcription task could not be saved. Your previous task still applies.";
-        }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 }
