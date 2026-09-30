@@ -260,32 +260,41 @@ public sealed class HistoryService : IHistoryAudioService
     }
 
     /// <inheritdoc />
-    public bool TryReplaceRecord(TranscriptionRecord record)
+    public bool TryReplaceRecord(TranscriptionRecord record) => TryReplaceRecords([record]);
+
+    /// <inheritdoc />
+    public bool TryReplaceRecords(IReadOnlyCollection<TranscriptionRecord> records)
     {
+        if (records.Count == 0) return true;
         using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         lock (_gate)
         {
-            var index = _cache.FindIndex(existing =>
-                string.Equals(existing.Id, record.Id, StringComparison.Ordinal));
-            if (index < 0)
-                return false;
-
-            var previousAudio = _cache[index].AudioFileName;
             var updated = _cache.ToList();
-            updated[index] = record;
-            var removeAudio = !string.IsNullOrWhiteSpace(previousAudio) &&
-                !updated.Any(item => string.Equals(item.AudioFileName, previousAudio, StringComparison.OrdinalIgnoreCase));
-            if (removeAudio && _audioStore?.MarkDeletion([previousAudio]) == false) return false;
+            var previousAudio = new List<string>();
+            foreach (var record in records)
+            {
+                var index = updated.FindIndex(existing =>
+                    string.Equals(existing.Id, record.Id, StringComparison.Ordinal));
+                if (index < 0)
+                    return false;
+                if (!string.IsNullOrWhiteSpace(updated[index].AudioFileName)) previousAudio.Add(updated[index].AudioFileName!);
+                updated[index] = record;
+            }
+
+            var removedAudio = previousAudio.Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(audio => !updated.Any(item => string.Equals(item.AudioFileName, audio, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            if (removedAudio.Length > 0 && _audioStore?.MarkDeletion(removedAudio) == false) return false;
             if (!SaveToDisk(updated))
                 return false;
 
             _cache = updated;
             RebuildStats();
-            if (removeAudio)
+            if (removedAudio.Length > 0)
             {
                 if (_audioStore is not null) _audioStore.Reconcile(AudioReferences());
-                else DeleteAudioFile(previousAudio);
+                else foreach (var audio in removedAudio) DeleteAudioFile(audio);
             }
         }
 

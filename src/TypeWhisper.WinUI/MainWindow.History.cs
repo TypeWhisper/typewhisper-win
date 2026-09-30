@@ -6,7 +6,7 @@ namespace TypeWhisper.WinUI;
 // History opens in its own window, as on macOS.
 public sealed partial class MainWindow
 {
-    private TypeWhisper.Core.Services.HistoryService? _historyService;
+    private readonly TypeWhisper.Core.Services.HistoryService? _historyService;
     private HistoryWindow? _historyWindow;
 
     private bool CanPlayHistoryAudio() => !_closing && !_profileRestoreClosing && _dictation.CanChangeProvider && !_dictation.Models.Busy

@@ -32,6 +32,8 @@ public interface IHistoryService
     /// Atomically replaces a complete record while preserving its identity.
     /// </summary>
     bool TryReplaceRecord(TranscriptionRecord record) => false;
+    /// <summary>Atomically replaces several complete records in one save. False leaves history unchanged.</summary>
+    bool TryReplaceRecords(IReadOnlyCollection<TranscriptionRecord> records) => false;
     /// <summary>
     /// Deletes record.
     /// </summary>

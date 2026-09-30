@@ -22,24 +22,22 @@ public sealed class HistoryActions(IHistoryService history)
 
     /// <summary>
     /// Marks Inbox entries complete, or reopens completed ones. Entries outside the Inbox are left unchanged,
-    /// matching macOS. Returns how many entries changed.
+    /// matching macOS. All changes are saved together. Returns how many entries changed.
     /// </summary>
     public async Task<int> SetInboxCompletedAsync(IReadOnlyCollection<string> ids, bool completed, DateTime? now = null)
     {
         var snapshot = ids.ToHashSet(StringComparer.Ordinal);
         await history.EnsureLoadedAsync().ConfigureAwait(false);
-        var changed = 0;
-        foreach (var record in history.Records.Where(record => snapshot.Contains(record.Id)).ToArray())
-        {
-            var from = completed ? HistoryWorkspace.InboxOpen : HistoryWorkspace.InboxCompleted;
-            if (record.InboxState != from) continue;
-            var updated = completed
-                ? record with { InboxState = HistoryWorkspace.InboxCompleted, InboxCompletedAt = now ?? DateTime.UtcNow, InboxUpdatedAt = now ?? DateTime.UtcNow }
-                : record with { InboxState = HistoryWorkspace.InboxOpen, InboxCompletedAt = null, InboxUpdatedAt = now ?? DateTime.UtcNow };
-            if (!history.TryReplaceRecord(updated)) throw new IOException("The Inbox change could not be saved. Your history was not changed.");
-            changed++;
-        }
-        return changed;
+        var at = now ?? DateTime.UtcNow;
+        var from = completed ? HistoryWorkspace.InboxOpen : HistoryWorkspace.InboxCompleted;
+        var updated = history.Records.Where(record => snapshot.Contains(record.Id) && record.InboxState == from)
+            .Select(record => completed
+                ? record with { InboxState = HistoryWorkspace.InboxCompleted, InboxCompletedAt = at, InboxUpdatedAt = at }
+                : record with { InboxState = HistoryWorkspace.InboxOpen, InboxCompletedAt = null, InboxUpdatedAt = at })
+            .ToArray();
+        if (updated.Length > 0 && !history.TryReplaceRecords(updated))
+            throw new IOException("The Inbox change could not be saved. Your history was not changed.");
+        return updated.Length;
     }
 
     /// <summary>Deletes an entry and verifies that persistence succeeded before reporting success.</summary>
