@@ -86,6 +86,7 @@ internal static partial class WinUICloudSync
             ? new HistorySyncAudioAccess(record => history.ResolveAudioPath(record.AudioFileName),
                 (path, sha256, bytes) => history.ImportSyncedAudio(path, sha256, bytes, Lifetime.Token), state.AudioSince ?? DateTime.UtcNow)
             : null;
+        var deletionsBefore = state.ExplicitDeletions.Keys.ToArray();
         var result = await Task.Run(() => HistoryFolderSync.Sync(folder, transport, state, snapshot, Environment.MachineName,
             typeof(WinUICloudSync).Assembly.GetName().Version?.ToString() ?? "unknown", DateTime.UtcNow, Lifetime.Token, audio), Lifetime.Token);
         if (result.Records is { } merged)
@@ -93,19 +94,40 @@ internal static partial class WinUICloudSync
             // Local History changed meanwhile: keep it, and merge again on the next pass.
             var current = history.Records;
             if (current.Count != snapshot.Length || current.Where((record, index) => !ReferenceEquals(record, snapshot[index])).Any())
-                return "History changed during sync; it will be merged again shortly.";
+                return KeepPublished(result, "History changed during sync; it will be merged again shortly.");
             // Remote deletions go through the History service so their saved audio is removed as well.
             var kept = merged.Select(record => record.Id).ToHashSet(StringComparer.Ordinal);
             var removed = snapshot.Where(record => !kept.Contains(record.Id)).Select(record => record.Id).ToArray();
-            if (removed.Length > 0 && !history.TryDeleteRecords(removed)) return "Synced History could not be saved. Local History was not changed.";
-            if (!history.TryReplaceAll(merged)) return "Synced History could not be saved completely. It will be merged again shortly.";
+            if (removed.Length > 0 && !history.TryDeleteRecords(removed))
+                return KeepPublished(result, "Synced History could not be saved. Local History was not changed.");
+            if (!history.TryReplaceAll(merged))
+                return KeepPublished(result, "Synced History could not be saved completely. It will be merged again shortly.");
             // Settle received audio: referenced copies are kept, copies of entries not saved are removed.
             if (audio is not null) history.RetryAudioCleanup();
         }
-        var devicesChanged = !state.Devices.OrderBy(pair => pair.Key).SequenceEqual(_history.Devices.OrderBy(pair => pair.Key));
-        SaveHistoryState(state);
-        _history = state;
+        // Settings and deletions recorded while the pass ran stay; the pass only owns its sync progress.
+        var next = CloneHistoryState();
+        next.ExportedVersions = state.ExportedVersions;
+        next.AppliedOperationIds = state.AppliedOperationIds;
+        next.Devices = state.Devices;
+        next.LastSyncAt = state.LastSyncAt;
+        foreach (var expired in deletionsBefore.Where(id => !state.ExplicitDeletions.ContainsKey(id))) next.ExplicitDeletions.Remove(expired);
+        var devicesChanged = !next.Devices.OrderBy(pair => pair.Key).SequenceEqual(_history.Devices.OrderBy(pair => pair.Key));
+        SaveHistoryState(next);
+        _history = next;
         if (devicesChanged) HistoryDevicesChanged?.Invoke();
         return $"History: {result.OperationsWritten} sent · {result.ChangesApplied} applied";
+    }
+
+    // The pass already wrote this PC's operation files. Remember their versions so the next pass does not publish
+    // them again. Remote changes stay unapplied and are merged again next time.
+    private static string KeepPublished(HistorySyncResult result, string status)
+    {
+        if (result.Published.Count == 0) return status;
+        var next = CloneHistoryState();
+        foreach (var (key, version) in result.Published) next.ExportedVersions[key] = version;
+        try { SaveHistoryState(next); _history = next; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Trace.TraceError("Published History versions were not saved: {0}", ex); }
+        return status;
     }
 }

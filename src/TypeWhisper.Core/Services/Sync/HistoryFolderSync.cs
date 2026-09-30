@@ -45,7 +45,14 @@ public sealed record HistorySyncAudioAccess(Func<TranscriptionRecord, string?> L
 /// <param name="Records">The merged local History, or null when nothing changed locally.</param>
 /// <param name="OperationsWritten">Operations published by this PC.</param>
 /// <param name="ChangesApplied">Remote changes merged into local History.</param>
-public sealed record HistorySyncResult(IReadOnlyList<TranscriptionRecord>? Records, int OperationsWritten, int ChangesApplied);
+public sealed record HistorySyncResult(IReadOnlyList<TranscriptionRecord>? Records, int OperationsWritten, int ChangesApplied)
+{
+    /// <summary>
+    /// The component versions this PC published in this pass. Their operation files exist even when
+    /// <see cref="Records"/> is not saved, so keep these versions to avoid publishing the same changes again.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Published { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+}
 
 /// <summary>
 /// Synchronizes History text and Inbox state through the shared cloud folder, in the operation format of the
@@ -92,7 +99,10 @@ public static class HistoryFolderSync
         foreach (var expired in state.ExplicitDeletions.Where(pair => now - pair.Value > DeletionRetention).Select(pair => pair.Key).ToArray())
             state.ExplicitDeletions.Remove(expired);
 
+        var exported = new Dictionary<string, string>(state.ExportedVersions, StringComparer.Ordinal);
         var written = Publish(package, ownOperations, transportDeviceId, state, records, now, audio);
+        var published = state.ExportedVersions.Where(pair => !exported.TryGetValue(pair.Key, out var version) || version != pair.Value)
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         cancellationToken.ThrowIfCancellationRequested();
         ReadDevices(package, state);
         var operations = ReadOperations(Path.Combine(package, "ops"), cancellationToken);
@@ -100,7 +110,7 @@ public static class HistoryFolderSync
         // Audio still downloading from the cloud provider is retried on the next pass.
         state.AppliedOperationIds.UnionWith(operations.Select(operation => operation.OperationId).Where(id => !deferred.Contains(id)));
         state.LastSyncAt = now;
-        return new HistorySyncResult(applied > 0 ? merged : null, written, applied);
+        return new HistorySyncResult(applied > 0 ? merged : null, written, applied) { Published = published };
     }
 
     // Publishing --------------------------------------------------------------------------------

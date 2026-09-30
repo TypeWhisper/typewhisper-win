@@ -142,6 +142,25 @@ public sealed class HistoryFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public void ReportsOnlyTheVersionsThisPassPublished()
+    {
+        WriteMacOperation("historyContent", MacContent(Now.AddMinutes(-10)), Now.AddMinutes(-10));
+        var state = new HistorySyncState { Enabled = true };
+        var result = Sync(_folder, "windows-transport", state, [Local()]);
+
+        // The caller keeps these when it cannot save the merge, so the local entry is not published twice.
+        Assert.Equal(["history:11111111-2222-4333-8444-555555555555#content", "history:11111111-2222-4333-8444-555555555555#inbox"],
+            result.Published.Keys.Order(StringComparer.Ordinal));
+        // The received Mac entry is not saved yet; its version must not look published.
+        Assert.True(state.ExportedVersions.ContainsKey($"history:{RecordUuid.ToLowerInvariant()}#content"));
+        Assert.DoesNotContain(result.Published.Keys, key => key.Contains(RecordUuid.ToLowerInvariant(), StringComparison.Ordinal));
+
+        var kept = new HistorySyncState { Enabled = true, HistoryDeviceId = state.HistoryDeviceId };
+        foreach (var (key, version) in result.Published) kept.ExportedVersions[key] = version;
+        Assert.Equal(0, Sync(_folder, "windows-transport", kept, [Local()]).OperationsWritten);
+    }
+
+    [Fact]
     public void InboxStampedWithTheCreationTimeIsApplied()
     {
         // macOS gives a new entry's Inbox the same time as its content.
