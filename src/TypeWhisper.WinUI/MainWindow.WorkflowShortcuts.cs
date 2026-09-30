@@ -1,5 +1,5 @@
-using System.Runtime.InteropServices;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -72,8 +72,8 @@ public sealed partial class MainWindow
             });
             return;
         }
-        var target = GetForegroundWindow();
-        GetWindowThreadProcessId(target, out var processId);
+        var target = NativeMethods.GetForegroundWindow();
+        NativeMethods.GetWindowThreadProcessId(target, out var processId);
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _workflowTask = completion.Task;
         _ = CaptureAndRunWorkflowAsync(workflow, target, processId, completion);
@@ -149,5 +149,4 @@ public sealed partial class MainWindow
         _workflowPalette?.Dismiss();
         await Task.WhenAll(_workflowWindows.ToArray().Select(w => w.ShutdownAsync()));
     }
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
 }

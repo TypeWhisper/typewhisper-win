@@ -240,22 +240,15 @@ public sealed class UsageStatisticsService : IUsageStatisticsService
 
     private bool SaveLocked()
     {
-        var tempPath = string.Concat(_filePath, ".", Guid.NewGuid().ToString("N"), ".tmp");
         try
         {
-            var directory = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-                Directory.CreateDirectory(directory);
-
             _store.Days = _store.Days.OrderBy(day => day.Day).ToList();
-            File.WriteAllText(tempPath, JsonSerializer.Serialize(_store, JsonOptions));
-            File.Move(tempPath, _filePath, true);
+            AtomicFileWriter.WriteAllText(_filePath, JsonSerializer.Serialize(_store, JsonOptions));
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Debug.WriteLine($"Failed to save usage statistics: {ex.GetType().Name}");
-            TryDelete(tempPath);
             return false;
         }
     }
@@ -290,17 +283,6 @@ public sealed class UsageStatisticsService : IUsageStatisticsService
         if (day.HourCounts is not null)
             Array.Copy(day.HourCounts, hours, Math.Min(day.HourCounts.Length, hours.Length));
         day.HourCounts = hours;
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
     }
 
     private sealed class UsageStatisticsStore

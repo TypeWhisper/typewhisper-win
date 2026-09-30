@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Graphics;
 
 namespace TypeWhisper.WinUI;
@@ -16,9 +16,6 @@ public sealed partial class TranscriptPreviewWindow : Window
     private const int FullHeight = 146;
     private const int SeamUnderlap = 1;
     private const double AnimationDurationMilliseconds = 260;
-    private const int GwlExstyle = -20;
-    private const long WsExNoactivate = 0x08000000L;
-    private const long WsExToolwindow = 0x00000080L;
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwcpRound = 2;
     private static readonly string[] DemoTranscriptWords =
@@ -177,7 +174,7 @@ public sealed partial class TranscriptPreviewWindow : Window
     private void TranscriptHeader_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (!_floating || _resizeStart is not null || _expansion < 0.999 || !e.GetCurrentPoint(TranscriptHeader).Properties.IsLeftButtonPressed
-            || !GetCursorPos(out var point) || !TranscriptHeader.CapturePointer(e.Pointer)) return;
+            || !NativeMethods.GetCursorPos(out var point) || !TranscriptHeader.CapturePointer(e.Pointer)) return;
         _dragStart = point;
         _dragWindowStart = AppWindow.Position;
         UpdateDragAppearance();
@@ -186,7 +183,7 @@ public sealed partial class TranscriptPreviewWindow : Window
 
     private void TranscriptHeader_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (_dragStart is not { } start || !GetCursorPos(out var point)) return;
+        if (_dragStart is not { } start || !NativeMethods.GetCursorPos(out var point)) return;
         _floatingPosition = (_floatingPosition ?? new LiveTextPosition(_dragWindowStart.X, _dragWindowStart.Y)) with
         { X = _dragWindowStart.X + point.X - start.X, Y = _dragWindowStart.Y + point.Y - start.Y };
         ApplyWindowBounds(Math.Max(1, (int)Math.Round(ExpandedHeight * _expansion)));
@@ -252,7 +249,7 @@ public sealed partial class TranscriptPreviewWindow : Window
         if (!_floating || _expansion < 0.999 || _dragStart is not null || _resizeStart is not null
             || sender is not ResizeHandleGrid handle
             || !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed
-            || !GetCursorPos(out var point) || !handle.CapturePointer(e.Pointer)) return;
+            || !NativeMethods.GetCursorPos(out var point) || !handle.CapturePointer(e.Pointer)) return;
         var position = AppWindow.Position;
         var size = AppWindow.Size;
         var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
@@ -260,7 +257,7 @@ public sealed partial class TranscriptPreviewWindow : Window
         _resizeEdge = (LiveTextResizeEdge)handle.Tag;
         _resizeWindowStart = new(position.X, position.Y, size.Width, size.Height);
         _resizeWorkArea = new(work.X, work.Y, work.Width, work.Height);
-        _resizeScale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96d;
+        _resizeScale = NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96d;
         if (_resizeScale <= 0) _resizeScale = _scale;
         _activeResizeHandle = handle;
         e.Handled = true;
@@ -268,7 +265,7 @@ public sealed partial class TranscriptPreviewWindow : Window
 
     private void ResizeHandle_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (_resizeStart is not { } start || !GetCursorPos(out var point)) return;
+        if (_resizeStart is not { } start || !NativeMethods.GetCursorPos(out var point)) return;
         var bounds = LiveTextPlacement.Resize(_resizeWindowStart, _resizeEdge, point.X - start.X, point.Y - start.Y,
             (int)Math.Round(LiveTextPlacement.MinimumWidth * _resizeScale),
             (int)Math.Round(LiveTextPlacement.MinimumHeight * _resizeScale), _resizeWorkArea);
@@ -404,7 +401,7 @@ public sealed partial class TranscriptPreviewWindow : Window
             var currentArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
             if (currentArea?.DisplayId != area.DisplayId)
                 AppWindow.Move(new PointInt32(work.X + work.Width / 2, work.Y + work.Height / 2));
-            var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96d;
+            var scale = NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96d;
             if (scale <= 0) scale = _scale;
             var width = Math.Min((int)Math.Round(desired.Width * scale), work.Width);
             var fullHeight = Math.Min((int)Math.Round(desired.Height * scale), work.Height);
@@ -467,27 +464,10 @@ public sealed partial class TranscriptPreviewWindow : Window
 
     private void ConfigureNativeWindow()
     {
+        NativeWindowAppearance.MakeNonActivatingToolWindow(this);
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        var style = GetWindowLongPtr(hwnd, GwlExstyle).ToInt64();
-        SetWindowLongPtr(hwnd, GwlExstyle, new IntPtr(style | WsExNoactivate | WsExToolwindow));
         var preference = DwmwcpRound;
-        _ = DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref preference, sizeof(int));
+        _ = NativeMethods.DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref preference, sizeof(int));
         NativeWindowAppearance.RemoveOverlayFrame(this);
     }
-
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out PointInt32 point);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr hwnd);
-
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }

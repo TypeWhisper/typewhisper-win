@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -45,17 +46,15 @@ internal sealed partial class LocalDictationSession
 
     private static async Task<bool> ActivateAsync(IntPtr target)
     {
-        if (IsIconic(target)) ShowWindow(target, 9);
-        SetForegroundWindow(target);
+        if (NativeMethods.IsIconic(target)) ShowWindow(target, 9);
+        NativeMethods.SetForegroundWindow(target);
         for (var attempt = 0; attempt < 20; attempt++)
         {
-            if (GetForegroundWindow() == target) return true;
+            if (NativeMethods.GetForegroundWindow() == target) return true;
             await Task.Delay(50);
         }
         return false;
     }
 
-    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
-    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr window, int command);
 }

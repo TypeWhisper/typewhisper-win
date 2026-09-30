@@ -45,8 +45,8 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField) : IClipboardPastePlatform
     {
         private IClipboardLease? _lease;
-        public bool CanPaste => target != IntPtr.Zero && GetForegroundWindow() == target && (verifyField?.Invoke() ?? true)
-            && !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0);
+        public bool CanPaste => target != IntPtr.Zero && NativeMethods.GetForegroundWindow() == target && (verifyField?.Invoke() ?? true)
+            && !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
         public bool ClipboardIsOwned => _lease is not null && clipboard.IsCurrent(_lease);
         public async Task<IDisposable> BeginAsync(string text)
         {
@@ -77,7 +77,5 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     }
     [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public UIntPtr Extra; }
     [StructLayout(LayoutKind.Sequential)] private struct MouseInput { public int X, Y; public uint Data, Flags, Time; public UIntPtr Extra; }
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
 }

@@ -1,11 +1,11 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Foundation;
 using global::Windows.Graphics;
 
@@ -138,8 +138,7 @@ internal sealed class NoticeWindow : Window
 
         (_area, _layout, _offset) = (area, layout, offset);
         Place(96);
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        _ = SetWindowLongPtr(hwnd, GwlExstyle, new IntPtr(GetWindowLongPtr(hwnd, GwlExstyle).ToInt64() | WsExNoactivate | WsExToolwindow));
+        NativeWindowAppearance.MakeNonActivatingToolWindow(this);
         AppWindow.Show(activateWindow: false);
         NativeWindowAppearance.RemoveOverlayFrame(this);
         _clock.Restart();
@@ -166,7 +165,7 @@ internal sealed class NoticeWindow : Window
     private void Place(double contentHeight)
     {
         if (_area is not { } area || _layout is not { } layout) return;
-        var scale = Math.Max(96u, GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))) / 96d;
+        var scale = Math.Max(96u, NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))) / 96d;
         var work = area.WorkArea;
         var width = Math.Min((int)Math.Round(CardWidth * scale), work.Width - (int)(32 * scale));
         var height = (int)Math.Ceiling(Math.Max(contentHeight, 56) * scale);
@@ -184,10 +183,4 @@ internal sealed class NoticeWindow : Window
         _run = null;
         if (!_closed) AppWindow.Hide();
     }
-
-    private const int GwlExstyle = -20;
-    private const long WsExNoactivate = 0x08000000L, WsExToolwindow = 0x00000080L;
-    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr window);
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
 }

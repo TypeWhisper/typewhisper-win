@@ -83,8 +83,8 @@ public sealed class PersistedCloudFolderSync
                 if (!Same(dictionaryBytes, Read(dictionaryPath)) || !Same(snippetBytes, Read(snippetsPath)))
                     throw new InvalidOperationException("Local entries changed during sync. They were kept; synchronize again.");
                 // Atomic per catalog. If a later write fails, leave progress unchanged; replay is idempotent.
-                if (buffer.DictionaryChanged) SnippetCatalogTransaction.WriteAtomically(dictionaryPath, JsonSerializer.Serialize(buffer.Dictionary, Json));
-                if (buffer.SnippetsChanged) SnippetCatalogTransaction.WriteAtomically(snippetsPath, JsonSerializer.Serialize(buffer.Snippets, Json));
+                if (buffer.DictionaryChanged) AtomicFileWriter.WriteAllText(dictionaryPath, JsonSerializer.Serialize(buffer.Dictionary, Json));
+                if (buffer.SnippetsChanged) AtomicFileWriter.WriteAllText(snippetsPath, JsonSerializer.Serialize(buffer.Snippets, Json));
                 var next = preferences with { State = state };
                 Save(next); Preferences = next;
             }
@@ -94,7 +94,7 @@ public sealed class PersistedCloudFolderSync
         finally { _gate.Release(); }
     }
 
-    private void Save(CloudFolderSyncPreferences preferences) => SnippetCatalogTransaction.WriteAtomically(PreferencesPath, JsonSerializer.Serialize(preferences, Json));
+    private void Save(CloudFolderSyncPreferences preferences) => AtomicFileWriter.WriteAllText(PreferencesPath, JsonSerializer.Serialize(preferences, Json));
     private static byte[]? Read(string path) { try { return File.ReadAllBytes(path); } catch (FileNotFoundException) { return null; } catch (DirectoryNotFoundException) { return null; } }
     private static bool Same(byte[]? a, byte[]? b) => a is null ? b is null : b is not null && a.AsSpan().SequenceEqual(b);
     private static List<T> ReadEntries<T>(byte[]? bytes) => bytes is null ? [] : JsonSerializer.Deserialize<List<T>>(bytes, Json) ?? throw new JsonException("Invalid local catalog.");

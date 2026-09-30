@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -14,7 +15,7 @@ internal sealed class CorrectionCommitObserver(DispatcherQueue dispatcher, IntPt
         Interlocked.Exchange(ref _signal, 0);
         _callback = (code, message, data) =>
         {
-            if (code >= 0 && (message == 0x100 || message == 0x104) && GetForegroundWindow() == target)
+            if (code >= 0 && (message == 0x100 || message == 0x104) && NativeMethods.GetForegroundWindow() == target)
             {
                 var key = Marshal.PtrToStructure<Key>(data);
                 if ((key.Flags & 0x10) == 0 && key.Code is 13 or 9) Interlocked.Exchange(ref _signal, 1);
@@ -36,7 +37,6 @@ internal sealed class CorrectionCommitObserver(DispatcherQueue dispatcher, IntPt
         completion.Task.GetAwaiter().GetResult();
     }
     [StructLayout(LayoutKind.Sequential)] private struct Key { public uint Code, Scan, Flags, Time; public UIntPtr Extra; }
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookExW(int hook, Hook callback, IntPtr module, uint thread);
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);

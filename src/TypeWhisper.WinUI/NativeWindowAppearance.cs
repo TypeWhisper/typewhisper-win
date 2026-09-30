@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -29,12 +30,15 @@ internal static class NativeWindowAppearance
     }
 
     private const int GwlStyle = -16;
+    private const int GwlExstyle = -20;
     private const long WsCaption = 0x00C00000L;
     private const long WsThickframe = 0x00040000L;
     private const long WsSysmenu = 0x00080000L;
     private const long WsMinimizebox = 0x00020000L;
     private const long WsMaximizebox = 0x00010000L;
     private const long WsPopup = unchecked((long)0x80000000L);
+    private const long WsExToolwindow = 0x00000080L;
+    private const long WsExNoactivate = 0x08000000L;
     private const uint SwpNosize = 0x0001;
     private const uint SwpNomove = 0x0002;
     private const uint SwpNozorder = 0x0004;
@@ -46,14 +50,23 @@ internal static class NativeWindowAppearance
     private const int DwmwcpRound = 2;
     private const int DwmColorNone = unchecked((int)0xFFFFFFFE);
 
+    // Keeps a floating window such as the overlay or a notice out of the taskbar and
+    // Alt+Tab, and stops it from taking focus away from the app the user works in.
+    internal static void MakeNonActivatingToolWindow(Window window)
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        var style = NativeMethods.GetWindowLongPtr(hwnd, GwlExstyle).ToInt64();
+        _ = NativeMethods.SetWindowLongPtr(hwnd, GwlExstyle, new IntPtr(style | WsExNoactivate | WsExToolwindow));
+    }
+
     internal static void RemoveSystemBorder(Window window, bool resizable = false)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        var style = GetWindowLongPtr(hwnd, GwlStyle).ToInt64();
+        var style = NativeMethods.GetWindowLongPtr(hwnd, GwlStyle).ToInt64();
         style &= ~(WsCaption | WsThickframe | WsSysmenu | WsMinimizebox | WsMaximizebox);
         style |= WsPopup;
         if (resizable) style |= WsThickframe;
-        _ = SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(style));
+        _ = NativeMethods.SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(style));
         _ = SetWindowPos(
             hwnd,
             IntPtr.Zero,
@@ -64,9 +77,9 @@ internal static class NativeWindowAppearance
             SwpNomove | SwpNosize | SwpNozorder | SwpNoactivate | SwpFramechanged);
 
         var borderColor = DwmColorNone;
-        _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref borderColor, sizeof(int));
+        _ = NativeMethods.DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref borderColor, sizeof(int));
         var cornerPreference = DwmwcpRound;
-        _ = DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(int));
+        _ = NativeMethods.DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(int));
     }
 
     internal static void RemoveOverlayFrame(Window window)
@@ -77,8 +90,8 @@ internal static class NativeWindowAppearance
         // TransparentTintBackdrop supplies per-pixel alpha, so neither a GDI
         // region nor a DWM corner/border should contribute pixels of its own.
         _ = SetWindowRgn(hwnd, IntPtr.Zero, true);
-        var style = GetWindowLongPtr(hwnd, GwlStyle).ToInt64() & ~WsPopup;
-        _ = SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(style));
+        var style = NativeMethods.GetWindowLongPtr(hwnd, GwlStyle).ToInt64() & ~WsPopup;
+        _ = NativeMethods.SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(style));
         _ = SetWindowPos(
             hwnd,
             IntPtr.Zero,
@@ -88,16 +101,10 @@ internal static class NativeWindowAppearance
             0,
             SwpNomove | SwpNosize | SwpNozorder | SwpNoactivate | SwpFramechanged);
         var cornerPreference = DwmwcpDoNotRound;
-        _ = DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(int));
+        _ = NativeMethods.DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref cornerPreference, sizeof(int));
         var borderColor = DwmColorNone;
-        _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref borderColor, sizeof(int));
+        _ = NativeMethods.DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref borderColor, sizeof(int));
     }
-
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
-
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -115,7 +122,4 @@ internal static class NativeWindowAppearance
         IntPtr hwnd,
         IntPtr region,
         [MarshalAs(UnmanagedType.Bool)] bool redraw);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }

@@ -1,9 +1,9 @@
-using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Graphics;
 using global::Windows.System;
 
@@ -116,7 +116,7 @@ internal sealed class TrayMenuWindow : Window
 
     private void LayoutAndShow()
     {
-        GetCursorPos(out var cursor);
+        NativeMethods.GetCursorPos(out var cursor);
         var area = DisplayArea.GetFromPoint(cursor, DisplayAreaFallback.Primary).WorkArea;
         AppWindow.Move(new PointInt32(cursor.X, cursor.Y));
         var scale = _presenter.XamlRoot?.RasterizationScale ?? 1;
@@ -130,17 +130,9 @@ internal sealed class TrayMenuWindow : Window
             width, height));
         AppWindow.Show();
         Activate();
-        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        NativeMethods.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
         _opening = false;
         var firstAction = _presenter.Items.OfType<MenuFlyoutItem>().FirstOrDefault(item => item.IsEnabled);
         firstAction?.Focus(FocusState.Programmatic);
     }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out PointInt32 point);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr hwnd);
 }

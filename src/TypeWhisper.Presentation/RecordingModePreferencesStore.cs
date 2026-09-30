@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -48,26 +49,15 @@ public sealed class RecordingModePreferencesStore
     public string? Save(RecordingMode mode)
     {
         if (!Enum.IsDefined(mode)) return Error = "Choose a valid recording mode.";
-        string? temporary = null;
         try
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new { Mode = mode.ToString() }));
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new { Mode = mode.ToString() }));
             Current = mode;
             return Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Error = "Recording mode could not be saved. Your previous mode still applies.";
-        }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 }

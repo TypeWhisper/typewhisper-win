@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -41,20 +42,13 @@ public sealed class AppUpdatePreferences
     public bool Save(AppUpdateChannel channel)
     {
         if (!Enum.IsDefined(channel)) throw new ArgumentOutOfRangeException(nameof(channel));
-        var temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
-            File.WriteAllText(temporary, JsonSerializer.Serialize(channel.ToString()));
-            File.Move(temporary, _path, true);
+            AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(channel.ToString()));
             Channel = channel; Error = null; return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { Error = "The update channel could not be saved."; return false; }
-        finally
-        {
-            try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
     }
     /// <summary>Resolves a compatible WinUI feed for a supported Windows architecture.</summary>
     public static string Feed(AppUpdateChannel channel, string architecture) =>

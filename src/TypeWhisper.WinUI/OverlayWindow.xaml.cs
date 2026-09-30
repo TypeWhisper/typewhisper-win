@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -8,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
+using TypeWhisper.WinUI.Platform;
 using global::Windows.Graphics;
 using global::Windows.UI;
 
@@ -18,9 +18,6 @@ public sealed partial class OverlayWindow : Window
 {
     internal const int WindowWidth = 458;
     internal const int WindowHeight = 72;
-    private const int GwlExstyle = -20;
-    private const long WsExNoactivate = 0x08000000L;
-    private const long WsExToolwindow = 0x00000080L;
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwcpRound = 2;
 
@@ -283,7 +280,7 @@ public sealed partial class OverlayWindow : Window
         var currentArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         if (currentArea?.DisplayId != area.DisplayId)
             AppWindow.Move(new PointInt32(work.X + work.Width / 2, work.Y + work.Height / 2));
-        var dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var dpi = NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
         _scale = dpi == 0 ? 1 : dpi / 96d;
         var width = Math.Min((int)Math.Round(_logicalWidth * _scale), Math.Max(1, work.Width - (int)(32 * _scale)));
         var height = (int)Math.Round(_logicalHeight * _scale);
@@ -554,23 +551,10 @@ public sealed partial class OverlayWindow : Window
 
     private void ConfigureNativeWindow()
     {
+        NativeWindowAppearance.MakeNonActivatingToolWindow(this);
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        var style = GetWindowLongPtr(hwnd, GwlExstyle).ToInt64();
-        SetWindowLongPtr(hwnd, GwlExstyle, new IntPtr(style | WsExNoactivate | WsExToolwindow));
         var preference = DwmwcpRound;
-        _ = DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref preference, sizeof(int));
+        _ = NativeMethods.DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref preference, sizeof(int));
         NativeWindowAppearance.RemoveOverlayFrame(this);
     }
-
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
-
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr hwnd);
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -25,14 +26,7 @@ public sealed class WorkflowLlmDefaults(string path)
     public void Save(WorkflowLlmSelection value)
     {
         Validate(value);
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllText(temporary, JsonSerializer.Serialize(value));
-            File.Move(temporary, path, true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        AtomicFileWriter.WriteAllText(path, JsonSerializer.Serialize(value));
     }
     /// <summary>Resolves inheritance once without modifying the saved workflow.</summary>
     public Workflow Resolve(Workflow workflow) => workflow.Template == WorkflowTemplate.Dictation || workflow.Behavior.ProviderOverride != Inherit ? workflow

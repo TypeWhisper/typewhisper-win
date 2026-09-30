@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Interop.UIAutomationClient;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -13,8 +14,8 @@ internal sealed class CorrectionTextObserver : ITargetAppTextObserver, IDisposab
     internal CorrectionTextObserver() { _automation.ConnectionTimeout = 200; _automation.TransactionTimeout = 200; }
     public TargetAppTextObservation? Capture(IntPtr targetHwnd, int maxTextLength)
     {
-        if (GetForegroundWindow() != targetHwnd) return null;
-        GetWindowThreadProcessId(targetHwnd, out var process);
+        if (NativeMethods.GetForegroundWindow() != targetHwnd) return null;
+        NativeMethods.GetWindowThreadProcessId(targetHwnd, out var process);
         if (process == Environment.ProcessId) return null;
         using var app = Process.GetProcessById((int)process);
         if (new[] { "cmd", "powershell", "pwsh", "WindowsTerminal", "conhost", "mintty" }.Contains(app.ProcessName, StringComparer.OrdinalIgnoreCase)) return null;
@@ -27,7 +28,7 @@ internal sealed class CorrectionTextObserver : ITargetAppTextObserver, IDisposab
         _element is null ? null : Read(_element, baseline.WindowHandle, baseline.MaxValueLength);
     public TargetAppTextElementMatch GetFocusedElementMatch(TargetAppTextObservation baseline)
     {
-        if (GetForegroundWindow() != baseline.WindowHandle) return TargetAppTextElementMatch.DifferentWindow;
+        if (NativeMethods.GetForegroundWindow() != baseline.WindowHandle) return TargetAppTextElementMatch.DifferentWindow;
         var focused = _automation.GetFocusedElement();
         try { return _element is not null && _automation.CompareElements(_element, focused) != 0 ? TargetAppTextElementMatch.Same : TargetAppTextElementMatch.Different; }
         finally { Release(focused); }
@@ -77,6 +78,4 @@ internal sealed class CorrectionTextObserver : ITargetAppTextObserver, IDisposab
     }
     public void Dispose() { Release(_element); Release(_automation); }
     private static void Release(object? value) { if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint process);
 }

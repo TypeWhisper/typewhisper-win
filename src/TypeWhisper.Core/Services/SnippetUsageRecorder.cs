@@ -35,7 +35,7 @@ public static class SnippetUsageRecorder
             entry[usageProperty.Key ?? "UsageCount"] = checked(usage + 1);
             count++;
         }
-        if (count > 0) SnippetCatalogTransaction.WriteAtomically(path, entries.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        if (count > 0) AtomicFileWriter.WriteAllText(path, entries.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         return count;
     }
 }

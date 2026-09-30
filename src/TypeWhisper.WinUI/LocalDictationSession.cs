@@ -1,8 +1,8 @@
-using System.Runtime.InteropServices;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Presentation;
 using RecordingMode = TypeWhisper.Presentation.RecordingMode;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.WinUI.Platform;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginHost;
@@ -80,9 +80,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         try
         {
             preferences = preferences.Validated();
-            Directory.CreateDirectory(Path.GetDirectoryName(AudioPreferencesPath)!);
-            File.WriteAllText(AudioPreferencesPath + ".tmp", System.Text.Json.JsonSerializer.Serialize(preferences));
-            File.Move(AudioPreferencesPath + ".tmp", AudioPreferencesPath, true);
+            AtomicFileWriter.WriteAllText(AudioPreferencesPath, System.Text.Json.JsonSerializer.Serialize(preferences));
             AudioPreferences = preferences;
             AudioPreferencesError = null;
             return null;
@@ -474,10 +472,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_audio.IsRecording) return "Finish the current recording before changing microphones.";
             _audio.StopPreview();
             var selected = devices.DistinctBy(item => item.Id).ToList();
-            Directory.CreateDirectory(Path.GetDirectoryName(MicrophonePath)!);
-            var pending = MicrophonePath + ".tmp";
-            File.WriteAllText(pending, System.Text.Json.JsonSerializer.Serialize(selected));
-            File.Move(pending, MicrophonePath, true);
+            AtomicFileWriter.WriteAllText(MicrophonePath, System.Text.Json.JsonSerializer.Serialize(selected));
             _microphones = selected;
             _audio.SetMicrophonePriorityList(selected);
             RefreshMicrophoneStatus();
@@ -667,7 +662,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             try
             {
                 await CorrectionLearning.Cancel();
-                var target = GetForegroundWindow();
+                var target = NativeMethods.GetForegroundWindow();
                 const string sample = "We use teh tool every day.";
                 for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
                 var inserted = await _inserter.InsertAsync(sample, target);
@@ -713,8 +708,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
-                _target = GetForegroundWindow();
-                GetWindowThreadProcessId(_target, out var processId);
+                _target = NativeMethods.GetForegroundWindow();
+                NativeMethods.GetWindowThreadProcessId(_target, out var processId);
                 _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
                 if (_target == IntPtr.Zero || (processId == Environment.ProcessId && _setupOutputAtStart is null))
                 {
@@ -816,8 +811,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
-                GetWindowThreadProcessId(_target, out var currentTargetProcessId);
-                if (!DictationStartupTarget.IsValid(_target, GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
+                NativeMethods.GetWindowThreadProcessId(_target, out var currentTargetProcessId);
+                if (!DictationStartupTarget.IsValid(_target, NativeMethods.GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
                 {
                     AppDiagnostics.Write("dictation.target-changed");
                     SetStatus("The target changed during recording setup. Focus your text field and try again.", DictationPhase.Idle);
@@ -827,8 +822,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 await StartCloudStreamAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
-                GetWindowThreadProcessId(_target, out currentTargetProcessId);
-                if (!DictationStartupTarget.IsValid(_target, GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
+                NativeMethods.GetWindowThreadProcessId(_target, out currentTargetProcessId);
+                if (!DictationStartupTarget.IsValid(_target, NativeMethods.GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
                 {
                     await StopCloudStreamAsync();
                     AppDiagnostics.Write("dictation.target-changed");
@@ -958,7 +953,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                             !await _originalField.RestoreAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.restore-failed"); return false; }
                         if (!_originalField.IsCurrent()) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
-                    if (GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
+                    if (NativeMethods.GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
                     var inserted = await _inserter.InsertAsync(text, _target, () =>
                         !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
@@ -1072,11 +1067,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Changed?.Invoke();
     }
 
-    private static bool ModifiersHeld() => new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0);
+    private static bool ModifiersHeld() => new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
 
     public ValueTask DisposeAsync() => new(ShutdownAsync());
-
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
 }

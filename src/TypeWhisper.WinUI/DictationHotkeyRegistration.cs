@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -53,7 +54,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                     {
                         var mode = recordingMode();
                         Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true,
-                            held => (GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0));
+                            held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0));
                     }
                 }
             }
@@ -83,7 +84,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         // Generic modifier VKs alias the physical left/right keys. Seeding both
         // would leave a phantom generic key down after the physical key-up.
         _state.ResetAfterInterruption(Enumerable.Range(8, 247)
-            .Where(key => key is not (0x10 or 0x11 or 0x12) && (GetAsyncKeyState(key) & 0x8000) != 0));
+            .Where(key => key is not (0x10 or 0x11 or 0x12) && (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0));
         _interrupted = false;
         return null;
     }
@@ -107,6 +108,5 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint thread);
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
 }

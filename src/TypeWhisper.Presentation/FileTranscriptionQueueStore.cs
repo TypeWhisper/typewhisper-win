@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -156,31 +157,17 @@ public sealed class FileTranscriptionQueueStore
     private bool Write(bool enabled, IReadOnlyList<FileTranscriptionRecoveryEntry> entries)
     {
         if (!_writable) return false;
-        string? temporary = null;
         try
         {
             var owned = ValidateAndCopy(entries);
             var bytes = JsonSerializer.SerializeToUtf8Bytes(new Document(SchemaVersion, enabled, owned), Options);
             if (bytes.Length > MaximumBytes) throw new InvalidDataException("The recovery snapshot is too large.");
-            var directory = Path.GetDirectoryName(_path)!;
-            Directory.CreateDirectory(directory);
-            temporary = Path.Combine(directory, "." + Path.GetFileName(_path) + "." + Guid.NewGuid().ToString("N") + ".tmp");
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            { stream.Write(bytes); stream.Flush(flushToDisk: true); }
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllBytes(_path, bytes);
             Enabled = enabled; Entries = owned; Error = null;
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         { Error = "File queue recovery could not be saved. The previous setting and checkpoint remain in effect: " + ex.Message; return false; }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
-        }
     }
 
     private static IReadOnlyList<FileTranscriptionRecoveryEntry> ValidateAndCopy(IReadOnlyList<FileTranscriptionRecoveryEntry> entries)

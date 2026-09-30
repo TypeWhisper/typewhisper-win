@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Windows.AppLifecycle;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -38,13 +39,7 @@ internal static class WinUIPremiumAccount
     private static void Save(string? value)
     {
         if (value is null) { File.Delete(SessionPath); return; }
-        var temporary = SessionPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllBytes(temporary, ProtectedData.Protect(Encoding.UTF8.GetBytes(value), null, DataProtectionScope.CurrentUser));
-            File.Move(temporary, SessionPath, true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        AtomicFileWriter.WriteAllBytes(SessionPath, ProtectedData.Protect(Encoding.UTF8.GetBytes(value), null, DataProtectionScope.CurrentUser));
     }
     internal static Task RefreshAsync() => Run(async ct =>
     {

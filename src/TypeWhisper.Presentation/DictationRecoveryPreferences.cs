@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
@@ -56,27 +57,13 @@ public sealed class DictationRecoveryPreferencesStore
     public bool Save(DictationRecoveryPreferences next)
     {
         if (!next.IsValid) { Error = "Choose a supported recovery retention period."; return false; }
-        string? temporary = null;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                JsonSerializer.Serialize(stream, new { Version = 1, next.Enabled, next.RetentionDays });
-                stream.Flush(flushToDisk: true);
-            }
-            File.Move(temporary, _path, overwrite: true);
-            temporary = null;
+            AtomicFileWriter.WriteAllBytes(_path, JsonSerializer.SerializeToUtf8Bytes(new { Version = 1, next.Enabled, next.RetentionDays }));
             Current = next; Error = null;
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { Error = "Recovery preferences could not be saved. The previous choice still applies."; return false; }
-        finally
-        {
-            if (temporary is not null)
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
     }
 }
