@@ -1,4 +1,4 @@
-# Local LLM (llama.cpp) portable plugin
+# Local LLM portable plugin
 
 Local GGUF text processing through LLamaSharp and the bundled llama.cpp CPU runtime. It is the Windows counterpart of the macOS Local LLM (MLX) plugin and offers the same model families: Gemma 4, Qwen3.5 and LFM2.5. Host-rendered model cards show download progress, cancellation, download completion and loaded state. Local LLM is a workflow text provider, not a speech recognition engine.
 

@@ -1,6 +1,6 @@
 {
   "id": "com.typewhisper.local-llm-llamacpp",
-  "name": "Local LLM (llama.cpp)",
+  "name": "Local LLM",
   "version": "1.0.0",
   "minHostVersion": "1.1.3",
   "author": "TypeWhisper",

@@ -71,7 +71,7 @@ public sealed partial class LocalLlmPlugin : ILlmProviderPlugin, ILocalLlmModelM
     /// <summary>
     /// Gets the plugin name.
     /// </summary>
-    public string PluginName => "Local LLM (llama.cpp)";
+    public string PluginName => "Local LLM";
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
@@ -147,7 +147,7 @@ public sealed partial class LocalLlmPlugin : ILlmProviderPlugin, ILocalLlmModelM
     /// <summary>
     /// Gets the provider name.
     /// </summary>
-    public string ProviderName => "Local LLM (llama.cpp)";
+    public string ProviderName => "Local LLM";
     /// <summary>
     /// Gets whether the provider can currently accept requests.
     /// </summary>
