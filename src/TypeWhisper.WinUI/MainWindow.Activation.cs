@@ -13,6 +13,9 @@ public sealed partial class MainWindow
     internal void ShowNotice(AppNotice notice)
     {
         if (_profileRestoreClosing) return;
+        // A new notice replaces the card, so a later workflow fix must not close it.
+        _noticeWorkflowId = null;
+        _noticeUsesDefault = false;
         try
         {
             if (_notice is null)
@@ -35,11 +38,10 @@ public sealed partial class MainWindow
 
     private void ShowActivationNotice(string message, string? workflowId = null)
     {
-        _noticeWorkflowId = workflowId;
-        _noticeUsesDefault = false;
         ShowNotice(workflowId is null
             ? new AppNotice(message)
             : new AppNotice(message, "Workflow could not start", ActionLabel: "Edit workflow", Action: () => EditNoticeWorkflow(workflowId)));
+        _noticeWorkflowId = workflowId;
     }
 
     // Closes the notice once the workflow it reported has been fixed.

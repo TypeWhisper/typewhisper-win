@@ -29,7 +29,10 @@ internal sealed class NoticeWindow : Window
     private static readonly global::Windows.UI.Color ErrorColor = Microsoft.UI.ColorHelper.FromArgb(255, 255, 159, 10);
     private readonly Border _card;
     private readonly TextBlock _title = new() { FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
-    private readonly TextBlock _text = new() { FontSize = 13, TextWrapping = TextWrapping.WrapWholeWords, MaxLines = 6, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly TextBlock _text = new() { FontSize = 13, TextWrapping = TextWrapping.WrapWholeWords };
+    // Long messages, such as the upgrade report, scroll instead of being cut off.
+    private readonly ScrollViewer _textScroll = new() { MaxHeight = 320, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    private bool _announce;
     private readonly HandCursorButton _action = new() { Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly ScaleTransform _countdown = new() { ScaleX = 1 };
     private readonly Border _countdownBar;
@@ -84,7 +87,8 @@ internal sealed class NoticeWindow : Window
             RenderTransformOrigin = new Point(0, 0.5), RenderTransform = _countdown };
         var content = new StackPanel { Spacing = 8 };
         content.Children.Add(header);
-        content.Children.Add(_text);
+        _textScroll.Content = _text;
+        content.Children.Add(_textScroll);
         content.Children.Add(_action);
         content.Children.Add(new Border { Height = 3, CornerRadius = new CornerRadius(1.5), Background = (Brush)Application.Current.Resources["HairlineBrush"], Child = _countdownBar });
         _card = new Border
@@ -122,6 +126,8 @@ internal sealed class NoticeWindow : Window
         _title.Foreground = notice.IsError ? new SolidColorBrush(ErrorColor) : (Brush)Application.Current.Resources["AccentBrush"];
         _countdownBar.Background = notice.IsError ? new SolidColorBrush(ErrorColor) : (Brush)Application.Current.Resources["AccentBrush"];
         _text.Text = notice.Text;
+        _textScroll.ChangeView(null, 0, null, true);
+        _announce = true;
         _run = notice.Action;
         _action.Content = notice.ActionLabel;
         _action.Visibility = notice.Action is not null && notice.ActionLabel is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -147,6 +153,12 @@ internal sealed class NoticeWindow : Window
         if (!IsShowing) return;
         _card.Measure(new Size(CardWidth, double.PositiveInfinity));
         if (_card.DesiredSize.Height > 0) Place(_card.DesiredSize.Height);
+        // A live setting alone is not announced; screen readers need the event once the new text is laid out.
+        if (_announce && (FrameworkElementAutomationPeer.FromElement(_text) ?? FrameworkElementAutomationPeer.CreatePeerForElement(_text)) is { } peer)
+        {
+            _announce = false;
+            peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        }
     }
 
     // The window follows the measured card height, so a longer message is never cut off.
