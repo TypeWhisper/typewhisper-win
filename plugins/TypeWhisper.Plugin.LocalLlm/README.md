@@ -47,7 +47,7 @@ dotnet msbuild plugins/TypeWhisper.Plugin.LocalLlm/portable.proj -t:Build -p:Con
 dotnet test plugins/TypeWhisper.Plugin.LocalLlm/Tests -c Release
 ```
 
-Run restore and build as separate steps on a clean checkout, as CI does, so the llama.cpp native runtimes from `LLamaSharp.Backend.Cpu` are copied into the package. The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.local-llm-llamacpp` inside the plugin project. Package that directory as the ZIP root.
+`portable.proj` restores in its own evaluation before building, so the llama.cpp native runtimes from `LLamaSharp.Backend.Cpu` are copied into the package even on a clean checkout. The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.local-llm-llamacpp` inside the plugin project. Package that directory as the ZIP root.
 
 The live model check is skipped unless `TYPEWHISPER_LOCAL_LLM_MODELS` names a folder containing downloaded catalog GGUF files. For each file it finds, the check verifies the hash, loads the model, runs a German correction and a German-to-English translation, and confirms that typed turn markers do not become stop tokens:
 
