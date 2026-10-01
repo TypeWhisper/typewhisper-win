@@ -143,6 +143,8 @@ internal static partial class SettingsCatalog
         titleRow.Children.Add(title);
         if (category == "Shortcuts")
             titleRow.Children.Add(SettingsHelp.Button(category, "These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable."));
+        else if (category == "Privacy")
+            titleRow.Children.Add(SettingsHelp.Button(category, "Settings are saved automatically. History retention changes take effect when you choose Apply retention. Unavailable controls are disabled."));
         else if (category is not "Premium" and not "Account & about" and not "Dictation")
             titleRow.Children.Add(SettingsHelp.Button(category, "Settings are saved automatically. Unavailable controls are disabled."));
         target.Children.Add(titleRow);
