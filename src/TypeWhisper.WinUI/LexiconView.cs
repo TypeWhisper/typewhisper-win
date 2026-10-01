@@ -475,7 +475,7 @@ public sealed partial class LexiconView : UserControl
         _actions.Children.Add(Button("Back to Quick Launch", () => ExitRequested?.Invoke()));
         _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
             ? "Saved packs provide dictionary terms for enabled vocabulary processing."
-            : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");
+            : "Saved packs · enable Vocabulary boosting in Settings > Dictation > More options to use them.");
         SettingsHelp.Update(_headingHelp, "Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off.");
         foreach (var pack in TypeWhisper.Core.Models.TermPack.AllPacks.Where(p => !p.RequiresCommercialLicense))
         {

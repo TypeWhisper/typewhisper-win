@@ -67,7 +67,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 return;
             }
             _content.Children.Add(Label("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device. " +
-                "An idle model is released as set under Unload idle models in Dictation settings and loads again when needed."));
+                "An idle model is released as set under Unload idle models in Advanced settings and loads again when needed."));
             _content.Children.Add(_status);
             foreach (var model in models)
             {
