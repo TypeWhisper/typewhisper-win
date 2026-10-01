@@ -47,6 +47,16 @@ public sealed partial class LocTests : IDisposable
     }
 
     [Fact]
+    public void In_TranslatesIntoALanguageThatIsNotInUse()
+    {
+        Loc.Use("ja");
+
+        Assert.Equal("Jetzt neustarten", Loc.In("de", "Restart Now"));
+        Assert.Equal("Restart Now", Loc.In("en", "Restart Now"));
+        Assert.Equal(Loc.T("Restart Now"), Loc.In("ja", "Restart Now"));
+    }
+
+    [Fact]
     public void T_FillsPlaceholders()
     {
         Loc.Use("en");

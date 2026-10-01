@@ -60,7 +60,7 @@ internal sealed class DictationRecoveryView : UserControl
         _body.Children.Clear();
         _body.Children.Add(Label(Loc.T("Dictation recovery"), 22));
         _body.Children.Add(Label(Loc.T("Keep microphone audio on this device to recover interrupted dictations. Recovery is separate from History and the Recorder library.")));
-        var enabled = new ToggleSwitch { Header = Loc.T("Keep dictation audio for recovery"), IsOn = _preferences.Current.Enabled };
+        var enabled = new ToggleSwitch { Header = Loc.T("Keep dictation audio for recovery"), OnContent = Loc.T("On"), OffContent = Loc.T("Off"), IsOn = _preferences.Current.Enabled };
         var retention = new ChoicePicker();
         retention.Configure(Loc.T("Recovery audio retention"), "history", Loc.T("Recovery audio retention"));
         retention.SetOptions(new[] { 1, 7, 30, 60, 90, 180, 0 }.Select(days => new Choice(days.ToString(),

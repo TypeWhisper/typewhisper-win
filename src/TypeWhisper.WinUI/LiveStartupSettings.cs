@@ -12,7 +12,7 @@ internal static class LiveStartupSettings
         var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "AutostartEnabled"));
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear(); row.IsHitTestVisible = true;
-        var toggle = new ToggleSwitch { Header = Loc.T("Start TypeWhisper with Windows"), IsEnabled = false };
+        var toggle = new ToggleSwitch { Header = Loc.T("Start TypeWhisper with Windows"), OnContent = Loc.T("On"), OffContent = Loc.T("Off"), IsEnabled = false };
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var updating = false;
         void Show(StartupRegistrationState state)

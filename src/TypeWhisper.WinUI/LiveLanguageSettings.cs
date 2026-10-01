@@ -16,14 +16,16 @@ internal static class LiveLanguageSettings
         row.Children.Add(SettingsHelp.Label(Loc.T("App Language"), Loc.T("The language change will take effect after restarting TypeWhisper.")));
         var picker = new ChoicePicker(); picker.Configure(Loc.T("App Language"), "dictionary", "App language");
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-        var restartNow = new HandCursorButton { Content = Loc.T("Restart Now"), HorizontalAlignment = HorizontalAlignment.Left,
+        var restartNow = new HandCursorButton { HorizontalAlignment = HorizontalAlignment.Left,
             Visibility = Visibility.Collapsed, Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         void Refresh(string? error = null)
         {
             var chosen = store.Saved ?? Loc.Language;
             picker.SetOptions(Loc.Languages.Select(language => new Choice(language.Code, language.Name, "")).ToArray(), chosen);
             var pending = chosen != Loc.Language;
-            status.Text = error ?? Loc.T("The language change will take effect after restarting TypeWhisper.");
+            // Someone who just picked a language may not be able to read the current one.
+            status.Text = error ?? Loc.In(chosen, Loc.Mark("The language change will take effect after restarting TypeWhisper."));
+            restartNow.Content = Loc.In(chosen, Loc.Mark("Restart Now"));
             status.Visibility = error is not null || pending ? Visibility.Visible : Visibility.Collapsed;
             restartNow.Visibility = pending ? Visibility.Visible : Visibility.Collapsed;
         }

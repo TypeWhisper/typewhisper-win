@@ -57,6 +57,13 @@ public static class Loc
         string.Format(CultureInfo.CurrentCulture, T(format), arguments);
 
     /// <summary>
+    /// Returns <paramref name="text"/> in <paramref name="language"/>, whatever language is in use. For the few texts
+    /// that must be readable in a language that was just chosen and applies after a restart.
+    /// </summary>
+    public static string In(string language, string text) =>
+        language == Language ? T(text) : Catalog(language).TryGetValue(text, out var translated) ? translated : text;
+
+    /// <summary>
     /// Returns the English text behind a translated <paramref name="text"/>, or the text itself. Only for code that
     /// has to recognize a label it did not create; text with filled placeholders is not recognized.
     /// </summary>
