@@ -162,6 +162,7 @@ public static class HistoryWorkspace
         {
             null or "" => null,
             "parakeet-tdt-0.6b" => "Parakeet TDT 0.6B",
+            "parakeet-ultra-0.6b" => "Parakeet Ultra 0.6B",
             "canary-180m-flash" => "Canary 180M Flash",
             "whisper-large-v3" => "Whisper Large V3",
             "whisper-large-v3-turbo" => "Whisper Large V3 Turbo",

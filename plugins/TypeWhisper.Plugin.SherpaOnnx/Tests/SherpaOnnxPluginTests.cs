@@ -22,7 +22,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.1.3", manifest.Version);
+        Assert.Equal("1.2.0", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -86,6 +86,40 @@ public class SherpaOnnxPluginTests
         {
             if (Directory.Exists(tempDirectory))
                 Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TranscriptionModels_RecommendParakeetUltraAndKeepTheNvidiaModels()
+    {
+        var models = new SherpaOnnxPlugin().TranscriptionModels;
+
+        Assert.Equal(["parakeet-ultra-0.6b", "parakeet-tdt-0.6b", "canary-180m-flash"], models.Select(model => model.Id));
+        Assert.Equal("parakeet-ultra-0.6b", Assert.Single(models, model => model.IsRecommended).Id);
+        Assert.Equal(["Moondream", "NVIDIA", "NVIDIA"], models.Select(model => model.Publisher));
+        Assert.Equal(models[1].LanguageCodes, models[0].LanguageCodes);
+    }
+
+    [Fact]
+    public async Task VerifyChecksumAsync_DeletesFilesThatDoNotMatchThePinnedHash()
+    {
+        var path = Path.Join(Path.GetTempPath(), $"tw-sherpa-checksum-{Guid.NewGuid():N}");
+        try
+        {
+            await File.WriteAllTextAsync(path, "model");
+            var expected = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData("model"u8)).ToLowerInvariant();
+
+            await SherpaOnnxPlugin.VerifyChecksumAsync("encoder.int8.onnx", expected, path, CancellationToken.None);
+            Assert.True(File.Exists(path));
+
+            var error = await Assert.ThrowsAsync<InvalidDataException>(
+                () => SherpaOnnxPlugin.VerifyChecksumAsync("encoder.int8.onnx", new string('0', 64), path, CancellationToken.None));
+            Assert.Contains("encoder.int8.onnx", error.Message);
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            File.Delete(path);
         }
     }
 

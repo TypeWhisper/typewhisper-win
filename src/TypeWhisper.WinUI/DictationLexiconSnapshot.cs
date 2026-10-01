@@ -16,7 +16,7 @@ internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dict
 
     internal static bool CanRefineWithCtc(TranscriptionTask task, bool registryProvider, string? modelId,
         bool ready, int timingCount) => task == TranscriptionTask.Transcribe && !registryProvider &&
-        modelId == "parakeet-tdt-0.6b" && ready && timingCount > 0;
+        TypeWhisper.Core.Models.ParakeetModels.IsParakeetTdt(modelId) && ready && timingCount > 0;
 
     internal async Task<Result> ProcessAsync(string text, DictationTextPreferences preferences,
         string? configuredLanguage, string? detectedLanguage, bool boostVocabulary,

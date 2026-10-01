@@ -10,6 +10,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("parakeet-tdt-0.6b")]
+    [InlineData("parakeet-ultra-0.6b")]
     [InlineData("canary-180m-flash")]
     [Trait("Category", "LocalParakeet")]
     public async Task PublishedPluginTranscribesPcmAndProvidesModelMetadata(string modelId)
@@ -44,7 +45,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
             output.WriteLine($"Plugin: {engine.PluginId}; result: {result.Text}; tokens: {result.TokenTimings.Count}");
             Assert.Contains("bananas", result.Text.ToLowerInvariant());
             Assert.Contains("local transcription", result.Text.ToLowerInvariant());
-            if (modelId == "parakeet-tdt-0.6b") Assert.NotEmpty(result.TokenTimings);
+            if (modelId != "canary-180m-flash") Assert.NotEmpty(result.TokenTimings);
             Assert.All(result.TokenTimings, timing =>
             {
                 Assert.True(timing.EndSeconds > timing.StartSeconds);
@@ -60,6 +61,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
     // Canary dropped most speech after roughly 30 seconds when decoded in one pass (#542).
     [Theory]
     [InlineData("parakeet-tdt-0.6b")]
+    [InlineData("parakeet-ultra-0.6b")]
     [InlineData("canary-180m-flash")]
     [Trait("Category", "LocalParakeet")]
     public async Task PublishedPluginKeepsEverySectionOfMinuteLongDictation(string modelId)

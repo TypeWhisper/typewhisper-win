@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using SherpaOnnx;
@@ -28,6 +29,8 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     private const int MinimumTranscriptOverlapWords = 2;
     private const int MaximumTranscriptOverlapWords = 40;
     private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main";
+    // Our own export of moondream/parakeet-ultra with the sherpa-onnx v3 script; the files are pinned by hash.
+    private const string ParakeetUltraRepo = "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-parakeet-ultra-int8-v1";
     private const string CanaryRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main";
 
     private static readonly IReadOnlyList<string> CanarySupportedLanguages = ["en", "de", "fr", "es"];
@@ -40,14 +43,21 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
     private static readonly IReadOnlyList<ModelDefinition> Models =
     [
-        new("parakeet-tdt-0.6b", "Parakeet TDT 0.6B", "~670 MB", 670, 25, true, false,
+        new("parakeet-ultra-0.6b", "Parakeet Ultra 0.6B", "Moondream", "~670 MB", 670, 25, true, false,
+        [
+            new("encoder.int8.onnx", $"{ParakeetUltraRepo}/encoder.int8.onnx", 652, "b42621d3c0f40fe0236a629fd6c3fad13575e5f9d22ed1a5addba14091931211"),
+            new("decoder.int8.onnx", $"{ParakeetUltraRepo}/decoder.int8.onnx", 12, "1fab98fe6c12aded87d2da66272cc9e148d0a0044ce3850a12fe56302ec4a922"),
+            new("joiner.int8.onnx", $"{ParakeetUltraRepo}/joiner.int8.onnx", 6, "8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2"),
+            new("tokens.txt", $"{ParakeetUltraRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
+        ]),
+        new("parakeet-tdt-0.6b", "Parakeet TDT 0.6B", "NVIDIA", "~670 MB", 670, 25, false, false,
         [
             new("encoder.int8.onnx", $"{ParakeetRepo}/encoder.int8.onnx", 652),
             new("decoder.int8.onnx", $"{ParakeetRepo}/decoder.int8.onnx", 12),
             new("joiner.int8.onnx", $"{ParakeetRepo}/joiner.int8.onnx", 6),
             new("tokens.txt", $"{ParakeetRepo}/tokens.txt", 1)
         ]),
-        new("canary-180m-flash", "Canary 180M Flash", "~198 MB", 198, 4, false, true,
+        new("canary-180m-flash", "Canary 180M Flash", "NVIDIA", "~198 MB", 198, 4, false, true,
         [
             new("encoder.int8.onnx", $"{CanaryRepo}/encoder.int8.onnx", 127),
             new("decoder.int8.onnx", $"{CanaryRepo}/decoder.int8.onnx", 71),
@@ -117,7 +127,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.3";
+    public string PluginVersion => "1.2.0";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -172,7 +182,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = Models.Select(m =>
           new PluginModelInfo(m.Id, m.DisplayName)
           {
-              Publisher = "NVIDIA",
+              Publisher = m.Publisher,
             SizeDescription = m.SizeDescription,
             EstimatedSizeMB = m.EstimatedSizeMB,
             IsRecommended = m.IsRecommended,
@@ -272,11 +282,29 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             var destination = Path.Combine(dir, file.FileName);
             var start = completed;
             if (!File.Exists(destination) || new FileInfo(destination).Length == 0)
+            {
                 await TypeWhisper.PluginSDK.Helpers.ModelFileDownloader.DownloadAsync(_httpClient, file.DownloadUrl, destination,
                     new DownloadProgress(value => progress?.Report((start + value * file.EstimatedSizeMB) / total)), ct);
+                await VerifyChecksumAsync(file.FileName, file.Sha256, destination, ct);
+            }
             completed += file.EstimatedSizeMB;
             progress?.Report(completed / total);
         }
+    }
+
+    internal static async Task VerifyChecksumAsync(string fileName, string? sha256, string path, CancellationToken ct)
+    {
+        if (sha256 is null)
+            return;
+
+        string actual;
+        await using (var stream = File.OpenRead(path))
+            actual = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
+        if (string.Equals(actual, sha256, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        File.Delete(path);
+        throw new InvalidDataException($"The downloaded {fileName} does not match its expected checksum.");
     }
 
     private sealed class DownloadProgress(Action<double> report) : IProgress<double>
@@ -446,7 +474,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
                 }
 
                 // Long recordings need bounded chunks; single-chunk recordings retain token timings.
-                if (model.Id == "parakeet-tdt-0.6b" && audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
+                if (audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
                     return new PluginTranscriptionResult(
                         TranscribeParakeetSamples(_recognizer, audioSamples, cancellationToken), null, audioDuration, NoSpeechProbability: null);
 
@@ -1030,6 +1058,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     private sealed record ModelDefinition(
         string Id,
         string DisplayName,
+        string Publisher,
         string SizeDescription,
         int EstimatedSizeMB,
         int LanguageCount,
@@ -1037,5 +1066,5 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         bool SupportsTranslation,
         IReadOnlyList<ModelFileDefinition> Files);
 
-    private sealed record ModelFileDefinition(string FileName, string DownloadUrl, int EstimatedSizeMB);
+    private sealed record ModelFileDefinition(string FileName, string DownloadUrl, int EstimatedSizeMB, string? Sha256 = null);
 }

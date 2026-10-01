@@ -8,6 +8,7 @@ public sealed class HistoryModelDisplayTests
 {
     [Theory]
     [InlineData("sherpa-onnx", "parakeet-tdt-0.6b", "Local · Parakeet TDT 0.6B")]
+    [InlineData("sherpa-onnx", "parakeet-ultra-0.6b", "Local · Parakeet Ultra 0.6B")]
     [InlineData("sherpa-onnx", "canary-180m-flash", "Local · Canary 180M Flash")]
     [InlineData("groq", "whisper-large-v3", "Groq · Whisper Large V3")]
     [InlineData("groq", "whisper-large-v3-turbo", "Groq · Whisper Large V3 Turbo")]
