@@ -92,7 +92,8 @@ internal static class EntryActionMenu
             var parts = action.Label.Split(" · ", 2, StringSplitOptions.TrimEntries);
             var label = parts[0];
             // Separator and icon follow the English wording, whatever language the label is shown in.
-            var english = Loc.English(action.Label) is var whole && whole != action.Label ? whole : Loc.English(label);
+            var english = Loc.English(action.Label);
+            if (english == action.Label) english = Loc.English(label);
             if (menu.Items.Count > 0 && english.StartsWith("Delete", StringComparison.Ordinal))
                 menu.Items.Add(new MenuFlyoutSeparator());
             var glyph = english switch
