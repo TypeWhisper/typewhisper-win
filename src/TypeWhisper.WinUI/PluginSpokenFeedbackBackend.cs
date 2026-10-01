@@ -1,3 +1,4 @@
+using TypeWhisper.Core;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Presentation;
@@ -18,7 +19,7 @@ internal sealed class PluginSpokenFeedbackBackend(PortablePluginRuntimeRegistry 
         }
         return local.Concat(runtime.TtsProviders.Where(p => p.Ready).SelectMany(p => p.Voices.Select(v => new SpokenFeedbackVoice(
             Prefix + Uri.EscapeDataString(p.PluginId) + ":" + Uri.EscapeDataString(v.Id),
-            p.Name + " \u00b7 " + v.DisplayName + (p.IsLocal ? " (local)" : " (cloud)")) { IsLocal = p.IsLocal }))).ToArray();
+            p.IsLocal ? Loc.T("{0} (local)", p.Name + " \u00b7 " + v.DisplayName) : Loc.T("{0} (cloud)", p.Name + " \u00b7 " + v.DisplayName)) { IsLocal = p.IsLocal }))).ToArray();
     }
 
     public async Task SpeakAsync(SpokenFeedbackRequest request, CancellationToken ct)
@@ -26,7 +27,7 @@ internal sealed class PluginSpokenFeedbackBackend(PortablePluginRuntimeRegistry 
         if (request.VoiceId?.StartsWith(Prefix, StringComparison.Ordinal) != true)
         { await windows.SpeakAsync(request, ct); return; }
         var parts = request.VoiceId[Prefix.Length..].Split(':');
-        if (parts.Length != 2) throw new InvalidOperationException("The saved speech voice is invalid.");
+        if (parts.Length != 2) throw new InvalidOperationException(Loc.T("The saved speech voice is invalid."));
         await runtime.SpeakAsync(Uri.UnescapeDataString(parts[0]), new(request.Text, request.Language, TtsPurpose.Status)
         { VoiceId = Uri.UnescapeDataString(parts[1]), OutputDeviceId = request.OutputDeviceId }, ct);
     }

@@ -28,12 +28,12 @@ internal sealed class RecorderCaptureAdapter : IDisposable
         {
             microphone.WhisperModeEnabled = false;
             microphone.StartRecording(enableRecovery: false);
-            if (!microphone.IsRecording) throw new InvalidOperationException("The microphone could not start. Check microphone access and your input device.");
+            if (!microphone.IsRecording) throw new InvalidOperationException(Loc.T("The microphone could not start. Check microphone access and your input device."));
             return Task.CompletedTask;
         }, () =>
         {
             _system.StartCapture(_outputDeviceId, timelineOffset: _timeline.Elapsed);
-            if (!_system.IsRecording) throw new InvalidOperationException("System audio capture could not start.");
+            if (!_system.IsRecording) throw new InvalidOperationException(Loc.T("System audio capture could not start."));
             return Task.CompletedTask;
         }, async () =>
         {
@@ -45,12 +45,12 @@ internal sealed class RecorderCaptureAdapter : IDisposable
                 return samples;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException && (microphone.IsRecording || microphone.HasUnreleasedCapture))
-            { throw new RecorderCleanupException("Microphone cleanup failed. Retry stopping before starting another recording.", ex); }
+            { throw new RecorderCleanupException(Loc.T("Microphone cleanup failed. Retry stopping before starting another recording."), ex); }
         }, () =>
         {
             try { return Task.FromResult(_system.StopCapture(_stopAt)); }
             catch (Exception ex) when (ex is not OutOfMemoryException && _system.HasCaptureResources)
-            { throw new RecorderCleanupException("System audio cleanup failed. Retry stopping before starting another recording.", ex); }
+            { throw new RecorderCleanupException(Loc.T("System audio cleanup failed. Retry stopping before starting another recording."), ex); }
         });
     }
     internal async Task StartAsync(bool microphone, bool system, string? outputDeviceId)
@@ -71,7 +71,7 @@ internal sealed class RecorderCaptureAdapter : IDisposable
         {
             var captured = await _sources.StopAsync();
             if (captured.Warnings.Count > 0)
-                Warning = string.Join(" ", new[] { Warning, string.Join(" ", captured.Warnings) + " Available audio was retained." }
+                Warning = string.Join(" ", new[] { Warning, Loc.T("{0} Available audio was retained.", string.Join(" ", captured.Warnings)) }
                     .Where(message => !string.IsNullOrWhiteSpace(message)));
             return await Task.Run(() => RecorderMixer.MixForOutput(
                 captured.Microphone.Length == 0 ? [] : RecorderSegments.FitTimeline(captured.Microphone, _stopAt.Value),

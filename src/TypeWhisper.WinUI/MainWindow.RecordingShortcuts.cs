@@ -33,7 +33,7 @@ public sealed partial class MainWindow
                 () => _dictationInput?.IsRecordingOrStarting == true, () => mode, () => DictationHotkeysPaused, id);
             id += 0x200;
             var settings = new PersistedShortcut(WinUIProfile.DataPath(key + ".txt"),
-                registration, value => ValidateRecordingShortcut(key, value), "Recording shortcuts");
+                registration, value => ValidateRecordingShortcut(key, value), Loc.T("Recording shortcuts"));
             _recordingShortcuts.Add(key, (registration, settings));
             var error = settings.Initialize();
             _settingsValues[key] = settings.Value;
@@ -50,9 +50,9 @@ public sealed partial class MainWindow
 
     private string? ChangeRecordingShortcut(string key, string value)
     {
-        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
-        if (_dictationInput?.IsRecordingOrStarting == true) return "Finish recording before changing its shortcut.";
-        if (!_recordingShortcuts.TryGetValue(key, out var entry)) return "Wait for shortcut initialization to finish.";
+        if (_closing || _profileRestoreClosing) return Loc.T("The app is shutting down.");
+        if (_dictationInput?.IsRecordingOrStarting == true) return Loc.T("Finish recording before changing its shortcut.");
+        if (!_recordingShortcuts.TryGetValue(key, out var entry)) return Loc.T("Wait for shortcut initialization to finish.");
         var error = entry.Settings.Save(WorkflowShortcutCatalog.Canonical(value));
         _settingsValues[key] = entry.Settings.Value;
         return error;

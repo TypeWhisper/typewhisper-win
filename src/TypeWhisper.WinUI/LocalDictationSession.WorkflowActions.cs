@@ -13,7 +13,7 @@ internal sealed partial class LocalDictationSession
     private async Task<IReadOnlyList<string>> RecallMemoryAsync(PortableMemoryProvider? source, string id, string query, CancellationToken ct)
     {
         if (source is null || source.PluginId != id)
-            throw new InvalidOperationException("The selected memory source is unavailable. Enable its plugin or turn memory context off.");
+            throw new InvalidOperationException(Loc.T("The selected memory source is unavailable. Enable its plugin or turn memory context off."));
         ct.ThrowIfCancellationRequested();
         await LocalLlmDownload.CancelAndDrainAsync();
         return await PluginRuntime.SearchMemoryAsync(source, query, ct);
@@ -26,7 +26,7 @@ internal sealed partial class LocalDictationSession
         ActionContext context, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (action is null) return new(false, "The workflow action is unavailable. Enable its plugin and check its settings.");
+        if (action is null) return new(false, Loc.T("The workflow action is unavailable. Enable its plugin and check its settings."));
         try
         {
             var result = await PluginRuntime.ExecuteActionAsync(action, text, context, ct);
@@ -35,7 +35,7 @@ internal sealed partial class LocalDictationSession
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            return new(false, "The workflow action could not run. Check its destination before trying again.");
+            return new(false, Loc.T("The workflow action could not run. Check its destination before trying again."));
         }
     }
 
@@ -45,13 +45,13 @@ internal sealed partial class LocalDictationSession
         var action = FindWorkflowAction(workflow.Output.TargetActionPluginId);
         var memory = FindWorkflowMemory(workflow.Behavior.MemoryPluginId);
         if (!string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId) && action is null)
-            throw new InvalidOperationException("The workflow action is unavailable. Enable its plugin first.");
+            throw new InvalidOperationException(Loc.T("The workflow action is unavailable. Enable its plugin first."));
         var text = await ManualWorkflowRunner.RunAsync(workflow, input,
             (provider, model) => LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)),
             ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
         if (action is null) return (text, null, null);
         var result = await ExecuteWorkflowActionAsync(action, text, new ActionContext(null, null, null, null, input), ct);
         // Preserve known completion even if cancellation arrives after an external write.
-        return (text, (result.Success ? "Completed: " : "Action not confirmed: ") + result.Message, result.Success);
+        return (text, result.Success ? Loc.T("Completed: {0}", result.Message) : Loc.T("Action not confirmed: {0}", result.Message), result.Success);
     }
 }

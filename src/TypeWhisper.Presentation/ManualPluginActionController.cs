@@ -52,7 +52,7 @@ public sealed class ManualPluginActionController
         {
             if (_closed || !_completion.IsCompleted)
                 return Task.FromResult(new ManualPluginActionOutcome(ManualPluginActionStatus.Failed,
-                    _closed ? "This review is closing." : "An action is already running. No additional action was queued."));
+                    _closed ? Loc.T("This review is closing.") : Loc.T("An action is already running. No additional action was queued.")));
             request = _request = new();
             _result = null;
             completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -92,16 +92,16 @@ public sealed class ManualPluginActionController
             request.Token.ThrowIfCancellationRequested();
             started = true;
             outcome = await invoke(text, request.Token).ConfigureAwait(false)
-                ?? new(ManualPluginActionStatus.CompletionUnknown, "The action returned no completion result. Check its destination before trying again.");
+                ?? new(ManualPluginActionStatus.CompletionUnknown, Loc.T("The action returned no completion result. Check its destination before trying again."));
         }
         catch (OperationCanceledException) when (!started)
-        { outcome = new(ManualPluginActionStatus.Canceled, "Canceled before the action started."); }
+        { outcome = new(ManualPluginActionStatus.Canceled, Loc.T("Canceled before the action started.")); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { outcome = new(ManualPluginActionStatus.CompletionUnknown, "The action's completion could not be confirmed. Check its destination before trying again."); }
+        { outcome = new(ManualPluginActionStatus.CompletionUnknown, Loc.T("The action's completion could not be confirmed. Check its destination before trying again.")); }
         catch (Exception ex)
         {
             fatal = ex;
-            outcome = new(ManualPluginActionStatus.CompletionUnknown, "The action could not finish. Check its destination before trying again.");
+            outcome = new(ManualPluginActionStatus.CompletionUnknown, Loc.T("The action could not finish. Check its destination before trying again."));
         }
         Task callbacks;
         lock (_sync) { callbacks = _cancellationCallbacks; _request = null; }

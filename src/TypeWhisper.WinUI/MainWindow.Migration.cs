@@ -14,11 +14,11 @@ public sealed partial class MainWindow
             using var document = JsonDocument.Parse(File.ReadAllText(report));
             var notes = document.RootElement.GetProperty("Notes").EnumerateArray().Select(item => item.GetString()).ToArray();
             // One line per note: skipped plugins and keys to re-enter must stay readable.
-            ShowNotice(new AppNotice(string.Join("\n", notes.Prepend("Your previous TypeWhisper profile was copied.")), "TypeWhisper upgraded",
+            ShowNotice(new AppNotice(string.Join("\n", notes.Prepend(Loc.T("Your previous TypeWhisper profile was copied."))), Loc.T("TypeWhisper upgraded"),
                 IsError: false, Duration: TimeSpan.FromSeconds(30)));
             File.WriteAllText(acknowledged, "1");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or KeyNotFoundException)
-        { ShowActivationNotice("Your previous profile was preserved. The upgrade report could not be displayed."); }
+        { ShowActivationNotice(Loc.T("Your previous profile was preserved. The upgrade report could not be displayed.")); }
     }
 }

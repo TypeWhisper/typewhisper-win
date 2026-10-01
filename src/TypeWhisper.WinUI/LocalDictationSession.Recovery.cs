@@ -22,17 +22,17 @@ internal sealed partial class LocalDictationSession
     internal async Task<string?> SaveRecoveryPreferencesAsync(DictationRecoveryPreferences next)
     {
         if (_disposed || !CanChangeProvider || Recovery.Busy || !await _gate.WaitAsync(0))
-            return "Finish dictation or recovery before changing recovery preferences.";
+            return Loc.T("Finish dictation or recovery before changing recovery preferences.");
         try
         {
-            if (_disposed) return "The app is shutting down.";
+            if (_disposed) return Loc.T("The app is shutting down.");
             if (!RecoveryPreferences.Save(next)) return RecoveryPreferences.Error;
             // Disabling stops future capture but must not delete existing recovery audio.
             await _recoveryAudio.SetRetentionAsync(next.Enabled ? next.RetentionDays : 0);
             return _recoveryAudio.LastError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return "The recovery choice was saved, but audio cleanup could not finish. Existing audio may remain."; }
+        { return Loc.T("The recovery choice was saved, but audio cleanup could not finish. Existing audio may remain."); }
         finally { _gate.Release(); Changed?.Invoke(); }
     }
 
@@ -44,12 +44,12 @@ internal sealed partial class LocalDictationSession
             if (preserve && _recoveryAtStart.CanPreserveWith(RecoveryPreferences.Current))
             {
                 if (await lease.PreserveAsync() is null && !_disposed)
-                    SetStatus(Status + " · Recovery audio could not be preserved.");
+                    SetStatus(Status + " · " + Loc.T("Recovery audio could not be preserved."));
             }
             else await lease.DiscardAsync();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_disposed) SetStatus(Status + " · Recovery audio could not be updated; review saved recovery audio before retrying."); }
+        { if (!_disposed) SetStatus(Status + " · " + Loc.T("Recovery audio could not be updated; review saved recovery audio before retrying.")); }
     }
 
     private async Task StopRecoveryCaptureAsync(bool preserve)
@@ -65,7 +65,7 @@ internal sealed partial class LocalDictationSession
     {
         ct.ThrowIfCancellationRequested();
         if (!CanTranscribeFile || !await _gate.WaitAsync(0, ct))
-            throw new InvalidOperationException("Select a ready model and finish the current operation first.");
+            throw new InvalidOperationException(Loc.T("Select a ready model and finish the current operation first."));
         _fileBusy = true;
         try
         {
@@ -73,7 +73,7 @@ internal sealed partial class LocalDictationSession
             Changed?.Invoke();
             var language = Language;
             var translate = TranscriptionTaskPreferences.Current == TypeWhisper.Core.Interfaces.TranscriptionTask.Translate;
-            if (translate && !SupportsTranslation) throw new NotSupportedException("Select a translation-capable model first.");
+            if (translate && !SupportsTranslation) throw new NotSupportedException(Loc.T("Select a translation-capable model first."));
             var registry = UsesRegistryProvider;
             var selection = RegistrySelectionId(_providerId);
             var hints = TextPreferences.Current.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -91,7 +91,7 @@ internal sealed partial class LocalDictationSession
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (string.IsNullOrWhiteSpace(decoded.Text) || FinalSpeechPolicy.ShouldReject(decoded.Text,
                 decoded.NoSpeechProbability, false, TextPreferences.Current.TranscribeShortQuietClipsAggressively))
-                throw new InvalidOperationException("No speech was recognized in the saved audio.");
+                throw new InvalidOperationException(Loc.T("No speech was recognized in the saved audio."));
             return decoded.Text;
         }
         finally { _fileBusy = false; _gate.Release(); Changed?.Invoke(); }

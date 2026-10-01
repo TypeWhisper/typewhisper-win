@@ -18,10 +18,10 @@ public static class WorkflowTranscriptionTask
             "transcribe" => TranscriptionTask.Transcribe,
             "translate" => TranscriptionTask.Translate,
             _ when string.IsNullOrWhiteSpace(selectedTask) => globalTask,
-            _ => throw new InvalidOperationException("This workflow has an unsupported transcription task.")
+            _ => throw new InvalidOperationException(Loc.T("This workflow has an unsupported transcription task."))
         };
         if (task == TranscriptionTask.Translate && !supportsTranslation)
-            throw new NotSupportedException("This model cannot translate to English. Choose a translation-capable model in Dictation, or change the transcription task to Transcribe.");
+            throw new NotSupportedException(Loc.T("This model cannot translate to English. Choose a translation-capable model in Dictation, or change the transcription task to Transcribe."));
         return task;
     }
 

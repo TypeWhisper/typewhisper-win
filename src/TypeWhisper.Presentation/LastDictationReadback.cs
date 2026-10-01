@@ -10,10 +10,10 @@ public static class LastDictationReadback
         if (controller.IsBusy)
         {
             await controller.CancelAndDrainAsync();
-            return new(SpokenFeedbackStatus.Canceled, "Read-back stopped.");
+            return new(SpokenFeedbackStatus.Canceled, Loc.T("Read-back stopped."));
         }
         if (snapshot is null)
-            return new(SpokenFeedbackStatus.Rejected, "No completed dictation in this session yet. Dictate once, then use this shortcut.");
+            return new(SpokenFeedbackStatus.Rejected, Loc.T("No completed dictation in this session yet. Dictate once, then use this shortcut."));
         return await controller.SpeakAsync(new(snapshot.Text, snapshot.Language, voiceId, outputDeviceId));
     }
 }

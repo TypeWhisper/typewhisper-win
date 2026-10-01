@@ -9,7 +9,7 @@ internal static class OverlayPreferencesStore
     {
         if (!File.Exists(path)) return new(OverlayMode.Standard, true, false);
         var preferences = JsonSerializer.Deserialize<OverlayPreferences>(File.ReadAllText(path));
-        if (preferences?.IsValid != true) throw new JsonException("Invalid overlay preferences.");
+        if (preferences?.IsValid != true) throw new JsonException(Loc.T("Invalid overlay preferences."));
         return preferences;
     }
 

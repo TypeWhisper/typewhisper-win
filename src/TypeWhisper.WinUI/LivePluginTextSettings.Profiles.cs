@@ -20,11 +20,11 @@ internal sealed partial class LivePluginTextSettings
 
     internal async Task<bool> CanLeaveAsync()
     {
-        if (_busy) { SetStatus("Wait for the current profile operation to finish."); return false; }
+        if (_busy) { SetStatus(Loc.T("Wait for the current profile operation to finish.")); return false; }
         if (!_dirtyProfiles.Values.Any(dirty => dirty) && _pendingApiKey() is null) return true;
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = _singleConfiguration ? "Discard unsaved changes?" : "Discard unsaved profile changes?",
-            Content = "Your edits and any entered API key have not been saved. Stay here to save them, or discard them and leave.",
-            PrimaryButtonText = "Discard changes", CloseButtonText = "Keep editing", DefaultButton = ContentDialogButton.Close };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = _singleConfiguration ? Loc.T("Discard unsaved changes?") : Loc.T("Discard unsaved profile changes?"),
+            Content = Loc.T("Your edits and any entered API key have not been saved. Stay here to save them, or discard them and leave."),
+            PrimaryButtonText = Loc.T("Discard changes"), CloseButtonText = Loc.T("Keep editing"), DefaultButton = ContentDialogButton.Close };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
@@ -80,10 +80,10 @@ internal sealed partial class LivePluginTextSettings
         picker.SelectedItem = profileItems.GetValueOrDefault(selector.Value);
         if (memoryEditor)
         {
-            var search = new TextBox { Text = _memoryFilter, PlaceholderText = "Search memories…", MinHeight = 40,
+            var search = new TextBox { Text = _memoryFilter, PlaceholderText = Loc.T("Search memories…"), MinHeight = 40,
                 HorizontalAlignment = HorizontalAlignment.Stretch };
-            AutomationProperties.SetName(search, "Search saved memories");
-            var empty = ProfileNote("No matching entries.");
+            AutomationProperties.SetName(search, Loc.T("Search saved memories"));
+            var empty = ProfileNote(Loc.T("No matching entries."));
             void Filter()
             {
                 _memoryFilter = search.Text;
@@ -116,7 +116,7 @@ internal sealed partial class LivePluginTextSettings
         var restoredOffset = _profileScrollOffset;
         scroll.Loaded += (_, _) => scroll.ChangeView(null, restoredOffset, null, true);
         scroll.ViewChanged += (_, _) => { if (generation == _generation) _profileScrollOffset = scroll.VerticalOffset; };
-        AutomationProperties.SetName(scroll, "Settings for “" + name + "”");
+        AutomationProperties.SetName(scroll, Loc.T("Settings for “{0}”", name));
         Grid.SetColumn(scroll, 1); layout.Children.Add(scroll);
         if (!generic && !string.IsNullOrWhiteSpace(selector.Description))
             content.Children.Add(ProfileNote(selector.Description));
@@ -126,7 +126,7 @@ internal sealed partial class LivePluginTextSettings
         var modelHeader = new Grid { ColumnSpacing = 8 };
         modelHeader.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         modelHeader.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        modelHeader.Children.Add(new TextBlock { Text = "Models", FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
+        modelHeader.Children.Add(new TextBlock { Text = Loc.T("Models"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         var divider = new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] };
         content.Children.Add(divider);
@@ -153,7 +153,7 @@ internal sealed partial class LivePluginTextSettings
         var saveState = ProfileNote("");
         var fieldGroups = new Dictionary<string, FrameworkElement>();
         AutomationProperties.SetLiveSetting(saveState, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        var save = ProfileButton(memoryEditor ? "Save memory" : singleConfiguration ? "Save settings" : "Save profile", async () =>
+        var save = ProfileButton(memoryEditor ? Loc.T("Save memory") : singleConfiguration ? Loc.T("Save settings") : Loc.T("Save profile"), async () =>
         {
             if (_busy || !_session.CanStartPluginSettingsAction || !IsLoaded || generation != _generation) return;
             _busy = true; IsEnabled = false;
@@ -181,13 +181,13 @@ internal sealed partial class LivePluginTextSettings
                 _dirtyProfiles[selector.Value] = false;
                 _clearApiKey();
                 await ReloadAsync();
-                SetStatus("“" + _profileName + "” saved.");
+                SetStatus(Loc.T("“{0}” saved.", _profileName));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (IsLoaded && generation == _generation) SetStatus("Could not save “" + name + "”. Your edits are still here; retry saving."); }
+            { if (IsLoaded && generation == _generation) SetStatus(Loc.T("Could not save “{0}”. Your edits are still here; retry saving.", name)); }
             finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         });
-        AutomationProperties.SetName(save, memoryEditor ? "Save memory" : singleConfiguration ? "Save settings" : "Save profile “" + name + "”");
+        AutomationProperties.SetName(save, memoryEditor ? Loc.T("Save memory") : singleConfiguration ? Loc.T("Save settings") : Loc.T("Save profile “{0}”", name));
         void UpdateDirty()
         {
             foreach (var field in editable)
@@ -202,8 +202,8 @@ internal sealed partial class LivePluginTextSettings
                     label.Text = choice.Title + (_dirtyProfiles.GetValueOrDefault(choice.Value) ? " *" : "");
             save.IsEnabled = dirty;
             var others = selector.Choices.Count(c => c.Value != selector.Value && _dirtyProfiles.GetValueOrDefault(c.Value));
-            saveState.Text = dirty ? "Unsaved changes" : "Saved";
-            if (others > 0) saveState.Text += " · Unsaved edits in " + others + (others == 1 ? " other profile" : " other profiles");
+            saveState.Text = dirty ? Loc.T("Unsaved changes") : Loc.T("Saved");
+            if (others > 0) saveState.Text += " · " + (others == 1 ? Loc.T("Unsaved edits in 1 other profile") : Loc.T("Unsaved edits in {0} other profiles", others));
         }
         _profileDirtyChanged = UpdateDirty;
         ScriptCodeEditor? scriptEditor = null;
@@ -213,7 +213,7 @@ internal sealed partial class LivePluginTextSettings
         {
             var panel = field.Section == PluginSettingsSection.Connection ? connectionPanel : modelsPanel;
             if (field.Section != previousSection && field.Section != PluginSettingsSection.Connection)
-                panel.Children.Add(new TextBlock { Text = field.Section switch { PluginSettingsSection.Transcription => "Transcription", PluginSettingsSection.Speech => "Speech", PluginSettingsSection.TextProcessing => "Text processing", _ => "Settings" },
+                panel.Children.Add(new TextBlock { Text = field.Section switch { PluginSettingsSection.Transcription => Loc.T("Transcription"), PluginSettingsSection.Speech => Loc.T("Speech"), PluginSettingsSection.TextProcessing => Loc.T("Text processing"), _ => Loc.T("Settings") },
                     FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new(0, 8, 0, 0) });
             previousSection = field.Section;
             var group = new StackPanel { Spacing = 5 };
@@ -256,20 +256,20 @@ internal sealed partial class LivePluginTextSettings
                 var editor = new ScriptCodeEditor(values[field.Id], language, field.MaxLength);
                 scriptEditor = editor;
                 editor.CodeChanged += value => { values[field.Id] = value; _drafts[field.Id] = value; UpdateDirty(); };
-                var position = ProfileNote("Ln 1, Col 1 · Ctrl+Z undo · Ctrl+Y redo");
-                editor.PositionChanged += (line, column) => position.Text = $"Ln {line}, Col {column} · Ctrl+Z undo · Ctrl+Y redo";
+                var position = ProfileNote(Loc.T("Ln {0}, Col {1} · Ctrl+Z undo · Ctrl+Y redo", 1, 1));
+                editor.PositionChanged += (line, column) => position.Text = Loc.T("Ln {0}, Col {1} · Ctrl+Z undo · Ctrl+Y redo", line, column);
                 editor.EditorNotice += message => position.Text = message;
                 AutomationProperties.SetLiveSetting(position, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
                 var toolbar = new Grid { Margin = new(0, 2, 0, 2) };
                 toolbar.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
                 toolbar.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-                toolbar.Children.Add(ProfileNote("SCRIPT · syntax highlighting"));
-                var expand = ProfileButton("Expand", () => { editor.Height = editor.Height == 240 ? 440 : 240; return Task.CompletedTask; });
-                expand.Click += (_, _) => expand.Content = editor.Height == 240 ? "Expand" : "Collapse";
-                var format = ProfileButton("Format", () => { editor.FormatCode(); return Task.CompletedTask; });
+                toolbar.Children.Add(ProfileNote(Loc.T("SCRIPT · syntax highlighting")));
+                var expand = ProfileButton(Loc.T("Expand"), () => { editor.Height = editor.Height == 240 ? 440 : 240; return Task.CompletedTask; });
+                expand.Click += (_, _) => expand.Content = editor.Height == 240 ? Loc.T("Expand") : Loc.T("Collapse");
+                var format = ProfileButton(Loc.T("Format"), () => { editor.FormatCode(); return Task.CompletedTask; });
                 format.IsEnabled = language is "powershell" or "pwsh";
                 editor.SyntaxLanguageChanged += () => format.IsEnabled = editor.SyntaxLanguage is "powershell" or "pwsh";
-                ToolTipService.SetToolTip(format, "Add line breaks between PowerShell statements. Changes remain unsaved.");
+                ToolTipService.SetToolTip(format, Loc.T("Add line breaks between PowerShell statements. Changes remain unsaved."));
                 var editorActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
                 editorActions.Children.Add(format); editorActions.Children.Add(expand);
                 Grid.SetColumn(editorActions, 1); toolbar.Children.Add(editorActions);
@@ -287,7 +287,7 @@ internal sealed partial class LivePluginTextSettings
                 text.TextChanged += (_, _) => { values[field.Id] = text.Text; _drafts[field.Id] = text.Text; UpdateDirty(); };
                 input = text;
             }
-            AutomationProperties.SetName(input, field.Title + " for “" + name + "”");
+            AutomationProperties.SetName(input, Loc.T("{0} for “{1}”", field.Title, name));
             AutomationProperties.SetHelpText(input, field.Description);
             var border = new Border { Child = input, CornerRadius = new(8), BorderThickness = new(1),
                 Background = (Brush)Application.Current.Resources["SurfaceBrush"],
@@ -304,10 +304,10 @@ internal sealed partial class LivePluginTextSettings
             var button = ProfileButton(action.Title, async () =>
             {
                 if (generic && (_dirtyProfiles.GetValueOrDefault(selector.Value) || _pendingApiKey() is not null))
-                { SetStatus("Save your changes before running this action."); return; }
+                { SetStatus(Loc.T("Save your changes before running this action.")); return; }
                 await RunProfileActionAsync(action, name, profileId: generic ? null : selector.Value, values: values);
             });
-            AutomationProperties.SetName(button, action.Title + " for “" + name + "”");
+            AutomationProperties.SetName(button, Loc.T("{0} for “{1}”", action.Title, name));
             ToolTipService.SetToolTip(button, action.Description);
             if (action.Section == PluginSettingsSection.Connection)
             {
@@ -344,9 +344,9 @@ internal sealed partial class LivePluginTextSettings
         {
             var removeButton = ProfileButton(remove.Title, async () =>
             {
-                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Remove “" + name + "”?",
-                    Content = memoryEditor ? "This deletes the saved memory from this device. It will no longer be available to workflows." : showKey ? "This removes this configuration, its saved API key and any unsaved edits. Workflows using it will need another provider." : "This removes this configuration and any unsaved edits.",
-                    PrimaryButtonText = "Remove", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Remove “{0}”?", name),
+                    Content = memoryEditor ? Loc.T("This deletes the saved memory from this device. It will no longer be available to workflows.") : showKey ? Loc.T("This removes this configuration, its saved API key and any unsaved edits. Workflows using it will need another provider.") : Loc.T("This removes this configuration and any unsaved edits."),
+                    PrimaryButtonText = Loc.T("Remove"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                     await RunProfileActionAsync(remove, name, removedFields: editable.Select(f => f.Id).ToArray(), removedProfileId: selector.Value);
             });
@@ -397,7 +397,7 @@ internal sealed partial class LivePluginTextSettings
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (IsLoaded && generation == _generation) { picker.SelectedItem = profileItems[selector.Value]; SetStatus("Could not switch profiles. Try again."); } }
+            { if (IsLoaded && generation == _generation) { picker.SelectedItem = profileItems[selector.Value]; SetStatus(Loc.T("Could not switch profiles. Try again.")); } }
             finally { selecting = _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         };
     }
@@ -407,7 +407,7 @@ internal sealed partial class LivePluginTextSettings
     {
         if (_busy || !IsLoaded) return;
         if (!_session.CanStartPluginSettingsAction)
-        { SetStatus("Finish dictation and other plugin operations before changing this profile."); return; }
+        { SetStatus(Loc.T("Finish dictation and other plugin operations before changing this profile.")); return; }
         var generation = _generation;
         if (leaveProfile && !await _canLeaveConnection()) return;
         if (!IsLoaded || generation != _generation) return;
@@ -452,27 +452,27 @@ internal sealed partial class LivePluginTextSettings
             }
             if (leaveProfile) _profileScrollOffset = 0;
             await ReloadAsync();
-            SetStatus(leaveProfile ? result ?? "Profile added." : "“" + name + "”: " + (result ?? "Completed."));
+            SetStatus(leaveProfile ? result ?? Loc.T("Profile added.") : "“" + name + "”: " + (result ?? Loc.T("Completed.")));
             if (_id == "com.typewhisper.script" && action.Id.StartsWith("test:", StringComparison.Ordinal) &&
                 result is not null && (result.StartsWith("Result: ", StringComparison.Ordinal) || result.StartsWith("Ergebnis: ", StringComparison.Ordinal)))
             {
                 var output = result[(result.IndexOf(": ", StringComparison.Ordinal) + 2)..];
                 var language = output.TrimStart().StartsWith('"') || output.TrimStart().StartsWith('{') ? "json" : "markdown";
                 var preview = new ScriptCodeEditor(output, language, 32768, readOnly: true);
-                AutomationProperties.SetName(preview, "Script test output");
+                AutomationProperties.SetName(preview, Loc.T("Script test output"));
                 var panel = new StackPanel { Spacing = 10 };
-                panel.Children.Add(ProfileNote("Sample output · up to 2,000 characters · draft not saved"));
+                panel.Children.Add(ProfileNote(Loc.T("Sample output · up to 2,000 characters · draft not saved")));
                 panel.Children.Add(preview);
-                await new ContentDialog { XamlRoot = XamlRoot, Title = "Test result", Content = panel,
-                    CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close }.ShowAsync();
+                await new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Test result"), Content = panel,
+                    CloseButtonText = Loc.T("Close"), DefaultButton = ContentDialogButton.Close }.ShowAsync();
             }
         }
         catch (OperationCanceledException)
-        { if (IsLoaded && generation == _generation) SetStatus("The action was cancelled or timed out. You can retry."); }
+        { if (IsLoaded && generation == _generation) SetStatus(Loc.T("The action was cancelled or timed out. You can retry.")); }
         catch (ArgumentException ex)
         { if (IsLoaded && generation == _generation) SetStatus(ex.Message); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded && generation == _generation) SetStatus("Could not complete “" + action.Title + "” for “" + name + "”. Check the plugin settings, then retry."); }
+        { if (IsLoaded && generation == _generation) SetStatus(Loc.T("Could not complete “{0}” for “{1}”. Check the plugin settings, then retry.", action.Title, name)); }
         finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
     }
 

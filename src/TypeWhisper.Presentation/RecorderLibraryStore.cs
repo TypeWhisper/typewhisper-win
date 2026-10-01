@@ -47,7 +47,7 @@ public sealed class RecorderLibraryStore(string directory)
     {
         ValidatePath(path);
         if (isQueuedSource?.Invoke(path) == true)
-            throw new InvalidOperationException("Remove this recording from the file queue before deleting it.");
+            throw new InvalidOperationException(Loc.T("Remove this recording from the file queue before deleting it."));
         File.Delete(path);
     }
 
@@ -57,10 +57,10 @@ public sealed class RecorderLibraryStore(string directory)
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (!string.Equals(Path.GetDirectoryName(fullPath), _directory, comparison) ||
             !string.Equals(Path.GetExtension(fullPath), ".wav", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Select a WAV file from the recording library.", nameof(path));
+            throw new ArgumentException(Loc.T("Select a WAV file from the recording library."), nameof(path));
         if ((File.GetAttributes(_directory) & FileAttributes.ReparsePoint) != 0 ||
             (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0)
-            throw new IOException("Linked recording files and directories are not supported.");
+            throw new IOException(Loc.T("Linked recording files and directories are not supported."));
     }
 
     /// <summary>Revalidates the owned local WAV immediately before playback.</summary>
@@ -74,9 +74,9 @@ public sealed class RecorderLibraryStore(string directory)
     {
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var reader = new BinaryReader(stream, Encoding.ASCII);
-        if (stream.Length < 12 || reader.ReadUInt32() != 0x46464952) throw new InvalidDataException("The file is not a RIFF WAV recording.");
+        if (stream.Length < 12 || reader.ReadUInt32() != 0x46464952) throw new InvalidDataException(Loc.T("The file is not a RIFF WAV recording."));
         var end = 8L + reader.ReadUInt32();
-        if (end > stream.Length || end < 12 || reader.ReadUInt32() != 0x45564157) throw new InvalidDataException("The WAV header is incomplete.");
+        if (end > stream.Length || end < 12 || reader.ReadUInt32() != 0x45564157) throw new InvalidDataException(Loc.T("The WAV header is incomplete."));
         uint sampleRate = 0;
         ushort blockAlign = 0;
         long dataBytes = 0;
@@ -84,14 +84,14 @@ public sealed class RecorderLibraryStore(string directory)
         var chunks = 0;
         while (stream.Position < end)
         {
-            if (++chunks > 10000 || end - stream.Position < 8) throw new InvalidDataException("The WAV chunk table is invalid.");
+            if (++chunks > 10000 || end - stream.Position < 8) throw new InvalidDataException(Loc.T("The WAV chunk table is invalid."));
             var id = reader.ReadUInt32();
             var length = reader.ReadUInt32();
             var next = stream.Position + length + (length & 1);
-            if (next > end) throw new InvalidDataException("The WAV audio is truncated.");
+            if (next > end) throw new InvalidDataException(Loc.T("The WAV audio is truncated."));
             if (id == 0x20746d66)
             {
-                if (length < 16) throw new InvalidDataException("The WAV format is incomplete.");
+                if (length < 16) throw new InvalidDataException(Loc.T("The WAV format is incomplete."));
                 var format = reader.ReadUInt16();
                 var channels = reader.ReadUInt16();
                 sampleRate = reader.ReadUInt32();
@@ -100,13 +100,13 @@ public sealed class RecorderLibraryStore(string directory)
                 var bits = reader.ReadUInt16();
                 if (format is not (1 or 3) || channels == 0 || sampleRate == 0 || bits == 0 || bits % 8 != 0 ||
                     blockAlign != channels * (bits / 8) || byteRate != (long)sampleRate * blockAlign)
-                    throw new InvalidDataException("The WAV format is unsupported or invalid.");
+                    throw new InvalidDataException(Loc.T("The WAV format is unsupported or invalid."));
             }
             else if (id == 0x61746164) { dataBytes += length; hasData = true; }
             stream.Position = next;
         }
         if (sampleRate == 0 || blockAlign == 0 || !hasData || dataBytes % blockAlign != 0)
-            throw new InvalidDataException("The WAV recording has no valid audio data.");
+            throw new InvalidDataException(Loc.T("The WAV recording has no valid audio data."));
         return TimeSpan.FromSeconds(dataBytes / (double)blockAlign / sampleRate);
     }
 }

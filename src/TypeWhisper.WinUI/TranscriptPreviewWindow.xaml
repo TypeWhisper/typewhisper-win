@@ -35,7 +35,7 @@
                     <TextBlock x:Name="DragHint" Text="⠿" FontSize="16" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
                     <Ellipse Width="6" Height="6" Fill="{ThemeResource AccentBrush}"
                              VerticalAlignment="Center" />
-                    <TextBlock Text="LIVE TRANSCRIPT" FontSize="9" FontWeight="SemiBold"
+                    <TextBlock x:Name="TranscriptHeading" Text="LIVE TRANSCRIPT" FontSize="9" FontWeight="SemiBold"
                                CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
                 </StackPanel>
                 <TextBlock x:Name="TranscriptSourceLabel" Grid.Column="1" Text="DEMO TEXT" FontFamily="Cascadia Mono"

@@ -18,9 +18,9 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
     private readonly TextBlock _message = Note("");
     private readonly ProgressBar _progress = new() { Minimum = 0, Maximum = 100, Visibility = Visibility.Collapsed };
     private readonly StackPanel _actions = new() { Spacing = 8 };
-    private readonly HandCursorButton _download = Button("Download & Load");
-    private readonly HandCursorButton _unload = Button("Unload model");
-    private readonly HandCursorButton _cancel = Button("Cancel download");
+    private readonly HandCursorButton _download = Button(Loc.T("Download & Load"));
+    private readonly HandCursorButton _unload = Button(Loc.T("Unload model"));
+    private readonly HandCursorButton _cancel = Button(Loc.T("Cancel download"));
     private CancellationTokenSource? _lifetime;
     private CancellationTokenSource? _operation;
     private bool _busy;
@@ -43,7 +43,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         SizeChanged += (_, e) => _actions.Orientation = e.NewSize.Width < 440 ? Orientation.Vertical : Orientation.Horizontal;
         AutomationProperties.SetLiveSetting(_state, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         AutomationProperties.SetLiveSetting(_message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        AutomationProperties.SetName(_progress, "Speech model download progress");
+        AutomationProperties.SetName(_progress, Loc.T("Speech model download progress"));
         _download.Click += async (_, _) => await RunAsync(async (model, ct) =>
         {
             var operation = _operation;
@@ -52,12 +52,12 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
                 if (!IsLoaded || !ReferenceEquals(_operation, operation) || operation?.IsCancellationRequested != false) return;
                 var percent = Math.Clamp(double.IsFinite(value) ? value * 100 : 0, 0, 100);
                 _progress.Value = percent;
-                _state.Text = percent >= 100 ? "Download complete · Loading model…" : $"Downloading · {percent:0}%";
+                _state.Text = percent >= 100 ? Loc.T("Download complete · Loading model…") : Loc.T("Downloading · {0:0}%", percent);
             }));
             await model.DownloadAndLoadModelAsync(progress, ct);
         }, download: true);
         _unload.Click += async (_, _) => await RunAsync((model, ct) => model.UnloadModelAsync(ct));
-        _cancel.Click += (_, _) => { _operation?.Cancel(); _cancel.IsEnabled = false; _state.Text = "Cancelling…"; };
+        _cancel.Click += (_, _) => { _operation?.Cancel(); _cancel.IsEnabled = false; _state.Text = Loc.T("Cancelling…"); };
         Loaded += async (_, _) =>
         {
             _lifetime = new();
@@ -88,17 +88,17 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
             _downloaded = state.Item2; _loaded = state.Item3;
             _accepted = state.Item4.Where(r => r.IsRequired).All(r => r.IsSatisfied);
             _title.Text = info.DisplayName;
-            _description.Text = $"Local speech output · {info.SizeDescription}\n{info.LanguageCount} languages · Audio is generated on this device.";
+            _description.Text = Loc.T("Local speech output · {0}\n{1} languages · Audio is generated on this device.", info.SizeDescription, info.LanguageCount);
             _licenses.Children.Clear();
             foreach (var requirement in state.Item4.Where(r => r.Kind == PluginModelDownloadRequirementKind.License))
             {
                 _licenses.Children.Add(Note(requirement.Description));
                 if (requirement.MoreInfoUri is { Scheme: "https" } uri)
-                    _licenses.Children.Add(new HyperlinkButton { Content = "Read model license", NavigateUri = uri,
+                    _licenses.Children.Add(new HyperlinkButton { Content = Loc.T("Read model license"), NavigateUri = uri,
                         HorizontalAlignment = HorizontalAlignment.Left, Padding = new(0) });
-                var check = new CheckBox { Content = new TextBlock { Text = "I have read and accept the model license terms", TextWrapping = TextWrapping.Wrap },
+                var check = new CheckBox { Content = new TextBlock { Text = Loc.T("I have read and accept the model license terms"), TextWrapping = TextWrapping.Wrap },
                     IsChecked = requirement.IsSatisfied, HorizontalAlignment = HorizontalAlignment.Stretch };
-                AutomationProperties.SetName(check, "Accept " + info.DisplayName + " model license");
+                AutomationProperties.SetName(check, Loc.T("Accept {0} model license", info.DisplayName));
                 check.Click += async (_, _) =>
                 {
                     var accepted = check.IsChecked == true;
@@ -108,12 +108,12 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
             }
             foreach (var requirement in state.Item4.Where(r => r.Kind == PluginModelDownloadRequirementKind.Credential))
             {
-                _licenses.Children.Add(Note(requirement.Title + (requirement.IsRequired ? "" : " (optional)")));
+                _licenses.Children.Add(Note(requirement.Title + (requirement.IsRequired ? "" : " " + Loc.T("(optional)"))));
                 _licenses.Children.Add(Note(requirement.Description));
-                var credential = new PasswordBox { PlaceholderText = requirement.IsSatisfied ? "Token saved securely" : "Hugging Face token" };
+                var credential = new PasswordBox { PlaceholderText = requirement.IsSatisfied ? Loc.T("Token saved securely") : Loc.T("Hugging Face token") };
                 AutomationProperties.SetName(credential, requirement.Title);
-                var save = Button("Save token");
-                var clear = Button("Remove saved token");
+                var save = Button(Loc.T("Save token"));
+                var clear = Button(Loc.T("Remove saved token"));
                 clear.Visibility = requirement.IsSatisfied ? Visibility.Visible : Visibility.Collapsed;
                 save.Click += async (_, _) =>
                 {
@@ -122,7 +122,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
                     await RunAsync(async (model, ct) =>
                     {
                         var result = await model.SaveModelDownloadCredentialAsync(info.Id, requirement.Id, value, ct);
-                        if (!result.Succeeded) throw new CredentialValidationException(result.Message ?? "The token could not be saved.");
+                        if (!result.Succeeded) throw new CredentialValidationException(result.Message ?? Loc.T("The token could not be saved."));
                         saved = true;
                     });
                     if (saved) credential.Password = "";
@@ -132,12 +132,12 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
             }
             _progress.Visibility = _downloaded ? Visibility.Visible : Visibility.Collapsed;
             _progress.Value = _downloaded ? 100 : 0;
-            _state.Text = _loaded ? "Ready · Model loaded" : _downloaded ? "Downloaded · 100%" : "Download required";
+            _state.Text = _loaded ? Loc.T("Ready · Model loaded") : _downloaded ? Loc.T("Downloaded · 100%") : Loc.T("Download required");
             UpdateButtons();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded) { Visibility = Visibility.Visible; _message.Text = "Model status could not be read. Reopen this page to retry."; UpdateButtons(); } }
+        { if (IsLoaded) { Visibility = Visibility.Visible; _message.Text = Loc.T("Model status could not be read. Reopen this page to retry."); UpdateButtons(); } }
     }
 
     private async Task RunAsync(Func<ILocalTtsModelManagement, CancellationToken, Task> action, bool download = false)
@@ -150,9 +150,9 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         {
             _progress.Visibility = Visibility.Visible;
             _progress.Value = _downloaded ? 100 : 0;
-            _state.Text = _downloaded ? "Loading model…" : "Downloading · 0%";
+            _state.Text = _downloaded ? Loc.T("Loading model…") : Loc.T("Downloading · 0%");
         }
-        _cancel.Content = download ? "Cancel download / loading" : "Cancel";
+        _cancel.Content = download ? Loc.T("Cancel download / loading") : Loc.T("Cancel");
         void CancelForRecording() => operation.Cancel();
         _session.RecordingStarting += CancelForRecording;
         UpdateButtons();
@@ -167,9 +167,9 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         catch (CredentialValidationException error)
         { refresh = false; if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = error.Message; }
         catch (OperationCanceledException)
-        { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = "Operation cancelled. Downloaded files are kept for the next attempt."; }
+        { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = Loc.T("Operation cancelled. Downloaded files are kept for the next attempt."); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = "The model operation failed. Check the connection and available disk space, then retry."; }
+        { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = Loc.T("The model operation failed. Check the connection and available disk space, then retry."); }
         finally
         {
             _session.RecordingStarting -= CancelForRecording;
@@ -184,7 +184,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         if (!DispatcherQueue.HasThreadAccess) { DispatcherQueue.TryEnqueue(UpdateButtons); return; }
         var available = !_busy && _session.CanStartPluginSettingsAction;
         foreach (var control in _licenses.Children.OfType<Control>()) control.IsEnabled = available;
-        _download.Content = _downloaded ? "Load model" : "Download & Load";
+        _download.Content = _downloaded ? Loc.T("Load model") : Loc.T("Download & Load");
         _download.IsEnabled = available && _accepted && !_loaded;
         _download.Visibility = _loaded ? Visibility.Collapsed : Visibility.Visible;
         _unload.IsEnabled = available && _loaded;

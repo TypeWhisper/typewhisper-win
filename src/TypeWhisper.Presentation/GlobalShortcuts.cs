@@ -56,18 +56,18 @@ public static class GlobalShortcuts
     /// <summary>Every global shortcut in check order; the first overlap decides the message.</summary>
     public static IReadOnlyList<GlobalShortcut> All { get; } =
     [
-        new(MainDictation, GlobalShortcutRole.MainDictation, "Main dictation"),
-        new(CancelProcessing, GlobalShortcutRole.CancelProcessing, "Cancel processing"),
-        new(PushToTalk, GlobalShortcutRole.Recording, "Push to talk"),
-        new(ToggleOnly, GlobalShortcutRole.Recording, "Toggle recording"),
-        new(HoldOnly, GlobalShortcutRole.Recording, "Hold to record"),
-        new(Recorder, GlobalShortcutRole.Action, "Recorder"),
-        new(WorkflowPalette, GlobalShortcutRole.Action, "Workflow palette"),
-        new(RecentTranscriptions, GlobalShortcutRole.Action, "Recent transcriptions"),
-        new(ReadLastTranscription, GlobalShortcutRole.Action, "Read last transcription"),
-        new(CopyLastTranscription, GlobalShortcutRole.Action, "Copy last transcription"),
-        new(PasteLastTranscription, GlobalShortcutRole.Action, "Paste last transcription"),
-        new(Workflows, GlobalShortcutRole.Workflows, "Workflows")
+        new(MainDictation, GlobalShortcutRole.MainDictation, Loc.T("Main dictation")),
+        new(CancelProcessing, GlobalShortcutRole.CancelProcessing, Loc.T("Cancel processing")),
+        new(PushToTalk, GlobalShortcutRole.Recording, Loc.T("Push to talk")),
+        new(ToggleOnly, GlobalShortcutRole.Recording, Loc.T("Toggle recording")),
+        new(HoldOnly, GlobalShortcutRole.Recording, Loc.T("Hold to record")),
+        new(Recorder, GlobalShortcutRole.Action, Loc.T("Recorder")),
+        new(WorkflowPalette, GlobalShortcutRole.Action, Loc.T("Workflow palette")),
+        new(RecentTranscriptions, GlobalShortcutRole.Action, Loc.T("Recent transcriptions")),
+        new(ReadLastTranscription, GlobalShortcutRole.Action, Loc.T("Read last transcription")),
+        new(CopyLastTranscription, GlobalShortcutRole.Action, Loc.T("Copy last transcription")),
+        new(PasteLastTranscription, GlobalShortcutRole.Action, Loc.T("Paste last transcription")),
+        new(Workflows, GlobalShortcutRole.Workflows, Loc.T("Workflows"))
     ];
 
     /// <summary>
@@ -104,13 +104,13 @@ public static class GlobalShortcuts
     private static string Message(GlobalShortcut candidate, GlobalShortcut other) => other.Role switch
     {
         GlobalShortcutRole.MainDictation => candidate.Role == GlobalShortcutRole.Recording
-            ? "Already used by Main dictation. Choose a different combination."
-            : "This shortcut overlaps Main dictation and could start recording. Choose another shortcut.",
+            ? Loc.T("Already used by Main dictation. Choose a different combination.")
+            : Loc.T("This shortcut overlaps Main dictation and could start recording. Choose another shortcut."),
         GlobalShortcutRole.CancelProcessing => candidate.Role == GlobalShortcutRole.MainDictation
-            ? "This dictation shortcut overlaps Cancel processing. Change the cancel shortcut first."
-            : "Already used by Cancel processing.",
-        GlobalShortcutRole.Recording => "Already used by another recording shortcut. Choose a different combination.",
-        GlobalShortcutRole.Workflows => "Already used by a workflow. Change its shortcut in Workflows first.",
-        _ => $"Already used by {other.Label}. Change that shortcut first."
+            ? Loc.T("This dictation shortcut overlaps Cancel processing. Change the cancel shortcut first.")
+            : Loc.T("Already used by Cancel processing."),
+        GlobalShortcutRole.Recording => Loc.T("Already used by another recording shortcut. Choose a different combination."),
+        GlobalShortcutRole.Workflows => Loc.T("Already used by a workflow. Change its shortcut in Workflows first."),
+        _ => Loc.T("Already used by {0}. Change that shortcut first.", other.Label)
     };
 }

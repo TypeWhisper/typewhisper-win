@@ -14,9 +14,9 @@ public sealed partial class SetupWizard
         if (_session.Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) return;
         _pluginInstallPanel = new StackPanel { Spacing = 12 };
         _body.Children.Add(_pluginInstallPanel);
-        var status = Copy("Install NVIDIA Parakeet for local, offline dictation. Choose and download its model here afterwards.");
+        var status = Copy(Loc.T("Install NVIDIA Parakeet for local, offline dictation. Choose and download its model here afterwards."));
         _pluginInstallPanel.Children.Add(status);
-        var install = Button("Install NVIDIA Parakeet", () => { });
+        var install = Button(Loc.T("Install NVIDIA Parakeet"), () => { });
         _pluginInstallPanel.Children.Add(install);
         install.Click += async (_, _) =>
         {
@@ -25,7 +25,7 @@ public sealed partial class SetupWizard
             using var operation = new CancellationTokenSource();
             _pluginInstallation = operation;
             _selecting = true;
-            install.Content = "Cancel installation";
+            install.Content = Loc.T("Cancel installation");
             RefreshModelPickers(); RefreshStatus();
             try
             {
@@ -47,7 +47,7 @@ public sealed partial class SetupWizard
             {
                 _pluginInstallation = null;
                 _selecting = false;
-                if (!_closing) { install.Content = "Retry installation"; RefreshModelPickers(); RefreshStatus(); }
+                if (!_closing) { install.Content = Loc.T("Retry installation"); RefreshModelPickers(); RefreshStatus(); }
             }
         };
     }

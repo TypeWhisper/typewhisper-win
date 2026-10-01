@@ -167,11 +167,11 @@ public static class HistoryWorkspace
             "whisper-large-v3-turbo" => "Whisper Large V3 Turbo",
             var other => other
         };
-        if (name is null) return "Model not recorded";
+        if (name is null) return Loc.T("Model not recorded");
         var provider = engine?.Trim() switch
         {
             "groq" => "Groq",
-            "sherpa-onnx" => "Local",
+            "sherpa-onnx" => Loc.T("Local"),
             null or "" => null,
             var other => other
         };

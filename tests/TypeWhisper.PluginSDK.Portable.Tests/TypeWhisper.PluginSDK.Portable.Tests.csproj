@@ -43,4 +43,8 @@
     <Compile Remove="WindowsPluginSecretStoreTests.cs" />
     <Compile Remove="LegacyWindowsProfileMigrationTests.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The app files compiled into these tests rely on the app's project-wide import. -->
+    <Using Include="TypeWhisper.Core" />
+  </ItemGroup>
 </Project>

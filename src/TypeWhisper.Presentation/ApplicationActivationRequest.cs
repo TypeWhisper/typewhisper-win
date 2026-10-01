@@ -19,8 +19,8 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
         var args = arguments.Take(128).ToArray();
         if (args.Any(value => value.StartsWith("typewhisper:", StringComparison.OrdinalIgnoreCase)))
             return args.Length == 1 && Uri.TryCreate(args[0], UriKind.Absolute, out var callback) && PremiumAccountClient.IsCallback(callback)
-                ? new(null, [], null, true) { AccountCallback = callback } : Failure("Invalid account callback.");
-        if (args.Length >= 128 || args.Sum(value => (long)value.Length) > 32767) return Failure("Too many activation arguments.");
+                ? new(null, [], null, true) { AccountCallback = callback } : Failure(Loc.T("Invalid account callback."));
+        if (args.Length >= 128 || args.Sum(value => (long)value.Length) > 32767) return Failure(Loc.T("Too many activation arguments."));
         string? route = null;
         var paths = new List<string>();
         bool minimized = startup;
@@ -31,7 +31,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
             if (Routes.Contains(value, StringComparer.OrdinalIgnoreCase))
             {
                 var next = value.ToLowerInvariant();
-                if (route is not null && route != next) return Failure("Choose one navigation destination per activation.");
+                if (route is not null && route != next) return Failure(Loc.T("Choose one navigation destination per activation."));
                 route = next; continue;
             }
             if (value.Equals("--transcribe-file", StringComparison.OrdinalIgnoreCase))
@@ -41,18 +41,18 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
                 {
                     var path = args[++i];
                     if (!AbsoluteWindowsPath(path) || path.Length > 32767 || path.IndexOfAny(['\0', '"', '*', '?']) >= 0)
-                        return Failure("File activation requires absolute Windows file paths.");
+                        return Failure(Loc.T("File activation requires absolute Windows file paths."));
                     paths.Add(path);
-                    if (paths.Count > MaximumFiles) return Failure("Add at most 20 files per activation.");
+                    if (paths.Count > MaximumFiles) return Failure(Loc.T("Add at most 20 files per activation."));
                 }
-                if (paths.Count == before) return Failure("Provide a file path after --transcribe-file.");
+                if (paths.Count == before) return Failure(Loc.T("Provide a file path after --transcribe-file."));
                 continue;
             }
             // Existing visual-test flags are not navigation destinations.
             if (value == "--settings-small") continue;
-            return Failure("Unknown activation argument: " + value);
+            return Failure(Loc.T("Unknown activation argument: {0}", value));
         }
-        if (paths.Count > 0 && route is not null && route != "--files") return Failure("File activation cannot be combined with another destination.");
+        if (paths.Count > 0 && route is not null && route != "--files") return Failure(Loc.T("File activation cannot be combined with another destination."));
         return new(paths.Count > 0 ? "--files" : route, Array.AsReadOnly(paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()), null,
             paths.Count > 0 || route is not null || !minimized);
     }
@@ -65,14 +65,14 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
     /// <summary>Tokenizes Windows command lines using the backslash-before-quote rules; the first token is the executable.</summary>
     public static ApplicationActivationRequest ParseCommandLine(string commandLine, bool startup = false)
     {
-        if (commandLine.Length > 32767) return Failure("The activation command line is too long.");
+        if (commandLine.Length > 32767) return Failure(Loc.T("The activation command line is too long."));
         return Parse(TokenizeCommandLine(commandLine).Skip(1), startup);
     }
 
     /// <summary>Accepts native activation arguments with or without this host's executable token.</summary>
     public static ApplicationActivationRequest ParseLaunchArguments(string arguments, string? executable, bool startup = false)
     {
-        if (arguments.Length > 32767) return Failure("The activation command line is too long.");
+        if (arguments.Length > 32767) return Failure(Loc.T("The activation command line is too long."));
         var tokens = TokenizeCommandLine(arguments);
         // App SDK's unpackaged fallback includes the executable; native packaged arguments do not.
         var includesExecutable = tokens.Count > 0 && !string.IsNullOrEmpty(executable) &&
@@ -138,7 +138,7 @@ public sealed class ActivationInbox
         lock (_requests)
         {
             var result = _requests.ToList(); _requests.Clear();
-            if (_overflow) result.Add(new(null, [], "Some activation requests were rejected because startup was busy. Retry those files.", true));
+            if (_overflow) result.Add(new(null, [], Loc.T("Some activation requests were rejected because startup was busy. Retry those files."), true));
             _overflow = false; return result;
         }
     }

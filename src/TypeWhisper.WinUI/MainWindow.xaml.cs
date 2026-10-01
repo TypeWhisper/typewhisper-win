@@ -17,10 +17,10 @@ public sealed partial class MainWindow : Window
     private static string DictationHotkeyPath => WinUIProfile.DataPath("dictation-hotkeys.txt");
     private string? ChangeDictationHotkeys(string value)
     {
-        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
-        if (_dictationHotkey is null) return "Dictation hotkeys are unavailable. Restart the app.";
+        if (_closing || _profileRestoreClosing) return Loc.T("The app is shutting down.");
+        if (_dictationHotkey is null) return Loc.T("Dictation hotkeys are unavailable. Restart the app.");
         if (ShortcutConflict(TypeWhisper.Presentation.GlobalShortcuts.MainDictation, value) is { } conflict) return conflict;
-        if (_dictation.IsRecording) return "Finish the recording before changing its shortcut.";
+        if (_dictation.IsRecording) return Loc.T("Finish the recording before changing its shortcut.");
         var previous = _dictationHotkey.Value;
         var error = _dictationHotkey.TryChange(value);
         if (error is not null) return error;
@@ -32,10 +32,10 @@ public sealed partial class MainWindow : Window
         {
             var rollback = _dictationHotkey.TryChange(previous);
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
-            _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
-            return rollback ?? $"Could not save the shortcut: {ex.Message}";
+            _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? Loc.Mark("No shortcut assigned") : _dictationHotkey.Value;
+            return rollback ?? Loc.T("Could not save the shortcut: {0}", ex.Message);
         }
-        _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
+        _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? Loc.Mark("No shortcut assigned") : _dictationHotkey.Value;
         return null;
     }
     private readonly LocalDictationSession _dictation;
@@ -71,10 +71,10 @@ public sealed partial class MainWindow : Window
             var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : LocalDictationSession.DefaultShortcut;
             var error = _dictationHotkey.TryChange(saved);
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
-            _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
+            _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? Loc.Mark("No shortcut assigned") : _dictationHotkey.Value;
             // A shortcut taken by another app must not block the session, API, licensing or the
             // other shortcuts; the user can assign a different chord in Settings without restarting.
-            var hotkeyError = error is null ? null : error + " Assign a different dictation shortcut in Settings.";
+            var hotkeyError = error is null ? null : Loc.T("{0} Assign a different dictation shortcut in Settings.", error);
             if (hotkeyError is not null) DictationChanged?.Invoke(hotkeyError, false);
             string? cancelError;
             try
@@ -83,13 +83,13 @@ public sealed partial class MainWindow : Window
                 {
                     // Cancels only active final processing or a running workflow; never starts or retries work.
                     if (CanCancelProcessing && !ShortcutRecorder.AnyEditing) RequestProcessingCancellation();
-                }, 0x7500, "cancel-processing-hotkeys.txt", "Cancel shortcuts", "cancel", ShortcutConflict);
+                }, 0x7500, "cancel-processing-hotkeys.txt", Loc.T("Cancel shortcuts"), Loc.T("cancel"), ShortcutConflict);
                 cancelError = _cancelProcessingShortcut.Initialize();
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 System.Diagnostics.Trace.TraceError("Cancel shortcut registration failed: {0}", ex);
-                cancelError = "Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.";
+                cancelError = Loc.T("Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.");
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingShortcut?.Value ?? "";
             await _dictation.InitializeAsync();
@@ -114,7 +114,7 @@ public sealed partial class MainWindow : Window
             }
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice("Dictation startup failed: " + ex.Message)); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
     }
 
     internal void FinishDictationFromTray()
@@ -129,14 +129,14 @@ public sealed partial class MainWindow : Window
         RequestWorkflowCancellation();
         try { if (_dictation.CanCancelProcessing) await _dictation.CancelAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) ShowNotice(new AppNotice("Could not finish cancellation. Try again.")); }
+        { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) ShowNotice(new AppNotice(Loc.T("Could not finish cancellation. Try again."))); }
     }
     internal Func<Task<string?>>? RestartApplicationAsync { get; set; }
-    private Task<string?> RestartForPluginUpdateAsync()
+    private Task<string?> RestartWhenIdleAsync()
     {
         if (_closing || _profileRestoreClosing || _dictation.Packages.Updates.Busy || !_dictation.CanChangeProvider || _dictation.Models.Busy || _dictation.CtcVocabulary.Busy)
-            return Task.FromResult<string?>("Finish recording and processing before restarting TypeWhisper.");
-        return RestartApplicationAsync?.Invoke() ?? Task.FromResult<string?>("Restart is currently unavailable.");
+            return Task.FromResult<string?>(Loc.T("Finish recording and processing before restarting TypeWhisper."));
+        return RestartApplicationAsync?.Invoke() ?? Task.FromResult<string?>(Loc.T("Restart is currently unavailable."));
     }
     private bool _closing;
     private readonly TypeWhisper.Presentation.AsyncShutdownCoordinator _shutdown = new();
@@ -183,10 +183,10 @@ public sealed partial class MainWindow : Window
         if (RecorderView.NeedsSaveRetry)
         {
             OpenRecorder();
-            ShowNotice(new AppNotice("Recording could not be saved. Retry saving in Recorder, then choose Exit again.", Duration: TimeSpan.FromSeconds(30)));
+            ShowNotice(new AppNotice(Loc.T("Recording could not be saved. Retry saving in Recorder, then choose Exit again."), Duration: TimeSpan.FromSeconds(30)));
             return;
         }
-        ShowNotice(new AppNotice("Shutdown could not complete cleanly. Work is stopped; see the diagnostic log for details.", Duration: TimeSpan.FromSeconds(30)));
+        ShowNotice(new AppNotice(Loc.T("Shutdown could not complete cleanly. Work is stopped; see the diagnostic log for details."), Duration: TimeSpan.FromSeconds(30)));
     }
     internal bool CanRetryRecorderShutdown => RecorderView.NeedsSaveRetry;
 
@@ -363,11 +363,11 @@ public sealed partial class MainWindow : Window
         _dictation.ReviewRequested += ShowOutputReview;
         _dictation.OutputWarning += message => DispatcherQueue.TryEnqueue(() =>
         {
-            if (!_closing) ShowNotice(new AppNotice(message, "Dictation delivered with a warning"));
+            if (!_closing) ShowNotice(new AppNotice(message, Loc.T("Dictation delivered with a warning")));
         });
         _dictation.EngineNotice += message => DispatcherQueue.TryEnqueue(() =>
         {
-            if (!_closing) ShowNotice(new AppNotice(message, "Speech engine"));
+            if (!_closing) ShowNotice(new AppNotice(message, Loc.T("Speech engine")));
         });
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
@@ -384,8 +384,8 @@ public sealed partial class MainWindow : Window
         RecorderView.TranscribeRequested += path => OpenFileTranscription(() => _fileTranscription?.AddRecording(path));
         MarketplaceView.ConfigureRuntime(_dictation);
         MarketplaceView.ManageRequested += id => OpenProviderSettings(id);
-        MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
-        PluginsView.RestartRequested = RestartForPluginUpdateAsync;
+        MarketplaceView.RestartRequested = RestartWhenIdleAsync;
+        PluginsView.RestartRequested = RestartWhenIdleAsync;
         InitializeIntegrationSettings();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "app.ico"));
         AppWindow.Closing += (_, args) =>
@@ -439,7 +439,7 @@ public sealed partial class MainWindow : Window
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             _overlay = null;
-            ShowNotice(new AppNotice($"The overlay preview could not open: {exception.Message}"));
+            ShowNotice(new AppNotice(Loc.T("The overlay preview could not open: {0}", exception.Message)));
         }
     }
 
@@ -469,7 +469,7 @@ public sealed partial class MainWindow : Window
             _technicalDetailsEnabled = preferences.TechnicalDetails;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        { _overlayPreferencesError = "Could not load overlay preferences: " + ex.Message; }
+        { _overlayPreferencesError = Loc.T("Could not load overlay preferences: {0}", ex.Message); }
     }
     private bool SaveOverlayPreferences(OverlayPreferences? preferences = null)
     {
@@ -479,7 +479,7 @@ public sealed partial class MainWindow : Window
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { _overlayPreferencesError = "Could not save overlay preferences: " + ex.Message; return false; }
+        { _overlayPreferencesError = Loc.T("Could not save overlay preferences: {0}", ex.Message); return false; }
     }
 
     internal void OpenSetup(bool returnToTray = false)
@@ -509,9 +509,9 @@ public sealed partial class MainWindow : Window
             _settingsWindow.CommitRecordingShortcut = ChangeRecordingShortcut;
             _settingsWindow.CommitRecorderHotkeys = ChangeRecorderShortcut;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
-            _settingsWindow.CommitCancelProcessingHotkeys = value => ChangeActionShortcut(_cancelProcessingShortcut, "Cancel", value);
+            _settingsWindow.CommitCancelProcessingHotkeys = value => ChangeActionShortcut(_cancelProcessingShortcut, Loc.T("Cancel"), value);
             _settingsWindow.CreateSetupWizard = exit => new SetupWizard(_settingsValues, exit,
-                value => _closing || _profileRestoreClosing ? "The app is shutting down." : ChangeDictationHotkeys(value),
+                value => _closing || _profileRestoreClosing ? Loc.T("The app is shutting down.") : ChangeDictationHotkeys(value),
                 _dictation);
             var dictationSettings = new LiveDictationSettings(_dictation, OpenProviderSettings);
             var startup = WindowsStartupRegistration.Create();
@@ -520,6 +520,7 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
+                LiveLanguageSettings.Configure(category, content, pickers, AppLanguage.Store, RestartWhenIdleAsync);
                 LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates);
                 if (category == "Advanced")
                 {
@@ -556,7 +557,7 @@ public sealed partial class MainWindow : Window
                 if (!SaveOverlayPreferences(preferences))
                 {
                     _settingsWindow.SetPreferences(OverlayPreferences);
-                    _settingsWindow.ShowOverlaySaveError(_overlayPreferencesError ?? "Could not save overlay preferences.");
+                    _settingsWindow.ShowOverlaySaveError(_overlayPreferencesError ?? Loc.T("Could not save overlay preferences."));
                     return;
                 }
                 var modeChanged = _overlayMode != preferences.Mode || _layoutPreferences.Screen != preferences.Screen || _layoutPreferences.Anchor != preferences.Anchor

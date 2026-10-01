@@ -77,7 +77,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         if (_disposed) return null;
         var replacement = SetWindowsHookEx(13, _callback, GetModuleHandle(null), 0);
         if (replacement == IntPtr.Zero)
-            return $"Could not restore dictation keyboard hook (Windows error {Marshal.GetLastWin32Error()}). Retry after unlocking, or restart TypeWhisper.";
+            return Loc.T("Could not restore dictation keyboard hook (Windows error {0}). Retry after unlocking, or restart TypeWhisper.", Marshal.GetLastWin32Error());
         var previous = _hook;
         _hook = replacement;
         if (previous != IntPtr.Zero) UnhookWindowsHookEx(previous);

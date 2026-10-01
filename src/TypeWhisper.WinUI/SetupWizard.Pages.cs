@@ -23,7 +23,7 @@ public sealed partial class SetupWizard
     private void RenderSteps()
     {
         _steps.Children.Clear(); _steps.ColumnDefinitions.Clear();
-        string[] labels = ["Welcome", "Permissions", "Hotkey", "AI & Engine", "Done"];
+        string[] labels = [Loc.T("Welcome"), Loc.T("Permissions"), Loc.T("Hotkey"), Loc.T("AI & Engine"), Loc.T("Done")];
         for (var i = 0; i < labels.Length; i++)
         {
             if (i > 0)
@@ -39,8 +39,8 @@ public sealed partial class SetupWizard
             stack.Children.Add(new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20), Background = Resource(i <= _state.Step ? "AccentBrush" : "HairlineBrush"), Child = number });
             var label = Copy(labels[i], 13); label.TextAlignment = TextAlignment.Center; label.Foreground = Resource(i == _state.Step ? "TextBrush" : "MutedBrush");
             stack.Children.Add(label);
-            AutomationProperties.SetName(stack, $"Step {i + 1}: {labels[i]}");
-            AutomationProperties.SetItemStatus(stack, i == _state.Step ? "Current step" : i < _state.Step ? "Completed" : "Upcoming");
+            AutomationProperties.SetName(stack, Loc.T("Step {0}: {1}", i + 1, labels[i]));
+            AutomationProperties.SetItemStatus(stack, i == _state.Step ? Loc.T("Current step") : i < _state.Step ? Loc.T("Completed") : Loc.T("Upcoming"));
             Grid.SetColumn(stack, i * 2); _steps.Children.Add(stack);
         }
     }
@@ -56,7 +56,7 @@ public sealed partial class SetupWizard
         Grid.SetColumn(copy, 1); row.Children.Add(copy);
         if (badge is not null)
         {
-            var badgeText = Copy(badge, 13);
+            var badgeText = Copy(Loc.T(badge), 13);
             if (badge is "Allowed" or "Available" or "Ready") badgeText.Foreground = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 65, 211, 120));
             if (badge == "Selected") badgeText.Foreground = Resource("AccentBrush");
             var chip = new Border { Padding = new Thickness(12, 6, 12, 6), CornerRadius = new CornerRadius(16), Background = Resource("HairlineBrush"), VerticalAlignment = VerticalAlignment.Center, Child = badgeText };
@@ -76,15 +76,15 @@ public sealed partial class SetupWizard
     {
         _body.Children.Add(new SetupLogo { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 18) });
         var features = new StackPanel { Spacing = 24, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 16) };
-        features.Children.Add(CardContent("microphone", "Speak naturally", "Press a hotkey and speak in any app."));
-        features.Children.Add(CardContent("text", "Write instantly", "Your words appear directly as text."));
-        features.Children.Add(CardContent("sparkle", "Improve with AI", "Rewrite, translate, summarize and more."));
+        features.Children.Add(CardContent("microphone", Loc.T("Speak naturally"), Loc.T("Press a hotkey and speak in any app.")));
+        features.Children.Add(CardContent("text", Loc.T("Write instantly"), Loc.T("Your words appear directly as text.")));
+        features.Children.Add(CardContent("sparkle", Loc.T("Improve with AI"), Loc.T("Rewrite, translate, summarize and more.")));
         _body.Children.Add(features);
         if (TypeWhisper.Core.Services.LegacyDailyProfileMigration.WasImported(WinUIProfile.Root))
         {
-            var details = new Expander { Header = "Data copied from your previous TypeWhisper installation",
+            var details = new Expander { Header = Loc.T("Data copied from your previous TypeWhisper installation"),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                Content = Copy("Dictionary, snippets, workflows, history text, supported settings, plugin settings, API keys, compatible plugins and local models were copied. Your previous installation is unchanged. Recordings, audio, account sign-ins and settings without an equivalent in this version remain there; plugins that could not be installed are listed after setup. Close the previous app before testing shortcuts.") };
+                Content = Copy(Loc.T("Dictionary, snippets, workflows, history text, supported settings, plugin settings, API keys, compatible plugins and local models were copied. Your previous installation is unchanged. Recordings, audio, account sign-ins and settings without an equivalent in this version remain there; plugins that could not be installed are listed after setup. Close the previous app before testing shortcuts.")) };
             _body.Children.Add(details);
         }
         RenderAppImport();
@@ -93,14 +93,14 @@ public sealed partial class SetupWizard
     private void RenderPermissions()
     {
         var microphone = new StackPanel { Spacing = 12 };
-        microphone.Children.Add(CardContent("microphone", "Microphone access", "Required to record your voice.", MicrophoneAccessStatus()));
-        microphone.Children.Add(Button("Open microphone settings", async () => await global::Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-microphone"))));
+        microphone.Children.Add(CardContent("microphone", Loc.T("Microphone access"), Loc.T("Required to record your voice."), MicrophoneAccessStatus()));
+        microphone.Children.Add(Button(Loc.T("Open microphone settings"), async () => await global::Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-microphone"))));
         _body.Children.Add(Card(microphone));
-        _body.Children.Add(Card(CardContent("keyboard", "Text insertion", "Windows allows typing into other apps. No separate accessibility permission is needed.", "Available")));
+        _body.Children.Add(Card(CardContent("keyboard", Loc.T("Text insertion"), Loc.T("Windows allows typing into other apps. No separate accessibility permission is needed."), Loc.Mark("Available"))));
         var devices = new MicrophonePriorityEditor(_session); _pickers.Add(devices.AddPicker);
-        var expander = new Expander { Header = "Choose microphone", Content = devices, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        var expander = new Expander { Header = Loc.T("Choose microphone"), Content = devices, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
         _body.Children.Add(expander);
-        var note = Copy("You can change microphone access at any time in Windows settings."); note.Foreground = Resource("MutedBrush"); _body.Children.Add(note);
+        var note = Copy(Loc.T("You can change microphone access at any time in Windows settings.")); note.Foreground = Resource("MutedBrush"); _body.Children.Add(note);
     }
 
     private static string MicrophoneAccessStatus()
@@ -109,36 +109,36 @@ public sealed partial class SetupWizard
         {
             return global::Windows.Devices.Enumeration.DeviceAccessInformation.CreateFromDeviceClass(global::Windows.Devices.Enumeration.DeviceClass.AudioCapture).CurrentStatus switch
             {
-                global::Windows.Devices.Enumeration.DeviceAccessStatus.Allowed => "Allowed",
-                global::Windows.Devices.Enumeration.DeviceAccessStatus.DeniedBySystem or global::Windows.Devices.Enumeration.DeviceAccessStatus.DeniedByUser => "Access blocked",
-                _ => "Check in Windows"
+                global::Windows.Devices.Enumeration.DeviceAccessStatus.Allowed => Loc.Mark("Allowed"),
+                global::Windows.Devices.Enumeration.DeviceAccessStatus.DeniedBySystem or global::Windows.Devices.Enumeration.DeviceAccessStatus.DeniedByUser => Loc.Mark("Access blocked"),
+                _ => Loc.Mark("Check in Windows")
             };
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return "Check in Windows"; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return Loc.Mark("Check in Windows"); }
     }
 
     private void RenderHotkeys()
     {
         foreach (var (mode, title, description) in new[] {
-            (RecordingMode.Hybrid, "Hybrid · Recommended", "Tap to toggle, hold for push-to-talk."),
-            (RecordingMode.Hold, "Push-to-Talk", "Hold to record, release to stop."),
-            (RecordingMode.Toggle, "Toggle", "Press to start, press again to stop.") })
+            (RecordingMode.Hybrid, Loc.T("Hybrid · Recommended"), Loc.T("Tap to toggle, hold for push-to-talk.")),
+            (RecordingMode.Hold, Loc.T("Push-to-Talk"), Loc.T("Hold to record, release to stop.")),
+            (RecordingMode.Toggle, Loc.T("Toggle"), Loc.T("Press to start, press again to stop.")) })
         {
             var selected = _session.RecordingModePreferences.Current == mode;
             var button = Button(title, () => { _feedback.ReportPersistence(_session.SelectRecordingMode(mode)); Render(); });
-            var content = CardContent("check", title, description, selected ? _session.Shortcut : null);
+            var content = CardContent("check", title, description, selected ? Loc.T(_session.Shortcut) : null);
             content.Children.RemoveAt(0);
             content.Children.Add(new RadioButton { IsChecked = selected, IsHitTestVisible = false, IsTabStop = false, MinWidth = 22, Width = 22, VerticalAlignment = VerticalAlignment.Center });
             button.Content = content;
             button.HorizontalAlignment = HorizontalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
             StyleCardButton(button, selected);
-            AutomationProperties.SetName(button, title); AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+            AutomationProperties.SetName(button, title); AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
             _body.Children.Add(button);
         }
-        _shortcutRecorder = new ShortcutRecorder("MainDictationHotkeys", "Dictation hotkey", LocalDictationSession.DefaultShortcut, _values,
-            () => SettingsCatalog.ShortcutBindings(_values), value => _closing ? "Setup is closed." : _commitHotkeys(value));
-        _body.Children.Add(new Expander { Header = "Change hotkey", Content = _shortcutRecorder, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
-        _body.Children.Add(Copy("Your existing hotkey is kept until you change it."));
+        _shortcutRecorder = new ShortcutRecorder("MainDictationHotkeys", Loc.T("Dictation hotkey"), LocalDictationSession.DefaultShortcut, _values,
+            () => SettingsCatalog.ShortcutBindings(_values), value => _closing ? Loc.T("Setup is closed.") : _commitHotkeys(value));
+        _body.Children.Add(new Expander { Header = Loc.T("Change hotkey"), Content = _shortcutRecorder, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
+        _body.Children.Add(Copy(Loc.T("Your existing hotkey is kept until you change it.")));
     }
 
     private void RenderEngines()
@@ -152,13 +152,13 @@ public sealed partial class SetupWizard
 
     private void RenderTest()
     {
-        var shortcut = CardContent("keyboard", _session.Shortcut, ""); shortcut.HorizontalAlignment = HorizontalAlignment.Center; _body.Children.Add(shortcut);
-        _testBox = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 144, FontSize = 18, Padding = new Thickness(18), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Text = _testText, PlaceholderText = "Your dictation appears here…" };
+        var shortcut = CardContent("keyboard", Loc.T(_session.Shortcut), ""); shortcut.HorizontalAlignment = HorizontalAlignment.Center; _body.Children.Add(shortcut);
+        _testBox = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 144, FontSize = 18, Padding = new Thickness(18), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Text = _testText, PlaceholderText = Loc.T("Your dictation appears here…") };
         ScrollViewer.SetVerticalScrollBarVisibility(_testBox, ScrollBarVisibility.Auto);
-        AutomationProperties.SetName(_testBox, "Try dictation");
+        AutomationProperties.SetName(_testBox, Loc.T("Try dictation"));
         _testBox.TextChanged += (_, _) => { if (_testBox is not null) _testText = _testBox.Text; };
         _body.Children.Add(_testBox);
-        _body.Children.Add(Card(CardContent("sparkle", "Try it out", "Click the text field, press your hotkey and say something. Test text stays in this setup window.")));
+        _body.Children.Add(Card(CardContent("sparkle", Loc.T("Try it out"), Loc.T("Click the text field, press your hotkey and say something. Test text stays in this setup window."))));
     }
 
     private Action<string>? CaptureTestTarget(IntPtr window)
@@ -170,7 +170,7 @@ public sealed partial class SetupWizard
         {
             if (_closing || _testBox != target || !target.IsLoaded) return;
             target.SelectedText = text; _testText = target.Text; _testSucceeded = true;
-            _message.Text = "Your first dictation worked."; _message.Visibility = Visibility.Visible;
+            _message.Text = Loc.T("Your first dictation worked."); _message.Visibility = Visibility.Visible;
         });
     }
     private static void StyleCardButton(HandCursorButton button, bool selected)

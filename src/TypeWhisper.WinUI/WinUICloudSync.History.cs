@@ -44,7 +44,7 @@ internal static partial class WinUICloudSync
         var next = CloneHistoryState();
         next.Enabled = enabled;
         try { SaveHistoryState(next); _history = next; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = "History sync could not be changed: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("History sync could not be changed: {0}", ex.Message); }
         Changed?.Invoke();
         if (enabled && Preferences.Enabled && CanUse) _ = SyncAsync();
     }
@@ -57,7 +57,7 @@ internal static partial class WinUICloudSync
         next.AudioEnabled = enabled;
         if (enabled) next.AudioSince = DateTime.UtcNow;
         try { SaveHistoryState(next); _history = next; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = "Audio sync could not be changed: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Audio sync could not be changed: {0}", ex.Message); }
         Changed?.Invoke();
     }
 
@@ -90,14 +90,14 @@ internal static partial class WinUICloudSync
             // Local History changed meanwhile: keep it, and merge again on the next pass.
             var current = history.Records;
             if (current.Count != snapshot.Length || current.Where((record, index) => !ReferenceEquals(record, snapshot[index])).Any())
-                return KeepPublished(result, "History changed during sync; it will be merged again shortly.");
+                return KeepPublished(result, Loc.T("History changed during sync; it will be merged again shortly."));
             // Remote deletions go through the History service so their saved audio is removed as well.
             var kept = merged.Select(record => record.Id).ToHashSet(StringComparer.Ordinal);
             var removed = snapshot.Where(record => !kept.Contains(record.Id)).Select(record => record.Id).ToArray();
             if (removed.Length > 0 && !history.TryDeleteRecords(removed))
-                return KeepPublished(result, "Synced History could not be saved. Local History was not changed.");
+                return KeepPublished(result, Loc.T("Synced History could not be saved. Local History was not changed."));
             if (!history.TryReplaceAll(merged))
-                return KeepPublished(result, "Synced History could not be saved completely. It will be merged again shortly.");
+                return KeepPublished(result, Loc.T("Synced History could not be saved completely. It will be merged again shortly."));
             // Settle received audio: referenced copies are kept, copies of entries not saved are removed.
             if (audio is not null) history.RetryAudioCleanup();
         }
@@ -112,7 +112,7 @@ internal static partial class WinUICloudSync
         SaveHistoryState(next);
         _history = next;
         if (devicesChanged) HistoryDevicesChanged?.Invoke();
-        return $"History: {result.OperationsWritten} sent · {result.ChangesApplied} applied";
+        return Loc.T("History: {0} sent · {1} applied", result.OperationsWritten, result.ChangesApplied);
     }
 
     // The pass already wrote this PC's operation files. Remember their versions so the next pass does not publish

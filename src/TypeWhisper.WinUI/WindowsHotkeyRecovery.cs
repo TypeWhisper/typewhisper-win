@@ -30,7 +30,7 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
     {
         if (_sessionRegistered) return;
         _sessionRegistered = WTSRegisterSessionNotification(_window, 0);
-        if (!_sessionRegistered) _report("Session notification registration failed. Hotkey recovery after unlocking is unavailable until registration succeeds.");
+        if (!_sessionRegistered) _report(Loc.T("Session notification registration failed. Hotkey recovery after unlocking is unavailable until registration succeeds."));
     }
 
     private IntPtr ProcessMessage(IntPtr window, uint message, IntPtr reason, IntPtr data, nuint id, IntPtr reference)
@@ -66,12 +66,12 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
                 if (!_state.IsCurrent(revision)) return;
                 error = _recover();
             }
-            _report(error ?? (_sessionRegistered ? null : "Session notification registration failed. Hotkey recovery after unlocking is unavailable."));
+            _report(error ?? (_sessionRegistered ? null : Loc.T("Session notification registration failed. Hotkey recovery after unlocking is unavailable.")));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("Hotkey recovery failed: {0}", ex);
-            if (!_disposed) _report("Hotkeys could not be restored. Restart TypeWhisper to retry.");
+            if (!_disposed) _report(Loc.T("Hotkeys could not be restored. Restart TypeWhisper to retry."));
         }
     }
 

@@ -63,7 +63,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
         if (_registry is null) await RequireLease().Configuration.SetApiKeyAsync(key);
         else await _registry.UseConfigurationAsync(PluginId, async (plugin, _) => { await ((IApiKeyPlugin)plugin).SetApiKeyAsync(key); return true; });
         if (_registry is not null) await _registry.RefreshCapabilitiesAsync();
-        Feedback = Ready ? "API key saved. Check connection to verify it." : "API key removed.";
+        Feedback = Ready ? Loc.T("API key saved. Check connection to verify it.") : Loc.T("API key removed.");
     });
 
     private async Task EnableCoreAsync()
@@ -84,7 +84,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
     {
         if (_registry is null) await RequireLease().Configuration.ValidateConfigurationAsync(_shutdown.Token);
         else await _registry.UseConfigurationAsync(PluginId, async (plugin, ct) => { await ((IApiKeyPlugin)plugin).ValidateConfigurationAsync(ct); return true; }, _shutdown.Token);
-        Feedback = "Connected to Groq. No audio was uploaded.";
+        Feedback = Loc.T("Connected to Groq. No audio was uploaded.");
     });
 
     internal Task SelectModelAsync(string id) => RunAsync(async () =>
@@ -96,8 +96,8 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
     internal void SelectLanguage(string language)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (Busy || !Enabled) throw new InvalidOperationException("Wait until Groq is ready.");
-        if (language != "auto" && !Languages.Contains(language)) throw new ArgumentException("Unsupported language.");
+        if (Busy || !Enabled) throw new InvalidOperationException(Loc.T("Wait until Groq is ready."));
+        if (language != "auto" && !Languages.Contains(language)) throw new ArgumentException(Loc.T("Unsupported language."));
         host.SetSetting("Language", language); Changed?.Invoke();
     }
 
@@ -144,7 +144,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
     private CloudTranscriptionLease RequireLease() => _lease ?? throw new InvalidOperationException("Enable Groq in Plugins first.");
     private async Task RunAsync(Func<Task> action)
     {
-        if (!await _operations.WaitAsync(0)) throw new InvalidOperationException("A Groq operation is already in progress.");
+        if (!await _operations.WaitAsync(0)) throw new InvalidOperationException(Loc.T("A Groq operation is already in progress."));
         Busy = true; Error = null; Feedback = null; Changed?.Invoke();
         try { ObjectDisposedException.ThrowIf(_disposed, this); await action(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -159,21 +159,21 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
     {
         PluginRequestException request => request.FailureKind switch
         {
-            PluginRequestFailureKind.Authentication => "Groq rejected the API key. Replace it in plugin settings.",
-            PluginRequestFailureKind.Permission => "This Groq key does not have permission for the request.",
-            PluginRequestFailureKind.RateLimit => "Groq rate limit reached. Wait and try again.",
-            PluginRequestFailureKind.Network => "Could not reach Groq. Check your internet connection.",
-            PluginRequestFailureKind.Timeout => "Groq timed out. Try again.",
-            PluginRequestFailureKind.RequestTooLarge => "Recording exceeds Groq's upload limit. Use a shorter recording.",
-            _ => "Groq could not complete the request. Check the selected model and try again."
+            PluginRequestFailureKind.Authentication => Loc.T("Groq rejected the API key. Replace it in plugin settings."),
+            PluginRequestFailureKind.Permission => Loc.T("This Groq key does not have permission for the request."),
+            PluginRequestFailureKind.RateLimit => Loc.T("Groq rate limit reached. Wait and try again."),
+            PluginRequestFailureKind.Network => Loc.T("Could not reach Groq. Check your internet connection."),
+            PluginRequestFailureKind.Timeout => Loc.T("Groq timed out. Try again."),
+            PluginRequestFailureKind.RequestTooLarge => Loc.T("Recording exceeds Groq's upload limit. Use a shorter recording."),
+            _ => Loc.T("Groq could not complete the request. Check the selected model and try again.")
         },
-        OperationCanceledException => "Groq request canceled.",
-        NotSupportedException => "The selected Groq model cannot translate audio to English. Choose Whisper Large V3 or switch to Transcribe.",
+        OperationCanceledException => Loc.T("Groq request canceled."),
+        NotSupportedException => Loc.T("The selected Groq model cannot translate audio to English. Choose Whisper Large V3 or switch to Transcribe."),
         System.Reflection.TargetInvocationException { InnerException: { } inner } => DescribeError(inner),
-        TypeLoadException or MissingMethodException or FileNotFoundException => "Groq package could not load: " + ex.Message,
-        System.Security.Cryptography.CryptographicException => "The saved API key could not be decrypted. Remove the key and save it again.",
-        IOException or UnauthorizedAccessException => "Groq settings could not be read or saved. Check storage access.",
-        _ => "Groq is unavailable. Check plugin enablement, API key and model settings."
+        TypeLoadException or MissingMethodException or FileNotFoundException => Loc.T("Groq package could not load: {0}", ex.Message),
+        System.Security.Cryptography.CryptographicException => Loc.T("The saved API key could not be decrypted. Remove the key and save it again."),
+        IOException or UnauthorizedAccessException => Loc.T("Groq settings could not be read or saved. Check storage access."),
+        _ => Loc.T("Groq is unavailable. Check plugin enablement, API key and model settings.")
     };
     private async Task ReleaseAsync()
     {

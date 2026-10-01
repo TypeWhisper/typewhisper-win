@@ -900,7 +900,7 @@ public sealed class LicenseService
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw CreatePolarException(json, $"Activation failed (HTTP {(int)response.StatusCode})", response);
+            throw CreatePolarException(json, global::TypeWhisper.Core.Loc.T("Activation failed (HTTP {0})", (int)response.StatusCode), response);
 
         return JsonSerializer.Deserialize<PolarActivationResponse>(json)
             ?? throw new InvalidOperationException(Loc.Instance["License.ActivationEmptyResponse"]);
@@ -913,7 +913,7 @@ public sealed class LicenseService
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw CreatePolarException(json, $"Validation failed (HTTP {(int)response.StatusCode})", response);
+            throw CreatePolarException(json, global::TypeWhisper.Core.Loc.T("Validation failed (HTTP {0})", (int)response.StatusCode), response);
 
         return JsonSerializer.Deserialize<PolarValidationResponse>(json)
             ?? throw new InvalidOperationException(Loc.Instance["License.ValidationEmptyResponse"]);
@@ -934,7 +934,7 @@ public sealed class LicenseService
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw CreatePolarException(json, $"Deactivation failed (HTTP {(int)response.StatusCode})", response);
+            throw CreatePolarException(json, global::TypeWhisper.Core.Loc.T("Deactivation failed (HTTP {0})", (int)response.StatusCode), response);
     }
 
     private async Task<HttpResponseMessage> PostPolarAsync<T>(string operation, T body, CancellationToken ct)
@@ -1140,7 +1140,7 @@ public sealed class LicenseService
         }
         catch (Exception ex)
         {
-            StorageError = "License changes could not be saved on this device. Keep your key and retry before closing the app.";
+            StorageError = global::TypeWhisper.Core.Loc.T("License changes could not be saved on this device. Keep your key and retry before closing the app.");
             Debug.WriteLine($"Persisting license store failed: {ex.Message}");
         }
     }

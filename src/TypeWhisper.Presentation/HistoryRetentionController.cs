@@ -10,7 +10,7 @@ public sealed class HistoryRetentionController(IHistoryService history, HistoryR
     private readonly object _closeSync = new();
     private int _closed;
     private Task? _closeTask;
-    private const string ClosedMessage = "History retention is stopped because the profile is closing.";
+    private static readonly string ClosedMessage = Loc.T("History retention is stopped because the profile is closing.");
     private string? _applyError;
     /// <summary>The profile's persisted preferences.</summary>
     public HistoryRetentionPreferencesStore Preferences { get; } = preferences;
@@ -41,7 +41,7 @@ public sealed class HistoryRetentionController(IHistoryService history, HistoryR
         {
             if (Volatile.Read(ref _closed) != 0) return ClosedMessage;
             if (value.RequiresConfirmationComparedTo(Preferences.Current) && !confirmedShortening)
-                return "Confirm deletion of existing entries older than the selected duration before applying this choice.";
+                return Loc.T("Confirm deletion of existing entries older than the selected duration before applying this choice.");
             if (Preferences.Save(value) is { } error) return error;
             return await ApplyCoreAsync().ConfigureAwait(false);
         }
@@ -75,13 +75,13 @@ public sealed class HistoryRetentionController(IHistoryService history, HistoryR
                 .Select(record => record.Id).ToHashSet(StringComparer.Ordinal);
             history.PurgeOldRecords(TimeSpan.FromMinutes(value.HistoryRetentionMinutes));
             if (history.Records.Any(record => expiredIds.Contains(record.Id)))
-                _applyError = "The retention choice is saved, but older history entries could not be deleted. The app will retry.";
+                _applyError = Loc.T("The retention choice is saved, but older history entries could not be deleted. The app will retry.");
             if (history is IHistoryAudioService audioHistory && audioHistory.AudioCleanupError is { } cleanupError)
                 _applyError = string.Join(" ", new[] { _applyError, cleanupError }.Where(message => !string.IsNullOrWhiteSpace(message)));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _applyError = "History retention could not be applied. The app will retry; older entries may still be present.";
+            _applyError = Loc.T("History retention could not be applied. The app will retry; older entries may still be present.");
         }
         return Error;
     }

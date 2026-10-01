@@ -14,10 +14,10 @@ internal static class LiveTranscriptionTaskSettings
         var row = FindRow(content, "TranscriptionTask") ?? throw new InvalidOperationException("Transcription task row is missing.");
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
-        row.Children.Add(SettingsHelp.Label("Transcription task",
-            "Transcribe writes speech in its original language. Native translation produces English text using a compatible model. The choice is saved for this profile."));
+        row.Children.Add(SettingsHelp.Label(Loc.T("Transcription task"),
+            Loc.T("Transcribe writes speech in its original language. Native translation produces English text using a compatible model. The choice is saved for this profile.")));
         var picker = new ChoicePicker();
-        picker.Configure("Transcription task", "language", "Preference TranscriptionTask");
+        picker.Configure(Loc.T("Transcription task"), "language", "Preference TranscriptionTask");
         row.Children.Add(picker); pickers.Add(picker);
         var status = Label(""); row.Children.Add(status);
         string? selectionError = null;
@@ -29,9 +29,9 @@ internal static class LiveTranscriptionTaskSettings
             foreach (var old in target.Children.OfType<ChoicePicker>()) pickers.Remove(old);
             RemoveRow(content, target);
             target.Children.Clear();
-            target.Children.Add(SettingsHelp.Label("Translation language",
-                "English is the only native translation target. Translation to other languages is not available yet."));
-            target.Children.Add(Label("English"));
+            target.Children.Add(SettingsHelp.Label(Loc.T("Translation language"),
+                Loc.T("English is the only native translation target. Translation to other languages is not available yet.")));
+            target.Children.Add(Label(Loc.T("English")));
             row.Children.Add(target);
         }
 
@@ -39,18 +39,18 @@ internal static class LiveTranscriptionTaskSettings
         {
             var selected = session.TranscriptionTaskPreferences.Current;
             picker.SetOptions([
-                new("Transcribe", "Transcribe", "Write speech in its original language."),
-                new("Translate", "Translate to English", "Use the active model's native audio-to-English translation.", session.SupportsTranslation)
+                new("Transcribe", Loc.T("Transcribe"), Loc.T("Write speech in its original language.")),
+                new("Translate", Loc.T("Translate to English"), Loc.T("Use the active model's native audio-to-English translation."), session.SupportsTranslation)
             ], selected.ToString());
             picker.IsEnabled = session.CanChangeProvider;
             status.Text = selectionError ?? session.TranscriptionTaskPreferences.Error ??
                 (selected == TranscriptionTask.Translate && !session.SupportsTranslation
-                    ? "Translate to English is saved, but this model does not support it. Recording is blocked until you choose Transcribe or a compatible model."
+                    ? Loc.T("Translate to English is saved, but this model does not support it. Recording is blocked until you choose Transcribe or a compatible model.")
                     : !session.CanChangeProvider
-                        ? "Finish or cancel the current dictation before changing the task."
+                        ? Loc.T("Finish or cancel the current dictation before changing the task.")
                         : session.SupportsTranslation
-                            ? "Saved for this profile."
-                            : "This model supports transcription only. Select a translation-capable model to translate audio to English.");
+                            ? Loc.T("Saved for this profile.")
+                            : Loc.T("This model supports transcription only. Select a translation-capable model to translate audio to English."));
         }
         void OnChanged() => row.DispatcherQueue.TryEnqueue(() => { if (row.IsLoaded) Refresh(); });
         picker.SelectionChanged += id =>

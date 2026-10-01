@@ -45,7 +45,7 @@ public sealed class SetupPreferencesStore
             Current = loaded;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { Error = "Setup progress could not be loaded. Your actual settings are unchanged."; }
+        { Error = Loc.T("Setup progress could not be loaded. Your actual settings are unchanged."); }
     }
     /// <summary>Saves progress without publishing in-memory success until the file is replaced.</summary>
     public string? Save(int step, bool completed = false)
@@ -58,6 +58,6 @@ public sealed class SetupPreferencesStore
             Current = next; Error = null; return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { return Error = "Setup progress could not be saved. Your actual settings remain saved separately."; }
+        { return Error = Loc.T("Setup progress could not be saved. Your actual settings remain saved separately."); }
     }
 }

@@ -64,7 +64,11 @@ public sealed partial class TranscriptPreviewWindow : Window
         _liveText = liveText;
         InitializeComponent();
         InitializeResizeHandles();
-        TranscriptSourceLabel.Text = liveText is null ? "DEMO TEXT" : "LIVE TEXT";
+        Title = Loc.T("TypeWhisper Live Transcript");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranscriptHeader, Loc.T("Live text window drag handle"));
+        TranscriptHeading.Text = Loc.T("LIVE TRANSCRIPT");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranscriptScrollViewer, Loc.T("Live transcript text"));
+        TranscriptSourceLabel.Text = liveText is null ? Loc.T("DEMO TEXT") : Loc.T("LIVE TEXT");
         NativeWindowAppearance.ApplyAppTitleBar(this);
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -129,7 +133,7 @@ public sealed partial class TranscriptPreviewWindow : Window
         TranscriptHeader.SetDraggable(floating);
         UpdateDragAppearance();
         DragHint.Visibility = floating ? Visibility.Visible : Visibility.Collapsed;
-        ToolTipService.SetToolTip(TranscriptHeader, floating ? "Drag to move live text" : null);
+        ToolTipService.SetToolTip(TranscriptHeader, floating ? Loc.T("Drag to move live text") : null);
         if (_hasAnchor) SetAnchor(_recordingPosition, _pixelWidth, _scale, _opensDown, _recordingHeight);
     }
 
@@ -235,8 +239,8 @@ public sealed partial class TranscriptPreviewWindow : Window
             HorizontalAlignment = horizontal, VerticalAlignment = vertical,
             Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent)
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(handle, $"Resize live text: {edge}");
-        ToolTipService.SetToolTip(handle, "Drag to resize live text");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(handle, Loc.T("Resize live text: {0}", edge));
+        ToolTipService.SetToolTip(handle, Loc.T("Drag to resize live text"));
         handle.PointerPressed += ResizeHandle_PointerPressed;
         handle.PointerMoved += ResizeHandle_PointerMoved;
         handle.PointerReleased += (_, _) => FinishResizing();

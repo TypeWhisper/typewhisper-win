@@ -75,7 +75,7 @@ public sealed partial class OverlayWindow : Window
         SetTechnicalDetailsEnabled(false);
         // Use the same anchor and shell, with enough room for a readable acknowledgement even in Minimal mode.
         SetMode(OverlayMode.Standard, area);
-        CorrectionHeading.Text = corrections.Count == 1 ? "Saved to Dictionary" : $"Saved {corrections.Count} corrections to Dictionary";
+        CorrectionHeading.Text = corrections.Count == 1 ? Loc.T("Saved to Dictionary") : Loc.T("Saved {0} corrections to Dictionary", corrections.Count);
         CorrectionText.Text = string.Join(" · ", corrections.Select(c => $"{c.Original} → {c.Replacement}"));
         RecordingLayout.Visibility = NoticeText.Visibility = DiagnosticsText.Visibility = Visibility.Collapsed;
         CorrectionFeedback.Visibility = Visibility.Visible;
@@ -100,6 +100,10 @@ public sealed partial class OverlayWindow : Window
         _runtimeState = runtimeState;
         _transcriptPreviewEnabled = transcriptPreviewEnabled;
         InitializeComponent();
+        Title = Loc.T("TypeWhisper Recording Overlay");
+        StatusText.Text = Loc.T("RECORDING");
+        CorrectionHeading.Text = Loc.T("Saved to Dictionary");
+        DiagnosticsText.Text = Loc.T("Measuring…");
         NativeWindowAppearance.ApplyAppTitleBar(this);
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -235,11 +239,11 @@ public sealed partial class OverlayWindow : Window
                 ? new SolidColorBrush(Color.FromArgb(255, 244, 188, 106)) : (Brush)Application.Current.Resources["TextBrush"];
             RecordingDot.Visibility = state.Phase == DictationPhase.Recording ? Visibility.Visible : Visibility.Collapsed;
             PauseMark.Visibility = Visibility.Collapsed;
-            AutomationProperties.SetName(OverlayRoot, $"{_mode} · {state.AccessibleMessage}");
+            AutomationProperties.SetName(OverlayRoot, $"{ModeLabel()} · {state.AccessibleMessage}");
             ToolTipService.SetToolTip(OverlayRoot, state.AccessibleMessage);
             return;
         }
-        StatusText.Text = _paused ? "PAUSED" : "RECORDING";
+        StatusText.Text = _paused ? Loc.T("PAUSED") : Loc.T("RECORDING");
         StatusText.Foreground = new SolidColorBrush(_paused
             ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 10, 132, 255));
         RecordingDot.Visibility = _paused ? Visibility.Collapsed : Visibility.Visible;
@@ -249,11 +253,18 @@ public sealed partial class OverlayWindow : Window
             UpdateWidgetText(RightWidgetText, _layout.Right);
         }
         PauseMark.Visibility = _paused ? Visibility.Visible : Visibility.Collapsed;
-        AutomationProperties.SetName(OverlayRoot, $"{_mode} recording preview · {(_paused ? "Paused" : "Recording")}");
-        DiagnosticsText.Text = _paused ? "Paused" : "Measuring…";
+        AutomationProperties.SetName(OverlayRoot, Loc.T("{0} recording preview · {1}", ModeLabel(), _paused ? Loc.T("Paused") : Loc.T("Recording")));
+        DiagnosticsText.Text = _paused ? Loc.T("Paused") : Loc.T("Measuring…");
         _diagnosticSampleStart = Stopwatch.GetTimestamp();
         _diagnosticDrawCount = 0;
     }
+
+    private string ModeLabel() => _mode switch
+    {
+        OverlayMode.Compact => Loc.T("Compact"),
+        OverlayMode.Minimal => Loc.T("Minimal"),
+        _ => Loc.T("Standard")
+    };
 
     internal void SetMode(OverlayMode mode, DisplayArea area)
     {
@@ -324,7 +335,7 @@ public sealed partial class OverlayWindow : Window
         DiagnosticsText.Visibility = enabled && _mode == OverlayMode.Standard ? Visibility.Visible : Visibility.Collapsed;
         _diagnosticSampleStart = Stopwatch.GetTimestamp();
         _diagnosticDrawCount = 0;
-        DiagnosticsText.Text = _paused ? "Paused" : "Measuring…";
+        DiagnosticsText.Text = _paused ? Loc.T("Paused") : Loc.T("Measuring…");
     }
 
     private void ShowTranscriptPreview()
@@ -391,10 +402,10 @@ public sealed partial class OverlayWindow : Window
         text.Text = widget switch
         {
             OverlayWidget.Clock => DateTime.Now.ToString("HH:mm"),
-            OverlayWidget.Profile => _runtimeState is null ? "Default profile" : "Parakeet",
-            OverlayWidget.HotkeyMode => _runtimeState?.Invoke().RecordingModeLabel ?? "Toggle",
-            OverlayWidget.AppName => _runtimeState?.Invoke().TargetApp ?? "Notepad",
-            OverlayWidget.Indicator => _runtimeState?.Invoke().Label ?? (_paused ? "Paused" : "Recording"),
+            OverlayWidget.Profile => _runtimeState is null ? Loc.T("Default profile") : "Parakeet",
+            OverlayWidget.HotkeyMode => _runtimeState?.Invoke().RecordingModeLabel ?? Loc.T("Toggle"),
+            OverlayWidget.AppName => (_runtimeState?.Invoke().TargetApp is { } app ? Loc.T(app) : null) ?? "Notepad",
+            OverlayWidget.Indicator => _runtimeState?.Invoke().Label ?? (_paused ? Loc.T("Paused") : Loc.T("Recording")),
             _ => ""
         };
     }

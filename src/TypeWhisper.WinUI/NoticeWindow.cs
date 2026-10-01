@@ -48,7 +48,7 @@ internal sealed class NoticeWindow : Window
 
     internal NoticeWindow()
     {
-        Title = "TypeWhisper Notice";
+        Title = Loc.T("TypeWhisper Notice");
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
@@ -66,7 +66,7 @@ internal sealed class NoticeWindow : Window
             Content = new TextBlock { Text = "×", FontSize = 14 }, Padding = new Thickness(6, 0, 6, 2), MinWidth = 0, MinHeight = 0,
             VerticalAlignment = VerticalAlignment.Top, Style = (Style)Application.Current.Resources["IconButtonStyle"]
         };
-        AutomationProperties.SetName(close, "Dismiss notice");
+        AutomationProperties.SetName(close, Loc.T("Dismiss notice"));
         close.Click += (_, _) => Dismiss();
         _action.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
         _action.Click += (_, _) =>

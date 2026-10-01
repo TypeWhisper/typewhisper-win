@@ -48,7 +48,7 @@ internal sealed partial class WinUIHttpApi
                 _importPending = true;
                 try { await ImportSettings(store, preview); }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { _importPending = false; Status = "Settings import failed. Reopen TypeWhisper before retrying."; Changed?.Invoke(); }
+                { _importPending = false; Status = Loc.T("Settings import failed. Reopen TypeWhisper before retrying."); Changed?.Invoke(); }
             })
         };
         }

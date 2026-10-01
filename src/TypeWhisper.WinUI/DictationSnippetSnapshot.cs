@@ -27,7 +27,7 @@ internal sealed class DictationSnippetSnapshot
     {
         try { return new(ReadEntries(path)); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { return new([], "Snippets unavailable · transcript retained without snippet expansion."); }
+        { return new([], Loc.T("Snippets unavailable · transcript retained without snippet expansion.")); }
     }
 
     internal bool NeedsClipboard(string text)
@@ -51,10 +51,10 @@ internal sealed class DictationSnippetSnapshot
             var applied = new HashSet<string>(StringComparer.Ordinal);
             // Read only when a matching snippet actually expands this placeholder.
             var expanded = SnippetService.ApplySnippetsSnapshot(text, _entries,
-                clipboardProvider ?? (() => throw new InvalidOperationException("Clipboard text is unavailable.")), id => applied.Add(id));
+                clipboardProvider ?? (() => throw new InvalidOperationException(Loc.T("Clipboard text is unavailable."))), id => applied.Add(id));
             return (expanded, null, applied.ToArray());
         }
         catch (Exception ex) when (ex is FormatException or InvalidOperationException)
-        { return (text, "Snippet expansion failed · transcript retained: " + ex.Message, []); }
+        { return (text, Loc.T("Snippet expansion failed · transcript retained: {0}", ex.Message), []); }
     }
 }

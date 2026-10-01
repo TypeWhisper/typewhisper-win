@@ -35,8 +35,8 @@ public sealed partial class PluginsView
             }
             row.Plugin = plugin;
             row.Status.Text = plugin.Status;
-            row.Toggle.Content = plugin.Enabled ? "Disable plugin" : "Enable plugin";
-            AutomationProperties.SetName(row.Toggle, (plugin.Enabled ? "Disable " : "Enable ") + plugin.Title);
+            row.Toggle.Content = plugin.Enabled ? Loc.T("Disable plugin") : Loc.T("Enable plugin");
+            AutomationProperties.SetName(row.Toggle, plugin.Enabled ? Loc.T("Disable {0}", plugin.Title) : Loc.T("Enable {0}", plugin.Title));
             row.Toggle.IsEnabled = plugin.RuntimeCanToggle && !_changingPlugin && !_runtime.CtcVocabulary.Busy && _runtime.CanChangeProvider;
             row.Remove.IsEnabled = !_changingPlugin && _runtime.CanChangeProvider && !_runtime.Models.Busy && !_runtime.CtcVocabulary.Busy;
             var id = Path.GetFileName(plugin.Id);
@@ -57,8 +57,8 @@ public sealed partial class PluginsView
         if (_selectedSettingsPlugin is not null && !_plugins.Any(p => Path.GetFileName(p.Id) == _selectedSettingsPlugin))
         {
             CloseSettingsPage();
-            PluginPageTitle.Text = "Plugin unavailable";
-            PluginSummary.Text = "Choose another integration from the sidebar.";
+            PluginPageTitle.Text = Loc.T("Plugin unavailable");
+            PluginSummary.Text = Loc.T("Choose another integration from the sidebar.");
         }
     }
 
@@ -90,13 +90,13 @@ public sealed partial class PluginsView
         body.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
         var actions = new StackPanel { Spacing = 8 };
         actions.Children.Add(new TextBlock { Text = plugin.Description, TextWrapping = TextWrapping.Wrap, FontSize = 12, MaxWidth = 280 });
-        var toggle = SettingsButton("Enable plugin");
-        var update = SettingsButton("Update plugin");
-        var remove = SettingsButton("Uninstall…");
+        var toggle = SettingsButton(Loc.T("Enable plugin"));
+        var update = SettingsButton(Loc.T("Update plugin"));
+        var remove = SettingsButton(Loc.T("Uninstall…"));
         actions.Children.Add(toggle); actions.Children.Add(update); actions.Children.Add(remove);
         var options = SettingsButton("•••");
-        AutomationProperties.SetName(options, "Manage " + plugin.Title);
-        ToolTipService.SetToolTip(options, "Manage plugin");
+        AutomationProperties.SetName(options, Loc.T("Manage {0}", plugin.Title));
+        ToolTipService.SetToolTip(options, Loc.T("Manage plugin"));
         options.Flyout = new Flyout { Content = actions };
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed };
         AutomationProperties.SetLiveSetting(message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
@@ -118,15 +118,15 @@ public sealed partial class PluginsView
                 message.Text = error ?? ""; message.Visibility = error is null ? Visibility.Collapsed : Visibility.Visible;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { message.Text = "The plugin operation could not finish. Please try again."; message.Visibility = Visibility.Visible; }
+            { message.Text = Loc.T("The plugin operation could not finish. Please try again."); message.Visibility = Visibility.Visible; }
             finally { _changingPlugin = false; await RefreshRuntimeAsync(); }
         }
         toggle.Click += async (_, _) => await Run(() => _management!.SetEnabledAsync(row.Plugin.Id, !row.Plugin.Enabled));
         update.Click += async (_, _) => await Run(async () => { await _runtime!.Packages.Updates.UpdateAsync(Path.GetFileName(row.Plugin.Id)); return _runtime.Packages.Updates.Status; });
         remove.Click += async (_, _) =>
         {
-            var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Uninstall " + row.Plugin.Title + "?",
-                Content = "Your API key, preferences and downloaded models will be kept.", PrimaryButtonText = "Uninstall", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+            var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Uninstall {0}?", row.Plugin.Title),
+                Content = Loc.T("Your API key, preferences and downloaded models will be kept."), PrimaryButtonText = Loc.T("Uninstall"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                 await Run(() => _runtime!.UninstallPluginAsync(Path.GetFileName(row.Plugin.Id)));
         };

@@ -18,15 +18,15 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
         get
         {
 #if TYPEWHISPER_STORE
-            return "App updates are managed by Microsoft Store.";
+            return Loc.T("App updates are managed by Microsoft Store.");
 #elif DEBUG
-            return "Update channels are saved here. Update checks and installation are available in the installed app.";
+            return Loc.T("Update channels are saved here. Update checks and installation are available in the installed app.");
 #else
             var locator = Velopack.Locators.VelopackLocator.Current;
             var installation = ApplicationInstallation.Resolve(locator.AppId);
             return installation is not null && locator.CurrentlyInstalledVersion is not null && !string.IsNullOrWhiteSpace(locator.RootAppDir)
                 && string.Equals(Environment.ProcessPath, Path.Combine(locator.RootAppDir!, "current", installation.Executable), StringComparison.OrdinalIgnoreCase)
-                ? null : "Install TypeWhisper using its installer to check for app updates.";
+                ? null : Loc.T("Install TypeWhisper using its installer to check for app updates.");
 #endif
         }
     }
@@ -44,7 +44,7 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
             var update = await manager.CheckForUpdatesAsync();
             if (update is null) return new(source.HasMatchingRelease != false, null);
             if (!installation.Accepts(update.TargetFullRelease.PackageId, update.TargetFullRelease.Version.Major, update.TargetFullRelease.Version.Minor))
-                throw new InvalidDataException("The release uses an incompatible installation identity.");
+                throw new InvalidDataException(Loc.T("The release uses an incompatible installation identity."));
             _manager = manager; _update = update;
             _offer = new(update.TargetFullRelease.Version.ToString(), manager.CurrentVersion is { } current && update.TargetFullRelease.Version < current);
             return new(true, _offer);
@@ -64,6 +64,6 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
     private void Validate(AppUpdateOffer offer)
     {
         if (UnavailableReason is not null || !ReferenceEquals(offer, _offer) || _manager is null || _update is null)
-            throw new InvalidOperationException("Check for updates again before installing.");
+            throw new InvalidOperationException(Loc.T("Check for updates again before installing."));
     }
 }

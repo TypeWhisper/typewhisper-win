@@ -35,10 +35,10 @@ public sealed record DictationOutputResult(TranscriptionRecord Record, bool Save
     /// <summary>Describes the result rather than requiring an unexplained review step.</summary>
     public string ReviewTitle => ReviewReason switch
     {
-        DictationReviewReason.PasteFailed => "Text could not be inserted",
-        DictationReviewReason.ProcessingFailed => "Text processing did not finish",
-        DictationReviewReason.ActionFailed => "Workflow action needs attention",
-        _ => "Your dictation"
+        DictationReviewReason.PasteFailed => Loc.T("Text could not be inserted"),
+        DictationReviewReason.ProcessingFailed => Loc.T("Text processing did not finish"),
+        DictationReviewReason.ActionFailed => Loc.T("Workflow action needs attention"),
+        _ => Loc.T("Your dictation")
     };
     /// <summary>Whether processing, storage or delivery failed; choosing review-first is not a failure. Storage failure alone does not require review.</summary>
     public bool Failed { get; init; }
@@ -98,10 +98,10 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                             ? history.TryAddRecord(textRecord) : (bool?)null, ct);
                         suppressed = added is null;
                         saved = added == true;
-                        if (wantsAudio && !suppressed) audioWarning = "History audio saving is unavailable. Only the text was retained.";
+                        if (wantsAudio && !suppressed) audioWarning = Loc.T("History audio saving is unavailable. Only the text was retained.");
                     }
                     if (!saved && !suppressed)
-                        storageWarning = "This dictation could not be saved to History.";
+                        storageWarning = Loc.T("This dictation could not be saved to History.");
                     if (!string.IsNullOrWhiteSpace(audioWarning))
                         storageWarning = string.IsNullOrEmpty(storageWarning) ? audioWarning : storageWarning + " " + audioWarning;
                 }
@@ -109,10 +109,10 @@ public sealed class DictationOutputDelivery(IHistoryService history)
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                storageWarning = "This dictation could not be saved to History.";
+                storageWarning = Loc.T("This dictation could not be saved to History.");
             }
         }
-        var storage = saved ? "Saved to History." : "Not saved to History.";
+        var storage = saved ? Loc.T("Saved to History.") : Loc.T("Not saved to History.");
         if (storageWarning is not null) storage += " " + storageWarning;
         ct.ThrowIfCancellationRequested();
         if (record.Status == TranscriptionRecordStatus.Succeeded && action is not null)
@@ -121,27 +121,27 @@ public sealed class DictationOutputDelivery(IHistoryService history)
             try { result = await action(ct); }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { result = new(false, "Action completion is unknown. Check its destination before trying again."); }
+            { result = new(false, Loc.T("Action completion is unknown. Check its destination before trying again.")); }
             return new(record, saved, !result.Success, result.Success ? result.Message + " " + storage
-                : result.Message + " Check the destination before trying again. You can copy the text below.")
+                : result.Message + " " + Loc.T("Check the destination before trying again. You can copy the text below."))
                 { Failed = !result.Success || storageWarning is not null, ActionAttempted = true,
                     ReviewReason = result.Success ? DictationReviewReason.None : DictationReviewReason.ActionFailed,
                     StorageWarning = storageWarning };
         }
         if (record.Status != TranscriptionRecordStatus.Succeeded)
-            return new(record, saved, true, "Your speech was transcribed, but a processing step failed. Nothing was inserted. Check the text before copying it.")
+            return new(record, saved, true, Loc.T("Your speech was transcribed, but a processing step failed. Nothing was inserted. Check the text before copying it."))
                 { Failed = true, ReviewReason = DictationReviewReason.ProcessingFailed, StorageWarning = storageWarning };
         if (!atStart.RestrictedBy(current()).AutoPaste)
-            return new(record, saved, true, "Automatic insertion is off. Copy the text, then paste it into the field you want to use.")
+            return new(record, saved, true, Loc.T("Automatic insertion is off. Copy the text, then paste it into the field you want to use."))
                 { Failed = storageWarning is not null, ReviewReason = DictationReviewReason.AutomaticPasteDisabled, StorageWarning = storageWarning };
         try
         {
-            if (await paste()) return new(record, saved, false, "Paste sent. " + storage)
+            if (await paste()) return new(record, saved, false, Loc.T("Paste sent.") + " " + storage)
                 { Failed = storageWarning is not null, Inserted = true, StorageWarning = storageWarning };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { }
-        return new(record, saved, true, "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.")
+        return new(record, saved, true, Loc.T("TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there."))
             { Failed = true, ReviewReason = DictationReviewReason.PasteFailed, StorageWarning = storageWarning };
     }
 }

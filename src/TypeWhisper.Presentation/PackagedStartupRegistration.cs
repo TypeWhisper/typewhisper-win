@@ -30,14 +30,14 @@ public sealed class PackagedStartupRegistration(
             {
                 PackagedStartupState.Disabled => new(false, true, null),
                 PackagedStartupState.Enabled => new(true, true, null),
-                PackagedStartupState.DisabledByUser => new(false, false, "Startup was disabled in Windows. Enable TypeWhisper in Settings > Apps > Startup."),
-                PackagedStartupState.DisabledByPolicy => new(false, false, "Startup is disabled by your organization's policy."),
-                PackagedStartupState.EnabledByPolicy => new(true, false, "Startup is enabled by your organization's policy."),
-                _ => new(false, false, "Windows returned an unsupported startup state.", Unknown: true)
+                PackagedStartupState.DisabledByUser => new(false, false, Loc.T("Startup was disabled in Windows. Enable TypeWhisper in Settings > Apps > Startup.")),
+                PackagedStartupState.DisabledByPolicy => new(false, false, Loc.T("Startup is disabled by your organization's policy.")),
+                PackagedStartupState.EnabledByPolicy => new(true, false, Loc.T("Startup is enabled by your organization's policy.")),
+                _ => new(false, false, Loc.T("Windows returned an unsupported startup state."), Unknown: true)
             };
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return new(false, false, "Startup registration could not be read: " + ex.Message, Unknown: true); }
+        { return new(false, false, Loc.T("Startup registration could not be read: {0}", ex.Message), Unknown: true); }
     }
 
     /// <inheritdoc />
@@ -48,8 +48,8 @@ public sealed class PackagedStartupRegistration(
         string? failure = null;
         try { await (enabled ? enable() : disable()); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { failure = "Startup registration could not be changed: " + ex.Message; }
+        { failure = Loc.T("Startup registration could not be changed: {0}", ex.Message); }
         var actual = await ReadAsync();
-        return actual with { Error = failure ?? actual.Error ?? (actual.IsEnabled == enabled ? null : "Windows did not save the requested startup registration.") };
+        return actual with { Error = failure ?? actual.Error ?? (actual.IsEnabled == enabled ? null : Loc.T("Windows did not save the requested startup registration.")) };
     }
 }

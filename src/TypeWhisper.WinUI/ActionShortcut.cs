@@ -25,11 +25,11 @@ internal sealed class ActionShortcut : IDisposable
     }
     internal string? Initialize() => _disposed ? Unavailable : _settings.Initialize();
     internal string? Save(string value) => _disposed ? Unavailable : _settings.Save(value);
-    private string Unavailable => _displayName + " are unavailable during shutdown.";
+    private string Unavailable => Loc.T("{0} are unavailable during shutdown.", _displayName);
     private string? Validate(string value)
     {
         // Saved values are canonical; anything else was edited outside the app.
-        if (value != WorkflowShortcutCatalog.Canonical(value)) return $"Assign the {_name} shortcut again using the shortcut editor.";
+        if (value != WorkflowShortcutCatalog.Canonical(value)) return Loc.T("Assign the {0} shortcut again using the shortcut editor.", _name);
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) return error;
         return _conflict(Key, value);

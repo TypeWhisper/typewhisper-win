@@ -55,6 +55,6 @@ internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dict
     {
         try { SnippetUsageRecorder.Record(path, appliedIds); return null; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or OverflowException)
-        { return "Snippet usage could not be saved. Your transcript is unchanged."; }
+        { return Loc.T("Snippet usage could not be saved. Your transcript is unchanged."); }
     }
 }

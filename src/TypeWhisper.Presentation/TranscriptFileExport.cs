@@ -22,7 +22,7 @@ public static class TranscriptFileExport
         if (File.Exists(destination))
         {
             if (verifyExisting && new FileInfo(destination).Length <= 16 * 1024 * 1024 && await File.ReadAllTextAsync(destination, ct) == text) return;
-            throw new IOException("The export destination already exists. The existing file was preserved.");
+            throw new IOException(Loc.T("The export destination already exists. The existing file was preserved."));
         }
         var temporary = Path.Combine(Path.GetDirectoryName(destination)!, ".transcript-" + Guid.NewGuid().ToString("N") + ".tmp");
         try

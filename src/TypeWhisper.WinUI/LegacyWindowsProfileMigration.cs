@@ -68,7 +68,7 @@ internal static class LegacyWindowsProfileMigration
         if (!string.IsNullOrEmpty(settings?.GroqApiKey)) ids.Add("com.typewhisper.groq");
         if (!string.IsNullOrEmpty(settings?.OpenAiApiKey)) ids.Add("com.typewhisper.openai");
         // Identities become directory names; anything else is skipped rather than blocking the upgrade.
-        if (ids.RemoveWhere(id => !ValidId(id)) > 0) notes.Add("Plugin entries with unsupported identifiers were skipped.");
+        if (ids.RemoveWhere(id => !ValidId(id)) > 0) notes.Add(Loc.T("Plugin entries with unsupported identifiers were skipped."));
         // A configured external model location is followed like the legacy root; links below it are not.
         var external = string.IsNullOrWhiteSpace(settings?.LocalModelStoragePath) ? null
             : LegacyDailyProfileMigration.ResolveLinkedPath(settings.LocalModelStoragePath);
@@ -80,7 +80,7 @@ internal static class LegacyWindowsProfileMigration
         var offline = false;
         if (ids.Count > 0 && install is null)
         {
-            progress?.Invoke("Finding compatible plugins…");
+            progress?.Invoke(Loc.T("Finding compatible plugins…"));
             // Downloads are best-effort: plugins can be installed later in Integrations. Only cancellation aborts.
             try
             {
@@ -94,7 +94,7 @@ internal static class LegacyWindowsProfileMigration
         foreach (var id in ids.Order(StringComparer.Ordinal))
         {
             ct.ThrowIfCancellationRequested();
-            progress?.Invoke("Migrating " + id + "…");
+            progress?.Invoke(Loc.T("Migrating {0}…", id));
             var data = Path.Combine(stage, "PluginData", id);
             Directory.CreateDirectory(data);
             var oldSettings = Path.Combine(pluginData, id, "settings.json");
@@ -142,7 +142,7 @@ internal static class LegacyWindowsProfileMigration
             if (available == false)
             {
                 unavailable.Add(id);
-                notes.Add(id + ": no compatible plugin is available. Its saved configuration was preserved; install a replacement in Integrations.");
+                notes.Add(Loc.T("{0}: no compatible plugin is available. Its saved configuration was preserved; install a replacement in Integrations.", id));
                 continue;
             }
             (available == true ? installed : deferred).Add(id);
@@ -162,16 +162,16 @@ internal static class LegacyWindowsProfileMigration
             }
         }
         if (deferred.Count > 0)
-            notes.Add((offline ? "The plugin catalog could not be reached, so these plugins were not installed: "
-                : "These plugins could not be downloaded or verified: ") + string.Join(", ", deferred) +
-                ". Their settings and models were preserved; install them in Integrations.");
+            notes.Add(offline
+                ? Loc.T("The plugin catalog could not be reached, so these plugins were not installed: {0}. Their settings and models were preserved; install them in Integrations.", string.Join(", ", deferred))
+                : Loc.T("These plugins could not be downloaded or verified: {0}. Their settings and models were preserved; install them in Integrations.", string.Join(", ", deferred)));
         if (keys.Count > 0)
-            notes.Add("Saved API keys for " + string.Join(", ", keys) + " could not be decrypted for this Windows user. Enter them again in Integrations.");
+            notes.Add(Loc.T("Saved API keys for {0} could not be decrypted for this Windows user. Enter them again in Integrations.", string.Join(", ", keys)));
         if (unreadable.Count > 0)
-            notes.Add("Saved settings for " + string.Join(", ", unreadable) + " could not be read and were reset.");
+            notes.Add(Loc.T("Saved settings for {0} could not be read and were reset.", string.Join(", ", unreadable)));
         if (settings is not null && selected is null && settings.SelectedModelId is not null)
-            notes.Add("The previous model selection could not be mapped. Select a model in Dictation.");
-        notes.Add("History was imported as text. Archived audio, recordings, recovery audio and account sign-ins remain in the previous profile.");
+            notes.Add(Loc.T("The previous model selection could not be mapped. Select a model in Dictation."));
+        notes.Add(Loc.T("History was imported as text. Archived audio, recordings, recovery audio and account sign-ins remain in the previous profile."));
         // Plugin identifiers and fixed notes only: never keys, exception text or transcript content.
         await File.WriteAllTextAsync(Path.Combine(stage, ReportName), JsonSerializer.Serialize(new
         {

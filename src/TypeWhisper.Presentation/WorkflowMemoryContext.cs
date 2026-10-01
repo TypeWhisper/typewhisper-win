@@ -11,7 +11,7 @@ public static class WorkflowMemoryContext
     {
         ct.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(pluginId)) return (prompt, input);
-        if (recall is null) throw new InvalidOperationException("The selected memory source is unavailable. Enable its plugin or turn memory context off for this workflow.");
+        if (recall is null) throw new InvalidOperationException(Loc.T("The selected memory source is unavailable. Enable its plugin or turn memory context off for this workflow."));
         var entries = await recall(pluginId, input, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         var bounded = entries.Where(e => !string.IsNullOrWhiteSpace(e)).Take(5)

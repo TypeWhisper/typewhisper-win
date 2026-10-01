@@ -40,7 +40,7 @@ internal sealed partial class LocalDictationSession
             throw new InvalidOperationException("Finish dictation and model operations first.");
         try
         {
-            SetStatus("Updating transcription model…", DictationPhase.Configuring);
+            SetStatus(Loc.T("Updating transcription model…"), DictationPhase.Configuring);
             await _livePreview.StopAsync();
             ct.ThrowIfCancellationRequested();
             if (operation == "unload")
@@ -86,7 +86,7 @@ internal sealed partial class LocalDictationSession
             finally
             {
                 _gate.Release();
-                if (!_disposed) SetStatus(IsReady ? ModelReadyStatus() : "Choose a downloaded transcription model.", DictationPhase.Idle);
+                if (!_disposed) SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose a downloaded transcription model."), DictationPhase.Idle);
             }
         }
     }

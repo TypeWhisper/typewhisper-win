@@ -1,3 +1,5 @@
+using TypeWhisper.Core;
+
 namespace TypeWhisper.WinUI;
 
 internal interface ISelectedTextCaptureLease : IDisposable
@@ -44,19 +46,19 @@ internal static class SelectedTextCaptureOperation
             throw new ArgumentOutOfRangeException(nameof(options));
         ct.ThrowIfCancellationRequested();
         if (!await platform.WaitModifiersReleasedAsync(options.ModifierTimeout, ct))
-            throw new InvalidOperationException("Release the shortcut keys and try again.");
+            throw new InvalidOperationException(Loc.T("Release the shortcut keys and try again."));
         ct.ThrowIfCancellationRequested();
         if (!platform.TargetStillCurrent)
-            throw new InvalidOperationException("The selected-text target changed. Select the text again and retry.");
+            throw new InvalidOperationException(Loc.T("The selected-text target changed. Select the text again and retry."));
         var marker = "__typewhisper-selection-" + Guid.NewGuid().ToString("N") + "__";
         var lease = await platform.BeginTemporaryAsync(marker, ct);
         try
         {
             ct.ThrowIfCancellationRequested();
             if (!platform.TargetStillCurrent || !platform.OwnsMarker(lease))
-                throw new InvalidOperationException("The target or clipboard changed before copying. No selection was sent.");
+                throw new InvalidOperationException(Loc.T("The target or clipboard changed before copying. No selection was sent."));
             if (platform.SendCopy() != 4)
-                throw new InvalidOperationException("The copy command could not be sent. Select the text and try again.");
+                throw new InvalidOperationException(Loc.T("The copy command could not be sent. Select the text and try again."));
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
             deadline.CancelAfter(options.CopyTimeout);
             var attempts = (int)Math.Ceiling(options.CopyTimeout / options.PollInterval);
@@ -66,21 +68,21 @@ internal static class SelectedTextCaptureOperation
                 {
                     deadline.Token.ThrowIfCancellationRequested();
                     if (!platform.TargetStillCurrent)
-                        throw new InvalidOperationException("The selected-text target changed while copying. No text was sent.");
+                        throw new InvalidOperationException(Loc.T("The selected-text target changed while copying. No text was sent."));
                     var state = await platform.ReadClipboardAsync(deadline.Token);
                     if (!platform.TargetStillCurrent)
-                        throw new InvalidOperationException("The selected-text target changed while copying. No text was sent.");
+                        throw new InvalidOperationException(Loc.T("The selected-text target changed while copying. No text was sent."));
                     if (state.SequenceNumber != lease.MarkerSequenceNumber)
                     {
                         if (!state.SourceOwnerVerified || !platform.AcceptCopiedSequence(lease, state))
-                            throw new InvalidOperationException("Another app changed the clipboard. Its contents were not used or replaced.");
+                            throw new InvalidOperationException(Loc.T("Another app changed the clipboard. Its contents were not used or replaced."));
                         // Adopt only the verified sequence for cleanup even if cancellation arrived
                         // during the read. Cancellation still prevents returning or processing text.
                         deadline.Token.ThrowIfCancellationRequested();
                         if (string.IsNullOrWhiteSpace(state.Text) || state.Text == marker)
-                            throw new InvalidOperationException("No selected text was copied. Select text in the target app and try again.");
+                            throw new InvalidOperationException(Loc.T("No selected text was copied. Select text in the target app and try again."));
                         if (state.Text.Length > MaxInputCharacters)
-                            throw new InvalidOperationException("The selection exceeds 128 Ki characters. Select less text; nothing was truncated or sent.");
+                            throw new InvalidOperationException(Loc.T("The selection exceeds 128 Ki characters. Select less text; nothing was truncated or sent."));
                         ct.ThrowIfCancellationRequested();
                         return state.Text;
                     }
@@ -89,8 +91,8 @@ internal static class SelectedTextCaptureOperation
                 }
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            { throw new InvalidOperationException("The target did not provide selected text in time. No clipboard fallback was used."); }
-            throw new InvalidOperationException("The target did not provide selected text in time. No clipboard fallback was used.");
+            { throw new InvalidOperationException(Loc.T("The target did not provide selected text in time. No clipboard fallback was used.")); }
+            throw new InvalidOperationException(Loc.T("The target did not provide selected text in time. No clipboard fallback was used."));
         }
         finally
         {

@@ -29,7 +29,7 @@ public sealed partial class MainWindow
         catch (System.ComponentModel.Win32Exception ex)
         {
             System.Diagnostics.Trace.TraceError("Escape cancel hook failed: {0}", ex);
-            ShowActivationNotice("Esc cannot cancel dictation in this session. Use the dictation shortcut or restart TypeWhisper.");
+            ShowActivationNotice(Loc.T("Esc cannot cancel dictation in this session. Use the dictation shortcut or restart TypeWhisper."));
         }
     }
 
@@ -49,7 +49,7 @@ public sealed partial class MainWindow
         if (_escapeConfirmation.Press(target, behavior, Environment.TickCount64) == EscapeCancelDecision.Warn)
         {
             _dictation.CancelWarning = target == TypeWhisper.Presentation.EscapeCancelTarget.Recording
-                ? "Press Esc again to cancel recording" : "Press Esc again to cancel transcription";
+                ? Loc.T("Press Esc again to cancel recording") : Loc.T("Press Esc again to cancel transcription");
             // Start() alone does not restart a running DispatcherQueueTimer.
             _escapeWarningTimer?.Stop();
             _escapeWarningTimer?.Start();
@@ -69,7 +69,7 @@ public sealed partial class MainWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("Escape cancellation failed: {0}", ex);
-            if (!_closing) ShowNotice(new AppNotice("Could not finish cancellation. Try again."));
+            if (!_closing) ShowNotice(new AppNotice(Loc.T("Could not finish cancellation. Try again.")));
             return;
         }
         // Escape cancels dictation only; a selected-text workflow keeps its own cancel shortcut.

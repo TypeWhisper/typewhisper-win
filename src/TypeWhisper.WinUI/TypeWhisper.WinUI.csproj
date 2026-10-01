@@ -100,4 +100,7 @@
     <Error Condition="!Exists('$(_CliPublishDirectory)typewhisper.exe')" Text="Bundled TypeWhisper CLI is missing." />
     <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../eng/Optimize-CliBundle.ps1&quot; -PublishDirectory &quot;$(PublishDir)/.&quot;" />
   </Target>
+  <ItemGroup>
+    <Using Include="TypeWhisper.Core" />
+  </ItemGroup>
 </Project>

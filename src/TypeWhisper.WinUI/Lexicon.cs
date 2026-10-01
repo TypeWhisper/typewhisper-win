@@ -35,7 +35,7 @@ internal sealed class Lexicon
                 RefreshSnippets();
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-            { LastError = _snippetLoadError = "Snippets could not be loaded: " + ex.Message; }
+            { LastError = _snippetLoadError = Loc.T("Snippets could not be loaded: {0}", ex.Message); }
         }
         if (dictionaryPath is null) return;
         try
@@ -49,7 +49,7 @@ internal sealed class Lexicon
             RefreshDictionary();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { LastError = _loadError = "Dictionary could not be loaded: " + ex.Message; }
+        { LastError = _loadError = Loc.T("Dictionary could not be loaded: {0}", ex.Message); }
     }
 
     internal void ReloadDictionary()
@@ -61,7 +61,7 @@ internal sealed class Lexicon
             _dictionary = new(_dictionaryPath); RefreshDictionary(); _loadError = null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
-        { LastError = _loadError = "Dictionary could not be loaded."; }
+        { LastError = _loadError = Loc.T("Dictionary could not be loaded."); }
     }
 
     private static Guid UiId(string id) => new(SHA256.HashData(Encoding.UTF8.GetBytes(id)).AsSpan(0, 16));
@@ -83,7 +83,7 @@ internal sealed class Lexicon
             _snippetLoadError = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { LastError = _snippetLoadError = "Snippets could not be loaded: " + ex.Message; }
+        { LastError = _snippetLoadError = Loc.T("Snippets could not be loaded: {0}", ex.Message); }
     }
     private void RefreshDictionary()
     {
@@ -91,7 +91,7 @@ internal sealed class Lexicon
         _entries.RemoveAll(e => e.Kind != LexiconKind.Snippet);
         _entries.AddRange(_dictionary.Entries.Select(e => new LexiconEntry(UiId(e.Id),
             e.EntryType == DictionaryEntryType.Term ? LexiconKind.Word : LexiconKind.Correction,
-            e.Original, e.Replacement ?? "", e.Id.StartsWith("pack:", StringComparison.Ordinal) ? "Term pack" : "",
+            e.Original, e.Replacement ?? "", e.Id.StartsWith("pack:", StringComparison.Ordinal) ? Loc.T("Term pack") : "",
             e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity)));
     }
 
@@ -99,15 +99,15 @@ internal sealed class Lexicon
     internal string? SetPackEnabled(TermPack pack, bool enabled)
     {
         if (_loadError is not null) return LastError = _loadError;
-        if (_dictionary is null) return LastError = "Persistent dictionary is unavailable.";
-        if (pack.RequiresCommercialLicense) return LastError = "This pack requires commercial license integration.";
+        if (_dictionary is null) return LastError = Loc.T("Persistent dictionary is unavailable.");
+        if (pack.RequiresCommercialLicense) return LastError = Loc.T("This pack requires commercial license integration.");
         var prefix = $"pack:{pack.Id}:";
         var updated = _dictionary.Entries.Where(e => !e.Id.StartsWith(prefix, StringComparison.Ordinal)).ToList();
         // Keep per-pack ownership even when multiple packs contain the same word.
         // Removing one pack must not remove a personal term or another pack's term.
         if (enabled) updated.AddRange(pack.Terms.Distinct(StringComparer.OrdinalIgnoreCase).Select(term => new DictionaryEntry
         { Id = prefix + term, EntryType = DictionaryEntryType.Term, Original = term }));
-        if (!_dictionary.TryReplaceAll(updated)) return LastError = "Could not save term pack selection.";
+        if (!_dictionary.TryReplaceAll(updated)) return LastError = Loc.T("Could not save term pack selection.");
         RefreshDictionary(); LastError = null; return null;
     }
     internal IReadOnlyList<LexiconEntry> Entries => _entries.AsReadOnly();
@@ -117,7 +117,7 @@ internal sealed class Lexicon
 
     internal AppImportReview ReviewAppImport(AppImportBatch batch, bool snippets, CancellationToken cancellationToken = default)
     {
-        var path = (snippets ? _snippetPath : _dictionaryPath) ?? throw new InvalidOperationException("Persistent storage is unavailable.");
+        var path = (snippets ? _snippetPath : _dictionaryPath) ?? throw new InvalidOperationException(Loc.T("Persistent storage is unavailable."));
         return LexiconAppImport.Review(batch, snippets, ReviewedCatalogTransaction.Read(path), cancellationToken);
     }
 
@@ -125,14 +125,14 @@ internal sealed class Lexicon
     {
         try
         {
-            if (review.Additions == 0) return "No new entries to import.";
-            var path = (review.IsSnippets ? _snippetPath : _dictionaryPath) ?? throw new InvalidOperationException("Persistent storage is unavailable.");
+            if (review.Additions == 0) return Loc.T("No new entries to import.");
+            var path = (review.IsSnippets ? _snippetPath : _dictionaryPath) ?? throw new InvalidOperationException(Loc.T("Persistent storage is unavailable."));
             ReviewedCatalogTransaction.Commit(path, review.Baseline, review.Json);
             if (review.IsSnippets) ReloadSnippets(); else ReloadDictionary();
             return LastError = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { return LastError = "Import canceled: " + ex.Message; }
+        { return LastError = Loc.T("Import canceled: {0}", ex.Message); }
     }
 
     internal string? Import(string json, bool snippets, bool replace)
@@ -142,22 +142,22 @@ internal sealed class Lexicon
         {
             if (snippets)
             {
-                if (_snippets is null) return LastError = "Persistent snippets are unavailable.";
+                if (_snippets is null) return LastError = Loc.T("Persistent snippets are unavailable.");
                 var imported = LexiconTransfer.ReadSnippets(json);
                 SnippetCatalogTransaction.Update(_snippetPath!, current => LexiconTransfer.MergeSnippets(current, imported, replace));
                 ReloadSnippets();
             }
             else
             {
-                if (_dictionary is null) return LastError = "Persistent dictionary is unavailable.";
+                if (_dictionary is null) return LastError = Loc.T("Persistent dictionary is unavailable.");
                 var next = LexiconTransfer.MergeDictionary(_dictionary.Entries, LexiconTransfer.ReadDictionary(json), replace);
-                if (!_dictionary.TryReplaceAll(next)) return LastError = "Could not save imported dictionary. Existing entries are unchanged.";
+                if (!_dictionary.TryReplaceAll(next)) return LastError = Loc.T("Could not save imported dictionary. Existing entries are unchanged.");
                 RefreshDictionary();
             }
             return LastError = null;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
-        { return LastError = "Import canceled: " + ex.Message; }
+        { return LastError = Loc.T("Import canceled: {0}", ex.Message); }
     }
 
     internal string? Export(string path, bool snippets)
@@ -168,17 +168,17 @@ internal sealed class Lexicon
             var destination = Path.GetFullPath(path);
             if (new[] { _dictionaryPath, _snippetPath }.Any(source => source is not null &&
                 Path.GetFullPath(source).Equals(destination, StringComparison.OrdinalIgnoreCase)))
-                return LastError = "Choose an export destination outside the active dictionary and snippet files.";
+                return LastError = Loc.T("Choose an export destination outside the active dictionary and snippet files.");
             var json = snippets
-                ? _snippets is null ? throw new InvalidOperationException("Persistent snippets are unavailable.") :
+                ? _snippets is null ? throw new InvalidOperationException(Loc.T("Persistent snippets are unavailable.")) :
                     LexiconTransfer.WriteSnippets(File.Exists(_snippetPath!) ? LexiconTransfer.ReadSnippets(File.ReadAllText(_snippetPath!)) : [])
-                : _dictionary is null ? throw new InvalidOperationException("Persistent dictionary is unavailable.") :
+                : _dictionary is null ? throw new InvalidOperationException(Loc.T("Persistent dictionary is unavailable.")) :
                     LexiconTransfer.WriteDictionary(_dictionary.Entries.Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal)).ToArray());
             LexiconTransfer.WriteFile(path, json);
             return LastError = null;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
-        { return LastError = "Export failed: " + ex.Message; }
+        { return LastError = Loc.T("Export failed: {0}", ex.Message); }
     }
 
     internal IEnumerable<LexiconEntry> Search(LexiconKind kind, string query) =>
@@ -190,19 +190,19 @@ internal sealed class Lexicon
     {
         if (_snippetLoadError is not null && draft.Kind == LexiconKind.Snippet) return LastError = _snippetLoadError;
         if (_loadError is not null && draft.Kind != LexiconKind.Snippet) return LastError = _loadError;
-        if (draft.FromPack) return "Manage this term through its term pack.";
+        if (draft.FromPack) return Loc.T("Manage this term through its term pack.");
         if (draft.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
-            return "Use a CTC similarity between 40% and 95%.";
+            return Loc.T("Use a CTC similarity between 40% and 95%.");
         var key = draft.Key.Trim();
-        if (key.Length == 0) return draft.Kind == LexiconKind.Snippet ? "Enter a trigger phrase." : "Enter a word or phrase.";
-        if (key.Length > 160 || key.Contains('\n') || key.Contains('\r')) return "Use a single line of up to 160 characters.";
-        if (draft.Kind != LexiconKind.Word && string.IsNullOrWhiteSpace(draft.Value)) return "Enter the replacement text.";
-        if (draft.Value.Length > 10000) return "Keep the replacement below 10,001 characters.";
-        if (draft.Tags.Length > 300) return "Keep tags below 301 characters.";
-        if (draft.Kind == LexiconKind.Correction && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return "The correction must differ from the original phrase.";
+        if (key.Length == 0) return draft.Kind == LexiconKind.Snippet ? Loc.T("Enter a trigger phrase.") : Loc.T("Enter a word or phrase.");
+        if (key.Length > 160 || key.Contains('\n') || key.Contains('\r')) return Loc.T("Use a single line of up to 160 characters.");
+        if (draft.Kind != LexiconKind.Word && string.IsNullOrWhiteSpace(draft.Value)) return Loc.T("Enter the replacement text.");
+        if (draft.Value.Length > 10000) return Loc.T("Keep the replacement below 10,001 characters.");
+        if (draft.Tags.Length > 300) return Loc.T("Keep tags below 301 characters.");
+        if (draft.Kind == LexiconKind.Correction && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return Loc.T("The correction must differ from the original phrase.");
         if ((draft.Kind != LexiconKind.Snippet || _snippets is null) && _entries.Any(entry => entry.Id != draft.Id && entry.Kind == draft.Kind &&
             entry.Key.Equals(key, entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
-            return "This word or trigger already exists in this section.";
+            return Loc.T("This word or trigger already exists in this section.");
         var normalized = draft with { Key = key, Value = draft.Kind == LexiconKind.Word ? "" : draft.Value, Tags = draft.Tags.Trim() };
         if (_snippets is not null && draft.Kind == LexiconKind.Snippet)
         {
@@ -212,7 +212,7 @@ internal sealed class Lexicon
                 SnippetCatalogTransaction.Update(_snippetPath!, current =>
                 {
                     var existing = current.FirstOrDefault(entry => UiId(entry.Id) == draft.Id);
-                    if (existing is null && wasExisting) throw new InvalidOperationException("This snippet was deleted elsewhere. Reopen the list before creating it again.");
+                    if (existing is null && wasExisting) throw new InvalidOperationException(Loc.T("This snippet was deleted elsewhere. Reopen the list before creating it again."));
                     var entry = (existing ?? new Snippet { Id = draft.Id.ToString(), Trigger = key, Replacement = draft.Value })
                         with { Trigger = key, Replacement = draft.Value, Tags = normalized.Tags, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, UpdatedAt = DateTime.UtcNow };
                     return LexiconTransfer.MergeSnippets(current.Where(item => item.Id != entry.Id).ToArray(), [entry], replace: false);
@@ -220,14 +220,14 @@ internal sealed class Lexicon
                 ReloadSnippets(); LastError = null; return null;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
-            { return LastError = "Could not save snippet: " + ex.Message; }
+            { return LastError = Loc.T("Could not save snippet: {0}", ex.Message); }
         }
         if (_dictionary is not null && draft.Kind != LexiconKind.Snippet)
         {
             var existing = _dictionary.Entries.FirstOrDefault(e => UiId(e.Id) == draft.Id);
             var entry = (existing ?? new DictionaryEntry { Id = draft.Id.ToString(), EntryType = draft.Kind == LexiconKind.Word ? DictionaryEntryType.Term : DictionaryEntryType.Correction, Original = key })
                 with { Original = key, Replacement = draft.Kind == LexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, CtcMinSimilarity = draft.CtcMinSimilarity, UpdatedAt = DateTime.UtcNow };
-            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = "Could not save dictionary entry.";
+            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = Loc.T("Could not save dictionary entry.");
             RefreshDictionary(); LastError = null; return null;
         }
         var index = _entries.FindIndex(entry => entry.Id == draft.Id);
@@ -245,9 +245,9 @@ internal sealed class Lexicon
     {
         word = word.Trim();
         if (suggestions ? !DictionaryAliasSuggestions.IsTerm(word) : !DictionaryTrainingPlan.IsWord(word))
-            return suggestions ? "Enter a word or short phrase on one line, up to 160 characters."
-                : "Enter one word, using letters, numbers, apostrophes or hyphens.";
-        if (suggestions && approved.Count == 0) return "Select at least one alias to save.";
+            return suggestions ? Loc.T("Enter a word or short phrase on one line, up to 160 characters.")
+                : Loc.T("Enter one word, using letters, numbers, apostrophes or hyphens.");
+        if (suggestions && approved.Count == 0) return Loc.T("Select at least one alias to save.");
         ReloadDictionary();
         if (_loadError is not null) return _loadError;
         var additions = new List<DictionaryEntry>();
@@ -255,11 +255,11 @@ internal sealed class Lexicon
         {
             if ((suggestions ? !DictionaryAliasSuggestions.IsAlias(original) : !DictionaryTrainingPlan.IsWord(original))
                 || original.Equals(word, StringComparison.OrdinalIgnoreCase))
-                return "Review the selected variants before saving.";
+                return Loc.T("Review the selected variants before saving.");
             var existing = _entries.Where(entry => entry.Kind == LexiconKind.Correction &&
                 entry.Key.Equals(original, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (existing.Any(entry => !entry.Value.Equals(word, StringComparison.Ordinal)))
-                return $"A correction for {original} already points to another spelling. Keep it or edit it in Corrections.";
+                return Loc.T("A correction for {0} already points to another spelling. Keep it or edit it in Corrections.", original);
             if (existing.Length == 0)
                 additions.Add(new() { Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Correction,
                     Original = original, Replacement = word, Source = DictionaryEntrySource.Manual });
@@ -270,7 +270,7 @@ internal sealed class Lexicon
         if (_dictionary is not null)
         {
             if (additions.Count > 0 && !_dictionary.TryReplaceAll(_dictionary.Entries.Concat(additions).ToArray()))
-                return "Could not save variants. Your dictionary was kept unchanged.";
+                return Loc.T("Could not save variants. Your dictionary was kept unchanged.");
             RefreshDictionary();
         }
         else foreach (var entry in additions)
@@ -284,11 +284,11 @@ internal sealed class Lexicon
     {
         var ids = _entries.Where(entry => entry.Kind == LexiconKind.Correction && !entry.FromPack &&
             string.Equals(entry.Value, replacement, StringComparison.Ordinal)).Select(entry => entry.Id).ToHashSet();
-        if (ids.Count == 0) { LastError = "This correction group no longer exists."; return false; }
+        if (ids.Count == 0) { LastError = Loc.T("This correction group no longer exists."); return false; }
         if (_dictionary is not null)
         {
             if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(entry => !ids.Contains(UiId(entry.Id))).ToArray()))
-            { LastError = "Could not delete correction group."; return false; }
+            { LastError = Loc.T("Could not delete correction group."); return false; }
             RefreshDictionary();
         }
         else _entries.RemoveAll(entry => ids.Contains(entry.Id));
@@ -308,11 +308,11 @@ internal sealed class Lexicon
                 ReloadSnippets(); LastError = null; return true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
-            { LastError = "Could not delete snippet: " + ex.Message; return false; }
+            { LastError = Loc.T("Could not delete snippet: {0}", ex.Message); return false; }
         }
         if (entry.Kind != LexiconKind.Snippet && _dictionary is not null)
         {
-            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => UiId(e.Id) != id).ToArray())) { LastError = "Could not delete entry."; return false; }
+            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => UiId(e.Id) != id).ToArray())) { LastError = Loc.T("Could not delete entry."); return false; }
             RefreshDictionary(); LastError = null; return true;
         }
         return _entries.RemoveAll(e => e.Id == id) == 1;

@@ -11,5 +11,5 @@ public sealed record MarketplaceItem(Plugin Plugin, string Publisher)
     public string Description => Plugin.Description;
     public string IconKind => Plugin.IconKind;
     public string Categories => Plugin.Categories;
-    public string Status => PendingRestart ? "Restart required" : !Supported ? "Not compatible" : UpdateAvailable ? "Update available" : Installed ? "Installed" : "Available";
+    public string Status => PendingRestart ? Loc.T("Restart required") : !Supported ? Loc.T("Not compatible") : UpdateAvailable ? Loc.T("Update available") : Installed ? Loc.T("Installed") : Loc.T("Available");
 }

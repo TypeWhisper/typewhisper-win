@@ -15,53 +15,53 @@ internal sealed class HttpApiSettingsView : UserControl
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var heading = SettingsHelp.Label("Enable HTTP API",
-            "Lets local apps and scripts, such as Raycast and the typewhisper command, control TypeWhisper. Only apps on this PC can connect.");
+        var heading = SettingsHelp.Label(Loc.T("Enable HTTP API"),
+            Loc.T("Lets local apps and scripts, such as Raycast and the typewhisper command, control TypeWhisper. Only apps on this PC can connect."));
         heading.VerticalAlignment = VerticalAlignment.Center;
         header.Children.Add(heading);
         var enabled = AppToggleSwitch.Create(api.Enabled);
-        AutomationProperties.SetName(enabled, "Enable HTTP API");
+        AutomationProperties.SetName(enabled, Loc.T("Enable HTTP API"));
         Grid.SetColumn(enabled, 1);
         header.Children.Add(enabled);
         body.Children.Add(header);
 
-        var status = Text(api.Status, 13);
+        var status = Text(Loc.T(api.Status), 13);
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         body.Children.Add(status);
         var details = new StackPanel { Spacing = 12 };
         body.Children.Add(details);
         var port = new NumberBox { Value = api.Port, Minimum = 1024, Maximum = 65535,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, Header = "Port", Width = 200,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, Header = Loc.T("Port"), Width = 200,
             HorizontalAlignment = HorizontalAlignment.Left };
         details.Children.Add(port);
         var authenticationRow = new Grid();
         authenticationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         authenticationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var authenticationLabel = SettingsHelp.Label("Require API token", "Leave off for the existing Raycast extension. Local apps can then connect without a token.");
+        var authenticationLabel = SettingsHelp.Label(Loc.T("Require API token"), Loc.T("Leave off for the existing Raycast extension. Local apps can then connect without a token."));
         authenticationLabel.VerticalAlignment = VerticalAlignment.Center;
         authenticationRow.Children.Add(authenticationLabel);
         var requireAuthentication = AppToggleSwitch.Create(api.RequireAuthentication);
-        AutomationProperties.SetName(requireAuthentication, "Require API token");
+        AutomationProperties.SetName(requireAuthentication, Loc.T("Require API token"));
         Grid.SetColumn(requireAuthentication, 1);
         authenticationRow.Children.Add(requireAuthentication);
         details.Children.Add(authenticationRow);
-        var documentation = new HyperlinkButton { Content = "Open documentation", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
+        var documentation = new HyperlinkButton { Content = Loc.T("Open documentation"), HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
         details.Children.Add(documentation);
         var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         HandCursorButton Button(string title, bool primary = false) => new()
         {
             Content = title, Style = (Style)Application.Current.Resources[primary ? "PrimaryButtonStyle" : "SecondaryButtonStyle"]
         };
-        var copyAddress = Button("Copy address");
-        var copyToken = Button("Copy API token");
-        var apply = Button("Apply", true);
+        var copyAddress = Button(Loc.T("Copy address"));
+        var copyToken = Button(Loc.T("Copy API token"));
+        var apply = Button(Loc.T("Apply"), true);
         footer.Children.Add(copyAddress); footer.Children.Add(copyToken); footer.Children.Add(apply);
         details.Children.Add(footer);
         var updating = false;
         void Refresh()
         {
-            status.Text = api.Status;
-            status.Visibility = api.Enabled || api.Status != "HTTP API is off." ? Visibility.Visible : Visibility.Collapsed;
+            status.Text = Loc.T(api.Status);
+            status.Visibility = api.Enabled || (api.Status != "HTTP API is off." && api.Status != Loc.T("HTTP API is off.")) ? Visibility.Visible : Visibility.Collapsed;
             details.Visibility = api.Enabled ? Visibility.Visible : Visibility.Collapsed;
             copyAddress.IsEnabled = copyToken.IsEnabled = documentation.IsEnabled = api.Running;
             documentation.NavigateUri = api.Running ? new Uri($"http://127.0.0.1:{api.Port}/docs") : null;
@@ -88,14 +88,14 @@ internal sealed class HttpApiSettingsView : UserControl
         };
         apply.Click += async (_, _) =>
         {
-            if (double.IsNaN(port.Value) || port.Value != Math.Truncate(port.Value)) { status.Text = "Enter a whole port number."; return; }
+            if (double.IsNaN(port.Value) || port.Value != Math.Truncate(port.Value)) { status.Text = Loc.T("Enter a whole port number."); return; }
             await ConfigureAsync(enabled.IsOn, (int)port.Value, requireAuthentication.IsOn);
         };
         void Copy(string? value)
         {
             if (value is null) return;
-            try { var data = new DataPackage(); data.SetText(value); Clipboard.SetContent(data); status.Text = "Copied."; }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { status.Text = "Could not copy. Try again."; }
+            try { var data = new DataPackage(); data.SetText(value); Clipboard.SetContent(data); status.Text = Loc.T("Copied."); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { status.Text = Loc.T("Could not copy. Try again."); }
         }
         copyAddress.Click += (_, _) => Copy($"http://127.0.0.1:{api.Port}");
         copyToken.Click += (_, _) => Copy(api.TokenForCopy);

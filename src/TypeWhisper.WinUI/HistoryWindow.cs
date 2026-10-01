@@ -24,11 +24,11 @@ public sealed partial class HistoryWindow : Window
     private readonly StackPanel _sidebar = new() { Spacing = 2, Padding = new Thickness(10, 4, 10, 16) };
     private readonly StackPanel _list = new() { Padding = new Thickness(10, 0, 10, 16) };
     private readonly ScrollViewer _listScroll;
-    private readonly TextBlock _listTitle = Text("All History", 15, bold: true);
+    private readonly TextBlock _listTitle = Text(Loc.T("All History"), 15, bold: true);
     private readonly TextBlock _listCount = Text("", 12, muted: true);
-    private readonly TextBox _search = new() { PlaceholderText = "Search History", VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBox _search = new() { PlaceholderText = Loc.T("Search History"), VerticalAlignment = VerticalAlignment.Center };
     private readonly DropDownButton _filterButton = new() { VerticalAlignment = VerticalAlignment.Center };
-    private readonly DropDownButton _sortButton = new() { Content = Text("Sort", 12), VerticalAlignment = VerticalAlignment.Center };
+    private readonly DropDownButton _sortButton = new() { Content = Text(Loc.T("Sort"), 12), VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _toolbarActions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
     private readonly Border _detailHost = new();
     private readonly TextBlock _notice = Text("", 12, muted: true);
@@ -60,7 +60,7 @@ public sealed partial class HistoryWindow : Window
         _reader = reader;
         _actions = actions;
         _audio = audio;
-        Title = "History";
+        Title = Loc.T("History");
         var root = new Grid { Background = Brush("InkBrush") };
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
@@ -74,7 +74,7 @@ public sealed partial class HistoryWindow : Window
         root.Children.Add(sidebarSurface);
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(20, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         brand.Children.Add(Glyph("history", 16));
-        brand.Children.Add(Text("History", 13, bold: true));
+        brand.Children.Add(Text(Loc.T("History"), 13, bold: true));
         root.Children.Add(brand);
         var sidebarScroll = new ScrollViewer { Content = _sidebar, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         Grid.SetRow(sidebarScroll, 1);
@@ -100,9 +100,9 @@ public sealed partial class HistoryWindow : Window
         find.Children.Add(_search);
         Grid.SetColumn(_filterButton, 1); find.Children.Add(_filterButton);
         Grid.SetColumn(_sortButton, 2); find.Children.Add(_sortButton);
-        AutomationProperties.SetName(_filterButton, "Filter history");
-        AutomationProperties.SetName(_sortButton, "Sort history");
-        AutomationProperties.SetName(_search, "Search history");
+        AutomationProperties.SetName(_filterButton, Loc.T("Filter history"));
+        AutomationProperties.SetName(_sortButton, Loc.T("Sort history"));
+        AutomationProperties.SetName(_search, Loc.T("Search history"));
         var listColumn = new Grid();
         listColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         listColumn.RowDefinitions.Add(new RowDefinition());
@@ -193,7 +193,7 @@ public sealed partial class HistoryWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("History window load failed: {0}", ex);
-            _loadError = "History could not be loaded. Your files were not changed.";
+            _loadError = Loc.T("History could not be loaded. Your files were not changed.");
         }
         finally { _loading = false; }
         if (_closing) return;
@@ -213,7 +213,7 @@ public sealed partial class HistoryWindow : Window
     {
         _visible = HistoryWorkspace.Query(_records, _scope, _search.Text, _range, _app, _sort, DateTimeOffset.Now, localDeviceId: LocalDeviceId());
         _listTitle.Text = ScopeTitle(_scope);
-        _listCount.Text = _loading ? "Loading…" : $"{_visible.Count:N0} {(_visible.Count == 1 ? "entry" : "entries")}";
+        _listCount.Text = _loading ? Loc.T("Loading…") : _visible.Count == 1 ? Loc.T("1 entry") : Loc.T("{0:N0} entries", _visible.Count);
         RenderList();
         RenderDetail();
         RenderToolbar();
@@ -221,12 +221,12 @@ public sealed partial class HistoryWindow : Window
 
     private string ScopeTitle(HistoryScope scope) => scope.Mailbox switch
     {
-        HistoryMailbox.Inbox => "Inbox",
-        HistoryMailbox.WithAudio => "With Audio",
-        HistoryMailbox.Failed => "Failed",
-        HistoryMailbox.All => "All History",
+        HistoryMailbox.Inbox => Loc.T("Inbox"),
+        HistoryMailbox.WithAudio => Loc.T("With Audio"),
+        HistoryMailbox.Failed => Loc.T("Failed"),
+        HistoryMailbox.All => Loc.T("All History"),
         _ => scope.Device is { } device ? DeviceName(device, _records.FirstOrDefault(record => record.OriginDeviceId == device)?.OriginPlatform)
-            : scope.Source is null ? "This PC" : SourceName(scope.Source)
+            : scope.Source is null ? Loc.T("This PC") : SourceName(scope.Source)
     };
 
     internal void RenderDevices()
@@ -245,13 +245,13 @@ public sealed partial class HistoryWindow : Window
             var value when value.Contains("mac") => "Mac",
             var value when value.Contains("ipad") => "iPad",
             var value when value.Contains("ios") || value.Contains("iphone") || value.Contains("watch") => "iPhone",
-            var value when value.Contains("windows") => "Windows PC",
-            _ => "Device"
+            var value when value.Contains("windows") => Loc.T("Windows PC"),
+            _ => Loc.T("Device")
         };
     }
 
     private string OriginName(TranscriptionRecord record) =>
-        HistoryWorkspace.IsLocal(record, LocalDeviceId()) ? "This PC" : DeviceName(record.OriginDeviceId!, record.OriginPlatform);
+        HistoryWorkspace.IsLocal(record, LocalDeviceId()) ? Loc.T("This PC") : DeviceName(record.OriginDeviceId!, record.OriginPlatform);
 
     private static string DeviceIcon(string? platform) => (platform ?? "").ToLowerInvariant() switch
     {
@@ -262,10 +262,10 @@ public sealed partial class HistoryWindow : Window
 
     private static string SourceName(string source) => source switch
     {
-        "dictation" => "Windows Dictation",
-        "recording" => "Recorder",
-        "file" => "File Transcription",
-        _ => "Other"
+        "dictation" => Loc.T("Windows Dictation"),
+        "recording" => Loc.T("Recorder"),
+        "file" => Loc.T("File Transcription"),
+        _ => Loc.T("Other")
     };
 
     // Sidebar -----------------------------------------------------------------------------
@@ -273,20 +273,20 @@ public sealed partial class HistoryWindow : Window
     private void RenderSidebar()
     {
         _sidebar.Children.Clear();
-        _sidebar.Children.Add(SectionHeader("Smart Mailboxes"));
+        _sidebar.Children.Add(SectionHeader(Loc.T("Smart Mailboxes")));
         foreach (var (mailbox, icon, label) in new[]
         {
-            (HistoryMailbox.Inbox, "mail", "Inbox"), (HistoryMailbox.All, "history", "All History"),
-            (HistoryMailbox.WithAudio, "wave-history", "With Audio"), (HistoryMailbox.Failed, "info", "Failed")
+            (HistoryMailbox.Inbox, "mail", Loc.T("Inbox")), (HistoryMailbox.All, "history", Loc.T("All History")),
+            (HistoryMailbox.WithAudio, "wave-history", Loc.T("With Audio")), (HistoryMailbox.Failed, "info", Loc.T("Failed"))
         })
         {
             var count = _records.Count(record => HistoryWorkspace.InMailbox(record, mailbox));
             _sidebar.Children.Add(SidebarRow(icon, label, count, _scope.Mailbox == mailbox, 0, () => SelectScope(new HistoryScope(mailbox))));
         }
-        _sidebar.Children.Add(SectionHeader("Devices"));
+        _sidebar.Children.Add(SectionHeader(Loc.T("Devices")));
         var localId = LocalDeviceId();
         var local = _records.Where(record => HistoryWorkspace.IsLocal(record, localId)).ToArray();
-        _sidebar.Children.Add(SidebarRow("laptop", "This PC", local.Length, _scope is { Mailbox: null, Source: null, Device: null }, 0,
+        _sidebar.Children.Add(SidebarRow("laptop", Loc.T("This PC"), local.Length, _scope is { Mailbox: null, Source: null, Device: null }, 0,
             () => SelectScope(new HistoryScope(null))));
         foreach (var (source, icon) in new[] { ("dictation", "microphone"), ("recording", "recorder"), ("file", "file"), ("other", "history") })
         {
@@ -336,8 +336,8 @@ public sealed partial class HistoryWindow : Window
         var button = new HandCursorButton { Content = row, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
             MinHeight = 36, Padding = new Thickness(10, 7, 10, 7),
             Style = (Style)Application.Current.Resources[selected ? "SidebarSelectedButtonStyle" : "MenuButtonStyle"] };
-        AutomationProperties.SetName(button, count > 0 ? $"{label}, {count} entries" : label);
-        AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+        AutomationProperties.SetName(button, count > 0 ? Loc.T("{0}, {1} entries", label, count) : label);
+        AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         button.Click += (_, _) => click();
         return button;
     }
@@ -360,8 +360,8 @@ public sealed partial class HistoryWindow : Window
     private void RenderList()
     {
         _list.Children.Clear();
-        if (_loadError is not null) { _list.Children.Add(EmptyState("info", "History unavailable", _loadError)); return; }
-        if (_loading) { _list.Children.Add(EmptyState("history", "Loading history…", "")); return; }
+        if (_loadError is not null) { _list.Children.Add(EmptyState("info", Loc.T("History unavailable"), _loadError)); return; }
+        if (_loading) { _list.Children.Add(EmptyState("history", Loc.T("Loading history…"), "")); return; }
         if (_visible.Count == 0) { _list.Children.Add(EmptyList()); return; }
         var now = DateTimeOffset.Now;
         var rendered = 0;
@@ -388,8 +388,8 @@ public sealed partial class HistoryWindow : Window
     {
         if (_search.Text.Trim().Length > 0 || _range != HistoryDateRange.AllTime || _app is not null)
         {
-            var empty = EmptyState("search", "No Results", "No entries match your search or filters.");
-            var clear = new HandCursorButton { Content = "Clear Filters", HorizontalAlignment = HorizontalAlignment.Center,
+            var empty = EmptyState("search", Loc.T("No Results"), Loc.T("No entries match your search or filters."));
+            var clear = new HandCursorButton { Content = Loc.T("Clear Filters"), HorizontalAlignment = HorizontalAlignment.Center,
                 Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
             clear.Click += (_, _) => ClearFilters();
             ((StackPanel)empty).Children.Add(clear);
@@ -397,10 +397,10 @@ public sealed partial class HistoryWindow : Window
         }
         return _scope.Mailbox switch
         {
-            HistoryMailbox.Inbox => EmptyState("mail", "Inbox is Empty", "Entries from your other devices appear here until you mark them complete."),
-            HistoryMailbox.Failed => EmptyState("check", "No Failed Entries", "Entries whose processing failed appear here."),
-            HistoryMailbox.WithAudio => EmptyState("wave-history", "No Audio Saved", "Turn on Keep dictation audio in History & Sync to listen to new dictations again."),
-            _ => EmptyState("history", "No History Yet", "Your dictations appear here once they are saved.")
+            HistoryMailbox.Inbox => EmptyState("mail", Loc.T("Inbox is Empty"), Loc.T("Entries from your other devices appear here until you mark them complete.")),
+            HistoryMailbox.Failed => EmptyState("check", Loc.T("No Failed Entries"), Loc.T("Entries whose processing failed appear here.")),
+            HistoryMailbox.WithAudio => EmptyState("wave-history", Loc.T("No Audio Saved"), Loc.T("Turn on Keep dictation audio in History & Sync to listen to new dictations again.")),
+            _ => EmptyState("history", Loc.T("No History Yet"), Loc.T("Your dictations appear here once they are saved."))
         };
     }
 
@@ -410,13 +410,13 @@ public sealed partial class HistoryWindow : Window
         row.Children.Add(Text(collapsed ? "›" : "⌄", 12, muted: true));
         row.Children.Add(Text(group switch
         {
-            HistoryDateGroup.Today => "Today", HistoryDateGroup.Yesterday => "Yesterday", HistoryDateGroup.ThisWeek => "This Week",
-            HistoryDateGroup.ThisMonth => "This Month", _ => "Older"
+            HistoryDateGroup.Today => Loc.T("Today"), HistoryDateGroup.Yesterday => Loc.T("Yesterday"), HistoryDateGroup.ThisWeek => Loc.T("This Week"),
+            HistoryDateGroup.ThisMonth => Loc.T("This Month"), _ => Loc.T("Older")
         }, 13, bold: true, muted: true));
         row.Children.Add(Text(count.ToString("N0"), 13, muted: true));
         var button = new HandCursorButton { Content = row, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left,
             Margin = new Thickness(0, 12, 0, 4), Padding = new Thickness(10, 4, 10, 4), Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
-        AutomationProperties.SetName(button, $"{(collapsed ? "Expand" : "Collapse")} {group} section, {count} entries");
+        AutomationProperties.SetName(button, collapsed ? Loc.T("Expand {0} section, {1} entries", group, count) : Loc.T("Collapse {0} section, {1} entries", group, count));
         button.Click += (_, _) =>
         {
             if (!_collapsed.Remove(group)) _collapsed.Add(group);
@@ -444,9 +444,9 @@ public sealed partial class HistoryWindow : Window
         when.Foreground = secondary;
         Grid.SetRow(when, 2); content.Children.Add(when);
         var status = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
-        if (record.InboxState == HistoryWorkspace.InboxOpen) status.Children.Add(Tinted(Glyph("mail", 14), selected, "Open in Inbox"));
-        if (record.Status != TranscriptionRecordStatus.Succeeded) status.Children.Add(Tinted(Glyph("info", 14), selected, "Processing failed"));
-        if (!string.IsNullOrWhiteSpace(record.AudioFileName)) status.Children.Add(Tinted(Glyph("wave-history", 14), selected, "Audio saved"));
+        if (record.InboxState == HistoryWorkspace.InboxOpen) status.Children.Add(Tinted(Glyph("mail", 14), selected, Loc.T("Open in Inbox")));
+        if (record.Status != TranscriptionRecordStatus.Succeeded) status.Children.Add(Tinted(Glyph("info", 14), selected, Loc.T("Processing failed")));
+        if (!string.IsNullOrWhiteSpace(record.AudioFileName)) status.Children.Add(Tinted(Glyph("wave-history", 14), selected, Loc.T("Audio saved")));
         Grid.SetColumn(status, 1); Grid.SetRow(status, 2); content.Children.Add(status);
         var button = new HandCursorButton
         {
@@ -455,7 +455,7 @@ public sealed partial class HistoryWindow : Window
             Style = (Style)Application.Current.Resources[selected ? "SidebarSelectedButtonStyle" : "MenuButtonStyle"]
         };
         AutomationProperties.SetName(button, $"{title.Text}, {origin.Text}, {when.Text}");
-        AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+        AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         button.Click += (_, _) => SelectRecord(record.Id);
         button.ContextFlyout = RowMenu(record);
         button.ContextRequested += (_, _) => { if (!_selection.Contains(record.Id)) SelectRecord(record.Id); };
@@ -535,17 +535,17 @@ public sealed partial class HistoryWindow : Window
     private void BuildMenus()
     {
         var filter = new MenuFlyout();
-        var date = new MenuFlyoutSubItem { Text = "Date" };
-        foreach (var (range, label) in new[] { (HistoryDateRange.Last7Days, "Last 7 Days"), (HistoryDateRange.Last30Days, "Last 30 Days"),
-                     (HistoryDateRange.Last90Days, "Last 90 Days"), (HistoryDateRange.AllTime, "All Time") })
+        var date = new MenuFlyoutSubItem { Text = Loc.T("Date") };
+        foreach (var (range, label) in new[] { (HistoryDateRange.Last7Days, Loc.T("Last 7 Days")), (HistoryDateRange.Last30Days, Loc.T("Last 30 Days")),
+                     (HistoryDateRange.Last90Days, Loc.T("Last 90 Days")), (HistoryDateRange.AllTime, Loc.T("All Time")) })
         {
             var item = new RadioMenuFlyoutItem { Text = label, GroupName = "date", IsChecked = _range == range };
             item.Click += async (_, _) => { if (await ConfirmLeaveEditAsync()) { _range = range; _shown = PageSize; BuildMenus(); Refilter(); } };
             date.Items.Add(item);
         }
         filter.Items.Add(date);
-        var apps = new MenuFlyoutSubItem { Text = "App" };
-        var allApps = new RadioMenuFlyoutItem { Text = "All Apps", GroupName = "app", IsChecked = _app is null };
+        var apps = new MenuFlyoutSubItem { Text = Loc.T("App") };
+        var allApps = new RadioMenuFlyoutItem { Text = Loc.T("All Apps"), GroupName = "app", IsChecked = _app is null };
         allApps.Click += async (_, _) => { if (await ConfirmLeaveEditAsync()) { _app = null; BuildMenus(); Refilter(); } };
         apps.Items.Add(allApps);
         foreach (var app in HistoryWorkspace.Apps(_records))
@@ -558,16 +558,16 @@ public sealed partial class HistoryWindow : Window
         if (_range != HistoryDateRange.AllTime || _app is not null || _search.Text.Length > 0)
         {
             filter.Items.Add(new MenuFlyoutSeparator());
-            var clear = new MenuFlyoutItem { Text = "Clear Filters" };
+            var clear = new MenuFlyoutItem { Text = Loc.T("Clear Filters") };
             clear.Click += (_, _) => ClearFilters();
             filter.Items.Add(clear);
         }
         _filterButton.Flyout = filter;
-        _filterButton.Content = Text(_range != HistoryDateRange.AllTime || _app is not null ? "Filter •" : "Filter", 12);
+        _filterButton.Content = Text(_range != HistoryDateRange.AllTime || _app is not null ? Loc.T("Filter") + " •" : Loc.T("Filter"), 12);
 
         var sort = new MenuFlyout();
-        foreach (var (order, label) in new[] { (HistorySort.NewestFirst, "Newest First"), (HistorySort.OldestFirst, "Oldest First"),
-                     (HistorySort.Duration, "Duration"), (HistorySort.AppName, "App Name") })
+        foreach (var (order, label) in new[] { (HistorySort.NewestFirst, Loc.T("Newest First")), (HistorySort.OldestFirst, Loc.T("Oldest First")),
+                     (HistorySort.Duration, Loc.T("Duration")), (HistorySort.AppName, Loc.T("App Name")) })
         {
             var item = new RadioMenuFlyoutItem { Text = label, GroupName = "sort", IsChecked = _sort == order };
             item.Click += async (_, _) => { if (await ConfirmLeaveEditAsync()) { _sort = order; BuildMenus(); Refilter(); } };
@@ -600,7 +600,7 @@ public sealed partial class HistoryWindow : Window
     private static string FirstLine(string text)
     {
         var line = text.Trim().Split('\n', 2)[0].Trim();
-        return line.Length == 0 ? "Untitled transcript" : line;
+        return line.Length == 0 ? Loc.T("Untitled transcript") : line;
     }
 
     // Short elapsed time as in the macOS list; older entries show their date.
@@ -608,9 +608,9 @@ public sealed partial class HistoryWindow : Window
     {
         var local = DateTime.SpecifyKind(timestampUtc, DateTimeKind.Utc).ToLocalTime();
         var elapsed = now.LocalDateTime - local;
-        if (elapsed < TimeSpan.FromMinutes(1)) return "now";
-        if (elapsed < TimeSpan.FromHours(1)) return $"{(int)elapsed.TotalMinutes}m";
-        if (elapsed < TimeSpan.FromHours(24)) return $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m";
+        if (elapsed < TimeSpan.FromMinutes(1)) return Loc.T("now");
+        if (elapsed < TimeSpan.FromHours(1)) return Loc.T("{0}m", (int)elapsed.TotalMinutes);
+        if (elapsed < TimeSpan.FromHours(24)) return Loc.T("{0}h {1}m", (int)elapsed.TotalHours, elapsed.Minutes);
         return local.ToString(local.Year == now.Year ? "d MMM" : "d MMM yyyy");
     }
 

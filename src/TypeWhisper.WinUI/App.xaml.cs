@@ -37,7 +37,7 @@ public partial class App : Application
         try { await LaunchAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowProfileFailure("TypeWhisper could not finish starting. Close and reopen the app before trying again.", ex.Message);
+            ShowProfileFailure(Loc.T("TypeWhisper could not finish starting. Close and reopen the app before trying again."), ex.Message);
         }
     }
 
@@ -61,7 +61,7 @@ public partial class App : Application
                 System.Diagnostics.Trace.TraceError("Activation redirection failed: {0}", ex);
                 if (share is not null)
                     TypeWhisper.Presentation.SharedFileActivation.Reject(new WindowsSharedFileOperation(share.ShareOperation),
-                        "TypeWhisper could not hand the shared files to the running app. Please share them again.");
+                        Loc.T("TypeWhisper could not hand the shared files to the running app. Please share them again."));
             }
             finally { Exit(); }
             return;
@@ -80,7 +80,7 @@ public partial class App : Application
                     await TypeWhisper.Presentation.SharedFileActivation.ReceiveAsync(operation, _activations, CanReceiveSharedActivation, _shareStartupReady.Task);
                     DrainActivations();
                 }))
-                    TypeWhisper.Presentation.SharedFileActivation.Reject(operation, "TypeWhisper is shutting down. Reopen the app and share the files again.");
+                    TypeWhisper.Presentation.SharedFileActivation.Reject(operation, Loc.T("TypeWhisper is shutting down. Reopen the app and share the files again."));
                 return;
             }
             var incoming = WindowsActivationRequest.Parse(redirected);
@@ -113,13 +113,13 @@ public partial class App : Application
             var recovery = new TypeWhisper.Core.Services.PersistedProfileBackup(WinUIProfile.Root).RecoverPending();
             if (!recovery.CanOpenProfile)
             {
-                ShowProfileFailure("A previous restore could not be recovered. Your files are preserved and the profile has not been opened. Close TypeWhisper before resolving this recovery error.", recovery.Error);
+                ShowProfileFailure(Loc.T("A previous restore could not be recovered. Your files are preserved and the profile has not been opened. Close TypeWhisper before resolving this recovery error."), recovery.Error);
                 return;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowProfileFailure("Profile recovery could not complete. Your profile has not been opened. Close TypeWhisper before resolving this recovery error.", ex.Message);
+            ShowProfileFailure(Loc.T("Profile recovery could not complete. Your profile has not been opened. Close TypeWhisper before resolving this recovery error."), ex.Message);
             return;
         }
         await StartWithProfileAsync(request, initialShare);
@@ -131,11 +131,11 @@ public partial class App : Application
         TypeWhisper.Presentation.ApplicationActivationRequest request, Task initialShare, bool skip)
     {
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-        var message = skip ? "Creating a new TypeWhisper profile. Your previous data stays unchanged…"
-            : "Upgrading your TypeWhisper profile. Your previous data will be preserved…";
+        var message = skip ? Loc.T("Creating a new TypeWhisper profile. Your previous data stays unchanged…")
+            : Loc.T("Upgrading your TypeWhisper profile. Your previous data will be preserved…");
         if (_profileOperation is null)
         {
-            _profileOperation = new ProfileOperationWindow(message, true, Exit, "Profile upgrade");
+            _profileOperation = new ProfileOperationWindow(message, true, Exit, Loc.T("Profile upgrade"));
             _profileOperation.Activate();
         }
         else { _profileOperation.SetMessage(message, true); _profileOperation.SetDetails(null); }
@@ -154,8 +154,8 @@ public partial class App : Application
             ShowProfileFailure(TypeWhisper.Core.Services.LegacyDailyProfileMigration.DescribeFailure(ex), ex.Message,
                 keepStartupPending: true);
             _profileOperation!.OfferActions(
-                "Retry", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: false)),
-                "Start with a new profile", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: true)));
+                Loc.T("Retry"), () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: false)),
+                Loc.T("Start with a new profile"), () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport: true)));
             return false;
         }
     }
@@ -165,7 +165,7 @@ public partial class App : Application
         try { await launch(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowProfileFailure("TypeWhisper could not finish starting. Close and reopen the app before trying again.", ex.Message);
+            ShowProfileFailure(Loc.T("TypeWhisper could not finish starting. Close and reopen the app before trying again."), ex.Message);
         }
     }
 
@@ -279,7 +279,7 @@ public partial class App : Application
         _exiting = true;
         _restartAfterProfileRestore = restart;
         _shareStartupReady.TrySetResult(false);
-        _profileOperation = new("Finishing active work before restoring your reviewed backup…", true, CloseProfileOperation);
+        _profileOperation = new(Loc.T("Finishing active work before restoring your reviewed backup…"), true, CloseProfileOperation);
         _profileOperation.Activate();
         try
         {
@@ -289,14 +289,14 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowProfileFailure("Could not stop active work for restoration. No backup was applied.", ex.Message);
+            ShowProfileFailure(Loc.T("Could not stop active work for restoration. No backup was applied."), ex.Message);
         }
     }
 
     private async Task CompleteProfileRestoreAsync(TypeWhisper.Core.Services.PersistedProfileBackup store,
         TypeWhisper.Core.Services.PersistedProfileBackupPreview preview)
     {
-        _profileOperation!.SetMessage("Finishing active work before restoring your reviewed backup…", true);
+        _profileOperation!.SetMessage(Loc.T("Finishing active work before restoring your reviewed backup…"), true);
         try
         {
             await _window!.ShutdownDictationAsync();
@@ -306,15 +306,15 @@ public partial class App : Application
             if (result.Error is not null)
             {
                 ShowProfileFailure(result.RecoveryRequired
-                    ? "The restore needs recovery before your profile can open again. Close TypeWhisper and reopen it to finish recovery."
-                    : "The backup was not applied. Close and reopen TypeWhisper, then review the backup again.", result.Error);
+                    ? Loc.T("The restore needs recovery before your profile can open again. Close TypeWhisper and reopen it to finish recovery.")
+                    : Loc.T("The backup was not applied. Close and reopen TypeWhisper, then review the backup again."), result.Error);
                 return;
             }
             if (_restartAfterProfileRestore)
             {
                 _mainInstance?.UnregisterKey();
                 var reason = AppInstance.Restart("");
-                ShowProfileFailure("Settings were restored. Reopen TypeWhisper to use them.", reason.ToString());
+                ShowProfileFailure(Loc.T("Settings were restored. Reopen TypeWhisper to use them."), reason.ToString());
                 return;
             }
             ExitAfterProfileOperation();
@@ -323,10 +323,10 @@ public partial class App : Application
         {
             if (_window?.CanRetryRecorderShutdown == true)
             {
-                ShowProfileFailure("The current recording could not be saved. Its audio is still held in memory. Retry saving before restoring. Closing the app discards that unsaved audio.");
+                ShowProfileFailure(Loc.T("The current recording could not be saved. Its audio is still held in memory. Retry saving before restoring. Closing the app discards that unsaved audio."));
                 _profileOperation!.OfferSaveRetry(() => CompleteProfileRestoreAsync(store, preview));
             }
-            else ShowProfileFailure("Restore did not complete. Close and reopen TypeWhisper before continuing.", ex.Message);
+            else ShowProfileFailure(Loc.T("Restore did not complete. Close and reopen TypeWhisper before continuing."), ex.Message);
         }
     }
 
@@ -338,7 +338,7 @@ public partial class App : Application
         if (_exiting || _window is null) return;
         _exiting = true;
         _shareStartupReady.TrySetResult(false);
-        _profileOperation = new("Finishing active work before deleting your data…", true, CloseProfileOperation, DataDeletionHeading);
+        _profileOperation = new(Loc.T("Finishing active work before deleting your data…"), true, CloseProfileOperation, DataDeletionHeading);
         _profileOperation.Activate();
         try
         {
@@ -348,12 +348,12 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowProfileFailure("Active work could not be stopped, so no data was deleted. Close TypeWhisper, reopen it and try again.", ex.Message);
+            ShowProfileFailure(Loc.T("Active work could not be stopped, so no data was deleted. Close TypeWhisper, reopen it and try again."), ex.Message);
             return;
         }
         try
         {
-            _profileOperation.SetMessage("Deleting your TypeWhisper data…", true);
+            _profileOperation.SetMessage(Loc.T("Deleting your TypeWhisper data…"), true);
             // Recorded first, so the deletion resumes on the next launch if the app ends during the cleanup below.
             ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             // Start with Windows lives in the registration, not the profile; a new installation starts with it off.
@@ -362,28 +362,29 @@ public partial class App : Application
             var report = await Task.Run(UserDataDeletion.FinishPending);
             if (startupError is not null || cliError is not null)
             {
-                string[] leftovers = [.. new[] { startupError is null ? null : "turn off Start with Windows under General",
-                    cliError is null ? null : "remove the command line tool under Advanced" }.OfType<string>()];
-                ShowProfileFailure((report.Complete
-                    ? "Your data was deleted, but not everything outside it could be undone. Reopen TypeWhisper and "
-                    : "Not all data could be deleted yet, and not everything outside it could be undone. Reopen TypeWhisper to finish deleting your data, then ")
-                    + string.Join(" and ", leftovers) + ".", string.Join(Environment.NewLine, new[] { startupError, cliError }.OfType<string>()));
+                var leftovers = cliError is null ? Loc.T("turn off Start with Windows under General")
+                    : startupError is null ? Loc.T("remove the command line tool under Advanced")
+                    : Loc.T("turn off Start with Windows under General and remove the command line tool under Advanced");
+                ShowProfileFailure(report.Complete
+                    ? Loc.T("Your data was deleted, but not everything outside it could be undone. Reopen TypeWhisper and {0}.", leftovers)
+                    : Loc.T("Not all data could be deleted yet, and not everything outside it could be undone. Reopen TypeWhisper to finish deleting your data, then {0}.", leftovers),
+                    string.Join(Environment.NewLine, new[] { startupError, cliError }.OfType<string>()));
                 return;
             }
             _mainInstance?.UnregisterKey();
             // On success this API ends the process; returning means the restart failed.
             var reason = AppInstance.Restart("");
-            ShowProfileFailure("Your data was deleted. Reopen TypeWhisper to finish removing files that were still in use.", reason.ToString());
+            ShowProfileFailure(Loc.T("Your data was deleted. Reopen TypeWhisper to finish removing files that were still in use."), reason.ToString());
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             ShowProfileFailure(ProfileDataEraser.IsErasurePending(WinUIProfile.Root)
-                ? "Not all data could be deleted yet. Reopen TypeWhisper to finish deleting it."
-                : "No data was deleted. Close TypeWhisper, reopen it and try again.", ex.Message);
+                ? Loc.T("Not all data could be deleted yet. Reopen TypeWhisper to finish deleting it.")
+                : Loc.T("No data was deleted. Close TypeWhisper, reopen it and try again."), ex.Message);
         }
     }
 
-    private const string DataDeletionHeading = "Delete all data";
+    private static string DataDeletionHeading => Loc.T("Delete all data");
 
     /// <returns>Null once startup is off or cannot be changed in this build; otherwise why it stayed on.</returns>
     private static async Task<string?> TurnOffStartupAsync()
@@ -392,7 +393,7 @@ public partial class App : Application
         {
             var state = await WindowsStartupRegistration.Create().SetEnabledAsync(false);
             // A registration that cannot be read may still be on, so it is reported like one that stayed on.
-            return state.IsEnabled || state.Unknown ? state.Error ?? "Windows still lists TypeWhisper as a startup app." : null;
+            return state.IsEnabled || state.Unknown ? state.Error ?? Loc.T("Windows still lists TypeWhisper as a startup app.") : null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
     }
@@ -407,15 +408,15 @@ public partial class App : Application
             {
                 // No tool, or another profile's, such as the release app's next to a development build: it stays.
                 case false: return null;
-                case null: return "The command line tool's profile setting could not be read, so it was left installed.";
+                case null: return Loc.T("The command line tool's profile setting could not be read, so it was left installed.");
             }
             // Bound to this profile but without the install record Remove relies on to know which files it owns.
             if (!cli.GetState().CanRemove)
-                return "The command line tool still points to this profile, but its install record is missing or unreadable, so it was left installed.";
+                return Loc.T("The command line tool still points to this profile, but its install record is missing or unreadable, so it was left installed.");
             cli.Remove();
             // A changed file stays; a binding left behind would still point a terminal at this profile.
             return cli.GetState() is { Installed: false, CanRemove: false } && cli.IsBoundTo(WinUIProfile.Root) is false
-                ? null : "Some files of the command line tool were changed and stayed.";
+                ? null : Loc.T("Some files of the command line tool were changed and stayed.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
     }
@@ -425,24 +426,26 @@ public partial class App : Application
         Task initialShare, bool skipLegacyImport)
     {
         if (!ProfileDataEraser.IsErasurePending(WinUIProfile.Root)) return true;
-        _profileOperation ??= new("Finishing the deletion of your TypeWhisper data…", true, Exit, DataDeletionHeading);
-        _profileOperation.SetMessage("Finishing the deletion of your TypeWhisper data…", true);
+        _profileOperation ??= new(Loc.T("Finishing the deletion of your TypeWhisper data…"), true, Exit, DataDeletionHeading);
+        _profileOperation.SetMessage(Loc.T("Finishing the deletion of your TypeWhisper data…"), true);
         _profileOperation.Activate();
         var report = await Task.Run(UserDataDeletion.FinishPending);
         if (report.Complete) return true;
         var message = report.Refused
-            ? "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched."
-            : $"{report.Remaining:N0} {(report.Remaining == 1 ? "item" : "items")} of your TypeWhisper data could not be deleted, usually because another program is using them. Close other programs that may use these files, then retry.";
+            ? Loc.T("TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched.")
+            : report.Remaining == 1
+                ? Loc.T("1 item of your TypeWhisper data could not be deleted, usually because another program is using them. Close other programs that may use these files, then retry.")
+                : Loc.T("{0:N0} items of your TypeWhisper data could not be deleted, usually because another program is using them. Close other programs that may use these files, then retry.", report.Remaining);
         var folder = TypeWhisper.WinUI.Platform.AppDistribution.ResolveShellVisiblePath(WinUIProfile.Root);
         ShowProfileFailure(message, folder, keepStartupPending: true);
         void Offer() => _profileOperation.OfferActions(
-            "Retry", () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport)),
-            "Open TypeWhisper anyway", () =>
+            Loc.T("Retry"), () => ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport)),
+            Loc.T("Open TypeWhisper anyway"), () =>
             {
                 // Opening while the marker stays would erase the profile again on this or the next launch.
                 if (ProfileDataEraser.CancelPendingErasure(WinUIProfile.Root))
                     return ContinueLaunchAsync(() => OpenProfileAsync(request, initialShare, skipLegacyImport));
-                ShowProfileFailure("The deletion could not be canceled because another program is using your TypeWhisper data folder. Close it, then try again.", folder, keepStartupPending: true);
+                ShowProfileFailure(Loc.T("The deletion could not be canceled because another program is using your TypeWhisper data folder. Close it, then try again."), folder, keepStartupPending: true);
                 Offer();
                 return Task.CompletedTask;
             });
@@ -452,7 +455,7 @@ public partial class App : Application
 
     private async void CloseProfileOperation()
     {
-        _profileOperation?.SetMessage("Finishing shutdown…", true);
+        _profileOperation?.SetMessage(Loc.T("Finishing shutdown…"), true);
         try
         {
             // A failed recorder save may have left other already-started work draining.
@@ -462,7 +465,7 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowProfileFailure("Shutdown could not finish. Profile access remains stopped.", ex.Message);
+            ShowProfileFailure(Loc.T("Shutdown could not finish. Profile access remains stopped."), ex.Message);
         }
     }
 
@@ -470,9 +473,9 @@ public partial class App : Application
 
     private async Task<string?> ExitOrRestartAsync(bool restart, Action? applyUpdate = null)
     {
-        if (_exiting) return "The app is already shutting down.";
+        if (_exiting) return Loc.T("The app is already shutting down.");
         _exiting = true;
-        _tray?.SetShutdownState("Finishing shutdown…");
+        _tray?.SetShutdownState(Loc.T("Finishing shutdown…"));
         _shareStartupReady.TrySetResult(false);
         try
         {
@@ -484,13 +487,13 @@ public partial class App : Application
                 if (applyUpdate is not null)
                 {
                     applyUpdate();
-                    ShowProfileFailure("The update restart did not complete. Close and reopen TypeWhisper.", null);
-                    return "The update restart did not complete.";
+                    ShowProfileFailure(Loc.T("The update restart did not complete. Close and reopen TypeWhisper."), null);
+                    return Loc.T("The update restart did not complete.");
                 }
                 // Restart the same host only after all profile writers and native owners have drained.
                 // On success this API terminates the process; returning means restart failed.
                 var reason = AppInstance.Restart("");
-                var message = "Automatic restart failed. Close and reopen TypeWhisper to apply the plugin update.";
+                var message = Loc.T("Automatic restart failed. Close and reopen TypeWhisper to apply the plugin update.");
                 ShowProfileFailure(message, reason.ToString());
                 return message;
             }
@@ -501,14 +504,14 @@ public partial class App : Application
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("Application shutdown failed: {0}", ex);
-            _tray?.SetShutdownState("Shutdown failed. Work is stopped.");
+            _tray?.SetShutdownState(Loc.T("Shutdown failed. Work is stopped."));
             _window?.ShowShutdownFailure();
             if (_window?.CanRetryRecorderShutdown == true)
             {
                 _exiting = false;
                 _tray?.AllowShutdownRetry();
             }
-            return "Shutdown could not finish. Resolve the displayed error before restarting.";
+            return Loc.T("Shutdown could not finish. Resolve the displayed error before restarting.");
         }
     }
 }

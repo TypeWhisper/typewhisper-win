@@ -24,7 +24,7 @@ public sealed partial class SetupWizard
         var panel = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         var link = new HyperlinkButton
         {
-            Content = "Import from Wispr Flow or Handy…", FontSize = 13,
+            Content = Loc.T("Import from Wispr Flow or Handy…"), FontSize = 13,
             Foreground = Resource("MutedBrush"), Padding = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Center
         };
@@ -62,7 +62,7 @@ public sealed partial class SetupWizard
         try
         {
             var result = await _appImportFlow.ShowAsync(false, app, chooseDestination: true);
-            if (!_closing && !_importsClosing) Report(result ?? "Import canceled. Nothing was changed.");
+            if (!_closing && !_importsClosing) Report(result ?? Loc.T("Import canceled. Nothing was changed."));
         }
         finally { _appImportFlow = null; }
     }

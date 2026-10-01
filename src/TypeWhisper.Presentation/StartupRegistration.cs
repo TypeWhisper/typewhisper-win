@@ -54,17 +54,17 @@ public sealed class StartupRegistration(IStartupRegistrationBackend backend, str
     public StartupRegistrationState Read()
     {
         if (unavailableReason is not null || executable is null)
-            return new(false, false, unavailableReason ?? "Startup registration is unavailable for this build.");
+            return new(false, false, unavailableReason ?? Loc.T("Startup registration is unavailable for this build."));
         try
         {
             var current = backend.Read(identity);
             if (current is null) return new(false, true, null);
             if (!string.Equals(current, Command, StringComparison.Ordinal))
-                return new(false, false, "A different startup command uses this development identity. It was left unchanged.");
+                return new(false, false, Loc.T("A different startup command uses this development identity. It was left unchanged."));
             return new(true, true, null);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return new(false, false, "Startup registration could not be read: " + ex.Message, Unknown: true); }
+        { return new(false, false, Loc.T("Startup registration could not be read: {0}", ex.Message), Unknown: true); }
     }
 
     /// <summary>Applies an explicit choice and reads it back; failed writes never report the requested state as saved.</summary>
@@ -74,8 +74,8 @@ public sealed class StartupRegistration(IStartupRegistrationBackend backend, str
         if (!before.CanChange || before.IsEnabled == enabled) return before;
         string? failure = null;
         try { if (enabled) backend.Write(identity, Command); else backend.Delete(identity); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { failure = "Startup registration could not be changed: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { failure = Loc.T("Startup registration could not be changed: {0}", ex.Message); }
         var actual = Read();
-        return actual with { Error = failure ?? actual.Error ?? (actual.IsEnabled == enabled ? null : "Windows did not save the requested startup registration.") };
+        return actual with { Error = failure ?? actual.Error ?? (actual.IsEnabled == enabled ? null : Loc.T("Windows did not save the requested startup registration.")) };
     }
 }

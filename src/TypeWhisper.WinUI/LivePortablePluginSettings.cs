@@ -14,7 +14,7 @@ internal sealed class LivePortablePluginSettings : UserControl
     private readonly string _id;
     private readonly bool _showEnableAction;
     private readonly TextBlock _status = Label("");
-    private readonly PasswordBox _key = new() { PlaceholderText = "Enter an API key" };
+    private readonly PasswordBox _key = new() { PlaceholderText = Loc.T("Enter an API key") };
     private readonly StackPanel _credentials = new() { Spacing = 8 };
     private readonly StackPanel _connectionActions = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     private readonly LivePortableModelSettings _models;
@@ -32,8 +32,8 @@ internal sealed class LivePortablePluginSettings : UserControl
     private void OnConnectionChanged(string? identity, string? title)
     {
         _connectionTitle = title;
-        _keyLabel.Content = SettingsHelp.Label("API key",
-            "Saved together with these settings in encrypted Windows user storage. Leave empty to keep the saved key.");
+        _keyLabel.Content = SettingsHelp.Label(Loc.T("API key"),
+            Loc.T("Saved together with these settings in encrypted Windows user storage. Leave empty to keep the saved key."));
         _save.Visibility = Visibility.Collapsed;
         _check.Visibility = title is null ? Visibility.Visible : Visibility.Collapsed;
         if (_connectionIdentity == identity) return;
@@ -46,9 +46,9 @@ internal sealed class LivePortablePluginSettings : UserControl
     private async Task<bool> CanLeaveConnectionAsync()
     {
         if (string.IsNullOrEmpty(_key.Password)) return true;
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Unsaved API key",
-            Content = "The key entered for “" + _connectionTitle + "” has not been saved. Use Save profile before switching, or discard the entered key.",
-            PrimaryButtonText = "Discard entered key", CloseButtonText = "Keep editing", DefaultButton = ContentDialogButton.Close };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Unsaved API key"),
+            Content = Loc.T("The key entered for “{0}” has not been saved. Use Save profile before switching, or discard the entered key.", _connectionTitle),
+            PrimaryButtonText = Loc.T("Discard entered key"), CloseButtonText = Loc.T("Keep editing"), DefaultButton = ContentDialogButton.Close };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
         _key.Password = "";
         return true;
@@ -65,21 +65,21 @@ internal sealed class LivePortablePluginSettings : UserControl
         content.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
         content.Children.Add(_status);
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        _enable = Button("Enable plugin", () => session.SetRegistryPluginEnabledAsync(id, true));
+        _enable = Button(Loc.T("Enable plugin"), () => session.SetRegistryPluginEnabledAsync(id, true));
         Grid.SetRow(_enable, 1); Grid.SetRow(_textSettings, 2);
         content.Children.Add(_enable);
-        _keyLabel.Content = SettingsHelp.Label("API key", "The plugin stores the key through encrypted Windows user storage. An empty field keeps the saved key.", 14);
+        _keyLabel.Content = SettingsHelp.Label(Loc.T("API key"), Loc.T("The plugin stores the key through encrypted Windows user storage. An empty field keeps the saved key."), 14);
         _credentials.Children.Add(_keyLabel);
-        AutomationProperties.SetName(_key, "Plugin API key");
+        AutomationProperties.SetName(_key, Loc.T("Plugin API key"));
         _credentials.Children.Add(_key);
-        _save = Button("Save key", async () =>
+        _save = Button(Loc.T("Save key"), async () =>
         {
             var error = await session.SaveRegistryKeyAsync(id, _key.Password);
             if (error is null && IsLoaded) _key.Password = "";
             return error;
-        }, "API key saved. Check connection to verify it.");
-        _remove = Button("Remove saved key", () => session.SaveRegistryKeyAsync(id, ""), "API key removed.");
-        _check = Button("Check connection", () => session.ValidateRegistryKeyAsync(id), "Connection verified. No audio was uploaded.");
+        }, Loc.T("API key saved. Check connection to verify it."));
+        _remove = Button(Loc.T("Remove saved key"), () => session.SaveRegistryKeyAsync(id, ""), Loc.T("API key removed."));
+        _check = Button(Loc.T("Check connection"), () => session.ValidateRegistryKeyAsync(id), Loc.T("Connection verified. No audio was uploaded."));
         _connectionActions.Children.Add(_save); _connectionActions.Children.Add(_remove); _connectionActions.Children.Add(_check);
         _credentials.SizeChanged += (_, e) => _connectionActions.Orientation = e.NewSize.Width < 460 ? Orientation.Vertical : Orientation.Horizontal;
         _credentials.Children.Add(_connectionActions); content.Children.Add(_textSettings);
@@ -101,10 +101,10 @@ internal sealed class LivePortablePluginSettings : UserControl
     private void Refresh()
     {
         var state = _session.PluginRuntime.Snapshot().FirstOrDefault(item => item.PluginId == _id);
-        _status.Text = _message ?? state?.Error ?? (state?.Enabled == true ? "" : "Enable this plugin to configure its providers.");
+        _status.Text = _message ?? state?.Error ?? (state?.Enabled == true ? "" : Loc.T("Enable this plugin to configure its providers."));
         _status.Visibility = string.IsNullOrEmpty(_status.Text) ? Visibility.Collapsed : Visibility.Visible;
         _enable.Visibility = _showEnableAction && state?.Enabled != true ? Visibility.Visible : Visibility.Collapsed;
-        _key.PlaceholderText = state?.ApiKeyConfigured == true ? "Key saved - enter a replacement" : "Enter an API key";
+        _key.PlaceholderText = state?.ApiKeyConfigured == true ? Loc.T("Key saved - enter a replacement") : Loc.T("Enter an API key");
         _remove.Visibility = state?.ApiKeyConfigured == true ? Visibility.Visible : Visibility.Collapsed;
         _credentials.Visibility = state?.HasApiKeySettings == true ? Visibility.Visible : Visibility.Collapsed;
         if (state?.Enabled == true)
@@ -139,7 +139,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _save.IsEnabled = available && !string.IsNullOrWhiteSpace(_key.Password);
         _textSettings.IsEnabled = !_working;
     }
-    private HandCursorButton Button(string text, Func<Task<string?>> action, string success = "Saved.")
+    private HandCursorButton Button(string text, Func<Task<string?>> action, string? success = null)
     {
         var button = new HandCursorButton { Content = text, HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
@@ -148,9 +148,9 @@ internal sealed class LivePortablePluginSettings : UserControl
             if (_working || !IsLoaded) return;
             _working = true; UpdateButtons();
             var context = _connectionTitle;
-            try { var error = await action(); if (IsLoaded) _message = (context is null ? "" : "“" + context + "”: ") + (error ?? success); }
+            try { var error = await action(); if (IsLoaded) _message = (context is null ? "" : "“" + context + "”: ") + (error ?? success ?? Loc.T("Saved.")); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (IsLoaded) _message = "The plugin operation could not finish. Check its configuration and try again."; }
+            { if (IsLoaded) _message = Loc.T("The plugin operation could not finish. Check its configuration and try again."); }
             finally
             {
                 _working = false;

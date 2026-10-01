@@ -41,14 +41,14 @@ public sealed class RecorderPreferencesStore
         catch (FileNotFoundException) { }
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { Error = "Recorder preferences could not be loaded. Default sources are selected; the existing file was preserved."; }
+        { Error = Loc.T("Recorder preferences could not be loaded. Default sources are selected; the existing file was preserved."); }
     }
 
     /// <summary>Saves source defaults atomically; a failed save retains the previous selection and file.</summary>
     public string? Save(RecorderPreferences value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        if (!value.IsValid) { Error = "Choose a valid system audio device."; NotifyChanged(); return Error; }
+        if (!value.IsValid) { Error = Loc.T("Choose a valid system audio device."); NotifyChanged(); return Error; }
         try
         {
             var normalized = Normalize(value);
@@ -57,7 +57,7 @@ public sealed class RecorderPreferencesStore
             Error = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { Error = "Recorder preferences could not be saved. The previous source selection still applies."; }
+        { Error = Loc.T("Recorder preferences could not be saved. The previous source selection still applies."); }
         NotifyChanged();
         return Error;
     }

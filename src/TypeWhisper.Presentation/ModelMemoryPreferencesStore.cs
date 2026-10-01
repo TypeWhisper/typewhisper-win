@@ -36,14 +36,14 @@ public sealed class ModelMemoryPreferencesStore
         catch (DirectoryNotFoundException) { /* Nothing saved yet: the default applies. */ }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
-            Error = "The model unload setting could not be loaded. Models are released after 10 minutes. Choose a setting to restore it.";
+            Error = Loc.T("The model unload setting could not be loaded. Models are released after 10 minutes. Choose a setting to restore it.");
         }
     }
 
     /// <summary>Persists one of <see cref="Choices"/>; failed writes preserve the previous setting.</summary>
     public string? Save(int seconds)
     {
-        if (!Choices.Contains(seconds)) return Error = "Choose a valid unload setting.";
+        if (!Choices.Contains(seconds)) return Error = Loc.T("Choose a valid unload setting.");
         string? temporary = null;
         try
         {
@@ -58,7 +58,7 @@ public sealed class ModelMemoryPreferencesStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Error = "The model unload setting could not be saved. The previous setting still applies.";
+            return Error = Loc.T("The model unload setting could not be saved. The previous setting still applies.");
         }
         finally
         {

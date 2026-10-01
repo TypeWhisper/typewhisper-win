@@ -29,7 +29,7 @@ internal static class SettingsHelp
             Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0, 0, 0, 0)),
             BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center
         };
-        AutomationProperties.SetName(button, $"About {title}");
+        AutomationProperties.SetName(button, Loc.T("About {0}", title));
         Update(button, help);
         return button;
     }

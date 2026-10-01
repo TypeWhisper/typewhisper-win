@@ -34,7 +34,7 @@ internal sealed class DictationDictionarySnapshot
             return new(entries);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { return new([], "Dictionary unavailable · original transcript retained."); }
+        { return new([], Loc.T("Dictionary unavailable · original transcript retained.")); }
     }
 
     internal string ApplyBoosting(string text) => _boosting.Apply(text);

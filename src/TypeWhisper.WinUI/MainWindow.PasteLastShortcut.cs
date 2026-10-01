@@ -13,10 +13,10 @@ public sealed partial class MainWindow
         // The shortcut pastes into the app window it was pressed in.
         _pasteLastShortcut = InitializeActionShortcut(GlobalShortcuts.PasteLastTranscription,
             () => _ = PasteLastTranscriptionAsync(ForegroundWindowHistory.CurrentTarget, activate: false), 0x8A00,
-            "paste-last-transcription-hotkeys.txt", "Paste last transcription shortcuts", "paste-last");
+            "paste-last-transcription-hotkeys.txt", Loc.T("Paste last transcription shortcuts"), Loc.T("paste-last"));
     }
 
-    private string? ChangePasteLastShortcut(string value) => ChangeActionShortcut(_pasteLastShortcut, "Paste-last", value);
+    private string? ChangePasteLastShortcut(string value) => ChangeActionShortcut(_pasteLastShortcut, Loc.T("Paste-last"), value);
 
     // The tray menu takes the foreground, so it pastes into the last app window used before.
     internal void PasteLastTranscriptionFromTray() => _ = PasteLastTranscriptionAsync(_foregroundHistory?.LastTarget, activate: true);
@@ -42,10 +42,10 @@ public sealed partial class MainWindow
         }
         var message = result switch
         {
-            LastDictationPasteResult.Busy => "Finish the current operation before pasting the last dictation.",
-            LastDictationPasteResult.Empty => "No completed dictation in this session yet. Dictate once, then use this shortcut.",
-            LastDictationPasteResult.NoTarget => "Click into the app you want to paste into, then try again.",
-            _ => "Could not paste the last dictation. Release all keys, click into a text field and try again, or use Copy last transcription."
+            LastDictationPasteResult.Busy => Loc.T("Finish the current operation before pasting the last dictation."),
+            LastDictationPasteResult.Empty => Loc.T("No completed dictation in this session yet. Dictate once, then use this shortcut."),
+            LastDictationPasteResult.NoTarget => Loc.T("Click into the app you want to paste into, then try again."),
+            _ => Loc.T("Could not paste the last dictation. Release all keys, click into a text field and try again, or use Copy last transcription.")
         };
         ShowActivationNotice(message);
     }

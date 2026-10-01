@@ -12,7 +12,7 @@ public sealed partial class MarketplaceView
         var count = updates.Available.Count;
         MarketUpdateAllButton.Visibility = !IsDetail && (count > 0 || updates.RestartRequired || updates.Busy)
             ? Visibility.Visible : Visibility.Collapsed;
-        MarketUpdateAllButton.Content = updates.Busy ? "Updating..." : count > 0 ? $"Update all ({count})" : "Restart now";
+        MarketUpdateAllButton.Content = updates.Busy ? Loc.T("Updating...") : count > 0 ? Loc.T("Update all ({0})", count) : Loc.T("Restart now");
         MarketUpdateAllButton.IsEnabled = !updates.Busy && !_restarting && _installation is null && _runtime.CanChangeProvider;
         UpdateNotice.Text = _bulkError ?? updates.Status ?? "";
         UpdateNotice.Visibility = !IsDetail && (_bulkError ?? updates.Status) is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -27,7 +27,7 @@ public sealed partial class MarketplaceView
         {
             _restarting = true; UpdateAllAction();
             try { _bulkError = await RestartRequested(); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { _bulkError = "Restart could not finish. Close and reopen TypeWhisper."; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { _bulkError = Loc.T("Restart could not finish. Close and reopen TypeWhisper."); }
             finally { _restarting = false; UpdateAllAction(); }
         }
         Filter(_query);

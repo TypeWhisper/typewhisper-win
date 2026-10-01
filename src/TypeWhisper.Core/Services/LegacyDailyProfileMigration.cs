@@ -145,14 +145,11 @@ public static class LegacyDailyProfileMigration
     /// <summary>Explains a failed import without exception internals; the legacy profile is never changed by a failure.</summary>
     public static string DescribeFailure(Exception error) => error switch
     {
-        LegacyImportLinkException => "Your previous TypeWhisper profile contains a linked file or folder (symbolic link or junction). " +
-            "Links inside the profile are not followed. Replace the link with the real files and retry, or start with a new profile.",
-        JsonException or InvalidDataException => "A file in your previous TypeWhisper profile is damaged or has an unsupported format, " +
-            "so it could not be imported. Retry after repairing it, or start with a new profile.",
-        UnauthorizedAccessException or IOException => "Files of your previous TypeWhisper profile could not be read or copied. " +
-            "Close the previous TypeWhisper version, check free disk space and retry, or start with a new profile.",
-        _ => "Your previous TypeWhisper profile could not be imported. Retry, or start with a new profile."
-    } + " Your previous data is unchanged either way.";
+        LegacyImportLinkException => Loc.T("Your previous TypeWhisper profile contains a linked file or folder (symbolic link or junction). Links inside the profile are not followed. Replace the link with the real files and retry, or start with a new profile. Your previous data is unchanged either way."),
+        JsonException or InvalidDataException => Loc.T("A file in your previous TypeWhisper profile is damaged or has an unsupported format, so it could not be imported. Retry after repairing it, or start with a new profile. Your previous data is unchanged either way."),
+        UnauthorizedAccessException or IOException => Loc.T("Files of your previous TypeWhisper profile could not be read or copied. Close the previous TypeWhisper version, check free disk space and retry, or start with a new profile. Your previous data is unchanged either way."),
+        _ => Loc.T("Your previous TypeWhisper profile could not be imported. Retry, or start with a new profile. Your previous data is unchanged either way.")
+    };
 
     /// <summary>Returns an equivalent path without symbolic links or junctions at the path or any ancestor.</summary>
     /// <remarks>Only for read-only sources and destination parents. Non-link reparse points are kept as they are.</remarks>

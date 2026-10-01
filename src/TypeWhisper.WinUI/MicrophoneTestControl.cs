@@ -12,7 +12,7 @@ internal sealed class MicrophoneTestControl : StackPanel
 {
     private readonly LocalDictationSession _session;
     private readonly HandCursorButton _button;
-    private readonly TextBlock _status = Copy("Speak into your microphone to check its input.");
+    private readonly TextBlock _status = Copy(Loc.T("Speak into your microphone to check its input."));
     private readonly TextBlock _device = Copy("", true);
     private readonly TextBlock _explanation = Copy("", true);
     private readonly ProgressBar _level = new() { Minimum = 0, Maximum = 100, Height = 6, IsTabStop = false };
@@ -24,14 +24,14 @@ internal sealed class MicrophoneTestControl : StackPanel
         _session = session;
         Spacing = 8;
         Margin = new Thickness(0, 8, 0, 8);
-        Children.Add(SettingsHelp.Label("Microphone test", "Checks the microphone selected by your priority list. No audio is saved or sent. Stops automatically after 15 seconds."));
+        Children.Add(SettingsHelp.Label(Loc.T("Microphone test"), Loc.T("Checks the microphone selected by your priority list. No audio is saved or sent. Stops automatically after 15 seconds.")));
         _button = new HandCursorButton
         {
-            Content = "Test microphone", HorizontalAlignment = HorizontalAlignment.Left,
+            Content = Loc.T("Test microphone"), HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"]
         };
         _button.Click += (_, _) => ToggleTest();
-        AutomationProperties.SetName(_level, "Microphone input level");
+        AutomationProperties.SetName(_level, Loc.T("Microphone input level"));
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         Children.Add(_button);
         Children.Add(_device);
@@ -57,7 +57,7 @@ internal sealed class MicrophoneTestControl : StackPanel
             return;
         }
         _ownsTest = true;
-        _button.Content = "Stop test";
+        _button.Content = Loc.T("Stop test");
         _timer.Start();
         Update();
     }
@@ -81,13 +81,13 @@ internal sealed class MicrophoneTestControl : StackPanel
         try { _session.StopMicrophoneTest(); }
         catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
-            _status.Text = "Could not stop the microphone test: " + ex.Message;
-            _button.Content = "Test microphone";
+            _status.Text = Loc.T("Could not stop the microphone test: {0}", ex.Message);
+            _button.Content = Loc.T("Test microphone");
             _level.Value = 0;
             return;
         }
         if (_session.MicrophoneTest is { } test) Render(test);
-        _button.Content = "Test microphone";
+        _button.Content = Loc.T("Test microphone");
         _level.Value = 0;
     }
 
@@ -97,14 +97,14 @@ internal sealed class MicrophoneTestControl : StackPanel
         _level.Value = test.Peak <= 0 ? 0 : Math.Clamp((20 * Math.Log10(test.Peak) + 60) / 60 * 100, 0, 100);
         var (status, explanation) = test.State switch
         {
-            MicrophoneTestState.WaitingForPackets => ("Waiting for microphone input…", "Speak into the microphone."),
-            MicrophoneTestState.NoPackets => ("No audio received", "Check the microphone connection and Windows microphone access."),
-            MicrophoneTestState.WindowsSilent => ("Windows reports silence", "Check the microphone mute switch and Windows input settings."),
-            MicrophoneTestState.ZeroSamples => ("Microphone sends only silence", "Check mute controls, input volume and the audio driver."),
-            MicrophoneTestState.Signal => ("Audio signal received", "Sound is reaching TypeWhisper."),
-            _ => ("Microphone test failed", test.Error ?? MicrophoneFailure.Generic)
+            MicrophoneTestState.WaitingForPackets => (Loc.T("Waiting for microphone input…"), Loc.T("Speak into the microphone.")),
+            MicrophoneTestState.NoPackets => (Loc.T("No audio received"), Loc.T("Check the microphone connection and Windows microphone access.")),
+            MicrophoneTestState.WindowsSilent => (Loc.T("Windows reports silence"), Loc.T("Check the microphone mute switch and Windows input settings.")),
+            MicrophoneTestState.ZeroSamples => (Loc.T("Microphone sends only silence"), Loc.T("Check mute controls, input volume and the audio driver.")),
+            MicrophoneTestState.Signal => (Loc.T("Audio signal received"), Loc.T("Sound is reaching TypeWhisper.")),
+            _ => (Loc.T("Microphone test failed"), test.Error ?? MicrophoneFailure.Generic)
         };
-        _status.Text = test.Running ? status : "Test stopped · " + status;
+        _status.Text = test.Running ? status : Loc.T("Test stopped · {0}", status);
         SetCopy(_explanation, explanation);
     }
 

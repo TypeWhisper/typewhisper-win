@@ -142,14 +142,14 @@ public sealed class EscapeCancelPreferencesStore
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            Error = "Escape cancellation could not be loaded. Pressing Esc twice cancels. Save a choice to restore this preference.";
+            Error = Loc.T("Escape cancellation could not be loaded. Pressing Esc twice cancels. Save a choice to restore this preference.");
         }
     }
 
     /// <summary>Persists a valid behavior; failed writes preserve the previous selection.</summary>
     public string? Save(EscapeCancelBehavior behavior)
     {
-        if (!Enum.IsDefined(behavior)) return Error = "Choose a valid Escape behavior.";
+        if (!Enum.IsDefined(behavior)) return Error = Loc.T("Choose a valid Escape behavior.");
         try
         {
             AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new { Behavior = behavior.ToString() }));
@@ -158,7 +158,7 @@ public sealed class EscapeCancelPreferencesStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Error = "Escape cancellation could not be saved. Your previous choice still applies.";
+            return Error = Loc.T("Escape cancellation could not be saved. Your previous choice still applies.");
         }
     }
 }

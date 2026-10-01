@@ -19,7 +19,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
     internal MicrophonePriorityEditor(LocalDictationSession session)
     {
         _session = session; Spacing = 8;
-        Children.Add(SettingsHelp.Label("Microphones", "Drag to prioritize or use the arrow buttons. The first available microphone wins; Windows default is the fallback."));
+        Children.Add(SettingsHelp.Label(Loc.T("Microphones"), Loc.T("Drag to prioritize or use the arrow buttons. The first available microphone wins; Windows default is the fallback.")));
         _list = new ListView
         {
             Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"],
@@ -62,24 +62,24 @@ internal sealed class MicrophonePriorityEditor : StackPanel
                 <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:local="using:TypeWhisper.WinUI">
                   <Grid Padding="12,4,6,4" ColumnSpacing="10" MinHeight="42">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="≡" Width="20" TextAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" ToolTipService.ToolTip="Drag to reorder"/>
+                    <TextBlock Text="≡" Width="20" TextAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" ToolTipService.ToolTip="{Binding DragTip}"/>
                     <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
                       <ToolTipService.ToolTip><ToolTip Content="{Binding Name}" Style="{StaticResource HeatmapToolTipStyle}"/></ToolTipService.ToolTip>
                     </TextBlock>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
-                      <local:HandCursorButton Command="{Binding Up}" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="Move microphone up" ToolTipService.ToolTip="Move up" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE74A;" FontSize="12"/></local:HandCursorButton>
-                      <local:HandCursorButton Command="{Binding Down}" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="Move microphone down" ToolTipService.ToolTip="Move down" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE74B;" FontSize="12"/></local:HandCursorButton>
-                      <local:HandCursorButton Command="{Binding Remove}" AutomationProperties.Name="Remove microphone from priority list" ToolTipService.ToolTip="Remove" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE711;" FontSize="12"/></local:HandCursorButton>
+                      <local:HandCursorButton Command="{Binding Up}" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="{Binding MoveUpName}" ToolTipService.ToolTip="{Binding MoveUpTip}" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE74A;" FontSize="12"/></local:HandCursorButton>
+                      <local:HandCursorButton Command="{Binding Down}" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="{Binding MoveDownName}" ToolTipService.ToolTip="{Binding MoveDownTip}" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE74B;" FontSize="12"/></local:HandCursorButton>
+                      <local:HandCursorButton Command="{Binding Remove}" AutomationProperties.Name="{Binding RemoveName}" ToolTipService.ToolTip="{Binding RemoveTip}" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Style="{StaticResource MenuButtonStyle}"><FontIcon Glyph="&#xE711;" FontSize="12"/></local:HandCursorButton>
                     </StackPanel>
                   </Grid>
                 </DataTemplate>
                 """)
         };
-        AutomationProperties.SetName(_list, "Microphone priority, highest priority first");
-        _list.DragItemsStarting += (_, e) => { if (session.IsRecording) { e.Cancel = true; _hint.Text = "Finish recording before reordering microphones."; } };
+        AutomationProperties.SetName(_list, Loc.T("Microphone priority, highest priority first"));
+        _list.DragItemsStarting += (_, e) => { if (session.IsRecording) { e.Cancel = true; _hint.Text = Loc.T("Finish recording before reordering microphones."); } };
         _list.DragItemsCompleted += (_, _) => Save();
         Children.Add(_list);
-        _add.Configure("Add microphone", "microphone", "Add microphone to priority list");
+        _add.Configure(Loc.T("Add microphone"), "microphone", Loc.T("Add microphone to priority list"));
         _add.SelectionChanged += id =>
         {
             var devices = session.GetMicrophones();
@@ -101,7 +101,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         addRow.Children.Add(_add);
         var refresh = new HandCursorButton { Content = new FontIcon { Glyph = "\uE72C", FontSize = 16 }, Width = 42, Height = 42,
             Padding = new Thickness(8), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
-        AutomationProperties.SetName(refresh, "Refresh microphones"); ToolTipService.SetToolTip(refresh, "Refresh microphones");
+        AutomationProperties.SetName(refresh, Loc.T("Refresh microphones")); ToolTipService.SetToolTip(refresh, Loc.T("Refresh microphones"));
         refresh.Click += (_, _) => Refresh(); Grid.SetColumn(refresh, 1); addRow.Children.Add(refresh);
         Children.Add(addRow); Children.Add(_hint);
         Children.Add(new MicrophoneTestControl(session));
@@ -138,11 +138,11 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         var priority = _items.Select(item => item.Item).ToArray();
         _add.SetOptions(devices.Where(device => !_items.Any(item => item.Item.Id == device.Id))
             .Select(device => new Choice(device.Id, device.Name, Platform.MicrophoneFailure.ReplacedEntryIndex(priority, device, devices) >= 0
-                ? "Update the saved entry for this microphone" : "Add to priority list")).ToArray(), "", _items.Count == 0 ? "System default · add microphone…" : "Add microphone…");
+                ? Loc.T("Update the saved entry for this microphone") : Loc.T("Add to priority list"))).ToArray(), "", _items.Count == 0 ? Loc.T("System default · add microphone…") : Loc.T("Add microphone…"));
         var missing = _items.Where(item => !devices.Any(device => Platform.MicrophoneFailure.IsSameMicrophone(device, item.Item))).Select(item => item.Name).ToArray();
         _hint.Text = _session.MicrophoneNotice() is { } notice ? notice
-            : missing.Length > 0 ? "Disconnected (kept in priority list): " + string.Join(", ", missing)
-            : _items.Count == 0 ? "Uses Windows default until you add a microphone." : "Priority saved.";
+            : missing.Length > 0 ? Loc.T("Disconnected (kept in priority list): {0}", string.Join(", ", missing))
+            : _items.Count == 0 ? Loc.T("Uses Windows default until you add a microphone.") : Loc.T("Priority saved.");
     }
 
     public sealed class PriorityRow(MicrophonePriorityItem item, bool canMoveUp, bool canMoveDown)
@@ -151,6 +151,13 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         public string Name => item.Name;
         public bool CanMoveUp => canMoveUp;
         public bool CanMoveDown => canMoveDown;
+        public string DragTip => Loc.T("Drag to reorder");
+        public string MoveUpName => Loc.T("Move microphone up");
+        public string MoveUpTip => Loc.T("Move up");
+        public string MoveDownName => Loc.T("Move microphone down");
+        public string MoveDownTip => Loc.T("Move down");
+        public string RemoveName => Loc.T("Remove microphone from priority list");
+        public string RemoveTip => Loc.T("Remove");
         public System.Windows.Input.ICommand Up { get; set; } = null!;
         public System.Windows.Input.ICommand Down { get; set; } = null!;
         public System.Windows.Input.ICommand Remove { get; set; } = null!;

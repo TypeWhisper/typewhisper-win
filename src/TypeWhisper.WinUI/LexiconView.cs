@@ -34,9 +34,9 @@ public sealed partial class LexiconView : UserControl
     private readonly StackPanel _rows = new() { Spacing = 6 };
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
     private readonly Breadcrumbs _crumbs = new();
-    private readonly TextBlock _heading = Text("Dictionary", 22);
-    private readonly HandCursorButton _headingHelp = SettingsHelp.Button("Dictionary", "Dictionary and snippets are saved in this profile.");
-    private readonly TextBlock _notice = Text("Dictionary and snippets are saved in this profile.", 11, true);
+    private readonly TextBlock _heading = Text(Loc.T("Dictionary"), 22);
+    private readonly HandCursorButton _headingHelp = SettingsHelp.Button(Loc.T("Dictionary"), Loc.T("Dictionary and snippets are saved in this profile."));
+    private readonly TextBlock _notice = Text(Loc.T("Dictionary and snippets are saved in this profile."), 11, true);
     private readonly TextBlock _count = Text("", 11, true);
     private readonly ScrollViewer _scroll;
     private LexiconKind _kind;
@@ -59,7 +59,7 @@ public sealed partial class LexiconView : UserControl
         var header = new StackPanel { Spacing = 12 };
         _heading.FontSize = 20; _heading.MinHeight = 32; _heading.Margin = new Thickness(4, 0, 0, 0);
         // Settings list Dictionary and Snippets as separate pages, so only the dictionary has tabs.
-        _tabs.SetItems([new("Word", "Words"), new("Correction", "Corrections"), new("packs", "Term packs")], "Word");
+        _tabs.SetItems([new("Word", Loc.T("Words")), new("Correction", Loc.T("Corrections")), new("packs", Loc.T("Term packs"))], "Word");
         _tabs.SelectionChanged += id =>
         {
             _showPacks = id == "packs";
@@ -92,7 +92,7 @@ public sealed partial class LexiconView : UserControl
 
     internal void GoBack()
     {
-        if (_confirmDelete) { _confirmDelete = false; RenderActions(); _notice.Text = "Entry kept."; return; }
+        if (_confirmDelete) { _confirmDelete = false; RenderActions(); _notice.Text = Loc.T("Entry kept."); return; }
         if (_pending is not null) { _pending = null; Render(); return; }
         Navigate(_draft is not null ? CloseEditor : () => ExitRequested?.Invoke());
     }
@@ -101,15 +101,14 @@ public sealed partial class LexiconView : UserControl
     {
         if (_draft is not null && _draft != _original)
         {
-            _pending = next; RenderActions(); _notice.Text = "You have unsaved changes. Keep editing or discard them to leave.";
+            _pending = next; RenderActions(); _notice.Text = Loc.T("You have unsaved changes. Keep editing or discard them to leave.");
             _actions.Children.OfType<Control>().FirstOrDefault()?.Focus(FocusState.Programmatic);
         }
         else next();
     }
 
     private void CloseEditor() { _draft = _original = null; _pending = null; _confirmDelete = false; Render(); }
-    private string Section => _kind switch { LexiconKind.Word => "Words", LexiconKind.Correction => "Corrections", _ => "Snippets" };
-    private string Singular => _kind switch { LexiconKind.Word => "word", LexiconKind.Correction => "correction", _ => "snippet" };
+    private string Section => _kind switch { LexiconKind.Word => Loc.T("Words"), LexiconKind.Correction => Loc.T("Corrections"), _ => Loc.T("Snippets") };
     private string Icon => _kind == LexiconKind.Snippet ? "text" : "dictionary";
 
     private void Render()
@@ -118,12 +117,14 @@ public sealed partial class LexiconView : UserControl
         _tabs.Visibility = _draft is null && !(_kind == LexiconKind.Snippet && !_showPacks) ? Visibility.Visible : Visibility.Collapsed;
         if (_draft is null) RenderTabs();
         if (_showPacks) { RenderPacks(); return; }
-        _heading.Text = _draft is null ? (_kind == LexiconKind.Snippet ? "Snippets" : "Dictionary") :
-            $"{(_store.Entries.Any(entry => entry.Id == _draft.Id) ? "Edit" : "New")} {Singular}";
+        _heading.Text = _draft is null ? (_kind == LexiconKind.Snippet ? Loc.T("Snippets") : Loc.T("Dictionary")) :
+            _store.Entries.Any(entry => entry.Id == _draft.Id)
+                ? _kind switch { LexiconKind.Word => Loc.T("Edit word"), LexiconKind.Correction => Loc.T("Edit correction"), _ => Loc.T("Edit snippet") }
+                : _kind switch { LexiconKind.Word => Loc.T("New word"), LexiconKind.Correction => Loc.T("New correction"), _ => Loc.T("New snippet") };
         if (_draft is null) _crumbs.SetItems(new Crumb(Section));
-        else _crumbs.SetItems(new(Section, () => Navigate(CloseEditor)), new("Editor"));
-        _notice.Text = _store.LastError ?? (_kind == LexiconKind.Snippet ? "Saved snippets are applied to your next dictation." : "Saved · applied to the next dictation using existing Windows dictionary rules.");
-        AutomationProperties.SetName(_headingHelp, "About " + (_draft is null ? Section : _heading.Text));
+        else _crumbs.SetItems(new(Section, () => Navigate(CloseEditor)), new(Loc.T("Editor")));
+        _notice.Text = _store.LastError ?? (_kind == LexiconKind.Snippet ? Loc.T("Saved snippets are applied to your next dictation.") : Loc.T("Saved · applied to the next dictation using existing Windows dictionary rules."));
+        AutomationProperties.SetName(_headingHelp, Loc.T("About {0}", _draft is null ? Section : _heading.Text));
         if (_draft is null) RenderList(); else RenderEditor();
         RenderActions(); _scroll.ChangeView(null, 0, null, true);
     }
@@ -134,14 +135,15 @@ public sealed partial class LexiconView : UserControl
     {
         SettingsHelp.Update(_headingHelp, _kind switch
         {
-            LexiconKind.Word => "Names and specialist terms you want TypeWhisper to recognize.",
-            LexiconKind.Correction => "Replace commonly misheard phrases with the spelling you prefer.",
-            _ => "Turn a short spoken phrase into a reusable block of text."
+            LexiconKind.Word => Loc.T("Names and specialist terms you want TypeWhisper to recognize."),
+            LexiconKind.Correction => Loc.T("Replace commonly misheard phrases with the spelling you prefer."),
+            _ => Loc.T("Turn a short spoken phrase into a reusable block of text.")
         });
-        var search = Input(_query, "Search " + Section.ToLowerInvariant(), false);
+        var searchLabel = _kind switch { LexiconKind.Word => Loc.T("Search words"), LexiconKind.Correction => Loc.T("Search corrections"), _ => Loc.T("Search snippets") };
+        var search = Input(_query, searchLabel, false);
         var searchGrid = new Grid { ColumnSpacing = 8 }; searchGrid.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); searchGrid.ColumnDefinitions.Add(new());
         searchGrid.Children.Add(new TypeWhisperGlyph { Kind = "search", Width = 18, Height = 18 });
-        var placeholder = Text("Search " + Section.ToLowerInvariant() + "…", 14, true); placeholder.IsHitTestVisible = false;
+        var placeholder = Text(searchLabel + "…", 14, true); placeholder.IsHitTestVisible = false;
         placeholder.Margin = new Thickness(12, 0, 0, 0); placeholder.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(search, 1); Grid.SetColumn(placeholder, 1); searchGrid.Children.Add(search); searchGrid.Children.Add(placeholder);
         void SearchChanged() { _query = search.Text; placeholder.Visibility = _query.Length == 0 ? Visibility.Visible : Visibility.Collapsed; RenderRows(); }
@@ -152,13 +154,14 @@ public sealed partial class LexiconView : UserControl
     private void RenderRows()
     {
         _rows.Children.Clear(); var entries = _store.Search(_kind, _query).ToArray();
-        _count.Text = $"{entries.Length} of {_store.Entries.Count(entry => entry.Kind == _kind)} {Section.ToLowerInvariant()}";
+        var total = _store.Entries.Count(entry => entry.Kind == _kind);
+        _count.Text = _kind switch { LexiconKind.Word => Loc.T("{0} of {1} words", entries.Length, total), LexiconKind.Correction => Loc.T("{0} of {1} corrections", entries.Length, total), _ => Loc.T("{0} of {1} snippets", entries.Length, total) };
         if (entries.Length == 0)
         {
             var empty = new StackPanel { Spacing = 10, Padding = new Thickness(16, 24, 16, 24) };
             empty.Children.Add(new TypeWhisperGlyph { Kind = "search", Width = 30, Height = 30, HorizontalAlignment = HorizontalAlignment.Center });
-            var title = Text(_query.Length == 0 ? $"Your first {Singular} starts here" : "No matching entries", 16); title.TextAlignment = TextAlignment.Center; empty.Children.Add(title);
-            var hint = Text(_query.Length == 0 ? "Add a term or phrase with the button below." : "Try a different word, phrase, or tag.", 12, true); hint.TextAlignment = TextAlignment.Center; empty.Children.Add(hint);
+            var title = Text(_query.Length == 0 ? _kind switch { LexiconKind.Word => Loc.T("Your first word starts here"), LexiconKind.Correction => Loc.T("Your first correction starts here"), _ => Loc.T("Your first snippet starts here") } : Loc.T("No matching entries"), 16); title.TextAlignment = TextAlignment.Center; empty.Children.Add(title);
+            var hint = Text(_query.Length == 0 ? Loc.T("Add a term or phrase with the button below.") : Loc.T("Try a different word, phrase, or tag."), 12, true); hint.TextAlignment = TextAlignment.Center; empty.Children.Add(hint);
             _rows.Children.Add(empty); return;
         }
         if (_kind == LexiconKind.Correction) { RenderCorrectionGroups(entries); return; }
@@ -170,18 +173,18 @@ public sealed partial class LexiconView : UserControl
             var labels = new StackPanel { Spacing = 5 }; var title = Text(_kind == LexiconKind.Correction ? entry.Value : entry.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; labels.Children.Add(title);
             if (_kind != LexiconKind.Word)
             {
-                var description = Text(_kind == LexiconKind.Correction ? "Recognized as: " + entry.Key : entry.Value.Replace('\n', ' '), 12, true);
+                var description = Text(_kind == LexiconKind.Correction ? Loc.T("Recognized as: {0}", entry.Key) : entry.Value.Replace('\n', ' '), 12, true);
                 description.MaxLines = 1; description.TextTrimming = TextTrimming.CharacterEllipsis; labels.Children.Add(description);
             }
             if (entry.Tags.Length > 0) labels.Children.Add(Text(entry.Tags, 11, true));
-            if (entry.Kind == LexiconKind.Snippet) labels.Children.Add(Text($"Used {entry.UsageCount} {(entry.UsageCount == 1 ? "time" : "times")}", 11, true));
+            if (entry.Kind == LexiconKind.Snippet) labels.Children.Add(Text(entry.UsageCount == 1 ? Loc.T("Used 1 time") : Loc.T("Used {0} times", entry.UsageCount), 11, true));
             Grid.SetColumn(labels, 1); content.Children.Add(labels);
-            var trailing = Text(entry.Enabled ? "Edit  ›" : "Off  ·  Edit  ›", 11, true); trailing.VerticalAlignment = VerticalAlignment.Center;
+            var trailing = Text(entry.Enabled ? Loc.T("Edit  ›") : Loc.T("Off  ·  Edit  ›"), 11, true); trailing.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(trailing, 2); content.Children.Add(trailing);
             var row = Button("", () => { if (entry.FromPack) { _showPacks = true; Render(); } else OpenEditor(entry); }); row.ContextFlyout = LexiconEntryMenu(entry); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
-            if (entry.FromPack) trailing.Text = "Term packs  ›";
+            if (entry.FromPack) trailing.Text = Loc.T("Term packs  ›");
             row.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
-            AutomationProperties.SetName(row, entry.FromPack ? $"Manage term pack for {entry.Key}" : entry.Kind == LexiconKind.Correction ? $"Edit correction: {entry.Value}, recognized as {entry.Key}" : $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
+            AutomationProperties.SetName(row, entry.FromPack ? Loc.T("Manage term pack for {0}", entry.Key) : entry.Kind == LexiconKind.Correction ? Loc.T("Edit correction: {0}, recognized as {1}", entry.Value, entry.Key) : _kind == LexiconKind.Snippet ? Loc.T("Edit snippet: {0}", entry.Key) : Loc.T("Edit word: {0}", entry.Key)); _rows.Children.Add(row);
         }
     }
 
@@ -191,13 +194,14 @@ public sealed partial class LexiconView : UserControl
         var groups = _store.Entries.Where(entry => entry.Kind == LexiconKind.Correction && matchingTargets.Contains(entry.Value))
             .GroupBy(entry => entry.Value, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase).ToArray();
-        _count.Text = $"{groups.Length} {(groups.Length == 1 ? "spelling" : "spellings")} · {groups.Sum(group => group.Count())} variants";
+        _count.Text = groups.Length == 1 ? Loc.T("{0} spelling · {1} variants", groups.Length, groups.Sum(group => group.Count()))
+            : Loc.T("{0} spellings · {1} variants", groups.Length, groups.Sum(group => group.Count()));
         foreach (var group in groups)
         {
             var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
             var title = Text(group.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
             header.Children.Add(title);
-            header.Children.Add(Text($"{group.Count()} {(group.Count() == 1 ? "variant" : "variants")}", 12, true));
+            header.Children.Add(Text(group.Count() == 1 ? Loc.T("1 variant") : Loc.T("{0} variants", group.Count()), 12, true));
             var aliases = new StackPanel { Spacing = 6 };
             foreach (var alias in group.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -205,25 +209,25 @@ public sealed partial class LexiconView : UserControl
                 var row = new Grid { ColumnSpacing = 12 };
                 row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
                 var edit = Button("", () => OpenEditor(current));
-                EntryActionMenu.Attach(edit, () => [new("Edit variant", () => OpenEditor(current)), new("Delete variant…", () => { OpenEditor(current); EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == "Delete")?.Invoke(); })]);
+                EntryActionMenu.Attach(edit, () => [new(Loc.T("Edit variant"), () => OpenEditor(current)), new(Loc.T("Delete variant…"), () => { OpenEditor(current); EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == Loc.T("Delete"))?.Invoke(); })]);
                 var label = Text(alias.Key, 13);
                 label.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
                 edit.Content = label;
                 edit.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
                 edit.HorizontalAlignment = HorizontalAlignment.Stretch;
                 edit.HorizontalContentAlignment = HorizontalAlignment.Left;
-                AutomationProperties.SetName(edit, $"Edit variant {alias.Key} for {group.Key}");
-                ToolTipService.SetToolTip(edit, "Edit variant");
+                AutomationProperties.SetName(edit, Loc.T("Edit variant {0} for {1}", alias.Key, group.Key));
+                ToolTipService.SetToolTip(edit, Loc.T("Edit variant"));
                 row.Children.Add(edit);
                 var toggle = AppToggleSwitch.Create(alias.Enabled);
-                AutomationProperties.SetName(toggle, $"Enable correction from {alias.Key} to {group.Key}");
+                AutomationProperties.SetName(toggle, Loc.T("Enable correction from {0} to {1}", alias.Key, group.Key));
                 var restoring = false;
                 toggle.Toggled += (_, _) =>
                 {
                     if (restoring || _closing) return;
                     var updated = current with { Enabled = toggle.IsOn };
                     var error = _store.Save(updated);
-                    if (error is null) { current = updated; _notice.Text = "Correction saved."; }
+                    if (error is null) { current = updated; _notice.Text = Loc.T("Correction saved."); }
                     else
                     {
                         restoring = true; toggle.IsOn = current.Enabled; restoring = false;
@@ -255,7 +259,7 @@ public sealed partial class LexiconView : UserControl
             expand.HorizontalContentAlignment = HorizontalAlignment.Left;
             expand.MinHeight = 32;
             expand.Padding = new Thickness(4, 4, 4, 4);
-            AutomationProperties.SetName(expand, $"Expand or collapse corrections for {group.Key}");
+            AutomationProperties.SetName(expand, Loc.T("Expand or collapse corrections for {0}", group.Key));
             headingRow.Children.Add(expand);
             var add = Button("+", () => OpenEditor(new LexiconEntry(Guid.NewGuid(), LexiconKind.Correction, "") with { Value = group.Key }));
             add.VerticalAlignment = VerticalAlignment.Center;
@@ -263,8 +267,8 @@ public sealed partial class LexiconView : UserControl
             add.Height = add.MinHeight = 32;
             add.MinWidth = 32;
             add.Padding = new Thickness(4);
-            AutomationProperties.SetName(add, $"Add variant for {group.Key}");
-            ToolTipService.SetToolTip(add, "Add variant");
+            AutomationProperties.SetName(add, Loc.T("Add variant for {0}", group.Key));
+            ToolTipService.SetToolTip(add, Loc.T("Add variant"));
             Grid.SetColumn(add, 1); headingRow.Children.Add(add);
             panel.Children.Add(headingRow);
             panel.Children.Add(aliases);
@@ -274,27 +278,27 @@ public sealed partial class LexiconView : UserControl
             MenuFlyout GroupMenu()
             {
                 var menu = new MenuFlyout();
-                var suggest = new MenuFlyoutItem { Text = "Suggest aliases…" };
+                var suggest = new MenuFlyoutItem { Text = Loc.T("Suggest aliases…") };
                 suggest.Click += (_, _) => StartAliasSuggestions(group.Key);
                 menu.Items.Add(suggest);
-                var delete = new MenuFlyoutItem { Text = "Delete group…" };
+                var delete = new MenuFlyoutItem { Text = Loc.T("Delete group…") };
                 delete.Click += async (_, _) =>
                 {
                     if (_closing) return;
                     var dialog = new ContentDialog
                     {
                         XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
-                        Title = $"Delete corrections for {group.Key}?",
-                        Content = $"This deletes all {group.Count()} variants in this group. This cannot be undone.",
-                        PrimaryButtonText = "Delete group", CloseButtonText = "Cancel",
+                        Title = Loc.T("Delete corrections for {0}?", group.Key),
+                        Content = Loc.T("This deletes all {0} variants in this group. This cannot be undone.", group.Count()),
+                        PrimaryButtonText = Loc.T("Delete group"), CloseButtonText = Loc.T("Cancel"),
                         DefaultButton = ContentDialogButton.Close
                     };
                     if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
                     if (!_store.RemoveCorrectionGroup(group.Key))
-                    { _notice.Text = _store.LastError ?? "Could not delete correction group."; return; }
+                    { _notice.Text = _store.LastError ?? Loc.T("Could not delete correction group."); return; }
                     _expandedCorrections.Remove(group.Key);
                     Render();
-                    _notice.Text = "Correction group deleted.";
+                    _notice.Text = Loc.T("Correction group deleted.");
                 };
                 menu.Items.Add(delete);
                 return menu;
@@ -308,20 +312,20 @@ public sealed partial class LexiconView : UserControl
     private MenuFlyout LexiconEntryMenu(LexiconEntry entry)
     {
         if (entry.FromPack)
-            return EntryActionMenu.Create([new("Show term pack", () => { _showPacks = true; Render(); })]);
+            return EntryActionMenu.Create([new(Loc.T("Show term pack"), () => { _showPacks = true; Render(); })]);
         return EntryActionMenu.Create([
-            new("Edit", () => OpenEditor(entry)),
-            .. entry.Kind == LexiconKind.Word ? new EntryActionMenu.Action[] { new("Suggest aliases…", () => StartAliasSuggestions(entry.Key)) } : [],
-            new(entry.Enabled ? "Disable" : "Enable", () =>
+            new(Loc.T("Edit"), () => OpenEditor(entry)),
+            .. entry.Kind == LexiconKind.Word ? new EntryActionMenu.Action[] { new(Loc.T("Suggest aliases…"), () => StartAliasSuggestions(entry.Key)) } : [],
+            new(entry.Enabled ? Loc.T("Disable") : Loc.T("Enable"), () =>
             {
                 var error = _store.Save(entry with { Enabled = !entry.Enabled });
-                _notice.Text = error ?? "Entry updated.";
+                _notice.Text = error ?? Loc.T("Entry updated.");
                 if (error is null) Render();
             }),
-            new("Delete…", () =>
+            new(Loc.T("Delete…"), () =>
             {
                 OpenEditor(entry);
-                EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == "Delete")?.Invoke();
+                EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == Loc.T("Delete"))?.Invoke();
             })
         ]);
     }
@@ -338,42 +342,42 @@ public sealed partial class LexiconView : UserControl
     {
         SettingsHelp.Update(_headingHelp, _kind switch
         {
-            LexiconKind.Word => "Save the exact spelling of a name or specialist term.",
-            LexiconKind.Correction => "When this phrase is recognized, use your preferred spelling instead.",
-            _ => "Say the trigger phrase to insert this text when dictation finishes."
+            LexiconKind.Word => Loc.T("Save the exact spelling of a name or specialist term."),
+            LexiconKind.Correction => Loc.T("When this phrase is recognized, use your preferred spelling instead."),
+            _ => Loc.T("Say the trigger phrase to insert this text when dictation finishes.")
         });
         if (_kind == LexiconKind.Correction)
         {
-            AddField("Correct spelling", _draft!.Value, value => _draft = _draft! with { Value = value }, 10000, help:
-                @"Type \n for a line break, \n\n for a new paragraph, \t for a tab or \s for a space, e.g. map ""new line"" to \n. Use \\ for a literal backslash. English and German built-in commands such as ""new line"" are available by choosing Replace spoken commands in Dictation settings.");
-            AddField("Recognized as", _draft.Key, value => _draft = _draft! with { Key = value }, 160);
+            AddField(Loc.T("Correct spelling"), _draft!.Value, value => _draft = _draft! with { Value = value }, 10000, help:
+                Loc.T("Type \\n for a line break, \\n\\n for a new paragraph, \\t for a tab or \\s for a space, e.g. map \"new line\" to \\n. Use \\\\ for a literal backslash. English and German built-in commands such as \"new line\" are available by choosing Replace spoken commands in Dictation settings."));
+            AddField(Loc.T("Recognized as"), _draft.Key, value => _draft = _draft! with { Key = value }, 160);
         }
         else
         {
-            AddField(_kind == LexiconKind.Word ? "Word or phrase" : "Spoken trigger", _draft!.Key, value => _draft = _draft! with { Key = value }, 160);
+            AddField(_kind == LexiconKind.Word ? Loc.T("Word or phrase") : Loc.T("Spoken trigger"), _draft!.Key, value => _draft = _draft! with { Key = value }, 160);
             if (_kind == LexiconKind.Snippet)
-                AddField("Insert this text", _draft.Value, value => _draft = _draft! with { Value = value }, 10000, true, "Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches.");
+                AddField(Loc.T("Insert this text"), _draft.Value, value => _draft = _draft! with { Value = value }, 10000, true, Loc.T("Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches."));
         }
         if (_kind == LexiconKind.Snippet)
         {
-            AddField("Tags · optional, separated by commas", _draft.Tags, value => _draft = _draft! with { Tags = value }, 300);
+            AddField(Loc.T("Tags · optional, separated by commas"), _draft.Tags, value => _draft = _draft! with { Tags = value }, 300);
         }
-        AddToggle("Enabled", "Keep this entry available without removing it.", _draft.Enabled, value => _draft = _draft! with { Enabled = value });
+        AddToggle(Loc.T("Enabled"), Loc.T("Keep this entry available without removing it."), _draft.Enabled, value => _draft = _draft! with { Enabled = value });
         if (_kind == LexiconKind.Word) AddBoostingOptions();
         if (_kind != LexiconKind.Word)
-            AddToggle("Match capitalization", "Only match the trigger with this exact capitalization.", _draft.CaseSensitive, value => _draft = _draft! with { CaseSensitive = value });
+            AddToggle(Loc.T("Match capitalization"), Loc.T("Only match the trigger with this exact capitalization."), _draft.CaseSensitive, value => _draft = _draft! with { CaseSensitive = value });
     }
 
     private void AddBoostingOptions()
     {
         var panel = new StackPanel { Spacing = 10 };
-        panel.Children.Add(SettingsHelp.Label("Boosting", "Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size."));
+        panel.Children.Add(SettingsHelp.Label(Loc.T("Boosting"), Loc.T("Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size.")));
         var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         var slider = new Slider { Minimum = 40, Maximum = 95, StepFrequency = 1, Value = (_draft!.CtcMinSimilarity ?? .65f) * 100 };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, "Minimum CTC similarity in percent");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, Loc.T("Minimum CTC similarity in percent"));
         var valueLabel = Text("", 12, true);
         var advanced = new StackPanel { Spacing = 4 }; advanced.Children.Add(slider); advanced.Children.Add(valueLabel);
-        var choices = new (string Name, float? Value)[] { ("Auto", null), ("Strong", .5f), ("Balanced", .65f), ("Precise", .8f), ("Advanced", null) };
+        var choices = new (string Name, float? Value)[] { (Loc.T("Auto"), null), (Loc.T("Strong"), .5f), (Loc.T("Balanced"), .65f), (Loc.T("Precise"), .8f), (Loc.T("Advanced"), null) };
         var selected = _draft.CtcMinSimilarity is null ? 0 : Array.FindIndex(choices, 1, 3, c => Math.Abs(c.Value!.Value - _draft.CtcMinSimilarity.Value) < .001f);
         if (selected < 0) selected = 4;
         void Refresh()
@@ -390,12 +394,12 @@ public sealed partial class LexiconView : UserControl
                 }, primary: index == selected));
             }
             advanced.Visibility = selected == 4 ? Visibility.Visible : Visibility.Collapsed;
-            valueLabel.Text = $"Minimum similarity: {slider.Value:0}%";
+            valueLabel.Text = Loc.T("Minimum similarity: {0:0}%", slider.Value);
         }
         slider.ValueChanged += (_, _) =>
         {
             if (selected == 4) _draft = _draft! with { CtcMinSimilarity = (float)(slider.Value / 100) };
-            valueLabel.Text = $"Minimum similarity: {slider.Value:0}%";
+            valueLabel.Text = Loc.T("Minimum similarity: {0:0}%", slider.Value);
         };
         Refresh(); panel.Children.Add(options); panel.Children.Add(advanced);
         _body.Children.Add(Surface(panel, 14));
@@ -422,79 +426,79 @@ public sealed partial class LexiconView : UserControl
         _actions.Children.Clear();
         if (_pending is not null)
         {
-            _actions.Children.Add(Button("Keep editing", () => { _pending = null; _notice.Text = "Your changes are still here."; RenderActions(); }));
-            _actions.Children.Add(Button("Discard", () => { var next = _pending; _pending = null; next?.Invoke(); }, destructive: true)); return;
+            _actions.Children.Add(Button(Loc.T("Keep editing"), () => { _pending = null; _notice.Text = Loc.T("Your changes are still here."); RenderActions(); }));
+            _actions.Children.Add(Button(Loc.T("Discard"), () => { var next = _pending; _pending = null; next?.Invoke(); }, destructive: true)); return;
         }
         if (_draft is null)
         {
             if (_kind != LexiconKind.Snippet)
             {
-                _actions.Children.Add(Button("Suggest aliases…", () => StartAliasSuggestions()));
-                _actions.Children.Add(Button("Train word…", () =>
+                _actions.Children.Add(Button(Loc.T("Suggest aliases…"), () => StartAliasSuggestions()));
+                _actions.Children.Add(Button(Loc.T("Train word…"), () =>
                 {
                     if (_trainingTask is null || _trainingTask.IsCompleted) _trainingTask = TrainWordAsync();
                 }));
             }
-            var import = Button("Import", () => { });
+            var import = Button(Loc.T("Import"), () => { });
             var importMenu = new MenuFlyout();
             var jsonImport = new MenuFlyoutItem { Text = "TypeWhisper JSON…" };
             jsonImport.Click += (_, _) => _ = ImportAsync();
-            var appImport = new MenuFlyoutItem { Text = "From another app…" };
+            var appImport = new MenuFlyoutItem { Text = Loc.T("From another app…") };
             appImport.Click += (_, _) => _ = ImportFromAppAsync();
             importMenu.Items.Add(jsonImport); importMenu.Items.Add(appImport);
             import.Flyout = importMenu;
             _actions.Children.Add(import);
-            _actions.Children.Add(Button("Export", () => _ = ExportAsync()));
-            _actions.Children.Add(Button("+ Add " + Singular, () => OpenEditor(new(Guid.NewGuid(), _kind, "")), primary: true)); return;
+            _actions.Children.Add(Button(Loc.T("Export"), () => _ = ExportAsync()));
+            _actions.Children.Add(Button(_kind switch { LexiconKind.Word => Loc.T("+ Add word"), LexiconKind.Correction => Loc.T("+ Add correction"), _ => Loc.T("+ Add snippet") }, () => OpenEditor(new(Guid.NewGuid(), _kind, "")), primary: true)); return;
         }
         if (_store.Entries.Any(entry => entry.Id == _draft.Id))
-            _actions.Children.Add(Button("Delete", () =>
+            _actions.Children.Add(Button(Loc.T("Delete"), () =>
             {
                 _confirmDelete = true;
-                _notice.Text = "Delete this entry? Installed production data is unchanged.";
+                _notice.Text = Loc.T("Delete this entry? Installed production data is unchanged.");
                 _actions.Children.Clear();
-                _actions.Children.Add(Button("Keep entry", () => { RenderActions(); _notice.Text = "Entry kept."; }));
-                _actions.Children.Add(Button("Delete entry", () => { if (!CanSaveApiEditor()) return; if (!_store.Remove(_draft!.Id)) { _notice.Text = _store.LastError ?? "Could not delete entry."; return; } CloseEditor(); _notice.Text = "Entry deleted."; }, destructive: true));
+                _actions.Children.Add(Button(Loc.T("Keep entry"), () => { RenderActions(); _notice.Text = Loc.T("Entry kept."); }));
+                _actions.Children.Add(Button(Loc.T("Delete entry"), () => { if (!CanSaveApiEditor()) return; if (!_store.Remove(_draft!.Id)) { _notice.Text = _store.LastError ?? Loc.T("Could not delete entry."); return; } CloseEditor(); _notice.Text = Loc.T("Entry deleted."); }, destructive: true));
             }, destructive: true));
-        _actions.Children.Add(Button("Cancel", () => Navigate(CloseEditor)));
-        _actions.Children.Add(Button("Save", () =>
+        _actions.Children.Add(Button(Loc.T("Cancel"), () => Navigate(CloseEditor)));
+        _actions.Children.Add(Button(Loc.T("Save"), () =>
         {
             if (!CanSaveApiEditor()) return;
             var error = _store.Save(_draft!);
             if (error is not null) { _notice.Text = error; return; }
-            CloseEditor(); _notice.Text = _kind == LexiconKind.Snippet ? "Snippet saved for the next dictation." : "Dictionary saved for the next dictation.";
+            CloseEditor(); _notice.Text = _kind == LexiconKind.Snippet ? Loc.T("Snippet saved for the next dictation.") : Loc.T("Dictionary saved for the next dictation.");
         }, primary: true));
     }
 
     private void RenderPacks()
     {
-        _heading.Text = "Dictionary";
-        AutomationProperties.SetName(_headingHelp, "About term packs");
-        _crumbs.SetItems(new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
+        _heading.Text = Loc.T("Dictionary");
+        AutomationProperties.SetName(_headingHelp, Loc.T("About term packs"));
+        _crumbs.SetItems(new(Loc.T("Dictionary"), () => { _showPacks = false; Render(); }), new(Loc.T("Term packs")));
         _actions.Children.Clear();
-        _actions.Children.Add(Button("Back to Dictionary", () => { _showPacks = false; _kind = LexiconKind.Word; Render(); }));
+        _actions.Children.Add(Button(Loc.T("Back to Dictionary"), () => { _showPacks = false; _kind = LexiconKind.Word; Render(); }));
         _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
-            ? "Saved packs provide dictionary terms for enabled vocabulary processing."
-            : "Saved packs · enable Vocabulary boosting in Settings > Dictation > More options to use them.");
-        SettingsHelp.Update(_headingHelp, "Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off.");
+            ? Loc.T("Saved packs provide dictionary terms for enabled vocabulary processing.")
+            : Loc.T("Saved packs · enable Vocabulary boosting in Settings > Dictation > More options to use them."));
+        SettingsHelp.Update(_headingHelp, Loc.T("Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off."));
         foreach (var pack in TypeWhisper.Core.Models.TermPack.AllPacks.Where(p => !p.RequiresCommercialLicense))
         {
             var row = new Grid { ColumnSpacing = 14 };
             row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
             row.Children.Add(new TypeWhisperGlyph { Kind = "dictionary", Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Center });
             var labels = new StackPanel { Spacing = 5 };
-            labels.Children.Add(Text($"{pack.Name} · {pack.Terms.Length} terms", 14));
+            labels.Children.Add(Text(Loc.T("{0} · {1} terms", pack.Name, pack.Terms.Length), 14));
             labels.Children.Add(Text(string.Join(", ", pack.Terms.Take(8)) + (pack.Terms.Length > 8 ? "…" : ""), 12, true));
             Grid.SetColumn(labels, 1); row.Children.Add(labels);
             var toggle = AppToggleSwitch.Create(_store.PackEnabled(pack.Id));
-            AutomationProperties.SetName(toggle, "Enable term pack " + pack.Name);
+            AutomationProperties.SetName(toggle, Loc.T("Enable term pack {0}", pack.Name));
             var restoring = false;
             toggle.Toggled += (_, _) =>
             {
                 if (restoring) return;
                 if (_closing) return;
                 var error = _store.SetPackEnabled(pack, toggle.IsOn);
-                _notice.Text = error ?? $"{pack.Name} {(toggle.IsOn ? "enabled" : "disabled")} · saved.";
+                _notice.Text = error ?? (toggle.IsOn ? Loc.T("{0} enabled · saved.", pack.Name) : Loc.T("{0} disabled · saved.", pack.Name));
                 if (error is not null) { restoring = true; toggle.IsOn = _store.PackEnabled(pack.Id); restoring = false; }
             };
             Grid.SetColumn(toggle, 2); row.Children.Add(toggle);
@@ -512,40 +516,44 @@ public sealed partial class LexiconView : UserControl
         try
         {
             var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
-                { Title = snippets ? "Import snippets" : "Import personal dictionary" };
+                { Title = snippets ? Loc.T("Import snippets") : Loc.T("Import personal dictionary") };
             picker.FileTypeFilter.Add(".json");
             var operation = picker.PickSingleFileAsync();
             _cancelPicker = () => operation.Cancel();
             var file = await operation;
             _cancelPicker = null;
             if (_closing) return;
-            if (file is null) { _notice.Text = "Import canceled."; return; }
+            if (file is null) { _notice.Text = Loc.T("Import canceled."); return; }
             if (new FileInfo(file.Path).Length > 20_000_000) throw new InvalidDataException("Choose a JSON file smaller than 20 MB.");
             var json = await File.ReadAllTextAsync(file.Path);
             if (_closing) return;
             var count = _store.PreviewImport(json, snippets);
-            var target = snippets ? "snippets" : "personal words and corrections";
-            _notice.Text = $"Validated {count} {target} from {Path.GetFileName(file.Path)}. Add rejects conflicts. Replace removes existing {target}. Term packs stay unchanged.";
+            _notice.Text = snippets
+                ? Loc.T("Validated {0} snippets from {1}. Add rejects conflicts. Replace removes existing snippets. Term packs stay unchanged.", count, Path.GetFileName(file.Path))
+                : Loc.T("Validated {0} personal words and corrections from {1}. Add rejects conflicts. Replace removes existing personal words and corrections. Term packs stay unchanged.", count, Path.GetFileName(file.Path));
             _actions.Children.Clear();
-            _actions.Children.Add(Button("Cancel import", () => { Render(); _notice.Text = "Import canceled."; }));
+            _actions.Children.Add(Button(Loc.T("Cancel import"), () => { Render(); _notice.Text = Loc.T("Import canceled."); }));
             void Apply(bool replace)
             {
                 if (_closing) return;
                 var error = _store.Import(json, snippets, replace);
                 if (error is not null) { _notice.Text = error; return; }
-                Render(); _notice.Text = $"Imported {count} {target}. Saved for the next dictation.";
+                Render(); _notice.Text = snippets ? Loc.T("Imported {0} snippets. Saved for the next dictation.", count)
+                    : Loc.T("Imported {0} personal words and corrections. Saved for the next dictation.", count);
             }
-            _actions.Children.Add(Button("Add entries", () => Apply(false), primary: true));
-            _actions.Children.Add(Button("Replace " + (snippets ? "snippets" : "personal dictionary"), () =>
+            _actions.Children.Add(Button(Loc.T("Add entries"), () => Apply(false), primary: true));
+            _actions.Children.Add(Button(snippets ? Loc.T("Replace snippets") : Loc.T("Replace personal dictionary"), () =>
             {
-                _notice.Text = $"Replace all existing {target} with the {count} validated entries? This cannot be undone. Export a backup first if needed.";
+                _notice.Text = snippets
+                    ? Loc.T("Replace all existing snippets with the {0} validated entries? This cannot be undone. Export a backup first if needed.", count)
+                    : Loc.T("Replace all existing personal words and corrections with the {0} validated entries? This cannot be undone. Export a backup first if needed.", count);
                 _actions.Children.Clear();
-                _actions.Children.Add(Button("Cancel import", () => Render()));
-                _actions.Children.Add(Button("Replace now", () => Apply(true), destructive: true));
+                _actions.Children.Add(Button(Loc.T("Cancel import"), () => Render()));
+                _actions.Children.Add(Button(Loc.T("Replace now"), () => Apply(true), destructive: true));
             }, destructive: true));
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
-        { _notice.Text = "Import canceled: " + ex.Message; }
+        { _notice.Text = Loc.T("Import canceled: {0}", ex.Message); }
         finally
         {
             _cancelPicker = null;
@@ -564,7 +572,7 @@ public sealed partial class LexiconView : UserControl
         {
             var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
             {
-                Title = snippets ? "Export snippets" : "Export personal dictionary (words and corrections, without term packs)",
+                Title = snippets ? Loc.T("Export snippets") : Loc.T("Export personal dictionary (words and corrections, without term packs)"),
                 SuggestedFileName = snippets ? "typewhisper-snippets" : "typewhisper-dictionary"
             };
             picker.FileTypeChoices.Add("TypeWhisper JSON", new List<string> { ".json" });
@@ -573,13 +581,13 @@ public sealed partial class LexiconView : UserControl
             var file = await operation;
             _cancelPicker = null;
             if (_closing) return;
-            if (file is null) { _notice.Text = "Export canceled."; return; }
+            if (file is null) { _notice.Text = Loc.T("Export canceled."); return; }
             _notice.Text = _store.Export(file.Path, snippets) ?? (snippets
-                ? "Snippets exported with tags, timestamps and usage counts."
-                : "Personal words and corrections exported with metadata. Installed term packs are managed separately.");
+                ? Loc.T("Snippets exported with tags, timestamps and usage counts.")
+                : Loc.T("Personal words and corrections exported with metadata. Installed term packs are managed separately."));
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
-        { _notice.Text = "Export failed: " + ex.Message; }
+        { _notice.Text = Loc.T("Export failed: {0}", ex.Message); }
         finally
         {
             _cancelPicker = null;

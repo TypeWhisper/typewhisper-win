@@ -36,7 +36,7 @@ public static class DictionaryAliasSuggestions
         Func<string, string, CancellationToken, Task<string>> generate, CancellationToken cancellationToken)
     {
         word = word.Trim().Normalize();
-        if (!IsTerm(word)) throw new ArgumentException("Enter a word or short phrase on one line, up to 160 characters.", nameof(word));
+        if (!IsTerm(word)) throw new ArgumentException(Loc.T("Enter a word or short phrase on one line, up to 160 characters."), nameof(word));
         cancellationToken.ThrowIfCancellationRequested();
         var response = await generate(Prompt, JsonSerializer.Serialize(new { word, language }), cancellationToken).ConfigureAwait(false);
         // Discard late output even when a provider ignores cancellation.
@@ -47,7 +47,7 @@ public static class DictionaryAliasSuggestions
     /// <summary>Reads structured output, removes invalid or duplicate aliases, and limits the review list.</summary>
     public static IReadOnlyList<string> Parse(string word, string response)
     {
-        if (response.Length > 8192) throw new FormatException("The model response was too long. Try again.");
+        if (response.Length > 8192) throw new FormatException(Loc.T("The model response was too long. Try again."));
         var json = response.Trim();
         // Some local models wrap otherwise valid JSON in a Markdown code fence.
         if (json.StartsWith("```", StringComparison.Ordinal) && json.EndsWith("```", StringComparison.Ordinal))
@@ -75,7 +75,7 @@ public static class DictionaryAliasSuggestions
         }
         catch (JsonException ex)
         {
-            throw new FormatException("The model did not return a usable list of variants. Try again.", ex);
+            throw new FormatException(Loc.T("The model did not return a usable list of variants. Try again."), ex);
         }
     }
 }

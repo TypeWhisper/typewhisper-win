@@ -15,7 +15,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private readonly TextBlock _status = Label("");
     private readonly List<Row> _rows = [];
     private readonly ProgressBar _downloadProgress = new() { Minimum = 0, Maximum = 100, Height = 6 };
-    private readonly HandCursorButton _cancelDownload = Button("Cancel download");
+    private readonly HandCursorButton _cancelDownload = Button(Loc.T("Cancel download"));
     private CancellationTokenSource? _lifetime;
     private CancellationTokenSource? _operation;
     private bool _busy;
@@ -62,12 +62,11 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             _rows.Clear(); _content.Children.Clear();
             if (models.Length == 0)
             {
-                _status.Text = "No local text models are currently available. Re-enable the plugin or reopen this page to retry.";
+                _status.Text = Loc.T("No local text models are currently available. Re-enable the plugin or reopen this page to retry.");
                 _content.Children.Add(_status);
                 return;
             }
-            _content.Children.Add(Label("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device. " +
-                "An idle model is released as set under Unload idle models in Advanced settings and loads again when needed."));
+            _content.Children.Add(Label(Loc.T("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device. An idle model is released as set under Unload idle models in Advanced settings and loads again when needed.")));
             _content.Children.Add(_status);
             foreach (var model in models)
             {
@@ -77,12 +76,12 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 row.Load.Click += async (_, _) => await RunAsync(row, "load");
                 row.Unload.Click += async (_, _) => await RunAsync(row, "unload");
                 row.Remove.Click += async (_, _) => await RunAsync(row, "remove");
-                row.Cancel.Click += (_, _) => { row.Cancel.IsEnabled = false; row.State.Text = "Stopping…"; _operation?.Cancel(); };
+                row.Cancel.Click += (_, _) => { row.Cancel.IsEnabled = false; row.State.Text = Loc.T("Stopping…"); _operation?.Cancel(); };
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "Model status could not be read. Reopen these settings to retry."; }
+        { if (Current(lifetime)) _status.Text = Loc.T("Model status could not be read. Reopen these settings to retry."); }
         finally
         {
             _busy = false;
@@ -113,8 +112,9 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         var state = _session.LocalLlmDownload.State;
         if (!state.IsBusy || _session.LocalLlmDownloadPluginId != _pluginId) return false;
         _content.Children.Clear(); _rows.Clear();
-        _status.Text = "Downloading " + _session.LocalLlmDownloadModelName +
-            (state.Progress is { } fraction ? $" · {fraction:P0}" : "…");
+        _status.Text = state.Progress is { } fraction
+            ? Loc.T("Downloading {0} · {1:P0}", _session.LocalLlmDownloadModelName, fraction)
+            : Loc.T("Downloading {0}…", _session.LocalLlmDownloadModelName);
         _downloadProgress.IsIndeterminate = state.Progress is null;
         _downloadProgress.Value = (state.Progress ?? 0) * 100;
         _content.Children.Add(_status); _content.Children.Add(_downloadProgress); _content.Children.Add(_cancelDownload);
@@ -130,7 +130,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         {
             try { await _session.DownloadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, row.Model.Model.DisplayName); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (Current(lifetime)) _status.Text = "Model download could not start: " + ex.Message; }
+            { if (Current(lifetime)) _status.Text = Loc.T("Model download could not start: {0}", ex.Message); }
             if (IsLoaded) await RefreshAsync();
             return;
         }
@@ -145,14 +145,14 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             if (action == "remove")
             {
                 var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
-                    Title = "Remove " + row.Model.Model.DisplayName + "?",
-                    Content = "The model will be unloaded and its downloaded file removed. You can download it again later.",
-                    PrimaryButtonText = "Remove model", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+                    Title = Loc.T("Remove {0}?", row.Model.Model.DisplayName),
+                    Content = Loc.T("The model will be unloaded and its downloaded file removed. You can download it again later."),
+                    PrimaryButtonText = Loc.T("Remove model"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary || !Current(lifetime)) return;
             }
             operation.Token.ThrowIfCancellationRequested();
             row.Progress.Visibility = Visibility.Visible; row.Progress.IsIndeterminate = true;
-            row.State.Text = action switch { "download" => "Downloading…", "load" => "Loading model into memory…", "unload" => "Releasing model memory…", _ => "Removing downloaded file…" };
+            row.State.Text = action switch { "download" => Loc.T("Downloading…"), "load" => Loc.T("Loading model into memory…"), "unload" => Loc.T("Releasing model memory…"), _ => Loc.T("Removing downloaded file…") };
             row.Cancel.Visibility = Visibility.Visible; row.Cancel.IsEnabled = true;
             try
             {
@@ -164,13 +164,13 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                     "unload" => runtime.UnloadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token),
                     _ => runtime.RemoveLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token)
                 });
-                if (Current(lifetime)) _status.Text = action == "load" ? "Model loaded. Select it in a text-processing workflow." : "Completed.";
+                if (Current(lifetime)) _status.Text = action == "load" ? Loc.T("Model loaded. Select it in a text-processing workflow.") : Loc.T("Completed.");
             }
             finally { row.Cancel.IsEnabled = false; }
         }
-        catch (OperationCanceledException) { if (Current(lifetime)) _status.Text = "Model operation cancelled."; }
+        catch (OperationCanceledException) { if (Current(lifetime)) _status.Text = Loc.T("Model operation cancelled."); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "Model operation failed: " + ex.Message; }
+        { if (Current(lifetime)) _status.Text = Loc.T("Model operation failed: {0}", ex.Message); }
         finally
         {
             if (action is "remove" or "load") _session.RecordingStarting -= CancelForRecording;
@@ -187,11 +187,11 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         internal readonly StackPanel Actions = new() { Spacing = 8 };
         internal readonly TextBlock State;
         internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100, Height = 6, Visibility = Visibility.Collapsed };
-        internal readonly HandCursorButton Download = Button("Download model");
-        internal readonly HandCursorButton Load = Button("Load model");
-        internal readonly HandCursorButton Unload = Button("Unload model");
-        internal readonly HandCursorButton Remove = Button("Remove model");
-        internal readonly HandCursorButton Cancel = Button("Cancel");
+        internal readonly HandCursorButton Download = Button(Loc.T("Download model"));
+        internal readonly HandCursorButton Load = Button(Loc.T("Load model"));
+        internal readonly HandCursorButton Unload = Button(Loc.T("Unload model"));
+        internal readonly HandCursorButton Remove = Button(Loc.T("Remove model"));
+        internal readonly HandCursorButton Cancel = Button(Loc.T("Cancel"));
         // A remembered model is released from memory but loads again on its next use.
         internal Row(LocalLlmModelState model, bool remembered)
         {
@@ -199,16 +199,16 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             var body = new StackPanel { Spacing = 12 };
             var title = Label(model.Model.DisplayName); title.FontSize = 16; title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
             body.Children.Add(title);
-            body.Children.Add(Label(model.Model.SizeDescription + (model.Model.IsRecommended ? " · Recommended" : "")));
-            State = Label(model.Loaded ? "Loaded · ready for text processing" : remembered ? "Ready · released while idle, loads again on next use"
-                : model.Downloaded ? "Downloaded · 100%" : "Not downloaded");
+            body.Children.Add(Label(model.Model.SizeDescription + (model.Model.IsRecommended ? " · " + Loc.T("Recommended") : "")));
+            State = Label(model.Loaded ? Loc.T("Loaded · ready for text processing") : remembered ? Loc.T("Ready · released while idle, loads again on next use")
+                : model.Downloaded ? Loc.T("Downloaded · 100%") : Loc.T("Not downloaded"));
             body.Children.Add(State); body.Children.Add(Progress);
             Download.Visibility = model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
             Load.Visibility = model.Downloaded && !model.Loaded && !remembered ? Visibility.Visible : Visibility.Collapsed;
             Unload.Visibility = model.Loaded || remembered ? Visibility.Visible : Visibility.Collapsed;
             Remove.Visibility = model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             Cancel.Visibility = Visibility.Collapsed;
-            ToolTipService.SetToolTip(Download, "Download missing files or verify an existing copy.");
+            ToolTipService.SetToolTip(Download, Loc.T("Download missing files or verify an existing copy."));
             Download.Style = Load.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
             foreach (var button in new[] { Download, Load, Unload, Remove }) Actions.Children.Add(button);
             body.Children.Add(Actions); body.Children.Add(Cancel); Panel.Child = body;
@@ -219,10 +219,10 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 Panel.BorderBrush = (Brush)Application.Current.Resources[model.Loaded || remembered ? "AccentBrush" : "HairlineBrush"];
             }
             Panel.ActualThemeChanged += (_, _) => Theme(); Theme();
-            AutomationProperties.SetName(Progress, model.Model.DisplayName + " download progress");
-            AutomationProperties.SetName(Download, "Download " + model.Model.DisplayName);
-            AutomationProperties.SetName(Load, "Load " + model.Model.DisplayName);
-            AutomationProperties.SetName(Remove, "Remove " + model.Model.DisplayName);
+            AutomationProperties.SetName(Progress, Loc.T("{0} download progress", model.Model.DisplayName));
+            AutomationProperties.SetName(Download, Loc.T("Download {0}", model.Model.DisplayName));
+            AutomationProperties.SetName(Load, Loc.T("Load {0}", model.Model.DisplayName));
+            AutomationProperties.SetName(Remove, Loc.T("Remove {0}", model.Model.DisplayName));
         }
     }
     private static TextBlock Label(string text) => new() { Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap };

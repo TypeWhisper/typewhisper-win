@@ -16,9 +16,9 @@ public sealed class WorkflowLlmDefaults(string path)
     public WorkflowLlmSelection? Read()
     {
         if (!File.Exists(path)) return null;
-        if (new FileInfo(path).Length > 8192) throw new InvalidDataException("Default LLM settings are too large.");
+        if (new FileInfo(path).Length > 8192) throw new InvalidDataException(Loc.T("Default LLM settings are too large."));
         var value = JsonSerializer.Deserialize<WorkflowLlmSelection>(File.ReadAllText(path))
-            ?? throw new InvalidDataException("Default LLM settings are invalid.");
+            ?? throw new InvalidDataException(Loc.T("Default LLM settings are invalid."));
         Validate(value);
         return value;
     }
@@ -39,6 +39,6 @@ public sealed class WorkflowLlmDefaults(string path)
         if (string.IsNullOrWhiteSpace(value.Provider) || value.Provider is Inherit or "none"
             || string.IsNullOrWhiteSpace(value.Model) || value.Provider.Length > 1024 || value.Model.Length > 1024
             || value.Provider.Any(char.IsControl) || value.Model.Any(char.IsControl))
-            throw new InvalidDataException("Choose a default LLM provider and model.");
+            throw new InvalidDataException(Loc.T("Choose a default LLM provider and model."));
     }
 }

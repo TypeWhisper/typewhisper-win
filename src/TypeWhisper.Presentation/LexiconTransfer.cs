@@ -26,14 +26,14 @@ public static class LexiconTransfer
             {
                 // macOS DictionaryExporter exports fields, not SwiftData IDs or timestamps.
                 var allowed = new HashSet<string> { "type", "original", "replacement", "caseSensitive", "isEnabled", "ctcMinSimilarity", "source" };
-                if (node.Any(p => !allowed.Contains(p.Key))) throw new JsonException("Unknown macOS dictionary field. Import canceled to avoid data loss.");
+                if (node.Any(p => !allowed.Contains(p.Key))) throw new JsonException(Loc.T("Unknown macOS dictionary field. Import canceled to avoid data loss."));
                 if (node["type"] is not JsonValue typeValue || !typeValue.TryGetValue<string>(out var type))
-                    throw new JsonException("Dictionary type must be a string.");
-                if (type is not ("term" or "correction")) throw new JsonException("Unknown dictionary entry type.");
+                    throw new JsonException(Loc.T("Dictionary type must be a string."));
+                if (type is not ("term" or "correction")) throw new JsonException(Loc.T("Unknown dictionary entry type."));
                 node.Remove("type"); node["EntryType"] = type; node["Id"] = Guid.NewGuid().ToString();
             }
             ValidateSource(node);
-            return node.Deserialize<DictionaryEntry>(Options) ?? throw new JsonException("Invalid dictionary entry.");
+            return node.Deserialize<DictionaryEntry>(Options) ?? throw new JsonException(Loc.T("Invalid dictionary entry."));
         }).ToArray();
         ValidateDictionary(entries, allowPackEntries);
         return entries;
@@ -43,7 +43,7 @@ public static class LexiconTransfer
     public static Snippet[] ReadSnippets(string json)
     {
         var entries = ReadArray(json).Select(element => element.Deserialize<Snippet>(Options)
-            ?? throw new JsonException("Invalid snippet.")).ToArray();
+            ?? throw new JsonException(Loc.T("Invalid snippet."))).ToArray();
         ValidateSnippets(entries);
         return entries;
     }
@@ -76,16 +76,16 @@ public static class LexiconTransfer
 
     private static JsonElement[] ReadArray(string json)
     {
-        if (json.Length > 5_000_000) throw new JsonException("Import is limited to 5 million characters.");
+        if (json.Length > 5_000_000) throw new JsonException(Loc.T("Import is limited to 5 million characters."));
         using var document = JsonDocument.Parse(json);
         if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() > 10000)
-            throw new JsonException("Choose a JSON array containing at most 10,000 entries.");
+            throw new JsonException(Loc.T("Choose a JSON array containing at most 10,000 entries."));
         var entries = document.RootElement.EnumerateArray().Select(element => element.Clone()).ToArray();
         foreach (var entry in entries)
         {
-            if (entry.ValueKind != JsonValueKind.Object) throw new JsonException("Every imported entry must be an object.");
+            if (entry.ValueKind != JsonValueKind.Object) throw new JsonException(Loc.T("Every imported entry must be an object."));
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (entry.EnumerateObject().Any(property => !names.Add(property.Name))) throw new JsonException("Duplicate JSON field. Import canceled.");
+            if (entry.EnumerateObject().Any(property => !names.Add(property.Name))) throw new JsonException(Loc.T("Duplicate JSON field. Import canceled."));
         }
         return entries;
     }
@@ -96,7 +96,7 @@ public static class LexiconTransfer
         {
             var value = property.Value?.ToJsonString();
             if (value is not ("\"manual\"" or "\"autoLearned\"" or "0" or "1"))
-                throw new JsonException("Unknown dictionary provenance. Import canceled to avoid data loss.");
+                throw new JsonException(Loc.T("Unknown dictionary provenance. Import canceled to avoid data loss."));
         }
     }
 
@@ -106,22 +106,22 @@ public static class LexiconTransfer
         foreach (var entry in entries)
         {
             ValidateKey(entry.Id, entry.Original, entry.UsageCount, ids);
-            if (!allowPackEntries && entry.Id.StartsWith("pack:", StringComparison.Ordinal)) throw new JsonException("Import personal entries only. Manage installed terms through Term packs.");
-            if (!Enum.IsDefined(entry.EntryType)) throw new JsonException("Unknown dictionary entry type.");
+            if (!allowPackEntries && entry.Id.StartsWith("pack:", StringComparison.Ordinal)) throw new JsonException(Loc.T("Import personal entries only. Manage installed terms through Term packs."));
+            if (!Enum.IsDefined(entry.EntryType)) throw new JsonException(Loc.T("Unknown dictionary entry type."));
             if (entry.Replacement?.Length > 10000 || entry.EntryType == DictionaryEntryType.Correction && entry.Replacement is null)
-                throw new JsonException("Corrections need replacement text of at most 10,000 characters.");
+                throw new JsonException(Loc.T("Corrections need replacement text of at most 10,000 characters."));
             if (entry.EntryType == DictionaryEntryType.Term && entry.Replacement is not null)
-                throw new JsonException("Term entries cannot contain replacement text.");
+                throw new JsonException(Loc.T("Term entries cannot contain replacement text."));
             if (entry.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
-                throw new JsonException("CTC similarity must be between 0.4 and 0.95.");
+                throw new JsonException(Loc.T("CTC similarity must be between 0.4 and 0.95."));
             if (entry.IsRegex)
                 try { _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromSeconds(1)); }
-                catch (ArgumentException) { throw new JsonException("Invalid dictionary regular expression."); }
+                catch (ArgumentException) { throw new JsonException(Loc.T("Invalid dictionary regular expression.")); }
         }
         foreach (var group in entries.Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal))
             .GroupBy(entry => $"{(int)entry.EntryType}:{entry.Original}", StringComparer.OrdinalIgnoreCase))
             if (group.Count() > 1 && (group.Any(entry => !entry.CaseSensitive) || group.Select(entry => entry.Original).Distinct(StringComparer.Ordinal).Count() != group.Count()))
-                throw new JsonException("Conflicting dictionary phrases. No entries were imported; review duplicates or choose Replace.");
+                throw new JsonException(Loc.T("Conflicting dictionary phrases. No entries were imported; review duplicates or choose Replace."));
     }
 
     private static void ValidateSnippets(IReadOnlyList<Snippet> entries)
@@ -131,20 +131,20 @@ public static class LexiconTransfer
         {
             ValidateKey(entry.Id, entry.Trigger, entry.UsageCount, ids);
             if (entry.Replacement is null || entry.Replacement.Length > 10000 || entry.Tags is null || entry.Tags.Length > 300)
-                throw new JsonException("Invalid snippet replacement or tags.");
+                throw new JsonException(Loc.T("Invalid snippet replacement or tags."));
             try { _ = SnippetService.ApplySnippetsSnapshot(entry.Trigger, [entry with { IsEnabled = true }], () => ""); }
-            catch (FormatException) { throw new JsonException("Invalid snippet date or time format."); }
+            catch (FormatException) { throw new JsonException(Loc.T("Invalid snippet date or time format.")); }
         }
         foreach (var group in entries.GroupBy(entry => entry.Trigger, StringComparer.OrdinalIgnoreCase))
             if (group.Count() > 1 && (group.Any(entry => !entry.CaseSensitive) || group.Select(entry => entry.Trigger).Distinct(StringComparer.Ordinal).Count() != group.Count()))
-                throw new JsonException("Conflicting snippet triggers. No entries were imported; review duplicates or choose Replace.");
+                throw new JsonException(Loc.T("Conflicting snippet triggers. No entries were imported; review duplicates or choose Replace."));
     }
 
     private static void ValidateKey(string id, string key, int usage, HashSet<string> ids)
     {
-        if (string.IsNullOrWhiteSpace(id) || !ids.Add(id)) throw new JsonException("Missing or duplicate entry ID. No entries were imported.");
+        if (string.IsNullOrWhiteSpace(id) || !ids.Add(id)) throw new JsonException(Loc.T("Missing or duplicate entry ID. No entries were imported."));
         if (string.IsNullOrWhiteSpace(key) || key.Length > 160 || key.Contains('\r') || key.Contains('\n') || key != key.Trim())
-            throw new JsonException("Entry phrases must be single lines of 1–160 characters without surrounding whitespace.");
-        if (usage < 0) throw new JsonException("Usage counts cannot be negative.");
+            throw new JsonException(Loc.T("Entry phrases must be single lines of 1–160 characters without surrounding whitespace."));
+        if (usage < 0) throw new JsonException(Loc.T("Usage counts cannot be negative."));
     }
 }

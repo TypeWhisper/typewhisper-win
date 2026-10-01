@@ -16,6 +16,7 @@ internal static class Program
             .OnBeforeUninstallFastCallback(_ => WindowsStartupRegistration.Create().SetEnabledAsync(false).GetAwaiter().GetResult())
             .Run();
 #endif
+        AppLanguage.Apply();
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Microsoft.UI.Xaml.Application.Start(parameters =>
         {

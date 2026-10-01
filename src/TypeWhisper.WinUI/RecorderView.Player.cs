@@ -42,7 +42,7 @@ public sealed partial class RecorderView
         if (_libraryClosing || !_presented || !_libraryOpen) return;
         if (CanPlayAudio?.Invoke() != true)
         {
-            LibraryStatus.Text = "Finish the current recording or processing before playing audio.";
+            LibraryStatus.Text = Loc.T("Finish the current recording or processing before playing audio.");
             return;
         }
         if (_libraryPlayingPath == path && _libraryPlayer is { } existing)
@@ -57,13 +57,13 @@ public sealed partial class RecorderView
                 }
                 RefreshLibraryActions();
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { StopAudioPlayback(); LibraryStatus.Text = "Playback failed: " + ex.Message; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { StopAudioPlayback(); LibraryStatus.Text = Loc.T("Playback failed: {0}", ex.Message); }
             return;
         }
         StopAudioPlayback();
         var generation = _libraryPlaybackGeneration;
         LibraryPlaybackPanel.Visibility = Visibility.Visible;
-        LibraryPlaybackTitle.Text = "Loading " + name;
+        LibraryPlaybackTitle.Text = Loc.T("Loading {0}", name);
         try
         {
             if (PrepareAudioPlayback is not null) await PrepareAudioPlayback();
@@ -79,25 +79,25 @@ public sealed partial class RecorderView
             {
                 if (!ReferenceEquals(player, _libraryPlayer)) return;
                 RefreshLibraryActions();
-                LibraryStatus.Text = player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing ? "Playing " + name : "Playback paused";
+                LibraryStatus.Text = player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing ? Loc.T("Playing {0}", name) : Loc.T("Playback paused");
             });
             player.MediaFailed += (_, _) => DispatcherQueue.TryEnqueue(() =>
             {
                 if (!ReferenceEquals(player, _libraryPlayer)) return;
                 StopAudioPlayback();
-                LibraryStatus.Text = "Audio playback failed. Check the recording and your audio output, then try again.";
+                LibraryStatus.Text = Loc.T("Audio playback failed. Check the recording and your audio output, then try again.");
             });
             player.Source = _librarySource;
             LibraryPlayerElement.SetMediaPlayer(player);
             LibraryPlaybackTitle.Text = name;
             player.Play();
-            LibraryStatus.Text = "Playing saved audio inside TypeWhisper.";
+            LibraryStatus.Text = Loc.T("Playing saved audio inside TypeWhisper.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             if (generation != _libraryPlaybackGeneration) return;
             StopAudioPlayback();
-            LibraryStatus.Text = "Could not play recording: " + ex.Message;
+            LibraryStatus.Text = Loc.T("Could not play recording: {0}", ex.Message);
         }
         bool Current() => generation == _libraryPlaybackGeneration && !_libraryClosing && _presented && _libraryOpen && CanPlayAudio?.Invoke() == true;
     }

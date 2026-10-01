@@ -12,109 +12,109 @@ internal static partial class SettingsCatalog
     private sealed record Field(string Category, string Key, string Label, string Value, string Hint, string[]? Choices = null);
     private static Field Toggle(string c, string k, string label, bool value = false, string hint = "") => new(c, k, label, value ? "On" : "Off", hint.Length > 0 ? hint : k switch
     {
-        "AutostartEnabled" => "Open TypeWhisper when you sign in to Windows.",
-        "AutoPaste" => "Insert the finished transcript into the active text field.",
-        "TranscribeShortQuietClipsAggressively" => "Try to recognize very brief or quiet speech, even when detection is uncertain.",
-        "TranscriptionNumberNormalizationEnabled" => "Write spoken numbers as digits where appropriate.",
-        "ShortUtterancePunctuationEnabled" => "Add punctuation to brief dictations too.",
-        "VocabularyBoostingEnabled" => "Help the engine recognize words from your selected vocabulary packs.",
-        "WhisperModeEnabled" => "Boost quiet speech automatically.",
-        "AudioDuckingEnabled" => "Turn down other apps while you speak.",
-        "PauseMediaDuringRecording" => "Pause media playback during your recording.",
-        "SoundFeedbackEnabled" => "Play a short sound when recording starts or stops.",
-        "SpokenFeedbackEnabled" => "Read recording feedback aloud using the selected voice.",
-        "SilenceAutoStopEnabled" => "Finish the recording after a period without speech.",
-        "RecorderMicEnabled" => "Start new recorder sessions with your microphone enabled.",
-        "RecorderSystemAudioEnabled" => "Start new recorder sessions with sound from your computer enabled.",
-        "RecorderTranscriptionEnabled" => "Create a transcript when you finish a recorder session.",
-        "DictationRecoveryAutomaticFallbackEnabled" => "Try the recovery engine if the initial transcription fails.",
-        "WorkflowRequestRecoveryEnabled" => "Keep failed requests available so you can try them again.",
-        "SaveToHistoryEnabled" => "Keep completed transcripts available in History.",
-        "SaveHistoryAudio" => "Keep a local audio copy with new dictation entries. Audio follows history deletion and retention.",
-        "MemoryEnabled" => "Use personal context to help tailor future results.",
-        "WatchFolderAutoStart" => "Start watching your chosen folder when TypeWhisper opens.",
-        "ApiServerRequiresAuthentication" => "Require authentication before accepting API requests.",
+        "AutostartEnabled" => Loc.T("Open TypeWhisper when you sign in to Windows."),
+        "AutoPaste" => Loc.T("Insert the finished transcript into the active text field."),
+        "TranscribeShortQuietClipsAggressively" => Loc.T("Try to recognize very brief or quiet speech, even when detection is uncertain."),
+        "TranscriptionNumberNormalizationEnabled" => Loc.T("Write spoken numbers as digits where appropriate."),
+        "ShortUtterancePunctuationEnabled" => Loc.T("Add punctuation to brief dictations too."),
+        "VocabularyBoostingEnabled" => Loc.T("Help the engine recognize words from your selected vocabulary packs."),
+        "WhisperModeEnabled" => Loc.T("Boost quiet speech automatically."),
+        "AudioDuckingEnabled" => Loc.T("Turn down other apps while you speak."),
+        "PauseMediaDuringRecording" => Loc.T("Pause media playback during your recording."),
+        "SoundFeedbackEnabled" => Loc.T("Play a short sound when recording starts or stops."),
+        "SpokenFeedbackEnabled" => Loc.T("Read recording feedback aloud using the selected voice."),
+        "SilenceAutoStopEnabled" => Loc.T("Finish the recording after a period without speech."),
+        "RecorderMicEnabled" => Loc.T("Start new recorder sessions with your microphone enabled."),
+        "RecorderSystemAudioEnabled" => Loc.T("Start new recorder sessions with sound from your computer enabled."),
+        "RecorderTranscriptionEnabled" => Loc.T("Create a transcript when you finish a recorder session."),
+        "DictationRecoveryAutomaticFallbackEnabled" => Loc.T("Try the recovery engine if the initial transcription fails."),
+        "WorkflowRequestRecoveryEnabled" => Loc.T("Keep failed requests available so you can try them again."),
+        "SaveToHistoryEnabled" => Loc.T("Keep completed transcripts available in History."),
+        "SaveHistoryAudio" => Loc.T("Keep a local audio copy with new dictation entries. Audio follows history deletion and retention."),
+        "MemoryEnabled" => Loc.T("Use personal context to help tailor future results."),
+        "WatchFolderAutoStart" => Loc.T("Start watching your chosen folder when TypeWhisper opens."),
+        "ApiServerRequiresAuthentication" => Loc.T("Require authentication before accepting API requests."),
         _ => ""
     }, ["Off", "On"]);
-    private static Field Choice(string c, string k, string label, string value, string options, string hint = "") => new(c, k, label, value, hint, options.Split('|'));
+    private static Field Choice(string c, string k, string label, string value, string[] options, string hint = "") => new(c, k, label, value, hint, options);
     private static Field Text(string c, string k, string label, string value = "", string hint = "") => new(c, k, label, value, hint);
     private static readonly Field[] Fields =
     [
-        Choice("General", "UiLanguage", "Interface language", "System", "System|English|Deutsch"),
-        Toggle("General", "AutostartEnabled", "Start with Windows"),
-        Choice("Account & about", "UpdateChannel", "Update channel", "Stable", "Stable|Daily|Release Candidate"),
+        Choice("General", "UiLanguage", Loc.T("App Language"), "English", ["English"]),
+        Toggle("General", "AutostartEnabled", Loc.T("Start with Windows")),
+        Choice("Account & about", "UpdateChannel", Loc.T("Update channel"), "Stable", [Loc.Mark("Stable"), Loc.Mark("Daily"), Loc.Mark("Release Candidate")]),
 
-        Choice("Dictation", "Mode", "Recording mode", "Toggle", "Toggle|Push to talk|Hybrid"),
-        Choice("Advanced", "CancellationBehavior", "Cancellation behavior", "Double", "Double|Single|Instant", "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing."),
-        Choice("Dictation", "Language", "Spoken language", "Automatic", "Automatic|English|German|French|Spanish|Italian"),
-        Choice("Dictation", "LanguageHints", "Preferred languages", "Unrestricted", "Unrestricted|German and English|German|English|French|Spanish", "Sample language selection; no language codes required."),
-        Choice("Dictation", "TranscriptionTask", "Task", "Transcribe", "Transcribe|Translate"),
-        Choice("Dictation", "TranslationTargetLanguage", "Translate into", "English", "English|German|French|Spanish|Italian"),
-        Toggle("Dictation", "AutoPaste", "After recording", true, "Insert the text directly, or review the result first."),
-        Toggle("Dictation", "LockPasteToFocusedField", "Paste only into the original field", false, "Used when automatic paste is enabled. Keep the target fixed when dictation starts."),
-        Choice("Advanced", "ModelAutoUnloadSeconds", "Unload idle models", "After 10 minutes", "Never|Immediately|After 2 minutes|After 5 minutes|After 10 minutes|After 30 minutes|After 1 hour", "Release the memory of local models after inactivity. They load again when needed."),
-        Toggle("Advanced", "TranscribeShortQuietClipsAggressively", "Recognize short, quiet clips"),
-        Toggle("Dictation", "TranscriptionNumberNormalizationEnabled", "Normalize numbers", true),
-        Toggle("Dictation", "ShortUtterancePunctuationEnabled", "Punctuate short phrases", true),
-        Choice("Dictation", "EnglishOutputVariant", "English spelling", "As transcribed", "As transcribed|American|British"),
-        Choice("Dictation", "GermanOutputVariant", "German spelling", "As transcribed", "As transcribed|Germany|Switzerland"),
-        Toggle("Dictation", "VocabularyBoostingEnabled", "Vocabulary boosting"),
-        Choice("Dictation", "VocabularyBoostingEnabledPackIds", "Vocabulary packs", "None", "None|Sample technical vocabulary|Sample medical vocabulary", "Sample packs. Manage your own words in Dictionary."),
-        Choice("Dictation", "VocabularyBoostingSelectedIndustryPresetId", "Industry", "General", "General|Technology|Medicine|Legal", "Sample industry presets."),
-        Choice("Dictation", "SpokenFormattingProfiles", "Spoken formatting", "Engine defaults", "Engine defaults|Sample punctuation rules", "Engine-specific formatting is a sample here."),
+        Choice("Dictation", "Mode", Loc.T("Recording mode"), "Toggle", [Loc.Mark("Toggle"), Loc.Mark("Push to talk"), Loc.Mark("Hybrid")]),
+        Choice("Advanced", "CancellationBehavior", Loc.T("Cancellation behavior"), "Double", [Loc.Mark("Double"), Loc.Mark("Single"), Loc.Mark("Instant")], Loc.T("Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing.")),
+        Choice("Dictation", "Language", Loc.T("Spoken language"), "Automatic", [Loc.Mark("Automatic"), Loc.Mark("English"), Loc.Mark("German"), Loc.Mark("French"), Loc.Mark("Spanish"), Loc.Mark("Italian")]),
+        Choice("Dictation", "LanguageHints", Loc.T("Preferred languages"), "Unrestricted", [Loc.Mark("Unrestricted"), Loc.Mark("German and English"), Loc.Mark("German"), Loc.Mark("English"), Loc.Mark("French"), Loc.Mark("Spanish")], Loc.T("Sample language selection; no language codes required.")),
+        Choice("Dictation", "TranscriptionTask", Loc.T("Task"), "Transcribe", [Loc.Mark("Transcribe"), Loc.Mark("Translate")]),
+        Choice("Dictation", "TranslationTargetLanguage", Loc.T("Translate into"), "English", [Loc.Mark("English"), Loc.Mark("German"), Loc.Mark("French"), Loc.Mark("Spanish"), Loc.Mark("Italian")]),
+        Toggle("Dictation", "AutoPaste", Loc.T("After recording"), true, Loc.T("Insert the text directly, or review the result first.")),
+        Toggle("Dictation", "LockPasteToFocusedField", Loc.T("Paste only into the original field"), false, Loc.T("Used when automatic paste is enabled. Keep the target fixed when dictation starts.")),
+        Choice("Advanced", "ModelAutoUnloadSeconds", Loc.T("Unload idle models"), "After 10 minutes", [Loc.Mark("Never"), Loc.Mark("Immediately"), Loc.Mark("After 2 minutes"), Loc.Mark("After 5 minutes"), Loc.Mark("After 10 minutes"), Loc.Mark("After 30 minutes"), Loc.Mark("After 1 hour")], Loc.T("Release the memory of local models after inactivity. They load again when needed.")),
+        Toggle("Advanced", "TranscribeShortQuietClipsAggressively", Loc.T("Recognize short, quiet clips")),
+        Toggle("Dictation", "TranscriptionNumberNormalizationEnabled", Loc.T("Normalize numbers"), true),
+        Toggle("Dictation", "ShortUtterancePunctuationEnabled", Loc.T("Punctuate short phrases"), true),
+        Choice("Dictation", "EnglishOutputVariant", Loc.T("English spelling"), "As transcribed", [Loc.Mark("As transcribed"), Loc.Mark("American"), Loc.Mark("British")]),
+        Choice("Dictation", "GermanOutputVariant", Loc.T("German spelling"), "As transcribed", [Loc.Mark("As transcribed"), Loc.Mark("Germany"), Loc.Mark("Switzerland")]),
+        Toggle("Dictation", "VocabularyBoostingEnabled", Loc.T("Vocabulary boosting")),
+        Choice("Dictation", "VocabularyBoostingEnabledPackIds", Loc.T("Vocabulary packs"), "None", [Loc.Mark("None"), Loc.Mark("Sample technical vocabulary"), Loc.Mark("Sample medical vocabulary")], Loc.T("Sample packs. Manage your own words in Dictionary.")),
+        Choice("Dictation", "VocabularyBoostingSelectedIndustryPresetId", Loc.T("Industry"), "General", [Loc.Mark("General"), Loc.Mark("Technology"), Loc.Mark("Medicine"), Loc.Mark("Legal")], Loc.T("Sample industry presets.")),
+        Choice("Dictation", "SpokenFormattingProfiles", Loc.T("Spoken formatting"), "Engine defaults", [Loc.Mark("Engine defaults"), Loc.Mark("Sample punctuation rules")], Loc.T("Engine-specific formatting is a sample here.")),
 
-        Choice("Audio", "SelectedMicrophoneDevice", "Microphone", "System default", "System default|Sample USB microphone|Sample headset", "Device choices are samples."),
-        Text("Audio", "MicrophonePriorityList", "Microphone fallback order", "", "Preferred device names in order; sample configuration only."),
-        Toggle("Advanced", "WhisperModeEnabled", "Whisper mode"),
-        Toggle("Audio", "AudioDuckingEnabled", "Lower other audio while recording"),
-        Choice("Audio", "AudioDuckingLevel", "Other audio volume", "20%", "0%|10%|20%|30%|50%|75%"),
-        Toggle("Audio", "PauseMediaDuringRecording", "Pause media during recording"),
-        Toggle("Audio", "SoundFeedbackEnabled", "Sound feedback", true),
-        Toggle("Advanced", "SpokenFeedbackEnabled", "Spoken feedback"),
-        Choice("Advanced", "SpokenFeedbackProviderId", "Spoken feedback provider", "Windows speech", "Windows speech|Sample plugin"),
-        Text("Advanced", "SpokenFeedbackVoiceId", "Voice", "System default"),
-        Toggle("Audio", "SilenceAutoStopEnabled", "Stop after silence"),
-        Choice("Audio", "SilenceAutoStopSeconds", "Silence timeout", "10 seconds", "3 seconds|5 seconds|10 seconds|15 seconds|30 seconds"),
+        Choice("Audio", "SelectedMicrophoneDevice", Loc.T("Microphone"), "System default", [Loc.Mark("System default"), Loc.Mark("Sample USB microphone"), Loc.Mark("Sample headset")], Loc.T("Device choices are samples.")),
+        Text("Audio", "MicrophonePriorityList", Loc.T("Microphone fallback order"), "", Loc.T("Preferred device names in order; sample configuration only.")),
+        Toggle("Advanced", "WhisperModeEnabled", Loc.T("Whisper mode")),
+        Toggle("Audio", "AudioDuckingEnabled", Loc.T("Lower other audio while recording")),
+        Choice("Audio", "AudioDuckingLevel", Loc.T("Other audio volume"), "20%", ["0%", "10%", "20%", "30%", "50%", "75%"]),
+        Toggle("Audio", "PauseMediaDuringRecording", Loc.T("Pause media during recording")),
+        Toggle("Audio", "SoundFeedbackEnabled", Loc.T("Sound feedback"), true),
+        Toggle("Advanced", "SpokenFeedbackEnabled", Loc.T("Spoken feedback")),
+        Choice("Advanced", "SpokenFeedbackProviderId", Loc.T("Spoken feedback provider"), "Windows speech", [Loc.Mark("Windows speech"), Loc.Mark("Sample plugin")]),
+        Text("Advanced", "SpokenFeedbackVoiceId", Loc.T("Voice"), "System default"),
+        Toggle("Audio", "SilenceAutoStopEnabled", Loc.T("Stop after silence")),
+        Choice("Audio", "SilenceAutoStopSeconds", Loc.T("Silence timeout"), "10 seconds", [Loc.Mark("3 seconds"), Loc.Mark("5 seconds"), Loc.Mark("10 seconds"), Loc.Mark("15 seconds"), Loc.Mark("30 seconds")]),
 
-        Text("Shortcuts", "MainDictationHotkeys", "Main dictation", LocalDictationSession.DefaultShortcut),
-        Text("Shortcuts", "CancelProcessingHotkeys", "Cancel processing", "", "Cancel final dictation processing or an active selected-text workflow. Does nothing while idle or recording."),
-        Text("Shortcuts", "PushToTalkHotkey", "Push to talk"),
-        Text("Shortcuts", "ToggleOnlyHotkeys", "Toggle recording"),
-        Text("Shortcuts", "HoldOnlyHotkeys", "Hold to record"),
-        Text("Shortcuts", "RecentTranscriptionsHotkeys", "Recent transcriptions"),
-        Text("Shortcuts", "CopyLastTranscriptionHotkeys", "Copy last transcription"),
-        Text("Shortcuts", "PasteLastTranscriptionHotkeys", "Paste last transcription"),
-        Text("Shortcuts", "ReadLastTranscriptionHotkeys", "Read last transcription"),
-        Text("Shortcuts", "WorkflowPaletteHotkeys", "Workflow palette"),
-        Text("Shortcuts", "RecorderToggleHotkeys", "Recorder"),
+        Text("Shortcuts", "MainDictationHotkeys", Loc.T("Main dictation"), LocalDictationSession.DefaultShortcut),
+        Text("Shortcuts", "CancelProcessingHotkeys", Loc.T("Cancel processing"), "", Loc.T("Cancel final dictation processing or an active selected-text workflow. Does nothing while idle or recording.")),
+        Text("Shortcuts", "PushToTalkHotkey", Loc.T("Push to talk")),
+        Text("Shortcuts", "ToggleOnlyHotkeys", Loc.T("Toggle recording")),
+        Text("Shortcuts", "HoldOnlyHotkeys", Loc.T("Hold to record")),
+        Text("Shortcuts", "RecentTranscriptionsHotkeys", Loc.T("Recent transcriptions")),
+        Text("Shortcuts", "CopyLastTranscriptionHotkeys", Loc.T("Copy last transcription")),
+        Text("Shortcuts", "PasteLastTranscriptionHotkeys", Loc.T("Paste last transcription")),
+        Text("Shortcuts", "ReadLastTranscriptionHotkeys", Loc.T("Read last transcription")),
+        Text("Shortcuts", "WorkflowPaletteHotkeys", Loc.T("Workflow palette")),
+        Text("Shortcuts", "RecorderToggleHotkeys", Loc.T("Recorder")),
 
 
-        Choice("Live text", "LiveTextPlacement", "Live text position", "Attached to recording", "Attached to recording|Floating window", "Float the existing live text and drag its header to move it independently of the recording indicator."),
-        Choice("Live text", "LiveTranscriptionFontSize", "Text size", "12", "10|11|12|13|14|15|16|17|18", "Size of the live transcript and completed result in the overlay."),
-        Toggle("Live text", "OnlineAsrBatchLiveTranscriptionEnabled", "Live text for online batch engines", false, "Availability depends on the selected engine."),
-        Choice("Live text", "PreviewBubbleAutoHideMilliseconds", "Result preview duration", "1.5 seconds", "Immediately|0.5 seconds|1 second|1.5 seconds|2 seconds|3 seconds|5 seconds", "After successful paste. Review windows stay open; errors remain visible for five seconds."),
+        Choice("Live text", "LiveTextPlacement", Loc.T("Live text position"), "Attached to recording", [Loc.Mark("Attached to recording"), Loc.Mark("Floating window")], Loc.T("Float the existing live text and drag its header to move it independently of the recording indicator.")),
+        Choice("Live text", "LiveTranscriptionFontSize", Loc.T("Text size"), "12", ["10", "11", "12", "13", "14", "15", "16", "17", "18"], Loc.T("Size of the live transcript and completed result in the overlay.")),
+        Toggle("Live text", "OnlineAsrBatchLiveTranscriptionEnabled", Loc.T("Live text for online batch engines"), false, Loc.T("Availability depends on the selected engine.")),
+        Choice("Live text", "PreviewBubbleAutoHideMilliseconds", Loc.T("Result preview duration"), "1.5 seconds", [Loc.Mark("Immediately"), Loc.Mark("0.5 seconds"), Loc.Mark("1 second"), Loc.Mark("1.5 seconds"), Loc.Mark("2 seconds"), Loc.Mark("3 seconds"), Loc.Mark("5 seconds")], Loc.T("After successful paste. Review windows stay open; errors remain visible for five seconds.")),
 
-        Choice("Recorder", "RecorderSystemAudioDeviceId", "System audio device", "System default", "System default", "Select a real audio output in Recorder settings."),
-        Toggle("Recorder", "RecorderMicEnabled", "Microphone on by default", true),
-        Toggle("Recorder", "RecorderSystemAudioEnabled", "System audio on by default"),
-        Choice("Recorder", "RecorderOutputFormat", "Audio format", "WAV", "WAV", "16 kHz mono WAV recording."),
-        Choice("Recorder", "RecorderTrackMode", "Tracks", "Mixed", "Mixed", "Microphone and system audio are mixed into one mono track."),
+        Choice("Recorder", "RecorderSystemAudioDeviceId", Loc.T("System audio device"), "System default", [Loc.Mark("System default")], Loc.T("Select a real audio output in Recorder settings.")),
+        Toggle("Recorder", "RecorderMicEnabled", Loc.T("Microphone on by default"), true),
+        Toggle("Recorder", "RecorderSystemAudioEnabled", Loc.T("System audio on by default")),
+        Choice("Recorder", "RecorderOutputFormat", Loc.T("Audio format"), "WAV", ["WAV"], Loc.T("16 kHz mono WAV recording.")),
+        Choice("Recorder", "RecorderTrackMode", Loc.T("Tracks"), "Mixed", [Loc.Mark("Mixed")], Loc.T("Microphone and system audio are mixed into one mono track.")),
 
-        Text("Files & recovery", "FileTranscriptionEngineOverride", "File transcription engine", "", "Empty uses the default engine."),
-        Text("Files & recovery", "FileTranscriptionModelOverride", "File transcription model"),
-        Choice("Files & recovery", "DictationRecoveryRetentionDays", "Keep recovery audio", "30 days", "Delete immediately|7 days|30 days|90 days|Forever"),
-        Toggle("Files & recovery", "DictationRecoveryAutomaticFallbackEnabled", "Automatic transcription fallback"),
-        Text("Files & recovery", "DictationRecoveryEngineId", "Recovery engine"),
-        Text("Files & recovery", "DictationRecoveryModelId", "Recovery model"),
-        Choice("Files & recovery", "DictationRecoveryLanguage", "Recovery language", "Automatic", "Automatic|English|German|French|Spanish"),
-        Choice("Files & recovery", "DictationRecoveryTask", "Recovery task", "Transcribe", "Transcribe|Translate"),
-        Toggle("Files & recovery", "WorkflowRequestRecoveryEnabled", "Recover failed workflow requests", true),
+        Text("Files & recovery", "FileTranscriptionEngineOverride", Loc.T("File transcription engine"), "", Loc.T("Empty uses the default engine.")),
+        Text("Files & recovery", "FileTranscriptionModelOverride", Loc.T("File transcription model")),
+        Choice("Files & recovery", "DictationRecoveryRetentionDays", Loc.T("Keep recovery audio"), "30 days", [Loc.Mark("Delete immediately"), Loc.Mark("7 days"), Loc.Mark("30 days"), Loc.Mark("90 days"), Loc.Mark("Forever")]),
+        Toggle("Files & recovery", "DictationRecoveryAutomaticFallbackEnabled", Loc.T("Automatic transcription fallback")),
+        Text("Files & recovery", "DictationRecoveryEngineId", Loc.T("Recovery engine")),
+        Text("Files & recovery", "DictationRecoveryModelId", Loc.T("Recovery model")),
+        Choice("Files & recovery", "DictationRecoveryLanguage", Loc.T("Recovery language"), "Automatic", [Loc.Mark("Automatic"), Loc.Mark("English"), Loc.Mark("German"), Loc.Mark("French"), Loc.Mark("Spanish")]),
+        Choice("Files & recovery", "DictationRecoveryTask", Loc.T("Recovery task"), "Transcribe", [Loc.Mark("Transcribe"), Loc.Mark("Translate")]),
+        Toggle("Files & recovery", "WorkflowRequestRecoveryEnabled", Loc.T("Recover failed workflow requests"), true),
 
-        Toggle("Privacy", "SaveToHistoryEnabled", "Save to history", true),
-        Toggle("Privacy", "SaveHistoryAudio", "Keep dictation audio"),
-        Choice("Privacy", "HistoryRetentionMode", "History retention", "For a duration", "For a duration|Forever|Until the app closes"),
-        Choice("Privacy", "HistoryRetentionMinutes", "Keep history for", "90 days", "1 day|7 days|30 days|90 days|180 days"),
-        Toggle("Privacy", "MemoryEnabled", "Personal memory"),
+        Toggle("Privacy", "SaveToHistoryEnabled", Loc.T("Save to history"), true),
+        Toggle("Privacy", "SaveHistoryAudio", Loc.T("Keep dictation audio")),
+        Choice("Privacy", "HistoryRetentionMode", Loc.T("History retention"), "For a duration", [Loc.Mark("For a duration"), Loc.Mark("Forever"), Loc.Mark("Until the app closes")]),
+        Choice("Privacy", "HistoryRetentionMinutes", Loc.T("Keep history for"), "90 days", [Loc.Mark("1 day"), Loc.Mark("7 days"), Loc.Mark("30 days"), Loc.Mark("90 days"), Loc.Mark("180 days")]),
+        Toggle("Privacy", "MemoryEnabled", Loc.T("Personal memory")),
 
 
     ];
@@ -124,7 +124,7 @@ internal static partial class SettingsCatalog
     internal static IEnumerable<SettingSearchEntry> SearchEntries => Fields.Select(setting => new SettingSearchEntry(
         setting.Category == "Live text" ? "Appearance" : setting.Category, setting.Key, setting.Label, setting.Hint,
         ChoiceIcon(setting), string.Join(' ', setting.Choices ?? []))).Append(new(
-            "Dictation", "DictationModel", "Dictation model", "Choose the active dictation model. Downloads and credentials are managed in plugin settings.", "chip", "engine default downloaded"));
+            "Dictation", "DictationModel", Loc.T("Dictation model"), Loc.T("Choose the active dictation model. Downloads and credentials are managed in plugin settings."), "chip", "engine default downloaded"));
 
     private static TextBlock Label(string text, double size = 13, bool muted = false) => new()
     {
@@ -143,11 +143,11 @@ internal static partial class SettingsCatalog
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         titleRow.Children.Add(title);
         if (category == "Shortcuts")
-            titleRow.Children.Add(SettingsHelp.Button(category, "These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable."));
+            titleRow.Children.Add(SettingsHelp.Button(Loc.T(category), Loc.T("These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable.")));
         else if (category == "Privacy")
-            titleRow.Children.Add(SettingsHelp.Button(category, "Settings are saved automatically. History retention changes take effect when you choose Apply retention. Unavailable controls are disabled."));
+            titleRow.Children.Add(SettingsHelp.Button(Loc.T(category), Loc.T("Settings are saved automatically. History retention changes take effect when you choose Apply retention. Unavailable controls are disabled.")));
         else if (category is not "Premium" and not "Account & about" and not "Dictation")
-            titleRow.Children.Add(SettingsHelp.Button(category, "Settings are saved automatically. Unavailable controls are disabled."));
+            titleRow.Children.Add(SettingsHelp.Button(Loc.T(category), Loc.T("Settings are saved automatically. Unavailable controls are disabled.")));
         target.Children.Add(titleRow);
         if (category == "Premium")
         {
@@ -162,16 +162,16 @@ internal static partial class SettingsCatalog
 
         if (category == "Shortcuts")
         {
-            var guide = Label("Your actions, your keys. Add alternatives with + or click a key to change it.", 13, true);
-            ToolTipService.SetToolTip(guide, "Main dictation and cancel processing shortcuts are global and saved automatically. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable.");
+            var guide = Label(Loc.T("Your actions, your keys. Add alternatives with + or click a key to change it."), 13, true);
+            ToolTipService.SetToolTip(guide, Loc.T("Main dictation and cancel processing shortcuts are global and saved automatically. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable."));
             target.Children.Add(guide);
             var list = new StackPanel { Spacing = 24 };
             (string Title, string[] Keys)[] groups =
             [
-                ("Dictation", ["MainDictationHotkeys", "CancelProcessingHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
-                ("Recent transcriptions", ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys", "PasteLastTranscriptionHotkeys", "ReadLastTranscriptionHotkeys"]),
-                ("Workflow palette", ["WorkflowPaletteHotkeys"]),
-                ("Recorder", ["RecorderToggleHotkeys"])
+                (Loc.T("Dictation"), ["MainDictationHotkeys", "CancelProcessingHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
+                (Loc.T("Recent transcriptions"), ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys", "PasteLastTranscriptionHotkeys", "ReadLastTranscriptionHotkeys"]),
+                (Loc.T("Workflow palette"), ["WorkflowPaletteHotkeys"]),
+                (Loc.T("Recorder"), ["RecorderToggleHotkeys"])
             ];
             foreach (var group in groups)
             {
@@ -300,7 +300,7 @@ internal static partial class SettingsCatalog
                 stack.Children.Add(SettingsHelp.Label(field.Label, field.Hint));
                 var picker = new ChoicePicker { Tag = field.Key };
                 picker.Configure(field.Label, ChoiceIcon(field), $"Preference {field.Key}");
-                picker.SetOptions(field.Choices.Select(v => new Choice(v, v, "Session-only setting")).ToArray(), value);
+                picker.SetOptions(field.Choices.Select(v => new Choice(v, Loc.T(v), Loc.T("Session-only setting"))).ToArray(), value);
                 picker.SelectionChanged += selected =>
                 {
                     values[field.Key] = selected;

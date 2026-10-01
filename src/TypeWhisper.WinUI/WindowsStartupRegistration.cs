@@ -9,7 +9,7 @@ internal static class WindowsStartupRegistration
     {
         var backend = new RegistryBackend();
         if (WinUIProfile.IsTestProfile)
-            return new StartupRegistration(backend, StartupPublication.DevelopmentIdentity, null, "Windows startup is unavailable in isolated test profiles. No startup registrations are accessed.");
+            return new StartupRegistration(backend, StartupPublication.DevelopmentIdentity, null, Loc.T("Windows startup is unavailable in isolated test profiles. No startup registrations are accessed."));
 #if TYPEWHISPER_STORE
         const string taskId = "TypeWhisperStartup";
         return new PackagedStartupRegistration(
@@ -38,7 +38,7 @@ internal static class WindowsStartupRegistration
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return new StartupRegistration(backend, StartupPublication.DevelopmentIdentity, null,
-                "Startup is available only from the development launcher's published output. " + ex.Message);
+                Loc.T("Startup is available only from the development launcher's published output. {0}", ex.Message));
         }
 #else
         return CreateInstalled(backend);
@@ -77,7 +77,7 @@ internal static class WindowsStartupRegistration
         {
             try { installation.MigrateStartupCommand(backend, executable); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { return new StartupRegistration(backend, installation.PackageId, null, "Startup registration could not be upgraded. " + ex.Message); }
+            { return new StartupRegistration(backend, installation.PackageId, null, Loc.T("Startup registration could not be upgraded. {0}", ex.Message)); }
             var registration = new StartupRegistration(backend, installation.PackageId, executable);
             if (installation.PackageId != "TypeWhisper" || string.IsNullOrWhiteSpace(locator.ThisExeRelativePath)) return registration;
             // 1.0 used an owned Startup-folder shortcut. Keep it (including Windows' disabled state)
@@ -90,7 +90,7 @@ internal static class WindowsStartupRegistration
 #pragma warning restore CS0618
         }
         return new StartupRegistration(backend, "TypeWhisperDaily", null,
-            "Windows startup is available after installing TypeWhisper.");
+            Loc.T("Windows startup is available after installing TypeWhisper."));
     }
 
     private sealed class RegistryBackend : IStartupRegistrationBackend
@@ -100,7 +100,7 @@ internal static class WindowsStartupRegistration
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: false);
             var value = key?.GetValue(identity, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
-            return value is null or string ? (string?)value : throw new InvalidDataException("The startup command has an unsupported registry type.");
+            return value is null or string ? (string?)value : throw new InvalidDataException(Loc.T("The startup command has an unsupported registry type."));
         }
         public void Write(string identity, string command)
         {

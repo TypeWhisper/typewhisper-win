@@ -10,8 +10,8 @@ internal sealed class SystemVoiceSettingsControl : UserControl
 {
     private readonly LocalDictationSession _session;
     private readonly TextBlock _status = Label("");
-    private readonly HandCursorButton _test = Button("Test voice");
-    private readonly HandCursorButton _stop = Button("Stop speaking");
+    private readonly HandCursorButton _test = Button(Loc.T("Test voice"));
+    private readonly HandCursorButton _stop = Button(Loc.T("Stop speaking"));
     private bool _testing;
     private bool _stopping;
 
@@ -20,9 +20,9 @@ internal sealed class SystemVoiceSettingsControl : UserControl
         _session = session;
         var content = new StackPanel { Spacing = 8 };
         content.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"], Margin = new(0, 4, 0, 4) });
-        content.Children.Add(SettingsHelp.Label("Spoken feedback", "Read successfully inserted dictation aloud using the selected voice. Off by default. Review, failed processing and file jobs are not read automatically. Windows voices run locally. Selecting a cloud voice sends the text to that provider and may incur API charges. Uses the selected audio output. Supports up to 4,000 characters and two minutes of speech.", 16));
+        content.Children.Add(SettingsHelp.Label(Loc.T("Spoken feedback"), Loc.T("Read successfully inserted dictation aloud using the selected voice. Off by default. Review, failed processing and file jobs are not read automatically. Windows voices run locally. Selecting a cloud voice sends the text to that provider and may incur API charges. Uses the selected audio output. Supports up to 4,000 characters and two minutes of speech."), 16));
         var enabled = AppToggleSwitch.Create(session.AudioPreferences.SpokenFeedbackEnabled);
-        AutomationProperties.SetName(enabled, "Spoken feedback");
+        AutomationProperties.SetName(enabled, Loc.T("Spoken feedback"));
         var restoring = false;
         enabled.Toggled += async (_, _) =>
         {
@@ -33,7 +33,7 @@ internal sealed class SystemVoiceSettingsControl : UserControl
             {
                 restoring = true; enabled.IsOn = previous; restoring = false; _status.Text = error; return;
             }
-            _status.Text = "Saved. Applies to future successful dictations.";
+            _status.Text = Loc.T("Saved. Applies to future successful dictations.");
             if (!enabled.IsOn) await StopAsync();
         };
         content.Children.Add(enabled);
@@ -42,16 +42,16 @@ internal sealed class SystemVoiceSettingsControl : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             voices = [];
-            content.Children.Add(Label("Installed Windows voices could not be read. Reopen Audio settings after checking Windows speech settings."));
+            content.Children.Add(Label(Loc.T("Installed Windows voices could not be read. Reopen Audio settings after checking Windows speech settings.")));
         }
-        if (voices.Count == 0) content.Children.Add(Label("No installed Windows voice is available. Install a voice through Windows settings before testing."));
-        var options = new List<Choice> { new("", "Windows default voice", "Uses the Windows voice; no automatic language switch") };
-        options.AddRange(voices.Select(voice => new Choice(voice.Id, voice.DisplayName, voice.Language ?? (voice.Id.StartsWith("plugin:", StringComparison.Ordinal) ? (voice.IsLocal ? "Local provider voice" : "Cloud provider voice") : "Installed Windows voice"))));
+        if (voices.Count == 0) content.Children.Add(Label(Loc.T("No installed Windows voice is available. Install a voice through Windows settings before testing.")));
+        var options = new List<Choice> { new("", Loc.T("Windows default voice"), Loc.T("Uses the Windows voice; no automatic language switch")) };
+        options.AddRange(voices.Select(voice => new Choice(voice.Id, voice.DisplayName, voice.Language ?? (voice.Id.StartsWith("plugin:", StringComparison.Ordinal) ? (voice.IsLocal ? Loc.T("Local provider voice") : Loc.T("Cloud provider voice")) : Loc.T("Installed Windows voice")))));
         var savedVoice = session.AudioPreferences.SpokenFeedbackVoiceId ?? "";
         if (!options.Any(option => option.Id == savedVoice))
-            options.Add(new(savedVoice, "Saved voice · unavailable", "Choose an available voice; unavailable voices never fall back silently"));
+            options.Add(new(savedVoice, Loc.T("Saved voice · unavailable"), Loc.T("Choose an available voice; unavailable voices never fall back silently")));
         var voicePicker = new ChoicePicker();
-        voicePicker.Configure("Voice", "speaker", "Spoken feedback voice");
+        voicePicker.Configure(Loc.T("Voice"), "speaker", Loc.T("Spoken feedback voice"));
         voicePicker.SetOptions(options, savedVoice);
         voicePicker.SelectionChanged += id =>
         {
@@ -61,7 +61,7 @@ internal sealed class SystemVoiceSettingsControl : UserControl
             {
                 restoring = true; voicePicker.SetOptions(options, savedVoice); restoring = false; _status.Text = error;
             }
-            else { savedVoice = id; _status.Text = "Voice saved. Applies to the next playback."; }
+            else { savedVoice = id; _status.Text = Loc.T("Voice saved. Applies to the next playback."); }
         };
         content.Children.Add(voicePicker); pickers.Add(voicePicker);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -71,14 +71,14 @@ internal sealed class SystemVoiceSettingsControl : UserControl
         _test.Click += async (_, _) =>
         {
             if (_testing || _stopping || !session.CanChangeProvider || session.SpokenFeedback.IsBusy) return;
-            _testing = true; UpdateButtons(); _status.Text = "Testing voice…";
+            _testing = true; UpdateButtons(); _status.Text = Loc.T("Testing voice…");
             try
             {
                 var result = await session.TestSpokenFeedbackAsync();
-                if (IsLoaded) _status.Text = result.Message ?? (result.Status == SpokenFeedbackStatus.Completed ? "Voice test completed." : "Voice test stopped.");
+                if (IsLoaded) _status.Text = result.Message ?? (result.Status == SpokenFeedbackStatus.Completed ? Loc.T("Voice test completed.") : Loc.T("Voice test stopped."));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (IsLoaded) _status.Text = "The voice test failed. Check the selected voice and audio output."; }
+            { if (IsLoaded) _status.Text = Loc.T("The voice test failed. Check the selected voice and audio output."); }
             finally { _testing = false; if (IsLoaded) UpdateButtons(); }
         };
         _stop.Click += async (_, _) => await StopAsync();
@@ -101,14 +101,14 @@ internal sealed class SystemVoiceSettingsControl : UserControl
     {
         if (_stopping) return;
         _stopping = true;
-        if (IsLoaded) { _status.Text = "Stopping spoken feedback…"; UpdateButtons(); }
+        if (IsLoaded) { _status.Text = Loc.T("Stopping spoken feedback…"); UpdateButtons(); }
         try
         {
             await _session.SpokenFeedback.CancelAndDrainAsync();
-            if (IsLoaded) _status.Text = "Spoken feedback stopped.";
+            if (IsLoaded) _status.Text = Loc.T("Spoken feedback stopped.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded) _status.Text = "Spoken feedback could not finish stopping. Wait before starting another test."; }
+        { if (IsLoaded) _status.Text = Loc.T("Spoken feedback could not finish stopping. Wait before starting another test."); }
         finally { _stopping = false; if (IsLoaded) UpdateButtons(); }
     }
 

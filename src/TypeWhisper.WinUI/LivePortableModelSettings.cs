@@ -21,7 +21,7 @@ internal sealed class LivePortableModelSettings : UserControl
     private readonly StackPanel _cloudPanel = new() { Spacing = 8 };
     private readonly ComboBox _cloudModel = new() { DisplayMemberPath = nameof(PortableDownloadableModel.DisplayName), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 40 };
     private readonly TextBlock _cloudStatus = Label("");
-    private readonly HandCursorButton _cloudUse = Button("Use selected model");
+    private readonly HandCursorButton _cloudUse = Button(Loc.T("Use selected model"));
     private readonly LiveLocalLlmModelSettings _localLlm;
     internal bool HasLocalLlmModels { get; set; }
     private bool _cloudMode;
@@ -41,14 +41,14 @@ internal sealed class LivePortableModelSettings : UserControl
     internal LivePortableModelSettings(LocalDictationSession session, string pluginId)
     {
         _session = session; _pluginId = pluginId;
-        _refresh = Button("Refresh models");
+        _refresh = Button(Loc.T("Refresh models"));
         _status.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => _status.Visibility = string.IsNullOrWhiteSpace(_status.Text) ? Visibility.Collapsed : Visibility.Visible);
         _status.Visibility = Visibility.Collapsed;
         var content = new StackPanel { Spacing = 10 };
-        _cloudPanel.Children.Add(new TextBlock { Text = "Transcription model", FontSize = 16 });
+        _cloudPanel.Children.Add(new TextBlock { Text = Loc.T("Transcription model"), FontSize = 16 });
         _cloudPanel.Children.Add(_cloudModel); _cloudPanel.Children.Add(_cloudStatus); _cloudPanel.Children.Add(_cloudUse);
         _cloudPanel.Visibility = Visibility.Collapsed;
-        AutomationProperties.SetName(_cloudModel, "Transcription model");
+        AutomationProperties.SetName(_cloudModel, Loc.T("Transcription model"));
         _cloudUse.Click += async (_, _) =>
         { if (_cloudModel.SelectedItem is PortableDownloadableModel model && _items.TryGetValue((model.SelectionId, model.ModelId), out var row)) await UseAsync(row); };
         _cloudModel.SelectionChanged += async (_, _) =>
@@ -155,12 +155,12 @@ internal sealed class LivePortableModelSettings : UserControl
             finally { _settingCloudModel = false; }
             _llm.Visibility = ShowLlmSummary && !HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             var llms = _session.LlmProviders.Where(p => p.PluginId == _pluginId).ToArray();
-            _llm.Text = models.Count == 0 && llms.Length == 0 && !localTts && !HasLocalLlmModels ? "No model providers are currently enabled." :
-                string.Join("\n", llms.Select(p => p.Name + " · Text processing: " + string.Join(", ", p.Models.Select(m => m.DisplayName))));
+            _llm.Text = models.Count == 0 && llms.Length == 0 && !localTts && !HasLocalLlmModels ? Loc.T("No model providers are currently enabled.") :
+                string.Join("\n", llms.Select(p => Loc.T("{0} · Text processing: {1}", p.Name, string.Join(", ", p.Models.Select(m => m.DisplayName)))));
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "Model status could not be read. Refresh after the current plugin operation finishes."; }
+        { if (Current(lifetime)) _status.Text = Loc.T("Model status could not be read. Refresh after the current plugin operation finishes."); }
         finally
         {
             _reading = false;
@@ -191,19 +191,19 @@ internal sealed class LivePortableModelSettings : UserControl
         {
             if (!row.Credentials.TryGetValue(requirement.Id, out var credential))
             {
-                credential = new CredentialRow(requirement.Title + (requirement.IsRequired ? "" : " (optional)"));
+                credential = new CredentialRow(requirement.IsRequired ? requirement.Title : Loc.T("{0} (optional)", requirement.Title));
                 row.Credentials.Add(requirement.Id, credential); row.CredentialPanel.Children.Add(credential.Panel);
                 var capturedRow = row; var capturedCredential = credential; var id = requirement.Id;
                 credential.Save.Click += async (_, _) => await SaveCredentialAsync(capturedRow, id, capturedCredential, clear: false);
                 credential.Clear.Click += async (_, _) => await SaveCredentialAsync(capturedRow, id, capturedCredential, clear: true);
             }
-            credential.Input.PlaceholderText = requirement.IsSatisfied ? "Saved securely; enter a replacement" : "Enter download token";
+            credential.Input.PlaceholderText = requirement.IsSatisfied ? Loc.T("Saved securely; enter a replacement") : Loc.T("Enter download token");
             credential.Clear.Visibility = requirement.IsSatisfied ? Visibility.Visible : Visibility.Collapsed;
         }
         row.Title.Text = model.DisplayName;
-        row.Size.Text = model.SizeDescription ?? "Local model";
+        row.Size.Text = model.SizeDescription ?? Loc.T("Local model");
         row.Requirements.Text = string.Join("\n", model.Requirements.Where(r => r.IsRequired && !r.IsSatisfied).Select(r =>
-            $"{r.Title} required · {r.Description}"));
+            Loc.T("{0} required · {1}", r.Title, r.Description)));
         row.Requirements.Visibility = string.IsNullOrEmpty(row.Requirements.Text) ? Visibility.Collapsed : Visibility.Visible;
         row.RemovalNote.Text = model.RemovalBlockedReason ?? "";
         row.RemovalNote.Visibility = model.SupportsRemoval && model.Downloaded && model.RemovalBlockedReason is not null
@@ -231,12 +231,12 @@ internal sealed class LivePortableModelSettings : UserControl
             if (Current(lifetime))
             {
                 if (result.Succeeded) credential.Input.Password = "";
-                _status.Text = result.Message ?? (result.Succeeded ? "Download credential saved." : "The credential could not be saved.");
+                _status.Text = result.Message ?? (result.Succeeded ? Loc.T("Download credential saved.") : Loc.T("The credential could not be saved."));
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception error) when (error is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "The download credential could not be updated. Refresh and try again."; }
+        { if (Current(lifetime)) _status.Text = Loc.T("The download credential could not be updated. Refresh and try again."); }
         finally { _session.RecordingStarting -= CancelForRecording; _working = false; if (IsLoaded) RequestRefresh(); }
     }
 
@@ -250,11 +250,11 @@ internal sealed class LivePortableModelSettings : UserControl
         {
             if (!Current(lifetime)) return;
             var error = await _session.UseRegistryModelAsync(expected);
-            if (Current(lifetime)) _status.Text = error ?? "Model selected for dictation.";
+            if (Current(lifetime)) _status.Text = error ?? Loc.T("Model selected for dictation.");
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "The model could not be selected. Refresh its status and try again."; }
+        { if (Current(lifetime)) _status.Text = Loc.T("The model could not be selected. Refresh its status and try again."); }
         finally { _loadingRow = null; _working = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
@@ -265,10 +265,10 @@ internal sealed class LivePortableModelSettings : UserControl
         try
         {
             var error = await _session.DownloadRegistryModelAsync(row.Model);
-            if (Current(lifetime)) _status.Text = error ?? "Model downloaded. Choose Use model to select it.";
+            if (Current(lifetime)) _status.Text = error ?? Loc.T("Model downloaded. Choose Use model to select it.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "The download could not finish. Refresh the model status before retrying."; }
+        { if (Current(lifetime)) _status.Text = Loc.T("The download could not finish. Refresh the model status before retrying."); }
         finally { _working = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
@@ -280,10 +280,10 @@ internal sealed class LivePortableModelSettings : UserControl
         try
         {
             await _session.CancelRegistryModelDownloadAsync();
-            if (Current(lifetime)) _status.Text = _session.RegistryModelDownload.State.Message ?? "Model operation stopped.";
+            if (Current(lifetime)) _status.Text = _session.RegistryModelDownload.State.Message ?? Loc.T("Model operation stopped.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "The model operation could not finish stopping. Wait before retrying."; }
+        { if (Current(lifetime)) _status.Text = Loc.T("The model operation could not finish stopping. Wait before retrying."); }
         finally { _canceling = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
@@ -298,18 +298,18 @@ internal sealed class LivePortableModelSettings : UserControl
             {
                 XamlRoot = XamlRoot,
                 RequestedTheme = ActualTheme,
-                Title = "Remove " + expected.DisplayName + "?",
-                Content = "Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept.",
-                PrimaryButtonText = "Remove model",
-                CloseButtonText = "Cancel",
+                Title = Loc.T("Remove {0}?", expected.DisplayName),
+                Content = Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."),
+                PrimaryButtonText = Loc.T("Remove model"),
+                CloseButtonText = Loc.T("Cancel"),
                 DefaultButton = ContentDialogButton.Close
             };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || !Current(lifetime)) return;
             var error = await _session.RemoveRegistryModelAsync(expected);
-            if (Current(lifetime)) _status.Text = error ?? "Model removed. Download it again to use it.";
+            if (Current(lifetime)) _status.Text = error ?? Loc.T("Model removed. Download it again to use it.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "The model could not be removed. Refresh its status before trying again."; }
+        { if (Current(lifetime)) _status.Text = Loc.T("The model could not be removed. Refresh its status before trying again."); }
         finally { _working = false; if (IsLoaded) { RequestRefresh(); ConfigurationChanged?.Invoke(); } }
     }
 
@@ -334,30 +334,30 @@ internal sealed class LivePortableModelSettings : UserControl
             var required = model.Requirements.Any(r => r.IsRequired && !r.IsSatisfied);
             row.Download.Visibility = model.SupportsDownload && !model.Downloaded && !(active && state.IsBusy) ? Visibility.Visible : Visibility.Collapsed;
             row.Download.IsEnabled = available && provider is not null && !required;
-            row.Use.Content = selected ? "Active model" : "Use model";
+            row.Use.Content = selected ? Loc.T("Active model") : Loc.T("Use model");
             row.Use.Visibility = model.SupportsDownload && !model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
             var loading = ReferenceEquals(_loadingRow, row);
             var recommended = provider?.Models.FirstOrDefault(m => m.Id == model.ModelId)?.IsRecommended == true;
-            row.Badge.Text = loading ? "Loading…" : active && state.IsBusy ? state.IsRemoval ? "Removing…" : "Downloading…" : selected ? "Active" : model.Downloaded ? "Downloaded" : recommended ? "Recommended" : "Available";
+            row.Badge.Text = loading ? Loc.T("Loading…") : active && state.IsBusy ? state.IsRemoval ? Loc.T("Removing…") : Loc.T("Downloading…") : selected ? Loc.T("Active") : model.Downloaded ? Loc.T("Downloaded") : recommended ? Loc.T("Recommended") : Loc.T("Available");
             row.SetActive(selected);
             row.Use.IsEnabled = available && provider is not null && !selected &&
                 (model.SupportsDownload ? model.Downloaded : provider.Ready);
             row.Remove.Visibility = model.SupportsRemoval && model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             row.Remove.IsEnabled = available && provider is not null && !selected && model.RemovalBlockedReason is null;
-            ToolTipService.SetToolTip(row.Remove, model.RemovalBlockedReason ?? "Remove downloaded files for this model.");
-            AutomationProperties.SetHelpText(row.Remove, model.RemovalBlockedReason ?? "Remove downloaded files for this model.");
+            ToolTipService.SetToolTip(row.Remove, model.RemovalBlockedReason ?? Loc.T("Remove downloaded files for this model."));
+            AutomationProperties.SetHelpText(row.Remove, model.RemovalBlockedReason ?? Loc.T("Remove downloaded files for this model."));
             row.Cancel.Visibility = active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
-            row.Cancel.Content = state.IsRemoval ? "Cancel removal" : "Cancel download";
+            row.Cancel.Content = state.IsRemoval ? Loc.T("Cancel removal") : Loc.T("Cancel download");
             row.Cancel.IsEnabled = !_canceling && active && state.IsBusy && !state.IsClosing;
             row.Progress.Visibility = loading || active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
             row.Percent.Text = active && state.IsBusy && state.Progress is { } fraction ? $"{fraction:P0}" : "";
             row.Percent.Visibility = row.Progress.Visibility;
             row.Progress.IsIndeterminate = loading || state.Progress is null;
             row.Progress.Value = (state.Progress ?? 0) * 100;
-            row.State.Text = loading ? "Loading model into memory…" : active && state.Message is not null ? state.Message : provider is null
-                ? "Provider unavailable. Refresh after enabling the plugin." : model.SupportsDownload
-                    ? selected ? "Downloaded · 100%. Selected for dictation." : model.Downloaded ? "Downloaded · 100%. Choose Use model to load it." : "Not downloaded."
-                    : provider.Ready ? "Provider ready." : "Complete provider configuration before selecting a model.";
+            row.State.Text = loading ? Loc.T("Loading model into memory…") : active && state.Message is not null ? state.Message : provider is null
+                ? Loc.T("Provider unavailable. Refresh after enabling the plugin.") : model.SupportsDownload
+                    ? selected ? Loc.T("Downloaded · 100%. Selected for dictation.") : model.Downloaded ? Loc.T("Downloaded · 100%. Choose Use model to load it.") : Loc.T("Not downloaded.")
+                    : provider.Ready ? Loc.T("Provider ready.") : Loc.T("Complete provider configuration before selecting a model.");
         }
         if (_cloudMode)
         {
@@ -367,7 +367,7 @@ internal sealed class LivePortableModelSettings : UserControl
             _cloudModel.IsEnabled = available && currentProvider?.Ready == true;
             _cloudUse.IsEnabled = false;
             _cloudUse.Visibility = Visibility.Collapsed;
-            _cloudStatus.Text = currentProvider?.Ready == true ? "Choose a transcription model." : "Complete provider configuration before selecting a model.";
+            _cloudStatus.Text = currentProvider?.Ready == true ? Loc.T("Choose a transcription model.") : Loc.T("Complete provider configuration before selecting a model.");
         }
         if (_cloudMode && _cloudModel.SelectedItem is PortableDownloadableModel selectedModel && _items.TryGetValue((selectedModel.SelectionId, selectedModel.ModelId), out var selectedRow))
         {
@@ -376,8 +376,8 @@ internal sealed class LivePortableModelSettings : UserControl
             _cloudUse.IsEnabled = selectedRow.Use.IsEnabled;
             _cloudUse.Visibility = _session.IsRegistryModelSelected(selectedModel) ? Visibility.Collapsed : Visibility.Visible;
             _cloudStatus.Text = provider?.Ready == true
-                ? _session.IsRegistryModelSelected(selectedModel) ? "Selected for dictation." : "Choose this model to use it for dictation."
-                : "An API key is required for transcription.";
+                ? _session.IsRegistryModelSelected(selectedModel) ? Loc.T("Selected for dictation.") : Loc.T("Choose this model to use it for dictation.")
+                : Loc.T("An API key is required for transcription.");
         }
     }
 
@@ -385,8 +385,8 @@ internal sealed class LivePortableModelSettings : UserControl
     {
         internal readonly StackPanel Panel = new() { Spacing = 6 };
         internal readonly PasswordBox Input = new();
-        internal readonly HandCursorButton Save = Button("Save token");
-        internal readonly HandCursorButton Clear = Button("Remove saved token");
+        internal readonly HandCursorButton Save = Button(Loc.T("Save token"));
+        internal readonly HandCursorButton Clear = Button(Loc.T("Remove saved token"));
         internal CredentialRow(string title)
         {
             AutomationProperties.SetName(Input, title);
@@ -408,10 +408,10 @@ internal sealed class LivePortableModelSettings : UserControl
         internal readonly TextBlock State = Label("");
         internal readonly TextBlock RemovalNote = Label("");
         internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100, Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
-        internal readonly HandCursorButton Download = Button("Download model");
-        internal readonly HandCursorButton Use = Button("Use model");
-        internal readonly HandCursorButton Remove = Button("Remove model");
-        internal readonly HandCursorButton Cancel = Button("Cancel operation");
+        internal readonly HandCursorButton Download = Button(Loc.T("Download model"));
+        internal readonly HandCursorButton Use = Button(Loc.T("Use model"));
+        internal readonly HandCursorButton Remove = Button(Loc.T("Remove model"));
+        internal readonly HandCursorButton Cancel = Button(Loc.T("Cancel operation"));
         private bool _active;
         internal void SetActive(bool active) {
             _active = active;
@@ -449,8 +449,8 @@ internal sealed class LivePortableModelSettings : UserControl
             Panel.SizeChanged += (_, e) => actions.Orientation = e.NewSize.Width < 440 ? Orientation.Vertical : Orientation.Horizontal;
             actions.Children.Add(Download); actions.Children.Add(Use); actions.Children.Add(Remove); actions.Children.Add(Cancel);
             body.Children.Add(actions);
-            AutomationProperties.SetName(Progress, model.DisplayName + " model operation progress");
-            AutomationProperties.SetName(Remove, "Remove " + model.DisplayName);
+            AutomationProperties.SetName(Progress, Loc.T("{0} model operation progress", model.DisplayName));
+            AutomationProperties.SetName(Remove, Loc.T("Remove {0}", model.DisplayName));
         }
     }
     private static TextBlock Label(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12 };

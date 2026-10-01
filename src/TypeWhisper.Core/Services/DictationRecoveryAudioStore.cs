@@ -373,7 +373,7 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
 
     private void ReportStorageFailure()
     {
-        Volatile.Write(ref _lastError, "Recovery audio could not be stored or restored completely. Your current transcription can continue; recovery is not guaranteed.");
+        Volatile.Write(ref _lastError, Loc.T("Recovery audio could not be stored or restored completely. Your current transcription can continue; recovery is not guaranteed."));
         PublishSnapshot();
     }
 

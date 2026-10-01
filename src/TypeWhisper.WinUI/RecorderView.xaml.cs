@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using TypeWhisper.Presentation;
 
@@ -9,7 +10,7 @@ namespace TypeWhisper.WinUI;
 public sealed partial class RecorderView : UserControl
 {
     private RecorderController? _recorder;
-    private readonly HandCursorButton _audioSourceHelp = SettingsHelp.Button("Audio source", "Choose a source, then start your session. Audio stays on this device. Up to 60 minutes per recording.");
+    private readonly HandCursorButton _audioSourceHelp = SettingsHelp.Button(Loc.T("Audio source"), Loc.T("Choose a source, then start your session. Audio stays on this device. Up to 60 minutes per recording."));
     private string? _audioSourceHelpText;
     private RecorderCaptureAdapter? _capture;
     private TimeSpan ActiveDuration => (_recorder?.Duration ?? TimeSpan.Zero)
@@ -30,12 +31,28 @@ public sealed partial class RecorderView : UserControl
     public RecorderView()
     {
         InitializeComponent();
+        RecorderTitle.Text = Loc.T("Recorder");
+        RecordingName.Header = Loc.T("Recording name (optional)");
+        RecordingName.PlaceholderText = Loc.T("Untitled recording");
+        AutomationProperties.SetName(RecordingName, Loc.T("Recording name"));
+        AutomationProperties.SetName(MicrophoneSource, Loc.T("Recorder source microphone"));
+        MicrophoneLabel.Text = Loc.T("Microphone");
+        AutomationProperties.SetName(SystemSource, Loc.T("Recorder source system audio"));
+        SystemLabel.Text = Loc.T("System audio");
+        LibraryStatus.Text = Loc.T("Saved recordings");
+        LibraryRefreshButton.Content = Loc.T("Refresh");
+        LibraryStopPlaybackButton.Content = Loc.T("Stop playback");
+        LibraryQueueButton.Content = Loc.T("Transcribe · T");
+        LibraryFolderButton.Content = Loc.T("Folder · F");
+        LibraryDeleteButton.Content = Loc.T("Delete · Del");
+        AutomationProperties.SetName(PauseButton, Loc.T("Pause or resume this recording"));
+        AutomationProperties.SetName(PrimaryButton, Loc.T("Recorder primary action"));
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
         var sourceLabel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        sourceLabel.Children.Add(new TextBlock { Text = "Audio source", FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        sourceLabel.Children.Add(new TextBlock { Text = Loc.T("Audio source"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
         sourceLabel.Children.Add(_audioSourceHelp);
         AudioSourceHelp.Child = sourceLabel;
-        RecorderTabs.SetItems([new("record", "Record"), new("recordings", "Recordings")], "record");
+        RecorderTabs.SetItems([new("record", Loc.T("Record")), new("recordings", Loc.T("Recordings"))], "record");
         RecorderTabs.SelectionChanged += id => ShowLibrary(id == "recordings");
         MicrophoneSource.IsChecked = true;
         _timer = DispatcherQueue.CreateTimer();
@@ -115,15 +132,16 @@ public sealed partial class RecorderView : UserControl
             _selectRecordingPath = _librarySavedPath;
             ShowLibrary(true);
         }
-        RecorderStatus.Text = _recorder?.Error ?? (state == RecorderState.Ready && _recordingDeleted ? "Recording deleted" : state switch
+        RecorderStatus.Text = _recorder?.Error ?? (state == RecorderState.Ready && _recordingDeleted ? Loc.T("Recording deleted") : state switch
         {
-            RecorderState.Recording => "Recording", RecorderState.Paused => "Paused · sources stopped", RecorderState.Saving => "Saving recording…",
-            RecorderState.SaveFailed => "Could not save. Audio is retained for retry.", RecorderState.Saved => "Recording saved", _ => "Ready to record"
+            RecorderState.Recording => Loc.T("Recording"), RecorderState.Paused => Loc.T("Paused · sources stopped"), RecorderState.Saving => Loc.T("Saving recording…"),
+            RecorderState.SaveFailed => Loc.T("Could not save. Audio is retained for retry."), RecorderState.Saved => Loc.T("Recording saved"), _ => Loc.T("Ready to record")
         });
         RecorderDuration.Text = (active ? ActiveDuration : _recorder?.Duration ?? TimeSpan.Zero).ToString(@"hh\:mm\:ss");
         var selectedPreferences = active || busy || state == RecorderState.SaveFailed ? _preferencesAtStart : _recorderPreferences?.Current;
-        var outputHint = selectedPreferences?.OutputDeviceId is null ? "default system output" : "selected system output (Recorder settings)";
-        var sourceHelp = $"Choose a source, then start your session. Audio stays on this device. Up to 60 minutes per recording · {outputHint}.";
+        var sourceHelp = selectedPreferences?.OutputDeviceId is null
+            ? Loc.T("Choose a source, then start your session. Audio stays on this device. Up to 60 minutes per recording · default system output.")
+            : Loc.T("Choose a source, then start your session. Audio stays on this device. Up to 60 minutes per recording · selected system output (Recorder settings).");
         if (_audioSourceHelpText != sourceHelp)
         {
             _audioSourceHelpText = sourceHelp;
@@ -133,18 +151,18 @@ public sealed partial class RecorderView : UserControl
         SessionHint.Visibility = string.IsNullOrEmpty(SessionHint.Text) ? Visibility.Collapsed : Visibility.Visible;
         RecordingName.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
         MicrophoneSource.IsEnabled = SystemSource.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
-        MicrophoneState.Text = MicrophoneSource.IsChecked == true ? "On" : "Off";
-        SystemState.Text = SystemSource.IsChecked == true ? "On" : "Off";
-        PrimaryButton.Content = active ? "Stop and save \u00b7 Enter" : state == RecorderState.SaveFailed ? "Retry save \u00b7 Enter" : "Start recording \u00b7 Enter";
+        MicrophoneState.Text = MicrophoneSource.IsChecked == true ? Loc.T("On") : Loc.T("Off");
+        SystemState.Text = SystemSource.IsChecked == true ? Loc.T("On") : Loc.T("Off");
+        PrimaryButton.Content = active ? Loc.T("Stop and save · Enter") : state == RecorderState.SaveFailed ? Loc.T("Retry save · Enter") : Loc.T("Start recording · Enter");
         PrimaryButton.IsEnabled = _recorder is not null && !busy && (active || state == RecorderState.SaveFailed || MicrophoneSource.IsChecked == true || SystemSource.IsChecked == true);
         PrimaryButton.Visibility = !_libraryOpen || active || state == RecorderState.SaveFailed ? Visibility.Visible : Visibility.Collapsed;
         LibraryRecordingStatus.Visibility = _libraryOpen && (active || busy || state == RecorderState.SaveFailed) ? Visibility.Visible : Visibility.Collapsed;
         LibraryRecordingStatus.Text = $"{RecorderStatus.Text} · {RecorderDuration.Text}";
         PauseButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-        PauseButton.Content = state == RecorderState.Paused ? "Resume" : "Pause";
+        PauseButton.Content = state == RecorderState.Paused ? Loc.T("Resume") : Loc.T("Pause");
         PauseButton.IsEnabled = active && !busy && !_automaticStop;
         SessionPanel.Visibility = Visibility.Visible;
-        if (saved) { RecorderStatus.Text = "Ready for a new recording"; RecorderDuration.Text = "00:00:00"; }
+        if (saved) { RecorderStatus.Text = Loc.T("Ready for a new recording"); RecorderDuration.Text = "00:00:00"; }
         RefreshLibraryActions();
         if (_presented) SignalCanvas.Invalidate();
         var toggle = (active, _recorder is not null && !busy && (active || state != RecorderState.SaveFailed

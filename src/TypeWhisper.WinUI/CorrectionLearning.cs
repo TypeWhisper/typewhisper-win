@@ -13,7 +13,7 @@ internal static class CorrectionLearning
     private static Task _pending = Task.CompletedTask;
     internal static bool Enabled { get; private set; } = ReadEnabled();
     internal static bool Allowed => Enabled && PremiumView.Access.Current.Requirement(PremiumFeature.CorrectionLearning) == PremiumRequirement.Available;
-    internal static string Status { get; private set; } = Enabled ? "Ready for the next dictation." : "Automatic learning is off. Existing corrections remain in Dictionary.";
+    internal static string Status { get; private set; } = Enabled ? Loc.T("Ready for the next dictation.") : Loc.T("Automatic learning is off. Existing corrections remain in Dictionary.");
     internal static event Action? Changed;
     internal static event Action? DictionaryChanged;
     internal static event Action<IReadOnlyList<LearnedDictionaryCorrection>>? CorrectionsLearned;
@@ -32,9 +32,9 @@ internal static class CorrectionLearning
             else File.Delete(PreferencePath);
             Enabled = enabled;
             if (!Allowed) Cancel();
-            Status = enabled ? "Ready for the next dictation." : "Automatic learning is off. Existing corrections remain in Dictionary.";
+            Status = enabled ? Loc.T("Ready for the next dictation.") : Loc.T("Automatic learning is off. Existing corrections remain in Dictionary.");
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = "Could not save the correction-learning setting."; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = Loc.T("Could not save the correction-learning setting."); }
         Changed?.Invoke();
     }
     internal static Task Cancel()
@@ -48,7 +48,7 @@ internal static class CorrectionLearning
         if (!Allowed || text.Length is 0 or > 2048 || !_pending.IsCompleted) return;
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var cancellation = new CancellationTokenSource(); _cancellation = cancellation;
-        Status = "Watching the inserted text for corrections (up to 30 seconds)."; Changed?.Invoke();
+        Status = Loc.T("Watching the inserted text for corrections (up to 30 seconds)."); Changed?.Invoke();
         _pending = RunAsync();
         async Task RunAsync()
         {
@@ -75,16 +75,16 @@ internal static class CorrectionLearning
                 });
                 Status = result.Outcome switch
                 {
-                    TargetAppCorrectionLearningOutcomeKind.Learned => $"Learned {result.Count} correction(s). Manage them in Dictionary > Corrections.",
-                    TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation => "This app does not expose an editable text field. No correction was learned.",
-                    TargetAppCorrectionLearningOutcomeKind.DuplicateCorrection => "The correction already exists. Your dictionary was kept unchanged.",
-                    TargetAppCorrectionLearningOutcomeKind.Cancelled => "Observation stopped.",
-                    TargetAppCorrectionLearningOutcomeKind.Failed => "Could not observe or save corrections. Your dictation was kept.",
-                    _ => "No confirmed, unambiguous word correction was learned."
+                    TargetAppCorrectionLearningOutcomeKind.Learned => Loc.T("Learned {0} correction(s). Manage them in Dictionary > Corrections.", result.Count),
+                    TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation => Loc.T("This app does not expose an editable text field. No correction was learned."),
+                    TargetAppCorrectionLearningOutcomeKind.DuplicateCorrection => Loc.T("The correction already exists. Your dictionary was kept unchanged."),
+                    TargetAppCorrectionLearningOutcomeKind.Cancelled => Loc.T("Observation stopped."),
+                    TargetAppCorrectionLearningOutcomeKind.Failed => Loc.T("Could not observe or save corrections. Your dictation was kept."),
+                    _ => Loc.T("No confirmed, unambiguous word correction was learned.")
                 };
             }
             catch (Exception e) when (e is not OutOfMemoryException)
-            { Status = "Correction learning is unavailable for this field. Your dictation was kept."; }
+            { Status = Loc.T("Correction learning is unavailable for this field. Your dictation was kept."); }
             finally
             {
                 if (ReferenceEquals(_cancellation, cancellation)) _cancellation = null;

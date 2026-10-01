@@ -17,8 +17,8 @@ public sealed partial class MainWindow
         var host = _integrationSettingsHost = new Grid { RowSpacing = 16 };
         host.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         host.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var search = _integrationSearch = new TextBox { PlaceholderText = "Search integrations…", Margin = new Thickness(8, 0, 8, 0) };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search, "Search integrations");
+        var search = _integrationSearch = new TextBox { PlaceholderText = Loc.T("Search integrations…"), Margin = new Thickness(8, 0, 8, 0) };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search, Loc.T("Search integrations"));
         search.TextChanged += (_, _) => { if (_discoverSettings) MarketplaceView.Filter(search.Text); };
         MarketplaceView.ClearSearchRequested += (_, _) => search.Text = "";
         MarketplaceView.DetailModeChanged += detail => search.IsEnabled = !detail;

@@ -12,7 +12,7 @@ internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Dura
     internal bool ShowsCancelWarning => CancelWarning is not null && Phase is not (DictationPhase.Error or DictationPhase.Copied);
     // After an Escape cancellation the idle overlay briefly confirms it, as on macOS.
     internal bool ShowsCancelled => Cancelled && Phase == DictationPhase.Idle;
-    internal string AccessibleMessage => ShowsCancelWarning ? CancelWarning! : ShowsCancelled ? "Cancelled" : Message;
+    internal string AccessibleMessage => ShowsCancelWarning ? CancelWarning! : ShowsCancelled ? Loc.T("Cancelled") : Message;
 
     internal static DictationPhase VisiblePhase(DictationPhase phase, bool dictationAttempted) =>
         phase == DictationPhase.LoadingModel && !dictationAttempted ? DictationPhase.Configuring : phase;
@@ -24,18 +24,18 @@ internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Dura
 
     internal string RecordingModeLabel => RecordingMode switch
     {
-        RecordingMode.Toggle => "Toggle",
-        RecordingMode.Hold => "Hold",
-        _ => "Hybrid"
+        RecordingMode.Toggle => Loc.T("Toggle"),
+        RecordingMode.Hold => Loc.T("Hold"),
+        _ => Loc.T("Hybrid")
     };
-    internal string Label => ShowsCancelWarning ? "PRESS ESC AGAIN" : ShowsCancelled ? "CANCELLED" : Phase switch
+    internal string Label => ShowsCancelWarning ? Loc.T("PRESS ESC AGAIN") : ShowsCancelled ? Loc.T("CANCELLED") : Phase switch
     {
-        DictationPhase.LoadingModel => "LOADING MODEL",
-        DictationPhase.Recording => "RECORDING",
-        DictationPhase.Processing => "TRANSCRIBING",
-        DictationPhase.Error => "ERROR",
-        DictationPhase.Copied => "COPIED",
-        DictationPhase.Completed => "DONE",
-        _ => "READY"
+        DictationPhase.LoadingModel => Loc.T("LOADING MODEL"),
+        DictationPhase.Recording => Loc.T("RECORDING"),
+        DictationPhase.Processing => Loc.T("TRANSCRIBING"),
+        DictationPhase.Error => Loc.T("ERROR"),
+        DictationPhase.Copied => Loc.T("COPIED"),
+        DictationPhase.Completed => Loc.T("DONE"),
+        _ => Loc.T("READY")
     };
 }

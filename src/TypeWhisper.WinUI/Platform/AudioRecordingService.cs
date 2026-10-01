@@ -1495,8 +1495,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (_isRecording || _disposed) return;
             if (_deviceProvider.DeviceCount == 0)
             {
-                _previewDiagnostics = new("No microphone", false);
-                _previewDiagnostics.Stop("No microphone is connected. Connect a microphone and try again.");
+                _previewDiagnostics = new(Loc.T("No microphone"), false);
+                _previewDiagnostics.Stop(Loc.T("No microphone is connected. Connect a microphone and try again."));
                 return;
             }
 
@@ -1507,8 +1507,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 : ResolvePreferredDeviceNumber();
             if (deviceIndex < 0)
             {
-                _previewDiagnostics = new("Preferred microphone unavailable", false);
-                _previewDiagnostics.Stop("No preferred microphone is connected. Reconnect one or change the priority list.");
+                _previewDiagnostics = new(Loc.T("Preferred microphone unavailable"), false);
+                _previewDiagnostics.Stop(Loc.T("No preferred microphone is connected. Reconnect one or change the priority list."));
                 return;
             }
 
@@ -1519,8 +1519,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                     : null;
             if (captureSelection is null)
             {
-                _previewDiagnostics = new("Microphone unavailable", false);
-                _previewDiagnostics.Stop("The selected microphone is no longer available. Refresh microphones and try again.");
+                _previewDiagnostics = new(Loc.T("Microphone unavailable"), false);
+                _previewDiagnostics.Stop(Loc.T("The selected microphone is no longer available. Refresh microphones and try again."));
                 return;
             }
 

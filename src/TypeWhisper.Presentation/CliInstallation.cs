@@ -42,19 +42,19 @@ public sealed class CliInstallation
     /// <summary>Copies the full runtime bundle and registers its directory in user PATH.</summary>
     public void Install()
     {
-        if (!GetState().Bundled) throw new IOException("The CLI is not included in this build.");
+        if (!GetState().Bundled) throw new IOException(Loc.T("The CLI is not included in this build."));
         var previous = ReadManifest();
         var sources = ReadBundleSources();
         var files = sources.ToDictionary(file => file.Key, file => file.Value.Hash, StringComparer.OrdinalIgnoreCase);
         var profileBytes = _profileDirectory is null ? null : System.Text.Encoding.UTF8.GetBytes(
             JsonSerializer.Serialize(new { profile_directory = Path.GetFullPath(_profileDirectory) }));
         if (profileBytes is not null) files["cli-profile.json"] = Convert.ToHexString(SHA256.HashData(profileBytes));
-        if (files.ContainsKey(ManifestName)) throw new IOException("The CLI bundle contains a reserved file.");
+        if (files.ContainsKey(ManifestName)) throw new IOException(Loc.T("The CLI bundle contains a reserved file."));
         foreach (var file in files)
         {
             var target = OwnedPath(file.Key);
             if (File.Exists(target) && !IsOwned(previous, file.Key, Hash(target)))
-                throw new IOException($"The existing file '{file.Key}' is not owned by this installation.");
+                throw new IOException(Loc.T("The existing file '{0}' is not owned by this installation.", file.Key));
         }
         Directory.CreateDirectory(_destination);
         // Journal old and new hashes before atomically replacing each file. Both
@@ -69,14 +69,14 @@ public sealed class CliInstallation
             {
                 if (file.Key == "cli-profile.json" && profileBytes is not null) File.WriteAllBytes(temporary, profileBytes);
                 else File.Copy(sources[file.Key].Source, temporary);
-                if (Hash(temporary) != file.Value) throw new IOException("The CLI bundle changed during installation. Try again.");
+                if (Hash(temporary) != file.Value) throw new IOException(Loc.T("The CLI bundle changed during installation. Try again."));
                 // A recovered pending version becomes the old owned version before
                 // a newer bundle replaces it, including after multiple failed updates.
                 if (File.Exists(target))
                 {
                     var currentHash = Hash(target);
                     if (!IsOwned(previous, file.Key, currentHash))
-                        throw new IOException($"The existing file '{file.Key}' changed during installation.");
+                        throw new IOException(Loc.T("The existing file '{0}' changed during installation.", file.Key));
                     previous.Files[file.Key] = currentHash;
                 }
                 previous.PendingFiles[file.Key] = file.Value;
@@ -150,7 +150,7 @@ public sealed class CliInstallation
         var manifest = Path.Combine(_bundle, SharedRuntimeName);
         if (!File.Exists(manifest)) return sources; // Existing full bundles remain installable.
         var shared = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(manifest))
-            ?? throw new IOException("The shared CLI runtime manifest is invalid.");
+            ?? throw new IOException(Loc.T("The shared CLI runtime manifest is invalid."));
         var appRoot = Path.GetDirectoryName(_bundle)!;
         foreach (var (name, hash) in shared)
         {
@@ -161,14 +161,14 @@ public sealed class CliInstallation
                 || string.Equals(name, SharedRuntimeName, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(name, "cli-profile.json", StringComparison.OrdinalIgnoreCase)
                 || !System.Text.RegularExpressions.Regex.IsMatch(hash ?? "", "\\A[0-9A-Fa-f]{64}\\z"))
-                throw new IOException("The shared CLI runtime manifest contains an invalid entry.");
+                throw new IOException(Loc.T("The shared CLI runtime manifest contains an invalid entry."));
             var source = Path.Combine(appRoot, name);
             for (var path = source; path is not null; path = Path.GetDirectoryName(path))
                 if ((File.Exists(path) || Directory.Exists(path)) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-                    throw new IOException("Shared CLI runtime files must not use symbolic links.");
+                    throw new IOException(Loc.T("Shared CLI runtime files must not use symbolic links."));
             if (!File.Exists(source) || !string.Equals(Hash(source), hash, StringComparison.OrdinalIgnoreCase))
-                throw new IOException($"The shared CLI runtime file '{name}' is missing or changed. Reinstall the app and try again.");
-            if (!sources.TryAdd(name, (source, hash!.ToUpperInvariant()))) throw new IOException("The CLI bundle contains duplicate runtime entries.");
+                throw new IOException(Loc.T("The shared CLI runtime file '{0}' is missing or changed. Reinstall the app and try again.", name));
+            if (!sources.TryAdd(name, (source, hash!.ToUpperInvariant()))) throw new IOException(Loc.T("The CLI bundle contains duplicate runtime entries."));
         }
         return sources;
     }
@@ -185,13 +185,13 @@ public sealed class CliInstallation
         var path = Path.GetFullPath(Path.Combine(_destination, relative));
         if (Path.IsPathRooted(relative) || !path.StartsWith(_destination.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
             StringComparison.OrdinalIgnoreCase) || relative.Contains(':') || string.Equals(relative, ManifestName, StringComparison.OrdinalIgnoreCase))
-            throw new IOException("The CLI manifest contains an invalid path.");
+            throw new IOException(Loc.T("The CLI manifest contains an invalid path."));
         // Never follow directory junctions or symlinks during installation or removal.
         for (var parent = Path.GetDirectoryName(path); parent is not null; parent = Path.GetDirectoryName(parent))
             if (Directory.Exists(parent) && (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("The CLI directory must not contain symbolic links.");
+                throw new IOException(Loc.T("The CLI directory must not contain symbolic links."));
         if (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new IOException("The CLI file must not be a symbolic link.");
+            throw new IOException(Loc.T("The CLI file must not be a symbolic link."));
         return path;
     }
     private Manifest ReadManifest()
@@ -199,8 +199,8 @@ public sealed class CliInstallation
         EnsureManifestLocation();
         if (!File.Exists(ManifestPath)) return new();
         var manifest = JsonSerializer.Deserialize<Manifest>(File.ReadAllText(ManifestPath))
-            ?? throw new IOException("The CLI manifest could not be read.");
-        if (manifest.Files is null || manifest.PendingFiles is null) throw new IOException("The CLI manifest could not be read.");
+            ?? throw new IOException(Loc.T("The CLI manifest could not be read."));
+        if (manifest.Files is null || manifest.PendingFiles is null) throw new IOException(Loc.T("The CLI manifest could not be read."));
         foreach (var key in manifest.Files.Keys.Concat(manifest.PendingFiles.Keys)) _ = OwnedPath(key);
         manifest.Files = new(manifest.Files, StringComparer.OrdinalIgnoreCase);
         manifest.PendingFiles = new(manifest.PendingFiles, StringComparer.OrdinalIgnoreCase);
@@ -221,7 +221,7 @@ public sealed class CliInstallation
     {
         _ = OwnedPath("typewhisper.exe");
         if (File.Exists(ManifestPath) && (File.GetAttributes(ManifestPath) & FileAttributes.ReparsePoint) != 0)
-            throw new IOException("The CLI manifest must not be a symbolic link.");
+            throw new IOException(Loc.T("The CLI manifest must not be a symbolic link."));
     }
     private sealed class Manifest
     {

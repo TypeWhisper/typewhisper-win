@@ -48,7 +48,7 @@
                     </StackPanel>
                 </Border>
                 <StackPanel Spacing="6">
-                    <TextBlock Text="REQUESTED ACCESS" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                    <TextBlock x:Name="MarketAccessHeading" Text="REQUESTED ACCESS" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                     <TextBlock x:Name="MarketAccess" FontSize="13" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock x:Name="MarketCompatibility" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />

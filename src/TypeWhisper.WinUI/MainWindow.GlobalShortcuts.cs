@@ -44,8 +44,8 @@ public sealed partial class MainWindow
     // name starts "… shortcuts are unavailable" while startup has not registered the shortcut yet.
     private string? ChangeActionShortcut(ActionShortcut? shortcut, string name, string value)
     {
-        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
-        if (shortcut is null) return name + " shortcuts are unavailable. Wait for startup to finish or restart.";
+        if (_closing || _profileRestoreClosing) return Loc.T("The app is shutting down.");
+        if (shortcut is null) return Loc.T("{0} shortcuts are unavailable. Wait for startup to finish or restart.", name);
         var error = shortcut.Save(WorkflowShortcutCatalog.Canonical(value));
         _settingsValues[shortcut.Key] = shortcut.Value;
         return error;

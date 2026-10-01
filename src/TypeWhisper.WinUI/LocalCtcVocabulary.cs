@@ -52,11 +52,11 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
     internal async Task<string?> SetEnabledAsync(bool enabled, CancellationToken ct)
     {
         if (!enabled) RequestCancelActivation();
-        if (enabled && !await _settingsGate.WaitAsync(0, ct)) return "A plugin operation is already in progress.";
+        if (enabled && !await _settingsGate.WaitAsync(0, ct)) return Loc.T("A plugin operation is already in progress.");
         if (!enabled) await _settingsGate.WaitAsync(ct);
         using var activation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         lock (_activationLock) _pendingActivation = activation;
-        Busy = true; Error = null; Status = enabled ? "Preparing NVIDIA dictionary boosting…" : "Stopping dictionary boosting…"; Changed?.Invoke();
+        Busy = true; Error = null; Status = enabled ? Loc.T("Preparing NVIDIA dictionary boosting…") : Loc.T("Stopping dictionary boosting…"); Changed?.Invoke();
         try
         {
             // Enablement is owned by the parent transcription plugin, never a separate preference.
@@ -65,11 +65,11 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
             return Error = null;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (OperationCanceledException) when (activation.IsCancellationRequested) { return Error = "Dictionary boosting setup was canceled. Choose Retry setup in plugin settings."; }
+        catch (OperationCanceledException) when (activation.IsCancellationRequested) { return Error = Loc.T("Dictionary boosting setup was canceled. Choose Retry setup in plugin settings."); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             await _session.SetEnabledAsync(false);
-            return Error = "Dictionary boosting unavailable: " + ex.Message + " Choose Retry setup to try again.";
+            return Error = Loc.T("Dictionary boosting unavailable: {0} Choose Retry setup to try again.", ex.Message);
         }
         finally
         {

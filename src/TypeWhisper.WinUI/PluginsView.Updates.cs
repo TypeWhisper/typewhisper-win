@@ -8,8 +8,8 @@ public sealed partial class PluginsView
     private bool _updating;
     private string? _updateError;
     private string? RuntimeUpdateStatus(string? id) => id is null || _runtime is null ? null
-        : _runtime.Packages.Store.PendingRestart(id) ? "Restart required"
-        : _runtime.Packages.Updates.HasUpdate(id) ? "Update available" : null;
+        : _runtime.Packages.Store.PendingRestart(id) ? Loc.T("Restart required")
+        : _runtime.Packages.Updates.HasUpdate(id) ? Loc.T("Update available") : null;
 
     private void UpdateUpdateAction()
     {
@@ -18,8 +18,8 @@ public sealed partial class PluginsView
         var count = updates.Available.Count;
         InstalledUpdateButton.Visibility = count > 0 || updates.RestartRequired || updates.Busy || _updating
             ? Visibility.Visible : Visibility.Collapsed;
-        InstalledUpdateButton.Content = updates.Busy ? "Updating..." : _updating ? "Restarting..."
-            : count > 0 ? $"Update all ({count})" : "Restart now";
+        InstalledUpdateButton.Content = updates.Busy ? Loc.T("Updating...") : _updating ? Loc.T("Restarting...")
+            : count > 0 ? Loc.T("Update all ({0})", count) : Loc.T("Restart now");
         InstalledUpdateButton.IsEnabled = !_updating && !updates.Busy && _runtime.CanChangeProvider && !_changingPlugin;
         UpdateNotice.Text = _updateError ?? updates.Status ?? "";
         UpdateNotice.Visibility = (_updateError ?? updates.Status) is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -39,7 +39,7 @@ public sealed partial class PluginsView
             {
                 _updateError = await RestartRequested();
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { _updateError = "Restart could not finish. Close and reopen TypeWhisper."; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { _updateError = Loc.T("Restart could not finish. Close and reopen TypeWhisper."); }
             finally { _updating = false; }
         }
         await RefreshRuntimeAsync();

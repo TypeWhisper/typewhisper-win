@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
@@ -14,22 +15,32 @@ public sealed partial class OverlayEditor : UserControl
     private static readonly Choice[] Widgets = Enum.GetValues<OverlayWidget>()
         .Select(widget => new Choice(widget.ToString(), Label(widget), widget switch
         {
-            OverlayWidget.Profile => "Sample profile in this preview",
-            OverlayWidget.AppName => "Sample app name in this preview",
-            OverlayWidget.HotkeyMode => "Sample recording mode in this preview",
-            OverlayWidget.None => "Leave this slot empty",
-            _ => "Shown in Standard and Compact"
+            OverlayWidget.Profile => Loc.T("Sample profile in this preview"),
+            OverlayWidget.AppName => Loc.T("Sample app name in this preview"),
+            OverlayWidget.HotkeyMode => Loc.T("Sample recording mode in this preview"),
+            OverlayWidget.None => Loc.T("Leave this slot empty"),
+            _ => Loc.T("Shown in Standard and Compact")
         })).ToArray();
 
     public OverlayEditor()
     {
         InitializeComponent();
-        ScreenPicker.Configure("Display", "desktop", "Overlay display");
+        EditorTitle.Text = Loc.T("Overlay editor");
+        EditorDescription.Text = Loc.T("Drag the preview to a screen edge. Arrange the two content slots below.");
+        ScreenPreviewLabel.Text = Loc.T("SCREEN PREVIEW");
+        ContentHeading.Text = Loc.T("OVERLAY CONTENT");
+        LeftSlotHint.Text = Loc.T("LEFT  ·  DRAG TO MOVE");
+        RightSlotHint.Text = Loc.T("RIGHT  ·  DRAG TO MOVE");
+        SwapButton.Content = Loc.T("Swap left and right");
+        AutomationProperties.SetName(SwapButton, Loc.T("Swap overlay widgets"));
+        ResetButton.Content = Loc.T("Reset layout");
+        AutomationProperties.SetName(ResetButton, Loc.T("Reset overlay layout"));
+        ScreenPicker.Configure(Loc.T("Display"), "desktop", Loc.T("Overlay display"));
         ScreenPicker.SelectionChanged += value => Publish(_preferences with { Screen = Enum.Parse<OverlayScreen>(value) });
-        EdgePicker.Configure("Screen edge", "desktop", "Overlay screen edge");
-        AlignmentPicker.Configure("Alignment", "layout", "Overlay screen alignment");
-        LeftWidgetPicker.Configure("Left widget", "workflow", "Overlay left widget");
-        RightWidgetPicker.Configure("Right widget", "workflow", "Overlay right widget");
+        EdgePicker.Configure(Loc.T("Screen edge"), "desktop", Loc.T("Overlay screen edge"));
+        AlignmentPicker.Configure(Loc.T("Alignment"), "layout", Loc.T("Overlay screen alignment"));
+        LeftWidgetPicker.Configure(Loc.T("Left widget"), "workflow", Loc.T("Overlay left widget"));
+        RightWidgetPicker.Configure(Loc.T("Right widget"), "workflow", Loc.T("Overlay right widget"));
         EdgePicker.SelectionChanged += value => Publish(_preferences with { Anchor = (OverlayAnchor)((value == "top" ? 0 : 3) + _preferences.HorizontalIndex) });
         AlignmentPicker.SelectionChanged += value => Publish(_preferences with { Anchor = (OverlayAnchor)((_preferences.AtTop ? 0 : 3) + int.Parse(value)) });
         LeftWidgetPicker.SelectionChanged += value => Publish(_preferences.SelectWidget(true, Enum.Parse<OverlayWidget>(value)));
@@ -39,18 +50,24 @@ public sealed partial class OverlayEditor : UserControl
 
     private static string Label(OverlayWidget widget) => widget switch
     {
-        OverlayWidget.HotkeyMode => "Hotkey mode",
-        OverlayWidget.AppName => "App name",
+        OverlayWidget.HotkeyMode => Loc.T("Hotkey mode"),
+        OverlayWidget.AppName => Loc.T("App name"),
+        OverlayWidget.None => Loc.T("None"),
+        OverlayWidget.Indicator => Loc.T("Indicator"),
+        OverlayWidget.Waveform => Loc.T("Waveform"),
+        OverlayWidget.Timer => Loc.T("Timer"),
+        OverlayWidget.Clock => Loc.T("Clock"),
+        OverlayWidget.Profile => Loc.T("Profile"),
         _ => widget.ToString()
     };
 
     internal void SetPreferences(OverlayPreferences preferences)
     {
         _preferences = preferences;
-        ScreenPicker.SetOptions([new("ActiveScreen", "Active screen", "Follow the screen containing the active window"),
-            new("PrimaryScreen", "Primary screen", "Always use your main Windows display")], preferences.Screen.ToString());
-        EdgePicker.SetOptions([new("top", "Top", "Live text opens downward"), new("bottom", "Bottom", "Live text opens upward")], preferences.AtTop ? "top" : "bottom");
-        AlignmentPicker.SetOptions([new("0", "Left", "Align to the left edge"), new("1", "Center", "Keep centered"), new("2", "Right", "Align to the right edge")], preferences.HorizontalIndex.ToString());
+        ScreenPicker.SetOptions([new("ActiveScreen", Loc.T("Active screen"), Loc.T("Follow the screen containing the active window")),
+            new("PrimaryScreen", Loc.T("Primary screen"), Loc.T("Always use your main Windows display"))], preferences.Screen.ToString());
+        EdgePicker.SetOptions([new("top", Loc.T("Top"), Loc.T("Live text opens downward")), new("bottom", Loc.T("Bottom"), Loc.T("Live text opens upward"))], preferences.AtTop ? "top" : "bottom");
+        AlignmentPicker.SetOptions([new("0", Loc.T("Left"), Loc.T("Align to the left edge")), new("1", Loc.T("Center"), Loc.T("Keep centered")), new("2", Loc.T("Right"), Loc.T("Align to the right edge"))], preferences.HorizontalIndex.ToString());
         LeftWidgetPicker.SetOptions(Widgets, preferences.Left.ToString());
         RightWidgetPicker.SetOptions(Widgets, preferences.Right.ToString());
         LeftLabel.Text = Label(preferences.Left);
@@ -59,10 +76,10 @@ public sealed partial class OverlayEditor : UserControl
         WidgetSlots.IsHitTestVisible = !minimal;
         WidgetSlots.Opacity = minimal ? 0.45 : 1;
         LeftWidgetPicker.IsEnabled = RightWidgetPicker.IsEnabled = SwapButton.IsEnabled = !minimal;
-        ContentHint.Text = minimal ? "Minimal keeps only its indicator. Your left and right widgets are remembered for the other layouts."
-            : "Drag a slot across to swap it, or choose a widget. The recording indicator stays visible.";
+        ContentHint.Text = minimal ? Loc.T("Minimal keeps only its indicator. Your left and right widgets are remembered for the other layouts.")
+            : Loc.T("Drag a slot across to swap it, or choose a widget. The recording indicator stays visible.");
         ThumbText.Text = minimal ? "● ━━━━━" : $"{ShortLabel(preferences.Left)}  ·  {ShortLabel(preferences.Right)}";
-        PositionSummary.Text = $"{(preferences.AtTop ? "Top" : "Bottom")} · {new[] { "Left", "Center", "Right" }[preferences.HorizontalIndex]} · snaps to six screen positions";
+        PositionSummary.Text = Loc.T("{0} · {1} · snaps to six screen positions", preferences.AtTop ? Loc.T("Top") : Loc.T("Bottom"), new[] { Loc.T("Left"), Loc.T("Center"), Loc.T("Right") }[preferences.HorizontalIndex]);
         PositionThumb();
     }
 

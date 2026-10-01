@@ -19,7 +19,7 @@ internal static class DictionaryBoostingPreferences
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { return "Could not save vocabulary boosting preference."; }
+        { return Loc.T("Could not save vocabulary boosting preference."); }
     }
     private sealed record Options(bool Enabled);
 }

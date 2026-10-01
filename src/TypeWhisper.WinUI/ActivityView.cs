@@ -12,7 +12,7 @@ public sealed class ActivityView : UserControl
 {
     private readonly StackPanel _body = new() { Spacing = 20 };
     private readonly Grid _header = new() { ColumnSpacing = 12, Padding = new Thickness(24, 16, 24, 16) };
-    private readonly TextBlock _title = Text("Statistics", 24);
+    private readonly TextBlock _title = Text(Loc.T("Statistics"), 24);
     private readonly StackPanel _periods = new() { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
     private readonly ScrollViewer _scroll;
     private readonly List<Action<double>> _responsive = [];
@@ -71,7 +71,7 @@ public sealed class ActivityView : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _loadError = "Activity could not be loaded from local history. Try again.";
+            _loadError = Loc.T("Activity could not be loaded from local history. Try again.");
         }
         finally { _loading = false; Render(); }
     }
@@ -86,7 +86,7 @@ public sealed class ActivityView : UserControl
     {
         _rangePicker?.Close(); _rangePicker = null;
         _body.Children.Clear(); _periods.Children.Clear(); _responsive.Clear();
-        _title.Text = "Statistics";
+        _title.Text = Loc.T("Statistics");
         var data = new UsageData(_records);
         var summary = _period == UsagePeriod.Custom
             ? data.SummarizeRange(_rangeStart, _rangeEnd)
@@ -94,9 +94,9 @@ public sealed class ActivityView : UserControl
         {
             foreach (var period in new[] { UsagePeriod.Week, UsagePeriod.Month, UsagePeriod.AllTime })
             {
-                var label = period switch { UsagePeriod.Week => "Week", UsagePeriod.Month => "Month", _ => "All history" };
+                var label = period switch { UsagePeriod.Week => Loc.T("Week"), UsagePeriod.Month => Loc.T("Month"), _ => Loc.T("All history") };
                 var button = Button(label, () => { _period = period; Render(); }, period == _period);
-                AutomationProperties.SetItemStatus(button, period == _period ? "Selected" : "Not selected"); _periods.Children.Add(button);
+                AutomationProperties.SetItemStatus(button, period == _period ? Loc.T("Selected") : Loc.T("Not selected")); _periods.Children.Add(button);
             }
             _rangePicker = new DateRangePicker(_rangeStart, _rangeEnd, _period == UsagePeriod.Custom);
             _rangePicker.Applied += (start, end) => { _rangeStart = start; _rangeEnd = end; _period = UsagePeriod.Custom; Render(); };
@@ -104,13 +104,13 @@ public sealed class ActivityView : UserControl
         }
         if (_reader is null || _loading && _records.Count == 0 || _loadError is not null)
         {
-            _body.Children.Add(Text(_loadError ?? (_reader is null ? "Activity is not connected to history." : "Loading local history…"), 14));
-            if (_loadError is not null) _body.Children.Add(Button("Retry", () => _ = RefreshAsync()));
+            _body.Children.Add(Text(_loadError ?? (_reader is null ? Loc.T("Activity is not connected to history.") : Loc.T("Loading local history…")), 14));
+            if (_loadError is not null) _body.Children.Add(Button(Loc.T("Retry"), () => _ = RefreshAsync()));
         }
         else if (summary.Transcriptions == 0) RenderEmpty();
         else RenderStatistics(summary);
-        _body.Children.Add(Text("Based only on entries currently saved in local history. Editing, deletion and retention change these figures. Dictations that were not saved are not counted. Dates and hours use this device's local time.", 11, true));
-        if (!_historySavingEnabled()) _body.Children.Add(Text("History saving is off. New dictations will not appear in these statistics. Existing saved entries are still included.", 12, true));
+        _body.Children.Add(Text(Loc.T("Based only on entries currently saved in local history. Editing, deletion and retention change these figures. Dictations that were not saved are not counted. Dates and hours use this device's local time."), 11, true));
+        if (!_historySavingEnabled()) _body.Children.Add(Text(Loc.T("History saving is off. New dictations will not appear in these statistics. Existing saved entries are still included."), 12, true));
         foreach (var resize in _responsive) resize(Math.Max(0, ActualWidth - 48));
         _scroll.ChangeView(null, 0, null, true);
     }
@@ -119,24 +119,24 @@ public sealed class ActivityView : UserControl
     {
         var body = new StackPanel { Spacing = 12, Padding = new Thickness(8, 28, 8, 28) };
         body.Children.Add(new TypeWhisperGlyph { Kind = "signal", Width = 42, Height = 42, HorizontalAlignment = HorizontalAlignment.Center });
-        var title = Text("No saved activity in this date range", 20); title.TextAlignment = TextAlignment.Center; body.Children.Add(title);
-        var hint = Text("Choose another date range or save a new dictation to history.", 13, true); hint.TextAlignment = TextAlignment.Center; body.Children.Add(hint);
-        var history = Button("Open history", () => NavigateRequested?.Invoke("History"), true); history.HorizontalAlignment = HorizontalAlignment.Center; body.Children.Add(history);
+        var title = Text(Loc.T("No saved activity in this date range"), 20); title.TextAlignment = TextAlignment.Center; body.Children.Add(title);
+        var hint = Text(Loc.T("Choose another date range or save a new dictation to history."), 13, true); hint.TextAlignment = TextAlignment.Center; body.Children.Add(hint);
+        var history = Button(Loc.T("Open history"), () => NavigateRequested?.Invoke("History"), true); history.HorizontalAlignment = HorizontalAlignment.Center; body.Children.Add(history);
         _body.Children.Add(Card(body));
     }
     private void RenderStatistics(UsageSummary summary)
     {
         _body.Children.Add(MetricGrid([
-            ("Days with saved entries", summary.ActiveDays.ToString(), "calendar"), ("Saved entries", summary.Transcriptions.ToString("N0"), "signal"),
-            ("Recorded apps", summary.KnownApps.ToString(), "desktop"), ("Recorded models", summary.KnownModels.ToString(), "chip")], false));
-        _body.Children.Add(MetricGrid([("Words", summary.Words.ToString("N0"), "text"),
-            ("Recorded minutes", summary.Minutes.ToString("N1"), "history")], false));
+            (Loc.T("Days with saved entries"), summary.ActiveDays.ToString(), "calendar"), (Loc.T("Saved entries"), summary.Transcriptions.ToString("N0"), "signal"),
+            (Loc.T("Recorded apps"), summary.KnownApps.ToString(), "desktop"), (Loc.T("Recorded models"), summary.KnownModels.ToString(), "chip")], false));
+        _body.Children.Add(MetricGrid([(Loc.T("Words"), summary.Words.ToString("N0"), "text"),
+            (Loc.T("Recorded minutes"), summary.Minutes.ToString("N1"), "history")], false));
         _body.Children.Add(ActivityChart(summary));
         var usage = new Grid { ColumnSpacing = 16, RowSpacing = 16 };
-        usage.Children.Add(Ranking("Top apps", summary.Apps, summary.Transcriptions)); usage.Children.Add(Ranking("Models used", summary.Models, summary.Transcriptions));
+        usage.Children.Add(Ranking(Loc.T("Top apps"), summary.Apps, summary.Transcriptions)); usage.Children.Add(Ranking(Loc.T("Models used"), summary.Models, summary.Transcriptions));
         ResponsiveColumns(usage, 2, 560); _body.Children.Add(usage);
         _body.Children.Add(Heatmap(summary));
-        _body.Children.Add(Text("Words use the current displayed transcript. Recorded minutes sum the stored duration; entries without a recorded duration contribute zero. Rankings count saved entries, including entries with missing attribution.", 11, true));
+        _body.Children.Add(Text(Loc.T("Words use the current displayed transcript. Recorded minutes sum the stored duration; entries without a recorded duration contribute zero. Rankings count saved entries, including entries with missing attribution."), 11, true));
     }
     private Grid MetricGrid((string Label, string Value, string Icon)[] metrics, bool links)
     {
@@ -152,7 +152,7 @@ public sealed class ActivityView : UserControl
             {
                 var button = Button("", () => NavigateRequested?.Invoke("Statistics")); button.Content = card;
                 button.Padding = new Thickness(0); button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.HorizontalAlignment = HorizontalAlignment.Stretch;
-                AutomationProperties.SetName(button, $"{metric.Label}: {metric.Value}. View statistics"); grid.Children.Add(button);
+                AutomationProperties.SetName(button, Loc.T("{0}: {1}. View statistics", metric.Label, metric.Value)); grid.Children.Add(button);
             }
             else grid.Children.Add(card);
         }
@@ -173,10 +173,10 @@ public sealed class ActivityView : UserControl
     }
     private Border ActivityChart(UsageSummary summary)
     {
-        var panel = new StackPanel { Spacing = 12 }; panel.Children.Add(Text("Activity", 14));
+        var panel = new StackPanel { Spacing = 12 }; panel.Children.Add(Text(Loc.T("Activity"), 14));
         var buckets = summary.Days.Chunk(Math.Max(1, (int)Math.Ceiling(summary.Days.Length / 90d)))
             .Select(days => (Date: days[0].Date, End: days[^1].Date, Words: days.Sum(day => day.Words))).ToArray();
-        if (summary.Transcriptions == 0) panel.Children.Add(Text("No activity in this date range.", 11, true));
+        if (summary.Transcriptions == 0) panel.Children.Add(Text(Loc.T("No activity in this date range."), 11, true));
         var chart = new Grid { Height = 170, ColumnSpacing = 8 }; chart.ColumnDefinitions.Add(new()); chart.ColumnDefinitions.Add(new() { Width = new GridLength(40) });
         var plot = new Grid(); chart.Children.Add(plot); var max = Math.Max(100, (int)(Math.Ceiling(buckets.Max(day => day.Words) / 500d) * 500));
         var axis = new Grid(); Grid.SetColumn(axis, 1); chart.Children.Add(axis);
@@ -196,7 +196,7 @@ public sealed class ActivityView : UserControl
             var button = Button("", () => { }); button.Content = plotCell; button.Style = (Style)Application.Current.Resources["IconButtonStyle"];
             button.Padding = new Thickness(0); button.MinWidth = 0; button.MinHeight = 0; button.VerticalContentAlignment = VerticalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.HorizontalAlignment = HorizontalAlignment.Stretch;
             var dates = day.End == day.Date ? $"{day.Date:MMM d, yyyy}" : $"{day.Date:MMM d, yyyy} – {day.End:MMM d, yyyy}";
-            var value = $"{day.Words:N0} {(day.Words == 1 ? "word" : "words")}";
+            var value = day.Words == 1 ? Loc.T("1 word") : Loc.T("{0:N0} words", day.Words);
             var tooltipContent = new StackPanel { Spacing = 5 };
             tooltipContent.Children.Add(Text(dates, 11, true)); tooltipContent.Children.Add(Text(value, 14));
             var tooltip = new ToolTip { Content = tooltipContent, Style = (Style)Application.Current.Resources["HeatmapToolTipStyle"] };
@@ -240,12 +240,12 @@ public sealed class ActivityView : UserControl
     }
     private Border Heatmap(UsageSummary summary)
     {
-        var body = new StackPanel { Spacing = 12 }; body.Children.Add(Text("Usage by time of day", 14));
+        var body = new StackPanel { Spacing = 12 }; body.Children.Add(Text(Loc.T("Usage by time of day"), 14));
         var grid = new Grid { ColumnSpacing = 3, RowSpacing = 3 }; grid.ColumnDefinitions.Add(new() { Width = new GridLength(30) });
         for (var hour = 0; hour < 24; hour++) grid.ColumnDefinitions.Add(new());
         for (var row = 0; row < 8; row++) grid.RowDefinitions.Add(new() { Height = new GridLength(17) });
         for (var hour = 0; hour < 24; hour += 6) { var label = Text(hour.ToString(), 9, true); Grid.SetColumn(label, hour + 1); grid.Children.Add(label); }
-        var max = Math.Max(1, summary.Hours.Cast<int>().Max()); var names = new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+        var max = Math.Max(1, summary.Hours.Cast<int>().Max()); var names = new[] { Loc.T("Mon"), Loc.T("Tue"), Loc.T("Wed"), Loc.T("Thu"), Loc.T("Fri"), Loc.T("Sat"), Loc.T("Sun") };
         var cells = new List<HandCursorButton>();
         for (var day = 0; day < 7; day++)
         {
@@ -253,7 +253,8 @@ public sealed class ActivityView : UserControl
             for (var hour = 0; hour < 24; hour++)
             {
                 var count = summary.Hours[day, hour];
-                var caption = $"{names[day]} · {hour:00}:00–{hour:00}:59 · {count} {(count == 1 ? "transcription" : "transcriptions")}";
+                var transcriptions = count == 1 ? Loc.T("1 transcription") : Loc.T("{0} transcriptions", count);
+                var caption = $"{names[day]} · {hour:00}:00–{hour:00}:59 · {transcriptions}";
                 var opacity = count == 0 ? .65 : .2 + .8 * count / max;
                 var fill = new Border { Background = Brush(count == 0 ? "HairlineBrush" : "AccentBrush"), Opacity = opacity, CornerRadius = new CornerRadius(2) };
                 var outline = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2) };
@@ -266,7 +267,7 @@ public sealed class ActivityView : UserControl
                 cell.IsTabStop = cells.Count == 0;
                 var tooltipContent = new StackPanel { Spacing = 5 };
                 tooltipContent.Children.Add(Text($"{names[day]} · {hour:00}:00–{hour:00}:59", 11, true));
-                tooltipContent.Children.Add(Text($"{count} {(count == 1 ? "transcription" : "transcriptions")}", 14));
+                tooltipContent.Children.Add(Text(transcriptions, 14));
                 var tooltip = new ToolTip { Content = tooltipContent, Style = (Style)Application.Current.Resources["HeatmapToolTipStyle"] };
                 ToolTipService.SetToolTip(cell, tooltip);
                 ToolTipService.SetPlacement(cell, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Top);
@@ -303,8 +304,8 @@ public sealed class ActivityView : UserControl
                 cells.Add(cell); Grid.SetColumn(cell, hour + 1); Grid.SetRow(cell, day + 1); grid.Children.Add(cell);
             }
         }
-        AutomationProperties.SetName(grid, "Hourly activity, Monday to Sunday, 00:00 to 23:00. Darker cells mean less activity.");
-        body.Children.Add(grid); body.Children.Add(Text("Less  ░ ▒ ▓  More · local time", 10, true)); return Card(body);
+        AutomationProperties.SetName(grid, Loc.T("Hourly activity, Monday to Sunday, 00:00 to 23:00. Darker cells mean less activity."));
+        body.Children.Add(grid); body.Children.Add(Text(Loc.T("Less  ░ ▒ ▓  More · local time"), 10, true)); return Card(body);
     }
     private static Border Card(UIElement child, double padding = 18) => new() { Child = child, Padding = new Thickness(padding), Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12) };
     private static HandCursorButton Button(string label, Action click, bool primary = false)

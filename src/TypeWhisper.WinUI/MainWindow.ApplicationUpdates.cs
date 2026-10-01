@@ -11,8 +11,8 @@ public sealed partial class MainWindow
         new WindowsApplicationUpdates(), action =>
         {
             if (_closing || _profileRestoreClosing || !_dictation.CanChangeProvider || _dictation.Packages.Updates.Busy || _dictation.Models.Busy)
-                return Task.FromResult<string?>("Finish recording, processing and plugin updates before restarting TypeWhisper.");
-            return InstallApplicationUpdateAsync?.Invoke(action) ?? Task.FromResult<string?>("Restart is currently unavailable.");
+                return Task.FromResult<string?>(Loc.T("Finish recording, processing and plugin updates before restarting TypeWhisper."));
+            return InstallApplicationUpdateAsync?.Invoke(action) ?? Task.FromResult<string?>(Loc.T("Restart is currently unavailable."));
         });
     internal async void ShowApplicationUpdates()
     {

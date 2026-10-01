@@ -45,7 +45,7 @@ public sealed class FileTranscriptionJob(string path, Guid? id = null)
     /// <summary>Current operation phase.</summary>
     public FileTranscriptionStatus Status { get; internal set; }
     /// <summary>Provider or decoder status, without invented progress.</summary>
-    public string Stage { get; internal set; } = "Queued";
+    public string Stage { get; internal set; } = Loc.T("Queued");
     /// <summary>Accepted result, available only after success.</summary>
     public FileTranscriptionOutput? Result { get; internal set; }
     internal FileTranscriptionSourceFingerprint? SourceFingerprint { get; set; }
@@ -76,7 +76,7 @@ public sealed class FileTranscriptionQueue
                 result = result with { Warning = JoinWarning(result.Warning, warning) };
             _jobs.Add(new(entry.SourcePath, entry.Id)
             {
-                Status = state, Stage = entry.RecoveryNotice ?? entry.Stage ?? (state == FileTranscriptionStatus.Ready ? "Ready · recovered" : state.ToString()),
+                Status = state, Stage = entry.RecoveryNotice ?? entry.Stage ?? (state switch { FileTranscriptionStatus.Ready => Loc.T("Ready · recovered"), FileTranscriptionStatus.Queued => Loc.T("Queued"), FileTranscriptionStatus.Failed => Loc.T("Failed"), _ => Loc.T("Canceled") }),
                 Result = result, SourceFingerprint = entry.Source, Receipt = entry.Receipt
             });
         }
@@ -125,14 +125,14 @@ public sealed class FileTranscriptionQueue
     /// <summary>Adds a source path, returning a validation error when rejected.</summary>
     public string? Add(string path)
     {
-        if (_shutdown) return "The file queue has shut down.";
-        if (Running) return "Wait for the current run to finish before adding files.";
+        if (_shutdown) return Loc.T("The file queue has shut down.");
+        if (Running) return Loc.T("Wait for the current run to finish before adding files.");
         if (string.IsNullOrWhiteSpace(path) || !Extensions.Contains(System.IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
-            return "Choose a supported audio or video file.";
+            return Loc.T("Choose a supported audio or video file.");
         try { path = System.IO.Path.GetFullPath(path); }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return "The file path is invalid."; }
-        if (_jobs.Any(j => string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase))) return "This file is already in the queue.";
-        if (_jobs.Count >= 20) return "The queue supports up to 20 files at a time.";
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return Loc.T("The file path is invalid."); }
+        if (_jobs.Any(j => string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase))) return Loc.T("This file is already in the queue.");
+        if (_jobs.Count >= 20) return Loc.T("The queue supports up to 20 files at a time.");
         var job = new FileTranscriptionJob(path);
         if (RecoveryEnabled) TryCaptureFingerprint(job);
         _jobs.Add(job); Checkpoint(); Changed?.Invoke(); return null;
@@ -164,7 +164,7 @@ public sealed class FileTranscriptionQueue
             foreach (var job in _jobs.Where(j => j.Status == FileTranscriptionStatus.Queued && (onlyJob is null || j == onlyJob)).ToArray())
             {
                 if (cancellation.IsCancellationRequested) break;
-                job.Status = FileTranscriptionStatus.Processing; job.Stage = "Loading audio…"; Changed?.Invoke();
+                job.Status = FileTranscriptionStatus.Processing; job.Stage = Loc.T("Loading audio…"); Changed?.Invoke();
                 try
                 {
                     cancellation.Token.ThrowIfCancellationRequested();
@@ -172,9 +172,9 @@ public sealed class FileTranscriptionQueue
                     {
                         var fingerprint = FileTranscriptionSourceFingerprint.Capture(job.Path);
                         if (job.SourceFingerprint is { } previous && previous != fingerprint)
-                            throw new IOException("The source file changed. Choose Retry to use the current file.");
+                            throw new IOException(Loc.T("The source file changed. Choose Retry to use the current file."));
                         job.SourceFingerprint = fingerprint;
-                        if (!Checkpoint()) throw new IOException("Recovery checkpoint failed. Retry after fixing recovery storage or turning recovery off.");
+                        if (!Checkpoint()) throw new IOException(Loc.T("Recovery checkpoint failed. Retry after fixing recovery storage or turning recovery off."));
                     }
                     var result = await process(job.Path, stage =>
                     {
@@ -182,8 +182,8 @@ public sealed class FileTranscriptionQueue
                         { job.Stage = stage; Changed?.Invoke(); }
                     }, cancellation.Token);
                     cancellation.Token.ThrowIfCancellationRequested();
-                    if (string.IsNullOrWhiteSpace(result.Text)) throw new InvalidOperationException("No speech was recognized.");
-                    job.Result = result; job.Status = FileTranscriptionStatus.Ready; job.Stage = "Ready";
+                    if (string.IsNullOrWhiteSpace(result.Text)) throw new InvalidOperationException(Loc.T("No speech was recognized."));
+                    job.Result = result; job.Status = FileTranscriptionStatus.Ready; job.Stage = Loc.T("Ready");
                     job.Receipt = FileTranscriptionAcceptanceReceipt.Pending;
                     var durable = Checkpoint();
                     // Acceptance is final before committing usage. No await or UI notification
@@ -192,18 +192,18 @@ public sealed class FileTranscriptionQueue
                     try
                     {
                         if (durable) warning = onAccepted?.Invoke(result);
-                        else warning = "Recovery could not be saved. History and snippet usage were not recorded. Export this transcript before closing the app.";
+                        else warning = Loc.T("Recovery could not be saved. History and snippet usage were not recorded. Export this transcript before closing the app.");
                     }
                     catch (Exception ex) when (ex is not OutOfMemoryException)
-                    { warning = "Result usage could not be saved. Your transcript is unchanged."; }
+                    { warning = Loc.T("Result usage could not be saved. Your transcript is unchanged."); }
                     if (warning is not null) job.Result = result with
                     { Warning = result.Warning is null ? warning : result.Warning + " · " + warning };
                     if (durable) job.Receipt = FileTranscriptionAcceptanceReceipt.Completed;
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-                { job.Status = FileTranscriptionStatus.Canceled; job.Stage = "Canceled"; }
+                { job.Status = FileTranscriptionStatus.Canceled; job.Stage = Loc.T("Canceled"); }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { job.Status = cancellation.IsCancellationRequested ? FileTranscriptionStatus.Canceled : FileTranscriptionStatus.Failed; job.Stage = cancellation.IsCancellationRequested ? "Canceled" : ex.Message; }
+                { job.Status = cancellation.IsCancellationRequested ? FileTranscriptionStatus.Canceled : FileTranscriptionStatus.Failed; job.Stage = cancellation.IsCancellationRequested ? Loc.T("Canceled") : ex.Message; }
                 Checkpoint(); Changed?.Invoke();
             }
         }
@@ -214,7 +214,7 @@ public sealed class FileTranscriptionQueue
             {
                 if (cancellation.IsCancellationRequested)
                     foreach (var job in _jobs.Where(j => j.Status is FileTranscriptionStatus.Queued or FileTranscriptionStatus.Processing))
-                    { job.Status = FileTranscriptionStatus.Canceled; job.Stage = "Canceled"; }
+                    { job.Status = FileTranscriptionStatus.Canceled; job.Stage = Loc.T("Canceled"); }
                 _run = null; Checkpoint(); Changed?.Invoke();
             }
             catch (Exception ex) { failure ??= ex; }
@@ -246,7 +246,7 @@ public sealed class FileTranscriptionQueue
     public bool Retry(FileTranscriptionJob job)
     {
         if (_shutdown || Running || !_jobs.Contains(job) || job.Status is not (FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)) return false;
-        job.Status = FileTranscriptionStatus.Queued; job.Stage = "Queued"; job.Result = null;
+        job.Status = FileTranscriptionStatus.Queued; job.Stage = Loc.T("Queued"); job.Result = null;
         job.Receipt = FileTranscriptionAcceptanceReceipt.None;
         if (RecoveryEnabled) TryCaptureFingerprint(job);
         Checkpoint(); Changed?.Invoke(); return true;
@@ -289,9 +289,9 @@ public sealed class FileTranscriptionQueue
     /// <summary>Exports accepted text or actual provider subtitle segments.</summary>
     public static string Export(FileTranscriptionJob job, string format)
     {
-        if (job.Status != FileTranscriptionStatus.Ready || job.Result is not { } result) throw new InvalidOperationException("The result is not ready.");
+        if (job.Status != FileTranscriptionStatus.Ready || job.Result is not { } result) throw new InvalidOperationException(Loc.T("The result is not ready."));
         if (format == "txt") return result.Text;
-        if (!HasSubtitles(result)) throw new InvalidOperationException("This provider did not return usable subtitle timing.");
+        if (!HasSubtitles(result)) throw new InvalidOperationException(Loc.T("This provider did not return usable subtitle timing."));
         return format switch { "srt" => SubtitleExporter.ToSrt(result.Segments), "vtt" => SubtitleExporter.ToWebVtt(result.Segments), _ => throw new ArgumentException("Unsupported format.", nameof(format)) };
     }
 }

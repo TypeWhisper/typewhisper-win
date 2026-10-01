@@ -50,27 +50,27 @@ internal sealed class DictationReviewWindow : Window
             Foreground = (Brush)Application.Current.Resources["TextBrush"],
             Background = (Brush)Application.Current.Resources["SurfaceBrush"],
             FontFamily = (FontFamily)Application.Current.Resources["InterfaceFont"] };
-        AutomationProperties.SetName(transcript, "Dictation result");
+        AutomationProperties.SetName(transcript, Loc.T("Dictation result"));
         ScrollViewer.SetVerticalScrollBarVisibility(transcript, ScrollBarVisibility.Auto);
         Grid.SetRow(transcript, 1); body.Children.Add(transcript);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12,
             HorizontalAlignment = HorizontalAlignment.Right };
-        var copy = new HandCursorButton { Content = "Copy text", Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
+        var copy = new HandCursorButton { Content = Loc.T("Copy text"), Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
         var copyStatus = new TextBlock { TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)Application.Current.Resources["TextBrush"] };
         AutomationProperties.SetLiveSetting(copyStatus, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         copy.Click += (_, _) => copyStatus.Text = ClipboardText.TrySet(result.Record.FinalText)
-            ? "Copied. Switch to the field you want to use and paste the text."
-            : "Clipboard unavailable. Your text is still here; try copying again.";
+            ? Loc.T("Copied. Switch to the field you want to use and paste the text.")
+            : Loc.T("Clipboard unavailable. Your text is still here; try copying again.");
         // The session already left a blocked paste on the clipboard; only confirm a copy that succeeded.
         if (result.CopiedToClipboard)
-            copyStatus.Text = "The text is on the clipboard. Switch to the field you want to use and paste it.";
-        var close = new HandCursorButton { Content = "Close", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
+            copyStatus.Text = Loc.T("The text is on the clipboard. Switch to the field you want to use and paste it.");
+        var close = new HandCursorButton { Content = Loc.T("Close"), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         close.Click += async (_, _) =>
         {
             try { await ShutdownAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _actionStatus.Text = "This review could not finish closing. Wait for the action to finish and try closing TypeWhisper again."; }
+            { _actionStatus.Text = Loc.T("This review could not finish closing. Wait for the action to finish and try closing TypeWhisper again."); }
         };
         actions.Children.Add(close); actions.Children.Add(copy);
         var footer = new StackPanel { Spacing = 10 };
@@ -79,19 +79,19 @@ internal sealed class DictationReviewWindow : Window
                 Foreground = (Brush)Application.Current.Resources["TextBrush"] });
         footer.Children.Add(new TextBlock
         {
-            Text = result.Saved ? "Saved to History. You can find this text there after closing."
-                : "Not saved to History. Copy the text before closing this window.",
+            Text = result.Saved ? Loc.T("Saved to History. You can find this text there after closing.")
+                : Loc.T("Not saved to History. Copy the text before closing this window."),
             TextWrapping = TextWrapping.Wrap, FontSize = 12,
             Foreground = (Brush)Application.Current.Resources["MutedBrush"]
         });
         var available = registry?.Actions.ToArray() ?? [];
         var pluginActions = new StackPanel { Spacing = 8 };
-        pluginActions.Children.Add(new TextBlock { Text = "Send this text to a plugin. If an earlier action was not confirmed, check its destination before trying again.",
+        pluginActions.Children.Add(new TextBlock { Text = Loc.T("Send this text to a plugin. If an earlier action was not confirmed, check its destination before trying again."),
             TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
-        AutomationProperties.SetName(_actionPicker, "Manual plugin action");
+        AutomationProperties.SetName(_actionPicker, Loc.T("Manual plugin action"));
         foreach (var action in available) _actionPicker.Items.Add(new ComboBoxItem { Content = action.Name, Tag = action });
         _runAction.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
-        _runAction.Content = "Run action";
+        _runAction.Content = Loc.T("Run action");
         _actionPicker.SelectionChanged += (_, _) =>
         {
             if (_actionPicker.SelectedItem is ComboBoxItem { Tag: PortablePluginAction selected })
@@ -101,7 +101,7 @@ internal sealed class DictationReviewWindow : Window
         var pluginButtons = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Left };
         pluginButtons.Children.Add(_actionPicker); pluginButtons.Children.Add(_runAction);
         pluginActions.Children.Add(pluginButtons);
-        var moreActions = new Expander { Header = "More actions", HorizontalAlignment = HorizontalAlignment.Stretch,
+        var moreActions = new Expander { Header = Loc.T("More actions"), HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Visibility = available.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
             Content = new ScrollViewer { Content = pluginActions, MaxHeight = 150,
@@ -117,12 +117,12 @@ internal sealed class DictationReviewWindow : Window
             if (_closing || _actionController.IsRunning || registry is null ||
                 _actionPicker.SelectedItem is not ComboBoxItem { Tag: PortablePluginAction selected }) return;
             _runAction.IsEnabled = _actionPicker.IsEnabled = false;
-            _actionStatus.Text = "Running " + selected.Name + "…";
+            _actionStatus.Text = Loc.T("Running {0}…", selected.Name);
             try
             {
                 if (!registry.Actions.Contains(selected))
                 {
-                    _actionStatus.Text = "This action is no longer available. Your review text is unchanged.";
+                    _actionStatus.Text = Loc.T("This action is no longer available. Your review text is unchanged.");
                     return;
                 }
                 var context = new ActionContext(result.Record.AppName, result.Record.AppProcessName,
@@ -139,14 +139,14 @@ internal sealed class DictationReviewWindow : Window
                 });
                 if (!_closing) _actionStatus.Text = outcome.Status switch
                 {
-                    ManualPluginActionStatus.Succeeded => "Completed: " + outcome.Message,
-                    ManualPluginActionStatus.Failed => "Action failed: " + outcome.Message,
+                    ManualPluginActionStatus.Succeeded => Loc.T("Completed: {0}", outcome.Message),
+                    ManualPluginActionStatus.Failed => Loc.T("Action failed: {0}", outcome.Message),
                     ManualPluginActionStatus.Canceled => outcome.Message,
-                    _ => "Completion unknown. " + outcome.Message
+                    _ => Loc.T("Completion unknown. {0}", outcome.Message)
                 };
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (!_closing) _actionStatus.Text = "The action could not finish. Check its destination before running it again. Your review text is unchanged."; }
+            { if (!_closing) _actionStatus.Text = Loc.T("The action could not finish. Check its destination before running it again. Your review text is unchanged."); }
             finally
             {
                 if (!_closing) _runAction.IsEnabled = _actionPicker.IsEnabled = true;
@@ -162,7 +162,7 @@ internal sealed class DictationReviewWindow : Window
             args.Cancel = true;
             try { await ShutdownAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _actionStatus.Text = "The action has not finished closing. Your review remains open."; }
+            { _actionStatus.Text = Loc.T("The action has not finished closing. Your review remains open."); }
         };
     }
 
@@ -181,8 +181,8 @@ internal sealed class DictationReviewWindow : Window
         _closing = true;
         _runAction.IsEnabled = _actionPicker.IsEnabled = false;
         _actionStatus.Text = _actionController.IsRunning
-            ? "Closing: cancellation requested. Waiting for the action to finish; any saved output will remain at its destination."
-            : "Closing review…";
+            ? Loc.T("Closing: cancellation requested. Waiting for the action to finish; any saved output will remain at its destination.")
+            : Loc.T("Closing review…");
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _shutdownTask = completion.Task;
         _ = DrainAndCloseAsync(completion);

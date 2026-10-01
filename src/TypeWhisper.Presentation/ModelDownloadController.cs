@@ -63,10 +63,10 @@ public sealed class ModelDownloadController
         lock (_sync)
         {
             if (_state.IsClosing || !_completion.IsCompleted)
-                throw new InvalidOperationException("Finish the current model operation before starting another.");
+                throw new InvalidOperationException(Loc.T("Finish the current model operation before starting another."));
             request = _request = new();
             generation = ++_generation;
-            _state = new(true, false, null, removal ? "Removing model…" : "Downloading model…", false) { IsRemoval = removal };
+            _state = new(true, false, null, removal ? Loc.T("Removing model…") : Loc.T("Downloading model…"), false) { IsRemoval = removal };
             completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             _completion = completion.Task;
         }
@@ -84,7 +84,7 @@ public sealed class ModelDownloadController
             if (_request is { IsCancellationRequested: false })
             {
                 _callbacks = _request.CancelAsync();
-                _state = _state with { Message = _state.IsRemoval ? "Canceling model removal…" : "Canceling model download…" };
+                _state = _state with { Message = _state.IsRemoval ? Loc.T("Canceling model removal…") : Loc.T("Canceling model download…") };
             }
             completion = _completion;
         }
@@ -112,17 +112,17 @@ public sealed class ModelDownloadController
             await download(new InlineProgress(value => Report(generation, value)), request.Token).ConfigureAwait(false);
             request.Token.ThrowIfCancellationRequested();
             succeeded = true;
-            message = removal ? "Model files removed." : "Model downloaded. Select it explicitly to use it.";
+            message = removal ? Loc.T("Model files removed.") : Loc.T("Model downloaded. Select it explicitly to use it.");
         }
         catch (OperationCanceledException)
         { message = CanceledMessage(removal); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { message = removal ? "The model could not be removed. Refresh model status; some files may have been removed." : DownloadFailureMessage(ex, ref fatal); }
+        { message = removal ? Loc.T("The model could not be removed. Refresh model status; some files may have been removed.") : DownloadFailureMessage(ex, ref fatal); }
         catch (Exception ex)
-        { fatal = ex; message = removal ? "The model removal could not finish." : "The model download could not finish."; }
+        { fatal = ex; message = removal ? Loc.T("The model removal could not finish.") : Loc.T("The model download could not finish."); }
         lock (_sync)
             if (succeeded && generation == _generation && !request.IsCancellationRequested)
-                _state = _state with { Message = removal ? "Finishing model removal…" : "Finishing model download…" };
+                _state = _state with { Message = removal ? Loc.T("Finishing model removal…") : Loc.T("Finishing model download…") };
         Notify();
         Task callbacks;
         lock (_sync) { callbacks = _callbacks; _request = null; }
@@ -153,18 +153,18 @@ public sealed class ModelDownloadController
         {
             // Completion must still be published, so a fatal describer failure takes the fatal path.
             fatal = ex;
-            return "The model download could not finish.";
+            return Loc.T("The model download could not finish.");
         }
         catch (Exception ex)
         { System.Diagnostics.Trace.WriteLine("Model download failure description failed: " + ex.GetType().Name); }
         return string.IsNullOrWhiteSpace(described)
-            ? "The model could not be downloaded. Check its requirements and configuration before trying again."
+            ? Loc.T("The model could not be downloaded. Check its requirements and configuration before trying again.")
             : described;
     }
 
     private static string CanceledMessage(bool removal) => removal
-        ? "Removal canceled. Refresh model status; some files may have been removed."
-        : "Download canceled. Refresh model status before trying again; existing files are retained.";
+        ? Loc.T("Removal canceled. Refresh model status; some files may have been removed.")
+        : Loc.T("Download canceled. Refresh model status before trying again; existing files are retained.");
 
     private void Report(long generation, double value)
     {

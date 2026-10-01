@@ -31,7 +31,7 @@ public sealed partial class MainWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("Hotkey resume monitoring failed: {0}", ex);
-            ReportHotkeyRecovery("Hotkey recovery after sleep could not start. Restart TypeWhisper if dictation shortcuts stop responding.");
+            ReportHotkeyRecovery(Loc.T("Hotkey recovery after sleep could not start. Restart TypeWhisper if dictation shortcuts stop responding."));
         }
     }
 

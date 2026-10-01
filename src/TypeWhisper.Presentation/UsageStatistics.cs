@@ -62,9 +62,9 @@ public sealed class UsageStatistics
     /// <summary>Validates an inclusive custom calendar range.</summary>
     public static string? ValidateRange(DateOnly start, DateOnly end)
     {
-        if (start.Year < 1900 || end.Year > 2100) return "Choose dates between 1900 and 2100.";
-        if (start > end) return "The start date must be on or before the end date.";
-        if (end.DayNumber - start.DayNumber > 3659) return "Choose a range of up to 10 years.";
+        if (start.Year < 1900 || end.Year > 2100) return Loc.T("Choose dates between 1900 and 2100.");
+        if (start > end) return Loc.T("The start date must be on or before the end date.");
+        if (end.DayNumber - start.DayNumber > 3659) return Loc.T("Choose a range of up to 10 years.");
         return null;
     }
 
@@ -89,6 +89,6 @@ public sealed class UsageStatistics
         return new UsageSummary(entries.Sum(entry => entry.Words), entries.Sum(entry => entry.Minutes), entries.Length, byDay.Count,
             entries.Where(entry => entry.App is not null).Select(entry => entry.App).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             entries.Where(entry => entry.Model is not null).Select(entry => entry.Model).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
-            days, Rank(entry => entry.App, "App not recorded"), Rank(entry => entry.Model, "Model not recorded"), hours);
+            days, Rank(entry => entry.App, Loc.T("App not recorded")), Rank(entry => entry.Model, Loc.T("Model not recorded")), hours);
     }
 }

@@ -20,16 +20,16 @@ internal sealed partial class LocalDictationSession
     {
         ct.ThrowIfCancellationRequested();
         if (!(apiRequest is null ? CanTranscribeFile : CanStartApiFile) || !await _gate.WaitAsync(0, ct))
-            throw new InvalidOperationException("Finish the current recording or model operation before transcribing a file.");
+            throw new InvalidOperationException(Loc.T("Finish the current recording or model operation before transcribing a file."));
         IAsyncDisposable? modelOverride = null;
         _fileBusy = true;
-        FileProcessingStatus = apiRequest is null ? "Loading audio · open Files for progress or cancellation" : "Processing HTTP API request";
+        FileProcessingStatus = apiRequest is null ? Loc.T("Loading audio · open Files for progress or cancellation") : Loc.T("Processing HTTP API request");
         void Report(string message)
         {
             void Publish()
             {
                 if (ct.IsCancellationRequested) return;
-                FileProcessingStatus = message + (apiRequest is null ? " · Files" : " · HTTP API");
+                FileProcessingStatus = (apiRequest is null ? Loc.T("{0} · Files", message) : Loc.T("{0} · HTTP API", message));
                 stage(message); Changed?.Invoke();
             }
             if (_fileDispatcher.HasThreadAccess) Publish();
@@ -69,17 +69,17 @@ internal sealed partial class LocalDictationSession
                 DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath), ct);
             var translate = task == TranscriptionTask.Translate;
             if (translate && !SupportsTranslation)
-                throw new NotSupportedException("This model cannot translate audio to English. Choose Transcribe or a translation-capable model.");
+                throw new NotSupportedException(Loc.T("This model cannot translate audio to English. Choose Transcribe or a translation-capable model."));
             await _livePreview.StopAsync();
             ct.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
-            Report("Loading audio…");
+            Report(Loc.T("Loading audio…"));
             float[] samples;
             try { samples = await MediaFoundationFileDecoder.LoadAsync(path, ct); }
             catch (Exception ex) when (apiRequest is not null && ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
             { throw new LocalApiRequestException(422, "The audio could not be decoded. Use supported media up to 60 minutes."); }
             ct.ThrowIfCancellationRequested();
-            Report($"Transcribing with {modelName}…");
+            Report(Loc.T("Transcribing with {0}…", modelName));
             var decoded = registryProvider
                 ? await PluginRuntime.UseTranscriptionAsync(providerSelection, (engine, token) =>
                     LanguageHintTranscription.DecodeAsync(engine, samples,
@@ -92,19 +92,19 @@ internal sealed partial class LocalDictationSession
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (FinalSpeechPolicy.ShouldReject(decoded.Text, decoded.NoSpeechProbability, false,
                 textPreferences.TranscribeShortQuietClipsAggressively) || string.IsNullOrWhiteSpace(decoded.Text))
-                throw new InvalidOperationException("No speech was recognized in this file.");
-            Report("Formatting transcript…");
+                throw new InvalidOperationException(Loc.T("No speech was recognized in this file."));
+            Report(Loc.T("Formatting transcript…"));
             var refinedText = decoded.Text;
             var useCtc = DictationLexiconSnapshot.CanRefineWithCtc(task, registryProvider, modelId,
                 ctcReady && CtcVocabulary.Enabled, decoded.TokenTimings.Count);
             var ctcWarnings = new List<string>();
             if (useCtc && lexicon.Dictionary is { EnabledCtcEntries.Count: > 0 } dictionary)
             {
-                Report("Checking vocabulary with CTC…");
+                Report(Loc.T("Checking vocabulary with CTC…"));
                 var refined = await CtcVocabulary.RefineAsync(Guid.NewGuid(), decoded.Text, samples,
                     decoded.TokenTimings, dictionary.EnabledCtcEntries, ct);
                 refinedText = refined.Text;
-                if (refined.Error is not null) ctcWarnings.Add("Acoustic vocabulary checking was unavailable. The decoded transcript was retained.");
+                if (refined.Error is not null) ctcWarnings.Add(Loc.T("Acoustic vocabulary checking was unavailable. The decoded transcript was retained."));
             }
             IReadOnlyList<TranscriptionSegment> segments = decoded.Segments
                 .Select(segment => new TranscriptionSegment(segment.Text, segment.Start, segment.End)).ToArray();
@@ -128,13 +128,13 @@ internal sealed partial class LocalDictationSession
             ObjectDisposedException.ThrowIf(_disposed, this);
             var warnings = processed.Warnings.ToList();
             if (string.IsNullOrWhiteSpace(processed.Text))
-                throw new InvalidOperationException("Text processing produced an empty transcript.");
+                throw new InvalidOperationException(Loc.T("Text processing produced an empty transcript."));
             warnings.AddRange(ctcWarnings);
             var duration = samples.Length / 16000.0;
             TranscriptionRecord? pendingHistory = null;
             if (apiRequest is null && outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory)
             {
-                Report("Preparing History…");
+                Report(Loc.T("Preparing History…"));
                 try
                 {
                     await _history.EnsureLoadedAsync();
@@ -154,7 +154,7 @@ internal sealed partial class LocalDictationSession
                 catch (OperationCanceledException) { throw; }
                 catch (ObjectDisposedException) when (_disposed) { throw; }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { warnings.Add("History could not be saved. Your transcript remains available here for export."); }
+                { warnings.Add(Loc.T("History could not be saved. Your transcript remains available here for export.")); }
             }
             return new(processed.Text, engineId, modelId ?? modelName, duration,
                 segments,

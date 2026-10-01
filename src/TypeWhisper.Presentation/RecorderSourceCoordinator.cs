@@ -35,14 +35,14 @@ public sealed class RecorderSourceCoordinator(Func<Task> startMicrophone, Func<T
             if (_microphone)
                 try { _microphoneSamples = await stopMicrophone(); _microphone = false; }
                 catch (RecorderCleanupException ex) { cleanupFailure = ex; }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { _microphone = false; warnings.Add("Microphone capture did not finish cleanly."); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { _microphone = false; warnings.Add(Loc.T("Microphone capture did not finish cleanly.")); }
         }
         finally
         {
             if (_system)
                 try { _systemSamples = await stopSystem(); _system = false; }
                 catch (RecorderCleanupException ex) { cleanupFailure = ex; }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { _system = false; warnings.Add("System audio capture did not finish cleanly."); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { _system = false; warnings.Add(Loc.T("System audio capture did not finish cleanly.")); }
         }
         if (cleanupFailure is not null) throw cleanupFailure;
         return new(_microphoneSamples, _systemSamples, warnings);

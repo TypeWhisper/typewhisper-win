@@ -22,19 +22,19 @@ internal static class WinUILicensing
     internal static Task ActivateAsync(string key) => RunAsync(async () =>
     {
         var entitlement = await Service.ActivateAnyLicenseKeyAsync(key);
-        Notice = Service.LicenseActivationError ?? (entitlement is null ? "Enter your license key." : "License activated on this device.");
+        Notice = Service.LicenseActivationError ?? (entitlement is null ? Loc.T("Enter your license key.") : Loc.T("License activated on this device."));
     });
     internal static Task RefreshAsync(bool commercial) => RunAsync(async () =>
     {
         if (commercial) await Service.RefreshCommercialLicenseAsync();
         else await Service.RefreshSupporterLicenseAsync();
-        Notice = (commercial ? Service.CommercialRefreshError : Service.SupporterRefreshError) ?? "License status updated.";
+        Notice = (commercial ? Service.CommercialRefreshError : Service.SupporterRefreshError) ?? Loc.T("License status updated.");
     });
     internal static Task DeactivateAsync(bool commercial) => RunAsync(async () =>
     {
         if (commercial) await Service.DeactivateCommercialLicenseAsync();
         else await Service.DeactivateSupporterLicenseAsync();
-        Notice = (commercial ? Service.CommercialDeactivationError : Service.SupporterDeactivationError) ?? "This device was deactivated.";
+        Notice = (commercial ? Service.CommercialDeactivationError : Service.SupporterDeactivationError) ?? Loc.T("This device was deactivated.");
     });
     private static Task RunAsync(Func<Task> action)
     {
@@ -49,7 +49,7 @@ internal static class WinUILicensing
     private static async Task CompleteAsync(Func<Task> action, TaskCompletionSource completion)
     {
         try { await action(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Notice = "The license operation could not be completed. Please try again."; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Notice = Loc.T("The license operation could not be completed. Please try again."); }
         finally { Busy = false; Changed?.Invoke(); completion.TrySetResult(); }
     }
     internal static Task ShutdownAsync() { _closing = true; return _operation; }

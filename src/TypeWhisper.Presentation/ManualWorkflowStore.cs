@@ -46,18 +46,18 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     {
         if (!File.Exists(path))
         {
-            if (Directory.Exists(path)) throw new IOException("The workflow file is a directory.");
+            if (Directory.Exists(path)) throw new IOException(Loc.T("The workflow file is a directory."));
             return [];
         }
         var json = File.ReadAllText(path);
         using var document = JsonDocument.Parse(json);
         RejectDuplicateProperties(document.RootElement);
         var items = JsonSerializer.Deserialize<List<Workflow>>(json, Options)
-            ?? throw new JsonException("The workflow list is empty or invalid.");
+            ?? throw new JsonException(Loc.T("The workflow list is empty or invalid."));
         if (items.Any(w => w is null || string.IsNullOrWhiteSpace(w.Id) || string.IsNullOrWhiteSpace(w.Name)
             || w.Behavior is null || w.Behavior.Settings is null || w.Behavior.FineTuning is null || w.Trigger is null || w.Output is null)
             || items.Select(w => w.Id).Distinct(StringComparer.Ordinal).Count() != items.Count)
-            throw new JsonException("The workflow list contains invalid or duplicate entries.");
+            throw new JsonException(Loc.T("The workflow list contains invalid or duplicate entries."));
         return items.OrderBy(w => w.SortOrder).ToArray();
     }
 
@@ -68,7 +68,7 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var property in element.EnumerateObject())
             {
-                if (!names.Add(property.Name)) throw new JsonException("Duplicate workflow property: " + property.Name);
+                if (!names.Add(property.Name)) throw new JsonException(Loc.T("Duplicate workflow property: {0}", property.Name));
                 RejectDuplicateProperties(property.Value);
             }
         }
@@ -83,10 +83,10 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
         {
             var items = Read().ToList();
             var index = items.FindIndex(item => item.Id == id);
-            if (index < 0) throw new InvalidOperationException("This workflow no longer exists.");
+            if (index < 0) throw new InvalidOperationException(Loc.T("This workflow no longer exists."));
             var updated = items[index] with { IsEnabled = enabled };
             items[index] = updated;
-            if (!_write(items.AsReadOnly())) throw new IOException("Workflow enablement could not be saved.");
+            if (!_write(items.AsReadOnly())) throw new IOException(Loc.T("Workflow enablement could not be saved."));
             return updated;
         }
     }
@@ -95,21 +95,21 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     public void Save(Workflow workflow, bool allowAutomatic = false)
     {
         ArgumentNullException.ThrowIfNull(workflow);
-        if (!(allowAutomatic ? IsEditable(workflow) : IsSupported(workflow))) throw new InvalidOperationException("This workflow cannot be edited here.");
+        if (!(allowAutomatic ? IsEditable(workflow) : IsSupported(workflow))) throw new InvalidOperationException(Loc.T("This workflow cannot be edited here."));
         if (string.IsNullOrWhiteSpace(workflow.Id) || string.IsNullOrWhiteSpace(workflow.Name))
-            throw new ArgumentException("A workflow name is required.", nameof(workflow));
+            throw new ArgumentException(Loc.T("A workflow name is required."), nameof(workflow));
         if (workflow.Template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(workflow.Behavior.FineTuning))
-            throw new ArgumentException("Custom workflows require instructions.", nameof(workflow));
+            throw new ArgumentException(Loc.T("Custom workflows require instructions."), nameof(workflow));
         lock (MutationLock)
         {
             var items = Read().ToList();
             int index = items.FindIndex(w => w.Id == workflow.Id);
             if (index >= 0 && !(allowAutomatic ? IsEditable(items[index]) : IsSupported(items[index])))
-                throw new InvalidOperationException("This workflow has changed and can no longer be edited here.");
+                throw new InvalidOperationException(Loc.T("This workflow has changed and can no longer be edited here."));
             var updated = workflow with { UpdatedAt = DateTime.UtcNow };
             if (index < 0) items.Add(updated); else items[index] = updated;
             if (!_write(items.AsReadOnly()))
-                throw new IOException("Workflow changes could not be saved.");
+                throw new IOException(Loc.T("Workflow changes could not be saved."));
         }
     }
 
@@ -120,11 +120,11 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
         {
             var items = Read().ToList();
             var current = items.FirstOrDefault(w => w.Id == id)
-                ?? throw new InvalidOperationException("This workflow no longer exists.");
-            if (!(allowAutomatic ? IsEditable(current) : IsSupported(current))) throw new InvalidOperationException("This workflow cannot be deleted here.");
+                ?? throw new InvalidOperationException(Loc.T("This workflow no longer exists."));
+            if (!(allowAutomatic ? IsEditable(current) : IsSupported(current))) throw new InvalidOperationException(Loc.T("This workflow cannot be deleted here."));
             items.Remove(current);
             if (!_write(items.AsReadOnly()))
-                throw new IOException("The workflow could not be deleted.");
+                throw new IOException(Loc.T("The workflow could not be deleted."));
         }
     }
 }
@@ -136,11 +136,11 @@ public static class ManualWorkflowRunner
     public static string? ConfigurationError(string? provider, string? model, Func<string, string, bool> available)
     {
         if (string.IsNullOrWhiteSpace(provider) || provider == "none")
-            return "Choose an LLM provider and model in Edit workflow. This workflow cannot run without them.";
+            return Loc.T("Choose an LLM provider and model in Edit workflow. This workflow cannot run without them.");
         if (string.IsNullOrWhiteSpace(model))
-            return "Choose an LLM model in Edit workflow before running this workflow.";
+            return Loc.T("Choose an LLM model in Edit workflow before running this workflow.");
         return available(provider, model) ? null
-            : "The saved LLM provider or model is unavailable. Check the plugin settings and model in Edit workflow.";
+            : Loc.T("The saved LLM provider or model is unavailable. Check the plugin settings and model in Edit workflow.");
     }
 
     /// <summary>Processes source text, rejecting unavailable choices and late results after cancellation.</summary>
@@ -151,19 +151,19 @@ public static class ManualWorkflowRunner
         Func<string, string, CancellationToken, Task<IReadOnlyList<string>>>? recall = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!workflow.IsEnabled) throw new InvalidOperationException("This workflow is disabled.");
+        if (!workflow.IsEnabled) throw new InvalidOperationException(Loc.T("This workflow is disabled."));
         var provider = workflow.Behavior.ProviderOverride;
         var model = workflow.Behavior.ModelOverride;
-        if (string.IsNullOrWhiteSpace(input)) throw new InvalidOperationException("Enter source text first.");
+        if (string.IsNullOrWhiteSpace(input)) throw new InvalidOperationException(Loc.T("Enter source text first."));
         if (workflow.Template == WorkflowTemplate.Dictation) return input;
         if (ConfigurationError(provider, model, available) is { } configurationError)
             throw new InvalidOperationException(configurationError);
         var prompt = workflow.SystemPrompt();
-        if (string.IsNullOrWhiteSpace(prompt)) throw new InvalidOperationException("This workflow has no instructions.");
+        if (string.IsNullOrWhiteSpace(prompt)) throw new InvalidOperationException(Loc.T("This workflow has no instructions."));
         var context = await WorkflowMemoryContext.PrepareAsync(workflow.Behavior.MemoryPluginId, prompt, input, recall, cancellationToken);
         var result = await process(provider!, context.Prompt, context.Input, model!, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException("The provider returned an empty result. Your source text is unchanged.");
+        if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException(Loc.T("The provider returned an empty result. Your source text is unchanged."));
         return result;
     }
 }

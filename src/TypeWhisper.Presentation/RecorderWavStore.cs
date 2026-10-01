@@ -21,7 +21,7 @@ public static class RecorderWavStore
     /// <summary>Writes on a worker thread; unsuccessful publication removes only its own temporary file.</summary>
     public static Task<string> SaveAsync(string directory, float[] samples, string? title = null) => Task.Run(() =>
     {
-        if (samples.Length == 0) throw new InvalidOperationException("No audio was captured.");
+        if (samples.Length == 0) throw new InvalidOperationException(Loc.T("No audio was captured."));
         Directory.CreateDirectory(directory);
         var safeTitle = NormalizeTitle(title);
         var prefix = safeTitle.Length == 0 ? "recording" : $"recording-{safeTitle}";

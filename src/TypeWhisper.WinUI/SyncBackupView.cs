@@ -16,12 +16,12 @@ internal sealed class SyncBackupView : UserControl
     private readonly StackPanel _body = new() { Spacing = 16 };
     private readonly StackPanel _selection = new() { Spacing = 8 };
     private readonly StackPanel _review = new() { Spacing = 10 };
-    private readonly TextBlock _notice = Copy("Choose the categories to include. History contains saved text only.", 13, true);
+    private readonly TextBlock _notice = Copy(Loc.T("Choose the categories to include. History contains saved text only."), 13, true);
     private readonly HandCursorButton _export;
     private readonly HandCursorButton _import;
     private readonly HandCursorButton _exportAll;
     private readonly HandCursorButton _deleteAll;
-    private readonly TextBlock _dataNotice = Copy("Everything TypeWhisper keeps on this PC, in one .zip file. API keys, licenses, downloaded models and installed plugins are left out.", 13, true);
+    private readonly TextBlock _dataNotice = Copy(Loc.T("Everything TypeWhisper keeps on this PC, in one .zip file. API keys, licenses, downloaded models and installed plugins are left out."), 13, true);
     private readonly CancellationTokenSource _lifetime = new();
     private BackupCategory _categories = BackupCategory.Dictionary | BackupCategory.Snippets | BackupCategory.Workflows;
     private PersistedProfileBackupPreview? _preview;
@@ -36,31 +36,31 @@ internal sealed class SyncBackupView : UserControl
     internal SyncBackupView()
     {
         Content = _body;
-        _body.Children.Add(SettingsHelp.Label("Local backup", "Save a portable JSON file or merge data from an existing TypeWhisper backup. Audio, model files, API keys, licenses, plugin installation and device preferences are excluded.", 22));
+        _body.Children.Add(SettingsHelp.Label(Loc.T("Local backup"), Loc.T("Save a portable JSON file or merge data from an existing TypeWhisper backup. Audio, model files, API keys, licenses, plugin installation and device preferences are excluded."), 22));
         foreach (var (category, label) in new[]
         {
-            (BackupCategory.Dictionary, "Dictionary"), (BackupCategory.Snippets, "Snippets"),
-            (BackupCategory.Workflows, "Workflows"), (BackupCategory.History, "History (text only)")
+            (BackupCategory.Dictionary, Loc.T("Dictionary")), (BackupCategory.Snippets, Loc.T("Snippets")),
+            (BackupCategory.Workflows, Loc.T("Workflows")), (BackupCategory.History, Loc.T("History (text only)"))
         })
         {
             var toggle = new CheckBox { Content = label, IsChecked = _categories.HasFlag(category) };
-            AutomationProperties.SetName(toggle, "Include " + label + " in backup");
+            AutomationProperties.SetName(toggle, Loc.T("Include {0} in backup", label));
             toggle.Checked += (_, _) => { _categories |= category; InvalidatePreview(); };
             toggle.Unchecked += (_, _) => { _categories &= ~category; InvalidatePreview(); };
             _selection.Children.Add(toggle);
         }
         _body.Children.Add(_selection);
-        _export = Button("Export backup…", () => RunAsync(ExportAsync));
-        _import = Button("Choose backup to restore…", () => RunAsync(PreviewAsync));
+        _export = Button(Loc.T("Export backup…"), () => RunAsync(ExportAsync));
+        _import = Button(Loc.T("Choose backup to restore…"), () => RunAsync(PreviewAsync));
         Actions.Children.Add(_export); Actions.Children.Add(_import);
         AutomationProperties.SetLiveSetting(_notice, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _body.Children.Add(_notice); _body.Children.Add(_review);
         _body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new(0, 8, 0, 8) });
         _body.Children.Add(new CloudSyncView());
         _body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new(0, 8, 0, 8) });
-        _body.Children.Add(SettingsHelp.Label("All data", "Take a complete copy of your TypeWhisper data with you, or remove everything TypeWhisper stores on this PC and start fresh.", 22));
-        _exportAll = Button("Export all data…", () => RunAsync(ExportAllAsync, _dataNotice, "Export failed: "));
-        _deleteAll = Button("Delete all data…", () => RunAsync(ConfirmDeleteAllAsync, _dataNotice, "Delete all data failed: "), "DestructiveButtonStyle");
+        _body.Children.Add(SettingsHelp.Label(Loc.T("All data"), Loc.T("Take a complete copy of your TypeWhisper data with you, or remove everything TypeWhisper stores on this PC and start fresh."), 22));
+        _exportAll = Button(Loc.T("Export all data…"), () => RunAsync(ExportAllAsync, _dataNotice, Loc.T("Export failed: {0}")));
+        _deleteAll = Button(Loc.T("Delete all data…"), () => RunAsync(ConfirmDeleteAllAsync, _dataNotice, Loc.T("Delete all data failed: {0}")), "DestructiveButtonStyle");
         _body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _exportAll, _deleteAll } });
         AutomationProperties.SetLiveSetting(_dataNotice, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _body.Children.Add(_dataNotice);
@@ -96,15 +96,15 @@ internal sealed class SyncBackupView : UserControl
         _deleteAll.IsEnabled = !_busy && _deleteAllData is not null;
     }
 
-    private async Task RunAsync(Func<Task> operation, TextBlock? notice = null, string failure = "Backup operation failed: ")
+    private async Task RunAsync(Func<Task> operation, TextBlock? notice = null, string? failure = null)
     {
         if (_busy || _unloaded) return;
         notice ??= _notice;
         _busy = true; UpdateButtons();
         try { await operation(); }
-        catch (OperationCanceledException) { if (!_unloaded) notice.Text = "Operation canceled."; }
+        catch (OperationCanceledException) { if (!_unloaded) notice.Text = Loc.T("Operation canceled."); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_unloaded) notice.Text = failure + ex.Message; }
+        { if (!_unloaded) notice.Text = string.Format(failure ?? Loc.T("Backup operation failed: {0}"), ex.Message); }
         finally { _busy = false; if (!_unloaded) UpdateButtons(); }
     }
 
@@ -112,42 +112,42 @@ internal sealed class SyncBackupView : UserControl
     {
         InvalidatePreview();
         var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
-        { Title = "Export TypeWhisper backup", SuggestedFileName = "typewhisper-backup-" + DateTime.Now.ToString("yyyy-MM-dd") };
-        picker.FileTypeChoices.Add("TypeWhisper backup", new List<string> { ".json" });
+        { Title = Loc.T("Export TypeWhisper backup"), SuggestedFileName = "typewhisper-backup-" + DateTime.Now.ToString("yyyy-MM-dd") };
+        picker.FileTypeChoices.Add(Loc.T("TypeWhisper backup"), new List<string> { ".json" });
         var file = await picker.PickSaveFileAsync();
         _lifetime.Token.ThrowIfCancellationRequested();
-        if (file is null) { _notice.Text = "Export canceled."; return; }
+        if (file is null) { _notice.Text = Loc.T("Export canceled."); return; }
         var json = await _store.ExportAsync(_categories, _lifetime.Token);
         _lifetime.Token.ThrowIfCancellationRequested();
         LexiconTransfer.WriteFile(file.Path, json);
-        _notice.Text = "Backup saved to " + file.Path;
+        _notice.Text = Loc.T("Backup saved to {0}", file.Path);
     }
 
     private async Task PreviewAsync()
     {
         InvalidatePreview();
         var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
-        { Title = "Choose a TypeWhisper backup" };
+        { Title = Loc.T("Choose a TypeWhisper backup") };
         picker.FileTypeFilter.Add(".json");
         var file = await picker.PickSingleFileAsync();
         _lifetime.Token.ThrowIfCancellationRequested();
-        if (file is null) { _notice.Text = "Restore canceled."; return; }
+        if (file is null) { _notice.Text = Loc.T("Restore canceled."); return; }
         await using var input = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (input.Length > 64 * 1024 * 1024) throw new InvalidDataException("Backups are limited to 64 MB.");
+        if (input.Length > 64 * 1024 * 1024) throw new InvalidDataException(Loc.T("Backups are limited to 64 MB."));
         using var reader = new StreamReader(input);
         var json = await reader.ReadToEndAsync(_lifetime.Token);
         var preview = await _store.PreviewAsync(json, _categories, _lifetime.Token);
         _lifetime.Token.ThrowIfCancellationRequested();
         _preview = preview;
-        _notice.Text = "Review the merge from " + Path.GetFileName(file.Path) + ". No profile data has changed.";
-        _review.Children.Add(Copy("Restore preview", 18));
+        _notice.Text = Loc.T("Review the merge from {0}. No profile data has changed.", Path.GetFileName(file.Path));
+        _review.Children.Add(Copy(Loc.T("Restore preview"), 18));
         foreach (var pair in preview.Merge.Categories)
-            _review.Children.Add(Copy($"{pair.Key}: {pair.Value.Imported} to add · {pair.Value.Skipped} skipped · {pair.Value.Conflicts} conflicts", 13));
+            _review.Children.Add(Copy(Loc.T("{0}: {1} to add · {2} skipped · {3} conflicts", pair.Key, pair.Value.Imported, pair.Value.Skipped, pair.Value.Conflicts), 13));
         foreach (var warning in preview.Merge.Warnings) _review.Children.Add(Copy(warning, 12, true));
-        _review.Children.Add(Copy($"{preview.ChangedFileCount} profile {(preview.ChangedFileCount == 1 ? "file" : "files")} will change. Existing items are kept according to the merge rules. The app closes after restoring; reopen it to use the restored data.", 13, true));
+        _review.Children.Add(Copy(preview.ChangedFileCount == 1 ? Loc.T("{0} profile file will change. Existing items are kept according to the merge rules. The app closes after restoring; reopen it to use the restored data.", preview.ChangedFileCount) : Loc.T("{0} profile files will change. Existing items are kept according to the merge rules. The app closes after restoring; reopen it to use the restored data.", preview.ChangedFileCount), 13, true));
         Actions.Children.Clear();
-        Actions.Children.Add(Button("Cancel restore", () => { InvalidatePreview(); _notice.Text = "Restore canceled. No data changed."; return Task.CompletedTask; }));
-        Actions.Children.Add(Button("Restore and close app…", () => RunAsync(ConfirmRestoreAsync), primary: true));
+        Actions.Children.Add(Button(Loc.T("Cancel restore"), () => { InvalidatePreview(); _notice.Text = Loc.T("Restore canceled. No data changed."); return Task.CompletedTask; }));
+        Actions.Children.Add(Button(Loc.T("Restore and close app…"), () => RunAsync(ConfirmRestoreAsync), primary: true));
 
     }
 
@@ -157,9 +157,9 @@ internal sealed class SyncBackupView : UserControl
         if (preview is null || _restore is null) return;
         _dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "Restore and close TypeWhisper?",
-            Content = $"Apply the reviewed merge to {preview.ChangedFileCount} profile {(preview.ChangedFileCount == 1 ? "file" : "files")}. Active work will stop. Reopen TypeWhisper after it closes.",
-            PrimaryButtonText = "Restore and close app", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            XamlRoot = XamlRoot, Title = Loc.T("Restore and close TypeWhisper?"),
+            Content = preview.ChangedFileCount == 1 ? Loc.T("Apply the reviewed merge to {0} profile file. Active work will stop. Reopen TypeWhisper after it closes.", preview.ChangedFileCount) : Loc.T("Apply the reviewed merge to {0} profile files. Active work will stop. Reopen TypeWhisper after it closes.", preview.ChangedFileCount),
+            PrimaryButtonText = Loc.T("Restore and close app"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
         };
         ContentDialogResult choice;
         try { choice = await _dialog.ShowAsync(); }
@@ -172,23 +172,23 @@ internal sealed class SyncBackupView : UserControl
     {
         InvalidatePreview();
         var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
-        { Title = "Export all TypeWhisper data", SuggestedFileName = "typewhisper-data-" + DateTime.Now.ToString("yyyy-MM-dd") };
-        picker.FileTypeChoices.Add("ZIP archive", new List<string> { ".zip" });
+        { Title = Loc.T("Export all TypeWhisper data"), SuggestedFileName = "typewhisper-data-" + DateTime.Now.ToString("yyyy-MM-dd") };
+        picker.FileTypeChoices.Add(Loc.T("ZIP archive"), new List<string> { ".zip" });
         var file = await picker.PickSaveFileAsync();
         _lifetime.Token.ThrowIfCancellationRequested();
-        if (file is null) { _dataNotice.Text = "Export canceled."; return; }
-        _dataNotice.Text = "Exporting your data…";
+        if (file is null) { _dataNotice.Text = Loc.T("Export canceled."); return; }
+        _dataNotice.Text = Loc.T("Exporting your data…");
         var progress = new Progress<UserDataExportProgress>(value =>
-        { if (!_unloaded) _dataNotice.Text = $"Exporting your data… {value.Files:N0} files, {Size(value.Bytes)}"; });
+        { if (!_unloaded) _dataNotice.Text = Loc.T("Exporting your data… {0:N0} files, {1}", value.Files, Size(value.Bytes)); });
         var result = await Task.Run(() => UserDataExport.ExportAsync(WinUIProfile.Root, file.Path, UserDataDeletion.PreviousVersionData, progress, _lifetime.Token));
         _lifetime.Token.ThrowIfCancellationRequested();
-        var summary = $"Exported {result.Files:N0} files ({Size(result.Bytes)}) to {file.Path}.";
+        var summary = Loc.T("Exported {0:N0} files ({1}) to {2}.", result.Files, Size(result.Bytes), file.Path);
         if (result.Skipped.Count > 0)
-            summary += $" {result.Skipped.Count:N0} {(result.Skipped.Count == 1 ? "item was" : "items were")} in use or unreadable and are missing from the export; README.txt in the export lists them.";
+            summary += " " + (result.Skipped.Count == 1 ? Loc.T("{0:N0} item was in use or unreadable and are missing from the export; README.txt in the export lists them.", result.Skipped.Count) : Loc.T("{0:N0} items were in use or unreadable and are missing from the export; README.txt in the export lists them.", result.Skipped.Count));
         if (!result.IncludesBackup)
-            summary += result.Skipped.Count == 0
-                ? " The restorable backup file could not be created, but the copy of your data folder is complete."
-                : " The restorable backup file could not be created either.";
+            summary += " " + (result.Skipped.Count == 0
+                ? Loc.T("The restorable backup file could not be created, but the copy of your data folder is complete.")
+                : Loc.T("The restorable backup file could not be created either."));
         _dataNotice.Text = summary;
     }
 
@@ -196,16 +196,16 @@ internal sealed class SyncBackupView : UserControl
     {
         if (_deleteAllData is null) return;
         InvalidatePreview();
-        var understood = new CheckBox { Content = "I understand that this cannot be undone" };
+        var understood = new CheckBox { Content = Loc.T("I understand that this cannot be undone") };
         var content = new StackPanel { Spacing = 12, MaxWidth = 460 };
-        content.Children.Add(Copy("This permanently deletes everything TypeWhisper stores on this PC: history and its audio, recordings, dictionary, snippets, workflows, settings, plugin settings and API keys, downloaded models, and the license and account sign-in saved on this PC.", 14));
-        content.Children.Add(Copy("Use Export all data first if you want to keep a copy. Files in your cloud sync folder, your TypeWhisper account and your license activations are not changed; to move a license to another PC, use Deactivate this device under Premium first.", 13, true));
-        content.Children.Add(Copy("Active work stops, Start with Windows is turned off and the command line tool installed from this profile is removed, then TypeWhisper restarts and opens setup like a new installation.", 13, true));
+        content.Children.Add(Copy(Loc.T("This permanently deletes everything TypeWhisper stores on this PC: history and its audio, recordings, dictionary, snippets, workflows, settings, plugin settings and API keys, downloaded models, and the license and account sign-in saved on this PC."), 14));
+        content.Children.Add(Copy(Loc.T("Use Export all data first if you want to keep a copy. Files in your cloud sync folder, your TypeWhisper account and your license activations are not changed; to move a license to another PC, use Deactivate this device under Premium first."), 13, true));
+        content.Children.Add(Copy(Loc.T("Active work stops, Start with Windows is turned off and the command line tool installed from this profile is removed, then TypeWhisper restarts and opens setup like a new installation."), 13, true));
         content.Children.Add(understood);
         var dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "Delete all TypeWhisper data?", Content = content,
-            PrimaryButtonText = "Delete everything and restart", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete all TypeWhisper data?"), Content = content,
+            PrimaryButtonText = Loc.T("Delete everything and restart"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close,
             IsPrimaryButtonEnabled = false, PrimaryButtonStyle = (Style)Application.Current.Resources["DestructiveConfirmButtonStyle"]
         };
         understood.Checked += (_, _) => dialog.IsPrimaryButtonEnabled = true;
@@ -215,7 +215,7 @@ internal sealed class SyncBackupView : UserControl
         try { choice = await dialog.ShowAsync(); }
         finally { _dialog = null; }
         if (_unloaded) return;
-        if (choice != ContentDialogResult.Primary || understood.IsChecked != true) { _dataNotice.Text = "Nothing was deleted."; return; }
+        if (choice != ContentDialogResult.Primary || understood.IsChecked != true) { _dataNotice.Text = Loc.T("Nothing was deleted."); return; }
         await _deleteAllData();
     }
 

@@ -10,16 +10,16 @@ public sealed partial class MainWindow
     private WorkflowPaletteWindow? _workflowPalette;
 
     private void InitializeWorkflowPaletteShortcut() => _workflowPaletteShortcut = InitializeActionShortcut(GlobalShortcuts.WorkflowPalette,
-        OpenWorkflowPaletteFromShortcut, 0x8000, "workflow-palette-hotkeys.txt", "Workflow palette shortcuts", "workflow palette");
+        OpenWorkflowPaletteFromShortcut, 0x8000, "workflow-palette-hotkeys.txt", Loc.T("Workflow palette shortcuts"), Loc.T("workflow palette"));
 
-    private string? ChangeWorkflowPaletteShortcut(string value) => ChangeActionShortcut(_workflowPaletteShortcut, "Workflow palette", value);
+    private string? ChangeWorkflowPaletteShortcut(string value) => ChangeActionShortcut(_workflowPaletteShortcut, Loc.T("Workflow palette"), value);
 
     private void OpenWorkflowPaletteFromShortcut()
     {
         if (_closing || _profileRestoreClosing || _workflowShortcutsStopping || ShortcutRecorder.AnyEditing) return;
         // The shortcut toggles the panel, as on macOS.
         if (_workflowPalette is { } open) { open.Dismiss(); return; }
-        if (ShortcutAdmission.Rejection("the workflow palette", ShortcutActionBusy || WorkflowsView.IsBusy || _dictation.Models.Busy) is { } refusal)
+        if (ShortcutAdmission.Rejection(Loc.T("the workflow palette"), ShortcutActionBusy || WorkflowsView.IsBusy || _dictation.Models.Busy) is { } refusal)
         { ShowActivationNotice(refusal); return; }
         var target = ForegroundWindowHistory.CurrentTarget;
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -55,7 +55,7 @@ public sealed partial class MainWindow
         var hasText = !string.IsNullOrWhiteSpace(text);
         if (!hasText && recent.Length == 0)
         {
-            ShowActivationNotice(recentOnly ? "No transcriptions yet. Dictate once, then try again." : "Please select or copy some text first.");
+            ShowActivationNotice(recentOnly ? Loc.T("No transcriptions yet. Dictate once, then try again.") : Loc.T("Please select or copy some text first."));
             return;
         }
         var palette = _workflowPalette = new WorkflowPaletteWindow(workflows, recent, hasText, recentOnly);
@@ -86,16 +86,16 @@ public sealed partial class MainWindow
     private async Task RunPaletteWorkflowAsync(WorkflowPaletteWindow palette, Workflow workflow, string text, PasteTarget? target)
     {
         if (_closing || _workflowShortcutsStopping || _workflowTask is { IsCompleted: false } || !_dictation.CanStartWorkflowShortcut)
-        { palette.ShowMessage("Finish the current recording, transcription or model operation before running a workflow."); return; }
+        { palette.ShowMessage(Loc.T("Finish the current recording, transcription or model operation before running a workflow.")); return; }
         var usesDefault = workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit;
         try { workflow = _dictation.WorkflowDefaults.Resolve(workflow); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { palette.ShowMessage("Default LLM settings could not be loaded. Open Default LLM in Workflows and save the selection again."); return; }
+        { palette.ShowMessage(Loc.T("Default LLM settings could not be loaded. Open Default LLM in Workflows and save the selection again.")); return; }
         if (ManualWorkflowRunner.ConfigurationError(workflow.Behavior.ProviderOverride, workflow.Behavior.ModelOverride,
             (provider, model) => _dictation.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model))) is { } error)
         {
             palette.ShowMessage(workflow.Name + "\n" + (usesDefault
-                ? "The default LLM is missing or unavailable. Open Default LLM in Workflows, or choose a provider and model for this workflow." : error));
+                ? Loc.T("The default LLM is missing or unavailable. Open Default LLM in Workflows, or choose a provider and model for this workflow.") : error));
             return;
         }
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -108,17 +108,17 @@ public sealed partial class MainWindow
             (string Text, string? Message, bool? ActionSucceeded) execution;
             using (_dictation.ReserveWorkflowShortcut())
             {
-                DictationChanged?.Invoke("Workflow: " + workflow.Name, false);
+                DictationChanged?.Invoke(Loc.T("Workflow: {0}", workflow.Name), false);
                 execution = await _dictation.RunWorkflowWithActionAsync(workflow, text, cancellation.Token);
             }
             // A workflow with an action plugin delivers its result there instead of replacing the selection.
-            if (execution.ActionSucceeded is not null) palette.ShowMessage(execution.Message ?? "Completed.");
+            if (execution.ActionSucceeded is not null) palette.ShowMessage(execution.Message ?? Loc.T("Completed."));
             else await DeliverPaletteTextAsync(palette, execution.Text, target);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        { palette.ShowMessage("Canceled. Your selected text was not changed."); }
+        { palette.ShowMessage(Loc.T("Canceled. Your selected text was not changed.")); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { palette.ShowMessage("Processing failed. Your selected text was not changed. " + ex.Message); }
+        { palette.ShowMessage(Loc.T("Processing failed. Your selected text was not changed. {0}", ex.Message)); }
         finally
         {
             _workflowCancellation = null;
@@ -135,7 +135,7 @@ public sealed partial class MainWindow
     // Replaces the selection in the source app; when that app is gone or refuses the paste, the text is copied instead.
     private async Task DeliverPaletteTextAsync(WorkflowPaletteWindow palette, string text, PasteTarget? target)
     {
-        if (string.IsNullOrEmpty(text)) { palette.ShowMessage("The workflow returned no text. Your selected text was not changed."); return; }
+        if (string.IsNullOrEmpty(text)) { palette.ShowMessage(Loc.T("The workflow returned no text. Your selected text was not changed.")); return; }
         if (target is { } destination)
         {
             palette.HideForInsertion();
@@ -146,9 +146,9 @@ public sealed partial class MainWindow
             var content = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
             content.SetText(text);
             global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(content);
-            palette.ShowMessage(target is null ? "Copied to the clipboard." : "The text could not be inserted, so it was copied to the clipboard.");
+            palette.ShowMessage(target is null ? Loc.T("Copied to the clipboard.") : Loc.T("The text could not be inserted, so it was copied to the clipboard."));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { palette.ShowMessage("The text could not be inserted or copied. Try again."); }
+        { palette.ShowMessage(Loc.T("The text could not be inserted or copied. Try again.")); }
     }
 }

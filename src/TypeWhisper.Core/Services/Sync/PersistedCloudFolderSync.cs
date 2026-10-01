@@ -27,19 +27,19 @@ public sealed class PersistedCloudFolderSync
         _root = Path.GetFullPath(profileRoot);
         Preferences = File.Exists(PreferencesPath)
             ? JsonSerializer.Deserialize<CloudFolderSyncPreferences>(File.ReadAllText(PreferencesPath), Json)
-                ?? throw new JsonException("Invalid sync preferences.") : new();
+                ?? throw new JsonException(Loc.T("Invalid sync preferences.")) : new();
     }
 
     /// <summary>Changes the selected folder or pauses sync. Remote files are never removed.</summary>
     public void Configure(string? folder, bool enabled)
     {
-        if (!_gate.Wait(0)) throw new InvalidOperationException("Wait for synchronization to finish.");
+        if (!_gate.Wait(0)) throw new InvalidOperationException(Loc.T("Wait for synchronization to finish."));
         try
         {
             folder = string.IsNullOrWhiteSpace(folder) ? null : Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
-            if (enabled && (folder is null || !Directory.Exists(folder))) throw new IOException("Choose an available sync folder first.");
+            if (enabled && (folder is null || !Directory.Exists(folder))) throw new IOException(Loc.T("Choose an available sync folder first."));
             if (folder is not null && (folder.Equals(_root, StringComparison.OrdinalIgnoreCase) || folder.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("Choose a cloud folder outside the TypeWhisper profile.");
+                throw new InvalidOperationException(Loc.T("Choose a cloud folder outside the TypeWhisper profile."));
             var changed = !string.Equals(folder, Preferences.Folder, StringComparison.OrdinalIgnoreCase);
             var next = new CloudFolderSyncPreferences(folder, enabled, changed ? new() : Preferences.State ?? new());
             Save(next); Preferences = next;
@@ -57,9 +57,9 @@ public sealed class PersistedCloudFolderSync
         try
         {
             var preferences = Preferences;
-            if (!preferences.Enabled) throw new InvalidOperationException("Synchronization is paused.");
+            if (!preferences.Enabled) throw new InvalidOperationException(Loc.T("Synchronization is paused."));
             if (!canUseSync()) throw new CloudFolderSyncNotEntitledException();
-            if (preferences.Folder is null || !Directory.Exists(preferences.Folder)) throw new IOException("The sync folder is unavailable. Check your cloud provider.");
+            if (preferences.Folder is null || !Directory.Exists(preferences.Folder)) throw new IOException(Loc.T("The sync folder is unavailable. Check your cloud provider."));
             var state = CloudFolderSyncJson.Deserialize<CloudFolderSyncState>(CloudFolderSyncJson.Serialize(preferences.State ?? new()))!;
             var dictionaryPath = Path.Combine(_root, "dictionary.json");
             var snippetsPath = Path.Combine(_root, "snippets.json");
@@ -70,7 +70,7 @@ public sealed class PersistedCloudFolderSync
                 dictionaryBytes = Read(dictionaryPath); snippetBytes = Read(snippetsPath);
                 if (dictionaryBytes is null && state.KnownLocalItemIds.Any(id => id.StartsWith("dictionary:", StringComparison.Ordinal)) ||
                     snippetBytes is null && state.KnownLocalItemIds.Any(id => id.StartsWith("snippet:", StringComparison.Ordinal)))
-                    throw new IOException("A previously synchronized local catalog is missing. Restore it before syncing again.");
+                    throw new IOException(Loc.T("A previously synchronized local catalog is missing. Restore it before syncing again."));
                 buffer = new(ReadEntries<DictionaryEntry>(dictionaryBytes), ReadEntries<Snippet>(snippetBytes));
             }
             var result = await Task.Run(() => CloudFolderSyncEngine.SyncAsync(preferences.Folder, buffer, state,
@@ -81,7 +81,7 @@ public sealed class PersistedCloudFolderSync
                 if (!canUseSync()) throw new CloudFolderSyncNotEntitledException();
                 using var mutation = ProfileMutationCoordinator.Enter();
                 if (!Same(dictionaryBytes, Read(dictionaryPath)) || !Same(snippetBytes, Read(snippetsPath)))
-                    throw new InvalidOperationException("Local entries changed during sync. They were kept; synchronize again.");
+                    throw new InvalidOperationException(Loc.T("Local entries changed during sync. They were kept; synchronize again."));
                 // Atomic per catalog. If a later write fails, leave progress unchanged; replay is idempotent.
                 if (buffer.DictionaryChanged) AtomicFileWriter.WriteAllText(dictionaryPath, JsonSerializer.Serialize(buffer.Dictionary, Json));
                 if (buffer.SnippetsChanged) AtomicFileWriter.WriteAllText(snippetsPath, JsonSerializer.Serialize(buffer.Snippets, Json));
@@ -97,7 +97,7 @@ public sealed class PersistedCloudFolderSync
     private void Save(CloudFolderSyncPreferences preferences) => AtomicFileWriter.WriteAllText(PreferencesPath, JsonSerializer.Serialize(preferences, Json));
     private static byte[]? Read(string path) { try { return File.ReadAllBytes(path); } catch (FileNotFoundException) { return null; } catch (DirectoryNotFoundException) { return null; } }
     private static bool Same(byte[]? a, byte[]? b) => a is null ? b is null : b is not null && a.AsSpan().SequenceEqual(b);
-    private static List<T> ReadEntries<T>(byte[]? bytes) => bytes is null ? [] : JsonSerializer.Deserialize<List<T>>(bytes, Json) ?? throw new JsonException("Invalid local catalog.");
+    private static List<T> ReadEntries<T>(byte[]? bytes) => bytes is null ? [] : JsonSerializer.Deserialize<List<T>>(bytes, Json) ?? throw new JsonException(Loc.T("Invalid local catalog."));
 
     private sealed class BufferStore : IUserDataSyncStore
     {
@@ -109,7 +109,7 @@ public sealed class PersistedCloudFolderSync
         {
             if (dictionary.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) || string.IsNullOrWhiteSpace(e.Original)) ||
                 snippets.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) || string.IsNullOrWhiteSpace(e.Trigger) || e.Replacement is null || e.Tags is null))
-                throw new JsonException("Invalid local catalog. No sync was performed.");
+                throw new JsonException(Loc.T("Invalid local catalog. No sync was performed."));
             Dictionary = dictionary; Snippets = snippets;
         }
         private static bool Personal(DictionaryEntry e) => !e.Id.StartsWith("pack:", StringComparison.Ordinal);

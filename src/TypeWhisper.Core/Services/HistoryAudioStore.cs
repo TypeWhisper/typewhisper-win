@@ -90,7 +90,7 @@ public sealed class HistoryAudioStore
                 return true;
             }
             catch (Exception ex) when (Recoverable(ex))
-            { CleanupError = "History audio cleanup could not be prepared. No History entries were removed."; return false; }
+            { CleanupError = Loc.T("History audio cleanup could not be prepared. No History entries were removed."); return false; }
         }
     }
 
@@ -136,11 +136,11 @@ public sealed class HistoryAudioStore
                     WriteIndex(index);
                 }
                 return CleanupError = incomplete
-                    ? "Some saved audio could not be removed or verified. Other pending cleanup finished; retry the remaining audio cleanup."
+                    ? Loc.T("Some saved audio could not be removed or verified. Other pending cleanup finished; retry the remaining audio cleanup.")
                     : null;
             }
             catch (Exception ex) when (Recoverable(ex))
-            { return CleanupError = "Saved audio cleanup could not finish. Existing files were retained where ownership could not be verified; retry cleanup."; }
+            { return CleanupError = Loc.T("Saved audio cleanup could not finish. Existing files were retained where ownership could not be verified; retry cleanup."); }
         }
     }
 

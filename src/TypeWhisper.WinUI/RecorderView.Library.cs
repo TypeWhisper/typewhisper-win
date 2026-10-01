@@ -47,7 +47,7 @@ public sealed partial class RecorderView
 
     private async Task RefreshLibraryAsync(int generation, CancellationToken cancellationToken)
     {
-        LibraryStatus.Text = "Loading recordings…";
+        LibraryStatus.Text = Loc.T("Loading recordings…");
         try
         {
             var entries = await _library.ReadAsync(cancellationToken);
@@ -67,21 +67,21 @@ public sealed partial class RecorderView
             RefreshLibraryActions();
             if (LibraryEntries.SelectedItem is { } item) LibraryEntries.ScrollIntoView(item);
             if (_libraryOpen && _presented) LibraryEntries.Focus(FocusState.Programmatic);
-            LibraryStatus.Text = entries.Count == 0 ? "No saved recordings yet." : $"{entries.Count} saved recording{(entries.Count == 1 ? "" : "s")}";
+            LibraryStatus.Text = entries.Count == 0 ? Loc.T("No saved recordings yet.") : entries.Count == 1 ? Loc.T("{0} saved recording", entries.Count) : Loc.T("{0} saved recordings", entries.Count);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_libraryClosing && generation == _libraryGeneration) LibraryStatus.Text = "Could not load recordings: " + ex.Message; }
+        { if (!_libraryClosing && generation == _libraryGeneration) LibraryStatus.Text = Loc.T("Could not load recordings: {0}", ex.Message); }
     }
 
     private FrameworkElement BuildLibraryEntry(RecorderLibraryEntry entry)
     {
         var row = new StackPanel { Spacing = 8 };
         row.Children.Add(new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(entry.Name), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-        var duration = entry.Duration?.ToString(@"hh\:mm\:ss") ?? "Duration unavailable";
-        var date = entry.CreatedAt == DateTimeOffset.MinValue ? "Date unavailable" : entry.CreatedAt.ToLocalTime().ToString("g");
+        var duration = entry.Duration?.ToString(@"hh\:mm\:ss") ?? Loc.T("Duration unavailable");
+        var date = entry.CreatedAt == DateTimeOffset.MinValue ? Loc.T("Date unavailable") : entry.CreatedAt.ToLocalTime().ToString("g");
         row.Children.Add(new TextBlock { Text = $"{duration} · {date}", FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
-        if (entry.Error is not null) row.Children.Add(new TextBlock { Text = "Could not read recording: " + entry.Error, TextWrapping = TextWrapping.Wrap });
+        if (entry.Error is not null) row.Children.Add(new TextBlock { Text = Loc.T("Could not read recording: {0}", entry.Error), TextWrapping = TextWrapping.Wrap });
         row.Padding = new Thickness(12);
         return new ListViewItem { Content = row, Tag = entry };
     }
@@ -91,10 +91,10 @@ public sealed partial class RecorderView
         if (_libraryClosing) return;
         try
         {
-            if (!System.IO.File.Exists(path)) throw new System.IO.FileNotFoundException("The recording no longer exists.");
+            if (!System.IO.File.Exists(path)) throw new System.IO.FileNotFoundException(Loc.T("The recording no longer exists."));
             Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { LibraryStatus.Text = "Could not open recording: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { LibraryStatus.Text = Loc.T("Could not open recording: {0}", ex.Message); }
     }
 
     private async Task DeleteLibraryEntryAsync(RecorderLibraryEntry entry)
@@ -103,16 +103,16 @@ public sealed partial class RecorderView
         try
         {
             if (IsQueuedSource?.Invoke(entry.FilePath) == true)
-            { LibraryStatus.Text = "Remove this recording from the file queue before deleting it."; return; }
+            { LibraryStatus.Text = Loc.T("Remove this recording from the file queue before deleting it."); return; }
             var confirmation = _libraryConfirmation = new ContentDialog
             {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "Delete recording?",
-                Content = $"Permanently delete {entry.Name}? This cannot be undone.",
-                PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete recording?"),
+                Content = Loc.T("Permanently delete {0}? This cannot be undone.", entry.Name),
+                PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
             };
             if (await confirmation.ShowAsync() != ContentDialogResult.Primary || _libraryClosing) return;
             if (IsQueuedSource?.Invoke(entry.FilePath) == true)
-            { LibraryStatus.Text = "Remove this recording from the file queue before deleting it."; return; }
+            { LibraryStatus.Text = Loc.T("Remove this recording from the file queue before deleting it."); return; }
             StopAudioPlayback();
             _library.Delete(entry.FilePath, IsQueuedSource);
             if (_recorder?.ForgetDeletedFile(entry.FilePath) == true)
@@ -123,7 +123,7 @@ public sealed partial class RecorderView
             BeginLibraryRefresh();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { LibraryStatus.Text = "Could not delete recording: " + ex.Message; }
+        { LibraryStatus.Text = Loc.T("Could not delete recording: {0}", ex.Message); }
         finally { _libraryConfirmation = null; }
     }
 
@@ -132,7 +132,7 @@ public sealed partial class RecorderView
         if (_libraryClosing || !_libraryMutation.IsCompleted) return;
         if (!System.IO.File.Exists(path))
         {
-            LibraryStatus.Text = "The recording no longer exists. Refresh the library.";
+            LibraryStatus.Text = Loc.T("The recording no longer exists. Refresh the library.");
             if (_recorder?.ForgetDeletedFile(path) == true) { _recordingDeleted = true; Refresh(); }
             return;
         }

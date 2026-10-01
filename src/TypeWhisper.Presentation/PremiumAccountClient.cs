@@ -68,7 +68,7 @@ public sealed class PremiumAccountClient
                 codeChallenge = Encode(SHA256.HashData(Encoding.UTF8.GetBytes(verifier))) }, false, ct);
         if (start.AuthorizationURL is null || start.AuthorizationURL.Scheme != "https" || start.AuthorizationURL.Host != "appleid.apple.com" ||
             !start.AuthorizationURL.IsDefaultPort || start.AuthorizationURL.UserInfo.Length != 0 || string.IsNullOrWhiteSpace(start.State) || start.ExpiresAt <= DateTimeOffset.UtcNow)
-            throw new InvalidDataException("The Apple sign-in address could not be verified.");
+            throw new InvalidDataException(Loc.T("The Apple sign-in address could not be verified."));
         _pending = new(start.State, verifier, start.ExpiresAt);
         return start.AuthorizationURL;
     }
@@ -94,12 +94,12 @@ public sealed class PremiumAccountClient
     /// <summary>Consumes one matching callback, verifies access, and saves the completed session.</summary>
     public async Task CompleteAsync(Uri callback, string? licenseKey, string? activationId, CancellationToken ct)
     {
-        if (!Accepts(callback)) throw new InvalidDataException("This Apple sign-in response does not match the pending request.");
+        if (!Accepts(callback)) throw new InvalidDataException(Loc.T("This Apple sign-in response does not match the pending request."));
         var pending = _pending!; _pending = null;
-        if (pending.ExpiresAt <= DateTimeOffset.UtcNow) throw new InvalidOperationException("Apple sign-in expired. Please try again.");
+        if (pending.ExpiresAt <= DateTimeOffset.UtcNow) throw new InvalidOperationException(Loc.T("Apple sign-in expired. Please try again."));
         var values = Query(callback);
-        if (values.ContainsKey("error")) throw new OperationCanceledException("Apple sign-in was canceled.");
-        if (!values.TryGetValue("code", out var code) || string.IsNullOrWhiteSpace(code)) throw new InvalidDataException("Apple sign-in returned no authorization code.");
+        if (values.ContainsKey("error")) throw new OperationCanceledException(Loc.T("Apple sign-in was canceled."));
+        if (!values.TryGetValue("code", out var code) || string.IsNullOrWhiteSpace(code)) throw new InvalidDataException(Loc.T("Apple sign-in returned no authorization code."));
         var session = await Request<Session>("/v1/auth/apple/web/exchange", HttpMethod.Post,
             new { state = pending.State, code, codeVerifier = pending.Verifier }, false, ct);
         ValidateToken(session.AccessToken);
@@ -137,7 +137,7 @@ public sealed class PremiumAccountClient
         if (SignedIn)
         {
             var result = await Request<JsonElement>("/v1/entitlements/polar/device/current", HttpMethod.Delete, null, true, ct);
-            if (!result.TryGetProperty("ok", out var ok) || ok.ValueKind != JsonValueKind.True) throw new InvalidDataException("The device could not be signed out.");
+            if (!result.TryGetProperty("ok", out var ok) || ok.ValueKind != JsonValueKind.True) throw new InvalidDataException(Loc.T("The device could not be signed out."));
         }
         Clear();
     }
@@ -166,7 +166,7 @@ public sealed class PremiumAccountClient
             return entitlement;
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException or JsonException or ArgumentException)
-        { throw new InvalidDataException("The Premium entitlement signature could not be verified."); }
+        { throw new InvalidDataException(Loc.T("The Premium entitlement signature could not be verified.")); }
     }
 
     private async Task<T> Request<T>(string path, HttpMethod method, object? body, bool authenticated, CancellationToken ct)
@@ -176,11 +176,11 @@ public sealed class PremiumAccountClient
         request.Headers.Add("X-TypeWhisper-Device-ID", _deviceId);
         request.Headers.Add("X-TypeWhisper-Platform", "windows");
         request.Headers.Add("X-TypeWhisper-Entitlement-Version", "2");
-        if (authenticated) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token ?? throw new InvalidOperationException("Sign in with Apple first."));
+        if (authenticated) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token ?? throw new InvalidOperationException(Loc.T("Sign in with Apple first.")));
         if (body is not null) request.Content = JsonContent.Create(body);
         using var response = await _http.SendAsync(request, ct);
         if (authenticated && response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) Clear();
-        if (!response.IsSuccessStatusCode) throw new HttpRequestException($"Account request failed (HTTP {(int)response.StatusCode}).");
+        if (!response.IsSuccessStatusCode) throw new HttpRequestException(Loc.T("Account request failed (HTTP {0}).", (int)response.StatusCode));
         return await response.Content.ReadFromJsonAsync<T>(Json, ct) ?? throw new JsonException("Invalid account response.");
     }
     private static string Encode(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');

@@ -51,13 +51,13 @@ public static class DictationTextPipeline
         if (capturedProcessors.Select(item => item.PluginId).Distinct(StringComparer.Ordinal).Count() != capturedProcessors.Length)
             throw new ArgumentException("A text processor may occur only once.", nameof(textProcessors));
         var spokenFormatting = DictationFormatting.Resolve(preferences, engineId, modelId, configuredLanguage, detectedLanguage, task);
-        Func<string, string>? Protect(string name, Func<string, string>? step) => step is null ? null : text =>
+        Func<string, string>? Protect(string warning, Func<string, string>? step) => step is null ? null : text =>
         {
             try { return step(text); }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                warnings.Add($"{name} failed. Text from the preceding step was retained.");
+                warnings.Add(warning);
                 return text;
             }
         };
@@ -68,7 +68,7 @@ public static class DictationTextPipeline
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                warnings.Add("Snippet expansion failed. Text from the preceding step was retained.");
+                warnings.Add(Loc.T("Snippet expansion failed. Text from the preceding step was retained."));
                 return text;
             }
         })];
@@ -91,7 +91,7 @@ public static class DictationTextPipeline
                 {
                     token.ThrowIfCancellationRequested();
                     provenance.Add(new(processor.PluginId, processor.Version, "failed"));
-                    warnings.Add($"Text processor {processor.PluginId} failed. Text from the preceding step was retained.");
+                    warnings.Add(Loc.T("Text processor {0} failed. Text from the preceding step was retained.", processor.PluginId));
                     return text;
                 }
             }));
@@ -125,8 +125,8 @@ public static class DictationTextPipeline
                 TargetProcessName = targetProcessName,
                 AppFormatter = preferences.AppFormattingEnabled ? (text, process) => AppFormatterService.Format(text, process) : null,
                 SpokenFormatter = text => DictationFormatting.Apply(text, spokenFormatting),
-                VocabularyBooster = Protect("Vocabulary boosting", boostVocabulary),
-                DictionaryCorrector = Protect("Dictionary corrections", correctDictionary)
+                VocabularyBooster = Protect(Loc.T("Vocabulary boosting failed. Text from the preceding step was retained."), boostVocabulary),
+                DictionaryCorrector = Protect(Loc.T("Dictionary corrections failed. Text from the preceding step was retained."), correctDictionary)
             }, ct);
             ct.ThrowIfCancellationRequested();
             return new() { Text = result.Text, Warnings = warnings.ToArray(), TextProcessors = provenance.ToArray() };
@@ -137,7 +137,7 @@ public static class DictationTextPipeline
             return new()
             {
                 Text = rawText, Warnings = warnings.ToArray(), TextProcessors = provenance.ToArray(),
-                WorkflowError = "Workflow processing failed. Your transcript was retained for review; nothing was pasted."
+                WorkflowError = Loc.T("Workflow processing failed. Your transcript was retained for review; nothing was pasted.")
             };
         }
     }

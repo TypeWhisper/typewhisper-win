@@ -1,0 +1,121 @@
+using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+namespace TypeWhisper.Core;
+
+/// <summary>An interface language the app can be shown in.</summary>
+/// <param name="Code">Language code, such as "de" or "zh-Hans".</param>
+/// <param name="Name">The language's own name, shown in the language picker.</param>
+public sealed record InterfaceLanguage(string Code, string Name);
+
+/// <summary>
+/// Translates interface text. As in the macOS string catalog, the English text is the key, so text without a
+/// translation is shown in English.
+/// </summary>
+public static partial class Loc
+{
+    private static IReadOnlyDictionary<string, string> _catalog = new Dictionary<string, string>();
+    private static Dictionary<string, string> _english = [];
+    private static (Regex Pattern, string English, int[] Arguments)[]? _englishFormats;
+
+    /// <summary>The languages offered in Settings; they match the macOS app.</summary>
+    public static IReadOnlyList<InterfaceLanguage> Languages { get; } =
+    [
+        new("en", "English"), new("de", "Deutsch"), new("ja", "日本語"), new("zh-Hans", "简体中文")
+    ];
+
+    /// <summary>The code of the language in use.</summary>
+    public static string Language { get; private set; } = "en";
+
+    /// <summary>Returns the saved language if it is offered; otherwise the offered language closest to <paramref name="system"/>.</summary>
+    public static string Resolve(string? saved, CultureInfo system)
+    {
+        if (Languages.Any(language => language.Code == saved)) return saved!;
+        return system.TwoLetterISOLanguageName switch { "de" => "de", "ja" => "ja", "zh" => "zh-Hans", _ => "en" };
+    }
+
+    /// <summary>
+    /// Switches the language for all text requested from now on. Call it once at startup, before any interface text
+    /// is created: text that already exists keeps its language.
+    /// </summary>
+    public static void Use(string language)
+    {
+        Language = Resolve(language, CultureInfo.InvariantCulture);
+        _catalog = Language == "en" ? new Dictionary<string, string>() : Catalog(Language);
+        _english = [];
+        _englishFormats = null;
+        foreach (var entry in _catalog.OrderBy(entry => entry.Key, StringComparer.Ordinal)) _english.TryAdd(entry.Value, entry.Key);
+        // Plugins choose their own translations from the UI culture.
+        var culture = CultureInfo.GetCultureInfo(Language);
+        CultureInfo.CurrentUICulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+    }
+
+    /// <summary>Returns <paramref name="text"/> in the language in use, or unchanged if it has no translation.</summary>
+    public static string T(string text) => _catalog.TryGetValue(text, out var translated) ? translated : text;
+
+    /// <summary>Translates <paramref name="format"/> and fills its numbered placeholders, such as {0}.</summary>
+    public static string T(string format, params object?[] arguments) =>
+        string.Format(CultureInfo.CurrentCulture, T(format), arguments);
+
+    /// <summary>
+    /// Returns <paramref name="text"/> in <paramref name="language"/>, whatever language is in use. For the few texts
+    /// that must be readable in a language that was just chosen and applies after a restart.
+    /// </summary>
+    public static string In(string language, string text) =>
+        language == Language ? T(text) : Catalog(language).TryGetValue(text, out var translated) ? translated : text;
+
+    /// <summary>
+    /// Returns the English text behind a translated <paramref name="text"/>, or the text itself. For code that has to
+    /// recognize a label it did not create, and for the local API, which answers in English. Filled placeholders are
+    /// carried over as they are.
+    /// </summary>
+    public static string English(string text)
+    {
+        if (_english.TryGetValue(text, out var english)) return english;
+        foreach (var (pattern, format, arguments) in _englishFormats ??= EnglishFormats())
+        {
+            if (pattern.Match(text) is not { Success: true } match) continue;
+            var values = new object[arguments.Max() + 1];
+            for (var index = 0; index < arguments.Length; index++) values[arguments[index]] = match.Groups[index + 1].Value;
+            return string.Format(CultureInfo.InvariantCulture, format, values);
+        }
+        return text;
+    }
+
+    // Translations with placeholders, as patterns that find the filled text again; the most specific one comes first.
+    private static (Regex, string, int[])[] EnglishFormats()
+    {
+        var formats = new List<(Regex Pattern, string English, int[] Arguments, int Literal)>();
+        foreach (var (english, translated) in _catalog)
+        {
+            if (translated.Contains("{{") || translated.Contains("}}") || english.Contains("{{")) continue;
+            var placeholders = Placeholder().Matches(translated);
+            var literal = translated.Length - placeholders.Sum(placeholder => placeholder.Length);
+            if (placeholders.Count == 0 || literal < 8) continue;
+            var pattern = "^" + Placeholder().Replace(Regex.Escape(translated).Replace("\\{", "{"), "(.+?)") + "$";
+            formats.Add((new Regex(pattern, RegexOptions.Singleline | RegexOptions.CultureInvariant),
+                Placeholder().Replace(english, placeholder => "{" + placeholder.Groups[1].Value + "}"),
+                placeholders.Select(placeholder => int.Parse(placeholder.Groups[1].Value, CultureInfo.InvariantCulture)).ToArray(), literal));
+        }
+        return formats.OrderByDescending(format => format.Literal).Select(format => (format.Pattern, format.English, format.Arguments)).ToArray();
+    }
+
+    [GeneratedRegex(@"\{(\d+)(?::[^}]*)?\}")]
+    private static partial Regex Placeholder();
+
+    /// <summary>
+    /// Returns <paramref name="text"/> unchanged and registers it for translation. Use it where an English text
+    /// also serves as an identifier, and translate the value with <see cref="T(string)"/> where it is displayed.
+    /// </summary>
+    public static string Mark(string text) => text;
+
+    /// <summary>Returns the translations shipped for <paramref name="language"/>, keyed by English text.</summary>
+    public static IReadOnlyDictionary<string, string> Catalog(string language)
+    {
+        using var stream = typeof(Loc).Assembly.GetManifestResourceStream("Localization/" + language + ".json");
+        if (stream is null) return new Dictionary<string, string>();
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(stream) ?? [];
+    }
+}

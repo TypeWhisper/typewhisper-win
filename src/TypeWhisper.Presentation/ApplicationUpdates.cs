@@ -36,7 +36,7 @@ public sealed class AppUpdatePreferences
             Channel = channel;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { Error = "The saved update channel could not be loaded."; }
+        { Error = Loc.T("The saved update channel could not be loaded."); }
     }
     /// <summary>Atomically saves a valid track; a failed write preserves the current selection.</summary>
     public bool Save(AppUpdateChannel channel)
@@ -48,7 +48,7 @@ public sealed class AppUpdatePreferences
             Channel = channel; Error = null; return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { Error = "The update channel could not be saved."; return false; }
+        { Error = Loc.T("The update channel could not be saved."); return false; }
     }
     /// <summary>Resolves a compatible WinUI feed for a supported Windows architecture.</summary>
     public static string Feed(AppUpdateChannel channel, string architecture) =>
@@ -88,7 +88,7 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
     /// <summary>The available package for the current selection.</summary>
     public AppUpdateOffer? Offer { get; private set; }
     /// <summary>Human-readable operation progress or failure.</summary>
-    public string Status { get; private set; } = preferences.Error ?? backend.UnavailableReason ?? "Choose a channel and check for updates.";
+    public string Status { get; private set; } = preferences.Error ?? backend.UnavailableReason ?? Loc.T("Choose a channel and check for updates.");
     /// <summary>Whether this host can begin another check.</summary>
     public bool CanCheck => !Busy && backend.UnavailableReason is null;
     /// <summary>Notifies UI subscribers after state changes.</summary>
@@ -98,38 +98,38 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
     {
         if (Busy) return false;
         if (!preferences.Save(channel)) { Status = preferences.Error!; Changed?.Invoke(); return false; }
-        Offer = null; Status = backend.UnavailableReason ?? "Channel saved. Check for updates to see available versions.";
+        Offer = null; Status = backend.UnavailableReason ?? Loc.T("Channel saved. Check for updates to see available versions.");
         Changed?.Invoke(); return true;
     }
     /// <summary>Checks the selected track without allowing concurrent selection changes.</summary>
     public async Task CheckAsync()
     {
         if (!CanCheck) return;
-        Busy = true; Offer = null; Status = "Checking for updates…"; Changed?.Invoke();
+        Busy = true; Offer = null; Status = Loc.T("Checking for updates…"); Changed?.Invoke();
         try
         {
             var result = await backend.CheckAsync(preferences.Channel);
             Offer = result.Offer;
-            Status = !result.ChannelPublished ? "No compatible WinUI release is available on this channel yet."
-                : Offer is null ? "You are up to date on this channel."
-                : Offer.IsDowngrade ? $"Version {Offer.Version} is older than your installed version. Installing it switches to the selected channel."
-                : $"Version {Offer.Version} is available.";
+            Status = !result.ChannelPublished ? Loc.T("No compatible WinUI release is available on this channel yet.")
+                : Offer is null ? Loc.T("You are up to date on this channel.")
+                : Offer.IsDowngrade ? Loc.T("Version {0} is older than your installed version. Installing it switches to the selected channel.", Offer.Version)
+                : Loc.T("Version {0} is available.", Offer.Version);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = "Update check failed: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Update check failed: {0}", ex.Message); }
         finally { Busy = false; Changed?.Invoke(); }
     }
     /// <summary>Downloads first, then requests orderly host shutdown and explicit installation.</summary>
     public async Task InstallAsync()
     {
         if (Busy || Offer is not { } offer || backend.UnavailableReason is not null) return;
-        Busy = true; Status = "Downloading update…"; Changed?.Invoke();
+        Busy = true; Status = Loc.T("Downloading update…"); Changed?.Invoke();
         try
         {
             await backend.DownloadAsync(offer);
-            Status = "Finishing work and restarting…"; Changed?.Invoke();
-            Status = await shutdownAndApply(() => backend.Apply(offer)) ?? "Restart requested.";
+            Status = Loc.T("Finishing work and restarting…"); Changed?.Invoke();
+            Status = await shutdownAndApply(() => backend.Apply(offer)) ?? Loc.T("Restart requested.");
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = "Update installation failed: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Update installation failed: {0}", ex.Message); }
         finally { Busy = false; Changed?.Invoke(); }
     }
 }

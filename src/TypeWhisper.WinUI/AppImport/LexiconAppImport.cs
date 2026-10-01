@@ -12,9 +12,10 @@ internal sealed record AppImportBatch(IReadOnlyList<DictionaryEntry> Dictionary,
 internal sealed record AppImportReview(bool IsSnippets, string? Baseline, string Json, IReadOnlyList<AppImportLine> Lines, int Excluded)
 {
     internal int Additions => Lines.Count(line => line.Outcome == AppImportOutcome.Add);
-    internal string Summary => $"{Additions} new · {Lines.Count(line => line.Outcome == AppImportOutcome.Duplicate)} already present · " +
-        $"{Lines.Count(line => line.Outcome == AppImportOutcome.Conflict)} conflicts kept unchanged · " +
-        $"{Excluded + Lines.Count(line => line.Outcome == AppImportOutcome.Unsupported)} excluded";
+    internal string Summary => Loc.T("{0} new · {1} already present · {2} conflicts kept unchanged · {3} excluded",
+        Additions, Lines.Count(line => line.Outcome == AppImportOutcome.Duplicate),
+        Lines.Count(line => line.Outcome == AppImportOutcome.Conflict),
+        Excluded + Lines.Count(line => line.Outcome == AppImportOutcome.Unsupported));
 }
 
 internal static partial class LexiconAppImport
@@ -30,7 +31,7 @@ internal static partial class LexiconAppImport
     {
         if (app == LexiconImportApp.Handy)
         {
-            if (snippets) throw new InvalidDataException("Handy supports word import only.");
+            if (snippets) throw new InvalidDataException(Loc.T("Handy supports word import only."));
             return ReadHandy(path, cancellationToken: cancellationToken);
         }
         return MapWispr(WisprImportDatabase.Read(path, cancellationToken), snippets, cancellationToken);
@@ -38,7 +39,7 @@ internal static partial class LexiconAppImport
 
     internal static AppImportBatch MapWispr(IReadOnlyList<WisprImportRow> rows, bool snippets, CancellationToken cancellationToken = default)
     {
-        if (rows.Count > WisprImportDatabase.MaximumRows) throw new InvalidDataException("Too many source entries. Nothing was imported.");
+        if (rows.Count > WisprImportDatabase.MaximumRows) throw new InvalidDataException(Loc.T("Too many source entries. Nothing was imported."));
         var words = new List<DictionaryEntry>();
         var expansions = new List<Snippet>();
         var excluded = 0;
@@ -75,29 +76,29 @@ internal static partial class LexiconAppImport
             try { return DecodeHandy(first); }
             catch (JsonException) when (attempt < 2) { }
         }
-        throw new IOException("Could not read a stable Handy settings file. Quitting Handy and trying again can help.");
+        throw new IOException(Loc.T("Could not read a stable Handy settings file. Quitting Handy and trying again can help."));
     }
 
     private static AppImportBatch DecodeHandy(byte[] bytes)
     {
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object) throw new JsonException("Choose a Handy settings_store.json file.");
+        if (root.ValueKind != JsonValueKind.Object) throw new JsonException(Loc.T("Choose a Handy settings_store.json file."));
         UniqueFields(root);
         if (!root.TryGetProperty("settings", out var settings) || settings.ValueKind == JsonValueKind.Null) return new([], [], 0);
-        if (settings.ValueKind != JsonValueKind.Object) throw new JsonException("Invalid Handy settings.");
+        if (settings.ValueKind != JsonValueKind.Object) throw new JsonException(Loc.T("Invalid Handy settings."));
         UniqueFields(settings);
         if (!settings.TryGetProperty("custom_words", out var words) || words.ValueKind == JsonValueKind.Null) return new([], [], 0);
-        if (words.ValueKind != JsonValueKind.Array) throw new JsonException("Invalid Handy word list.");
-        if (words.GetArrayLength() > WisprImportDatabase.MaximumRows) throw new InvalidDataException("Handy has more than 10,000 words. Nothing was imported.");
+        if (words.ValueKind != JsonValueKind.Array) throw new JsonException(Loc.T("Invalid Handy word list."));
+        if (words.GetArrayLength() > WisprImportDatabase.MaximumRows) throw new InvalidDataException(Loc.T("Handy has more than 10,000 words. Nothing was imported."));
         return new(words.EnumerateArray().Select(word => word.ValueKind == JsonValueKind.String
-            ? Word(word.GetString()!.Trim()) : throw new JsonException("Invalid Handy word.")).ToArray(), [], 0);
+            ? Word(word.GetString()!.Trim()) : throw new JsonException(Loc.T("Invalid Handy word."))).ToArray(), [], 0);
     }
 
     private static void UniqueFields(JsonElement element)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
-        if (element.EnumerateObject().Any(field => !names.Add(field.Name))) throw new JsonException("Duplicate settings field.");
+        if (element.EnumerateObject().Any(field => !names.Add(field.Name))) throw new JsonException(Loc.T("Duplicate settings field."));
     }
 
     private static byte[] ReadBounded(string path, CancellationToken cancellationToken)
@@ -109,7 +110,7 @@ internal static partial class LexiconAppImport
         while ((count = stream.Read(buffer)) > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (output.Length + count > 8 * 1024 * 1024) throw new InvalidDataException("Choose a Handy settings file smaller than 8 MB.");
+            if (output.Length + count > 8 * 1024 * 1024) throw new InvalidDataException(Loc.T("Choose a Handy settings file smaller than 8 MB."));
             output.Write(buffer, 0, count);
         }
         return output.ToArray();
@@ -143,10 +144,10 @@ internal static partial class LexiconAppImport
                             ? AppImportOutcome.Duplicate : AppImportOutcome.Conflict;
                 }
                 catch (JsonException) { outcome = AppImportOutcome.Unsupported; }
-                lines.Add(new("Snippet", entry.Trigger, entry.Replacement, outcome));
+                lines.Add(new(Loc.T("Snippet"), entry.Trigger, entry.Replacement, outcome));
                 if (outcome == AppImportOutcome.Add) { IncludeEntry(ref budget, serialized.Length); next.Add(entry); }
             }
-            if (next.Count > 10000) throw new InvalidDataException("The resulting snippet list would exceed 10,000 entries.");
+            if (next.Count > 10000) throw new InvalidDataException(Loc.T("The resulting snippet list would exceed 10,000 entries."));
             var json = LexiconTransfer.WriteSnippets(next);
             _ = LexiconTransfer.ReadSnippets(json);
             return new(true, baseline, json, lines, batch.Excluded);
@@ -172,10 +173,10 @@ internal static partial class LexiconAppImport
                             ? AppImportOutcome.Duplicate : AppImportOutcome.Conflict;
                 }
                 catch (JsonException) { outcome = AppImportOutcome.Unsupported; }
-                lines.Add(new(entry.EntryType == DictionaryEntryType.Term ? "Word" : "Correction", entry.Original, entry.Replacement, outcome));
+                lines.Add(new(entry.EntryType == DictionaryEntryType.Term ? Loc.T("Word") : Loc.T("Correction"), entry.Original, entry.Replacement, outcome));
                 if (outcome == AppImportOutcome.Add) { IncludeEntry(ref budget, serialized.Length); next.Add(entry); }
             }
-            if (next.Count > 10000) throw new InvalidDataException("The resulting dictionary would exceed 10,000 entries.");
+            if (next.Count > 10000) throw new InvalidDataException(Loc.T("The resulting dictionary would exceed 10,000 entries."));
             var json = LexiconTransfer.WriteDictionary(next);
             _ = LexiconTransfer.ReadDictionary(json, allowPackEntries: true);
             return new(false, baseline, json, lines, batch.Excluded);
@@ -197,7 +198,7 @@ internal static partial class LexiconAppImport
     private static void IncludeEntry(ref int budget, int length)
     {
         if (length > MaximumCatalogCharacters - budget)
-            throw new InvalidDataException("The resulting catalog would exceed five million JSON characters. Import a smaller selection.");
+            throw new InvalidDataException(Loc.T("The resulting catalog would exceed five million JSON characters. Import a smaller selection."));
         budget += length;
     }
 

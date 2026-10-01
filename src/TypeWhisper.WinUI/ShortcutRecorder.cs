@@ -69,8 +69,8 @@ public sealed class ShortcutRecorder : UserControl
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.Children.Add(new TypeWhisperGlyph { Kind = "keyboard", Width = 18, Height = 18 });
         _value = Text("", 14); Grid.SetColumn(_value, 1); row.Children.Add(_value);
-        var action = Text("Record", 12, true); Grid.SetColumn(action, 2); row.Children.Add(action);
-        _record = Button(row, "SecondaryButtonStyle", $"Record {label} shortcut");
+        var action = Text(Loc.T("Record"), 12, true); Grid.SetColumn(action, 2); row.Children.Add(action);
+        _record = Button(row, "SecondaryButtonStyle", Loc.T("Record {0} shortcut", label));
         _record.MinHeight = 44; _record.HorizontalAlignment = HorizontalAlignment.Stretch;
         _record.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         _record.Click += (_, _) => Begin(_editingIndex); panel.Children.Add(_record);
@@ -82,36 +82,36 @@ public sealed class ShortcutRecorder : UserControl
         {
             Kind = "restore", Width = 16, Height = 16,
             Foreground = (Brush)Application.Current.Resources["MutedBrush"]
-        }, "IconButtonStyle", $"Reset {label} shortcuts");
-        ToolTipService.SetToolTip(reset, "Restore defaults");
+        }, "IconButtonStyle", Loc.T("Reset {0} shortcuts", label));
+        ToolTipService.SetToolTip(reset, Loc.T("Restore defaults"));
         reset.MinWidth = 32; reset.Padding = new Thickness(6);
         reset.Click += (_, _) => SetValue(_defaultValue);
-        _add = Button(Text("+", 20), "SecondaryButtonStyle", $"Add {label} shortcut");
+        _add = Button(Text("+", 20), "SecondaryButtonStyle", Loc.T("Add {0} shortcut", label));
         _add.MinWidth = 34; _add.MinHeight = 34; _add.Padding = new Thickness(6, 0, 6, 0);
-        ToolTipService.SetToolTip(_add, "Add another shortcut");
+        ToolTipService.SetToolTip(_add, Loc.T("Add another shortcut"));
         _add.Click += (_, _) => Begin();
         _normalActions.Children.Add(_add); _normalActions.Children.Add(reset);
         Grid.SetColumn(_normalActions, 1); bindingsRow.Children.Add(_normalActions);
         _editActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Visibility = Visibility.Collapsed };
-        _apply = Button("Use shortcut", "PrimaryButtonStyle", $"Use {label} shortcut");
+        _apply = Button(Loc.T("Use shortcut"), "PrimaryButtonStyle", Loc.T("Use {0} shortcut", label));
         _apply.Click += (_, _) => Apply();
-        var cancel = Button("Cancel", "SecondaryButtonStyle", $"Cancel {label} shortcut capture");
+        var cancel = Button(Loc.T("Cancel"), "SecondaryButtonStyle", Loc.T("Cancel {0} shortcut capture", label));
         cancel.Click += (_, _) => Cancel();
         _editActions.Children.Add(_apply); _editActions.Children.Add(cancel); panel.Children.Add(_editActions);
         var (icon, description) = key switch
         {
-            "MainDictationHotkeys" => ("microphone", "Your everyday dictation"),
-            "CancelProcessingHotkeys" => ("keyboard", "Cancel final dictation processing or an active selected-text workflow"),
-            "PushToTalkHotkey" => ("run", "Speak while holding"),
-            "ToggleOnlyHotkeys" => ("pause", "Press to start or stop"),
-            "HoldOnlyHotkeys" => ("keyboard", "Record while held down"),
-            "RecentTranscriptionsHotkeys" => ("history", "Open recent transcripts"),
-            "CopyLastTranscriptionHotkeys" => ("file", "Copy the last dictation from this session"),
-            "PasteLastTranscriptionHotkeys" => ("text", "Insert the last dictation from this session into the focused app"),
-            "ReadLastTranscriptionHotkeys" => ("audio", "Read last dictation aloud; press again to stop"),
-            "WorkflowPaletteHotkeys" => ("workflow", "Run a text workflow"),
-            "WorkflowSelectedTextHotkeys" => ("workflow", "Activate this workflow · saved when you save the workflow"),
-            _ => ("recorder", "Open the audio recorder")
+            "MainDictationHotkeys" => ("microphone", Loc.T("Your everyday dictation")),
+            "CancelProcessingHotkeys" => ("keyboard", Loc.T("Cancel final dictation processing or an active selected-text workflow")),
+            "PushToTalkHotkey" => ("run", Loc.T("Speak while holding")),
+            "ToggleOnlyHotkeys" => ("pause", Loc.T("Press to start or stop")),
+            "HoldOnlyHotkeys" => ("keyboard", Loc.T("Record while held down")),
+            "RecentTranscriptionsHotkeys" => ("history", Loc.T("Open recent transcripts")),
+            "CopyLastTranscriptionHotkeys" => ("file", Loc.T("Copy the last dictation from this session")),
+            "PasteLastTranscriptionHotkeys" => ("text", Loc.T("Insert the last dictation from this session into the focused app")),
+            "ReadLastTranscriptionHotkeys" => ("audio", Loc.T("Read last dictation aloud; press again to stop")),
+            "WorkflowPaletteHotkeys" => ("workflow", Loc.T("Run a text workflow")),
+            "WorkflowSelectedTextHotkeys" => ("workflow", Loc.T("Activate this workflow · saved when you save the workflow")),
+            _ => ("recorder", Loc.T("Open the audio recorder"))
         };
         var layout = new Grid { ColumnSpacing = 14 };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
@@ -129,7 +129,7 @@ public sealed class ShortcutRecorder : UserControl
         var heading = Text(label, 14); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         copy.Children.Add(heading); copy.Children.Add(Text(description, 12, true));
         if (key == "CancelProcessingHotkeys") ToolTipService.SetToolTip(copy,
-            "Saved global shortcut. Requests cancellation of final dictation processing or an active selected-text workflow without starting a recording. It does not cancel Recorder or file-transcription work. Use a main key; modifier-only shortcuts are unsupported.");
+            Loc.T("Saved global shortcut. Requests cancellation of final dictation processing or an active selected-text workflow without starting a recording. It does not cancel Recorder or file-transcription work. Use a main key; modifier-only shortcuts are unsupported."));
         Grid.SetColumn(copy, 1); layout.Children.Add(copy);
         Grid.SetColumn(panel, 2); layout.Children.Add(panel);
         _shell = new Border
@@ -173,7 +173,7 @@ public sealed class ShortcutRecorder : UserControl
         var current = Current;
         if (current.Length == 0)
         {
-            var empty = Button(Text("Set shortcut", 12, true), "IconButtonStyle", $"Set {_label} shortcut");
+            var empty = Button(Text(Loc.T("Set shortcut"), 12, true), "IconButtonStyle", Loc.T("Set {0} shortcut", _label));
             empty.HorizontalAlignment = HorizontalAlignment.Stretch;
             empty.HorizontalContentAlignment = HorizontalAlignment.Right;
             empty.Click += (_, _) => Begin();
@@ -196,16 +196,16 @@ public sealed class ShortcutRecorder : UserControl
                     CornerRadius = new CornerRadius(5), Padding = new Thickness(7, 4, 7, 4), MinWidth = 28,
                     Child = Text(ShortcutKeys.Label(keycap, ShortcutKeys.LayoutCharacter), 12)
                 });
-            var edit = Button(content, "IconButtonStyle", $"Edit {_label} shortcut {chord}");
+            var edit = Button(content, "IconButtonStyle", Loc.T("Edit {0} shortcut {1}", _label, chord));
             edit.MinHeight = 34; edit.Padding = new Thickness(2);
             edit.HorizontalAlignment = HorizontalAlignment.Right;
             edit.HorizontalContentAlignment = HorizontalAlignment.Left;
             edit.Click += (_, _) => Begin(index);
-            ToolTipService.SetToolTip(edit, "Change this shortcut");
+            ToolTipService.SetToolTip(edit, Loc.T("Change this shortcut"));
             row.Children.Add(edit);
-            var remove = Button("×", "DestructiveButtonStyle", $"Remove {_label} shortcut {chord}");
+            var remove = Button("×", "DestructiveButtonStyle", Loc.T("Remove {0} shortcut {1}", _label, chord));
             remove.MinWidth = 28; remove.MinHeight = 28; remove.Padding = new Thickness(4, 0, 4, 0);
-            ToolTipService.SetToolTip(remove, "Remove this shortcut");
+            ToolTipService.SetToolTip(remove, Loc.T("Remove this shortcut"));
             remove.Click += (_, _) =>
             {
                 SetValue(ShortcutRules.RemoveAt(Current, index));
@@ -230,13 +230,13 @@ public sealed class ShortcutRecorder : UserControl
         _startingCapture = true;
         IsEditing = IsCapturing = true; _candidate = _heldModifiers = ""; _hasMainKey = _altGr = false;
         _downModifiers.Clear();
-        _value.Text = "Press shortcut…";
+        _value.Text = Loc.T("Press shortcut…");
         _record.Visibility = Visibility.Visible;
         _hint.Visibility = Visibility.Visible;
         _shell.BorderBrush = (Brush)Application.Current.Resources["AccentBrush"];
         _shortcuts.IsHitTestVisible = false;
         foreach (var control in _shortcuts.Children.OfType<Grid>().SelectMany(row => row.Children).OfType<Control>().Concat(_shortcuts.Children.OfType<Control>())) control.IsEnabled = false;
-        _hint.Text = "Press keys, then choose Use shortcut. Esc cancels; Tab moves to the buttons.";
+        _hint.Text = Loc.T("Press keys, then choose Use shortcut. Esc cancels; Tab moves to the buttons.");
         _apply.IsEnabled = false;
         _normalActions.Visibility = Visibility.Collapsed; _editActions.Visibility = Visibility.Visible;
         _record.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
@@ -293,7 +293,7 @@ public sealed class ShortcutRecorder : UserControl
         _candidate = candidate;
         var error = Validate(candidate);
         _value.Text = ShortcutKeys.Display(candidate, ShortcutKeys.LayoutCharacter);
-        _hint.Text = error ?? "Ready to use. Choose Use shortcut or press Enter to confirm.";
+        _hint.Text = error ?? Loc.T("Ready to use. Choose Use shortcut or press Enter to confirm.");
         _apply.IsEnabled = error is null;
     }
     private static bool Down(VirtualKey key) => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);

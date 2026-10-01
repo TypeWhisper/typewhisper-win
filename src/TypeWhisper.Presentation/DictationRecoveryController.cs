@@ -36,7 +36,7 @@ public sealed class DictationRecoveryController
     {
         await _store.InitializeAsync(token).ConfigureAwait(false);
         await _store.RefreshAsync(token).ConfigureAwait(false);
-        Message = _store.LastError ?? "Choose an audio recording to transcribe and review. Nothing runs automatically.";
+        Message = _store.LastError ?? Loc.T("Choose an audio recording to transcribe and review. Nothing runs automatically.");
     });
     /// <summary>Transcribes one internally enumerated source; cancellation rejects even a decoder that returns late.</summary>
     public Task RetryAsync(string id) => Run(async token =>
@@ -49,7 +49,7 @@ public sealed class DictationRecoveryController
         {
             if (_closed || token.IsCancellationRequested) return;
             Review = new(id, result);
-            Message = "Review ready. Audio is still saved. Nothing was pasted or added to History.";
+            Message = Loc.T("Review ready. Audio is still saved. Nothing was pasted or added to History.");
         }
     });
     /// <summary>Deletes only the confirmed identifier; the UI must obtain explicit confirmation before calling.</summary>
@@ -58,7 +58,7 @@ public sealed class DictationRecoveryController
         token.ThrowIfCancellationRequested();
         if (!await _store.DeleteAsync(id, token).ConfigureAwait(false))
             throw new IOException("Recovery audio could not be deleted.");
-        Message = "Recovery audio deleted. Your reviewed text is still available.";
+        Message = Loc.T("Recovery audio deleted. Your reviewed text is still available.");
     });
     /// <summary>Requests cancellation without releasing the source or admitting overlapping work.</summary>
     public void Cancel()
@@ -70,7 +70,7 @@ public sealed class DictationRecoveryController
     private void Cancel(CancellationTokenSource? cancellation)
     {
         try { cancellation?.Cancel(); } catch (ObjectDisposedException) { }
-        catch (AggregateException) { Message = "Recovery cancellation was requested, but a decoder callback failed. Waiting for it to finish."; Notify(); }
+        catch (AggregateException) { Message = Loc.T("Recovery cancellation was requested, but a decoder callback failed. Waiting for it to finish."); Notify(); }
     }
     /// <summary>Closes admission, cancels current work, and awaits the actual decoder completion.</summary>
     public Task ShutdownAsync()
@@ -106,10 +106,10 @@ public sealed class DictationRecoveryController
             Notify();
             try { cancellation.Token.ThrowIfCancellationRequested(); await action(cancellation.Token).ConfigureAwait(false); }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-            { Message = "Recovery canceled. Audio and any previous review were kept."; }
+            { Message = Loc.T("Recovery canceled. Audio and any previous review were kept."); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { Message = cancellation.IsCancellationRequested ? "Recovery canceled. Audio and any previous review were kept."
-                : "The recovery action failed. Audio that could not be deleted and any previous review were kept. Retry when the source and model are available."; }
+            { Message = cancellation.IsCancellationRequested ? Loc.T("Recovery canceled. Audio and any previous review were kept.")
+                : Loc.T("The recovery action failed. Audio that could not be deleted and any previous review were kept. Retry when the source and model are available."); }
             finally
             {
                 lock (_sync) { _busy = false; _cancellation = null; }

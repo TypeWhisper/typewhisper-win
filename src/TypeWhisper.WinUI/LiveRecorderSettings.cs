@@ -18,20 +18,20 @@ internal static class LiveRecorderSettings
         var content = new StackPanel { Spacing = 12 };
         parent.Children.Add(content);
         pickers.Clear();
-        content.Children.Add(SettingsHelp.Label("Recorder", "Source choices are saved for your next recording. Changes never switch sources during an active recording.", 24));
+        content.Children.Add(SettingsHelp.Label(Loc.T("Recorder"), Loc.T("Source choices are saved for your next recording. Changes never switch sources during an active recording."), 24));
         var microphone = AppToggleSwitch.Create(preferences.Current.MicrophoneEnabled);
         var system = AppToggleSwitch.Create(preferences.Current.SystemAudioEnabled);
-        AddToggle("Microphone on by default", microphone);
-        AddToggle("System audio on by default", system);
-        content.Children.Add(SettingsHelp.Label("System audio device", "The microphone uses your Audio settings priority list. This output selection controls which system audio is recorded, independently of feedback sounds."));
+        AddToggle(Loc.T("Microphone on by default"), microphone);
+        AddToggle(Loc.T("System audio on by default"), system);
+        content.Children.Add(SettingsHelp.Label(Loc.T("System audio device"), Loc.T("The microphone uses your Audio settings priority list. This output selection controls which system audio is recorded, independently of feedback sounds.")));
         var device = new ChoicePicker();
-        device.Configure("System audio device", "speaker", "Recorder system audio device");
+        device.Configure(Loc.T("System audio device"), "speaker", Loc.T("Recorder system audio device"));
         content.Children.Add(device); pickers.Add(device);
-        var refreshDevices = new HandCursorButton { Content = "Refresh devices", HorizontalAlignment = HorizontalAlignment.Left,
+        var refreshDevices = new HandCursorButton { Content = Loc.T("Refresh devices"), HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         content.Children.Add(refreshDevices);
-        content.Children.Add(SettingsHelp.Label("Audio format: WAV · 16 kHz mono", "Recordings are saved locally. Choose Transcribe on a saved recording to process it."));
-        content.Children.Add(Label("Tracks: Mixed · microphone ducking off", 14));
+        content.Children.Add(SettingsHelp.Label(Loc.T("Audio format: WAV · 16 kHz mono"), Loc.T("Recordings are saved locally. Choose Transcribe on a saved recording to process it.")));
+        content.Children.Add(Label(Loc.T("Tracks: Mixed · microphone ducking off"), 14));
         var status = Label("");
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         content.Children.Add(status);
@@ -49,24 +49,24 @@ internal static class LiveRecorderSettings
             var id = current.OutputDeviceId ?? "";
             var available = choices.Any(choice => choice.Id == id);
             var options = available ? choices : choices.Concat([new Choice(id,
-                "Saved device · unavailable", "Reconnect it or choose another device. No automatic fallback.")]).ToArray();
+                Loc.T("Saved device · unavailable"), Loc.T("Reconnect it or choose another device. No automatic fallback."))]).ToArray();
             device.SetOptions(options, id);
             status.Text = preferences.Error ?? deviceError ?? (!available
-                ? "The saved output is unavailable. Reconnect it or choose another output before recording system audio."
-                : "Saved · applies to the next recording.");
+                ? Loc.T("The saved output is unavailable. Reconnect it or choose another output before recording system audio.")
+                : Loc.T("Saved · applies to the next recording."));
             refreshing = false;
         }
         void RefreshDevices()
         {
-            var available = new List<Choice> { new("", "System default", "Windows default audio output") };
+            var available = new List<Choice> { new("", Loc.T("System default"), Loc.T("Windows default audio output")) };
             deviceError = null;
             try
             {
                 available.AddRange(getDevices().Where(item => !string.IsNullOrWhiteSpace(item.Id))
-                    .DistinctBy(item => item.Id).Select(item => new Choice(item.Id!, item.Name, "System audio capture source")));
+                    .DistinctBy(item => item.Id).Select(item => new Choice(item.Id!, item.Name, Loc.T("System audio capture source"))));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { deviceError = "Audio devices could not be listed. Your saved selection is unchanged."; }
+            { deviceError = Loc.T("Audio devices could not be listed. Your saved selection is unchanged."); }
             choices = available;
             RefreshSelection();
         }

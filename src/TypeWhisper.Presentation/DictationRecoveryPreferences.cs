@@ -50,13 +50,13 @@ public sealed class DictationRecoveryPreferencesStore
         catch (FileNotFoundException) { }
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or KeyNotFoundException or FormatException)
-        { Error = "Recovery preferences could not be loaded. New recovery audio is disabled; existing audio has not been deleted."; }
+        { Error = Loc.T("Recovery preferences could not be loaded. New recovery audio is disabled; existing audio has not been deleted."); }
     }
 
     /// <summary>Persists one explicit choice atomically. This does not delete or change existing audio.</summary>
     public bool Save(DictationRecoveryPreferences next)
     {
-        if (!next.IsValid) { Error = "Choose a supported recovery retention period."; return false; }
+        if (!next.IsValid) { Error = Loc.T("Choose a supported recovery retention period."); return false; }
         try
         {
             AtomicFileWriter.WriteAllBytes(_path, JsonSerializer.SerializeToUtf8Bytes(new { Version = 1, next.Enabled, next.RetentionDays }));
@@ -64,6 +64,6 @@ public sealed class DictationRecoveryPreferencesStore
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { Error = "Recovery preferences could not be saved. The previous choice still applies."; return false; }
+        { Error = Loc.T("Recovery preferences could not be saved. The previous choice still applies."); return false; }
     }
 }

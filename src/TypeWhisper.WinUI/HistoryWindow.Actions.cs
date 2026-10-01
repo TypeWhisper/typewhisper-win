@@ -45,19 +45,19 @@ public sealed partial class HistoryWindow
         {
             menu.Items.Clear();
             var records = SelectedRecords();
-            Add("Copy", CopySelection);
-            var export = new MenuFlyoutSubItem { Text = "Export as…" };
-            foreach (var (label, extension) in new[] { ("Markdown", ".md"), ("Plain Text", ".txt"), ("JSON", ".json") })
+            Add(Loc.T("Copy"), CopySelection);
+            var export = new MenuFlyoutSubItem { Text = Loc.T("Export as…") };
+            foreach (var (label, extension) in new[] { ("Markdown", ".md"), (Loc.T("Plain Text"), ".txt"), ("JSON", ".json") })
             {
                 var item = new MenuFlyoutItem { Text = label };
                 item.Click += (_, _) => _ = ExportAsync(extension);
                 export.Items.Add(item);
             }
             menu.Items.Add(export);
-            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add("Mark Complete", () => _ = SetInboxAsync(true));
-            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add("Reopen", () => _ = SetInboxAsync(false));
+            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true));
+            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false));
             menu.Items.Add(new MenuFlyoutSeparator());
-            Add(records.Length > 1 ? $"Delete {records.Length} Entries…" : "Delete…", () => _ = DeleteSelectionAsync());
+            Add(records.Length > 1 ? Loc.T("Delete {0} Entries…", records.Length) : Loc.T("Delete…"), () => _ = DeleteSelectionAsync());
         };
         return menu;
     }
@@ -74,12 +74,12 @@ public sealed partial class HistoryWindow
             var package = new DataPackage();
             package.SetText(text);
             Clipboard.SetContent(package);
-            _notice.Text = records.Length == 1 ? "Copied to the clipboard." : $"Copied {records.Length} entries to the clipboard.";
+            _notice.Text = records.Length == 1 ? Loc.T("Copied to the clipboard.") : Loc.T("Copied {0} entries to the clipboard.", records.Length);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Trace.TraceError("History copy failed: {0}", ex);
-            _notice.Text = "The clipboard is busy. Try copying again.";
+            _notice.Text = Loc.T("The clipboard is busy. Try copying again.");
         }
     }
 
@@ -90,14 +90,14 @@ public sealed partial class HistoryWindow
         try
         {
             var changed = await _actions.SetInboxCompletedAsync(ids, completed);
-            _notice.Text = changed == 0 ? "Nothing to change." : completed
-                ? $"Marked {changed} {(changed == 1 ? "entry" : "entries")} complete."
-                : $"Reopened {changed} {(changed == 1 ? "entry" : "entries")}.";
+            _notice.Text = changed == 0 ? Loc.T("Nothing to change.") : completed
+                ? changed == 1 ? Loc.T("Marked 1 entry complete.") : Loc.T("Marked {0} entries complete.", changed)
+                : changed == 1 ? Loc.T("Reopened 1 entry.") : Loc.T("Reopened {0} entries.", changed);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Trace.TraceError("History Inbox change failed: {0}", ex);
-            _notice.Text = "The Inbox change could not be saved. Try again.";
+            _notice.Text = Loc.T("The Inbox change could not be saved. Try again.");
         }
         await RefreshAsync();
     }
@@ -111,18 +111,18 @@ public sealed partial class HistoryWindow
             var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(AppWindow.Id)
             {
                 SuggestedFileName = ids.Length == 1 ? "transcript" : "history-selection",
-                Title = ids.Length == 1 ? "Export transcript" : $"Export {ids.Length} entries"
+                Title = ids.Length == 1 ? Loc.T("Export transcript") : Loc.T("Export {0} entries", ids.Length)
             };
-            picker.FileTypeChoices.Add(extension switch { ".txt" => "Plain Text", ".json" => "JSON", _ => "Markdown" }, new List<string> { extension });
+            picker.FileTypeChoices.Add(extension switch { ".txt" => Loc.T("Plain Text"), ".json" => "JSON", _ => "Markdown" }, new List<string> { extension });
             var file = await picker.PickSaveFileAsync();
             if (_closing || file is null) return;
             await _actions.ExportFileAsync(ids, file.Path);
-            _notice.Text = ids.Length == 1 ? "Transcript exported." : $"Exported {ids.Length} entries.";
+            _notice.Text = ids.Length == 1 ? Loc.T("Transcript exported.") : Loc.T("Exported {0} entries.", ids.Length);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Trace.TraceError("History export failed: {0}", ex);
-            _notice.Text = "Export failed. Choose a writable location and try again.";
+            _notice.Text = Loc.T("Export failed. Choose a writable location and try again.");
         }
     }
 
@@ -133,9 +133,9 @@ public sealed partial class HistoryWindow
         var dialog = new ContentDialog
         {
             XamlRoot = Content.XamlRoot,
-            Title = ids.Length == 1 ? "Delete this entry?" : $"Delete {ids.Length} entries?",
-            Content = "The transcript and any saved audio are removed from this PC. This cannot be undone.",
-            PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            Title = ids.Length == 1 ? Loc.T("Delete this entry?") : Loc.T("Delete {0} entries?", ids.Length),
+            Content = Loc.T("The transcript and any saved audio are removed from this PC. This cannot be undone."),
+            PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
         };
         _dialogOpen = true;
         ContentDialogResult result;
@@ -150,14 +150,14 @@ public sealed partial class HistoryWindow
                 _editor = null;
                 _editedId = null;
                 _selection.Clear();
-                _notice.Text = ids.Length == 1 ? "Entry deleted." : $"Deleted {ids.Length} entries.";
+                _notice.Text = ids.Length == 1 ? Loc.T("Entry deleted.") : Loc.T("Deleted {0} entries.", ids.Length);
             }
-            else _notice.Text = "The entries could not be deleted. Your history was not changed.";
+            else _notice.Text = Loc.T("The entries could not be deleted. Your history was not changed.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Trace.TraceError("History delete failed: {0}", ex);
-            _notice.Text = "The entries could not be deleted. Your history was not changed.";
+            _notice.Text = Loc.T("The entries could not be deleted. Your history was not changed.");
         }
         await RefreshAsync();
     }
@@ -173,17 +173,17 @@ public sealed partial class HistoryWindow
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var playing = _playerId == record.Id && _player?.PlaybackSession.PlaybackState == MediaPlaybackState.Playing;
         _playButton = new HandCursorButton { Content = Glyph(playing ? "pause" : "play", 16), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], MinWidth = 40 };
-        AutomationProperties.SetName(_playButton, playing ? "Pause audio" : "Play audio");
+        AutomationProperties.SetName(_playButton, playing ? Loc.T("Pause audio") : Loc.T("Play audio"));
         _playButton.Click += (_, _) => _ = ToggleAudioAsync(record.Id);
         row.Children.Add(_playButton);
         _timeline = new Slider { Minimum = 0, Maximum = 1, IsEnabled = false, VerticalAlignment = VerticalAlignment.Center };
-        AutomationProperties.SetName(_timeline, "Audio position");
+        AutomationProperties.SetName(_timeline, Loc.T("Audio position"));
         _timeline.ValueChanged += Timeline_ValueChanged;
         Grid.SetColumn(_timeline, 1); row.Children.Add(_timeline);
         _position = Text("0:00 / " + Duration(record.DurationSeconds), 12, muted: true);
         _position.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(_position, 2); row.Children.Add(_position);
-        var folder = ActionButton("Show in Folder", () => _ = ShowAudioAsync(record.Id));
+        var folder = ActionButton(Loc.T("Show in Folder"), () => _ = ShowAudioAsync(record.Id));
         Grid.SetColumn(folder, 3); row.Children.Add(folder);
         if (_playerId == record.Id) UpdatePosition();
         return new Border { Child = row, Padding = new Thickness(10, 8, 12, 8), CornerRadius = new CornerRadius(10),
@@ -207,14 +207,14 @@ public sealed partial class HistoryWindow
             UpdatePosition();
             return;
         }
-        if (CanPlayAudio?.Invoke() == false) { _notice.Text = "Finish the current recording or operation before playing audio."; return; }
+        if (CanPlayAudio?.Invoke() == false) { _notice.Text = Loc.T("Finish the current recording or operation before playing audio."); return; }
         StopAudioPlayback();
         try
         {
             if (PrepareAudioPlayback is { } prepare) await prepare();
             var path = await Task.Run(() => AudioPath(id));
             if (_closing || Opened?.Id != id) return;
-            if (path is null) { _notice.Text = "The saved audio is missing. The transcript is still available."; return; }
+            if (path is null) { _notice.Text = Loc.T("The saved audio is missing. The transcript is still available."); return; }
             var file = await StorageFile.GetFileFromPathAsync(path);
             if (_closing || Opened?.Id != id) return;
             var player = _player = new MediaPlayer { AutoPlay = true, Source = MediaSource.CreateFromStorageFile(file) };
@@ -230,7 +230,7 @@ public sealed partial class HistoryWindow
             {
                 if (!ReferenceEquals(_player, player)) return;
                 StopAudioPlayback();
-                _notice.Text = "Audio playback failed. Check your audio output and try again.";
+                _notice.Text = Loc.T("Audio playback failed. Check your audio output and try again.");
             });
             player.PlaybackSession.PlaybackStateChanged += (_, _) => DispatcherQueue.TryEnqueue(() => { if (ReferenceEquals(_player, player)) UpdatePosition(); });
             _playerTimer ??= DispatcherQueue.CreateTimer();
@@ -243,7 +243,7 @@ public sealed partial class HistoryWindow
         {
             Trace.TraceError("History playback failed: {0}", ex);
             StopAudioPlayback();
-            _notice.Text = "The saved audio could not be played. Check the file and audio output.";
+            _notice.Text = Loc.T("The saved audio could not be played. Check the file and audio output.");
         }
     }
 
@@ -262,14 +262,14 @@ public sealed partial class HistoryWindow
         _position.Text = $"{(int)session.Position.TotalMinutes}:{session.Position.Seconds:00} / {(int)duration.TotalMinutes}:{duration.Seconds:00}";
         var playing = session.PlaybackState == MediaPlaybackState.Playing;
         _playButton.Content = Glyph(playing ? "pause" : "play", 16);
-        AutomationProperties.SetName(_playButton, playing ? "Pause audio" : "Play audio");
+        AutomationProperties.SetName(_playButton, playing ? Loc.T("Pause audio") : Loc.T("Play audio"));
     }
 
     private void Timeline_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         if (_updatingTimeline || _player is null) return;
         try { _player.PlaybackSession.Position = TimeSpan.FromSeconds(e.NewValue); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = "Could not seek in this recording."; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = Loc.T("Could not seek in this recording."); }
     }
 
     internal void StopAudioPlayback()
@@ -290,14 +290,14 @@ public sealed partial class HistoryWindow
         try
         {
             var path = await Task.Run(() => AudioPath(id));
-            if (path is null) { _notice.Text = "The saved audio is no longer available. Your transcript was not changed."; return; }
+            if (path is null) { _notice.Text = Loc.T("The saved audio is no longer available. Your transcript was not changed."); return; }
             // The resolver only returns verified WAV files owned by the History audio store.
             using var process = Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Trace.TraceError("History audio folder failed: {0}", ex);
-            _notice.Text = "The audio folder could not be opened.";
+            _notice.Text = Loc.T("The audio folder could not be opened.");
         }
     }
 }
