@@ -17,6 +17,19 @@ public sealed class DictationOverlayStateTests
     }
 
     [Theory]
+    [InlineData(6, false, 1)]
+    [InlineData(0, false, 1)]
+    [InlineData(1, false, 1)]
+    [InlineData(6, true, 6)]
+    [InlineData(1, true, 6)]
+    [InlineData(3, false, 3)]
+    [InlineData(2, true, 2)]
+    public void CaptureDuringModelLoadingShowsRecordingUntilTheUserFinishes(int phase, bool stopped, int expected)
+    {
+        Assert.Equal((DictationPhase)expected, DictationOverlayState.VisiblePhase((DictationPhase)phase, false, earlyCapture: true, earlyStop: stopped));
+    }
+
+    [Theory]
     [InlineData(1, true, false, false)]
     [InlineData(2, true, false, false)]
     [InlineData(3, true, false, false)]

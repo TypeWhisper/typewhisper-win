@@ -173,12 +173,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private bool _showModelLoadingForDictation;
     internal void ShowLoadingForDictationAttempt()
     {
-        if (_phase != DictationPhase.LoadingModel || _disposed) return;
+        // An attempt that can capture right away shows its recording instead.
+        if (_phase != DictationPhase.LoadingModel || _disposed || CanCaptureWhileModelLoads) return;
         _showModelLoadingForDictation = true;
         Changed?.Invoke();
     }
     internal DictationOverlayState OverlayState => new(
-        DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation),
+        DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation, _earlyCapture, _earlyStopSamples is not null),
         _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current, CancelWarning, Cancelled);
     internal string Status { get; private set; } = Loc.T("Loading local transcription plugin…");
     internal const string DefaultShortcut = "Ctrl+Shift";
@@ -561,14 +562,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _audio.SetMicrophonePriorityList(_microphones);
             }
             _providerId = SessionProviderId(_selection.GetSetting<string>("Provider") ?? "local");
+            // Prepare the device without starting capture, so key-down need not initialize it. It is opened
+            // beside the model load, so a dictation started meanwhile does not wait for the device either.
+            var warmUp = Task.Run(_audio.WarmUp);
             SetStatus(Loc.T("Loading model…"), DictationPhase.LoadingModel);
             await PluginRuntime.InitializeAsync();
             if (_disposed) return;
             try { if (Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) await _transcriptionPlugin.InitializeAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { LocalPluginError = ex.Message; }
             if (_disposed) return;
-            // Prepare the device without starting capture, so key-down need not initialize it.
-            var prepared = _audio.WarmUp();
+            var prepared = await warmUp;
             await CtcVocabulary.SetEnabledAsync(Models.Enabled);
             LocalPluginError ??= Models.Error;
             SetStatus(ReadyStatus(prepared));
@@ -584,7 +587,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal Task ToggleAsync() => SetRecordingAsync(null);
     // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
     // hotkey while one is active so it can reach that cancellation before using a provider.
-    internal bool CanStartFromShortcut => CanStartSessionOperation
+    internal bool CanStartFromShortcut => CanCaptureWhileModelLoads || CanStartSessionOperation
         && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (IsReady
 #if DEBUG
         || CorrectionProbeEnabled
@@ -608,6 +611,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal async Task StopAsync()
     {
         if (_disposed || !_audio.IsRecording || _stopPending) return;
+        // The stop itself waits for the model; remember where the user finished speaking.
+        if (_earlyCapture && _earlyStopSamples is null)
+        {
+            _earlyStopSamples = _audio.SampleCountAfterStopDrain;
+            AppDiagnostics.Write("dictation.early-stop");
+            Changed?.Invoke();
+        }
         _stopPending = true;
         try { await SetRecordingAsync(false); }
         finally { _stopPending = false; }
@@ -645,17 +655,25 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null,
-        Action<string>? rejected = null)
+        Action<string>? rejected = null, bool adoptEarlyCapture = false)
     {
-        if (_disposed) return;
+        // Shutdown stops a capture that is never adopted.
+        if (_disposed) { if (adoptEarlyCapture) { _earlyCapture = false; _gate.Release(); } return; }
         // An API-started capture can bypass the input coordinator. Preserve explicit
         // stop intent while its setup holds the gate; never queue a new start.
-        if (recording == false)
+        if (adoptEarlyCapture) { }
+        else if (recording == false)
         {
             await _gate.WaitAsync();
             if (_disposed) { _gate.Release(); return; }
         }
-        else if (!await _gate.WaitAsync(0)) return;
+        else if (!await _gate.WaitAsync(0))
+        {
+            // Return once the microphone is open, so a stop or cancel reaches the capture while the model
+            // loads. API starts report their outcome to the caller and are not deferred.
+            if (captureStarted is null && BeginEarlyCapture()) _ = AdoptEarlyCaptureAsync(workflow);
+            return;
+        }
 #if DEBUG
         if (CorrectionProbeEnabled && !_audio.IsRecording)
         {
@@ -687,15 +705,28 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Task previousRecordingWork = Task.CompletedTask;
         try
         {
-            if (recording.HasValue && recording.Value == _audio.IsRecording) return;
+            if (adoptEarlyCapture)
+            {
+                // Every exit before startup completes discards the capture, like any other aborted start.
+                preparingRecording = true;
+                if (_earlyCancelled) return;
+                if (!_audio.IsRecording)
+                {
+                    _microphoneNotice = MicrophoneNotice() ?? MicrophoneFailure.Generic;
+                    SetStatus(_microphoneStatus = _microphoneNotice);
+                    return;
+                }
+            }
+            else if (recording.HasValue && recording.Value == _audio.IsRecording) return;
             if (!IsReady)
             {
                 AppDiagnostics.Write("dictation.not-ready");
                 SetStatus(Loc.T("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."));
                 return;
             }
-            if (!_audio.IsRecording)
+            if (!_audio.IsRecording || adoptEarlyCapture)
             {
+                if (!adoptEarlyCapture) _earlyStopSamples = null;
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
                 _taskAtStart = globalTaskAtStart;
                 // Unsupported tasks fail before microphone capture. When the model cannot translate
@@ -708,7 +739,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
-                _target = NativeMethods.GetForegroundWindow();
+                _target = adoptEarlyCapture ? _earlyTarget : NativeMethods.GetForegroundWindow();
                 NativeMethods.GetWindowThreadProcessId(_target, out var processId);
                 _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
                 if (_target == IntPtr.Zero || (processId == Environment.ProcessId && _setupOutputAtStart is null))
@@ -726,7 +757,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 StopHistoryPlayback?.Invoke();
                 var speechStopped = SpokenFeedback.CancelAndDrainAsync();
                 var previewStopped = _livePreview.StopAsync();
-                var streamStopped = StopCloudStreamAsync();
+                // An adopted capture has no earlier stream, and its buffered beginning must survive.
+                var streamStopped = adoptEarlyCapture ? Task.CompletedTask : StopCloudStreamAsync();
                 previousRecordingWork = Task.WhenAll(downloadStopped, correctionStopped, speechStopped, previewStopped, streamStopped);
                 // A canceled TTS backend can still be playing until its drain completes.
                 // Avoid recording its tail; model, provider and other cleanup remain deferred.
@@ -758,17 +790,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 preparingRecording = true;
                 // Buffer locally while context matching is pending, even if the global task
                 // is Translate: the matched workflow may explicitly request Transcribe.
-                if (LivePreviewEnabled && ModelSupportsLiveTranscription && UsesRegistryProvider &&
-                    ActiveRegistryProvider is { SupportsStreaming: true }) _streamAudio.Begin();
+                if (!(LivePreviewEnabled && ModelSupportsLiveTranscription && UsesRegistryProvider &&
+                    ActiveRegistryProvider is { SupportsStreaming: true })) _streamAudio.Reset();
+                else if (!adoptEarlyCapture) _streamAudio.Begin();
                 if (preferences.SilenceAutoStopEnabled)
                 {
                     _silenceClock.Restart();
                     _silence = new(TimeSpan.FromSeconds(preferences.SilenceAutoStopSeconds));
                     _silenceTimer.Start();
                 }
-                AppDiagnostics.BeginDictation();
-                AppDiagnostics.Write($"dictation.capture.start engine={_engineAtStart} model={_modelAtStart} task={_taskAtStart} setup={_setupOutputAtStart is not null}");
-                _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
+                if (!adoptEarlyCapture) AppDiagnostics.BeginDictation();
+                AppDiagnostics.Write($"dictation.capture.{(adoptEarlyCapture ? "adopted" : "start")} engine={_engineAtStart} model={_modelAtStart} task={_taskAtStart} setup={_setupOutputAtStart is not null}");
+                if (!adoptEarlyCapture) _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
                 if (!_audio.IsRecording)
                 {
                     AppDiagnostics.Write("dictation.capture.failed");
@@ -784,13 +817,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _targetApp = TargetProcessName(processId);
                 BeginApiDictationGeneration();
                 captureStarted?.Invoke(ApiDictationGeneration);
-                _started = DateTime.UtcNow;
+                _started = DateTime.UtcNow - _audio.RecordingDuration;
                 _lastDuration = TimeSpan.Zero;
-                _sounds.IsEnabled = preferences.SoundFeedbackEnabled;
-                _sounds.OutputDeviceId = preferences.OutputDeviceId;
-                _ducking.OutputDeviceId = preferences.OutputDeviceId;
-                _effects.Begin(preferences);
-                _sounds.PlayStartSound();
+                if (!adoptEarlyCapture) BeginRecordingFeedback(preferences);
                 SetStatus(Loc.T("Recording · {0} to finish", Shortcut));
                 await previousRecordingWork;
                 _operationCancellation.Token.ThrowIfCancellationRequested();
@@ -820,7 +849,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return;
                 }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
-                await StartCloudStreamAsync();
+                // A recording the user already finished needs neither a live stream nor a preview.
+                if (_earlyStopSamples is null) await StartCloudStreamAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 NativeMethods.GetWindowThreadProcessId(_target, out currentTargetProcessId);
@@ -834,7 +864,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
                 _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && TypeWhisper.Core.Models.ParakeetModels.IsParakeetTdt(Models.ActiveModelId) && CtcVocabulary.Enabled;
-                if (_cloudStream is null && LivePreviewEnabled && SupportsLiveTranscription &&
+                if (_cloudStream is null && _earlyStopSamples is null && LivePreviewEnabled && SupportsLiveTranscription &&
                     (!UsesRegistryProvider || ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)))
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
@@ -855,6 +885,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var captured = await _audio.StopRecordingWithRecoveryAsync();
             recoveryLease = captured.RecoveryLease;
             var samples = captured.Samples;
+            if (_earlyStopSamples is { } spoken)
+            {
+                _earlyStopSamples = null;
+                // The microphone stayed open until the model was ready; keep only what was dictated.
+                if (samples?.Length > spoken)
+                {
+                    samples = samples[..spoken];
+                    AppDiagnostics.Write("dictation.early-trim");
+                    _lastDuration = TimeSpan.FromSeconds(spoken / 16000.0);
+                    await StopCloudStreamAsync();
+                }
+            }
             _effects.End();
             _sounds.PlayStopSound();
             // Native decoding cannot be interrupted; drain the cancelled preview
@@ -1018,6 +1060,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         {
             try
             {
+                if (adoptEarlyCapture) _earlyCapture = false;
                 if (preparingRecording)
                 {
                     StopSilenceMonitoring();

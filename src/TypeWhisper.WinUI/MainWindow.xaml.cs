@@ -93,7 +93,11 @@ public sealed partial class MainWindow : Window
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingShortcut?.Value ?? "";
             await _dictation.InitializeAsync();
+            // A dictation captured while the model loaded is waiting to be adopted; the remaining
+            // startup steps yield in between so they do not freeze it or its overlay in one block.
+            await YieldToQueuedWorkAsync();
             if (!_closing) await _httpApi.InitializeAsync();
+            await YieldToQueuedWorkAsync();
             EnsureFileTranscription();
             InitializeWorkflowShortcuts();
             InitializeRecentTranscriptionsShortcut();
@@ -107,6 +111,7 @@ public sealed partial class MainWindow : Window
             InitializeHotkeyRecovery();
             await WinUILicensing.ValidateAsync();
             if (!_closing) await WinUIPremiumAccount.RefreshAsync();
+            await YieldToQueuedWorkAsync();
             if (!_closing)
             {
                 WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
@@ -115,6 +120,13 @@ public sealed partial class MainWindow : Window
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
+    }
+
+    private Task YieldToQueuedWorkAsync()
+    {
+        var resumed = new TaskCompletionSource();
+        if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => resumed.TrySetResult())) resumed.TrySetResult();
+        return resumed.Task;
     }
 
     internal void FinishDictationFromTray()

@@ -14,8 +14,12 @@ internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Dura
     internal bool ShowsCancelled => Cancelled && Phase == DictationPhase.Idle;
     internal string AccessibleMessage => ShowsCancelWarning ? CancelWarning! : ShowsCancelled ? Loc.T("Cancelled") : Message;
 
-    internal static DictationPhase VisiblePhase(DictationPhase phase, bool dictationAttempted) =>
-        phase == DictationPhase.LoadingModel && !dictationAttempted ? DictationPhase.Configuring : phase;
+    // Capture that starts while the model loads shows as recording until the user finishes speaking,
+    // then as loading until the model can transcribe it.
+    internal static DictationPhase VisiblePhase(DictationPhase phase, bool dictationAttempted, bool earlyCapture = false, bool earlyStop = false) =>
+        earlyCapture && phase is DictationPhase.LoadingModel or DictationPhase.Idle or DictationPhase.Recording
+            ? earlyStop ? DictationPhase.LoadingModel : DictationPhase.Recording
+            : phase == DictationPhase.LoadingModel && !dictationAttempted ? DictationPhase.Configuring : phase;
 
     internal bool ShouldShowTranscript(OverlayMode mode, bool enabled, bool supportsLiveTranscription) => enabled &&
         mode != OverlayMode.Minimal && (mode != OverlayMode.Compact || Phase == DictationPhase.Recording) &&
