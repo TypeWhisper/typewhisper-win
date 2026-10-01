@@ -223,6 +223,13 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// Gets the recording duration.
     /// </summary>
     public TimeSpan RecordingDuration => _isRecording ? DateTime.UtcNow - _recordingStartTime : TimeSpan.Zero;
+    /// <summary>
+    /// Gets the number of samples a stop requested now would return, including its drain.
+    /// </summary>
+    public int SampleCountAfterStopDrain
+    {
+        get { lock (_bufferLock) return (_sampleBuffer?.Count ?? 0) + (int)(StopDrainDuration.TotalSeconds * SampleRate); }
+    }
 
     /// <summary>
     /// Sets microphone device.

@@ -10,6 +10,8 @@ internal sealed partial class LocalDictationSession
 
     internal void RequestCancel()
     {
+        // Adoption begins a fresh cancellation scope, so a capture still waiting for its model is marked instead.
+        if (_earlyCapture) _earlyCancelled = true;
         try { _operationCancellation.Cancel(); }
         catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Operation cancellation callback failed: {0}", ex); }
         _livePreview.Cancel();

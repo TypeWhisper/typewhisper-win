@@ -8,6 +8,7 @@ public sealed partial class MainWindow
 
     private void DispatchRecordingShortcut(HybridHotkeyAction action)
     {
+        AppDiagnostics.Write("shortcut." + action.ToString().ToLowerInvariant());
         if (action is HybridHotkeyAction.Start or HybridHotkeyAction.Toggle)
             _dictation.ShowLoadingForDictationAttempt();
         // A modifier chord such as Ctrl+Shift+Left emits Cancel after a rejected Start. Only
