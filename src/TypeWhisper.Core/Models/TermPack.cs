@@ -67,22 +67,22 @@ public sealed record TermPack(string Id, string Name, string Icon, string[] Term
             "OWASP", "CVE", "Pentest", "Firewall", "Zero Trust", "OAuth", "JWT", "SAML",
             "XSS", "CSRF", "SQL Injection", "SIEM", "SOC", "Ransomware", "Phishing"
         ]),
-        new("databases", Loc.T("Datenbanken"), "\U0001F5C4\uFE0F",
+        new("databases", Loc.T("Databases"), "\U0001F5C4\uFE0F",
         [
             "PostgreSQL", "MongoDB", "Redis", "Elasticsearch", "Cassandra", "DynamoDB", "SQLite",
             "MariaDB", "CockroachDB", "InfluxDB", "Neo4j", "Supabase", "PlanetScale", "Prisma", "Drizzle"
         ]),
-        new("medical", Loc.T("Medizin"), "\u2695\uFE0F",
+        new("medical", Loc.T("Medicine"), "\u2695\uFE0F",
         [
             "Anamnese", "Diagnose", "Pathologie", "EKG", "MRT", "CT", "Ultraschall", "Biopsie",
             "Anästhesie", "Kardiologie", "Onkologie", "Orthopädie", "Neurologie", "Pädiatrie", "Radiologie"
         ]),
-        new("finance", Loc.T("Finanzen"), "\U0001F4B0",
+        new("finance", Loc.T("Finance"), "\U0001F4B0",
         [
             "Portfolio", "Derivat", "Bilanz", "EBITDA", "Hedging", "Cashflow", "Rendite", "Dividende",
             "Aktie", "Anleihe", "ETF", "Kryptowährung", "Blockchain", "Fintech", "Liquidität"
         ]),
-        new("music", Loc.T("Musik-Produktion"), "\U0001F3B5",
+        new("music", Loc.T("Music Production"), "\U0001F3B5",
         [
             "DAW", "MIDI", "Equalizer", "Kompressor", "VST", "Synthesizer", "Reverb", "Delay",
             "Sidechain", "Mastering", "Mixing", "Limiter", "Chorus", "Phaser", "Arpeggiator"
