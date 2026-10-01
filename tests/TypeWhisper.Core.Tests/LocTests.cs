@@ -57,6 +57,16 @@ public sealed partial class LocTests : IDisposable
     }
 
     [Fact]
+    public void English_FindsTheSourceOfTranslatedTextWithAndWithoutPlaceholders()
+    {
+        Loc.Use("de");
+
+        Assert.Equal("Restart Now", Loc.English(Loc.T("Restart Now")));
+        Assert.Equal("Could not select model: tiny", Loc.English(Loc.T("Could not select model: {0}", "tiny")));
+        Assert.Equal("Not a known text", Loc.English("Not a known text"));
+    }
+
+    [Fact]
     public void T_FillsPlaceholders()
     {
         Loc.Use("en");

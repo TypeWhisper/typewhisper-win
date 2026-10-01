@@ -149,7 +149,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         return completion.Task;
     }
     internal Func<LocalApiRequest, CancellationToken, Task<LocalApiResponse?>>? RecorderRequest { get; set; }
-    private static LocalApiResponse Error(int code, string message) => LocalApiResponse.Json(code, new { error = new { code = code switch { 400 => "bad_request", 401 => "unauthorized", 404 => "not_found", 405 => "method_not_allowed", 409 => "conflict", 413 => "payload_too_large", 503 => "service_unavailable", _ => "error" }, message } });
+    private static LocalApiResponse Error(int code, string message) => LocalApiResponse.Json(code, new { error = new { code = code switch { 400 => "bad_request", 401 => "unauthorized", 404 => "not_found", 405 => "method_not_allowed", 409 => "conflict", 413 => "payload_too_large", 503 => "service_unavailable", _ => "error" }, message = Loc.English(message) } });
 
     private async Task<LocalApiResponse> HandleAsync(LocalApiRequest request, CancellationToken ct)
     {

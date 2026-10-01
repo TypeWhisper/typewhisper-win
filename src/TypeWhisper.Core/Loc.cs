@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace TypeWhisper.Core;
 
@@ -12,10 +13,11 @@ public sealed record InterfaceLanguage(string Code, string Name);
 /// Translates interface text. As in the macOS string catalog, the English text is the key, so text without a
 /// translation is shown in English.
 /// </summary>
-public static class Loc
+public static partial class Loc
 {
     private static IReadOnlyDictionary<string, string> _catalog = new Dictionary<string, string>();
     private static Dictionary<string, string> _english = [];
+    private static (Regex Pattern, string English, int[] Arguments)[]? _englishFormats;
 
     /// <summary>The languages offered in Settings; they match the macOS app.</summary>
     public static IReadOnlyList<InterfaceLanguage> Languages { get; } =
@@ -42,6 +44,7 @@ public static class Loc
         Language = Resolve(language, CultureInfo.InvariantCulture);
         _catalog = Language == "en" ? new Dictionary<string, string>() : Catalog(Language);
         _english = [];
+        _englishFormats = null;
         foreach (var entry in _catalog.OrderBy(entry => entry.Key, StringComparer.Ordinal)) _english.TryAdd(entry.Value, entry.Key);
         // Plugins choose their own translations from the UI culture.
         var culture = CultureInfo.GetCultureInfo(Language);
@@ -64,10 +67,43 @@ public static class Loc
         language == Language ? T(text) : Catalog(language).TryGetValue(text, out var translated) ? translated : text;
 
     /// <summary>
-    /// Returns the English text behind a translated <paramref name="text"/>, or the text itself. Only for code that
-    /// has to recognize a label it did not create; text with filled placeholders is not recognized.
+    /// Returns the English text behind a translated <paramref name="text"/>, or the text itself. For code that has to
+    /// recognize a label it did not create, and for the local API, which answers in English. Filled placeholders are
+    /// carried over as they are.
     /// </summary>
-    public static string English(string text) => _english.TryGetValue(text, out var english) ? english : text;
+    public static string English(string text)
+    {
+        if (_english.TryGetValue(text, out var english)) return english;
+        foreach (var (pattern, format, arguments) in _englishFormats ??= EnglishFormats())
+        {
+            if (pattern.Match(text) is not { Success: true } match) continue;
+            var values = new object[arguments.Max() + 1];
+            for (var index = 0; index < arguments.Length; index++) values[arguments[index]] = match.Groups[index + 1].Value;
+            return string.Format(CultureInfo.InvariantCulture, format, values);
+        }
+        return text;
+    }
+
+    // Translations with placeholders, as patterns that find the filled text again; the most specific one comes first.
+    private static (Regex, string, int[])[] EnglishFormats()
+    {
+        var formats = new List<(Regex Pattern, string English, int[] Arguments, int Literal)>();
+        foreach (var (english, translated) in _catalog)
+        {
+            if (translated.Contains("{{") || translated.Contains("}}") || english.Contains("{{")) continue;
+            var placeholders = Placeholder().Matches(translated);
+            var literal = translated.Length - placeholders.Sum(placeholder => placeholder.Length);
+            if (placeholders.Count == 0 || literal < 8) continue;
+            var pattern = "^" + Placeholder().Replace(Regex.Escape(translated).Replace("\\{", "{"), "(.+?)") + "$";
+            formats.Add((new Regex(pattern, RegexOptions.Singleline | RegexOptions.CultureInvariant),
+                Placeholder().Replace(english, placeholder => "{" + placeholder.Groups[1].Value + "}"),
+                placeholders.Select(placeholder => int.Parse(placeholder.Groups[1].Value, CultureInfo.InvariantCulture)).ToArray(), literal));
+        }
+        return formats.OrderByDescending(format => format.Literal).Select(format => (format.Pattern, format.English, format.Arguments)).ToArray();
+    }
+
+    [GeneratedRegex(@"\{(\d+)(?::[^}]*)?\}")]
+    private static partial Regex Placeholder();
 
     /// <summary>
     /// Returns <paramref name="text"/> unchanged and registers it for translation. Use it where an English text

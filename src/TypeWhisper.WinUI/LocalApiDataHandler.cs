@@ -25,7 +25,7 @@ internal sealed class LocalApiDataHandler(string dictionaryPath, string workflow
     }
 
     private static LocalApiResponse Error(int status, string message) => LocalApiResponse.Json(status,
-        new { error = new { code = status switch { 400 => "bad_request", 404 => "not_found", 405 => "method_not_allowed", _ => "error" }, message } });
+        new { error = new { code = status switch { 400 => "bad_request", 404 => "not_found", 405 => "method_not_allowed", _ => "error" }, message = Loc.English(message) } });
 
     private LocalApiResponse Workflows(LocalApiRequest request, CancellationToken ct)
     {

@@ -136,7 +136,7 @@ public sealed partial class RecorderView
         error = new
         {
             code = status switch { 400 => "bad_request", 404 => "not_found", 405 => "method_not_allowed", 409 => "conflict", 503 => "service_unavailable", _ => "error" },
-            message
+            message = Loc.English(message)
         }
     });
 }
