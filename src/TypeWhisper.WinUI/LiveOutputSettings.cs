@@ -50,7 +50,7 @@ internal static class LiveOutputSettings
         }
         if (category != "Privacy") return;
         var previewNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("Settings preview"));
-        if (previewNote is not null) previewNote.Text = "History saving is saved for this development profile. Unavailable controls are disabled.";
+        if (previewNote is not null) previewNote.Text = "History saving is saved automatically. Unavailable controls are disabled.";
         var saveRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "SaveToHistoryEnabled"));
         saveRow.Children.Clear();
         var toggle = AppToggleSwitch.Create(store.Current.SaveToHistory);

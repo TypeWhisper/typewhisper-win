@@ -143,8 +143,10 @@ internal static partial class SettingsCatalog
         titleRow.Children.Add(title);
         if (category == "Shortcuts")
             titleRow.Children.Add(SettingsHelp.Button(category, "These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable."));
+        else if (category == "Privacy")
+            titleRow.Children.Add(SettingsHelp.Button(category, "Settings are saved automatically. History retention changes take effect when you choose Apply retention. Unavailable controls are disabled."));
         else if (category is not "Premium" and not "Account & about" and not "Dictation")
-            titleRow.Children.Add(SettingsHelp.Button(category, "Available settings are saved for this development build. Unavailable controls are disabled."));
+            titleRow.Children.Add(SettingsHelp.Button(category, "Settings are saved automatically. Unavailable controls are disabled."));
         target.Children.Add(titleRow);
         if (category == "Premium")
         {
@@ -160,7 +162,7 @@ internal static partial class SettingsCatalog
         if (category == "Shortcuts")
         {
             var guide = Label("Your actions, your keys. Add alternatives with + or click a key to change it.", 13, true);
-            ToolTipService.SetToolTip(guide, "Main dictation and cancel processing shortcuts are global and saved for this development profile. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable.");
+            ToolTipService.SetToolTip(guide, "Main dictation and cancel processing shortcuts are global and saved automatically. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable.");
             target.Children.Add(guide);
             var list = new StackPanel { Spacing = 24 };
             (string Title, string[] Keys)[] groups =
