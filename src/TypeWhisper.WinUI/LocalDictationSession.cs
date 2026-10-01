@@ -490,7 +490,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), isolation: isolation);
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
         PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
-            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId)) { TranscriptionIsolation = isolation };
+            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId)) { TranscriptionIsolation = isolation, IdleUnloadPolicy = ModelIdlePolicy };
         _speechBackend = new(PluginRuntime, new WindowsSystemVoiceBackend());
         SpokenFeedback = new(_speechBackend);
         PluginRuntime.Changed += () => Changed?.Invoke();
@@ -779,6 +779,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return;
                 }
                 AppDiagnostics.Write("dictation.capture.active");
+                PrepareTranscriptionModel();
                 _targetProcessId = processId;
                 _targetApp = TargetProcessName(processId);
                 BeginApiDictationGeneration();

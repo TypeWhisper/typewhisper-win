@@ -12,6 +12,8 @@ public sealed class TranscriptionWorkerFaultedException(string message, Exceptio
 /// Metadata, downloads, removal and settings stay with the in-process plugin instance, which never loads
 /// a model. A crashed worker is restarted and the request retried; repeated crashes on an accelerated
 /// backend switch the engine to its CPU variant, and further crashes pause it instead of looping.
+/// With an idle policy, an unused worker ends after the idle delay; the next request starts a new one,
+/// which loads the selected model again.
 /// </summary>
 public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity, IAsyncDisposable
 {
@@ -24,6 +26,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     private readonly Action<PluginLogLevel, string> _log;
     private readonly TimeProvider _time;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ModelIdleTimer? _idle;
     private ITranscriptionWorkerConnection? _worker;
     private TranscriptionWorkerState? _state;
     private int _consecutiveCrashes;
@@ -37,9 +40,10 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
 
     internal IsolatedTranscriptionEngine(ITranscriptionEnginePlugin inner,
         Func<TranscriptionAccelerationPreference, CancellationToken, Task<ITranscriptionWorkerConnection>> start,
-        Action<PluginLogLevel, string> log, TimeProvider? time = null)
+        Action<PluginLogLevel, string> log, TimeProvider? time = null, ModelIdleUnloadPolicy? idlePolicy = null)
     {
         _inner = inner; _start = start; _log = log; _time = time ?? TimeProvider.System;
+        if (idlePolicy is not null) _idle = new(idlePolicy, ReleaseIdleWorkerAsync);
     }
 
     /// <summary>Whether crashes switched this engine to the CPU until its acceleration preference changes.</summary>
@@ -102,6 +106,16 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     /// <summary>Ends the worker, which releases the model and all native memory.</summary>
     public Task UnloadModelAsync() => StopWorkerAsync();
 
+    /// <summary>
+    /// Starts a stopped worker and loads the selected model before audio arrives, for example when a recording
+    /// begins after an idle release. A running worker is left unchanged.
+    /// </summary>
+    public async Task PrepareAsync(CancellationToken ct = default)
+    {
+        if (_inner.SelectedModelId is not { } modelId) return;
+        await RunAsync(new() { Command = TranscriptionWorkerCommands.Load, ModelId = modelId }, default, ct, onlyIfStopped: true).ConfigureAwait(false);
+    }
+
     public Task<PluginTranscriptionResult> TranscribePcmAsync(ReadOnlyMemory<float> samples, string? language, bool translate, CancellationToken cancellationToken) =>
         TranscribeCoreAsync(new() { AudioFormat = TranscriptionWorkerAudioFormats.Pcm, Language = language, Translate = translate },
             MemoryMarshal.AsBytes(samples.Span).ToArray(), cancellationToken);
@@ -125,12 +139,14 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
         return TranscriptionWorkerProtocol.FromResult(response.Result ?? throw new InvalidDataException("The transcription worker returned no result."));
     }
 
-    private async Task<TranscriptionWorkerMessage> RunAsync(TranscriptionWorkerMessage request, ReadOnlyMemory<byte> payload, CancellationToken ct, bool explicitLoad = false)
+    private async Task<TranscriptionWorkerMessage> RunAsync(TranscriptionWorkerMessage request, ReadOnlyMemory<byte> payload, CancellationToken ct,
+        bool explicitLoad = false, bool onlyIfStopped = false)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (onlyIfStopped && _worker is { IsAlive: true } alive && alive.Acceleration == EffectivePreference()) return new();
             if (explicitLoad) { _pausedUntil = default; _consecutiveCrashes = 0; }
             if (_time.GetUtcNow() < _pausedUntil)
                 throw new TranscriptionWorkerFaultedException(PausedMessage());
@@ -172,6 +188,24 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
                 _consecutiveCrashes = 0;
                 return response;
             }
+        }
+        finally
+        {
+            if (_worker is not null && !_disposed) _idle?.Touch();
+            _gate.Release();
+        }
+    }
+
+    // Ends an idle worker unless a request is running; the model stays selected for the next request.
+    private async Task<bool> ReleaseIdleWorkerAsync()
+    {
+        if (!_gate.Wait(0)) return false;
+        try
+        {
+            if (_disposed || _worker is null) return true;
+            _log(PluginLogLevel.Info, ProviderDisplayName + " released its model after inactivity. The next transcription loads it again.");
+            await DiscardWorkerAsync().ConfigureAwait(false);
+            return true;
         }
         finally { _gate.Release(); }
     }
@@ -242,7 +276,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     private async Task StopWorkerAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
-        try { await DiscardWorkerAsync().ConfigureAwait(false); _state = null; }
+        try { _idle?.Cancel(); await DiscardWorkerAsync().ConfigureAwait(false); _state = null; }
         finally { _gate.Release(); }
     }
 
@@ -256,6 +290,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
         {
             if (_disposed) return;
             _disposed = true;
+            _idle?.Dispose();
             await DiscardWorkerAsync().ConfigureAwait(false);
         }
         finally { _gate.Release(); }

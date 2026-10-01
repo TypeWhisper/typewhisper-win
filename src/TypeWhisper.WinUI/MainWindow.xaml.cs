@@ -523,18 +523,7 @@ public sealed partial class MainWindow : Window
                 LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates);
                 if (category == "Advanced")
                 {
-                    content.Children.Clear(); pickers.Clear();
-                    content.Children.Add(new TextBlock { Text = "Advanced", FontSize = 22, Margin = new Thickness(0, 0, 0, 12) });
-                    content.Children.Add(new HttpApiSettingsView(_httpApi));
-                    Border SectionDivider() => new() { Height = 1, Margin = new Thickness(0, 12, 0, 12),
-                        Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["HairlineBrush"] };
-                    content.Children.Add(SectionDivider());
-                    content.Children.Add(new CliSettingsView());
-                    content.Children.Add(SectionDivider());
-                    content.Children.Add(new DiagnosticsSettingsView());
-                    content.Children.Add(SectionDivider());
-                    content.Children.Add(new TextBlock { Text = "Integrations", FontSize = 18 });
-                    content.Children.Add(new RaycastIntegrationView());
+                    AdvancedSettingsPage.Render(content, pickers, _dictation, _httpApi);
                 }
                 if (category == "Shortcuts" && _cancelProcessingShortcut?.Error is { } shortcutError)
                     content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });

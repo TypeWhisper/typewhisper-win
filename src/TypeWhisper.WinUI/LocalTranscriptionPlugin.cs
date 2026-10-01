@@ -261,6 +261,18 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         { Error = "Could not remove model: " + ex.Message; throw; }
         finally { RemovingModelId = null; Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
+    // Starts a worker that was released after inactivity, so the model loads while the user speaks.
+    internal void PrepareForDictation()
+    {
+        if (Ready && _lease?.Engine is IsolatedTranscriptionEngine isolated) _ = PrepareAsync(isolated);
+    }
+
+    // Failures surface on the transcription itself.
+    private async Task PrepareAsync(IsolatedTranscriptionEngine engine)
+    {
+        try { await engine.PrepareAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _host.Log(PluginLogLevel.Warning, "Could not prepare the model: " + ex.Message); }
+    }
     private sealed class InlineProgress(Action<double> report) : IProgress<double> { public void Report(double value) => report(value); }
 
     // Ends the worker before the in-process plugin instance is deactivated.

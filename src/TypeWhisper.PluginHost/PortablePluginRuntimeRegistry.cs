@@ -67,6 +67,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal CancellationTokenSource? Request;
         internal Task CancellationCallbacks = Task.CompletedTask;
         internal string? Directory;
+        // Releases this activation's idle local text model; created once a model is loaded.
+        internal ModelIdleTimer? LocalLlmIdle;
         // Worker adapters for this activation, keyed by the in-process engine they present. Locked for readers
         // outside the gate; only gate holders change it.
         internal readonly Dictionary<ITranscriptionEnginePlugin, IsolatedTranscriptionEngine> Isolated = new(ReferenceEqualityComparer.Instance);
@@ -280,13 +282,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_index.Llm.TryGetValue(selectionId, out var role)) throw new InvalidOperationException("LLM provider is unavailable.");
             owner = role.Owner;
         }
-        return UseAsync(owner, token =>
+        return UseAsync(owner, async token =>
         {
             if (!_index.Llm.TryGetValue(selectionId, out var current) || current.Owner != owner)
                 throw new InvalidOperationException("LLM provider changed.");
             if (requireLocal && !owner.IsLocal)
                 throw new InvalidOperationException("Choose a local LLM for alias suggestions.");
-            return use(current.Provider, token);
+            await RestoreLocalLlmAsync(owner, current.Provider, token).ConfigureAwait(false);
+            try { return await use(current.Provider, token).ConfigureAwait(false); }
+            finally { if (owner.Package?.Plugin is ILocalLlmModelManagement local) TouchLocalLlm(owner, local); }
         }, cancellationToken);
     }
 
@@ -503,7 +507,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var id = provider.GetLlmSelectionId();
                 if (string.IsNullOrWhiteSpace(id) || provider.PluginId != slot.Id || !llm.TryAdd(id, new(slot, provider)))
                     throw new CapabilityCollisionException("LLM capability identity collision or invalid owner: " + id);
-                llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable, Array.AsReadOnly(provider.SupportedModels.ToArray()))
+                // A remembered local model loads on the next request, so its provider stays selectable while released.
+                var restorable = RestorableModel(slot, provider);
+                llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable || restorable is not null,
+                    Array.AsReadOnly(restorable is null ? provider.SupportedModels.ToArray() : [restorable]))
                     { IsLocal = slot.IsLocal });
             }
         }
@@ -525,6 +532,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     // Ends the package's workers before its in-process instances are deactivated.
     private static async Task ReleasePackageAsync(Slot slot, PortablePluginPackage package)
     {
+        slot.LocalLlmIdle?.Dispose();
+        slot.LocalLlmIdle = null;
         IsolatedTranscriptionEngine[] isolated;
         lock (slot.Isolated) { isolated = slot.Isolated.Values.ToArray(); slot.Isolated.Clear(); }
         try

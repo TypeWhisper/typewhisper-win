@@ -8,7 +8,7 @@ Resume follow-up branch: `seofood/gemma-resumable-downloads`; original portable 
 
 ## Setup
 
-Download a model from its card, then choose Load model before selecting it in a workflow. No model is downloaded or loaded automatically on activation. Unload releases memory; Remove unloads the chosen model before deleting its GGUF file.
+Download a model from its card, then choose Load model before selecting it in a workflow. No model is downloaded or loaded automatically on activation. TypeWhisper remembers the model you loaded: after it was released for inactivity (Settings > Advanced > Recording > Unload idle models) or after a restart, the next request loads it again. Unload releases memory and stops this automatic loading; Remove unloads the chosen model before deleting its GGUF file.
 
 Switching directly to another model keeps the current model available until the replacement loads successfully, temporarily requiring memory for both. On memory-constrained machines, choose Unload on the current model first, then load the replacement. This explicit path releases memory before loading; automatic replacement preserves the working model on failure or cancellation.
 

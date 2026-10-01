@@ -15,6 +15,8 @@ public sealed class TranscriptionIsolation(string executablePath, IReadOnlyList<
 
     /// <summary>Raised with the plugin id and a user-facing message; subscribers must dispatch to their UI thread.</summary>
     public event Action<string, string>? Notice;
+    /// <summary>Ends idle workers after this policy's delay; null keeps workers running.</summary>
+    public ModelIdleUnloadPolicy? IdleUnloadPolicy { get; init; }
 
     /// <summary>Returns an isolated adapter, or null when the engine stays in process.</summary>
     public IsolatedTranscriptionEngine? TryIsolate(ITranscriptionEnginePlugin engine, string packageDirectory, IPluginHostServices services)
@@ -30,7 +32,8 @@ public sealed class TranscriptionIsolation(string executablePath, IReadOnlyList<
             if (level >= PluginLogLevel.Warning) AppendLog(logPath, level, message);
         }
         var isolated = new IsolatedTranscriptionEngine(engine,
-            async (acceleration, ct) => await TranscriptionWorkerProcess.StartAsync(launch, acceleration, Log, ct).ConfigureAwait(false), Log);
+            async (acceleration, ct) => await TranscriptionWorkerProcess.StartAsync(launch, acceleration, Log, ct).ConfigureAwait(false), Log,
+            idlePolicy: IdleUnloadPolicy);
         isolated.Notice += message => Notice?.Invoke(engine.PluginId, message);
         return isolated;
     }

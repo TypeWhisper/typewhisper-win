@@ -8,9 +8,9 @@ internal static class LiveCancellationBehaviorSettings
 {
     private const string Hint = "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing.";
 
-    internal static void Configure(string category, StackPanel content, List<ChoicePicker> pickers, LocalDictationSession session)
+    // Fills the Advanced page's Recording row.
+    internal static void Configure(StackPanel content, List<ChoicePicker> pickers, LocalDictationSession session)
     {
-        if (category != "Dictation") return;
         var row = FindRow(content) ?? throw new InvalidOperationException("Cancellation behavior settings row is missing.");
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();

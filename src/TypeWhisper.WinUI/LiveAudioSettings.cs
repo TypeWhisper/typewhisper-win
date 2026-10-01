@@ -25,8 +25,6 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             preferences.OutputDeviceId ?? "", id => Save(session.AudioPreferences with { OutputDeviceId = id }));
         AddToggle("Sound feedback", "Play a short sound when recording starts or stops.", preferences.SoundFeedbackEnabled,
             value => Save(session.AudioPreferences with { SoundFeedbackEnabled = value }));
-        AddToggle("Whisper mode", "Boost quiet speech automatically.", preferences.WhisperModeEnabled,
-            value => Save(session.AudioPreferences with { WhisperModeEnabled = value }));
         AddToggle("Lower audio while recording", "Reduce the selected output's volume, then restore it after recording. This includes TypeWhisper sounds on that output.", preferences.AudioDuckingEnabled,
             value => Save(session.AudioPreferences with { AudioDuckingEnabled = value }));
         var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Select(level => new Choice(level.ToString(), level == 0 ? "Muted" : $"{level}%", "Of the current output volume")).ToArray();
@@ -34,7 +32,6 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             ((int)Math.Round(preferences.AudioDuckingLevel * 100)).ToString(), id => Save(session.AudioPreferences with { AudioDuckingLevel = int.Parse(id) / 100f }));
         AddToggle("Pause media during recording", "Send the media Play/Pause key at start and stop, as in the previous app. Use while media is playing; paused media may start.", preferences.PauseMediaDuringRecording,
             value => Save(session.AudioPreferences with { PauseMediaDuringRecording = value }));
-        content.Children.Add(new SystemVoiceSettingsControl(session, pickers));
         AddToggle("Stop after silence", "Finish and transcribe after a quiet pause, including silence at the start. Waits while shortcut modifiers are held. Background noise may delay stopping.", preferences.SilenceAutoStopEnabled,
             value => Save(session.AudioPreferences with { SilenceAutoStopEnabled = value }));
         var timeouts = new[] { 3, 5, 10, 15, 30 }.Append(preferences.SilenceAutoStopSeconds).Distinct().Order()

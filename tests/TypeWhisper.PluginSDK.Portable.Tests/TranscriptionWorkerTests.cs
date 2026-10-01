@@ -203,6 +203,39 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AnIdleWorkerEndsAndTheNextRequestLoadsTheModelAgain()
+    {
+        var time = new ManualTimeProvider();
+        var isolation = new TranscriptionIsolation(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5))
+            { IdleUnloadPolicy = new(60, time) };
+        await using var engine = isolation.TryIsolate(_inner, PackageDirectory, _host)!;
+        var first = Fields(await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default))["pid"];
+        var worker = Process.GetProcessById(engine.WorkerProcessId!.Value);
+        time.Advance(TimeSpan.FromSeconds(59));
+        Assert.NotNull(engine.WorkerProcessId);
+        time.Advance(TimeSpan.FromSeconds(1));
+        await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await ManualTimeProvider.WaitUntilAsync(() => engine.WorkerProcessId is null);
+        var fields = Fields(await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
+        Assert.NotEqual(first, fields["pid"]);
+        Assert.Equal("small", fields["model"]);
+        Assert.Contains(_logs, line => line == "loaded small in " + fields["pid"]);
+        Assert.Empty(_notices);
+    }
+
+    [Fact]
+    public async Task PreparingLoadsTheSelectedModelOnlyWhenNoWorkerRuns()
+    {
+        await _engine.PrepareAsync();
+        var pid = _engine.WorkerProcessId!.Value;
+        Assert.Contains(_logs, line => line == "loaded small in " + pid);
+        await _engine.PrepareAsync();
+        var fields = Fields(await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
+        Assert.Equal(pid.ToString(), fields["pid"]);
+        Assert.Single(_logs, line => line.StartsWith("loaded small in ", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task PluginActivationErrorsAreNotTreatedAsCrashes()
     {
         var broken = Path.Combine(_root, "broken");

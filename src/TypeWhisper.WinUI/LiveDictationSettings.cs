@@ -16,9 +16,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
         LiveOutputSettings.Configure(category, content, pickers, session);
         LiveHistoryRetentionSettings.Configure(category, content, pickers, session.HistoryRetention);
         LiveRecordingModeSettings.Configure(category, content, pickers, session);
-        LiveCancellationBehaviorSettings.Configure(category, content, pickers, session);
         LiveTextProcessingSettings.Configure(category, content, pickers, session);
-        LiveShortClipSettings.Configure(category, content, session);
         LiveLanguageHintSettings.Configure(category, content, pickers, session);
         LiveSpokenFormattingSettings.Configure(category, content, pickers, session);
         LiveTranscriptionTaskSettings.Configure(category, content, pickers, session);

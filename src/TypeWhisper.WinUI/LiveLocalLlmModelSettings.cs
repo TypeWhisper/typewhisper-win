@@ -58,6 +58,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 Task.FromResult((plugin as ILocalLlmModelManagement)?.LocalModels.ToArray() ?? []), lifetime.Token,
                 refreshCapabilities: false);
             if (!Current(lifetime)) return;
+            var restorable = _session.PluginRuntime.RestorableLocalLlmModel(_pluginId);
             _rows.Clear(); _content.Children.Clear();
             if (models.Length == 0)
             {
@@ -65,11 +66,12 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 _content.Children.Add(_status);
                 return;
             }
-            _content.Children.Add(Label("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device."));
+            _content.Children.Add(Label("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device. " +
+                "An idle model is released as set under Unload idle models in Advanced settings and loads again when needed."));
             _content.Children.Add(_status);
             foreach (var model in models)
             {
-                var row = new Row(model);
+                var row = new Row(model, !model.Loaded && restorable == model.Model.Id);
                 _rows.Add(row); _content.Children.Add(row.Panel);
                 row.Download.Click += async (_, _) => await RunAsync(row, "download");
                 row.Load.Click += async (_, _) => await RunAsync(row, "load");
@@ -154,20 +156,14 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             row.Cancel.Visibility = Visibility.Visible; row.Cancel.IsEnabled = true;
             try
             {
-                await _session.PluginRuntime.UseConfigurationAsync(_pluginId, async (plugin, ct) =>
+                // The runtime remembers a loaded model so it can load again after an idle release or a restart.
+                var runtime = _session.PluginRuntime;
+                await (action switch
                 {
-                    if (plugin is not ILocalLlmModelManagement local || !local.LocalModels.Any(m => m.Model.Id == row.Model.Model.Id))
-                        throw new InvalidOperationException("The local model provider changed.");
-                    switch (action)
-                    {
-                        case "load": await local.LoadModelAsync(row.Model.Model.Id, ct); break;
-                        case "unload":
-                            if (local.LocalModels.Any(m => m.Model.Id == row.Model.Model.Id && m.Loaded)) await local.UnloadModelAsync(ct);
-                            break;
-                        case "remove": await local.RemoveModelAsync(row.Model.Model.Id, ct); break;
-                    }
-                    return true;
-                }, operation.Token, preserveCompletedResult: true);
+                    "load" => runtime.LoadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token),
+                    "unload" => runtime.UnloadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token),
+                    _ => runtime.RemoveLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token)
+                });
                 if (Current(lifetime)) _status.Text = action == "load" ? "Model loaded. Select it in a text-processing workflow." : "Completed.";
             }
             finally { row.Cancel.IsEnabled = false; }
@@ -196,18 +192,20 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         internal readonly HandCursorButton Unload = Button("Unload model");
         internal readonly HandCursorButton Remove = Button("Remove model");
         internal readonly HandCursorButton Cancel = Button("Cancel");
-        internal Row(LocalLlmModelState model)
+        // A remembered model is released from memory but loads again on its next use.
+        internal Row(LocalLlmModelState model, bool remembered)
         {
             Model = model;
             var body = new StackPanel { Spacing = 12 };
             var title = Label(model.Model.DisplayName); title.FontSize = 16; title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
             body.Children.Add(title);
             body.Children.Add(Label(model.Model.SizeDescription + (model.Model.IsRecommended ? " · Recommended" : "")));
-            State = Label(model.Loaded ? "Loaded · ready for text processing" : model.Downloaded ? "Downloaded · 100%" : "Not downloaded");
+            State = Label(model.Loaded ? "Loaded · ready for text processing" : remembered ? "Ready · released while idle, loads again on next use"
+                : model.Downloaded ? "Downloaded · 100%" : "Not downloaded");
             body.Children.Add(State); body.Children.Add(Progress);
             Download.Visibility = model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
-            Load.Visibility = model.Downloaded && !model.Loaded ? Visibility.Visible : Visibility.Collapsed;
-            Unload.Visibility = model.Loaded ? Visibility.Visible : Visibility.Collapsed;
+            Load.Visibility = model.Downloaded && !model.Loaded && !remembered ? Visibility.Visible : Visibility.Collapsed;
+            Unload.Visibility = model.Loaded || remembered ? Visibility.Visible : Visibility.Collapsed;
             Remove.Visibility = model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             Cancel.Visibility = Visibility.Collapsed;
             ToolTipService.SetToolTip(Download, "Download missing files or verify an existing copy.");
@@ -218,7 +216,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             void Theme()
             {
                 Panel.Background = (Brush)Application.Current.Resources["SurfaceBrush"];
-                Panel.BorderBrush = (Brush)Application.Current.Resources[model.Loaded ? "AccentBrush" : "HairlineBrush"];
+                Panel.BorderBrush = (Brush)Application.Current.Resources[model.Loaded || remembered ? "AccentBrush" : "HairlineBrush"];
             }
             Panel.ActualThemeChanged += (_, _) => Theme(); Theme();
             AutomationProperties.SetName(Progress, model.Model.DisplayName + " download progress");
