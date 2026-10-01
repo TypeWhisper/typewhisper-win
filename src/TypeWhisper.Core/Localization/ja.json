@@ -1,0 +1,7 @@
+{
+  "App Language": "アプリの言語",
+  "Choose one of the listed languages.": "一覧にある言語を選択してください。",
+  "Restart Now": "今すぐ再起動",
+  "The language change will take effect after restarting TypeWhisper.": "言語の変更はTypeWhisperを再起動した後に反映されます。",
+  "The language could not be saved. Your previous language still applies.": "言語を保存できませんでした。これまでの言語が引き続き使用されます。"
+}

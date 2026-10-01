@@ -1,0 +1,7 @@
+{
+  "App Language": "应用语言",
+  "Choose one of the listed languages.": "请选择列表中的一种语言。",
+  "Restart Now": "立即重启",
+  "The language change will take effect after restarting TypeWhisper.": "重新启动 TypeWhisper 后，语言更改才会生效。",
+  "The language could not be saved. Your previous language still applies.": "无法保存语言。仍使用之前的语言。"
+}

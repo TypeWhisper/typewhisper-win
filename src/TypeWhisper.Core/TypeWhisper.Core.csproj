@@ -12,6 +12,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\EnglishSpelling\*.tsv" />
     <EmbeddedResource Include="Resources\SpokenFormatting\*.json" />
+    <EmbeddedResource Include="Localization\*.json" LogicalName="Localization/%(Filename)%(Extension)" WithCulture="false" />
   </ItemGroup>
 
 

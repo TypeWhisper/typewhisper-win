@@ -40,7 +40,7 @@ internal static partial class SettingsCatalog
     private static Field Text(string c, string k, string label, string value = "", string hint = "") => new(c, k, label, value, hint);
     private static readonly Field[] Fields =
     [
-        Choice("General", "UiLanguage", "Interface language", "System", "System|English|Deutsch"),
+        Choice("General", "UiLanguage", "App Language", "English", "English"),
         Toggle("General", "AutostartEnabled", "Start with Windows"),
         Choice("Account & about", "UpdateChannel", "Update channel", "Stable", "Stable|Daily|Release Candidate"),
 

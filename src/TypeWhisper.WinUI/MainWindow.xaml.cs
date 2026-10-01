@@ -132,7 +132,7 @@ public sealed partial class MainWindow : Window
         { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) ShowNotice(new AppNotice("Could not finish cancellation. Try again.")); }
     }
     internal Func<Task<string?>>? RestartApplicationAsync { get; set; }
-    private Task<string?> RestartForPluginUpdateAsync()
+    private Task<string?> RestartWhenIdleAsync()
     {
         if (_closing || _profileRestoreClosing || _dictation.Packages.Updates.Busy || !_dictation.CanChangeProvider || _dictation.Models.Busy || _dictation.CtcVocabulary.Busy)
             return Task.FromResult<string?>("Finish recording and processing before restarting TypeWhisper.");
@@ -384,8 +384,8 @@ public sealed partial class MainWindow : Window
         RecorderView.TranscribeRequested += path => OpenFileTranscription(() => _fileTranscription?.AddRecording(path));
         MarketplaceView.ConfigureRuntime(_dictation);
         MarketplaceView.ManageRequested += id => OpenProviderSettings(id);
-        MarketplaceView.RestartRequested = RestartForPluginUpdateAsync;
-        PluginsView.RestartRequested = RestartForPluginUpdateAsync;
+        MarketplaceView.RestartRequested = RestartWhenIdleAsync;
+        PluginsView.RestartRequested = RestartWhenIdleAsync;
         InitializeIntegrationSettings();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "app.ico"));
         AppWindow.Closing += (_, args) =>
@@ -520,6 +520,7 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
+                LiveLanguageSettings.Configure(category, content, pickers, AppLanguage.Store, RestartWhenIdleAsync);
                 LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates);
                 if (category == "Advanced")
                 {
