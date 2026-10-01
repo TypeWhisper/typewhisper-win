@@ -13,11 +13,11 @@ internal static class LiveShortClipSettings
         row.Children.Clear();
         var store = session.TextPreferences;
         var toggle = AppToggleSwitch.Create(store.Current.TranscribeShortQuietClipsAggressively);
-        AutomationProperties.SetName(toggle, "Recognize short, quiet clips");
-        row.Children.Add(SettingsHelp.Label("Recognize short, quiet clips",
-            "Enable to transcribe very quiet audio; silence may produce unwanted text. Clips shorter than 40 ms are always skipped. Changes apply to the next recording."));
+        AutomationProperties.SetName(toggle, Loc.T("Recognize short, quiet clips"));
+        row.Children.Add(SettingsHelp.Label(Loc.T("Recognize short, quiet clips"),
+            Loc.T("Enable to transcribe very quiet audio; silence may produce unwanted text. Clips shorter than 40 ms are always skipped. Changes apply to the next recording.")));
         row.Children.Add(toggle);
-        var status = new TextBlock { Text = store.Error ?? "Saved for the next recording.", FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        var status = new TextBlock { Text = store.Error ?? Loc.T("Saved for the next recording."), FontSize = 12, TextWrapping = TextWrapping.Wrap };
         row.Children.Add(status);
         var restoring = false;
         toggle.Toggled += (_, _) =>
@@ -27,7 +27,7 @@ internal static class LiveShortClipSettings
             restoring = true;
             toggle.IsOn = store.Current.TranscribeShortQuietClipsAggressively;
             restoring = false;
-            status.Text = store.Error ?? "Saved for the next recording.";
+            status.Text = store.Error ?? Loc.T("Saved for the next recording.");
         };
     }
 

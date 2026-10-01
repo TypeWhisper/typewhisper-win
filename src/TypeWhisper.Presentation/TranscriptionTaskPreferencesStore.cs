@@ -30,14 +30,14 @@ public sealed class TranscriptionTaskPreferencesStore
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            Error = "Transcription task could not be loaded. Transcribe is selected. Save your choice to restore this preference.";
+            Error = Loc.T("Transcription task could not be loaded. Transcribe is selected. Save your choice to restore this preference.");
         }
     }
 
     /// <summary>Atomically saves the task; failed writes preserve the previous selection.</summary>
     public string? Save(TranscriptionTask task)
     {
-        if (!Enum.IsDefined(task)) return Error = "Choose a valid transcription task.";
+        if (!Enum.IsDefined(task)) return Error = Loc.T("Choose a valid transcription task.");
         try
         {
             AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new { Task = task.ToString() }));
@@ -46,7 +46,7 @@ public sealed class TranscriptionTaskPreferencesStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Error = "Transcription task could not be saved. Your previous task still applies.";
+            return Error = Loc.T("Transcription task could not be saved. Your previous task still applies.");
         }
     }
 }

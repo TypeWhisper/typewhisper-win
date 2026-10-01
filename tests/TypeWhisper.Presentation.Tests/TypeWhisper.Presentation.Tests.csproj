@@ -45,4 +45,8 @@
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutKeys.cs" Link="ShortcutKeys.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The app files compiled into these tests rely on the app's project-wide import. -->
+    <Using Include="TypeWhisper.Core" />
+  </ItemGroup>
 </Project>

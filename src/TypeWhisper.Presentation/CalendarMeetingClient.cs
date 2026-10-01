@@ -108,7 +108,7 @@ public sealed class CalendarMeetingClient(HttpClient http, Func<CancellationToke
         }
         if (participation == "declined") return null;
         var links = MeetingLink.Extract(urls.ToArray());
-        return links.Count == 0 ? null : new(calendar, id, Text(item, microsoft ? "subject" : "summary") ?? "Meeting", start.Value, end.Value, participation, links);
+        return links.Count == 0 ? null : new(calendar, id, Text(item, microsoft ? "subject" : "summary") ?? Loc.T("Meeting"), start.Value, end.Value, participation, links);
     }
 
     private static DateTimeOffset? Time(JsonElement item, string property, bool microsoft)

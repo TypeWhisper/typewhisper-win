@@ -41,12 +41,12 @@ internal static class AppDiagnostics
 
     internal static string? Configure(DiagnosticLogPreferences preferences)
     {
-        if (Preferences is not { } store || _log is not { } log) return "Diagnostics are not available until TypeWhisper has finished starting.";
+        if (Preferences is not { } store || _log is not { } log) return Loc.T("Diagnostics are not available until TypeWhisper has finished starting.");
         if (store.Save(preferences) is { } error) return error;
         if (log.Configure(preferences)) return null;
         return preferences.Enabled
-            ? "Your choice is saved, but the log could not be updated because another program is using it. TypeWhisper tries again with the next entry."
-            : "The diagnostic log is off, but the existing log could not be deleted because another program is using it. TypeWhisper tries again the next time it starts.";
+            ? Loc.T("Your choice is saved, but the log could not be updated because another program is using it. TypeWhisper tries again with the next entry.")
+            : Loc.T("The diagnostic log is off, but the existing log could not be deleted because another program is using it. TypeWhisper tries again the next time it starts.");
     }
 
     internal static bool Clear() => _log?.Clear() ?? true;

@@ -15,7 +15,7 @@ public sealed partial class FileTranscriptionView : UserControl
 {
     private readonly FileTranscriptionQueue _queue = new(new FileTranscriptionQueueStore(WinUIProfile.DataPath("file-queue.json")));
     private readonly StackPanel _body = new() { Spacing = 14 };
-    private readonly HandCursorButton _headingHelp = SettingsHelp.Button("File transcription", "");
+    private readonly HandCursorButton _headingHelp = SettingsHelp.Button(Loc.T("File transcription"), "");
     private readonly TextBlock _notice = Text("", 12, true);
     private readonly Breadcrumbs _crumbs = new();
     private readonly Border _primaryHost = new();
@@ -37,11 +37,11 @@ public sealed partial class FileTranscriptionView : UserControl
         var root = new Grid { Background = Brush("InkBrush"), RowSpacing = 10, Padding = new Thickness(24, 8, 24, 0) };
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new()); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var header = new StackPanel { Spacing = 14 };
-        _tabs.SetItems([new("queue", "Files"), new("watch", "Watch folder")], "queue");
+        _tabs.SetItems([new("queue", Loc.T("Files")), new("watch", Loc.T("Watch folder"))], "queue");
         _tabs.SelectionChanged += id => { _watchTab = id == "watch"; _result = null; Render(); _tabs.SelectedControl.Focus(FocusState.Programmatic); };
         header.Children.Add(_crumbs);
         header.Children.Add(_tabs);
-        var heading = Text("File transcription", 22); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        var heading = Text(Loc.T("File transcription"), 22); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level1);
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         titleRow.Children.Add(heading); titleRow.Children.Add(_headingHelp);
@@ -76,7 +76,7 @@ public sealed partial class FileTranscriptionView : UserControl
         if (_watcher.Settings?.StartWithApp == true) _watcher.Start();
         session.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !_watchTab && !_queue.Running && !_picking && _result is null) Render(); });
     }
-    internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
+    internal void Present() { _notice.Text = Loc.T("Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."); Render(); }
     internal void Stop() { _queue.Cancel(); _recoveryDialog?.Hide(); }
     internal bool ContainsSource(string path) => _queue.Jobs.Any(job =>
         string.Equals(job.Path, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
@@ -106,7 +106,7 @@ public sealed partial class FileTranscriptionView : UserControl
         _primaryHost.Child = null;
         RenderContent();
         var primary = _actions.Children.OfType<HandCursorButton>().LastOrDefault(button =>
-            button.Style == (Style)Application.Current.Resources["PrimaryButtonStyle"] || button.Content?.ToString()?.StartsWith("Cancel run") == true);
+            button.Style == (Style)Application.Current.Resources["PrimaryButtonStyle"] || button.Content?.ToString() == Loc.T("Cancel run · Enter"));
         if (primary is not null) { _actions.Children.Remove(primary); _primaryHost.Child = primary; }
         if (!_watchTab && (_queue.Running || _picking))
             foreach (var action in _actions.Children.OfType<Control>()) action.IsEnabled = false;
@@ -133,25 +133,25 @@ public sealed partial class FileTranscriptionView : UserControl
     {
         _body.Children.Clear(); _actions.Children.Clear(); _formatPicker = null; _primaryAction = null;
         SettingsHelp.Update(_headingHelp, _watchTab
-            ? "Watch a folder for audio and video files. Finished files are transcribed and exported automatically while TypeWhisper is running, using the model selected in Dictation."
-            : "Choose audio or video files to transcribe using the model selected in Dictation. Up to 20 files, maximum 60 minutes per file. Turn on queue recovery to keep results after closing the app.");
+            ? Loc.T("Watch a folder for audio and video files. Finished files are transcribed and exported automatically while TypeWhisper is running, using the model selected in Dictation.")
+            : Loc.T("Choose audio or video files to transcribe using the model selected in Dictation. Up to 20 files, maximum 60 minutes per file. Turn on queue recovery to keep results after closing the app."));
         if (_watchTab) { RenderWatcher(); return; }
-        _crumbs.SetItems(new("Files", _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? "Queue" : "Result"));
+        _crumbs.SetItems(new(Loc.T("Files"), _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? Loc.T("Queue") : Loc.T("Result")));
         if (_result is not null) { RenderResult(_result); return; }
         var recovery = new CheckBox
         {
-            Content = "Remember this queue after restart", IsChecked = _queue.RecoveryEnabled,
+            Content = Loc.T("Remember this queue after restart"), IsChecked = _queue.RecoveryEnabled,
             IsEnabled = !_queue.Running && !_picking
         };
-        AutomationProperties.SetName(recovery, "Remember file queue after restart");
+        AutomationProperties.SetName(recovery, Loc.T("Remember file queue after restart"));
         void ChangeRecovery()
         {
             var enabled = recovery.IsChecked == true;
             var saved = _queue.SetRecoveryEnabled(enabled);
             _notice.Text = saved ? enabled
-                ? "Queue recovery is on. Saved jobs require an explicit start or retry after restart."
-                : "Queue recovery is off. Saved recovery data was removed; this session’s results remain available."
-                : _queue.RecoveryError ?? "The recovery setting could not be changed.";
+                ? Loc.T("Queue recovery is on. Saved jobs require an explicit start or retry after restart.")
+                : Loc.T("Queue recovery is off. Saved recovery data was removed; this session’s results remain available.")
+                : _queue.RecoveryError ?? Loc.T("The recovery setting could not be changed.");
             Render();
         }
         recovery.Checked += (_, _) => ChangeRecovery();
@@ -159,13 +159,13 @@ public sealed partial class FileTranscriptionView : UserControl
         var recoveryContent = new StackPanel { Spacing = 6 };
         var recoveryRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         recoveryRow.Children.Add(recovery);
-        recoveryRow.Children.Add(SettingsHelp.Button("Queue recovery", "Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data."));
+        recoveryRow.Children.Add(SettingsHelp.Button(Loc.T("Queue recovery"), Loc.T("Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data.")));
         recoveryContent.Children.Add(recoveryRow);
-        _body.Children.Add(new Expander { Header = _queue.RecoveryEnabled ? "Queue recovery is on" : "Queue recovery", Content = recoveryContent, HorizontalAlignment = HorizontalAlignment.Stretch });
+        _body.Children.Add(new Expander { Header = _queue.RecoveryEnabled ? Loc.T("Queue recovery is on") : Loc.T("Queue recovery"), Content = recoveryContent, HorizontalAlignment = HorizontalAlignment.Stretch });
         if (_queue.RecoveryError is { } recoveryError) _body.Children.Add(Text(recoveryError, 12, true));
         if (_queue.RecoveryError is not null)
         {
-            var discardRecovery = Button("Discard saved queue data…", () =>
+            var discardRecovery = Button(Loc.T("Discard saved queue data…"), () =>
             {
                 if (_recoveryOperation.IsCompleted) _recoveryOperation = DiscardRecoveryAsync();
             }, destructive: true);
@@ -174,11 +174,11 @@ public sealed partial class FileTranscriptionView : UserControl
         }
         var dropContent = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         dropContent.Children.Add(new TypeWhisperGlyph { Kind = "file", Width = 28, Height = 28, HorizontalAlignment = HorizontalAlignment.Center });
-        dropContent.Children.Add(Text("Drop audio or video files here", 15));
+        dropContent.Children.Add(Text(Loc.T("Drop audio or video files here"), 15));
         var importActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
-        var browse = Button("Choose files…", async () => await ChooseFiles()); browse.IsEnabled = !_queue.Running && !_picking; importActions.Children.Add(browse);
+        var browse = Button(Loc.T("Choose files…"), async () => await ChooseFiles()); browse.IsEnabled = !_queue.Running && !_picking; importActions.Children.Add(browse);
         dropContent.Children.Add(importActions);
-        dropContent.Children.Add(Text("Audio & video · up to 20 files · maximum 60 minutes per file", 11, true));
+        dropContent.Children.Add(Text(Loc.T("Audio & video · up to 20 files · maximum 60 minutes per file"), 11, true));
         var drop = new Border { Child = dropContent, Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(16), AllowDrop = true };
         drop.DragOver += (_, e) => { e.AcceptedOperation = !_queue.Running && !_picking && e.DataView.Contains(StandardDataFormats.StorageItems) ? DataPackageOperation.Copy : DataPackageOperation.None; drop.BorderBrush = Brush(e.AcceptedOperation == DataPackageOperation.Copy ? "AccentBrush" : "HairlineBrush"); };
         drop.DragLeave += (_, _) => drop.BorderBrush = Brush("HairlineBrush");
@@ -190,47 +190,47 @@ public sealed partial class FileTranscriptionView : UserControl
                 if (_queue.Running || _picking || !e.DataView.Contains(StandardDataFormats.StorageItems)) return;
                 var items = await e.DataView.GetStorageItemsAsync();
                 AddPaths(items.OfType<StorageFile>().Select(file => file.Path));
-                if (items.Any(item => item is not StorageFile)) _notice.Text += " Folders are not supported.";
+                if (items.Any(item => item is not StorageFile)) _notice.Text += " " + Loc.T("Folders are not supported.");
             }
-            catch (Exception) { _notice.Text = "Could not accept this drop. Try Choose files instead."; }
+            catch (Exception) { _notice.Text = Loc.T("Could not accept this drop. Try Choose files instead."); }
             finally { drop.BorderBrush = Brush("HairlineBrush"); deferral.Complete(); }
         };
         if (_queue.Jobs.Count == 0) _body.Children.Add(drop);
-        else _actions.Children.Add(Button("Add files…", async () => await ChooseFiles()));
-        if (_session?.IsReady != true) _body.Children.Add(Text("Choose a ready model in Dictation before starting.", 12, true));
-        else if (!_queue.Running && !_session.CanTranscribeFile) _body.Children.Add(Text("Finish the current recording or model operation before starting.", 12, true));
+        else _actions.Children.Add(Button(Loc.T("Add files…"), async () => await ChooseFiles()));
+        if (_session?.IsReady != true) _body.Children.Add(Text(Loc.T("Choose a ready model in Dictation before starting."), 12, true));
+        else if (!_queue.Running && !_session.CanTranscribeFile) _body.Children.Add(Text(Loc.T("Finish the current recording or model operation before starting."), 12, true));
         if (_queue.Jobs.Count > 0)
         {
-            _body.Children.Add(Text($"{_queue.Jobs.Count} {(_queue.Jobs.Count == 1 ? "file" : "files")} · {_session?.ActiveModelName ?? "No model selected"}", 12, true));
+            _body.Children.Add(Text((_queue.Jobs.Count == 1 ? Loc.T("1 file") : Loc.T("{0} files", _queue.Jobs.Count)) + " · " + (_session?.ActiveModelName ?? Loc.T("No model selected")), 12, true));
             if (_selectedJob is null || !_queue.Jobs.Contains(_selectedJob)) _selectedJob = _queue.Jobs.FirstOrDefault();
             foreach (var job in _queue.Jobs) AddRow(job);
         }
         if (!_queue.Running && _selectedJob is { } selected)
         {
-            var remove = Button("Remove · Del", () => RemoveSelected(), destructive: true); remove.IsEnabled = !_picking;
+            var remove = Button(Loc.T("Remove · Del"), () => RemoveSelected(), destructive: true); remove.IsEnabled = !_picking;
             _actions.Children.Add(remove);
             if (selected.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)
-                _actions.Children.Add(Button("Retry · R", async () => { if (_queue.Retry(selected)) await RunQueue(selected); }));
+                _actions.Children.Add(Button(Loc.T("Retry · R"), async () => { if (_queue.Retry(selected)) await RunQueue(selected); }));
 
         }
         if (!_queue.Running && _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready) > 1)
-            _actions.Children.Add(Button("Export all… · X", async () => await ExportAllAsync()));
+            _actions.Children.Add(Button(Loc.T("Export all… · X"), async () => await ExportAllAsync()));
         if (_queue.Running)
         {
-            _primaryAction = () => { Stop(); _notice.Text = "Canceling… Completed results are kept."; Render(); };
-            _actions.Children.Add(Button("Cancel run · Enter", _primaryAction, destructive: true));
+            _primaryAction = () => { Stop(); _notice.Text = Loc.T("Canceling… Completed results are kept."); Render(); };
+            _actions.Children.Add(Button(Loc.T("Cancel run · Enter"), _primaryAction, destructive: true));
         }
         else
         {
             if (!_queue.Jobs.Any(job => job.Status == FileTranscriptionStatus.Queued) && _selectedJob?.Status == FileTranscriptionStatus.Ready)
             {
                 _primaryAction = OpenSelectedResult;
-                _actions.Children.Add(Button("View result · Enter", _primaryAction, primary: true));
+                _actions.Children.Add(Button(Loc.T("View result · Enter"), _primaryAction, primary: true));
             }
             else
             {
                 _primaryAction = async () => await RunQueue();
-                var start = Button("Start transcription · Enter", _primaryAction, primary: true);
+                var start = Button(Loc.T("Start transcription · Enter"), _primaryAction, primary: true);
                 start.IsEnabled = _session?.CanTranscribeFile == true && !_picking && _queue.Jobs.Any(job => job.Status == FileTranscriptionStatus.Queued); _actions.Children.Add(start);
             }
         }
@@ -238,10 +238,10 @@ public sealed partial class FileTranscriptionView : UserControl
     private async Task RunQueue(FileTranscriptionJob? onlyJob = null)
     {
         if (_session is null || !_session.CanTranscribeFile || _queue.Running) return;
-        _notice.Text = "Transcribing with the model selected in Dictation…";
+        _notice.Text = Loc.T("Transcribing with the model selected in Dictation…");
         try { await _queue.RunAsync(_session.TranscribeFileAsync, _session.AcceptFileResult, onlyJob); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = "File processing failed: " + ex.Message; return; }
-        _notice.Text = $"{_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready)} completed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed)} failed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled)} canceled";
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = Loc.T("File processing failed: {0}", ex.Message); return; }
+        _notice.Text = Loc.T("{0} completed · {1} failed · {2} canceled", _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready), _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed), _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled));
         if (onlyJob?.Status == FileTranscriptionStatus.Ready) { _selectedJob = onlyJob; _result = onlyJob; }
         if (!_watchTab && (_result is null || onlyJob?.Status == FileTranscriptionStatus.Ready)) Render();
         if (onlyJob?.Status == FileTranscriptionStatus.Ready && !_watchTab) FocusPrimaryAction();
@@ -254,22 +254,22 @@ public sealed partial class FileTranscriptionView : UserControl
         {
             var dialog = _recoveryDialog = new ContentDialog
             {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "Discard saved queue data?",
-                Content = "Remove the saved recovery queue and turn recovery off? Original media files and this session’s results are kept.",
-                PrimaryButtonText = "Discard saved data", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Discard saved queue data?"),
+                Content = Loc.T("Remove the saved recovery queue and turn recovery off? Original media files and this session’s results are kept."),
+                PrimaryButtonText = Loc.T("Discard saved data"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
             };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary && !_queue.IsShutdown)
-                _notice.Text = _queue.DiscardRecoveryData() ? "Saved queue recovery data was removed." : _queue.RecoveryError ?? "Recovery data could not be removed.";
+                _notice.Text = _queue.DiscardRecoveryData() ? Loc.T("Saved queue recovery data was removed.") : _queue.RecoveryError ?? Loc.T("Recovery data could not be removed.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_queue.IsShutdown) _notice.Text = "Saved recovery data could not be discarded. Try again."; }
+        { if (!_queue.IsShutdown) _notice.Text = Loc.T("Saved recovery data could not be discarded. Try again."); }
         finally
         {
             _recoveryDialog = null; _picking = false;
             if (!_queue.IsShutdown)
                 try { Render(); }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { _notice.Text = "The queue view could not be refreshed. Reopen Files to try again."; }
+                { _notice.Text = Loc.T("The queue view could not be refreshed. Reopen Files to try again."); }
         }
     }
     private void AddRow(FileTranscriptionJob job)
@@ -282,12 +282,12 @@ public sealed partial class FileTranscriptionView : UserControl
         var row = new HandCursorButton { Content = labels, Padding = new Thickness(12), HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources[_selectedJob == job ? "PrimaryButtonStyle" : "SecondaryButtonStyle"] };
         AutomationProperties.SetName(row, job.Name + ", " + job.Stage);
-        AutomationProperties.SetItemStatus(row, _selectedJob == job ? "Selected" : "Not selected");
+        AutomationProperties.SetItemStatus(row, _selectedJob == job ? Loc.T("Selected") : Loc.T("Not selected"));
         row.ContextFlyout = EntryActionMenu.Create([
-            new("View result", () => { _selectedJob = job; OpenSelectedResult(); }, job.Status == FileTranscriptionStatus.Ready),
-            new("Transcribe", () => { _selectedJob = job; _ = RunQueue(job); }, !_queue.Running && job.Status == FileTranscriptionStatus.Queued && _session?.CanTranscribeFile == true),
-            new("Retry", () => { _selectedJob = job; if (_queue.Retry(job)) _ = RunQueue(job); }, !_queue.Running && job.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled),
-            new("Remove · Del", () => { _selectedJob = job; RemoveSelected(); }, !_queue.Running && !_picking)
+            new(Loc.T("View result"), () => { _selectedJob = job; OpenSelectedResult(); }, job.Status == FileTranscriptionStatus.Ready),
+            new(Loc.T("Transcribe"), () => { _selectedJob = job; _ = RunQueue(job); }, !_queue.Running && job.Status == FileTranscriptionStatus.Queued && _session?.CanTranscribeFile == true),
+            new(Loc.T("Retry"), () => { _selectedJob = job; if (_queue.Retry(job)) _ = RunQueue(job); }, !_queue.Running && job.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled),
+            new(Loc.T("Remove · Del"), () => { _selectedJob = job; RemoveSelected(); }, !_queue.Running && !_picking)
         ]);
         row.Click += (_, _) => { _selectedJob = job; Render(); };
         row.PreviewKeyDown += async (_, e) =>
@@ -307,7 +307,7 @@ public sealed partial class FileTranscriptionView : UserControl
     private void RemoveSelected()
     {
         if (_selectedJob is null || _picking || _queue.Running) return;
-        _queue.Remove(_selectedJob); _notice.Text = "Removed from the queue. The original file is unchanged."; Render();
+        _queue.Remove(_selectedJob); _notice.Text = Loc.T("Removed from the queue. The original file is unchanged."); Render();
     }
     private void RenderResult(FileTranscriptionJob job)
     {
@@ -317,20 +317,20 @@ public sealed partial class FileTranscriptionView : UserControl
         _body.Children.Add(Text($"{job.Result.DisplayName ?? job.Result.Model} · {duration}", 12, true));
         if (job.Result.Warning is { } warning) _body.Children.Add(Text(warning, 12, true));
         _body.Children.Add(new Border { Child = new TextBlock { Text = job.Result!.Text, FontSize = 14, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, Foreground = Brush("TextBrush") }, Padding = new Thickness(18), Background = Brush("SurfaceBrush"), CornerRadius = new CornerRadius(10) });
-        _formatPicker = new ChoicePicker(); _formatPicker.Configure("Export format", "file", "File export format");
-        var formats = new List<Choice> { new("txt", "Plain text · TXT", "Transcribed text") };
+        _formatPicker = new ChoicePicker(); _formatPicker.Configure(Loc.T("Export format"), "file", Loc.T("File export format"));
+        var formats = new List<Choice> { new("txt", Loc.T("Plain text · TXT"), Loc.T("Transcribed text")) };
         if (FileTranscriptionQueue.HasSubtitles(job.Result!))
         {
-            formats.Add(new("srt", "Subtitles · SRT", "Provider timestamps"));
-            formats.Add(new("vtt", "Subtitles · WebVTT", "Provider timestamps"));
-            _body.Children.Add(Text("TXT includes dictionary corrections and snippet expansion. SRT and WebVTT preserve the provider’s original segment text and timing.", 12, true));
+            formats.Add(new("srt", Loc.T("Subtitles · SRT"), Loc.T("Provider timestamps")));
+            formats.Add(new("vtt", Loc.T("Subtitles · WebVTT"), Loc.T("Provider timestamps")));
+            _body.Children.Add(Text(Loc.T("TXT includes dictionary corrections and snippet expansion. SRT and WebVTT preserve the provider’s original segment text and timing."), 12, true));
         }
-        else { _format = "txt"; _body.Children.Add(Text("Subtitle export is unavailable because this provider did not return usable timing.", 12, true)); }
+        else { _format = "txt"; _body.Children.Add(Text(Loc.T("Subtitle export is unavailable because this provider did not return usable timing."), 12, true)); }
         _formatPicker.SetOptions(formats, _format);
         _formatPicker.SelectionChanged += selected => _format = selected; _body.Children.Add(_formatPicker);
-        _actions.Children.Add(Button("Export… · X", async () => await Export(job)));
+        _actions.Children.Add(Button(Loc.T("Export… · X"), async () => await Export(job)));
         _primaryAction = () => CopyResult(job.Result.Text);
-        _actions.Children.Add(Button("Copy text · Enter", _primaryAction, primary: true));
+        _actions.Children.Add(Button(Loc.T("Copy text · Enter"), _primaryAction, primary: true));
     }
     internal async void AddRecording(string path)
     {
@@ -346,7 +346,7 @@ public sealed partial class FileTranscriptionView : UserControl
         && _recoveryDialog is null && _recoveryOperation.IsCompleted && _exportOperation.IsCompleted;
     internal string AddActivatedFiles(IReadOnlyList<string> paths)
     {
-        if (!CanAcceptActivation) return _notice.Text = "Files were not added. Finish the current file operation or close the result, then retry.";
+        if (!CanAcceptActivation) return _notice.Text = Loc.T("Files were not added. Finish the current file operation or close the result, then retry.");
         _watchTab = false; _tabs.SetSelected("queue");
         AddPaths(paths);
         return _notice.Text;
@@ -355,7 +355,7 @@ public sealed partial class FileTranscriptionView : UserControl
     {
         var added = 0; var errors = new List<string>();
         foreach (var path in paths) { var error = _queue.Add(path); if (error is null) added++; else errors.Add(error); }
-        _notice.Text = $"{added} {(added == 1 ? "file" : "files")} added. " + string.Join(' ', errors.Distinct()); Render();
+        _notice.Text = (added == 1 ? Loc.T("1 file added.") : Loc.T("{0} files added.", added)) + " " + string.Join(' ', errors.Distinct()); Render();
     }
     private async Task ChooseFiles()
     {
@@ -363,13 +363,13 @@ public sealed partial class FileTranscriptionView : UserControl
         _picking = true;
         try
         {
-            var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = "Choose audio or video files" };
+            var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = Loc.T("Choose audio or video files") };
             foreach (var extension in FileTranscriptionQueue.Extensions) picker.FileTypeFilter.Add(extension);
             var files = await picker.PickMultipleFilesAsync();
             if (_queue.IsShutdown) return;
-            if (files.Count > 0) AddPaths(files.Select(file => file.Path)); else _notice.Text = "Selection canceled. Your queue is unchanged.";
+            if (files.Count > 0) AddPaths(files.Select(file => file.Path)); else _notice.Text = Loc.T("Selection canceled. Your queue is unchanged.");
         }
-        catch (Exception) { _notice.Text = "The file dialog could not be opened. Try dropping a file."; }
+        catch (Exception) { _notice.Text = Loc.T("The file dialog could not be opened. Try dropping a file."); }
         finally { _picking = false; if (!_queue.IsShutdown) Render(); }
     }
     private async Task Export(FileTranscriptionJob job)
@@ -378,20 +378,20 @@ public sealed partial class FileTranscriptionView : UserControl
         _picking = true; var format = _format;
         try
         {
-            var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { SuggestedFileName = Path.GetFileNameWithoutExtension(job.Name), Title = "Export transcript" };
+            var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { SuggestedFileName = Path.GetFileNameWithoutExtension(job.Name), Title = Loc.T("Export transcript") };
             picker.FileTypeChoices.Add(format.ToUpperInvariant(), new List<string> { "." + format });
             var file = await picker.PickSaveFileAsync();
             if (_queue.IsShutdown) return;
-            if (file is null) { _notice.Text = "Export canceled. Nothing was written."; return; }
+            if (file is null) { _notice.Text = Loc.T("Export canceled. Nothing was written."); return; }
             var destination = Path.GetFullPath(file.Path);
             if (_queue.Jobs.Any(item => string.Equals(Path.GetFullPath(item.Path), destination, StringComparison.OrdinalIgnoreCase)))
                 throw new IOException("Choose a filename different from the source media.");
             _exportOperation = WriteExportAsync(destination, FileTranscriptionQueue.Export(job, format));
             await _exportOperation;
-            if (!_queue.IsShutdown) _notice.Text = "Transcript exported.";
+            if (!_queue.IsShutdown) _notice.Text = Loc.T("Transcript exported.");
         }
-        catch (IOException) { _notice.Text = "Could not save. Choose a writable destination different from the source media."; }
-        catch (Exception) { _notice.Text = "Export could not be completed. Your result is still available."; }
+        catch (IOException) { _notice.Text = Loc.T("Could not save. Choose a writable destination different from the source media."); }
+        catch (Exception) { _notice.Text = Loc.T("Export could not be completed. Your result is still available."); }
         finally { _picking = false; _exportOperation = Task.CompletedTask; }
     }
     private static async Task WriteExportAsync(string destination, string text)

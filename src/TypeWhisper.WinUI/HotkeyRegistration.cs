@@ -49,7 +49,7 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
             if (error is not null || !ShortcutKeys.TryParse(parts[^1], out var vk) || vk == 0x7B)
             {
                 foreach (var id in added.Values) UnregisterHotKey(_hwnd, id);
-                return error ?? "Choose another key with modifiers. F12 is reserved.";
+                return error ?? Loc.T("Choose another key with modifiers. F12 is reserved.");
             }
             uint mods = ModNoRepeat;
             foreach (var modifier in parts[..^1]) mods |= modifier switch { "ALT" => ModAlt, "CTRL" => ModControl, "SHIFT" => 4u, "WIN" => 8u, _ => 0u };
@@ -57,7 +57,7 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
             if (!RegisterHotKey(_hwnd, newId, mods, (uint)vk))
             {
                 foreach (var id in added.Values) UnregisterHotKey(_hwnd, id);
-                return $"{chord} is unavailable or already used by another app. Your previous shortcuts are unchanged.";
+                return Loc.T("{0} is unavailable or already used by another app. Your previous shortcuts are unchanged.", chord);
             }
             added.Add(chord, newId);
         }

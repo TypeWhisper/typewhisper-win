@@ -59,8 +59,8 @@ public sealed class TabBar : UserControl
             var selected = (string)button.Tag == id;
             button.IsTabStop = selected;
             button.Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "IconButtonStyle"];
-            AutomationProperties.SetName(button, button.Content + (selected ? ", selected" : ""));
-            AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+            AutomationProperties.SetName(button, selected ? Loc.T("{0}, selected", button.Content) : (string)button.Content);
+            AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         }
     }
     private void Activate(HandCursorButton button)

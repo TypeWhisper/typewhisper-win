@@ -48,10 +48,10 @@ public sealed class WatchedFolderProcessor
                 throw new InvalidDataException();
             Settings = saved.Settings;
             _files = saved.Files.Select(f => f.Status == "Processing"
-                ? f with { Status = "Failed", Message = "Interrupted. Retry explicitly; the provider may already have processed this file." } : f).ToList();
+                ? f with { Status = Loc.Mark("Failed"), Message = Loc.T("Interrupted. Retry explicitly; the provider may already have processed this file.") } : f).ToList();
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException)
-        { _loadFailed = true; Error = "Saved folder processing data could not be read. Existing data was preserved."; }
+        { _loadFailed = true; Error = Loc.T("Saved folder processing data could not be read. Existing data was preserved."); }
     }
 
     /// <summary>The explicitly saved folder configuration.</summary>
@@ -64,7 +64,7 @@ public sealed class WatchedFolderProcessor
     /// <summary>Whether one scan, provider call or export is still draining.</summary>
     public bool Busy => _busy;
     /// <summary>Current user-visible processing status.</summary>
-    public string Status { get; private set; } = "Not watching";
+    public string Status { get; private set; } = Loc.T("Not watching");
     /// <summary>A persistence failure that blocks automatic work.</summary>
     public string? Error { get; private set; }
     /// <summary>Raised on the owning context when visible state changes.</summary>
@@ -78,9 +78,9 @@ public sealed class WatchedFolderProcessor
         {
             var input = Path.TrimEndingDirectorySeparator(Path.GetFullPath(settings.Input));
             var output = Path.TrimEndingDirectorySeparator(Path.GetFullPath(string.IsNullOrWhiteSpace(settings.Output) ? Path.Combine(input, "Transcripts") : settings.Output));
-            if (!Directory.Exists(input)) throw new IOException("Choose an existing watch folder.");
-            if (string.Equals(input, output, StringComparison.OrdinalIgnoreCase)) throw new IOException("Choose a separate output folder.");
-            if (settings.Format is not ("txt" or "srt" or "vtt")) throw new IOException("Choose TXT, SRT or VTT.");
+            if (!Directory.Exists(input)) throw new IOException(Loc.T("Choose an existing watch folder."));
+            if (string.Equals(input, output, StringComparison.OrdinalIgnoreCase)) throw new IOException(Loc.T("Choose a separate output folder."));
+            if (settings.Format is not ("txt" or "srt" or "vtt")) throw new IOException(Loc.T("Choose TXT, SRT or VTT."));
             Directory.CreateDirectory(output);
             var previous = Settings;
             Settings = settings with { Input = input, Output = output };
@@ -89,7 +89,7 @@ public sealed class WatchedFolderProcessor
                 _files = _files.Select(f => IsCurrentFolder(f) && f.Status != "Completed" && f.Result is not null ? f with { ExportPath = null } : f).ToList();
             if (!Save()) { Settings = previous; _files = previousFiles; return false; }
             _observed.Clear();
-            Status = "Folders saved. Start watching to process supported files in this folder.";
+            Status = Loc.T("Folders saved. Start watching to process supported files in this folder.");
             Changed?.Invoke();
             return true;
         }
@@ -112,7 +112,7 @@ public sealed class WatchedFolderProcessor
     {
         if (_shutdown || Settings is null || Error is not null || Busy) return;
         Watching = true;
-        Status = "Waiting for stable audio or video files";
+        Status = Loc.T("Waiting for stable audio or video files");
         Changed?.Invoke();
     }
 
@@ -121,7 +121,7 @@ public sealed class WatchedFolderProcessor
     {
         Watching = false;
         _operation?.Cancel();
-        Status = Busy ? "Stopping after the current operation drains…" : "Paused";
+        Status = Busy ? Loc.T("Stopping after the current operation drains…") : Loc.T("Paused");
         Changed?.Invoke();
     }
 
@@ -160,12 +160,12 @@ public sealed class WatchedFolderProcessor
             active = _files.FirstOrDefault(f => IsCurrentFolder(f) && f.Status == "Export pending");
             if (active is null)
             {
-                if (!providerReady) { Status = "Waiting for a ready, idle dictation model"; return; }
+                if (!providerReady) { Status = Loc.T("Waiting for a ready, idle dictation model"); return; }
                 var sources = await Task.Run(() => Directory.EnumerateFiles(settings.Input)
                     .Where(p => FileTranscriptionQueue.Extensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
                     .Take(2001).Select(p => new FileInfo(p)).Select(f => (f.FullName, f.Length, f.LastWriteTimeUtc.Ticks)).ToArray(), ct);
                 ct.ThrowIfCancellationRequested();
-                if (sources.Length > 2000) throw new IOException("This folder has more than 2,000 media files. Choose a smaller folder.");
+                if (sources.Length > 2000) throw new IOException(Loc.T("This folder has more than 2,000 media files. Choose a smaller folder."));
                 var present = sources.Select(s => s.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 foreach (var removed in _observed.Keys.Where(p => !present.Contains(p)).ToArray()) _observed.Remove(removed);
                 foreach (var source in sources.OrderBy(s => s.FullName, StringComparer.OrdinalIgnoreCase))
@@ -178,7 +178,7 @@ public sealed class WatchedFolderProcessor
                     var existing = _files.LastOrDefault(f => string.Equals(f.Path, source.FullName, StringComparison.OrdinalIgnoreCase)
                         && f.Length == source.Length && f.ModifiedTicks == source.Ticks);
                     if (existing is not null && existing.Status != "Queued") continue;
-                    if (existing is null && _files.Count >= 2000) throw new IOException("The folder log has reached 2,000 files. Pause watching and export your results before continuing.");
+                    if (existing is null && _files.Count >= 2000) throw new IOException(Loc.T("The folder log has reached 2,000 files. Pause watching and export your results before continuing."));
                     // Hold a read lease through decoding/inference so writers and replacements cannot change this revision.
                     FileStream lease;
                     try { lease = new FileStream(source.FullName, FileMode.Open, FileAccess.Read, FileShare.Read); }
@@ -187,16 +187,16 @@ public sealed class WatchedFolderProcessor
                     {
                         var current = new FileInfo(source.FullName);
                         if (lease.Length != source.Length || current.LastWriteTimeUtc.Ticks != source.Ticks) continue;
-                        active = (existing ?? new WatchedFile(Guid.NewGuid(), source.FullName, source.Length, source.Ticks, "Queued"))
-                            with { Status = "Processing", Message = null };
+                        active = (existing ?? new WatchedFile(Guid.NewGuid(), source.FullName, source.Length, source.Ticks, Loc.Mark("Queued")))
+                            with { Status = Loc.Mark("Processing"), Message = null };
                         Put(active);
-                        if (!Save()) { Put(active with { Status = "Queued", Message = "Waiting for progress storage to recover." }); return; }
-                        Status = "Transcribing " + Path.GetFileName(active.Path);
+                        if (!Save()) { Put(active with { Status = "Queued", Message = Loc.T("Waiting for progress storage to recover.") }); return; }
+                        Status = Loc.T("Transcribing {0}", Path.GetFileName(active.Path));
                         Changed?.Invoke();
                         var output = await process(active.Path, stage => { if (!ct.IsCancellationRequested) { Status = stage; Changed?.Invoke(); } }, ct);
                         ct.ThrowIfCancellationRequested();
-                        if (string.IsNullOrWhiteSpace(output.Text)) throw new IOException("No speech was recognized.");
-                        active = active with { Status = "Export pending", Result = FileTranscriptionRecoveryResult.FromOutput(output) };
+                        if (string.IsNullOrWhiteSpace(output.Text)) throw new IOException(Loc.T("No speech was recognized."));
+                        active = active with { Status = Loc.Mark("Export pending"), Result = FileTranscriptionRecoveryResult.FromOutput(output) };
                         Put(active);
                         if (!Save()) return;
                     }
@@ -213,24 +213,24 @@ public sealed class WatchedFolderProcessor
                 active = active with { ExportPath = destination }; Put(active);
                 if (!Save()) return;
                 await TranscriptFileExport.PublishAsync(destination, text, ct, verifyExisting: true);
-                active = active with { Status = "Completed", Message = job.Result.Warning };
+                active = active with { Status = Loc.Mark("Completed"), Message = job.Result.Warning };
                 Put(active);
                 if (!Save()) return;
-                Status = "Exported " + Path.GetFileName(active.Path);
+                Status = Loc.T("Exported {0}", Path.GetFileName(active.Path));
             }
-            else Status = "Watching · waiting for new or finished files";
+            else Status = Loc.T("Watching · waiting for new or finished files");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             if (active is not null && active.Status == "Processing")
-            { Put(active with { Status = "Failed", Message = "Stopped. Retry explicitly to transcribe again." }); Save(); }
-            Status = "Paused";
+            { Put(active with { Status = "Failed", Message = Loc.T("Stopped. Retry explicitly to transcribe again.") }); Save(); }
+            Status = Loc.T("Paused");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             if (active is not null)
-            { Put(active with { Status = "Failed", Message = ex is IOException or InvalidOperationException ? ex.Message : "Processing failed. Retry when the provider and folders are available." }); Save(); }
-            Status = active is null ? "Folder unavailable. Check the paths and access; watching will retry." : "A file needs attention. Other files can continue.";
+            { Put(active with { Status = "Failed", Message = ex is IOException or InvalidOperationException ? ex.Message : Loc.T("Processing failed. Retry when the provider and folders are available.") }); Save(); }
+            Status = active is null ? Loc.T("Folder unavailable. Check the paths and access; watching will retry.") : Loc.T("A file needs attention. Other files can continue.");
         }
         finally
         {
@@ -265,7 +265,7 @@ public sealed class WatchedFolderProcessor
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { Error = "Folder progress could not be saved. Watching stopped to prevent duplicate processing."; Watching = false; return false; }
+        { Error = Loc.T("Folder progress could not be saved. Watching stopped to prevent duplicate processing."); Watching = false; return false; }
     }
 
 }

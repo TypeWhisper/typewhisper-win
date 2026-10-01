@@ -38,16 +38,16 @@ internal sealed partial class PremiumView
         _learningStatus = null;
         _detailTitle.Text = _selectedFeature switch
         {
-            PremiumFeature.CalendarMeetings => "Meeting Automation",
-            PremiumFeature.CorrectionLearning => "Learn from Corrections",
-            PremiumFeature.CloudSync => "Sync Dictionary & Snippets",
-            _ => "Manage Premium Access"
+            PremiumFeature.CalendarMeetings => Loc.T("Meeting Automation"),
+            PremiumFeature.CorrectionLearning => Loc.T("Learn from Corrections"),
+            PremiumFeature.CloudSync => Loc.T("Sync Dictionary & Snippets"),
+            _ => Loc.T("Manage Premium Access")
         };
         if (_selectedFeature == PremiumFeature.CloudSync) { _features.Children.Add(new CloudSyncView()); return; }
         if (_selectedFeature is { } feature)
             Feature(feature, _detailTitle.Text, feature == PremiumFeature.CorrectionLearning
-                ? "Remembers confident edits after insertion and improves future text."
-                : "Feature availability on Windows.");
+                ? Loc.T("Remembers confident edits after insertion and improves future text.")
+                : Loc.T("Feature availability on Windows."));
     }
 
     private void RefreshOverview()
@@ -62,11 +62,11 @@ internal sealed partial class PremiumView
         accessRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         accessRow.Children.Add(IconTile(active ? "\uE73E" : "\uE72E", active ? green : gold));
         var status = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
-        status.Children.Add(Copy("Premium access", 12, true));
+        status.Children.Add(Copy(Loc.T("Premium access"), 12, true));
         _status.FontSize = 16;
         status.Children.Add(Copy(_status.Text, 16));
         Grid.SetColumn(status, 1); accessRow.Children.Add(status);
-        var manage = new HandCursorButton { Content = "Manage Access…", CornerRadius = new CornerRadius(8), VerticalAlignment = VerticalAlignment.Center };
+        var manage = new HandCursorButton { Content = Loc.T("Manage Access…"), CornerRadius = new CornerRadius(8), VerticalAlignment = VerticalAlignment.Center };
         manage.Click += (_, _) => ShowDetails(null);
         Grid.SetColumn(manage, 2); accessRow.Children.Add(manage);
         _overview.Children.Add(Card(accessRow));
@@ -74,26 +74,26 @@ internal sealed partial class PremiumView
         {
             var hero = new StackPanel { Spacing = 12 };
             hero.Children.Add(IconTile("\uE734", gold));
-            hero.Children.Add(Copy("Premium features that save you work", 22));
-            hero.Children.Add(Copy("Record scheduled meetings automatically, learn from your corrections, and keep your dictionary and snippets in sync.", 14, true));
-            hero.Children.Add(Copy("Correction learning is available on Windows. Cloud folder sync is also available; meeting automation is coming later.", 12, true));
-            var unlock = new HandCursorButton { Content = "Unlock Premium" };
+            hero.Children.Add(Copy(Loc.T("Premium features that save you work"), 22));
+            hero.Children.Add(Copy(Loc.T("Record scheduled meetings automatically, learn from your corrections, and keep your dictionary and snippets in sync."), 14, true));
+            hero.Children.Add(Copy(Loc.T("Correction learning is available on Windows. Cloud folder sync is also available; meeting automation is coming later."), 12, true));
+            var unlock = new HandCursorButton { Content = Loc.T("Unlock Premium") };
             unlock.Click += (_, _) => ShowDetails(null);
             hero.Children.Add(unlock);
-            if (Access.Current.Supporter) hero.Children.Add(Copy("Supporter status alone does not unlock Premium features.", 12, true));
+            if (Access.Current.Supporter) hero.Children.Add(Copy(Loc.T("Supporter status alone does not unlock Premium features."), 12, true));
             _overview.Children.Add(Card(hero));
         }
         else
         {
             var heading = new StackPanel { Spacing = 6 };
-            heading.Children.Add(Copy("Your Premium features", 20));
-            heading.Children.Add(Copy("See the current state at a glance and open only the settings you need.", 13, true));
+            heading.Children.Add(Copy(Loc.T("Your Premium features"), 20));
+            heading.Children.Add(Copy(Loc.T("See the current state at a glance and open only the settings you need."), 13, true));
             _overview.Children.Add(heading);
         }
         var cards = new Grid { ColumnSpacing = 12, RowSpacing = 12 };
-        cards.Children.Add(OverviewFeature(PremiumFeature.CalendarMeetings, "Meeting Automation", "Reminds you before a scheduled meeting or starts recording automatically when you join.", "Calendar integration is not connected in this Windows build yet.", "\uE787", Color.FromArgb(255, 10, 132, 255)));
-        cards.Children.Add(OverviewFeature(PremiumFeature.CorrectionLearning, "Learn from Corrections", "Remembers confident edits after insertion and improves future text.", "teh → the\nrecieve → receive", "\uE734", gold));
-        cards.Children.Add(OverviewFeature(PremiumFeature.CloudSync, "Sync Dictionary & Snippets", "Keeps your personal terms and text snippets available across your devices.", "Choose a shared iCloud Drive, OneDrive or Dropbox folder.", "\uE753", Color.FromArgb(255, 67, 201, 220)));
+        cards.Children.Add(OverviewFeature(PremiumFeature.CalendarMeetings, Loc.T("Meeting Automation"), Loc.T("Reminds you before a scheduled meeting or starts recording automatically when you join."), Loc.T("Calendar integration is not connected in this Windows build yet."), "\uE787", Color.FromArgb(255, 10, 132, 255)));
+        cards.Children.Add(OverviewFeature(PremiumFeature.CorrectionLearning, Loc.T("Learn from Corrections"), Loc.T("Remembers confident edits after insertion and improves future text."), "teh → the\nrecieve → receive", "\uE734", gold));
+        cards.Children.Add(OverviewFeature(PremiumFeature.CloudSync, Loc.T("Sync Dictionary & Snippets"), Loc.T("Keeps your personal terms and text snippets available across your devices."), Loc.T("Choose a shared iCloud Drive, OneDrive or Dropbox folder."), "\uE753", Color.FromArgb(255, 67, 201, 220)));
         void Arrange(double width)
         {
             var columns = width >= 660 ? 3 : 1;
@@ -119,7 +119,7 @@ internal sealed partial class PremiumView
         var top = new Grid { ColumnSpacing = 6 };
         top.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); top.ColumnDefinitions.Add(new());
         top.Children.Add(IconTile(glyph, accent));
-        var badge = Copy(feature == PremiumFeature.CloudSync ? (WinUICloudSync.Preferences.Enabled ? "Enabled" : "Cloud folder") : !learning ? "Coming later" : available ? (CorrectionLearning.Enabled ? "Active" : "Off") : "Premium", 11);
+        var badge = Copy(feature == PremiumFeature.CloudSync ? (WinUICloudSync.Preferences.Enabled ? Loc.T("Enabled") : Loc.T("Cloud folder")) : !learning ? Loc.T("Coming later") : available ? (CorrectionLearning.Enabled ? Loc.T("Active") : Loc.T("Off")) : "Premium", 11);
         badge.Foreground = new SolidColorBrush(accent);
         var pill = new Border { Child = badge, Padding = new Thickness(8, 4, 8, 4), CornerRadius = new CornerRadius(12), Background = Tint(accent, 24), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(pill, 1); top.Children.Add(pill); panel.Children.Add(top);
@@ -128,7 +128,7 @@ internal sealed partial class PremiumView
         Grid.SetRow(content, 1); panel.Children.Add(content);
         if (Access.Current.Any)
         {
-            var settings = new HandCursorButton { Content = "Settings…", CornerRadius = new CornerRadius(8), HorizontalAlignment = HorizontalAlignment.Left };
+            var settings = new HandCursorButton { Content = Loc.T("Settings…"), CornerRadius = new CornerRadius(8), HorizontalAlignment = HorizontalAlignment.Left };
             settings.Click += (_, _) => ShowDetails(feature);
             Grid.SetRow(settings, 2); panel.Children.Add(settings);
         }

@@ -21,7 +21,7 @@ public sealed partial class RecorderView
         LibraryQueueButton.IsEnabled = selected is { Error: null } && !busy && !active;
         LibraryFolderButton.IsEnabled = selected is not null && !busy;
         LibraryDeleteButton.IsEnabled = selected is not null && !busy;
-        LibraryPlayButton.Content = (_libraryPlayer?.PlaybackSession.PlaybackState == MediaPlaybackState.Playing ? "Pause" : "Play audio") + " \u00b7 Enter";
+        LibraryPlayButton.Content = _libraryPlayer?.PlaybackSession.PlaybackState == MediaPlaybackState.Playing ? Loc.T("Pause · Enter") : Loc.T("Play audio · Enter");
     }
     private void LibrarySelection_Changed(object sender, SelectionChangedEventArgs e)
     {

@@ -25,7 +25,7 @@ internal sealed partial class PremiumView : UserControl
         var body = new StackPanel { Spacing = 20 }; Content = body;
         body.Children.Add(_overview);
         body.Children.Add(_details);
-        var back = new HandCursorButton { Content = "← Back to Premium" };
+        var back = new HandCursorButton { Content = Loc.T("← Back to Premium") };
         back.Click += (_, _) => ShowOverview();
         _details.Children.Add(back);
         _details.Children.Add(_detailTitle);
@@ -61,11 +61,11 @@ internal sealed partial class PremiumView : UserControl
         {
             RefreshLicenseSection();
             var access = Access.Current;
-            _status.Text = (access.Any ? "Premium access active" : access.Supporter ? "Supporter · no Premium access" : "No Premium access")
+            _status.Text = (access.Any ? Loc.T("Premium access active") : access.Supporter ? Loc.T("Supporter · no Premium access") : Loc.T("No Premium access"))
                 + (Access.IsOverridden ? " · Development" : "");
             _notice.Text = Access.Error ?? (Access.IsOverridden
                 ? "Development access is active. Feature availability below is separate from access."
-                : "Manage your license and Apple account below. Cloud folder sync is available with a commercial license.");
+                : Loc.T("Manage your license and Apple account below. Cloud folder sync is available with a commercial license."));
             RefreshOverview();
             RefreshDetails();
             _scenario?.SetOptions([
@@ -100,32 +100,32 @@ internal sealed partial class PremiumView : UserControl
         var requirement = Access.Current.Requirement(feature);
         panel.Children.Add(Copy(requirement switch
         {
-            PremiumRequirement.Available => "Access granted",
-            PremiumRequirement.Commercial => "Requires a commercial license",
-            PremiumRequirement.PremiumAccount => "Requires a Premium account",
-            PremiumRequirement.SignIn => "Sign in to use this feature",
-            PremiumRequirement.LinkCommercialLicense => "Link your commercial license to your account",
-            _ => "Requires a commercial license or Premium account"
+            PremiumRequirement.Available => Loc.T("Access granted"),
+            PremiumRequirement.Commercial => Loc.T("Requires a commercial license"),
+            PremiumRequirement.PremiumAccount => Loc.T("Requires a Premium account"),
+            PremiumRequirement.SignIn => Loc.T("Sign in to use this feature"),
+            PremiumRequirement.LinkCommercialLicense => Loc.T("Link your commercial license to your account"),
+            _ => Loc.T("Requires a commercial license or Premium account")
         }, 12));
         if (feature == PremiumFeature.CorrectionLearning)
         {
             var toggle = new ToggleSwitch { IsOn = CorrectionLearning.Enabled,
                 IsEnabled = requirement == PremiumRequirement.Available };
             AppToggleSwitch.Configure(toggle);
-            AutomationProperties.SetName(toggle, "Automatically learn dictation corrections");
+            AutomationProperties.SetName(toggle, Loc.T("Automatically learn dictation corrections"));
             _learningToggle = toggle;
             toggle.Toggled += (_, _) => { if (!_refreshing) CorrectionLearning.SetEnabled(toggle.IsOn); };
             var toggleRow = new Grid { ColumnSpacing = 16 };
             toggleRow.ColumnDefinitions.Add(new());
             toggleRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            var label = SettingsHelp.Label("Learn automatically", "After dictation, edit the inserted text and press Enter or Tab, or leave the field. Only clear word corrections are saved locally in Dictionary > Corrections. Unsupported and password fields are skipped.", 13); label.VerticalAlignment = VerticalAlignment.Center;
+            var label = SettingsHelp.Label(Loc.T("Learn automatically"), Loc.T("After dictation, edit the inserted text and press Enter or Tab, or leave the field. Only clear word corrections are saved locally in Dictionary > Corrections. Unsupported and password fields are skipped."), 13); label.VerticalAlignment = VerticalAlignment.Center;
             toggleRow.Children.Add(label); Grid.SetColumn(toggle, 1); toggleRow.Children.Add(toggle);
             panel.Children.Add(toggleRow);
             _learningStatus = Copy(CorrectionLearning.Status, 12, true);
             AutomationProperties.SetLiveSetting(_learningStatus, AutomationLiveSetting.Polite);
             panel.Children.Add(_learningStatus);
         }
-        else panel.Children.Add(Copy("Not connected in this Windows build yet.", 12, true));
+        else panel.Children.Add(Copy(Loc.T("Not connected in this Windows build yet."), 12, true));
         _features.Children.Add(Card(panel));
     }
     private static TextBlock Copy(string text, double size, bool muted = false) => new()

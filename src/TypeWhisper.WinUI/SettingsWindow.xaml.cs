@@ -44,9 +44,9 @@ public sealed partial class SettingsWindow : Window
     internal event Action<string?>? WorkspaceChanged;
     internal static string DisplayName(string category) => category switch
     {
-        "Privacy" => "History & Sync",
-        "Files & recovery" => "Recovery",
-        _ => category
+        "Privacy" => Loc.T("History & Sync"),
+        "Files & recovery" => Loc.T("Recovery"),
+        _ => Loc.T(category)
     };
     internal void SetIntegrationsContent(UIElement content) => IntegrationsHost.Child = content;
     internal void DetachIntegrationsContent() => IntegrationsHost.Child = null;
@@ -91,6 +91,7 @@ public sealed partial class SettingsWindow : Window
         _values = values;
         _preferences = preferences;
         InitializeComponent();
+        LocalizeXamlText();
         PageKeyboardNavigation.Attach(SettingsRoot);
         NativeWindowAppearance.ApplyAppTitleBar(this);
         CatalogContent.LayoutUpdated += (_, _) => SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
@@ -101,12 +102,12 @@ public sealed partial class SettingsWindow : Window
         // an empty group holds the plugin pages.
         (string Category, string Icon)[][] groups =
         [
-            [("Home", "home")],
-            [("General", "settings"), ("Appearance", "desktop"), ("Dictation", "microphone"), ("Audio", "speaker"), ("Files & recovery", "restore"),
-             ("Shortcuts", "keyboard"), ("File transcription", "file"), ("Recorder", "recorder")],
-            [("Privacy", "history"), ("Statistics", "stats"), ("Dictionary", "dictionary"), ("Snippets", "text"), ("Workflows", "workflow"), ("Premium", "lock")],
+            [(Loc.Mark("Home"), "home")],
+            [(Loc.Mark("General"), "settings"), (Loc.Mark("Appearance"), "desktop"), (Loc.Mark("Dictation"), "microphone"), (Loc.Mark("Audio"), "speaker"), (Loc.Mark("Files & recovery"), "restore"),
+             (Loc.Mark("Shortcuts"), "keyboard"), (Loc.Mark("File transcription"), "file"), (Loc.Mark("Recorder"), "recorder")],
+            [(Loc.Mark("Privacy"), "history"), (Loc.Mark("Statistics"), "stats"), (Loc.Mark("Dictionary"), "dictionary"), (Loc.Mark("Snippets"), "text"), (Loc.Mark("Workflows"), "workflow"), (Loc.Mark("Premium"), "lock")],
             [],
-            [("Sync & backup", "devices"), ("Advanced", "settings"), ("Account & about", "info")]
+            [(Loc.Mark("Sync & backup"), "devices"), (Loc.Mark("Advanced"), "settings"), (Loc.Mark("Account & about"), "info")]
         ];
         foreach (var group in groups)
         {
@@ -120,7 +121,7 @@ public sealed partial class SettingsWindow : Window
                 var button = new HandCursorButton { Content = row, Tag = category, HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 36, Padding = new Thickness(10, 7, 10, 7),
                     Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
-                AutomationProperties.SetName(button, $"Settings category {DisplayName(category)}");
+                AutomationProperties.SetName(button, Loc.T("Settings category {0}", DisplayName(category)));
                 button.Click += (_, _) => ShowCategory(category);
                 section.Children.Add(button);
                 _navigationButtons.Add(button);
@@ -185,6 +186,49 @@ public sealed partial class SettingsWindow : Window
         };
     }
 
+    // The XAML keeps the English text as a fallback.
+    private void LocalizeXamlText()
+    {
+        Title = Loc.T("TypeWhisper Settings");
+        SettingsBrandTitle.Text = Loc.T("Settings");
+        AutomationProperties.SetName(CloseSettingsButton, Loc.T("Close settings"));
+        AutomationProperties.SetName(SettingsSearch, Loc.T("Search settings"));
+        SearchPlaceholder.Text = Loc.T("Search settings…");
+        AutomationProperties.SetName(ClearSettingsSearch, Loc.T("Clear settings search"));
+        AppearanceTitle.Text = Loc.T("Appearance");
+        AppearanceSubtitle.Text = Loc.T("Choose how much you want to see while you speak.");
+        RecordingOverlayHeading.Text = Loc.T("RECORDING OVERLAY");
+        AutomationProperties.SetName(StandardChoice, Loc.T("Settings standard overlay"));
+        StandardChoiceTitle.Text = Loc.T("Standard");
+        StandardChoiceDescription.Text = Loc.T("Waveform, status and time");
+        AutomationProperties.SetName(CompactChoice, Loc.T("Settings compact overlay"));
+        CompactChoiceTitle.Text = Loc.T("Compact");
+        CompactChoiceDescription.Text = Loc.T("A slim waveform with time");
+        AutomationProperties.SetName(MinimalChoice, Loc.T("Settings minimal overlay"));
+        MinimalChoiceTitle.Text = Loc.T("Minimal");
+        MinimalChoiceDescription.Text = Loc.T("Just an indicator at the edge");
+        LiveTextTitle.Text = Loc.T("Live transcription");
+        AutomationProperties.SetName(LiveTextToggle, Loc.T("Settings live transcription"));
+        DetailsTitle.Text = Loc.T("Technical details");
+        AutomationProperties.SetName(DetailsToggle, Loc.T("Settings technical details"));
+        CustomizeLayoutButton.Content = Loc.T("Customize layout");
+        AutomationProperties.SetName(CustomizeLayoutButton, Loc.T("Customize overlay layout"));
+        PreviewButton.Content = Loc.T("Preview overlay");
+        AutomationProperties.SetName(PreviewButton, Loc.T("Preview overlay"));
+        PausePreviewButton.Content = Loc.T("Pause preview");
+        AutomationProperties.SetName(PausePreviewButton, Loc.T("Pause or resume preview"));
+        PreviewExplanation.Text = Loc.T("Preview uses your microphone level when available, otherwise a simulated signal. Transcript text is a sample; no audio is saved.");
+        BackToAppearanceButton.Content = Loc.T("← Appearance");
+        AutomationProperties.SetName(BackToAppearanceButton, Loc.T("Back to appearance"));
+        FloatingLiveTextHeading.Text = Loc.T("FLOATING LIVE TEXT");
+        PreviewWidth.Header = Loc.T("Width");
+        AutomationProperties.SetName(PreviewWidth, Loc.T("Floating live-text width"));
+        PreviewHeight.Header = Loc.T("Height");
+        AutomationProperties.SetName(PreviewHeight, Loc.T("Floating live-text height"));
+        EditorPreviewButton.Content = Loc.T("Preview overlay");
+        AutomationProperties.SetName(EditorPreviewButton, Loc.T("Layout editor overlay preview"));
+    }
+
     internal void ShowOn(DisplayArea area)
     {
         PlaceOn(area);
@@ -221,20 +265,20 @@ public sealed partial class SettingsWindow : Window
         var placement = preferences.FloatingLiveText ? "Floating window" : "Attached to recording";
         _values["LiveTextPlacement"] = placement;
         _appearancePickers.FirstOrDefault(p => p.Tag is "LiveTextPlacement")?.SetOptions(
-            new[] { "Attached to recording", "Floating window" }.Select(label => new Choice(label, label, "Saved on this device")).ToArray(), placement, placement);
+            new[] { "Attached to recording", "Floating window" }.Select(label => new Choice(label, Loc.T(label), Loc.T("Saved on this device"))).ToArray(), placement, Loc.T(placement));
         var duration = DurationChoices.FirstOrDefault(c => c.Milliseconds == preferences.PreviewBubbleAutoHideMilliseconds).Label
             ?? $"{preferences.PreviewBubbleAutoHideMilliseconds} milliseconds";
         _values["PreviewBubbleAutoHideMilliseconds"] = duration;
         _appearancePickers.FirstOrDefault(p => p.Tag is "LiveTranscriptionFontSize")?.SetOptions(
-            Enumerable.Range(10, 9).Select(n => new Choice(n.ToString(), n.ToString(), "Saved on this device")).ToArray(), size, size);
+            Enumerable.Range(10, 9).Select(n => new Choice(n.ToString(), n.ToString(), Loc.T("Saved on this device"))).ToArray(), size, size);
         _appearancePickers.FirstOrDefault(p => p.Tag is "PreviewBubbleAutoHideMilliseconds")?.SetOptions(
-            DurationChoices.Select(c => new Choice(c.Label, c.Label, "After successful paste; errors remain visible for five seconds")).ToArray(), duration, duration);
+            DurationChoices.Select(c => new Choice(c.Label, Loc.T(c.Label), Loc.T("After successful paste; errors remain visible for five seconds"))).ToArray(), duration, Loc.T("{0} milliseconds", preferences.PreviewBubbleAutoHideMilliseconds));
         OverlayEditor.SetPreferences(preferences);
         foreach (var button in new[] { StandardChoice, CompactChoice, MinimalChoice })
         {
             var selected = (string)button.Tag == preferences.Mode.ToString();
             button.Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "SecondaryButtonStyle"];
-            AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+            AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         }
         LiveTextToggle.IsOn = _liveTranscriptionAvailable && preferences.LiveText;
         DetailsToggle.IsOn = preferences.TechnicalDetails;
@@ -243,15 +287,15 @@ public sealed partial class SettingsWindow : Window
         LiveTextToggle.IsEnabled = !minimal && _liveTranscriptionAvailable;
         DetailsToggle.IsEnabled = standard;
         LiveTextDescription.Text = !_liveTranscriptionAvailable
-            ? "Unavailable for the selected provider or task. Text arrives after recording stops. Your live-text preference is kept for supported models."
+            ? Loc.T("Unavailable for the selected provider or task. Text arrives after recording stops. Your live-text preference is kept for supported models.")
             : minimal
-            ? "Hidden in Minimal. Your preference is kept for Standard and Compact."
+            ? Loc.T("Hidden in Minimal. Your preference is kept for Standard and Compact.")
             : preferences.FloatingLiveText
-            ? "Show live text in a floating window. Drag its header to move it or its edges to resize it. Longer text scrolls."
-            : "Show streaming text beside the recording block. Longer text scrolls.";
+            ? Loc.T("Show live text in a floating window. Drag its header to move it or its edges to resize it. Longer text scrolls.")
+            : Loc.T("Show streaming text beside the recording block. Longer text scrolls.");
         DetailsDescription.Text = standard
-            ? "Show the audio level in dBFS and measured render frequency. Off by default."
-            : "Available in Standard only. Your preference is kept when switching layouts.";
+            ? Loc.T("Show the audio level in dBFS and measured render frequency. Off by default.")
+            : Loc.T("Available in Standard only. Your preference is kept when switching layouts.");
         UpdatePreviewSizeControls();
         _updating = false;
     }
@@ -261,20 +305,20 @@ public sealed partial class SettingsWindow : Window
         if (visible && !_previewVisible) RefreshPreviewSize();
         _previewVisible = visible;
         UpdatePreviewSizeControls();
-        PreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
-        EditorPreviewButton.Content = visible ? "Stop preview" : "Preview overlay";
+        PreviewButton.Content = visible ? Loc.T("Stop preview") : Loc.T("Preview overlay");
+        EditorPreviewButton.Content = visible ? Loc.T("Stop preview") : Loc.T("Preview overlay");
         PausePreviewButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        PausePreviewButton.Content = paused ? "Resume preview" : "Pause preview";
+        PausePreviewButton.Content = paused ? Loc.T("Resume preview") : Loc.T("Pause preview");
     }
 
     private void UpdatePreviewSizeControls()
     {
         PreviewSizeSection.Visibility = _preferences.FloatingLiveText ? Visibility.Visible : Visibility.Collapsed;
         PreviewWidth.IsEnabled = PreviewHeight.IsEnabled = _previewVisible && _preferences.LiveText && _preferences.Mode != OverlayMode.Minimal;
-        FloatingPositionLabel.Text = _previewVisible ? "POSITION ON SCREEN" : "LAST PREVIEW POSITION";
+        FloatingPositionLabel.Text = _previewVisible ? Loc.T("POSITION ON SCREEN") : Loc.T("LAST PREVIEW POSITION");
         PreviewSizeHint.Text = PreviewWidth.IsEnabled
-            ? "Changes are saved automatically. Size uses display-independent pixels and is limited to your screen's work area."
-            : "Start the preview with live text enabled in Standard or Compact to adjust its width and height.";
+            ? Loc.T("Changes are saved automatically. Size uses display-independent pixels and is limited to your screen's work area.")
+            : Loc.T("Start the preview with live text enabled in Standard or Compact to adjust its width and height.");
     }
 
     internal void SetFloatingPlacement(LiveTextPreviewFrame? frame)
@@ -295,7 +339,7 @@ public sealed partial class SettingsWindow : Window
         Place(FloatingWindowThumb, map.Window);
         var horizontal = 100d * (frame.Window.X - frame.WorkArea.X) / Math.Max(1, frame.WorkArea.Width);
         var vertical = 100d * (frame.Window.Y - frame.WorkArea.Y) / Math.Max(1, frame.WorkArea.Height);
-        FloatingPositionSummary.Text = $"Live text · {horizontal:0}% from left · {vertical:0}% from top";
+        FloatingPositionSummary.Text = Loc.T("Live text · {0:0}% from left · {1:0}% from top", horizontal, vertical);
         AutomationProperties.SetName(FloatingPositionPreview, FloatingPositionSummary.Text);
 
         static void Place(FrameworkElement element, LiveTextMapRect rect)
@@ -359,7 +403,7 @@ public sealed partial class SettingsWindow : Window
     }
 
     private static readonly (string Label, int Milliseconds)[] DurationChoices =
-    [("Immediately", 0), ("0.5 seconds", 500), ("1 second", 1000), ("1.5 seconds", 1500), ("2 seconds", 2000), ("3 seconds", 3000), ("5 seconds", 5000)];
+    [(Loc.Mark("Immediately"), 0), (Loc.Mark("0.5 seconds"), 500), (Loc.Mark("1 second"), 1000), (Loc.Mark("1.5 seconds"), 1500), (Loc.Mark("2 seconds"), 2000), (Loc.Mark("3 seconds"), 3000), (Loc.Mark("5 seconds"), 5000)];
 
     internal void ShowOverlaySaveError(string error) => SessionHint.Text = error;
 
@@ -453,7 +497,7 @@ public sealed partial class SettingsWindow : Window
         _checkingNavigation = true;
         try { return CanLeaveIntegrationAsync is null || await CanLeaveIntegrationAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { SessionHint.Text = "Could not leave this page. Save your profile changes and try again."; return false; }
+        { SessionHint.Text = Loc.T("Could not leave this page. Save your profile changes and try again."); return false; }
         finally { _checkingNavigation = false; }
     }
 
@@ -507,7 +551,7 @@ public sealed partial class SettingsWindow : Window
             SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
             if (category == "General")
             {
-                var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,
+                var setup = new HandCursorButton { Content = Loc.T("Open setup wizard"), HorizontalAlignment = HorizontalAlignment.Left,
                     Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
                 setup.Click += (_, _) => ShowSetup();
                 CatalogContent.Children.Add(setup);
@@ -520,7 +564,7 @@ public sealed partial class SettingsWindow : Window
     internal static void SetNavigationSelected(HandCursorButton button, bool selected)
     {
         button.Style = (Style)Application.Current.Resources[selected ? "SidebarSelectedButtonStyle" : "MenuButtonStyle"];
-        AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+        AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         if (button.Content is not Panel row) return;
         foreach (var child in row.Children)
         {
@@ -542,7 +586,7 @@ public sealed partial class SettingsWindow : Window
         // Live settings wrap their controls, including the title, in one child panel.
         var titled = panel.Children is [StackPanel live] ? live : panel;
         if (titled.Children.Count > 0) titled.Children.RemoveAt(0);
-        panel.Children.Insert(0, new TextBlock { Text = "Defaults", FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        panel.Children.Insert(0, new TextBlock { Text = Loc.T("Defaults"), FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         SettingsCatalog.UpdateTrailingSeparators(panel);
     }
 
@@ -550,7 +594,7 @@ public sealed partial class SettingsWindow : Window
     {
         if (_currentCategory == "Files & recovery") return;
         if (allowNavigation) ShowCategory("Files & recovery");
-        else SessionHint.Text = "Open Files & recovery from the sidebar to review saved audio. Your current settings are kept intact.";
+        else SessionHint.Text = Loc.T("Open Files & recovery from the sidebar to review saved audio. Your current settings are kept intact.");
     }
     internal void ShowAccount() => ShowCategory("Account & about");
     // The setup wizard covers the settings; it stays in front until the user finishes or leaves it.
@@ -606,23 +650,23 @@ public sealed partial class SettingsWindow : Window
 
     private static readonly SettingSearchEntry[] AppearanceSearchEntries =
     [
-        new("Appearance", "StandardChoice", "Recording overlay", "Choose Standard, Compact or Minimal.", "microphone", "waveform indicator"),
-        new("Appearance", "LiveTextToggle", "Live transcription", "Show streaming text beside the recording block.", "text"),
-        new("Appearance", "DetailsToggle", "Technical details", "Show audio level and render frequency.", "signal", "dB FPS"),
-        new("Overlay editor", "", "Customize layout", "Choose screen position and arrange the left and right widgets.", "layout", "appearance monitor top bottom drag"),
-        new("Integrations", "", "Integrations", "Manage installed plugins, accounts, models and updates.", "plugin", "OpenAI ChatGPT Groq ElevenLabs API key login discover marketplace"),
-        new("Advanced", "", "HTTP API", "Connect local scripts and apps, configure the port, and copy the API token.", "settings", "advanced server localhost auto-discovery automation"),
-        new("Advanced", DiagnosticsSettingsView.SettingKey, "Diagnostics", "Keep a local log without dictated text and export it for support.", "settings", "error log crash troubleshooting support export retention"),
-        new("Premium", "", "Premium", "Premium access, commercial license and development activation.", "lock", "supporter calendar correction learning cloud sync"),
-        new("Account & about", "", "Account & about", "License, Premium, updates and app information.", "info"),
-        new("Home", "", "Home", "Recent activity and transcriptions.", "home", "dashboard overview start"),
-        new("Workflows", "", "Workflows", "Create and edit workflows, triggers and their LLM.", "workflow", "prompt template automation selected text"),
-        new("Dictionary", "", "Dictionary", "Your words, corrections and term packs.", "dictionary", "vocabulary words corrections spelling"),
-        new("Snippets", "", "Snippets", "Reusable text with spoken triggers.", "text", "text expansion shortcut"),
-        new("Recorder", "", "Recorder", "Record microphone and system audio.", "recorder", "meeting session recordings"),
-        new("File transcription", "", "File transcription", "Transcribe audio and video files or watch a folder.", "file", "import audio video watch folder queue"),
-        new("Statistics", "", "Statistics", "Words, apps and models over time.", "stats", "activity usage streaks"),
-        new("Sync & backup", "", "Sync & backup", "Back up, restore, export or delete your data.", "devices", "backup restore export delete data")
+        new("Appearance", "StandardChoice", Loc.T("Recording overlay"), Loc.T("Choose Standard, Compact or Minimal."), "microphone", "waveform indicator"),
+        new("Appearance", "LiveTextToggle", Loc.T("Live transcription"), Loc.T("Show streaming text beside the recording block."), "text"),
+        new("Appearance", "DetailsToggle", Loc.T("Technical details"), Loc.T("Show audio level and render frequency."), "signal", "dB FPS"),
+        new(Loc.Mark("Overlay editor"), "", Loc.T("Customize layout"), Loc.T("Choose screen position and arrange the left and right widgets."), "layout", "appearance monitor top bottom drag"),
+        new(Loc.Mark("Integrations"), "", Loc.T("Integrations"), Loc.T("Manage installed plugins, accounts, models and updates."), "plugin", "OpenAI ChatGPT Groq ElevenLabs API key login discover marketplace"),
+        new("Advanced", "", Loc.T("HTTP API"), Loc.T("Connect local scripts and apps, configure the port, and copy the API token."), "settings", "advanced server localhost auto-discovery automation"),
+        new("Advanced", DiagnosticsSettingsView.SettingKey, Loc.T("Diagnostics"), Loc.T("Keep a local log without dictated text and export it for support."), "settings", "error log crash troubleshooting support export retention"),
+        new("Premium", "", Loc.T("Premium"), Loc.T("Premium access, commercial license and development activation."), "lock", "supporter calendar correction learning cloud sync"),
+        new("Account & about", "", Loc.T("Account & about"), Loc.T("License, Premium, updates and app information."), "info"),
+        new("Home", "", Loc.T("Home"), Loc.T("Recent activity and transcriptions."), "home", "dashboard overview start"),
+        new("Workflows", "", Loc.T("Workflows"), Loc.T("Create and edit workflows, triggers and their LLM."), "workflow", "prompt template automation selected text"),
+        new("Dictionary", "", Loc.T("Dictionary"), Loc.T("Your words, corrections and term packs."), "dictionary", "vocabulary words corrections spelling"),
+        new("Snippets", "", Loc.T("Snippets"), Loc.T("Reusable text with spoken triggers."), "text", "text expansion shortcut"),
+        new("Recorder", "", Loc.T("Recorder"), Loc.T("Record microphone and system audio."), "recorder", "meeting session recordings"),
+        new("File transcription", "", Loc.T("File transcription"), Loc.T("Transcribe audio and video files or watch a folder."), "file", "import audio video watch folder queue"),
+        new("Statistics", "", Loc.T("Statistics"), Loc.T("Words, apps and models over time."), "stats", "activity usage streaks"),
+        new("Sync & backup", "", Loc.T("Sync & backup"), Loc.T("Back up, restore, export or delete your data."), "devices", "backup restore export delete data")
     ];
 
     private void SettingsSearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -649,9 +693,10 @@ public sealed partial class SettingsWindow : Window
         CatalogContent.Children.Clear();
         foreach (var button in _navigationButtons) SetNavigationSelected(button, false);
         var results = SettingsSearchIndex.Find(SettingsCatalog.SearchEntries.Concat(AppearanceSearchEntries), query);
-        CatalogContent.Children.Add(SearchText("Search settings", 24));
-        CatalogContent.Children.Add(SearchText(results.Count == 0 ? "No matching settings. Try a shorter term, such as microphone, language or overlay."
-            : $"{results.Count} matching {(results.Count == 1 ? "setting" : "settings")} · select one to open its page", 13, true));
+        CatalogContent.Children.Add(SearchText(Loc.T("Search settings"), 24));
+        CatalogContent.Children.Add(SearchText(results.Count == 0 ? Loc.T("No matching settings. Try a shorter term, such as microphone, language or overlay.")
+            : results.Count == 1 ? Loc.T("{0} matching setting · select one to open its page", results.Count)
+            : Loc.T("{0} matching settings · select one to open its page", results.Count), 13, true));
         foreach (var result in results)
         {
             var row = new Grid { ColumnSpacing = 14 };
@@ -661,7 +706,7 @@ public sealed partial class SettingsWindow : Window
             row.Children.Add(new TypeWhisperGlyph { Kind = result.Icon, Width = 18, Height = 18 });
             var copy = new StackPanel { Spacing = 5 };
             copy.Children.Add(SearchText(result.Label, 14));
-            copy.Children.Add(SearchText(result.Category == "Overlay editor" ? "Appearance · Layout" : DisplayName(result.Category), 11, true));
+            copy.Children.Add(SearchText(result.Category == "Overlay editor" ? Loc.T("Appearance · Layout") : DisplayName(result.Category), 11, true));
             if (result.Description.Length > 0) copy.Children.Add(SearchText(result.Description, 12, true));
             Grid.SetColumn(copy, 1); row.Children.Add(copy);
             var arrow = SearchText("→", 16, true); arrow.VerticalAlignment = VerticalAlignment.Center;
@@ -669,7 +714,7 @@ public sealed partial class SettingsWindow : Window
             var button = new HandCursorButton { Content = row, Tag = result, Padding = new Thickness(14),
                 HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
-            AutomationProperties.SetName(button, $"Open {result.Label} in {DisplayName(result.Category)}");
+            AutomationProperties.SetName(button, Loc.T("Open {0} in {1}", result.Label, DisplayName(result.Category)));
             button.Click += (_, _) => OpenSearchResult(result);
             button.KeyDown += (_, key) =>
             {

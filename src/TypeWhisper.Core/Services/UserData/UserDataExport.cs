@@ -93,18 +93,18 @@ public static class UserDataExport
         ArgumentException.ThrowIfNullOrWhiteSpace(profileRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(destination);
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(profileRoot));
-        if (!Directory.Exists(root)) throw new DirectoryNotFoundException("No TypeWhisper data folder was found.");
+        if (!Directory.Exists(root)) throw new DirectoryNotFoundException(Loc.T("No TypeWhisper data folder was found."));
         var target = Path.GetFullPath(destination);
         // An archive inside the data folder would be copied into itself and removed by "Delete all data".
         if (IsSameOrInside(root, target))
-            throw new ArgumentException("Choose a location outside the TypeWhisper data folder.", nameof(destination));
+            throw new ArgumentException(Loc.T("Choose a location outside the TypeWhisper data folder."), nameof(destination));
         // Its own rules keep an earlier version's settings out, which the data folder's rules would copy.
         if ((previousVersionData ?? []).Any(place => IsSameOrInside(root, place.Root) || IsSameOrInside(place.Root, root)))
             throw new ArgumentException("An earlier version's folder must not overlap the data folder.", nameof(previousVersionData));
         // The same for an earlier version's data: it is copied into the archive and removed by "Delete all data" too.
         if ((previousVersionData ?? []).SelectMany(PlacePaths).Any(path => IsSameOrInside(path, target)))
-            throw new ArgumentException("Choose a location outside the folders of earlier TypeWhisper versions.", nameof(destination));
-        var folder = Path.GetDirectoryName(target) ?? throw new IOException("The export destination has no folder.");
+            throw new ArgumentException(Loc.T("Choose a location outside the folders of earlier TypeWhisper versions."), nameof(destination));
+        var folder = Path.GetDirectoryName(target) ?? throw new IOException(Loc.T("The export destination has no folder."));
 
         var temporary = Path.Join(folder, ".typewhisper-export-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
@@ -140,7 +140,7 @@ public static class UserDataExport
         {
             // The partial archive holds the same data as a finished one, so a copy that stays behind is named.
             if (!TryDelete(temporary))
-                throw new IOException($"The export did not finish, and its partial file could not be removed. Delete it yourself: {temporary}", ex);
+                throw new IOException(Loc.T("The export did not finish, and its partial file could not be removed. Delete it yourself: {0}", temporary), ex);
             throw;
         }
     }

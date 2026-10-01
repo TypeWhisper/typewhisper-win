@@ -7,16 +7,16 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class PremiumAccountView : UserControl
 {
-    private readonly Button _signIn = new HandCursorButton { Content = "Sign in with Apple", CornerRadius = new(8) };
-    private readonly Button _refresh = new HandCursorButton { Content = "Refresh account", CornerRadius = new(8) };
-    private readonly Button _link = new HandCursorButton { Content = "Link commercial license", CornerRadius = new(8) };
-    private readonly Button _signOut = new HandCursorButton { Content = "Sign out", CornerRadius = new(8) };
-    private readonly Button _cancel = new HandCursorButton { Content = "Cancel sign-in", CornerRadius = new(8) };
+    private readonly Button _signIn = new HandCursorButton { Content = Loc.T("Sign in with Apple"), CornerRadius = new(8) };
+    private readonly Button _refresh = new HandCursorButton { Content = Loc.T("Refresh account"), CornerRadius = new(8) };
+    private readonly Button _link = new HandCursorButton { Content = Loc.T("Link commercial license"), CornerRadius = new(8) };
+    private readonly Button _signOut = new HandCursorButton { Content = Loc.T("Sign out"), CornerRadius = new(8) };
+    private readonly Button _cancel = new HandCursorButton { Content = Loc.T("Cancel sign-in"), CornerRadius = new(8) };
     private readonly TextBlock _status = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
     internal PremiumAccountView()
     {
         var body = new StackPanel { Spacing = 12 };
-        body.Children.Add(SettingsHelp.Label("Premium account", "Sign in with your Apple Account in your browser. An activated commercial license is linked to your account after sign-in. Account access and iCloud Drive folder synchronization are separate; signing out keeps your local data and license.", 16));
+        body.Children.Add(SettingsHelp.Label(Loc.T("Premium account"), Loc.T("Sign in with your Apple Account in your browser. An activated commercial license is linked to your account after sign-in. Account access and iCloud Drive folder synchronization are separate; signing out keeps your local data and license."), 16));
         var actions = new StackPanel { Spacing = 8 };
         foreach (var button in new[] { _signIn, _refresh, _link, _signOut, _cancel }) { button.HorizontalAlignment = HorizontalAlignment.Left; actions.Children.Add(button); }
         body.Children.Add(actions); body.Children.Add(_status);

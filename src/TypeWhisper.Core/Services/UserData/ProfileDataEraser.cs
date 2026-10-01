@@ -106,7 +106,7 @@ public static class ProfileDataEraser
     {
         var fullRoot = Normalize(root);
         if (Classify(fullRoot) == RootKind.Refused)
-            throw new IOException("The TypeWhisper data folder is a link or not a folder, so it is never deleted automatically.");
+            throw new IOException(Loc.T("The TypeWhisper data folder is a link or not a folder, so it is never deleted automatically."));
         Directory.CreateDirectory(fullRoot);
         // Held open like during erasure, so the folder cannot be swapped for a link while the marker is written.
         using var pin = PinFolder(fullRoot);

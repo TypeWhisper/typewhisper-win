@@ -14,7 +14,7 @@ public sealed record Choice(string Id, string Label, string Description, bool En
 public sealed partial class ChoicePicker : UserControl
 {
     private IReadOnlyList<Choice> _options = [];
-    private string _automationName = "Choice";
+    private string _automationName = Loc.T("Choice");
     private bool _keyboard;
     private HandCursorButton? _selectedButton;
     private int _comparisonVariant;
@@ -34,11 +34,11 @@ public sealed partial class ChoicePicker : UserControl
         AutomationProperties.SetName(ChoiceButton, automationName);
     }
 
-    internal void SetOptions(IReadOnlyList<Choice> options, string selectedId, string placeholder = "Choose a model")
+    internal void SetOptions(IReadOnlyList<Choice> options, string selectedId, string? placeholder = null)
     {
         _options = options;
         SelectedId = selectedId;
-        ChoiceLabel.Text = options.FirstOrDefault(option => option.Id == selectedId)?.Label ?? placeholder;
+        ChoiceLabel.Text = options.FirstOrDefault(option => option.Id == selectedId)?.Label ?? placeholder ?? Loc.T("Choose a model");
         UpdateSelectedIcon();
         UpdateComparisonContent();
         if (IsPopupOpen) RebuildChoices(restoreFocus: true);
@@ -67,7 +67,7 @@ public sealed partial class ChoicePicker : UserControl
             Foreground = (Brush)Application.Current.Resources["TextBrush"] };
         if (variant == 3)
         {
-            row.Children.Add(new TextBlock { Text = "Microphone", FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+            row.Children.Add(new TextBlock { Text = Loc.T("Microphone"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
             Grid.SetColumn(_comparisonValue, 1);
             _comparisonValue.MaxWidth = 145;
@@ -106,7 +106,7 @@ public sealed partial class ChoicePicker : UserControl
     private void UpdateComparisonContent()
     {
         var selected = _options.FirstOrDefault(o => o.Id == SelectedId);
-        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? "Choose\u2026";
+        if (_comparisonValue is not null) _comparisonValue.Text = selected?.Label ?? Loc.T("Choose\u2026");
         if (_comparisonDescription is not null) _comparisonDescription.Text = selected?.Description ?? "";
     }
 
@@ -157,9 +157,9 @@ public sealed partial class ChoicePicker : UserControl
                 button.Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 19, 40, 58));
                 if (option.Enabled) _selectedButton = button;
             }
-            AutomationProperties.SetName(button, $"{_automationName} option {option.Id}");
+            AutomationProperties.SetName(button, Loc.T("{0} option {1}", _automationName, option.Id));
             AutomationProperties.SetHelpText(button, $"{option.Label}. {option.Description}");
-            AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+            AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
             button.Click += (_, _) =>
             {
                 var changed = SelectedId != option.Id;

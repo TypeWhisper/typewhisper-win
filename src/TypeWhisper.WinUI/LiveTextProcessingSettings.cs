@@ -34,7 +34,7 @@ internal static class LiveTextProcessingSettings
             header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
             var toggle = AppToggleSwitch.Create(get(store.Current));
             AutomationProperties.SetName(toggle, title);
-            AutomationProperties.SetHelpText(toggle, description + " Changes apply to the next recording.");
+            AutomationProperties.SetHelpText(toggle, Loc.T("{0} Changes apply to the next recording.", description));
             header.Children.Add(SettingsHelp.Label(title, description));
             Grid.SetColumn(toggle, 1); header.Children.Add(toggle);
             row.Children.Add(header);
@@ -45,7 +45,7 @@ internal static class LiveTextProcessingSettings
                 restoring = true;
                 toggle.IsOn = get(store.Current);
                 restoring = false;
-                status.Text = store.Error ?? "Saved for the next recording.";
+                status.Text = store.Error ?? Loc.T("Saved for the next recording.");
             });
             toggle.Toggled += (_, _) =>
             {
@@ -68,7 +68,7 @@ internal static class LiveTextProcessingSettings
             refreshers.Add(() =>
             {
                 picker.SetOptions(options, get(store.Current));
-                status.Text = store.Error ?? "Saved for the next recording.";
+                status.Text = store.Error ?? Loc.T("Saved for the next recording.");
             });
             picker.SelectionChanged += id =>
             {
@@ -77,27 +77,27 @@ internal static class LiveTextProcessingSettings
             };
         }
 
-        AddToggle("TranscriptionNumberNormalizationEnabled", "Normalize numbers",
-            "Write spoken numbers as digits where appropriate for the transcript language.",
+        AddToggle("TranscriptionNumberNormalizationEnabled", Loc.T("Normalize numbers"),
+            Loc.T("Write spoken numbers as digits where appropriate for the transcript language."),
             preferences => preferences.TranscriptionNumberNormalizationEnabled,
             (preferences, enabled) => preferences with { TranscriptionNumberNormalizationEnabled = enabled });
-        AddToggle("ShortUtterancePunctuationEnabled", "Keep punctuation in short phrases",
-            "Keep model punctuation in one- or two-word phrases. When off, remove greeting commas and ending punctuation from these phrases.",
+        AddToggle("ShortUtterancePunctuationEnabled", Loc.T("Keep punctuation in short phrases"),
+            Loc.T("Keep model punctuation in one- or two-word phrases. When off, remove greeting commas and ending punctuation from these phrases."),
             preferences => preferences.ShortUtterancePunctuationEnabled,
             (preferences, enabled) => preferences with { ShortUtterancePunctuationEnabled = enabled });
-        AddChoice("EnglishOutputVariant", "English spelling", [
-            new("AsTranscribed", "As transcribed", "Keep spelling from transcription and corrections."),
-            new("UnitedStates", "American", "Apply American spelling to recognized English output."),
-            new("UnitedKingdom", "British", "Apply British spelling to recognized English output.")
+        AddChoice("EnglishOutputVariant", Loc.T("English spelling"), [
+            new("AsTranscribed", Loc.T("As transcribed"), Loc.T("Keep spelling from transcription and corrections.")),
+            new("UnitedStates", Loc.T("American"), Loc.T("Apply American spelling to recognized English output.")),
+            new("UnitedKingdom", Loc.T("British"), Loc.T("Apply British spelling to recognized English output."))
         ], preferences => preferences.EnglishOutputVariant.ToString(),
             (preferences, id) => preferences with { EnglishOutputVariant = Enum.Parse<EnglishOutputVariant>(id) },
-            "Applied after snippets and dictionary corrections. Requires English to be detected or selected as the spoken language; automatic language without detection leaves spelling unchanged.");
-        AddChoice("GermanOutputVariant", "German spelling", [
-            new("AsTranscribed", "As transcribed", "Keep spelling from transcription and corrections."),
-            new("Switzerland", "Swiss Standard German", "Write ss instead of ß in German output.")
+            Loc.T("Applied after snippets and dictionary corrections. Requires English to be detected or selected as the spoken language; automatic language without detection leaves spelling unchanged."));
+        AddChoice("GermanOutputVariant", Loc.T("German spelling"), [
+            new("AsTranscribed", Loc.T("As transcribed"), Loc.T("Keep spelling from transcription and corrections.")),
+            new("Switzerland", Loc.T("Swiss Standard German"), Loc.T("Write ss instead of ß in German output."))
         ], preferences => preferences.GermanOutputVariant.ToString(),
             (preferences, id) => preferences with { GermanOutputVariant = Enum.Parse<GermanOutputVariant>(id) },
-            "Applied after snippets and dictionary corrections. Requires German to be detected or selected as the spoken language; automatic language without detection leaves spelling unchanged.");
+            Loc.T("Applied after snippets and dictionary corrections. Requires German to be detected or selected as the spoken language; automatic language without detection leaves spelling unchanged."));
         RefreshAll();
     }
 

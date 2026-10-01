@@ -9,21 +9,21 @@ public sealed class SetupReadiness
     public void ReportPersistence(string? error) => PersistenceError = error;
     /// <summary>Returns a blocking reason using actual capture fallback availability, not only the preferred device.</summary>
     public static string? Validate(bool busy, bool hasShortcut, bool modelReady, bool microphoneAvailable) =>
-        busy ? "Wait for the current operation to finish. You can skip setup."
-        : !hasShortcut ? "Save a dictation shortcut before finishing."
-        : !modelReady ? "Select a ready model in plugin settings before finishing."
-        : !microphoneAvailable ? "No microphone is available. Connect one or skip setup."
+        busy ? Loc.T("Wait for the current operation to finish. You can skip setup.")
+        : !hasShortcut ? Loc.T("Save a dictation shortcut before finishing.")
+        : !modelReady ? Loc.T("Select a ready model in plugin settings before finishing.")
+        : !microphoneAvailable ? Loc.T("No microphone is available. Connect one or skip setup.")
         : null;
     /// <summary>Checks the prerequisite belonging to the current setup step.</summary>
     public static string? ValidateStep(int step, bool busy, bool hasShortcut, bool modelReady, bool microphoneAvailable) => step switch
     {
         0 => null,
-        1 => microphoneAvailable ? null : "Connect a microphone to continue, or skip setup.",
-        2 => hasShortcut ? null : "Save a dictation shortcut to continue.",
-        3 => busy ? "Wait for the model to finish loading." : modelReady ? null : "Choose a ready model or configure its plugin to continue.",
+        1 => microphoneAvailable ? null : Loc.T("Connect a microphone to continue, or skip setup."),
+        2 => hasShortcut ? null : Loc.T("Save a dictation shortcut to continue."),
+        3 => busy ? Loc.T("Wait for the model to finish loading.") : modelReady ? null : Loc.T("Choose a ready model or configure its plugin to continue."),
         _ => Validate(busy, hasShortcut, modelReady, microphoneAvailable)
     };
 
     /// <summary>Preserves persistence errors across live readiness updates.</summary>
-    public string Message(string? readiness) => PersistenceError ?? readiness ?? "Configuration is ready. Audio has not been tested by setup.";
+    public string Message(string? readiness) => PersistenceError ?? readiness ?? Loc.T("Configuration is ready. Audio has not been tested by setup.");
 }

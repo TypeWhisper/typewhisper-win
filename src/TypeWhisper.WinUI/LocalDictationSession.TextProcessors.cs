@@ -55,7 +55,7 @@ internal sealed partial class LocalDictationSession
                 (plugin, ct) => PortablePluginSettingsWriter.SaveAsync(plugin, changes, apiKey, ct),
                 preserveCompletedResult: true);
         });
-        return result is null ? new([], false, error ?? "The settings could not be saved.")
+        return result is null ? new([], false, error ?? Loc.T("The settings could not be saved."))
             : result with { Error = error ?? result.Error };
     }
 }

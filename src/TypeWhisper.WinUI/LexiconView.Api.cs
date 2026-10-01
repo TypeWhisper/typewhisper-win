@@ -11,7 +11,7 @@ public sealed partial class LexiconView
         _store.ReloadSnippets();
         if (_draft is null) Render();
         else if (ApiEditorConflict())
-            _notice.Text = "This entry changed outside this editor. Your draft is still here; copy any changes you need, then reopen the entry before saving.";
+            _notice.Text = Loc.T("This entry changed outside this editor. Your draft is still here; copy any changes you need, then reopen the entry before saving.");
     }
 
     private bool ApiEditorConflict() => _draft is not null &&
@@ -23,7 +23,7 @@ public sealed partial class LexiconView
         _store.ReloadSnippets();
         if (_store.LastError is { } error) { _notice.Text = error; return false; }
         if (!ApiEditorConflict()) return true;
-        _notice.Text = "This entry changed outside this editor. Your draft is still here; copy any changes you need, then reopen the entry before saving.";
+        _notice.Text = Loc.T("This entry changed outside this editor. Your draft is still here; copy any changes you need, then reopen the entry before saving.");
         return false;
     }
 }

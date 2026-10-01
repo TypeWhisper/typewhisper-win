@@ -130,17 +130,17 @@ public static class WorkflowTemplateCatalog
     [
         new(
             WorkflowTemplate.CleanedText,
-            "Smart Formatting",
-            "Use AI to improve punctuation, paragraphs, grammar, and structure while preserving the original message.",
+            Loc.T("Smart Formatting"),
+            Loc.T("Use AI to improve punctuation, paragraphs, grammar, and structure while preserving the original message."),
             "Text"),
-        new(WorkflowTemplate.Translation, "Translation", "Translate dictated text into the target language.", "Globe"),
-        new(WorkflowTemplate.EmailReply, "Email Reply", "Turn dictated notes into a reply email.", "Mail"),
-        new(WorkflowTemplate.MeetingNotes, "Meeting Notes", "Structure dictated notes into a meeting summary.", "Notes"),
-        new(WorkflowTemplate.Checklist, "Checklist", "Extract action items into a checklist.", "Check"),
-        new(WorkflowTemplate.Json, "JSON", "Extract structured data as JSON.", "Json"),
-        new(WorkflowTemplate.Summary, "Summary", "Condense dictated text into a concise summary.", "Summary"),
-        new(WorkflowTemplate.Dictation, "Dictation Only", "Transcribe and insert without LLM processing.", "Microphone"),
-        new(WorkflowTemplate.Custom, "Custom Workflow", "Start with a flexible workflow draft.", "Custom")
+        new(WorkflowTemplate.Translation, Loc.T("Translation"), Loc.T("Translate dictated text into the target language."), "Globe"),
+        new(WorkflowTemplate.EmailReply, Loc.T("Email Reply"), Loc.T("Turn dictated notes into a reply email."), "Mail"),
+        new(WorkflowTemplate.MeetingNotes, Loc.T("Meeting Notes"), Loc.T("Structure dictated notes into a meeting summary."), "Notes"),
+        new(WorkflowTemplate.Checklist, Loc.T("Checklist"), Loc.T("Extract action items into a checklist."), "Check"),
+        new(WorkflowTemplate.Json, "JSON", Loc.T("Extract structured data as JSON."), "Json"),
+        new(WorkflowTemplate.Summary, Loc.T("Summary"), Loc.T("Condense dictated text into a concise summary."), "Summary"),
+        new(WorkflowTemplate.Dictation, Loc.T("Dictation Only"), Loc.T("Transcribe and insert without LLM processing."), "Microphone"),
+        new(WorkflowTemplate.Custom, Loc.T("Custom Workflow"), Loc.T("Start with a flexible workflow draft."), "Custom")
     ];
 
     /// <summary>

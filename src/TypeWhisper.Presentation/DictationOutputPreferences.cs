@@ -69,7 +69,7 @@ public sealed class DictationOutputPreferencesStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             Current = new() { AutoPaste = false, SaveToHistory = false };
-            Error = "Output preferences could not be loaded. Automatic paste and history saving are off. Save your choices to restore them.";
+            Error = Loc.T("Output preferences could not be loaded. Automatic paste and history saving are off. Save your choices to restore them.");
         }
     }
 
@@ -84,7 +84,7 @@ public sealed class DictationOutputPreferencesStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Error = "Output preferences could not be saved. Your previous choices still apply.";
+            return Error = Loc.T("Output preferences could not be saved. Your previous choices still apply.");
         }
     }
 }

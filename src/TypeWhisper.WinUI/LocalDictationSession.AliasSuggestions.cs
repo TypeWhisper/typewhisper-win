@@ -8,7 +8,7 @@ internal sealed partial class LocalDictationSession
         string providerId, string modelId, CancellationToken ct)
     {
         if (!CanStartPluginSettingsAction || !_gate.Wait(0))
-            throw new InvalidOperationException("Finish the current dictation or model operation before generating aliases.");
+            throw new InvalidOperationException(Loc.T("Finish the current dictation or model operation before generating aliases."));
         _workflowReserved = true;
         try
         {
@@ -17,7 +17,7 @@ internal sealed partial class LocalDictationSession
                 (prompt, input, token) => PluginRuntime.UseLocalLlmAsync(providerId, (provider, providerToken) =>
                 {
                     if (!provider.IsAvailable || !provider.SupportedModels.Any(model => model.Id == modelId))
-                        throw new InvalidOperationException("The local model is no longer available. Load it in Plugins and try again.");
+                        throw new InvalidOperationException(Loc.T("The local model is no longer available. Load it in Plugins and try again."));
                     return provider.ProcessAsync(prompt, input, modelId, providerToken);
                 }, token), ct);
         }

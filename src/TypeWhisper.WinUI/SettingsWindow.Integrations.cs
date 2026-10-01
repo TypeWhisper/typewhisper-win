@@ -13,7 +13,7 @@ public sealed partial class SettingsWindow
         foreach (var button in _pluginNavigationButtons) _navigationButtons.Remove(button);
         _pluginNavigationButtons.Clear();
         _integrationNavigation.Children.Clear();
-        AddIntegrationNavigation("Discover plugins", "Integrations", "discover");
+        AddIntegrationNavigation(Loc.T("Discover plugins"), "Integrations", "discover");
         foreach (var (id, title) in items) AddIntegrationNavigation(title, "plugin:" + id, "plugin");
     }
 
@@ -33,7 +33,7 @@ public sealed partial class SettingsWindow
             HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
             MinHeight = 36, Padding = new Thickness(10, 7, 10, 7),
             Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
-        AutomationProperties.SetName(button, "Settings integration " + title);
+        AutomationProperties.SetName(button, Loc.T("Settings integration {0}", title));
         SetNavigationSelected(button, selected);
         ToolTipService.SetToolTip(button, title);
         button.Click += (_, _) => ShowCategory(category);

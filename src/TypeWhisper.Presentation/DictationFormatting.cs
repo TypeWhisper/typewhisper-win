@@ -39,7 +39,7 @@ public static class DictationFormatting
     {
         var normalizedLanguage = SpokenFormattingLanguageNormalizer.Normalize(language);
         if (string.IsNullOrWhiteSpace(engineId) || normalizedLanguage is null || !Rules.Supports(normalizedLanguage) ||
-            strategy is { } value && !Enum.IsDefined(value)) throw new ArgumentException("Choose a known engine and a supported formatting language and strategy.");
+            strategy is { } value && !Enum.IsDefined(value)) throw new ArgumentException(Loc.T("Choose a known engine and a supported formatting language and strategy."));
         var engine = engineId.Trim();
         var model = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
         var key = DictationSpokenFormattingProfile.MakeKey(engine, model, normalizedLanguage);

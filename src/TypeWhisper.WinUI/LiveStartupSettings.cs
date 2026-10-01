@@ -12,7 +12,7 @@ internal static class LiveStartupSettings
         var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "AutostartEnabled"));
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear(); row.IsHitTestVisible = true;
-        var toggle = new ToggleSwitch { Header = "Start TypeWhisper with Windows", IsEnabled = false };
+        var toggle = new ToggleSwitch { Header = Loc.T("Start TypeWhisper with Windows"), IsEnabled = false };
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var updating = false;
         void Show(StartupRegistrationState state)
@@ -20,8 +20,8 @@ internal static class LiveStartupSettings
             updating = true;
             toggle.IsOn = state.IsEnabled; toggle.IsEnabled = state.CanChange;
             status.Text = state.Error ?? (state.IsEnabled
-                ? "Starts in the tray when you sign in. Windows can also disable it in Startup apps."
-                : "Off. Enable to start TypeWhisper in the tray when you sign in.");
+                ? Loc.T("Starts in the tray when you sign in. Windows can also disable it in Startup apps.")
+                : Loc.T("Off. Enable to start TypeWhisper in the tray when you sign in."));
             updating = false;
         }
         toggle.Toggled += async (_, _) =>

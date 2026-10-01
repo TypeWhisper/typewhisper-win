@@ -52,7 +52,7 @@ internal sealed class EscapeCancelHook : IDisposable
         if (_disposed) return null;
         var replacement = SetWindowsHookEx(13, _callback, GetModuleHandle(null), 0);
         if (replacement == IntPtr.Zero)
-            return $"Could not restore the Escape cancel hook (Windows error {Marshal.GetLastWin32Error()}). Restart TypeWhisper if Esc stops cancelling dictation.";
+            return Loc.T("Could not restore the Escape cancel hook (Windows error {0}). Restart TypeWhisper if Esc stops cancelling dictation.", Marshal.GetLastWin32Error());
         var previous = _hook;
         _hook = replacement;
         if (previous != IntPtr.Zero) UnhookWindowsHookEx(previous);

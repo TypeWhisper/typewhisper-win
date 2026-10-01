@@ -42,6 +42,20 @@ public sealed partial class MarketplaceView : UserControl
     public MarketplaceView()
     {
         InitializeComponent();
+        MarketTitle.Text = Loc.T("Discover plugins");
+        MarketSummary.Text = Loc.T("Discover");
+        AutomationProperties.SetName(MarketList, Loc.T("Available plugins"));
+        EmptyTitle.Text = Loc.T("No matching plugins");
+        ResetFiltersButton.Content = Loc.T("Reset filters");
+        AutomationProperties.SetName(ResetFiltersButton, Loc.T("Reset marketplace filters"));
+        AutomationProperties.SetName(InstallProgress, Loc.T("Plugin installation progress"));
+        MarketAccessHeading.Text = Loc.T("REQUESTED ACCESS");
+        MarketNavigationHint.Text = Loc.T("Esc Back   ↑↓ Navigate   Enter Open");
+        MarketUpdateAllButton.Content = Loc.T("Update all");
+        MarketCancelButton.Content = Loc.T("Cancel");
+        AutomationProperties.SetName(MarketCancelButton, Loc.T("Cancel installation"));
+        MarketPrimaryButton.Content = Loc.T("Install");
+        AutomationProperties.SetName(MarketPrimaryButton, Loc.T("Marketplace primary action"));
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
         CatalogFilters.SelectionChanged += id => { _categoriesFilter = id == "all" ? "" : id; Filter(_query); };
         UpdateCategories();
@@ -54,7 +68,7 @@ public sealed partial class MarketplaceView : UserControl
         runtime.Packages.Updates.Changed += () => DispatcherQueue.TryEnqueue(() => { UpdateAllAction(); if (!IsDetail) Filter(_query); else UpdateDetail(); });
         _isInstalled = runtime.Packages.Store.IsInstalled;
 
-        ResetFiltersButton.Content = "Retry";
+        ResetFiltersButton.Content = Loc.T("Retry");
         Loaded += async (_, _) => await RefreshCatalogAsync();
         runtime.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsDetail) UpdateDetail(); else Filter(_query); });
     }
@@ -63,7 +77,7 @@ public sealed partial class MarketplaceView : UserControl
     {
         if (_runtime is null || _fetching || _installation is not null) return;
         _fetching = true; _error = null;
-        EmptyTitle.Text = "Loading plugins…";
+        EmptyTitle.Text = Loc.T("Loading plugins…");
         EmptyDescription.Text = "";
         ResetFiltersButton.Visibility = Visibility.Collapsed;
         try
@@ -72,17 +86,17 @@ public sealed partial class MarketplaceView : UserControl
             _entries = await _runtime.Packages.Catalog.FetchAsync(timeout.Token);
             _runtime.Packages.Updates.AcceptCatalog(_entries);
             _catalog = _entries.Select(entry => new MarketplaceItem(new(entry.Id, entry.Name, entry.Description,
-                "plugin", string.Join(" / ", entry.Categories.Select(value => value == "llm" ? "LLM" : char.ToUpperInvariant(value[0]) + value[1..])), "Plugins run with your Windows user's permissions. Install only publishers you trust.",
+                "plugin", string.Join(" / ", entry.Categories.Select(value => value == "llm" ? "LLM" : char.ToUpperInvariant(value[0]) + value[1..])), Loc.T("Plugins run with your Windows user's permissions. Install only publishers you trust."),
                 entry.Version, entry.MinHostVersion), entry.Author)
                 { CategoriesIds = entry.Categories, Supported = entry.Supports(LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture) }).ToArray();
-            EmptyTitle.Text = _catalog.Count == 0 ? "No plugins published yet" : "No matching plugins";
-            EmptyDescription.Text = _catalog.Count == 0 ? "The catalog is ready. Plugins will appear here when they are published." : "Try another search.";
+            EmptyTitle.Text = _catalog.Count == 0 ? Loc.T("No plugins published yet") : Loc.T("No matching plugins");
+            EmptyDescription.Text = _catalog.Count == 0 ? Loc.T("The catalog is ready. Plugins will appear here when they are published.") : Loc.T("Try another search.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _catalog = []; _entries = [];
-            EmptyTitle.Text = "Catalog unavailable";
-            EmptyDescription.Text = "The plugin catalog could not be loaded. Your installed plugins remain available. Try again shortly.";
+            EmptyTitle.Text = Loc.T("Catalog unavailable");
+            EmptyDescription.Text = Loc.T("The plugin catalog could not be loaded. Your installed plugins remain available. Try again shortly.");
             System.Diagnostics.Debug.WriteLine("Plugin catalog: " + ex.GetType().Name);
         }
         finally { UpdateCategories(); _fetching = false; ResetFiltersButton.Visibility = Visibility.Visible; Filter(_query); }
@@ -102,15 +116,15 @@ public sealed partial class MarketplaceView : UserControl
             FilteredItems.Add(item with { Installed = _isInstalled(item.Plugin.Id),
                 UpdateAvailable = HasUpdate(item), PendingRestart = _runtime?.Packages.Store.PendingRestart(item.Plugin.Id) == true });
         MarketList.SelectedItem = FilteredItems.FirstOrDefault(item => item.Plugin.Id == selectedId) ?? FilteredItems.FirstOrDefault();
-        MarketSummary.Text = $"{FilteredItems.Count} {(FilteredItems.Count == 1 ? "plugin" : "plugins")}";
+        MarketSummary.Text = FilteredItems.Count == 1 ? Loc.T("1 plugin") : Loc.T("{0} plugins", FilteredItems.Count);
         MarketEmptyState.Visibility = FilteredItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_catalog.Count > 0)
         {
-            ResetFiltersButton.Content = available.Length == 0 ? "Refresh catalog" : "Reset filters";
-            EmptyTitle.Text = available.Length == 0 ? "All available plugins are installed" : "No matching plugins";
+            ResetFiltersButton.Content = available.Length == 0 ? Loc.T("Refresh catalog") : Loc.T("Reset filters");
+            EmptyTitle.Text = available.Length == 0 ? Loc.T("All available plugins are installed") : Loc.T("No matching plugins");
             EmptyDescription.Text = available.Length == 0
-                ? "Open an installed plugin in the sidebar to change its settings. Check again later for new plugins."
-                : "Try another search or category.";
+                ? Loc.T("Open an installed plugin in the sidebar to change its settings. Check again later for new plugins.")
+                : Loc.T("Try another search or category.");
         }
     }
 
@@ -149,24 +163,24 @@ public sealed partial class MarketplaceView : UserControl
         var pending = _runtime.Packages.Store.PendingRestart(item.Plugin.Id);
         var busy = _installation is not null || _runtime.Packages.Updates.Busy;
         MarketTitle.Text = item.Title;
-        MarketSummary.Text = "Discover";
+        MarketSummary.Text = Loc.T("Discover");
         MarketDescription.Text = item.Description;
         MarketPublisher.Text = item.Publisher + " / " + item.Categories;
         MarketAccess.Text = item.Plugin.Permissions;
-        MarketCompatibility.Text = $"Version {item.Plugin.Version} · Minimum host {item.Plugin.MinimumHostVersion}";
-        MarketStatus.Text = busy ? "Installing…" : _error is not null ? pending ? "Restart unavailable" : "Installation failed" : pending ? "Restart required" : !item.Supported ? "Not compatible" : update ? "Update available" : installed ? "Installed" : "Available";
-        MarketStatusExplanation.Text = _error ?? (busy ? _runtime.Packages.Updates.Busy ? _runtime.Packages.Updates.Status : _operationMessage ?? "Preparing installation…"
-            : pending ? "Restart TypeWhisper to use the update. The current version remains available until then."
-            : !item.Supported ? "This package does not support your TypeWhisper version or Windows architecture."
-            : installed && !update ? "Open plugin settings to finish setup or manage its models."
-            : "The package is downloaded over HTTPS and checked against the catalog checksum.");
+        MarketCompatibility.Text = Loc.T("Version {0} · Minimum host {1}", item.Plugin.Version, item.Plugin.MinimumHostVersion);
+        MarketStatus.Text = busy ? Loc.T("Installing…") : _error is not null ? pending ? Loc.T("Restart unavailable") : Loc.T("Installation failed") : pending ? Loc.T("Restart required") : !item.Supported ? Loc.T("Not compatible") : update ? Loc.T("Update available") : installed ? Loc.T("Installed") : Loc.T("Available");
+        MarketStatusExplanation.Text = _error ?? (busy ? _runtime.Packages.Updates.Busy ? _runtime.Packages.Updates.Status : _operationMessage ?? Loc.T("Preparing installation…")
+            : pending ? Loc.T("Restart TypeWhisper to use the update. The current version remains available until then.")
+            : !item.Supported ? Loc.T("This package does not support your TypeWhisper version or Windows architecture.")
+            : installed && !update ? Loc.T("Open plugin settings to finish setup or manage its models.")
+            : Loc.T("The package is downloaded over HTTPS and checked against the catalog checksum."));
         MarketPrimaryButton.Visibility = Visibility.Visible;
-        MarketPrimaryButton.Content = _restarting ? "Restarting…" : busy ? "Installing…" : pending ? "Restart now · Enter" : update ? "Update" : installed ? "Open settings" : "Install";
+        MarketPrimaryButton.Content = _restarting ? Loc.T("Restarting…") : busy ? Loc.T("Installing…") : pending ? Loc.T("Restart now · Enter") : update ? Loc.T("Update") : installed ? Loc.T("Open settings") : Loc.T("Install");
         MarketPrimaryButton.IsEnabled = !_restarting && !busy && item.Supported && _runtime.Packages.Store.Initialized
             && (!pending || RestartRequested is not null);
         MarketCancelButton.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
         InstallProgress.Visibility = _installation is not null ? Visibility.Visible : Visibility.Collapsed;
-        MarketNavigationHint.Text = busy ? "Esc Cancel" : "Esc Back";
+        MarketNavigationHint.Text = busy ? Loc.T("Esc Cancel") : Loc.T("Esc Back");
     }
 
     private void ShowList(bool reset)
@@ -177,7 +191,7 @@ public sealed partial class MarketplaceView : UserControl
         MarketListPage.Visibility = Visibility.Visible;
         MarketDetailPage.Visibility = Visibility.Collapsed;
         MarketPrimaryButton.Visibility = MarketCancelButton.Visibility = Visibility.Collapsed;
-        MarketNavigationHint.Text = "Esc Back   ↑↓ Navigate   Enter Open";
+        MarketNavigationHint.Text = Loc.T("Esc Back   ↑↓ Navigate   Enter Open");
         DetailModeChanged?.Invoke(false);
         if (reset)
         {
@@ -219,7 +233,7 @@ public sealed partial class MarketplaceView : UserControl
             _restarting = true; _error = null; UpdateDetail();
             try { _error = await RestartRequested(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _error = "Restart could not finish. Close and reopen TypeWhisper to apply the update."; }
+            { _error = Loc.T("Restart could not finish. Close and reopen TypeWhisper to apply the update."); }
             finally { _restarting = false; if (IsDetail) UpdateDetail(); }
             return;
         }
@@ -233,7 +247,7 @@ public sealed partial class MarketplaceView : UserControl
         }
         var entry = _entries.Single(entry => entry.Id == item.Plugin.Id);
         using var operation = new CancellationTokenSource();
-        _installation = operation; _error = null; _operationMessage = "Preparing installation…"; SetProgress(0);
+        _installation = operation; _error = null; _operationMessage = Loc.T("Preparing installation…"); SetProgress(0);
         UpdateDetail();
         var openSettings = false;
         try
@@ -250,7 +264,7 @@ public sealed partial class MarketplaceView : UserControl
             // If enabling is refused (e.g. while recording), the page still offers Enable.
             if (openSettings && _runtime.GetPluginBinding(item.Plugin.Id) is { } binding && !binding.IsEnabled())
             {
-                _operationMessage = "Enabling " + item.Plugin.Title + "…";
+                _operationMessage = Loc.T("Enabling {0}…", item.Plugin.Title);
                 SetProgress(null);
                 if (IsDetail) MarketStatusExplanation.Text = _operationMessage;
                 if (await binding.ChangeEnabledAsync(true) is not null)
@@ -281,7 +295,7 @@ public sealed partial class MarketplaceView : UserControl
     {
         var ids = _catalog.SelectMany(item => item.CategoriesIds).Distinct(StringComparer.OrdinalIgnoreCase).Order().ToArray();
         if (!ids.Contains(_categoriesFilter, StringComparer.OrdinalIgnoreCase)) _categoriesFilter = "";
-        CatalogFilters.SetItems(new[] { new Tab("all", "All") }.Concat(ids.Select(id =>
+        CatalogFilters.SetItems(new[] { new Tab("all", Loc.T("All")) }.Concat(ids.Select(id =>
             new Tab(id, id == "llm" ? "LLM" : char.ToUpperInvariant(id[0]) + id[1..]))).ToArray(),
             _categoriesFilter.Length == 0 ? "all" : _categoriesFilter);
     }

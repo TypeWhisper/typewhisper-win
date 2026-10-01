@@ -8,7 +8,7 @@ internal sealed partial class LocalDictationSession
     internal IDisposable ReserveWorkflowShortcut()
     {
         if (!CanStartWorkflowShortcut || !_gate.Wait(0))
-            throw new InvalidOperationException("Finish the current recording, transcription or model operation before running a workflow shortcut.");
+            throw new InvalidOperationException(Loc.T("Finish the current recording, transcription or model operation before running a workflow shortcut."));
         _workflowReserved = true;
         try
         {

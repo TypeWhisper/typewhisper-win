@@ -13,15 +13,15 @@ public sealed partial class FileTranscriptionView
         _picking = true;
         try
         {
-            var picker = new FolderPicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = "Export completed transcripts as TXT" };
+            var picker = new FolderPicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = Loc.T("Export completed transcripts as TXT") };
             var folder = await picker.PickSingleFolderAsync();
             if (folder is null || _queue.IsShutdown) return;
             var export = TranscriptFileExport.ExportBatchAsync(ready, folder.Path, "txt");
             _exportOperation = export;
             var failures = await export;
-            _notice.Text = $"{ready.Length - failures.Count} transcripts exported." + (failures.Count > 0 ? " " + string.Join(" ", failures) : " Existing files were preserved.");
+            _notice.Text = Loc.T("{0} transcripts exported.", ready.Length - failures.Count) + " " + (failures.Count > 0 ? string.Join(" ", failures) : Loc.T("Existing files were preserved."));
         }
-        catch (Exception) { _notice.Text = "Export could not finish. Your transcripts remain available."; }
+        catch (Exception) { _notice.Text = Loc.T("Export could not finish. Your transcripts remain available."); }
         finally { _picking = false; _exportOperation = Task.CompletedTask; if (!_queue.IsShutdown) Render(); }
     }
 }

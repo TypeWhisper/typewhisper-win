@@ -7,5 +7,5 @@ public static class ShortcutAdmission
     /// <param name="destination">What the shortcut opens, as used in the sentence, such as "the recorder".</param>
     /// <param name="operationBusy">Whether recording, processing or another operation is running.</param>
     public static string? Rejection(string destination, bool operationBusy) => operationBusy
-        ? $"Finish the current operation before opening {destination}. Your work is kept intact." : null;
+        ? Loc.T("Finish the current operation before opening {0}. Your work is kept intact.", destination) : null;
 }

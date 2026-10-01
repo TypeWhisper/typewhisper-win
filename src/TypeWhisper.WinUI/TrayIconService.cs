@@ -20,7 +20,7 @@ internal sealed class TrayIconService : IDisposable
     private readonly MenuFlyoutItem _exitAction;
     private bool _closing;
     private readonly MenuFlyoutItem _pauseHotkeys;
-    private string _dictationStatus = "Loading…";
+    private string _dictationStatus = Loc.T("Loading…");
     private bool _hotkeysPaused;
     private string? _pauseError;
 
@@ -37,40 +37,40 @@ internal sealed class TrayIconService : IDisposable
         presenterStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0, 4, 0, 4)));
         presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 230d));
         menu.MenuFlyoutPresenterStyle = presenterStyle;
-        _status = Label("Loading Parakeet…");
+        _status = Label(Loc.T("Loading Parakeet…"));
         menu.Items.Add(_status);
         menu.Items.Add(new MenuFlyoutSeparator());
         // The recorder toggle is the primary action, as on macOS. Dictation actions appear only while they apply.
-        _recorderAction = CreateItem("Start recording", "\uE7C8", toggleRecorder);
+        _recorderAction = CreateItem(Loc.T("Start recording"), "\uE7C8", toggleRecorder);
         menu.Items.Add(_recorderAction);
-        _recordingAction = CreateItem("Finish dictation", "\uE720", finishDictation);
+        _recordingAction = CreateItem(Loc.T("Finish dictation"), "\uE720", finishDictation);
         _recordingAction.Visibility = Visibility.Collapsed;
         menu.Items.Add(_recordingAction);
-        _cancelProcessing = CreateItem("Cancel processing", "\uE711", cancelProcessing);
+        _cancelProcessing = CreateItem(Loc.T("Cancel processing"), "\uE711", cancelProcessing);
         _cancelProcessing.Visibility = Visibility.Collapsed;
         menu.Items.Add(_cancelProcessing);
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Label("General"));
-        menu.Items.Add(CreateItem("Settings\u2026", "\uE713", settings));
-        menu.Items.Add(CreateItem("History", "\uE81C", history));
-        menu.Items.Add(CreateItem("Diagnostics", "\uE9D9", diagnostics));
+        menu.Items.Add(Label(Loc.T("General")));
+        menu.Items.Add(CreateItem(Loc.T("Settings\u2026"), "\uE713", settings));
+        menu.Items.Add(CreateItem(Loc.T("History"), "\uE81C", history));
+        menu.Items.Add(CreateItem(Loc.T("Diagnostics"), "\uE9D9", diagnostics));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Label("Transcription"));
-        _pauseHotkeys = CreateItem("Pause dictation hotkeys", "\uE769", togglePause);
+        menu.Items.Add(Label(Loc.T("Transcription")));
+        _pauseHotkeys = CreateItem(Loc.T("Pause dictation hotkeys"), "\uE769", togglePause);
         _pauseHotkeys.IsEnabled = false;
         menu.Items.Add(_pauseHotkeys);
-        menu.Items.Add(CreateItem("Transcribe file…", "\uE8A5", files));
-        menu.Items.Add(CreateItem("Review recovery recordings…", "\uE777", recovery));
+        menu.Items.Add(CreateItem(Loc.T("Transcribe file…"), "\uE8A5", files));
+        menu.Items.Add(CreateItem(Loc.T("Review recovery recordings…"), "\uE777", recovery));
         // Flat items like the macOS menu; a submenu cannot open beside the tray menu's own window.
         // Paste targets the app window used before the tray menu opened.
-        menu.Items.Add(CreateItem("Recent transcriptions", "\uE81C", recent));
-        menu.Items.Add(CreateItem("Paste last transcription", "\uE77F", pasteLast));
-        menu.Items.Add(CreateItem("Copy last transcription", "\uE8C8", copyLast));
-        menu.Items.Add(CreateItem("Read back last transcription", "\uE767", readLast));
+        menu.Items.Add(CreateItem(Loc.T("Recent transcriptions"), "\uE81C", recent));
+        menu.Items.Add(CreateItem(Loc.T("Paste last transcription"), "\uE77F", pasteLast));
+        menu.Items.Add(CreateItem(Loc.T("Copy last transcription"), "\uE8C8", copyLast));
+        menu.Items.Add(CreateItem(Loc.T("Read back last transcription"), "\uE767", readLast));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(CreateItem("Check for updates…", "\uE895", updates));
+        menu.Items.Add(CreateItem(Loc.T("Check for updates…"), "\uE895", updates));
         menu.Items.Add(new MenuFlyoutSeparator());
-        _exitAction = CreateItem("Exit", "\uE7E8", exit);
+        _exitAction = CreateItem(Loc.T("Exit"), "\uE7E8", exit);
         menu.Items.Add(_exitAction);
 
         _menuWindow = new TrayMenuWindow(menu);
@@ -94,8 +94,8 @@ internal sealed class TrayIconService : IDisposable
     internal void UpdateDictation(string status, bool recording)
     {
         if (_closing) return;
-        _dictationStatus = recording ? "Recording" : status;
-        _status.Text = _pauseError ?? (_hotkeysPaused ? "Dictation hotkeys paused. Resume them from the tray menu." : _dictationStatus);
+        _dictationStatus = recording ? Loc.T("Recording") : status;
+        _status.Text = _pauseError ?? (_hotkeysPaused ? Loc.T("Dictation hotkeys paused. Resume them from the tray menu.") : _dictationStatus);
         _recordingAction.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
         ToolTipService.SetToolTip(_status, _status.Text);
         _icon.ToolTipText = "TypeWhisper · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
@@ -105,9 +105,9 @@ internal sealed class TrayIconService : IDisposable
     {
         if (_closing) return;
         _hotkeysPaused = paused; _pauseError = error;
-        _pauseHotkeys.Text = paused ? "Resume dictation hotkeys" : "Pause dictation hotkeys";
+        _pauseHotkeys.Text = paused ? Loc.T("Resume dictation hotkeys") : Loc.T("Pause dictation hotkeys");
         _pauseHotkeys.IsEnabled = canChange;
-        _status.Text = error ?? (paused ? "Dictation hotkeys paused. Resume them from the tray menu." : _dictationStatus);
+        _status.Text = error ?? (paused ? Loc.T("Dictation hotkeys paused. Resume them from the tray menu.") : _dictationStatus);
         ToolTipService.SetToolTip(_status, _status.Text);
         _icon.ToolTipText = "TypeWhisper · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
     }
@@ -128,7 +128,7 @@ internal sealed class TrayIconService : IDisposable
     internal void UpdateRecorder(bool recording, bool canToggle)
     {
         if (_closing) return;
-        _recorderAction.Text = recording ? "Stop recording" : "Start recording";
+        _recorderAction.Text = recording ? Loc.T("Stop recording") : Loc.T("Start recording");
         ((FontIcon)_recorderAction.Icon).Glyph = recording ? "" : "";
         _recorderAction.IsEnabled = canToggle;
     }

@@ -57,7 +57,7 @@ internal static class StableImportCopy
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         remaining -= count;
-                        if (remaining < 0) throw new IOException("The source database exceeds 2 GB.");
+                        if (remaining < 0) throw new IOException(Loc.T("The source database exceeds 2 GB."));
                         output.Write(buffer, 0, count);
                     }
                 }
@@ -69,7 +69,7 @@ internal static class StableImportCopy
             catch (IOException) when (attempt < 2) { }
             TryDelete(attemptDirectory);
         }
-        throw new IOException("Could not obtain a stable copy of the database. Quitting Wispr Flow and trying again can help.");
+        throw new IOException(Loc.T("Could not obtain a stable copy of the database. Quitting Wispr Flow and trying again can help."));
     }
 
     private static Part[] Inspect(string source, CancellationToken cancellationToken)
@@ -82,14 +82,14 @@ internal static class StableImportCopy
             var info = new FileInfo(source + Suffixes[i]);
             if (!info.Exists)
             {
-                if (i == 0) throw new FileNotFoundException("The source database was not found.");
+                if (i == 0) throw new FileNotFoundException(Loc.T("The source database was not found."));
                 result[i] = new(false);
                 continue;
             }
             if (i == 3 || info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                throw new IOException("The source database cannot be copied safely. Quitting Wispr Flow and trying again can help.");
+                throw new IOException(Loc.T("The source database cannot be copied safely. Quitting Wispr Flow and trying again can help."));
             remaining -= info.Length;
-            if (remaining < 0) throw new IOException("The source database exceeds 2 GB.");
+            if (remaining < 0) throw new IOException(Loc.T("The source database exceeds 2 GB."));
             result[i] = new(true, info.Length, info.LastWriteTimeUtc.Ticks, i < 2 ? Hash(info.FullName, info.Length, cancellationToken) : null);
         }
         return result;
@@ -107,7 +107,7 @@ internal static class StableImportCopy
         {
             cancellationToken.ThrowIfCancellationRequested();
             maximum -= count;
-            if (maximum < 0) throw new IOException("The source changed or exceeds the import limit.");
+            if (maximum < 0) throw new IOException(Loc.T("The source changed or exceeds the import limit."));
             hash.AppendData(buffer, 0, count);
         }
         return Convert.ToHexString(hash.GetHashAndReset());

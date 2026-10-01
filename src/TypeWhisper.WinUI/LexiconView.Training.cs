@@ -26,7 +26,7 @@ public sealed partial class LexiconView
             var body = new StackPanel { Spacing = 12, MinWidth = 360, MaxWidth = 500 };
             var status = Text("", 12, true);
             AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
-            var wordInput = Input("", "Correct spelling", false);
+            var wordInput = Input("", Loc.T("Correct spelling"), false);
             wordInput.MaxLength = 160;
             var exampleLanguage = new ComboBox
             {
@@ -34,13 +34,13 @@ public sealed partial class LexiconView
                 SelectedIndex = _trainingSession.Language == "de" || System.Globalization.CultureInfo.CurrentCulture.TwoLetterISOLanguageName == "de" ? 0 : 1,
                 HorizontalAlignment = HorizontalAlignment.Stretch
             };
-            AutomationProperties.SetName(exampleLanguage, "Example sentence language");
+            AutomationProperties.SetName(exampleLanguage, Loc.T("Example sentence language"));
             var dialog = _trainingDialog = new ContentDialog
             {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "Train a word",
+                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Train a word"),
                 Content = new ScrollViewer { Content = body, MaxHeight = 420, Padding = new Thickness(0, 0, 16, 0),
                     HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
-                PrimaryButtonText = "Continue", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+                PrimaryButtonText = Loc.T("Continue"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
             };
             dialog.Resources["ContentDialogBackground"] = Brush("InkBrush");
             dialog.Resources["ContentDialogTopOverlay"] = Brush("InkBrush");
@@ -54,7 +54,7 @@ public sealed partial class LexiconView
             var busy = false;
             var clock = new System.Diagnostics.Stopwatch();
             var meter = new ProgressBar { Minimum = 0, Maximum = 1, Height = 4 };
-            AutomationProperties.SetName(meter, "Microphone level");
+            AutomationProperties.SetName(meter, Loc.T("Microphone level"));
 
             void Render()
             {
@@ -62,44 +62,44 @@ public sealed partial class LexiconView
                 body.Children.Clear();
                 dialog.IsPrimaryButtonEnabled = !busy;
                 dialog.SecondaryButtonText = "";
-                body.Children.Add(Text("Model: " + capture.ModelName, 12, true));
+                body.Children.Add(Text(Loc.T("Model: {0}", capture.ModelName), 12, true));
                 if (stage == 0)
                 {
-                    body.Children.Add(Text("Speak three short sentences, then review the recognized variants before saving. This adds dictionary entries; it does not retrain the model.", 13, true));
-                    body.Children.Add(Text("Correct spelling", 12));
+                    body.Children.Add(Text(Loc.T("Speak three short sentences, then review the recognized variants before saving. This adds dictionary entries; it does not retrain the model."), 13, true));
+                    body.Children.Add(Text(Loc.T("Correct spelling"), 12));
                     body.Children.Add(Surface(wordInput, 2));
-                    body.Children.Add(Text("Example sentence language", 12, true));
+                    body.Children.Add(Text(Loc.T("Example sentence language"), 12, true));
                     body.Children.Add(exampleLanguage);
-                    body.Children.Add(Text("Uses your selected microphone and dictation model. Cloud models receive the sample audio. Training creates no History entry and does not paste text.", 12, true));
-                    dialog.PrimaryButtonText = "Continue";
+                    body.Children.Add(Text(Loc.T("Uses your selected microphone and dictation model. Cloud models receive the sample audio. Training creates no History entry and does not paste text."), 12, true));
+                    dialog.PrimaryButtonText = Loc.T("Continue");
                 }
                 else if (stage == 1)
                 {
-                    dialog.Title = $"Train {word} · Sample {index + 1} of 3";
-                    body.Children.Add(Text("Read this sentence aloud:", 12, true));
+                    dialog.Title = Loc.T("Train {0} · Sample {1} of 3", word, index + 1);
+                    body.Children.Add(Text(Loc.T("Read this sentence aloud:"), 12, true));
                     body.Children.Add(Text(sentences[index], 18));
-                    if (recording) { body.Children.Add(meter); body.Children.Add(Text("Recording · stops after 30 seconds", 12, true)); }
+                    if (recording) { body.Children.Add(meter); body.Children.Add(Text(Loc.T("Recording · stops after 30 seconds"), 12, true)); }
                     if (transcripts[index] is { } transcript)
                     {
-                        body.Children.Add(Text("Recognized:", 12, true));
+                        body.Children.Add(Text(Loc.T("Recognized:"), 12, true));
                         body.Children.Add(Text(transcript, 14));
                         var candidate = DictionaryTrainingPlan.Candidate(word, sentences[index], transcript);
-                        body.Children.Add(Text(candidate is not null ? $"Variant found: {candidate} → {word}"
-                            : DictionaryTrainingPlan.Matches(sentences[index], transcript) ? "Correctly recognized."
-                            : "The sentence differs in more than the target word. Record it again to get a useful variant.", 12, true));
-                        dialog.PrimaryButtonText = index == 2 ? "Review" : "Next sample";
-                        dialog.SecondaryButtonText = "Record again";
+                        body.Children.Add(Text(candidate is not null ? Loc.T("Variant found: {0} → {1}", candidate, word)
+                            : DictionaryTrainingPlan.Matches(sentences[index], transcript) ? Loc.T("Correctly recognized.")
+                            : Loc.T("The sentence differs in more than the target word. Record it again to get a useful variant."), 12, true));
+                        dialog.PrimaryButtonText = index == 2 ? Loc.T("Review") : Loc.T("Next sample");
+                        dialog.SecondaryButtonText = Loc.T("Record again");
                     }
-                    else dialog.PrimaryButtonText = busy ? "Transcribing…" : recording ? "Stop recording" : "Start recording";
+                    else dialog.PrimaryButtonText = busy ? Loc.T("Transcribing…") : recording ? Loc.T("Stop recording") : Loc.T("Start recording");
                 }
                 else
                 {
-                    dialog.Title = $"Save training for {word}";
-                    body.Children.Add(Text("The correct spelling will be saved under Words. Select the misheard variants to add under Corrections.", 13, true));
+                    dialog.Title = Loc.T("Save training for {0}", word);
+                    body.Children.Add(Text(Loc.T("The correct spelling will be saved under Words. Select the misheard variants to add under Corrections."), 13, true));
                     foreach (var item in approved.Values) body.Children.Add(item);
-                    if (approved.Count == 0) body.Children.Add(Text("No unambiguous new variants were found. You can still save the word.", 13, true));
-                    dialog.PrimaryButtonText = "Save to Dictionary";
-                    dialog.SecondaryButtonText = "Review samples";
+                    if (approved.Count == 0) body.Children.Add(Text(Loc.T("No unambiguous new variants were found. You can still save the word."), 13, true));
+                    dialog.PrimaryButtonText = Loc.T("Save to Dictionary");
+                    dialog.SecondaryButtonText = Loc.T("Review samples");
                 }
                 body.Children.Add(status);
             }
@@ -109,7 +109,7 @@ public sealed partial class LexiconView
                 recording = false; busy = true; timer.Stop(); status.Text = ""; Render();
                 try { transcripts[index] = await capture.StopAsync(); }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { if (!ended) status.Text = "Could not transcribe this sample. Check the microphone and provider, then try again."; System.Diagnostics.Debug.WriteLine(ex); }
+                { if (!ended) status.Text = Loc.T("Could not transcribe this sample. Check the microphone and provider, then try again."); System.Diagnostics.Debug.WriteLine(ex); }
                 finally { busy = false; Render(); }
             }
             void Review()
@@ -122,7 +122,7 @@ public sealed partial class LexiconView
                     var existing = _store.Entries.FirstOrDefault(entry => entry.Kind == LexiconKind.Correction &&
                         entry.Key.Equals(candidate, StringComparison.OrdinalIgnoreCase));
                     var check = new CheckBox { Content = existing is null ? candidate :
-                        existing.Value == word ? candidate + " · already in Dictionary" : candidate + " · already corrects to " + existing.Value,
+                        existing.Value == word ? Loc.T("{0} · already in Dictionary", candidate) : Loc.T("{0} · already corrects to {1}", candidate, existing.Value),
                         IsChecked = existing is null, IsEnabled = existing is null };
                     approved.Add(candidate, check);
                 }
@@ -141,7 +141,7 @@ public sealed partial class LexiconView
                 if (stage == 0)
                 {
                     word = wordInput.Text.Trim();
-                    if (!DictionaryTrainingPlan.IsWord(word)) { status.Text = "Enter one word, using letters, numbers, apostrophes or hyphens."; return; }
+                    if (!DictionaryTrainingPlan.IsWord(word)) { status.Text = Loc.T("Enter one word, using letters, numbers, apostrophes or hyphens."); return; }
                     sentences = DictionaryTrainingPlan.Sentences(word, exampleLanguage.SelectedIndex == 0);
                     capture.Language = exampleLanguage.SelectedIndex == 0 ? "de" : "en";
                     stage = 1; status.Text = ""; Render(); return;
@@ -186,7 +186,7 @@ public sealed partial class LexiconView
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_closing) _notice.Text = "Word training unavailable: " + ex.Message; }
+        { if (!_closing) _notice.Text = Loc.T("Word training unavailable: {0}", ex.Message); }
         finally
         {
             ended = true; timer.Stop(); _trainingDialog = null;
@@ -201,6 +201,6 @@ public sealed partial class LexiconView
     private void RenderListAfterTraining(bool saved)
     {
         Render();
-        _notice.Text = saved ? "Word training saved to Dictionary." : "Training canceled. No dictionary entries were added.";
+        _notice.Text = saved ? Loc.T("Word training saved to Dictionary.") : Loc.T("Training canceled. No dictionary entries were added.");
     }
 }

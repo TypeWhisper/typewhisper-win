@@ -79,7 +79,7 @@ public sealed class PersistedProfileBackup
         {
             var json = await CreateService(staging).ExportAsync(new() { Categories = categories }, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
-            if (Encoding.UTF8.GetByteCount(json) > MaximumBytes) throw new InvalidDataException("The selected backup exceeds the 64 MiB limit.");
+            if (Encoding.UTF8.GetByteCount(json) > MaximumBytes) throw new InvalidDataException(Loc.T("The selected backup exceeds the 64 MiB limit."));
             return json;
         }
         finally { DeleteStage(staging); }
@@ -92,7 +92,7 @@ public sealed class PersistedProfileBackup
         ValidateCategories(categories);
         var document = ParseStrict<SettingsBackupDocument>(Encoding.UTF8.GetBytes(json));
         if (document.Format != SettingsBackupDocument.CurrentFormat || document.SchemaVersion != SettingsBackupDocument.CurrentSchemaVersion)
-            throw new InvalidDataException("Unsupported TypeWhisper backup format or version.");
+            throw new InvalidDataException(Loc.T("Unsupported TypeWhisper backup format or version."));
         var originals = CaptureProfile();
         var staging = CreateStage(originals);
         try
@@ -102,7 +102,7 @@ public sealed class PersistedProfileBackup
             if (!validation.IsValid) throw new InvalidDataException(validation.Error);
             if (categories.HasFlag(BackupCategory.Dictionary) && document.Data.Dictionary.EnabledPackIds.Any(id =>
                 TermPack.FindById(id) is not { RequiresCommercialLicense: false }))
-                throw new InvalidDataException("This backup requires an unknown or licensed term pack. Restore the other categories or install that pack separately.");
+                throw new InvalidDataException(Loc.T("This backup requires an unknown or licensed term pack. Restore the other categories or install that pack separately."));
             var merge = await service.ImportAsync(json, new() { Categories = categories }, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             if (!merge.Success) throw new InvalidDataException(merge.Error);
@@ -115,7 +115,7 @@ public sealed class PersistedProfileBackup
                 if (!BytesEqual(originals[pair.Value], bytes)) candidates.Add(pair.Value, bytes);
             }
             if (document.Data.Plugins.Count > 0 || document.Data.Hotkeys.Bindings.Count > 0 || document.Data.Preferences is not null)
-                merge = merge with { Warnings = merge.Warnings.Append("Plugins, shortcuts and preferences are not part of this restore.").ToArray() };
+                merge = merge with { Warnings = merge.Warnings.Append(Loc.T("Plugins, shortcuts and preferences are not part of this restore.")).ToArray() };
             return new(_owner, originals, candidates, merge);
         }
         finally { DeleteStage(staging); }
@@ -132,10 +132,10 @@ public sealed class PersistedProfileBackup
         try
         {
             CheckRoot();
-            if (HasPendingRecovery) throw new InvalidOperationException("Resolve the pending profile restore before continuing.");
+            if (HasPendingRecovery) throw new InvalidOperationException(Loc.T("Resolve the pending profile restore before continuing."));
             if (preview.Owner != _owner) throw new ArgumentException("The restore preview belongs to another profile session.", nameof(preview));
             foreach (var pair in preview.Originals)
-                if (!BytesEqual(ReadOptional(Target(pair.Key)), pair.Value)) throw new InvalidOperationException("Profile data changed after preview. Review the backup again.");
+                if (!BytesEqual(ReadOptional(Target(pair.Key)), pair.Value)) throw new InvalidOperationException(Loc.T("Profile data changed after preview. Review the backup again."));
             if (preview.Candidates.Count == 0) return new(false, false, null);
             Directory.CreateDirectory(TransactionDirectory);
             ownsPreparation = true;
@@ -162,12 +162,12 @@ public sealed class PersistedProfileBackup
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            if (committed) return new(true, true, "Restore committed, but cleanup failed. Keep profile writers stopped: " + ex.Message);
+            if (committed) return new(true, true, Loc.T("Restore committed, but cleanup failed. Keep profile writers stopped: {0}", ex.Message));
             if (prepared && journal is not null)
             {
                 try { Rollback(journal); WriteJournal(journal with { RolledBack = true }); Cleanup(journal); }
                 catch (Exception rollback) when (rollback is not OutOfMemoryException)
-                { return new(false, true, "Restore and rollback did not finish. Profile access must remain blocked: " + rollback.Message); }
+                { return new(false, true, Loc.T("Restore and rollback did not finish. Profile access must remain blocked: {0}", rollback.Message)); }
             }
             else if (ownsPreparation && Directory.Exists(TransactionDirectory))
             {
@@ -175,9 +175,9 @@ public sealed class PersistedProfileBackup
                 // Unknown content is never removed by this cleanup.
                 try { CleanupKnownPreparation(); }
                 catch (Exception cleanup) when (cleanup is not OutOfMemoryException)
-                { return new(false, true, "Restore preparation cleanup failed. Profile access must remain blocked: " + cleanup.Message); }
+                { return new(false, true, Loc.T("Restore preparation cleanup failed. Profile access must remain blocked: {0}", cleanup.Message)); }
             }
-            return new(false, HasPendingRecovery, "Restore was not applied: " + ex.Message);
+            return new(false, HasPendingRecovery, Loc.T("Restore was not applied: {0}", ex.Message));
         }
     }
 
@@ -216,14 +216,14 @@ public sealed class PersistedProfileBackup
             return new(true, null);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return new(false, "Profile restore recovery did not finish. Do not open profile stores: " + ex.Message); }
+        { return new(false, Loc.T("Profile restore recovery did not finish. Do not open profile stores: {0}", ex.Message)); }
     }
 
     private Dictionary<string, byte[]?> CaptureProfile()
     {
         using var mutation = ProfileMutationCoordinator.Enter();
         CheckRoot();
-        if (HasPendingRecovery) throw new InvalidOperationException("Recover the pending profile restore before reading profile data.");
+        if (HasPendingRecovery) throw new InvalidOperationException(Loc.T("Recover the pending profile restore before reading profile data."));
         var files = new Dictionary<string, byte[]?>();
         foreach (var name in Names.Values)
         {
@@ -304,7 +304,7 @@ public sealed class PersistedProfileBackup
     private string Artifact(string prefix, string name) { _ = Target(name); return Path.Combine(TransactionDirectory, prefix + name); }
 
     private static void ValidateCategories(BackupCategory categories)
-    { if (categories == BackupCategory.None || (categories & ~SupportedCategories) != 0) throw new ArgumentException("Choose dictionary, snippets, workflows or history.", nameof(categories)); }
+    { if (categories == BackupCategory.None || (categories & ~SupportedCategories) != 0) throw new ArgumentException(Loc.T("Choose dictionary, snippets, workflows or history."), nameof(categories)); }
     private static void ValidateJournal(Journal journal)
     {
         if (journal.Version != 1 || journal.Committed && journal.RolledBack || journal.Files is null || journal.Files.Count is < 1 or > 4 ||
@@ -316,9 +316,9 @@ public sealed class PersistedProfileBackup
     private static bool ValidHash(string hash) => hash is { Length: 64 } && hash.All(char.IsAsciiHexDigit);
     private static string? Hash(byte[]? bytes) => bytes is null ? null : Convert.ToHexString(SHA256.HashData(bytes));
     private static bool BytesEqual(byte[]? left, byte[]? right) => left is null ? right is null : right is not null && left.AsSpan().SequenceEqual(right);
-    private void CheckRoot() { if (File.Exists(_root)) throw new IOException("The profile root is not a directory."); if (Directory.Exists(_root)) RejectLink(_root); }
+    private void CheckRoot() { if (File.Exists(_root)) throw new IOException(Loc.T("The profile root is not a directory.")); if (Directory.Exists(_root)) RejectLink(_root); }
     private static void RejectLink(string path)
-    { if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new IOException("Linked profile and transaction paths are not supported."); }
+    { if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new IOException(Loc.T("Linked profile and transaction paths are not supported.")); }
     private static byte[]? ReadOptional(string path)
     { if (!File.Exists(path)) { if (Directory.Exists(path)) throw new IOException("A profile file is a directory: " + Path.GetFileName(path)); return null; } return ReadBounded(path); }
     private static byte[] ReadBounded(string path)
@@ -326,7 +326,7 @@ public sealed class PersistedProfileBackup
         RejectLink(path);
         // Opened without following a link, so a file swapped for one after the check is refused rather than read.
         using var stream = UserData.ProfileDataEraser.OpenFileWithoutFollowing(path);
-        if (stream.Length > MaximumBytes) throw new InvalidDataException("A backup or profile file exceeds the 64 MiB limit.");
+        if (stream.Length > MaximumBytes) throw new InvalidDataException(Loc.T("A backup or profile file exceeds the 64 MiB limit."));
         var bytes = new byte[checked((int)stream.Length)]; stream.ReadExactly(bytes); return bytes;
     }
     private static void AtomicWrite(string path, byte[] bytes)
@@ -352,7 +352,7 @@ public sealed class PersistedProfileBackup
     }
     private static T ParseStrict<T>(byte[] bytes)
     {
-        if (bytes.Length > MaximumBytes) throw new InvalidDataException("Backup metadata exceeds the size limit.");
+        if (bytes.Length > MaximumBytes) throw new InvalidDataException(Loc.T("Backup metadata exceeds the size limit."));
         using var json = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = 64 });
         RejectDuplicates(json.RootElement);
         if (typeof(T) == typeof(SettingsBackupDocument))
@@ -360,9 +360,9 @@ public sealed class PersistedProfileBackup
             var fields = json.RootElement.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (!fields.Contains("format") || !fields.Contains("schemaVersion") || !fields.Contains("data") ||
                 !fields.Contains("sourcePlatform") || !fields.Contains("exportedAt"))
-                throw new InvalidDataException("Backup format, version, source, timestamp and data are required.");
+                throw new InvalidDataException(Loc.T("Backup format, version, source, timestamp and data are required."));
         }
-        return json.RootElement.Deserialize<T>(Strict) ?? throw new InvalidDataException("Backup metadata is empty.");
+        return json.RootElement.Deserialize<T>(Strict) ?? throw new InvalidDataException(Loc.T("Backup metadata is empty."));
     }
     private static void RejectDuplicates(JsonElement element)
     {
@@ -370,7 +370,7 @@ public sealed class PersistedProfileBackup
         {
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var property in element.EnumerateObject())
-            { if (!names.Add(property.Name)) throw new InvalidDataException("Duplicate JSON field."); RejectDuplicates(property.Value); }
+            { if (!names.Add(property.Name)) throw new InvalidDataException(Loc.T("Duplicate JSON field.")); RejectDuplicates(property.Value); }
         }
         else if (element.ValueKind == JsonValueKind.Array) foreach (var value in element.EnumerateArray()) RejectDuplicates(value);
     }

@@ -20,14 +20,14 @@ internal sealed class WorkflowPaletteWindow : Window
     private readonly IReadOnlyList<WorkflowPaletteItem> _workflows;
     private readonly IReadOnlyList<TranscriptionRecord> _recent;
     private readonly bool _hasText, _recentOnly;
-    private readonly TextBox _search = new() { PlaceholderText = "Search workflows…" };
+    private readonly TextBox _search = new() { PlaceholderText = Loc.T("Search workflows…") };
     private readonly StackPanel _rows = new() { Spacing = 2 };
     private readonly ScrollViewer _scroll;
     private readonly TextBlock _hint = Text("", 11, muted: true);
     private readonly Grid _status = new() { Visibility = Visibility.Collapsed, Padding = new Thickness(20) };
     private readonly TextBlock _statusText = Text("", 14);
     private readonly ProgressRing _progress = new() { IsActive = true, Width = 28, Height = 28 };
-    private readonly HandCursorButton _statusClose = new() { Content = "Close", HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly HandCursorButton _statusClose = new() { Content = Loc.T("Close"), HorizontalAlignment = HorizontalAlignment.Center };
     private readonly List<(HandCursorButton Button, Action Run)> _items = [];
     private int _selected = -1;
     private bool _recentLevel;
@@ -46,12 +46,12 @@ internal sealed class WorkflowPaletteWindow : Window
         _recent = recent;
         _hasText = hasText;
         _recentOnly = recentOnly;
-        Title = recentOnly ? "Recent Transcriptions" : "Workflow Palette";
+        Title = recentOnly ? Loc.T("Recent Transcriptions") : Loc.T("Workflow Palette");
         var root = new Grid { Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1), Padding = new Thickness(10) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition());
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        AutomationProperties.SetName(_search, "Search workflows and recent transcriptions");
+        AutomationProperties.SetName(_search, Loc.T("Search workflows and recent transcriptions"));
         root.Children.Add(_search);
         _scroll = new ScrollViewer { Content = _rows, Margin = new Thickness(0, 8, 0, 6), VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -158,7 +158,7 @@ internal sealed class WorkflowPaletteWindow : Window
         _rows.Children.Clear();
         _items.Clear();
         var query = _search.Text.Trim();
-        _search.PlaceholderText = _recentLevel ? "Search recent transcriptions…" : "Search workflows…";
+        _search.PlaceholderText = _recentLevel ? Loc.T("Search recent transcriptions…") : Loc.T("Search workflows…");
         if (!_recentLevel)
         {
             foreach (var item in WorkflowPalette.Filter(_workflows, query))
@@ -168,7 +168,7 @@ internal sealed class WorkflowPaletteWindow : Window
             {
                 // Typing searches both levels; the group opens the full list.
                 if (query.Length == 0)
-                    Add(Row("history", "Recent Transcriptions", $"{recent.Count} recent transcription{(recent.Count == 1 ? "" : "s")}", chevron: true), OpenRecent);
+                    Add(Row("history", Loc.T("Recent Transcriptions"), recent.Count == 1 ? Loc.T("1 recent transcription") : Loc.T("{0} recent transcriptions", recent.Count), chevron: true), OpenRecent);
                 else foreach (var record in recent.Take(5)) Add(RecentRow(record), () => Insert(record));
             }
         }
@@ -176,7 +176,7 @@ internal sealed class WorkflowPaletteWindow : Window
         {
             if (!_hasText && !_recentOnly)
             {
-                var note = Text("No text is selected or copied. Choose a recent transcription to insert.", 12, muted: true);
+                var note = Text(Loc.T("No text is selected or copied. Choose a recent transcription to insert."), 12, muted: true);
                 note.Margin = new Thickness(6, 2, 6, 8);
                 _rows.Children.Add(note);
             }
@@ -184,11 +184,11 @@ internal sealed class WorkflowPaletteWindow : Window
         }
         if (_items.Count == 0)
         {
-            var empty = Text(query.Length > 0 ? "No matches." : "Nothing to show yet.", 13, muted: true);
+            var empty = Text(query.Length > 0 ? Loc.T("No matches.") : Loc.T("Nothing to show yet."), 13, muted: true);
             empty.Margin = new Thickness(6, 12, 6, 0);
             _rows.Children.Add(empty);
         }
-        _hint.Text = _recentLevel && _hasText && _workflows.Count > 0 ? "↑↓ Select   Enter Insert   Esc Back" : _recentLevel ? "↑↓ Select   Enter Insert   Esc Close" : "↑↓ Select   Enter Run   Esc Close";
+        _hint.Text = _recentLevel && _hasText && _workflows.Count > 0 ? Loc.T("↑↓ Select   Enter Insert   Esc Back") : _recentLevel ? Loc.T("↑↓ Select   Enter Insert   Esc Close") : Loc.T("↑↓ Select   Enter Run   Esc Close");
         Select(_items.Count > 0 ? 0 : -1);
     }
 
@@ -212,7 +212,7 @@ internal sealed class WorkflowPaletteWindow : Window
         {
             var selected = i == index;
             _items[i].Button.Style = (Style)Application.Current.Resources[selected ? "SidebarSelectedButtonStyle" : "MenuButtonStyle"];
-            AutomationProperties.SetItemStatus(_items[i].Button, selected ? "Selected" : "Not selected");
+            AutomationProperties.SetItemStatus(_items[i].Button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
             foreach (var glyph in Descendants<TypeWhisperGlyph>(_items[i].Button.Content as Panel)) glyph.Inverse = selected;
             foreach (var text in Descendants<TextBlock>(_items[i].Button.Content as Panel))
                 text.Foreground = selected ? new SolidColorBrush(Microsoft.UI.Colors.White) : Brush(text.Tag as string == "muted" ? "MutedBrush" : "TextBrush");
@@ -301,7 +301,7 @@ internal sealed class WorkflowPaletteWindow : Window
         var text = record.DisplayText.ReplaceLineEndings(" ").Trim();
         var local = DateTime.SpecifyKind(record.Timestamp, DateTimeKind.Utc).ToLocalTime();
         var when = local.Date == DateTime.Today ? local.ToString("t") : local.ToString("g");
-        return Row("text", text.Length == 0 ? "Untitled transcript" : text, string.IsNullOrWhiteSpace(record.AppName) ? when : when + " · " + record.AppName);
+        return Row("text", text.Length == 0 ? Loc.T("Untitled transcript") : text, string.IsNullOrWhiteSpace(record.AppName) ? when : when + " · " + record.AppName);
     }
 
     private void RoundCorners()

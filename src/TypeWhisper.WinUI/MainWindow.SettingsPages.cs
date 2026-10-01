@@ -27,8 +27,8 @@ public sealed partial class MainWindow
         var page = _workflowsPage = new Grid { RowSpacing = 12 };
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var search = _workflowSearch = new TextBox { PlaceholderText = "Search workflows…", Margin = new Thickness(12, 0, 12, 0) };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search, "Search workflows");
+        var search = _workflowSearch = new TextBox { PlaceholderText = Loc.T("Search workflows…"), Margin = new Thickness(12, 0, 12, 0) };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search, Loc.T("Search workflows"));
         search.TextChanged += (_, _) => WorkflowsView.Filter(search.Text.Trim());
         search.KeyDown += (_, e) =>
         {
@@ -106,7 +106,7 @@ public sealed partial class MainWindow
         page.RowDefinitions.Add(new RowDefinition());
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var body = new StackPanel { Spacing = 16 };
-        body.Children.Add(new TextBlock { Text = "Sync & backup", FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        body.Children.Add(new TextBlock { Text = Loc.T("Sync & backup"), FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         body.Children.Add(_backup);
         page.Children.Add(new ScrollViewer { Content = body, Padding = new Thickness(12, 4, 12, 16),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
@@ -155,10 +155,10 @@ public sealed partial class MainWindow
     private StackPanel HistoryWorkspaceSection()
     {
         var section = new StackPanel { Spacing = 8 };
-        section.Children.Add(new TextBlock { Text = "History workspace", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        section.Children.Add(new TextBlock { Text = "Search, review, edit, copy and export your transcriptions in a dedicated view.",
+        section.Children.Add(new TextBlock { Text = Loc.T("History workspace"), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        section.Children.Add(new TextBlock { Text = Loc.T("Search, review, edit, copy and export your transcriptions in a dedicated view."),
             FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
-        var open = new HandCursorButton { Content = "Open History", HorizontalAlignment = HorizontalAlignment.Left,
+        var open = new HandCursorButton { Content = Loc.T("Open History"), HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
         open.Click += (_, _) => ShowHistoryFromTray();
         section.Children.Add(open);

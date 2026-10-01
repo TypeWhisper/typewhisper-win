@@ -32,7 +32,7 @@ public sealed class Breadcrumbs : UserControl
             {
                 var button = new HandCursorButton { Content = label, Padding = new Thickness(6, 5, 6, 5),
                     Style = (Style)Application.Current.Resources["IconButtonStyle"] };
-                AutomationProperties.SetName(button, item.AutomationName ?? $"Navigate to {item.Label}");
+                AutomationProperties.SetName(button, item.AutomationName ?? Loc.T("Navigate to {0}", item.Label));
                 button.Click += (_, _) => item.Navigate();
                 ToolTipService.SetToolTip(button, item.Label);
                 _items.Children.Add(button);

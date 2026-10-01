@@ -72,7 +72,7 @@ internal sealed class ScriptCodeEditor : RichEditBox
         if (_updating || _composing) return;
         var text = ReadText();
         if (text == _text) return;
-        if (text.Length > _maximum && text.Length >= _text.Length) { ReplaceText(_text); EditorNotice?.Invoke($"The command is limited to {_maximum:N0} characters."); return; }
+        if (text.Length > _maximum && text.Length >= _text.Length) { ReplaceText(_text); EditorNotice?.Invoke(Loc.T("The command is limited to {0:N0} characters.", _maximum)); return; }
         _text = text;
         _history.Record(text);
         Highlight();
@@ -173,24 +173,24 @@ internal sealed class ScriptCodeEditor : RichEditBox
             if (!clipboard.Contains(StandardDataFormats.Text)) return;
             var pasted = Normalize(await clipboard.GetTextAsync());
             if (!IsLoaded || _text != original || Document.Selection.StartPosition != start || Document.Selection.EndPosition != end) return;
-            if (_text.Length - (end - start) + pasted.Length > _maximum && pasted.Length >= end - start) { EditorNotice?.Invoke($"The command is limited to {_maximum:N0} characters."); return; }
+            if (_text.Length - (end - start) + pasted.Length > _maximum && pasted.Length >= end - start) { EditorNotice?.Invoke(Loc.T("The command is limited to {0:N0} characters.", _maximum)); return; }
             Document.Selection.SetText(TextSetOptions.None, pasted);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { EditorNotice?.Invoke("The clipboard is unavailable. Try again."); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { EditorNotice?.Invoke(Loc.T("The clipboard is unavailable. Try again.")); }
     }
 
     private MenuFlyout CreateContextMenu()
     {
         var menu = new MenuFlyout();
         void Add(string title, Action action) { var item = new MenuFlyoutItem { Text = title }; item.Click += (_, _) => action(); menu.Items.Add(item); }
-        if (!IsReadOnly) { Add("Undo", UndoText); Add("Redo", RedoText); menu.Items.Add(new MenuFlyoutSeparator()); }
-        Add("Copy", () => Document.Selection.Copy());
+        if (!IsReadOnly) { Add(Loc.T("Undo"), UndoText); Add(Loc.T("Redo"), RedoText); menu.Items.Add(new MenuFlyoutSeparator()); }
+        Add(Loc.T("Copy"), () => Document.Selection.Copy());
         if (!IsReadOnly)
         {
-            Add("Cut", () => { Document.Selection.Copy(); Document.Selection.SetText(TextSetOptions.None, ""); });
-            Add("Paste", () => _ = PastePlainTextAsync());
+            Add(Loc.T("Cut"), () => { Document.Selection.Copy(); Document.Selection.SetText(TextSetOptions.None, ""); });
+            Add(Loc.T("Paste"), () => _ = PastePlainTextAsync());
         }
-        Add("Select all", () => Document.Selection.SetRange(0, _text.Length));
+        Add(Loc.T("Select all"), () => Document.Selection.SetRange(0, _text.Length));
         return menu;
     }
 }

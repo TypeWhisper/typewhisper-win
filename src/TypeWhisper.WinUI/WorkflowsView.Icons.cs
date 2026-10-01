@@ -22,8 +22,8 @@ public sealed partial class WorkflowsView
             var index = _iconChoices.Count;
             var button = new HandCursorButton { Width = 40, Height = 40, Padding = new Thickness(8),
                 Content = new TypeWhisperGlyph { Kind = id, Width = 22, Height = 22 }, Tag = id };
-            AutomationProperties.SetName(button, label);
-            ToolTipService.SetToolTip(button, label);
+            AutomationProperties.SetName(button, Loc.T(label));
+            ToolTipService.SetToolTip(button, Loc.T(label));
             button.Click += (_, _) => { SetDraftIcon(id); flyout.Hide(); UpdateConfigurationState(); _iconPicker.Focus(FocusState.Keyboard); };
             button.KeyDown += (_, e) =>
             {
@@ -52,17 +52,17 @@ public sealed partial class WorkflowsView
     private void SetDraftIcon(string icon)
     {
         _draftIcon = WorkflowIcons.Normalize(icon);
-        var label = WorkflowIcons.All.First(choice => choice.Id == _draftIcon).Label;
+        var label = Loc.T(WorkflowIcons.All.First(choice => choice.Id == _draftIcon).Label);
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         content.Children.Add(new TypeWhisperGlyph { Kind = _draftIcon, Width = 20, Height = 20 });
-        content.Children.Add(new TextBlock { Text = "Icon · " + label, VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = Loc.T("Icon · {0}", label), VerticalAlignment = VerticalAlignment.Center });
         _iconPicker.Content = content;
-        AutomationProperties.SetName(_iconPicker, "Choose workflow icon: " + label);
+        AutomationProperties.SetName(_iconPicker, Loc.T("Choose workflow icon: {0}", label));
         foreach (var button in _iconChoices)
         {
             var selected = (string)button.Tag == _draftIcon;
             button.Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "SecondaryButtonStyle"];
-            AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+            AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         }
     }
 }

@@ -20,7 +20,7 @@ internal sealed partial class LocalDictationSession
     {
         if (_disposed || !CanChangeProvider || Models.Busy || SpokenFeedback.IsBusy || !_gate.Wait(0))
             return Task.FromResult(new SpokenFeedbackResult(SpokenFeedbackStatus.Rejected,
-                "Finish the current recording, playback or model operation before reading this transcript."));
+                Loc.T("Finish the current recording, playback or model operation before reading this transcript.")));
         try
         {
             _historySpeechRequest = new(text, language, AudioPreferences.SpokenFeedbackVoiceId, AudioPreferences.OutputDeviceId);
@@ -35,7 +35,7 @@ internal sealed partial class LocalDictationSession
     {
         if (_disposed || (!SpokenFeedback.IsBusy && (!CanChangeProvider || Models.Busy)) || !_gate.Wait(0))
             return Task.FromResult(new SpokenFeedbackResult(SpokenFeedbackStatus.Rejected,
-                "Finish the current recording or model operation before reading the last dictation."));
+                Loc.T("Finish the current recording or model operation before reading the last dictation.")));
         try
         {
             var playback = ReadLastDictationCoreAsync();
@@ -60,7 +60,7 @@ internal sealed partial class LocalDictationSession
     {
         if (!CanChangeProvider || Models.Busy || SpokenFeedback.IsBusy || !_gate.Wait(0))
             return Task.FromResult(new SpokenFeedbackResult(SpokenFeedbackStatus.Rejected,
-                "Finish the current recording or model operation before testing spoken feedback."));
+                Loc.T("Finish the current recording or model operation before testing spoken feedback.")));
         try
         {
             var playback = RunSpokenFeedbackAsync(new("This is a test of TypeWhisper spoken feedback.", "en",

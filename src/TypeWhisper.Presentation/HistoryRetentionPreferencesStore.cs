@@ -63,14 +63,14 @@ public sealed class HistoryRetentionPreferencesStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             CanApply = false;
-            Error = "History retention could not be loaded. Automatic deletion is paused. Apply a retention choice to restore it.";
+            Error = Loc.T("History retention could not be loaded. Automatic deletion is paused. Apply a retention choice to restore it.");
         }
     }
 
     /// <summary>Persists a choice before making it active; failures preserve the previous policy.</summary>
     public string? Save(HistoryRetentionPreferences preferences)
     {
-        if (!preferences.IsValid) return Error = "Choose Forever or a duration between 1 minute and 10 years. Your previous choice still applies.";
+        if (!preferences.IsValid) return Error = Loc.T("Choose Forever or a duration between 1 minute and 10 years. Your previous choice still applies.");
         try
         {
             AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new
@@ -83,10 +83,10 @@ public sealed class HistoryRetentionPreferencesStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            var active = !CanApply ? "Automatic deletion remains paused."
-                : Current.HistoryRetentionMode == HistoryRetentionMode.Forever ? "Forever remains active."
-                : $"Automatic deletion after {Current.HistoryRetentionMinutes:N0} minutes remains active.";
-            return Error = "History retention could not be saved. " + active;
+            var active = !CanApply ? Loc.T("Automatic deletion remains paused.")
+                : Current.HistoryRetentionMode == HistoryRetentionMode.Forever ? Loc.T("Forever remains active.")
+                : Loc.T("Automatic deletion after {0:N0} minutes remains active.", Current.HistoryRetentionMinutes);
+            return Error = Loc.T("History retention could not be saved.") + " " + active;
         }
     }
 }

@@ -34,13 +34,13 @@ public sealed partial class WorkflowsView
                 else
                 {
                     WorkflowPrimaryButton.IsEnabled = false;
-                    WorkflowInputHint.Text = "This workflow was removed through the API. Your source text is still here.";
+                    WorkflowInputHint.Text = Loc.T("This workflow was removed through the API. Your source text is still here.");
                 }
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _loadError = "Workflows could not be reloaded. Your open draft has been kept.";
+            _loadError = Loc.T("Workflows could not be reloaded. Your open draft has been kept.");
             if (_page == Page.Configuration)
             {
                 _apiConfigurationConflict = _loadError;
@@ -58,12 +58,12 @@ public sealed partial class WorkflowsView
         var before = draft.Stored is null ? null : JsonSerializer.Serialize(draft.Stored with { UpdatedAt = default });
         var after = current is null ? null : JsonSerializer.Serialize(current with { UpdatedAt = default });
         return before == after ? null
-            : "This workflow changed through the API. Your draft is still here; copy any changes you need, then reopen the workflow before saving.";
+            : Loc.T("This workflow changed through the API. Your draft is still here; copy any changes you need, then reopen the workflow before saving.");
     }
 
     private void RequireUnchangedApiWorkflow(WorkflowDraft draft)
     {
-        if (_store is null) throw new InvalidOperationException("Workflow storage is unavailable.");
+        if (_store is null) throw new InvalidOperationException(Loc.T("Workflow storage is unavailable."));
         if (ApiWorkflowConflict(draft, _store.Read()) is { } error)
         {
             _apiConfigurationConflict = error;

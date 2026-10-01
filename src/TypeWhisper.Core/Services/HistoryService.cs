@@ -199,11 +199,11 @@ public sealed class HistoryService : IHistoryAudioService
                 {
                     try
                     {
-                        if (_audioStore is null) warning = "Audio storage is unavailable. The text can still be saved.";
+                        if (_audioStore is null) warning = Loc.T("Audio storage is unavailable. The text can still be saved.");
                         else actual = actual with { AudioFileName = _audioStore.Prepare(samples, sampleRate, cancellationToken) };
                     }
                     catch (Exception ex) when (HistoryAudioStore.Recoverable(ex))
-                    { warning = "Audio could not be saved. The text can still be saved to History."; }
+                    { warning = Loc.T("Audio could not be saved. The text can still be saved to History."); }
                 }
                 cancellationToken.ThrowIfCancellationRequested();
                 // Last synchronous permission boundary before committing the History reference.
@@ -583,7 +583,7 @@ public sealed class HistoryService : IHistoryAudioService
             }
         }
         catch (Exception ex) when (HistoryAudioStore.Recoverable(ex))
-        { _legacyAudioError = "Some legacy audio could not be removed. The text History has already been updated."; }
+        { _legacyAudioError = Loc.T("Some legacy audio could not be removed. The text History has already been updated."); }
     }
 
     private void DeleteAudioFiles(IEnumerable<string?> audioFileNames)

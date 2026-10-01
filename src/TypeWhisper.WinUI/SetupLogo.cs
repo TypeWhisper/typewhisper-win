@@ -28,7 +28,7 @@ public sealed class SetupLogo : UserControl
             _bars.Add(bar); waveform.Children.Add(bar);
         }
         hitArea.Children.Add(waveform); Content = hitArea;
-        AutomationProperties.SetName(this, "TypeWhisper waveform logo");
+        AutomationProperties.SetName(this, Loc.T("TypeWhisper waveform logo"));
         PointerEntered += (_, _) => { _hovering = true; Animate(); };
         PointerExited += (_, _) => { _hovering = false; Animate(); };
         Loaded += (_, _) => _uiSettings.AnimationsEnabledChanged += AnimationsChanged;

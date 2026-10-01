@@ -91,9 +91,11 @@ internal static class EntryActionMenu
         {
             var parts = action.Label.Split(" · ", 2, StringSplitOptions.TrimEntries);
             var label = parts[0];
-            if (menu.Items.Count > 0 && label.StartsWith("Delete", StringComparison.Ordinal))
+            // Separator and icon follow the English wording, whatever language the label is shown in.
+            var english = Loc.English(action.Label) is var whole && whole != action.Label ? whole : Loc.English(label);
+            if (menu.Items.Count > 0 && english.StartsWith("Delete", StringComparison.Ordinal))
                 menu.Items.Add(new MenuFlyoutSeparator());
-            var glyph = label switch
+            var glyph = english switch
             {
                 var text when text.StartsWith("Set shortcut", StringComparison.Ordinal) => "\uE765",
                 var text when text.StartsWith("Copy", StringComparison.Ordinal) => "\uE8C8",

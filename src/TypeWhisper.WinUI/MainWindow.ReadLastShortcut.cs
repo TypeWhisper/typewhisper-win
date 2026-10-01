@@ -5,9 +5,9 @@ namespace TypeWhisper.WinUI;
 public sealed partial class MainWindow
 {
     private void InitializeReadLastShortcut() => _readLastShortcut = InitializeActionShortcut(GlobalShortcuts.ReadLastTranscription,
-        () => ReadLastTranscription(), 0x7E00, "read-last-transcription-hotkeys.txt", "Read last transcription shortcuts", "read-last");
+        () => ReadLastTranscription(), 0x7E00, "read-last-transcription-hotkeys.txt", Loc.T("Read last transcription shortcuts"), Loc.T("read-last"));
 
-    private string? ChangeReadLastShortcut(string value) => ChangeActionShortcut(_readLastShortcut, "Read-last", value);
+    private string? ChangeReadLastShortcut(string value) => ChangeActionShortcut(_readLastShortcut, Loc.T("Read-last"), value);
 
     private long _readLastRevision;
     private async void ReadLastTranscription()
@@ -17,7 +17,7 @@ public sealed partial class MainWindow
             (!_dictation.SpokenFeedback.IsBusy && (!_dictation.CanChangeProvider || _dictation.Models.Busy)) ||
             _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false })
         {
-            const string busy = "Finish the current operation before reading the last dictation.";
+            var busy = Loc.T("Finish the current operation before reading the last dictation.");
             ShowActivationNotice(busy);
             return;
         }
@@ -26,7 +26,7 @@ public sealed partial class MainWindow
         if (_closing || _profileRestoreClosing || revision != _readLastRevision) return;
         if (result.Status is SpokenFeedbackStatus.Failed or SpokenFeedbackStatus.Rejected)
         {
-            ShowActivationNotice(result.Message ?? "The last dictation could not be read aloud.");
+            ShowActivationNotice(result.Message ?? Loc.T("The last dictation could not be read aloud."));
         }
     }
 }

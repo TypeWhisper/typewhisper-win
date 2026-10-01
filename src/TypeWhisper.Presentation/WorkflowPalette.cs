@@ -39,22 +39,22 @@ public static class WorkflowPalette
 
     private static string TemplateName(WorkflowTemplate template) => template switch
     {
-        WorkflowTemplate.CleanedText => "Cleaned Text",
-        WorkflowTemplate.Translation => "Translation",
-        WorkflowTemplate.EmailReply => "Email Reply",
-        WorkflowTemplate.MeetingNotes => "Meeting Notes",
-        WorkflowTemplate.Checklist => "Checklist",
+        WorkflowTemplate.CleanedText => Loc.T("Cleaned Text"),
+        WorkflowTemplate.Translation => Loc.T("Translation"),
+        WorkflowTemplate.EmailReply => Loc.T("Email Reply"),
+        WorkflowTemplate.MeetingNotes => Loc.T("Meeting Notes"),
+        WorkflowTemplate.Checklist => Loc.T("Checklist"),
         WorkflowTemplate.Json => "JSON",
-        WorkflowTemplate.Summary => "Summary",
-        _ => "Custom"
+        WorkflowTemplate.Summary => Loc.T("Summary"),
+        _ => Loc.T("Custom")
     };
 
     private static string TriggerSummary(WorkflowTrigger trigger) => trigger.Kind switch
     {
-        WorkflowTriggerKind.Manual => "Manual",
-        WorkflowTriggerKind.Hotkey => trigger.Hotkeys.Count > 0 ? string.Join(", ", trigger.Hotkeys) : "Shortcut",
-        WorkflowTriggerKind.App => trigger.ProcessNames.Count > 0 ? string.Join(", ", trigger.ProcessNames) : "App",
-        WorkflowTriggerKind.Website => trigger.WebsitePatterns.Count > 0 ? string.Join(", ", trigger.WebsitePatterns) : "Website",
-        _ => "Always"
+        WorkflowTriggerKind.Manual => Loc.T("Manual"),
+        WorkflowTriggerKind.Hotkey => trigger.Hotkeys.Count > 0 ? string.Join(", ", trigger.Hotkeys) : Loc.T("Shortcut"),
+        WorkflowTriggerKind.App => trigger.ProcessNames.Count > 0 ? string.Join(", ", trigger.ProcessNames) : Loc.T("App"),
+        WorkflowTriggerKind.Website => trigger.WebsitePatterns.Count > 0 ? string.Join(", ", trigger.WebsitePatterns) : Loc.T("Website"),
+        _ => Loc.T("Always")
     };
 }

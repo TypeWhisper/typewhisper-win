@@ -23,7 +23,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     internal int Port => _preferences.Port;
     internal bool RequireAuthentication => _preferences.RequireAuthentication;
     internal bool Running => _host?.IsRunning == true;
-    internal string Status { get; private set; } = "HTTP API is off.";
+    internal string Status { get; private set; } = Loc.Mark("HTTP API is off.");
     internal event Action? Changed;
     private static string SettingsPath => WinUIProfile.DataPath("http-api.json");
     private static string PortPath => WinUIProfile.DataPath("api-port");
@@ -44,13 +44,13 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             else RemoveDiscovery();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { RemoveDiscovery(); Status = "HTTP API settings could not be loaded. The server is off."; Changed?.Invoke(); }
+        { RemoveDiscovery(); Status = Loc.T("HTTP API settings could not be loaded. The server is off."); Changed?.Invoke(); }
     }
 
     internal async Task ConfigureAsync(bool enabled, int port, bool requireAuthentication)
     {
         if (_closed) return;
-        if (port is < 1024 or > 65535) { Status = "Choose a port from 1024 to 65535."; Changed?.Invoke(); return; }
+        if (port is < 1024 or > 65535) { Status = Loc.T("Choose a port from 1024 to 65535."); Changed?.Invoke(); return; }
         await _changes.WaitAsync();
         try
         {
@@ -60,7 +60,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             _preferences = new(enabled, port, requireAuthentication);
             Directory.CreateDirectory(WinUIProfile.Root);
             AtomicFileWriter.WriteAllText(SettingsPath, JsonSerializer.Serialize(_preferences));
-            if (!enabled) { Status = "HTTP API is off."; return; }
+            if (!enabled) { Status = Loc.Mark("HTTP API is off."); return; }
             _token ??= await _secrets.LoadAsync("token");
             if (_token is null)
             {
@@ -85,13 +85,13 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             File.Move(DiscoveryPath + ".tmp", DiscoveryPath, true);
             File.WriteAllText(PortPath + ".tmp", port.ToString(System.Globalization.CultureInfo.InvariantCulture));
             File.Move(PortPath + ".tmp", PortPath, true);
-            Status = $"Listening on http://127.0.0.1:{port}";
+            Status = Loc.T("Listening on http://127.0.0.1:{0}", port);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             if (_host is not null) { await _host.StopAsync(); _host = null; }
             RemoveDiscovery();
-            Status = "HTTP API could not start or save its settings. Check the port and profile access, then retry.";
+            Status = Loc.T("HTTP API could not start or save its settings. Check the port and profile access, then retry.");
             System.Diagnostics.Debug.WriteLine("HTTP API configuration: " + ex.GetType().Name);
         }
         finally { _changes.Release(); Changed?.Invoke(); }

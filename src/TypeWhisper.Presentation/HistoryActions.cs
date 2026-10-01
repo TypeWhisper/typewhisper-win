@@ -12,7 +12,7 @@ public sealed class HistoryActions(IHistoryService history)
     /// <summary>Changes only final text, retaining raw text and capture metadata.</summary>
     public async Task<TranscriptionRecord?> EditAsync(string id, string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Enter transcript text.", nameof(text));
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException(Loc.T("Enter transcript text."), nameof(text));
         await history.EnsureLoadedAsync().ConfigureAwait(false);
         var original = history.Records.FirstOrDefault(record => record.Id == id);
         if (original is null) return null;
@@ -36,7 +36,7 @@ public sealed class HistoryActions(IHistoryService history)
                 : record with { InboxState = HistoryWorkspace.InboxOpen, InboxCompletedAt = null, InboxUpdatedAt = at })
             .ToArray();
         if (updated.Length > 0 && !history.TryReplaceRecords(updated))
-            throw new IOException("The Inbox change could not be saved. Your history was not changed.");
+            throw new IOException(Loc.T("The Inbox change could not be saved. Your history was not changed."));
         return updated.Length;
     }
 
@@ -75,17 +75,17 @@ public sealed class HistoryActions(IHistoryService history)
     public async Task<string> ExportAsync(IReadOnlyCollection<string> ids, string extension)
     {
         var snapshot = ids.ToHashSet(StringComparer.Ordinal);
-        if (snapshot.Count == 0) throw new ArgumentException("Select history entries to export.", nameof(ids));
+        if (snapshot.Count == 0) throw new ArgumentException(Loc.T("Select history entries to export."), nameof(ids));
         await history.EnsureLoadedAsync().ConfigureAwait(false);
         var records = history.Records.Where(record => snapshot.Contains(record.Id)).ToArray();
-        if (records.Length != snapshot.Count) throw new InvalidOperationException("Some selected history entries are no longer available. Refresh and select them again.");
+        if (records.Length != snapshot.Count) throw new InvalidOperationException(Loc.T("Some selected history entries are no longer available. Refresh and select them again."));
         return extension.ToLowerInvariant() switch
         {
             ".txt" => history.ExportToText(records),
             ".md" => history.ExportToMarkdown(records),
             ".csv" => history.ExportToCsv(records),
             ".json" => history.ExportToJson(records),
-            _ => throw new ArgumentException("Choose TXT, Markdown, CSV, or JSON.", nameof(extension))
+            _ => throw new ArgumentException(Loc.T("Choose TXT, Markdown, CSV, or JSON."), nameof(extension))
         };
     }
 

@@ -40,7 +40,7 @@ public sealed partial class MainWindow
     {
         ShowNotice(workflowId is null
             ? new AppNotice(message)
-            : new AppNotice(message, "Workflow could not start", ActionLabel: "Edit workflow", Action: () => EditNoticeWorkflow(workflowId)));
+            : new AppNotice(message, Loc.T("Workflow could not start"), ActionLabel: Loc.T("Edit workflow"), Action: () => EditNoticeWorkflow(workflowId)));
         _noticeWorkflowId = workflowId;
     }
 
@@ -65,7 +65,7 @@ public sealed partial class MainWindow
         OpenWorkflows(() =>
         {
             if (!WorkflowsView.EditWorkflow(id))
-                ShowNotice(new AppNotice("Finish your current workflow action first. If this workflow was deleted, you can ignore this notice."));
+                ShowNotice(new AppNotice(Loc.T("Finish your current workflow action first. If this workflow was deleted, you can ignore this notice.")));
         });
     }
 
@@ -73,7 +73,7 @@ public sealed partial class MainWindow
     {
         System.Diagnostics.Trace.TraceError("Activation request failed: {0}", error);
         if (_closing || _profileRestoreClosing) return;
-        ShowActivationNotice("An activation request could not be opened. Retry that request; other queued requests will continue.");
+        ShowActivationNotice(Loc.T("An activation request could not be opened. Retry that request; other queued requests will continue."));
     }
 
     internal void HandleActivation(ApplicationActivationRequest request)

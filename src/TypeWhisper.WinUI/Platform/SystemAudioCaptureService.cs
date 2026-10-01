@@ -3,6 +3,7 @@ using System.Diagnostics;
 using NAudio;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using TypeWhisper.Core;
 
 namespace TypeWhisper.WinUI.Platform;
 
@@ -375,7 +376,7 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             selected?.Dispose();
-            throw new InvalidOperationException("The selected system audio device is unavailable. Reconnect it or choose another device in Recorder settings. No fallback output was selected.", ex);
+            throw new InvalidOperationException(Loc.T("The selected system audio device is unavailable. Reconnect it or choose another device in Recorder settings. No fallback output was selected."), ex);
         }
     }
 

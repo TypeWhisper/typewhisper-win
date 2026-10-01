@@ -38,20 +38,20 @@ public sealed class AutomaticWorkflowSnapshot
     public string? Error { get; }
 
     /// <summary>Creates a review-only result when the catalog cannot be read safely.</summary>
-    public static AutomaticWorkflowSnapshot Unavailable() => new(null, "Workflows could not be loaded. Review your transcript; nothing was pasted.");
+    public static AutomaticWorkflowSnapshot Unavailable() => new(null, Loc.T("Workflows could not be loaded. Review your transcript; nothing was pasted."));
 
     /// <summary>Captures an explicit shortcut independently of app and global matching.</summary>
     public static AutomaticWorkflowSnapshot ForDictationShortcut(Workflow workflow)
     {
         if (!workflow.IsEnabled || !ManualWorkflowStore.IsDictationShortcut(workflow))
-            throw new InvalidOperationException("This dictation workflow is disabled or unsupported.");
+            throw new InvalidOperationException(Loc.T("This dictation workflow is disabled or unsupported."));
         return new(workflow, null);
     }
 
     /// <summary>Captures an explicitly requested API workflow after validating its supported semantics.</summary>
     public static AutomaticWorkflowSnapshot ForApi(Workflow workflow)
     {
-        if (!workflow.IsEnabled) throw new InvalidOperationException("This workflow is disabled.");
+        if (!workflow.IsEnabled) throw new InvalidOperationException(Loc.T("This workflow is disabled."));
         var error = UnsupportedReason(workflow);
         if (error is not null) throw new InvalidOperationException(error);
         return new(workflow, null);
@@ -85,9 +85,9 @@ public sealed class AutomaticWorkflowSnapshot
             || behavior.WhisperModeOverride is not null || !string.IsNullOrWhiteSpace(behavior.TranscriptionModelOverride)
             || !string.IsNullOrWhiteSpace(output.Format) || output.AutoEnter
             || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw))
-            return "The selected workflow has unsupported trigger, recording or output settings. Review your transcript; nothing was pasted.";
+            return Loc.T("The selected workflow has unsupported trigger, recording or output settings. Review your transcript; nothing was pasted.");
         if (workflow.Template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(behavior.FineTuning))
-            return "The selected custom workflow requires instructions. Review your transcript; nothing was pasted.";
+            return Loc.T("The selected custom workflow requires instructions. Review your transcript; nothing was pasted.");
         return null;
     }
 
@@ -105,13 +105,13 @@ public sealed class AutomaticWorkflowSnapshot
         var provider = workflow.Behavior.ProviderOverride;
         var model = workflow.Behavior.ModelOverride;
         if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(model) || !available(provider, model))
-            throw new InvalidOperationException("The workflow provider or model is unavailable.");
+            throw new InvalidOperationException(Loc.T("The workflow provider or model is unavailable."));
         var prompt = workflow.SystemPrompt(detectedLanguage: detectedLanguage, configuredLanguage: configuredLanguage);
-        if (string.IsNullOrWhiteSpace(prompt)) throw new InvalidOperationException("The workflow has no instructions.");
+        if (string.IsNullOrWhiteSpace(prompt)) throw new InvalidOperationException(Loc.T("The workflow has no instructions."));
         var context = await WorkflowMemoryContext.PrepareAsync(workflow.Behavior.MemoryPluginId, prompt, text, recall, ct);
         var result = await process(provider, context.Prompt, context.Input, model, ct);
         ct.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException("The workflow returned no text.");
+        if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException(Loc.T("The workflow returned no text."));
         return result;
     }
 }

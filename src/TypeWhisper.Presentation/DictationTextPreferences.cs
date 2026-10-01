@@ -85,14 +85,14 @@ public sealed class DictationTextPreferencesStore
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            Error = "Text preferences could not be loaded. Default text processing is active. Save your choices to restore them.";
+            Error = Loc.T("Text preferences could not be loaded. Default text processing is active. Save your choices to restore them.");
         }
     }
 
     /// <summary>Persists valid choices; failed writes preserve the previous preferences.</summary>
     public string? Save(DictationTextPreferences next)
     {
-        if (!next.IsValid) return Error = "Choose supported text-processing options and unique formatting profiles.";
+        if (!next.IsValid) return Error = Loc.T("Choose supported text-processing options and unique formatting profiles.");
         try
         {
             next = next.Snapshot();
@@ -102,7 +102,7 @@ public sealed class DictationTextPreferencesStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Error = "Text preferences could not be saved. Your previous choices still apply.";
+            return Error = Loc.T("Text preferences could not be saved. Your previous choices still apply.");
         }
     }
 }

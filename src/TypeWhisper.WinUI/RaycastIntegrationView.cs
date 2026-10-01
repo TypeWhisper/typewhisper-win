@@ -11,16 +11,16 @@ internal sealed class RaycastIntegrationView : UserControl
     internal RaycastIntegrationView()
     {
         var row = new StackPanel { Spacing = 6 };
-        row.Children.Add(SettingsHelp.Label("Raycast Extension", "Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running."));
-        var link = new HyperlinkButton { Content = "Learn more", Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Left };
-        ToolTipService.SetToolTip(link, "Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running.");
+        row.Children.Add(SettingsHelp.Label(Loc.T("Raycast Extension"), Loc.T("Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running.")));
+        var link = new HyperlinkButton { Content = Loc.T("Learn more"), Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Left };
+        ToolTipService.SetToolTip(link, Loc.T("Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running."));
         row.Children.Add(link);
         var installed = false;
         Loaded += async (_, _) =>
         {
             try { installed = await Launcher.QueryUriSupportAsync(Extension, LaunchQuerySupportType.Uri) == LaunchQuerySupportStatus.Available; }
             catch (Exception ex) when (ex is not OutOfMemoryException) { installed = false; }
-            link.Content = installed ? "Open in Raycast" : "Learn more";
+            link.Content = installed ? Loc.T("Open in Raycast") : Loc.T("Learn more");
         };
         link.Click += async (_, _) =>
         {
@@ -29,7 +29,7 @@ internal sealed class RaycastIntegrationView : UserControl
             {
                 if (!installed || !await Launcher.LaunchUriAsync(Extension)) await Launcher.LaunchUriAsync(Store);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { link.Content = "Could not open Raycast — try again"; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { link.Content = Loc.T("Could not open Raycast — try again"); }
             finally { link.IsEnabled = true; }
         };
         Content = row;

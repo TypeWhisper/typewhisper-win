@@ -35,7 +35,7 @@ public static class SharedFileActivation
             operation.ReportStarted();
             if ((startupReady is not null && !await startupReady) || canReceive?.Invoke() == false)
             {
-                Reject(operation, "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.");
+                Reject(operation, Loc.T("TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it."));
                 return;
             }
             var paths = await operation.ReadPathsAsync();
@@ -45,7 +45,7 @@ public static class SharedFileActivation
             // Profile restoration or shutdown can begin while Windows is retrieving files.
             if (canReceive?.Invoke() == false || !inbox.TryAdd(request))
             {
-                operation.ReportError("TypeWhisper is busy or shutting down. Please share the files again.");
+                operation.ReportError(Loc.T("TypeWhisper is busy or shutting down. Please share the files again."));
                 return;
             }
             operation.ReportCompleted();
@@ -53,7 +53,7 @@ public static class SharedFileActivation
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("Shared file activation failed: {0}", ex);
-            Reject(operation, "TypeWhisper could not receive the shared files. Please try again.");
+            Reject(operation, Loc.T("TypeWhisper could not receive the shared files. Please try again."));
         }
     }
 }

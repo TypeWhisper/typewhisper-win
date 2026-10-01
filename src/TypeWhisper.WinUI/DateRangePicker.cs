@@ -26,9 +26,9 @@ public sealed class DateRangePicker : UserControl
     internal DateRangePicker(DateOnly start, DateOnly end, bool active)
     {
         _start = start; _end = end; _month = new(start.Year, start.Month, 1);
-        _button = Button(active ? $"{start:dd.MM.yy} – {end:dd.MM.yy}" : "Custom…", () => _flyout!.ShowAt(_button!), active);
-        AutomationProperties.SetName(_button, "Choose custom date range");
-        ToolTipService.SetToolTip(_button, "Choose an inclusive start and end date");
+        _button = Button(active ? $"{start:dd.MM.yy} – {end:dd.MM.yy}" : Loc.T("Custom…"), () => _flyout!.ShowAt(_button!), active);
+        AutomationProperties.SetName(_button, Loc.T("Choose custom date range"));
+        ToolTipService.SetToolTip(_button, Loc.T("Choose an inclusive start and end date"));
         _flyout = new Flyout { Content = new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _panel, MaxHeight = 540, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
             Placement = FlyoutPlacementMode.BottomEdgeAlignedRight, FlyoutPresenterStyle = (Style)Application.Current.Resources["RangeFlyoutStyle"] };
         _flyout.Opening += (_, _) => { IsOpen = true; Build(); };
@@ -45,14 +45,14 @@ public sealed class DateRangePicker : UserControl
     private void Build()
     {
         _panel.Children.Clear(); _editingStart = true; _month = new(_start.Year, _start.Month, 1);
-        _panel.Children.Add(Label("Custom date range", 16));
+        _panel.Children.Add(Label(Loc.T("Custom date range"), 16));
         var fields = new Grid { ColumnSpacing = 12 }; fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new());
-        _from = Field("From", _start, fields, 0); _to = Field("To", _end, fields, 1); _panel.Children.Add(fields);
-        _panel.Children.Add(Label("DD.MM.YYYY · both dates are included", 11));
+        _from = Field(Loc.T("From"), _start, fields, 0); _to = Field(Loc.T("To"), _end, fields, 1); _panel.Children.Add(fields);
+        _panel.Children.Add(Label(Loc.T("DD.MM.YYYY · both dates are included"), 11));
         _panel.Children.Add(_calendar); _panel.Children.Add(_message);
         AutomationProperties.SetLiveSetting(_message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-        actions.Children.Add(Button("Cancel", Close)); _apply = Button("Apply", Apply, true); actions.Children.Add(_apply); _panel.Children.Add(actions);
+        actions.Children.Add(Button(Loc.T("Cancel"), Close)); _apply = Button(Loc.T("Apply"), Apply, true); actions.Children.Add(_apply); _panel.Children.Add(actions);
         _from.TextChanged += (_, _) => Validate(); _to.TextChanged += (_, _) => Validate();
         _from.GotFocus += (_, _) => SelectField(true); _to.GotFocus += (_, _) => SelectField(false);
         Validate(); RenderCalendar();
@@ -61,7 +61,7 @@ public sealed class DateRangePicker : UserControl
     {
         var field = new StackPanel { Spacing = 6 }; field.Children.Add(Label(name, 12));
         var input = new TextBox { Text = date.ToString("dd.MM.yyyy"), MaxLength = 10, Height = 38, Padding = new Thickness(8), Style = (Style)Application.Current.Resources["SearchTextBoxStyle"], IsSpellCheckEnabled = false };
-        AutomationProperties.SetName(input, name + " date, day month year");
+        AutomationProperties.SetName(input, Loc.T("{0} date, day month year", name));
         var border = new Border { Child = input, BorderThickness = new Thickness(1), BorderBrush = Brush("HairlineBrush"), CornerRadius = new CornerRadius(7), Background = Brush("InkBrush") };
         input.GotFocus += (_, _) => border.BorderBrush = Brush("FocusBrush"); input.LostFocus += (_, _) => border.BorderBrush = Brush("HairlineBrush");
         field.Children.Add(border); Grid.SetColumn(field, column); grid.Children.Add(field); return input;
@@ -75,8 +75,8 @@ public sealed class DateRangePicker : UserControl
     private void Validate()
     {
         var valid = Parse(_from.Text, out var from) && Parse(_to.Text, out _);
-        var error = valid ? UsageData.ValidateRange(from, DateOnly.ParseExact(_to.Text.Trim(), ["dd.MM.yyyy", "yyyy-MM-dd"], CultureInfo.InvariantCulture)) : "Enter valid dates as DD.MM.YYYY or YYYY-MM-DD.";
-        _message.Text = error ?? "Select a date below or type it above."; _apply.IsEnabled = error is null;
+        var error = valid ? UsageData.ValidateRange(from, DateOnly.ParseExact(_to.Text.Trim(), ["dd.MM.yyyy", "yyyy-MM-dd"], CultureInfo.InvariantCulture)) : Loc.T("Enter valid dates as DD.MM.YYYY or YYYY-MM-DD.");
+        _message.Text = error ?? Loc.T("Select a date below or type it above."); _apply.IsEnabled = error is null;
     }
     private void Apply()
     {
@@ -87,14 +87,14 @@ public sealed class DateRangePicker : UserControl
     {
         _calendar.Children.Clear();
         var heading = new Grid(); heading.ColumnDefinitions.Add(new() { Width = new GridLength(38) }); heading.ColumnDefinitions.Add(new()); heading.ColumnDefinitions.Add(new() { Width = new GridLength(38) });
-        var previous = Button("‹", () => { _month = _month.AddMonths(-1); RenderCalendar(); }); previous.IsEnabled = _month > new DateOnly(1900, 1, 1); AutomationProperties.SetName(previous, "Previous month"); heading.Children.Add(previous);
+        var previous = Button("‹", () => { _month = _month.AddMonths(-1); RenderCalendar(); }); previous.IsEnabled = _month > new DateOnly(1900, 1, 1); AutomationProperties.SetName(previous, Loc.T("Previous month")); heading.Children.Add(previous);
         var title = Label(_month.ToString("MMMM yyyy", CultureInfo.CurrentCulture), 13); title.VerticalAlignment = VerticalAlignment.Center; title.HorizontalAlignment = HorizontalAlignment.Center; Grid.SetColumn(title, 1); heading.Children.Add(title);
-        var next = Button("›", () => { _month = _month.AddMonths(1); RenderCalendar(); }); next.IsEnabled = _month < new DateOnly(2100, 12, 1); AutomationProperties.SetName(next, "Next month"); Grid.SetColumn(next, 2); heading.Children.Add(next); _calendar.Children.Add(heading);
-        _calendar.Children.Add(Label(_editingStart ? "Selecting start date" : "Selecting end date", 11));
+        var next = Button("›", () => { _month = _month.AddMonths(1); RenderCalendar(); }); next.IsEnabled = _month < new DateOnly(2100, 12, 1); AutomationProperties.SetName(next, Loc.T("Next month")); Grid.SetColumn(next, 2); heading.Children.Add(next); _calendar.Children.Add(heading);
+        _calendar.Children.Add(Label(_editingStart ? Loc.T("Selecting start date") : Loc.T("Selecting end date"), 11));
         var days = new Grid { ColumnSpacing = 3, RowSpacing = 3 };
         for (var col = 0; col < 7; col++) days.ColumnDefinitions.Add(new());
         for (var row = 0; row < 7; row++) days.RowDefinitions.Add(new() { Height = new GridLength(row == 0 ? 22 : 32) });
-        var names = new[] { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" };
+        var names = new[] { Loc.T("Mo"), Loc.T("Tu"), Loc.T("We"), Loc.T("Th"), Loc.T("Fr"), Loc.T("Sa"), Loc.T("Su") };
         for (var i = 0; i < 7; i++) { var dayName = Label(names[i], 10); dayName.HorizontalAlignment = HorizontalAlignment.Center; Grid.SetColumn(dayName, i); days.Children.Add(dayName); }
         var offset = ((int)_month.DayOfWeek + 6) % 7;
         Parse(_from.Text, out var start); Parse(_to.Text, out var end);

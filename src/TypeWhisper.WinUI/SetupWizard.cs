@@ -42,7 +42,7 @@ public sealed partial class SetupWizard : UserControl
         var shell = new Grid { Padding = new Thickness(32, 18, 32, 24), RowSpacing = 28, Background = WizardBackground() };
         shell.RowDefinitions.Add(new() { Height = GridLength.Auto }); shell.RowDefinitions.Add(new()); shell.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var heading = new StackPanel { MaxWidth = 800, HorizontalAlignment = HorizontalAlignment.Stretch };
-        var title = Copy("TypeWhisper Setup", 20); title.HorizontalAlignment = HorizontalAlignment.Center; title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        var title = Copy(Loc.T("TypeWhisper Setup"), 20); title.HorizontalAlignment = HorizontalAlignment.Center; title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         heading.Children.Add(title); heading.Children.Add(_steps); shell.Children.Add(heading);
         _body.MaxWidth = 720; _body.HorizontalAlignment = HorizontalAlignment.Center;
         _scroll = new ScrollViewer { Padding = new Thickness(12, 0, 12, 12), Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, HorizontalContentAlignment = HorizontalAlignment.Center };
@@ -57,10 +57,10 @@ public sealed partial class SetupWizard : UserControl
         footer.ColumnDefinitions.Add(new());
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        _back = Button("Back", () => Move(Math.Max(0, _state.Step - 1))); Grid.SetRow(_back, 1); footer.Children.Add(_back);
-        var skip = Button("Skip setup", () => { if (!_closing) _exit(false); });
+        _back = Button(Loc.T("Back"), () => Move(Math.Max(0, _state.Step - 1))); Grid.SetRow(_back, 1); footer.Children.Add(_back);
+        var skip = Button(Loc.T("Skip setup"), () => { if (!_closing) _exit(false); });
         Grid.SetRow(skip, 1); Grid.SetColumn(skip, 2); footer.Children.Add(skip);
-        _next = Button("Continue", Next);
+        _next = Button(Loc.T("Continue"), Next);
         _next.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
         Grid.SetRow(_next, 1); Grid.SetColumn(_next, 3); footer.Children.Add(_next);
         Grid.SetRow(footer, 2); shell.Children.Add(footer); Content = shell;
@@ -89,9 +89,9 @@ public sealed partial class SetupWizard : UserControl
     {
         bool microphoneAvailable;
         try { microphoneAvailable = _session.GetMicrophones().Count > 0; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return "Microphones could not be checked. Reopen the microphone step or skip setup."; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return Loc.T("Microphones could not be checked. Reopen the microphone step or skip setup."); }
         if ((currentStep ? _state.Step : 4) > 0 && MicrophoneAccessStatus() == "Access blocked")
-            return "Allow microphone access in Windows settings to continue, or skip setup.";
+            return Loc.T("Allow microphone access in Windows settings to continue, or skip setup.");
         return SetupReadiness.ValidateStep(currentStep ? _state.Step : 4, _selecting || !_session.CanChangeProvider,
             !string.IsNullOrWhiteSpace(_session.Shortcut) && _session.Shortcut != "No shortcut assigned",
             _session.IsReady, microphoneAvailable);
@@ -99,11 +99,11 @@ public sealed partial class SetupWizard : UserControl
 
     private void RefreshStatus()
     {
-        _next.Content = _state.Step == 4 ? "Finish setup" : "Continue";
+        _next.Content = _state.Step == 4 ? Loc.T("Finish setup") : Loc.T("Continue");
         _back.Visibility = _state.Step == 0 ? Visibility.Collapsed : Visibility.Visible;
         _back.IsEnabled = !_closing && !_selecting && _state.Step > 0;
         _next.IsEnabled = !_closing && !_selecting && Readiness(currentStep: true) is null;
-        _message.Text = _feedback.Message(Readiness(currentStep: true) ?? (_state.Step == 4 && _testSucceeded ? "Your first dictation worked." : ""));
+        _message.Text = _feedback.Message(Readiness(currentStep: true) ?? (_state.Step == 4 && _testSucceeded ? Loc.T("Your first dictation worked.") : ""));
         _message.Visibility = string.IsNullOrWhiteSpace(_message.Text) ? Visibility.Collapsed : Visibility.Visible;
     }
     private void Next()
@@ -134,9 +134,9 @@ public sealed partial class SetupWizard : UserControl
         _providerSettings = null; _modelLabel = _engineStatus = null; _renderedProvider = null;
         _pluginInstallPanel = null;
         RenderSteps();
-        string[] titles = ["Welcome to TypeWhisper", "Permissions", "Choose your hotkey", "AI & Engine", "Try it out"];
-        string[] subtitles = ["Set up voice typing in a few simple steps.", "Give TypeWhisper access to work on your PC.",
-            "Start and stop dictation without leaving your app.", "Local defaults first. Cloud providers can wait.", "Press your hotkey and say something."];
+        string[] titles = [Loc.T("Welcome to TypeWhisper"), Loc.T("Permissions"), Loc.T("Choose your hotkey"), Loc.T("AI & Engine"), Loc.T("Try it out")];
+        string[] subtitles = [Loc.T("Set up voice typing in a few simple steps."), Loc.T("Give TypeWhisper access to work on your PC."),
+            Loc.T("Start and stop dictation without leaving your app."), Loc.T("Local defaults first. Cloud providers can wait."), Loc.T("Press your hotkey and say something.")];
         var title = Copy(titles[_state.Step], 27); title.FontWeight = Microsoft.UI.Text.FontWeights.Bold; title.TextAlignment = TextAlignment.Center;
         _body.Children.Add(title);
         var subtitle = Copy(subtitles[_state.Step], 17); subtitle.Foreground = Resource("MutedBrush"); subtitle.TextAlignment = TextAlignment.Center; subtitle.Margin = new Thickness(0, 0, 0, 12);
@@ -167,13 +167,13 @@ public sealed partial class SetupWizard : UserControl
             _body.Children.Add(Copy(label, 12));
             _body.Children.Add(picker); _pickers.Add(picker); return picker;
         }
-        _providerPicker = Create("Provider");
+        _providerPicker = Create(Loc.T("Provider"));
         _providerLabel = (TextBlock)_body.Children[^2];
         _providerSettings = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         _body.Children.Add(_providerSettings);
-        _modelPicker = Create("Ready model");
+        _modelPicker = Create(Loc.T("Ready model"));
         _modelLabel = (TextBlock)_body.Children[^2];
-        _languagePicker = Create("Spoken language");
+        _languagePicker = Create(Loc.T("Spoken language"));
         _languageLabel = (TextBlock)_body.Children[^2];
         _providerPicker.SelectionChanged += id => { if (_refreshingModels || _closing) return; _selectedProvider = id; RefreshModelPickers(); };
         _modelPicker.SelectionChanged += async id =>
@@ -181,7 +181,7 @@ public sealed partial class SetupWizard : UserControl
             if (_refreshingModels || _closing || _selecting || _selectedProvider is null) return;
             _selecting = true; RefreshModelPickers(); RefreshStatus();
             try { _feedback.ReportPersistence(await _session.SelectProviderModelAsync(_selectedProvider, id)); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { _feedback.ReportPersistence("Model selection failed: " + ex.Message); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { _feedback.ReportPersistence(Loc.T("Model selection failed: {0}", ex.Message)); }
             finally { _selecting = false; if (!_closing) { RefreshModelPickers(); RefreshStatus(); } }
         };
         _languagePicker.SelectionChanged += id =>
@@ -193,7 +193,7 @@ public sealed partial class SetupWizard : UserControl
     }
     private static string LanguageName(string code)
     {
-        if (code == "auto") return "Automatic";
+        if (code == "auto") return Loc.T("Automatic");
         try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
         catch (System.Globalization.CultureNotFoundException) { return code; }
     }
@@ -209,12 +209,12 @@ public sealed partial class SetupWizard : UserControl
                 _pluginInstallation is null && _session.Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)
                     ? Visibility.Collapsed : Visibility.Visible;
             var selected = providers.FirstOrDefault(item => item.Id == _selectedProvider);
-            _providerPicker.SetOptions(providers.Select(item => new Choice(item.Id, item.Name, item.Status + (item.Cloud ? " - cloud" : " - on device"))).ToArray(), _selectedProvider ?? "", "Provider unavailable");
-            _modelPicker.SetOptions(selected?.Models.Where(item => item.Ready).Select(item => new Choice(item.Id, item.Name, "Ready")).ToArray() ?? [],
-                _selectedProvider == _session.ActiveProviderId ? selected?.SelectedModelId ?? "" : "", "Choose a ready model; otherwise configure the plugin");
+            _providerPicker.SetOptions(providers.Select(item => new Choice(item.Id, item.Name, item.Cloud ? Loc.T("{0} - cloud", item.Status) : Loc.T("{0} - on device", item.Status))).ToArray(), _selectedProvider ?? "", Loc.T("Provider unavailable"));
+            _modelPicker.SetOptions(selected?.Models.Where(item => item.Ready).Select(item => new Choice(item.Id, item.Name, Loc.T("Ready"))).ToArray() ?? [],
+                _selectedProvider == _session.ActiveProviderId ? selected?.SelectedModelId ?? "" : "", Loc.T("Choose a ready model; otherwise configure the plugin"));
             var codes = _session.SupportedLanguages;
             var options = (codes.Count == 0 || _session.UsesRegistryProvider ? new[] { "auto" }.Concat(codes) : codes).Distinct().ToArray();
-            _languagePicker.SetOptions(options.Select(code => new Choice(code, LanguageName(code), "Supported by the active model")).ToArray(), _session.Language);
+            _languagePicker.SetOptions(options.Select(code => new Choice(code, LanguageName(code), Loc.T("Supported by the active model"))).ToArray(), _session.Language);
             var canChange = !_selecting && _session.CanChangeProvider;
             _providerPicker.IsEnabled = canChange;
             _modelPicker.IsEnabled = canChange && selected?.Ready == true;
@@ -227,9 +227,9 @@ public sealed partial class SetupWizard : UserControl
             _modelPicker.Visibility = local ? Visibility.Collapsed : available;
             if (_modelLabel is not null) _modelLabel.Visibility = _modelPicker.Visibility;
             if (_engineStatus is not null) _engineStatus.Text = _session.IsReady
-                ? _session.ActiveModelName + " is ready for dictation."
-                : providers.Count == 0 ? "Choose a transcription plugin to get started."
-                : "Choose a model below. Download it, then select Use model to continue.";
+                ? Loc.T("{0} is ready for dictation.", _session.ActiveModelName)
+                : providers.Count == 0 ? Loc.T("Choose a transcription plugin to get started.")
+                : Loc.T("Choose a model below. Download it, then select Use model to continue.");
             if (_providerSettings is not null && _renderedProvider != selected?.Id)
             {
                 _renderedProvider = selected?.Id;
@@ -243,7 +243,7 @@ public sealed partial class SetupWizard : UserControl
     private void AddPicker(string label, IReadOnlyList<Choice> choices, string selected, Func<string, string?> save)
     {
         _body.Children.Add(Copy(label, 12));
-        var picker = new ChoicePicker(); picker.Configure(label, "workflow", label); picker.SetOptions(choices, selected, "Saved selection unavailable");
+        var picker = new ChoicePicker(); picker.Configure(label, "workflow", label); picker.SetOptions(choices, selected, Loc.T("Saved selection unavailable"));
         picker.SelectionChanged += id =>
         {
             if (_closing) return;

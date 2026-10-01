@@ -14,7 +14,7 @@ internal sealed class LiveModelsView : UserControl
     private readonly StackPanel _cards = new() { Spacing = 12 };
     private readonly TextBlock _active = Copy("", 16);
     private readonly TextBlock _vocabulary = Copy("", 12, true);
-    private readonly HandCursorButton _setupAction = Button("Retry setup", "Retry dictionary boosting setup");
+    private readonly HandCursorButton _setupAction = Button(Loc.T("Retry setup"), Loc.T("Retry dictionary boosting setup"));
     private readonly TextBlock _feedback = Copy("", 12, true);
     private readonly List<ModelRow> _rows = [];
     private string? _message;
@@ -27,9 +27,9 @@ internal sealed class LiveModelsView : UserControl
         Tag = "SelectedModelId";
         if (!setup)
         {
-            _panel.Children.Add(Copy("ACTIVE MODEL", 10, true));
+            _panel.Children.Add(Copy(Loc.T("ACTIVE MODEL"), 10, true));
             _panel.Children.Add(_active);
-            _panel.Children.Add(Copy("Local models support dictation and live preview. Downloads continue when you leave this page.", 12, true));
+            _panel.Children.Add(Copy(Loc.T("Local models support dictation and live preview. Downloads continue when you leave this page."), 12, true));
         }
         _panel.Children.Add(_cards);
         if (!setup) _panel.Children.Add(_vocabulary);
@@ -61,31 +61,31 @@ internal sealed class LiveModelsView : UserControl
         }
         _active.Text = _session.ActiveModelName;
         _vocabulary.Text = _session.CtcVocabulary.Error ?? (_session.CtcVocabulary.Busy
-            ? _session.CtcVocabulary.Status ?? "Preparing dictionary boosting…" : _session.CtcVocabulary.Enabled
-                ? "Dictionary boosting is included for Parakeet. Add terms in Dictionary."
-                : "Dictionary boosting follows this plugin’s enablement.");
+            ? _session.CtcVocabulary.Status ?? Loc.T("Preparing dictionary boosting…") : _session.CtcVocabulary.Enabled
+                ? Loc.T("Dictionary boosting is included for Parakeet. Add terms in Dictionary.")
+                : Loc.T("Dictionary boosting follows this plugin’s enablement."));
         _setupAction.Visibility = models.Enabled && (_session.CtcVocabulary.Busy || !_session.CtcVocabulary.Enabled)
             ? Visibility.Visible : Visibility.Collapsed;
-        _setupAction.Content = _session.CtcVocabulary.Busy ? "Cancel setup" : "Retry setup";
-        AutomationProperties.SetName(_setupAction, _session.CtcVocabulary.Busy ? "Cancel dictionary boosting setup" : "Retry dictionary boosting setup");
+        _setupAction.Content = _session.CtcVocabulary.Busy ? Loc.T("Cancel setup") : Loc.T("Retry setup");
+        AutomationProperties.SetName(_setupAction, _session.CtcVocabulary.Busy ? Loc.T("Cancel dictionary boosting setup") : Loc.T("Retry dictionary boosting setup"));
         _setupAction.IsEnabled = _session.CtcVocabulary.Busy || (_session.CanChangeProvider && !models.Busy);
         _feedback.Text = _message ?? models.Error ?? models.Feedback
-            ?? "Choose a downloaded model to use it. Downloads do not change your active model.";
+            ?? Loc.T("Choose a downloaded model to use it. Downloads do not change your active model.");
         foreach (var row in _rows)
         {
             var state = states.Single(s => s.Model.Id == row.Model.Id);
             var downloading = models.DownloadingModelId == row.Model.Id;
             var removing = models.RemovingModelId == row.Model.Id;
             var active = !_session.UsesRegistryProvider && models.ActiveModelId == row.Model.Id;
-            row.Status.Text = removing ? "Removing downloaded files…" : downloading ? $"Downloading · {models.Progress:P0}" : active ? "Active · ready for dictation" : state.Downloaded ? "Downloaded · ready to activate" : "Available to download";
-            row.Action.Content = downloading ? $"{models.Progress:P0}" : active ? "Active" : state.Downloaded ? "Use model" : "Download";
+            row.Status.Text = removing ? Loc.T("Removing downloaded files…") : downloading ? Loc.T("Downloading · {0:P0}", models.Progress) : active ? Loc.T("Active · ready for dictation") : state.Downloaded ? Loc.T("Downloaded · ready to activate") : Loc.T("Available to download");
+            row.Action.Content = downloading ? $"{models.Progress:P0}" : active ? Loc.T("Active") : state.Downloaded ? Loc.T("Use model") : Loc.T("Download");
             row.Action.IsEnabled = !_confirmingRemoval && !models.Busy && !active && (!state.Downloaded || _session.CanSelectModel);
             row.Remove.Visibility = !_setup && models.SupportsModelRemoval && state.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             row.Remove.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanChangeProvider && models.CanRemoveModel(row.Model.Id);
             ToolTipService.SetToolTip(row.Remove, models.CanRemoveModel(row.Model.Id)
-                ? "Remove downloaded files for this model." : "Select a different model in this plugin before removing this one.");
+                ? Loc.T("Remove downloaded files for this model.") : Loc.T("Select a different model in this plugin before removing this one."));
             row.Cancel.Visibility = downloading || removing ? Visibility.Visible : Visibility.Collapsed;
-            AutomationProperties.SetName(row.Cancel, "Cancel " + row.Model.DisplayName + (removing ? " removal" : " download"));
+            AutomationProperties.SetName(row.Cancel, removing ? Loc.T("Cancel {0} removal", row.Model.DisplayName) : Loc.T("Cancel {0} download", row.Model.DisplayName));
             row.Progress.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
             row.Fill.Width = row.Progress.ActualWidth * models.Progress;
             row.Card.BorderBrush = Brush(active ? "AccentBrush" : "HairlineBrush");
@@ -102,9 +102,9 @@ internal sealed class LiveModelsView : UserControl
         layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var copy = new StackPanel { Spacing = 5 };
-        copy.Children.Add(Copy("LOCAL MODELS · ON-DEVICE · " + model.Publisher + " · " + model.SizeDescription, 10, true));
+        copy.Children.Add(Copy(Loc.T("LOCAL MODELS · ON-DEVICE · {0} · {1}", model.Publisher, model.SizeDescription), 10, true));
         copy.Children.Add(Copy(model.DisplayName, _setup ? 14 : 16));
-        var languages = Button($"{model.LanguageCount} languages", $"Languages supported by {model.DisplayName}");
+        var languages = Button(Loc.T("{0} languages", model.LanguageCount), Loc.T("Languages supported by {0}", model.DisplayName));
         languages.Padding = new Thickness(0); languages.BorderThickness = new Thickness(0);
         languages.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         languages.HorizontalAlignment = HorizontalAlignment.Left; languages.FontSize = 12;
@@ -113,7 +113,7 @@ internal sealed class LiveModelsView : UserControl
             try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
             catch (System.Globalization.CultureNotFoundException) { return code; }
         }).Order(StringComparer.CurrentCulture).ToArray();
-        var description = languageNames.Length == 0 ? "The plugin has not supplied a language list." : string.Join(", ", languageNames);
+        var description = languageNames.Length == 0 ? Loc.T("The plugin has not supplied a language list.") : string.Join(", ", languageNames);
         AutomationProperties.SetHelpText(languages, description);
         var tooltip = new ToolTip { Content = new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 } };
         ToolTipService.SetToolTip(languages, tooltip);
@@ -126,10 +126,10 @@ internal sealed class LiveModelsView : UserControl
         var fill = new Border { Background = Brush("AccentBrush"), HorizontalAlignment = HorizontalAlignment.Left, Width = 0, CornerRadius = new CornerRadius(2) };
         var progress = new Border { Background = Brush("HairlineBrush"), Child = fill, Height = 4, CornerRadius = new CornerRadius(2) };
         progress.SizeChanged += (_, e) => fill.Width = e.NewSize.Width * _session.Models.Progress;
-        AutomationProperties.SetName(progress, model.DisplayName + " download progress");
+        AutomationProperties.SetName(progress, Loc.T("{0} download progress", model.DisplayName));
         copy.Children.Add(progress); layout.Children.Add(copy);
         var actions = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
-        var action = Button("Download", "Download " + model.DisplayName);
+        var action = Button(Loc.T("Download"), Loc.T("Download {0}", model.DisplayName));
         action.MinWidth = 124;
         action.Click += async (_, _) =>
         {
@@ -143,18 +143,18 @@ internal sealed class LiveModelsView : UserControl
             catch (Exception ex) when (ex is not OutOfMemoryException) { _message = ex.Message; }
             if (IsLoaded) { Update(); action.Focus(FocusState.Programmatic); }
         };
-        var cancel = Button("Cancel", "Cancel " + model.DisplayName + " download");
+        var cancel = Button(Loc.T("Cancel"), Loc.T("Cancel {0} download", model.DisplayName));
         cancel.Click += async (_, _) =>
         {
             if (_session.Models.RemovingModelId == model.Id)
             {
                 try { await _session.CancelRegistryModelDownloadAsync(); }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { _message = "The model operation could not finish stopping. Wait before retrying."; }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { _message = Loc.T("The model operation could not finish stopping. Wait before retrying."); }
                 if (IsLoaded) Update();
             }
             else _session.Models.CancelDownload();
         };
-        var remove = Button("Remove model", "Remove " + model.DisplayName);
+        var remove = Button(Loc.T("Remove model"), Loc.T("Remove {0}", model.DisplayName));
         remove.Click += async (_, _) =>
         {
             if (_confirmingRemoval || !remove.IsEnabled) return;
@@ -165,9 +165,9 @@ internal sealed class LiveModelsView : UserControl
                 var dialog = new ContentDialog
                 {
                     XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
-                    Title = "Remove " + model.DisplayName + "?",
-                    Content = "Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept.",
-                    PrimaryButtonText = "Remove model", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+                    Title = Loc.T("Remove {0}?", model.DisplayName),
+                    Content = Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."),
+                    PrimaryButtonText = Loc.T("Remove model"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
                 };
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary || !IsLoaded) return;
                 _message = await _session.RemoveLocalModelAsync(model.Id, expectedGeneration);

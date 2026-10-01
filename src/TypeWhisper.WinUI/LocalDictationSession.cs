@@ -29,7 +29,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal RecordingModePreferencesStore RecordingModePreferences { get; } = new(WinUIProfile.DataPath("recording-mode.json"));
     internal string? SelectRecordingMode(RecordingMode mode)
     {
-        if (!CanChangeProvider || !_gate.Wait(0)) return "Finish dictation before changing recording mode.";
+        if (!CanChangeProvider || !_gate.Wait(0)) return Loc.T("Finish dictation before changing recording mode.");
         try { return RecordingModePreferences.Save(mode); }
         finally { _gate.Release(); Changed?.Invoke(); }
     }
@@ -42,11 +42,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private string? _modelAtStart;
     internal string? SelectTranscriptionTask(TranscriptionTask task)
     {
-        if (!CanChangeProvider || !_gate.Wait(0)) return "Finish dictation before changing the task.";
+        if (!CanChangeProvider || !_gate.Wait(0)) return Loc.T("Finish dictation before changing the task.");
         try
         {
             if (task == TranscriptionTask.Translate && !SupportsTranslation)
-                return "This model does not support translation to English. Choose a compatible model first.";
+                return Loc.T("This model does not support translation to English. Choose a compatible model first.");
             return TranscriptionTaskPreferences.Save(task);
         }
         finally { _gate.Release(); Changed?.Invoke(); }
@@ -76,7 +76,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     internal string? SaveAudioPreferences(DictationAudioPreferences preferences)
     {
-        if (_disposed) return "Audio preferences are unavailable during shutdown.";
+        if (_disposed) return Loc.T("Audio preferences are unavailable during shutdown.");
         try
         {
             preferences = preferences.Validated();
@@ -86,7 +86,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { return AudioPreferencesError = "Could not save audio preferences: " + ex.Message; }
+        { return AudioPreferencesError = Loc.T("Could not save audio preferences: {0}", ex.Message); }
     }
     internal HistoryRetentionController HistoryRetention { get; }
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _retentionTimer;
@@ -131,8 +131,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     private readonly VocabularyHostServices _selection = new(WinUIProfile.DataPath("Dictation"));
     internal string ActiveModelName => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
-        ? provider.Name + " · " + (provider.Models.FirstOrDefault(model => model.Id == provider.SelectedModelId)?.DisplayName ?? "No model selected")
-        : "Selected provider unavailable" : Models.ActiveModelName;
+        ? provider.Name + " · " + (provider.Models.FirstOrDefault(model => model.Id == provider.SelectedModelId)?.DisplayName ?? Loc.T("No model selected"))
+        : Loc.T("Selected provider unavailable") : Models.ActiveModelName;
     internal string? ActiveModelId => UsesRegistryProvider ? ActiveRegistryProvider?.SelectedModelId : Models.ActiveModelId;
     internal string ActiveChoiceId => UsesRegistryProvider ? _providerId + ":" + ActiveModelId : Models.ActiveModelId ?? "";
     internal string ActiveProviderId => _providerId;
@@ -180,7 +180,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal DictationOverlayState OverlayState => new(
         DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation),
         _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current, CancelWarning, Cancelled);
-    internal string Status { get; private set; } = "Loading local transcription plugin…";
+    internal string Status { get; private set; } = Loc.T("Loading local transcription plugin…");
     internal const string DefaultShortcut = "Ctrl+Shift";
     internal string Shortcut { get; set; } = DefaultShortcut;
     internal bool IsRecording => !_recorderReserved && _audio.IsRecording;
@@ -189,23 +189,23 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     internal async Task<string?> SetLocalPluginEnabledAsync(bool enabled)
     {
-        if (enabled && !Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) return "Install NVIDIA Parakeet under Integrations first.";
-        if (_disposed || !await _gate.WaitAsync(0)) return "Wait until dictation is ready before changing the plugin.";
+        if (enabled && !Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) return Loc.T("Install NVIDIA Parakeet under Integrations first.");
+        if (_disposed || !await _gate.WaitAsync(0)) return Loc.T("Wait until dictation is ready before changing the plugin.");
         try
         {
-            if (_audio.IsRecording) return "Finish recording before changing the plugin.";
-            SetStatus(enabled ? "Loading local transcription plugin…" : "Unloading local transcription plugin…", DictationPhase.Configuring);
+            if (_audio.IsRecording) return Loc.T("Finish recording before changing the plugin.");
+            SetStatus(enabled ? Loc.T("Loading local transcription plugin…") : Loc.T("Unloading local transcription plugin…"), DictationPhase.Configuring);
             await _livePreview.StopAsync();
             await _transcriptionPlugin.SetEnabledAsync(enabled);
-            if (_disposed) return "The application is shutting down.";
+            if (_disposed) return Loc.T("The application is shutting down.");
             var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled);
             LocalPluginError = Models.Error ?? vocabularyError;
-            SetStatus(enabled ? IsReady ? ModelReadyStatus() : Models.Error ?? "Download a model in plugin settings, then select it in Dictation." : "Local transcription plugin disabled", DictationPhase.Idle);
+            SetStatus(enabled ? IsReady ? ModelReadyStatus() : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation.") : Loc.T("Local transcription plugin disabled"), DictationPhase.Idle);
             return LocalPluginError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            LocalPluginError = "Could not update local transcription plugin: " + ex.Message;
+            LocalPluginError = Loc.T("Could not update local transcription plugin: {0}", ex.Message);
             SetStatus(LocalPluginError, DictationPhase.Idle);
             return LocalPluginError;
         }
@@ -213,10 +213,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     internal async Task<string?> SelectModelAsync(string modelId)
     {
-        if (!CanSelectModel || !await _gate.WaitAsync(0)) return "Finish recording or the current model operation before changing models.";
+        if (!CanSelectModel || !await _gate.WaitAsync(0)) return Loc.T("Finish recording or the current model operation before changing models.");
         try
         {
-            SetStatus("Loading model… Wait until the model is ready before dictating.", DictationPhase.LoadingModel);
+            SetStatus(Loc.T("Loading model… Wait until the model is ready before dictating."), DictationPhase.LoadingModel);
             await _livePreview.StopAsync();
             await Models.ActivateAsync(modelId);
             _selection.SetSetting("Provider", "local");
@@ -227,7 +227,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            LocalPluginError = "Could not select model: " + ex.Message;
+            LocalPluginError = Loc.T("Could not select model: {0}", ex.Message);
             SetStatus(LocalPluginError, DictationPhase.Idle);
             return LocalPluginError;
         }
@@ -243,13 +243,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal async Task<string?> UninstallPluginAsync(string id, IProgress<PluginInstallationProgress>? progress = null)
     {
         if (!CanChangeProvider || Models.Busy || CtcVocabulary.Busy || !await _gate.WaitAsync(0))
-            return "Finish dictation and model operations before uninstalling a plugin.";
+            return Loc.T("Finish dictation and model operations before uninstalling a plugin.");
         try
         {
-            SetStatus("Uninstalling plugin…", DictationPhase.Configuring);
-            progress?.Report(new("Finishing running plugin operations…"));
+            SetStatus(Loc.T("Uninstalling plugin…"), DictationPhase.Configuring);
+            progress?.Report(new(Loc.T("Finishing running plugin operations…")));
             await _livePreview.StopAsync();
-            progress?.Report(new("Unloading plugin resources…"));
+            progress?.Report(new(Loc.T("Unloading plugin resources…")));
             if (id == LocalTranscriptionPlugin.PluginId)
             {
                 await Models.SetEnabledAsync(false);
@@ -262,28 +262,28 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             // Keep the selected provider explicit; removing it never switches audio to a cloud service.
             return null;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return "Could not uninstall plugin: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return Loc.T("Could not uninstall plugin: {0}", ex.Message); }
         finally
         {
-            SetStatus(IsReady ? ModelReadyStatus() : "Choose an installed provider in Dictation.", DictationPhase.Idle);
+            SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose an installed provider in Dictation."), DictationPhase.Idle);
             _gate.Release(); Changed?.Invoke();
         }
     }
     internal string? SelectLanguage(string language)
     {
-        if (!(UsesRegistryProvider ? CanChangeProvider && IsReady : CanSelectModel) || !_gate.Wait(0)) return "Finish dictation before changing the language.";
+        if (!(UsesRegistryProvider ? CanChangeProvider && IsReady : CanSelectModel) || !_gate.Wait(0)) return Loc.T("Finish dictation before changing the language.");
         try
         {
             if (UsesRegistryProvider)
             {
-                if (language != "auto" && !SupportedLanguages.Contains(language)) return "This provider does not support that language.";
-                if (ActiveRegistryProvider is not { } provider) return "The selected provider is unavailable.";
+                if (language != "auto" && !SupportedLanguages.Contains(language)) return Loc.T("This provider does not support that language.");
+                if (ActiveRegistryProvider is not { } provider) return Loc.T("The selected provider is unavailable.");
                 WinUIPluginPackages.CreateServices(provider.PluginId).SetSetting("Language", language);
             }
             else Models.SelectLanguage(language);
             return null;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return "Could not save language: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return Loc.T("Could not save language: {0}", ex.Message); }
         finally { _gate.Release(); }
     }
     internal float CurrentLevel => _audio.CurrentRmsLevel;
@@ -322,28 +322,28 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private Task<string?> SelectRegistryModelAsync(string providerId, string modelId)
     {
         if (_disposed || !CanChangeProvider || Models.Busy)
-            return Task.FromResult<string?>("Finish dictation and model operations before selecting a model.");
+            return Task.FromResult<string?>(Loc.T("Finish dictation and model operations before selecting a model."));
         var model = PluginRuntime.TranscriptionProviders
             .FirstOrDefault(provider => provider.SelectionId == RegistrySelectionId(providerId))?
             .ModelStates.FirstOrDefault(model => model.ModelId == modelId);
-        return model is null ? Task.FromResult<string?>("This model is no longer available. Refresh its provider settings.")
+        return model is null ? Task.FromResult<string?>(Loc.T("This model is no longer available. Refresh its provider settings."))
             : UseRegistryModelAsync(model);
     }
     private async Task<string?> ChangeRegistryPluginAsync(string id, Func<Task> action, bool loadingModel = false)
     {
-        if (!Packages.Store.IsInstalled(id)) return "Install this plugin in Integrations first.";
-        if (!CanChangeProvider || Models.Busy || !await _gate.WaitAsync(0)) return "Finish dictation and model operations before changing plugins.";
+        if (!Packages.Store.IsInstalled(id)) return Loc.T("Install this plugin in Integrations first.");
+        if (!CanChangeProvider || Models.Busy || !await _gate.WaitAsync(0)) return Loc.T("Finish dictation and model operations before changing plugins.");
         try
         {
-            SetStatus(loadingModel ? "Loading model…" : "Updating plugin…", loadingModel ? DictationPhase.LoadingModel : DictationPhase.Configuring);
+            SetStatus(loadingModel ? Loc.T("Loading model…") : Loc.T("Updating plugin…"), loadingModel ? DictationPhase.LoadingModel : DictationPhase.Configuring);
             await _livePreview.StopAsync();
             await action();
-            SetStatus(IsReady ? ModelReadyStatus() : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
+            SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose and configure a transcription provider in Dictation."), DictationPhase.Idle);
             return null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var message = "Plugin operation could not be completed (" + ex.GetType().Name + "). Check the plugin's configuration and try again.";
+            var message = Loc.T("Plugin operation could not be completed ({0}). Check the plugin's configuration and try again.", ex.GetType().Name);
             SetStatus(message, DictationPhase.Idle); return message;
         }
         finally { _gate.Release(); Changed?.Invoke(); }
@@ -366,16 +366,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private static readonly string MicrophonePath = WinUIProfile.DataPath("microphone.json");
     internal IReadOnlyList<MicrophonePriorityItem> MicrophonePriority => _microphones.AsReadOnly();
     internal string SelectedMicrophoneId => _microphones.FirstOrDefault()?.Id ?? "default";
-    internal string SelectedMicrophoneName => _microphones.FirstOrDefault()?.Name ?? "System default";
+    internal string SelectedMicrophoneName => _microphones.FirstOrDefault()?.Name ?? Loc.T("System default");
     internal IReadOnlyList<AudioInputDeviceInfo> GetMicrophones() => _audio.GetAvailableInputDeviceInfos();
     internal MicrophoneTestSnapshot? MicrophoneTest => _audio.MicrophoneTest;
     internal string? StartMicrophoneTest()
     {
-        if (!_gate.Wait(0)) return "Please wait until dictation is ready.";
+        if (!_gate.Wait(0)) return Loc.T("Please wait until dictation is ready.");
         try
         {
-            if (!CanStartSessionOperation) return "Finish the current operation before testing the microphone.";
-            if (_audio.IsPreviewing) return "A microphone test is already running.";
+            if (!CanStartSessionOperation) return Loc.T("Finish the current operation before testing the microphone.");
+            if (_audio.IsPreviewing) return Loc.T("A microphone test is already running.");
             _audio.StartPreview(null);
             var error = _audio.MicrophoneTest?.Error;
             if (error is not null) _audio.StopPreview();
@@ -395,7 +395,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     // Why dictation cannot use the preferred microphone right now; null when it can.
     internal string? MicrophoneNotice()
     {
-        if (!_audio.HasDevice) return "No microphone connected. Connect one to dictate.";
+        if (!_audio.HasDevice) return Loc.T("No microphone connected. Connect one to dictate.");
         if (_audio.CaptureFailure is { } failure) return failure;
         return MicrophoneFailure.PriorityNotice(_microphones, GetMicrophones());
     }
@@ -403,13 +403,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private string ReadyStatus(bool prepared)
     {
         _microphoneNotice = MicrophoneNotice();
-        return _microphoneStatus = !IsReady ? UsesRegistryProvider ? "The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation." : !Models.Enabled ? "Local transcription plugin disabled" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation."
-            : _microphoneNotice is { } notice ? $"{ActiveModelName} ready · {notice}"
-            : prepared ? $"{ActiveModelName} ready · {Shortcut} to dictate" : $"{ActiveModelName} ready · microphone preparation failed; check the device";
+        return _microphoneStatus = !IsReady ? UsesRegistryProvider ? Loc.T("The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation.") : !Models.Enabled ? Loc.T("Local transcription plugin disabled") : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation.")
+            : _microphoneNotice is { } notice ? Loc.T("{0} ready · {1}", ActiveModelName, notice)
+            : prepared ? Loc.T("{0} ready · {1} to dictate", ActiveModelName, Loc.T(Shortcut)) : Loc.T("{0} ready · microphone preparation failed; check the device", ActiveModelName);
     }
 
     // Every idle "ready" status keeps a current microphone warning visible.
-    private string ModelReadyStatus() => _microphoneStatus = (_microphoneNotice = MicrophoneNotice()) is { } notice ? $"{ActiveModelName} ready · {notice}" : $"{ActiveModelName} ready";
+    private string ModelReadyStatus() => _microphoneStatus = (_microphoneNotice = MicrophoneNotice()) is { } notice ? Loc.T("{0} ready · {1}", ActiveModelName, notice) : Loc.T("{0} ready", ActiveModelName);
 
     // Resume may recreate the capture without a device-list change, so publish its result explicitly.
     internal void RefreshMicrophoneAfterResume() =>
@@ -459,17 +459,17 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal string? SelectMicrophone(string id)
     {
         var device = GetMicrophones().FirstOrDefault(item => item.Id == id);
-        if (id != "default" && device is null) return "This microphone is no longer available. Reopen Audio to refresh.";
+        if (id != "default" && device is null) return Loc.T("This microphone is no longer available. Reopen Audio to refresh.");
         return SetMicrophonePriority(device is null ? [] :
             new[] { new MicrophonePriorityItem(device.Id, device.Name) }.Concat(_microphones.Where(item => item.Id != id)).ToArray());
     }
 
     internal string? SetMicrophonePriority(IReadOnlyList<MicrophonePriorityItem> devices)
     {
-        if (!_gate.Wait(0)) return "Please wait until dictation is ready.";
+        if (!_gate.Wait(0)) return Loc.T("Please wait until dictation is ready.");
         try
         {
-            if (_audio.IsRecording) return "Finish the current recording before changing microphones.";
+            if (_audio.IsRecording) return Loc.T("Finish the current recording before changing microphones.");
             _audio.StopPreview();
             var selected = devices.DistinctBy(item => item.Id).ToList();
             AtomicFileWriter.WriteAllText(MicrophonePath, System.Text.Json.JsonSerializer.Serialize(selected));
@@ -478,7 +478,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             RefreshMicrophoneStatus();
             return null;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return "Could not apply microphone: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return Loc.T("Could not apply microphone: {0}", ex.Message); }
         finally { _gate.Release(); }
     }
 
@@ -524,7 +524,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _livePreview.Cancel();
             _cloudStream?.Cancel();
             _effects.End();
-            if (_phase == DictationPhase.Recording) SetStatus("Microphone disconnected · recording stopped", DictationPhase.Error);
+            if (_phase == DictationPhase.Recording) SetStatus(Loc.T("Microphone disconnected · recording stopped"), DictationPhase.Error);
         });
         try
         {
@@ -532,7 +532,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 AudioPreferences = (System.Text.Json.JsonSerializer.Deserialize<DictationAudioPreferences>(File.ReadAllText(AudioPreferencesPath)) ?? new()).Validated();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        { AudioPreferencesError = "Audio preferences could not be loaded. Defaults are in use: " + ex.Message; }
+        { AudioPreferencesError = Loc.T("Audio preferences could not be loaded. Defaults are in use: {0}", ex.Message); }
     }
 
     internal async Task InitializeAsync()
@@ -561,7 +561,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _audio.SetMicrophonePriorityList(_microphones);
             }
             _providerId = SessionProviderId(_selection.GetSetting<string>("Provider") ?? "local");
-            SetStatus("Loading model…", DictationPhase.LoadingModel);
+            SetStatus(Loc.T("Loading model…"), DictationPhase.LoadingModel);
             await PluginRuntime.InitializeAsync();
             if (_disposed) return;
             try { if (Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) await _transcriptionPlugin.InitializeAsync(); }
@@ -576,7 +576,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             LocalPluginError = ex.Message;
-            SetStatus("Local transcription unavailable: " + ex.Message);
+            SetStatus(Loc.T("Local transcription unavailable: {0}", ex.Message));
         }
         finally { _gate.Release(); }
     }
@@ -633,9 +633,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await _livePreview.StopAsync();
             // Like every ready status, the cancellation keeps the current microphone notice visible.
             SetStatus(_microphoneStatus = (_microphoneNotice = MicrophoneNotice()) is { } notice
-                ? $"Shortcut cancelled · {ActiveModelName} ready · {notice}" : $"Shortcut cancelled · {ActiveModelName} ready");
+                ? Loc.T("Shortcut cancelled · {0} ready · {1}", ActiveModelName, notice) : Loc.T("Shortcut cancelled · {0} ready", ActiveModelName));
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { SetStatus("Could not cancel recording: " + ex.Message); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { SetStatus(Loc.T("Could not cancel recording: {0}", ex.Message)); }
         finally
         {
             // A canceled recording never reaches the stop path that ends its dictation context.
@@ -691,7 +691,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!IsReady)
             {
                 AppDiagnostics.Write("dictation.not-ready");
-                SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation.");
+                SetStatus(Loc.T("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."));
                 return;
             }
             if (!_audio.IsRecording)
@@ -714,7 +714,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_target == IntPtr.Zero || (processId == Environment.ProcessId && _setupOutputAtStart is null))
                 {
                     AppDiagnostics.Write("dictation.no-target");
-                    SetStatus($"Focus a text field in another app, then press {Shortcut}.");
+                    SetStatus(Loc.T("Focus a text field in another app, then press {0}.", Shortcut));
                     return;
                 }
                 // Capture the microphone before field inspection, workflow lookup or provider setup.
@@ -791,7 +791,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _ducking.OutputDeviceId = preferences.OutputDeviceId;
                 _effects.Begin(preferences);
                 _sounds.PlayStartSound();
-                SetStatus($"Recording · {Shortcut} to finish");
+                SetStatus(Loc.T("Recording · {0} to finish", Shortcut));
                 await previousRecordingWork;
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
@@ -816,7 +816,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (!DictationStartupTarget.IsValid(_target, NativeMethods.GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
                 {
                     AppDiagnostics.Write("dictation.target-changed");
-                    SetStatus("The target changed during recording setup. Focus your text field and try again.", DictationPhase.Idle);
+                    SetStatus(Loc.T("The target changed during recording setup. Focus your text field and try again."), DictationPhase.Idle);
                     return;
                 }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
@@ -828,7 +828,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 {
                     await StopCloudStreamAsync();
                     AppDiagnostics.Write("dictation.target-changed");
-                    SetStatus("The target changed during recording setup. Focus your text field and try again.", DictationPhase.Idle);
+                    SetStatus(Loc.T("The target changed during recording setup. Focus your text field and try again."), DictationPhase.Idle);
                     return;
                 }
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
@@ -839,7 +839,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
-                        error => { LivePreviewText = "Live preview unavailable · final transcription will continue."; LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
+                        error => { LivePreviewText = Loc.T("Live preview unavailable · final transcription will continue."); LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
                 AppDiagnostics.Write("dictation.startup.complete");
                 preparingRecording = false;
                 return;
@@ -851,7 +851,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _livePreview.Cancel();
             _lastDuration = _audio.RecordingDuration;
             var preGainPeakRms = _audio.PreGainPeakRmsLevel;
-            SetStatus("Finishing recording…", DictationPhase.Processing);
+            SetStatus(Loc.T("Finishing recording…"), DictationPhase.Processing);
             var captured = await _audio.StopRecordingWithRecoveryAsync();
             recoveryLease = captured.RecoveryLease;
             var samples = captured.Samples;
@@ -867,10 +867,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively);
             AppDiagnostics.Write($"dictation.captured decision={captureDecision} streaming={_cloudStream is not null}");
             if (samples is null || captureDecision == ShortClipCaptureDecision.TooShort)
-            { SetStatus("Recording was too short. Hold the shortcut a little longer."); return; }
+            { SetStatus(Loc.T("Recording was too short. Hold the shortcut a little longer.")); return; }
             if (captureDecision == ShortClipCaptureDecision.NoSpeech)
-            { SetStatus("No speech energy detected. Speak closer to the microphone or enable Recognize short, quiet clips."); return; }
-            SetStatus($"Transcribing with {ActiveModelName}…", DictationPhase.Processing);
+            { SetStatus(Loc.T("No speech energy detected. Speak closer to the microphone or enable Recognize short, quiet clips.")); return; }
+            SetStatus(Loc.T("Transcribing with {0}…", ActiveModelName), DictationPhase.Processing);
             var streamedText = _cloudStream is null ? null : await _cloudStream.FinishAsync(samples.Length);
             _operationCancellation.Token.ThrowIfCancellationRequested();
             var decoded = streamedText is null
@@ -881,16 +881,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             AppDiagnostics.Write($"dictation.transcribed empty={string.IsNullOrWhiteSpace(rawText)}");
             if (FinalSpeechPolicy.ShouldReject(rawText, decoded.NoSpeechProbability,
                 _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively))
-            { AppDiagnostics.Write("dictation.no-speech"); SetStatus("No speech recognized. Ready to try again."); return; }
+            { AppDiagnostics.Write("dictation.no-speech"); SetStatus(Loc.T("No speech recognized. Ready to try again.")); return; }
             // Empty final output does not reuse preview text or its unrelated token timings.
-            if (string.IsNullOrWhiteSpace(rawText)) { SetStatus("No speech recognized. Ready to try again."); return; }
+            if (string.IsNullOrWhiteSpace(rawText)) { SetStatus(Loc.T("No speech recognized. Ready to try again.")); return; }
             if (_setupOutputAtStart is { } setupOutput)
             {
                 // A setup sample never pastes into another app or creates a history entry.
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 setupOutput(rawText);
-                SetStatus("Setup dictation completed.", DictationPhase.Completed);
+                SetStatus(Loc.T("Setup dictation completed."), DictationPhase.Completed);
                 return;
             }
             var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
@@ -898,7 +898,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var recordingId = Guid.NewGuid();
             if (_ctcAtStart && dictionary is not null && CtcVocabulary.Enabled)
             {
-                SetStatus("Checking vocabulary with CTC…", DictationPhase.Processing);
+                SetStatus(Loc.T("Checking vocabulary with CTC…"), DictationPhase.Processing);
                 var refined = await CtcVocabulary.RefineAsync(recordingId, rawText, samples, decoded.Timings, dictionary.EnabledCtcEntries, _operationCancellation.Token);
                 refinedText = refined.Text;
                 if (refined.Error is not null) System.Diagnostics.Debug.WriteLine(refined.Error);
@@ -978,7 +978,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var pasteFailed = outcome.ReviewReason == DictationReviewReason.PasteFailed;
             if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText) };
             var message = !pasteFailed ? outcome.Message : outcome.CopiedToClipboard
-                ? "Not inserted. The text is on the clipboard." : "Not inserted. Copy the text from the review window.";
+                ? Loc.T("Not inserted. The text is on the clipboard.") : Loc.T("Not inserted. Copy the text from the review window.");
             SetStatus(snippetError is null ? message : message + " · " + snippetError,
                 pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
                     : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
@@ -999,7 +999,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await StopRecoveryCaptureAsync(preserve: preserveRecovery);
             _effects.End();
             await _livePreview.StopAsync();
-            if (!_disposed) SetStatus("Dictation canceled. Ready to try again.");
+            if (!_disposed) SetStatus(Loc.T("Dictation canceled. Ready to try again."));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -1012,7 +1012,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             { System.Diagnostics.Debug.WriteLine(stopError); }
             finally { _effects.End(); await _livePreview.StopAsync(); }
             _sounds.PlayErrorSound();
-            SetStatus("Dictation failed: " + ex.Message, DictationPhase.Error);
+            SetStatus(Loc.T("Dictation failed: {0}", ex.Message), DictationPhase.Error);
         }
         finally
         {

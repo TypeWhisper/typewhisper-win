@@ -9,7 +9,7 @@ internal sealed partial class LocalDictationSession
     private TrainingCapture? _training;
     internal TrainingCapture BeginWordTraining()
     {
-        if (!IsReady) throw new InvalidOperationException("Select a ready model in Dictation before training a word.");
+        if (!IsReady) throw new InvalidOperationException(Loc.T("Select a ready model in Dictation before training a word."));
         var reservation = ReserveRecorder();
         try { return _training = new TrainingCapture(this, reservation); }
         catch { reservation.Dispose(); throw; }
@@ -28,16 +28,16 @@ internal sealed partial class LocalDictationSession
         internal void Start()
         {
             ObjectDisposedException.ThrowIf(_disposal is not null, this);
-            if (_recording || _decode is { IsCompleted: false }) throw new InvalidOperationException("Finish the current sample first.");
+            if (_recording || _decode is { IsCompleted: false }) throw new InvalidOperationException(Loc.T("Finish the current sample first."));
             owner._audio.StartRecording(enableRecovery: false);
-            if (!owner._audio.IsRecording) throw new InvalidOperationException("Microphone could not start. Check the selected input and microphone access.");
+            if (!owner._audio.IsRecording) throw new InvalidOperationException(Loc.T("Microphone could not start. Check the selected input and microphone access."));
             _recording = true;
         }
 
         internal Task<string> StopAsync()
         {
             ObjectDisposedException.ThrowIf(_disposal is not null, this);
-            if (!_recording) throw new InvalidOperationException("Record a sample first.");
+            if (!_recording) throw new InvalidOperationException(Loc.T("Record a sample first."));
             _recording = false;
             return _decode = DecodeAsync();
         }
@@ -47,7 +47,7 @@ internal sealed partial class LocalDictationSession
             var ct = _cancel.Token;
             var samples = await owner._audio.StopRecordingAsync();
             ct.ThrowIfCancellationRequested();
-            if (samples is not { Length: > 0 }) throw new InvalidOperationException("No audio was captured. Please record the sentence again.");
+            if (samples is not { Length: > 0 }) throw new InvalidOperationException(Loc.T("No audio was captured. Please record the sentence again."));
             samples = ShortClipCapturePolicy.PadForFinalDecode(samples);
             // Deliberately bypass dictionary hints, CTC, snippets, formatting, workflows and History.
             var language = Language == "auto" ? null : Language;
@@ -57,7 +57,7 @@ internal sealed partial class LocalDictationSession
                         language, [], false, token), ct)
                 : await owner._transcriptionPlugin.DecodeResultAsync(samples, language, false, ct);
             ct.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(result.Text)) throw new InvalidOperationException("No speech was recognized. Please record the sentence again.");
+            if (string.IsNullOrWhiteSpace(result.Text)) throw new InvalidOperationException(Loc.T("No speech was recognized. Please record the sentence again."));
             return result.Text;
         }
 

@@ -13,9 +13,9 @@ internal sealed partial class LocalDictationSession
     internal IDisposable ReserveRecorder()
     {
         if (SpokenFeedback.IsBusy)
-            throw new InvalidOperationException("Stop spoken feedback in Audio settings before starting the recorder.");
+            throw new InvalidOperationException(Loc.T("Stop spoken feedback in Audio settings before starting the recorder."));
         if (!CanChangeProvider || Models.Busy || !_gate.Wait(0))
-            throw new InvalidOperationException("Finish dictation, file transcription or model setup before starting the recorder.");
+            throw new InvalidOperationException(Loc.T("Finish dictation, file transcription or model setup before starting the recorder."));
         _recorderReserved = true;
         try { StopHistoryPlayback?.Invoke(); Changed?.Invoke(); return new RecorderReservation(this); }
         catch { _recorderReserved = false; _gate.Release(); throw; }

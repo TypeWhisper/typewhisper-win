@@ -5,9 +5,9 @@ namespace TypeWhisper.WinUI;
 public sealed partial class MainWindow
 {
     private void InitializeCopyLastShortcut() => _copyLastShortcut = InitializeActionShortcut(GlobalShortcuts.CopyLastTranscription,
-        () => CopyLastTranscription(), 0x7C00, "copy-last-transcription-hotkeys.txt", "Copy last transcription shortcuts", "copy-last");
+        () => CopyLastTranscription(), 0x7C00, "copy-last-transcription-hotkeys.txt", Loc.T("Copy last transcription shortcuts"), Loc.T("copy-last"));
 
-    private string? ChangeCopyLastShortcut(string value) => ChangeActionShortcut(_copyLastShortcut, "Copy-last", value);
+    private string? ChangeCopyLastShortcut(string value) => ChangeActionShortcut(_copyLastShortcut, Loc.T("Copy-last"), value);
 
     private void CopyLastTranscription()
     {
@@ -22,14 +22,14 @@ public sealed partial class MainWindow
         if (result == LastDictationCopyResult.Copied)
         {
             // A global copy action must not steal focus from the destination app.
-            ShowNotice(new AppNotice("Last dictation copied.", IsError: false, Duration: TimeSpan.FromSeconds(3)));
+            ShowNotice(new AppNotice(Loc.T("Last dictation copied."), IsError: false, Duration: TimeSpan.FromSeconds(3)));
             return;
         }
         var message = result switch
         {
-            LastDictationCopyResult.Busy => "Finish the current operation before copying the last dictation.",
-            LastDictationCopyResult.Empty => "No completed dictation in this session yet. Dictate once, then use this shortcut.",
-            _ => "Could not access the clipboard. Try copying the last dictation again."
+            LastDictationCopyResult.Busy => Loc.T("Finish the current operation before copying the last dictation."),
+            LastDictationCopyResult.Empty => Loc.T("No completed dictation in this session yet. Dictate once, then use this shortcut."),
+            _ => Loc.T("Could not access the clipboard. Try copying the last dictation again.")
         };
         ShowActivationNotice(message);
     }

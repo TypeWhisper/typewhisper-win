@@ -56,9 +56,9 @@ public static class SpokenFeedbackPolicy
 
     /// <summary>Returns a visible reason for rejecting text, without truncating it.</summary>
     public static string? ValidateText(string? text) => string.IsNullOrWhiteSpace(text)
-        ? "There is no text to read aloud."
+        ? Loc.T("There is no text to read aloud.")
         : text.Length > SpokenFeedbackRequest.MaxTextLength
-            ? $"Spoken feedback supports up to {SpokenFeedbackRequest.MaxTextLength} characters. Your text is unchanged."
+            ? Loc.T("Spoken feedback supports up to {0} characters. Your text is unchanged.", SpokenFeedbackRequest.MaxTextLength)
             : null;
 }
 
@@ -107,8 +107,8 @@ public sealed class SpokenFeedbackController(ISpokenFeedbackBackend backend)
         long generation;
         lock (_sync)
         {
-            var error = _closed ? "Spoken feedback is shutting down."
-                : _operation is not null ? "Spoken feedback is still playing or stopping."
+            var error = _closed ? Loc.T("Spoken feedback is shutting down.")
+                : _operation is not null ? Loc.T("Spoken feedback is still playing or stopping.")
                 : SpokenFeedbackPolicy.ValidateText(request.Text);
             if (error is not null)
                 return Task.FromResult(new SpokenFeedbackResult(SpokenFeedbackStatus.Rejected, error));
@@ -162,13 +162,13 @@ public sealed class SpokenFeedbackController(ISpokenFeedbackBackend backend)
             result = new(SpokenFeedbackStatus.Completed);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        { result = new(SpokenFeedbackStatus.Canceled, "Spoken feedback stopped."); }
+        { result = new(SpokenFeedbackStatus.Canceled, Loc.T("Spoken feedback stopped.")); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { result = new(SpokenFeedbackStatus.Failed, "Spoken feedback could not be played. Check the selected voice and audio output."); }
+        { result = new(SpokenFeedbackStatus.Failed, Loc.T("Spoken feedback could not be played. Check the selected voice and audio output.")); }
         lock (_sync)
         {
             if (_generation != generation || cancellation.IsCancellationRequested)
-                result = new(SpokenFeedbackStatus.Canceled, "Spoken feedback stopped.");
+                result = new(SpokenFeedbackStatus.Canceled, Loc.T("Spoken feedback stopped."));
             _operation = null;
             _activeRequest = null;
             _cancellation = null;

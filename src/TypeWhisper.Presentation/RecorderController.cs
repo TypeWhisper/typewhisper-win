@@ -60,8 +60,8 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
     /// <summary>Reserves capture exclusively and starts the selected sources.</summary>
     public Task StartAsync(bool microphone, bool systemAudio) => Run(async () =>
     {
-        if (_closing || State is RecorderState.Recording or RecorderState.Paused or RecorderState.SaveFailed) throw new InvalidOperationException("Finish or save the current recording first.");
-        if (!microphone && !systemAudio) throw new InvalidOperationException("Select at least one audio source.");
+        if (_closing || State is RecorderState.Recording or RecorderState.Paused or RecorderState.SaveFailed) throw new InvalidOperationException(Loc.T("Finish or save the current recording first."));
+        if (!microphone && !systemAudio) throw new InvalidOperationException(Loc.T("Select at least one audio source."));
         _reservation = reserve();
         _emptyCapture = false;
         _segments.Clear();
@@ -84,7 +84,7 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
     {
         if (_closing || State != RecorderState.Paused) return;
         if (_segments.SampleCount >= RecorderSegments.MaximumSamples)
-            throw new InvalidOperationException("The active recording limit was reached. Stop and save this recording.");
+            throw new InvalidOperationException(Loc.T("The active recording limit was reached. Stop and save this recording."));
         try { await start(_microphone, _systemAudio); State = RecorderState.Recording; }
         catch (RecorderCleanupException) { State = RecorderState.Recording; throw; }
     });
@@ -115,7 +115,7 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
             try { _unsaved = await Task.Run(_segments.Combine); }
             catch { State = RecorderState.Paused; throw; }
             _segments.Clear();
-            if (_unsaved.Length == 0) { _emptyCapture = true; State = RecorderState.Ready; throw new InvalidOperationException("No usable audio was captured."); }
+            if (_unsaved.Length == 0) { _emptyCapture = true; State = RecorderState.Ready; throw new InvalidOperationException(Loc.T("No usable audio was captured.")); }
             Duration = TimeSpan.FromSeconds(_unsaved.Length / 16000.0);
             await SaveAsync();
         }
@@ -131,7 +131,7 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
 
     private async Task SaveAsync()
     {
-        if (_unsaved is null || _unsaved.Length == 0) throw new InvalidOperationException("No usable audio was captured.");
+        if (_unsaved is null || _unsaved.Length == 0) throw new InvalidOperationException(Loc.T("No usable audio was captured."));
         State = RecorderState.Saving; NotifyChanged();
         try { FilePath = await save(_unsaved); _unsaved = null; State = RecorderState.Saved; }
         catch { State = RecorderState.SaveFailed; throw; }

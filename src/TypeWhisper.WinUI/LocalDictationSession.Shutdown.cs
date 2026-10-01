@@ -15,7 +15,7 @@ internal sealed partial class LocalDictationSession
         _livePreview.Cancel();
         _cloudStream?.Cancel();
         if (!_disposed && !_fileBusy && _phase == DictationPhase.Processing)
-            SetStatus("Canceling processing…", DictationPhase.Processing);
+            SetStatus(Loc.T("Canceling processing…"), DictationPhase.Processing);
     }
 
     internal Task ShutdownAsync() => _shutdown.Run(() =>

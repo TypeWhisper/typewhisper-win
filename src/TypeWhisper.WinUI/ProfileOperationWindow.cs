@@ -19,25 +19,26 @@ internal sealed class ProfileOperationWindow : Window
     private Func<Task>? _retryAction;
     private Func<Task>? _alternateAction;
 
-    internal ProfileOperationWindow(string message, bool busy, Action exit, string heading = "Profile restore")
+    internal ProfileOperationWindow(string message, bool busy, Action exit, string? heading = null)
     {
+        heading ??= Loc.T("Profile restore");
         Title = "TypeWhisper · " + heading;
         var body = new StackPanel { Spacing = 18, Padding = new(24), Background = (Brush)Application.Current.Resources["InkBrush"] };
         body.Children.Add(new TextBlock { Text = heading, FontSize = 24, Foreground = (Brush)Application.Current.Resources["TextBrush"] });
         _message = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14, Foreground = (Brush)Application.Current.Resources["TextBrush"] };
         body.Children.Add(_message);
         _diagnostic = new TextBlock { TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, FontSize = 12 };
-        _details = new Expander { Header = "Technical details", Content = _diagnostic, Visibility = Visibility.Collapsed,
+        _details = new Expander { Header = Loc.T("Technical details"), Content = _diagnostic, Visibility = Visibility.Collapsed,
             HorizontalAlignment = HorizontalAlignment.Stretch };
         body.Children.Add(_details);
-        _retry = new HandCursorButton { Content = "Retry saving and restoring", Visibility = Visibility.Collapsed,
+        _retry = new HandCursorButton { Content = Loc.T("Retry saving and restoring"), Visibility = Visibility.Collapsed,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _retry.Click += async (_, _) => await RunAction(_retryAction);
         _alternate = new HandCursorButton { Visibility = Visibility.Collapsed,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _alternate.Click += async (_, _) => await RunAction(_alternateAction);
         body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _retry, _alternate } });
-        _close = new HandCursorButton { Content = "Close TypeWhisper", HorizontalAlignment = HorizontalAlignment.Right,
+        _close = new HandCursorButton { Content = Loc.T("Close TypeWhisper"), HorizontalAlignment = HorizontalAlignment.Right,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _close.Click += (_, _) => exit(); body.Children.Add(_close);
         Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -55,7 +56,7 @@ internal sealed class ProfileOperationWindow : Window
     internal void SetDetails(string? details)
     { _diagnostic.Text = details ?? ""; _details.Visibility = details is null ? Visibility.Collapsed : Visibility.Visible; }
 
-    internal void OfferSaveRetry(Func<Task> retry) => OfferActions("Retry saving and restoring", retry);
+    internal void OfferSaveRetry(Func<Task> retry) => OfferActions(Loc.T("Retry saving and restoring"), retry);
 
     // Each offer is single-use; the action re-offers on another failure.
     internal void OfferActions(string retryLabel, Func<Task> retry, string? alternateLabel = null, Func<Task>? alternate = null)

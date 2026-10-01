@@ -23,7 +23,7 @@ public static class SnippetCatalogTransaction
             var json = File.ReadAllText(path);
             using var document = JsonDocument.Parse(json);
             ValidateObjectFields(document.RootElement);
-            current = JsonSerializer.Deserialize<Snippet[]>(json, Options) ?? throw new JsonException("Invalid snippet catalog.");
+            current = JsonSerializer.Deserialize<Snippet[]>(json, Options) ?? throw new JsonException(Loc.T("Invalid snippet catalog."));
         }
         catch (FileNotFoundException) { current = []; }
         catch (DirectoryNotFoundException) { current = []; }
@@ -36,12 +36,12 @@ public static class SnippetCatalogTransaction
 
     internal static void ValidateObjectFields(JsonElement root)
     {
-        if (root.ValueKind != JsonValueKind.Array) throw new JsonException("Snippet catalog must be an array.");
+        if (root.ValueKind != JsonValueKind.Array) throw new JsonException(Loc.T("Snippet catalog must be an array."));
         foreach (var entry in root.EnumerateArray())
         {
-            if (entry.ValueKind != JsonValueKind.Object) throw new JsonException("Invalid snippet entry.");
+            if (entry.ValueKind != JsonValueKind.Object) throw new JsonException(Loc.T("Invalid snippet entry."));
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (entry.EnumerateObject().Any(property => !keys.Add(property.Name))) throw new JsonException("Duplicate snippet field.");
+            if (entry.EnumerateObject().Any(property => !keys.Add(property.Name))) throw new JsonException(Loc.T("Duplicate snippet field."));
         }
     }
 
@@ -50,6 +50,6 @@ public static class SnippetCatalogTransaction
         var ids = new HashSet<string>(StringComparer.Ordinal);
         if (entries.Any(entry => entry is null || string.IsNullOrWhiteSpace(entry.Id) || !ids.Add(entry.Id) ||
             string.IsNullOrWhiteSpace(entry.Trigger) || entry.Replacement is null || entry.Tags is null || entry.UsageCount < 0))
-            throw new JsonException("Invalid snippet catalog. No changes were saved.");
+            throw new JsonException(Loc.T("Invalid snippet catalog. No changes were saved."));
     }
 }

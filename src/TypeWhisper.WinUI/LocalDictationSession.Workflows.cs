@@ -44,7 +44,7 @@ internal sealed partial class LocalDictationSession
     private static string TargetProcessName(uint processId)
     {
         try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); return process.ProcessName; }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return "Target app"; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return Loc.Mark("Target app"); }
     }
 
     // Reports a configuration failure without treating it as cancellation:

@@ -16,7 +16,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IShortc
     internal string? Initialize()
     {
         try { Apply(store.Read(), () => { }); return null; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return Error = "Workflow shortcuts are unavailable. " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return Error = Loc.T("Workflow shortcuts are unavailable. {0}", ex.Message); }
     }
 
     internal Workflow? Resolve(string chord) => _active.TryGetValue(ShortcutRules.Normalize(chord), out var workflow)
@@ -33,7 +33,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IShortc
             foreach (var chord in ShortcutRules.Split(Canonical(value)))
             {
                 if (reservedConflict(chord) is { } conflict) return conflict;
-                if (bindings.TryGetValue(chord, out var owner)) return "Already used by " + owner.Name + ".";
+                if (bindings.TryGetValue(chord, out var owner)) return Loc.T("Already used by {0}.", owner.Name);
             }
             return null;
         }
@@ -66,7 +66,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IShortc
         try
         {
             if (backend.TryChange(requested) is { } error) throw new InvalidOperationException(error);
-            if (!SameBindings(backend.Value, requested)) throw new InvalidOperationException("Native shortcut registration was incomplete.");
+            if (!SameBindings(backend.Value, requested)) throw new InvalidOperationException(Loc.T("Native shortcut registration was incomplete."));
             persist();
             _active = next;
             Error = null;
@@ -81,9 +81,9 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IShortc
             {
                 // A partly restored native chord must never invoke a different or unsaved workflow.
                 _active.Clear();
-                Error = "Workflow changes could not be saved and shortcut registration could not be restored. Workflow shortcuts are suspended; reassign them or restart.";
+                Error = Loc.T("Workflow changes could not be saved and shortcut registration could not be restored. Workflow shortcuts are suspended; reassign them or restart.");
             }
-            else Error = "Workflow changes could not be saved. Previous shortcuts still apply. " + ex.Message;
+            else Error = Loc.T("Workflow changes could not be saved. Previous shortcuts still apply. {0}", ex.Message);
             throw new InvalidOperationException(Error, ex);
         }
     }
@@ -100,8 +100,8 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IShortc
             foreach (var chord in ShortcutRules.Split(Canonical(value)))
             {
                 if (reservedConflict(chord) is { } conflict) throw new InvalidOperationException(workflow.Name + ": " + conflict);
-                if (!result.TryAdd(chord, snapshot)) throw new InvalidOperationException(chord + " is assigned to more than one enabled workflow.");
-                if (result.Count > 128) throw new InvalidOperationException("At most 128 workflow shortcuts can be active.");
+                if (!result.TryAdd(chord, snapshot)) throw new InvalidOperationException(Loc.T("{0} is assigned to more than one enabled workflow.", chord));
+                if (result.Count > 128) throw new InvalidOperationException(Loc.T("At most 128 workflow shortcuts can be active."));
             }
         }
         return result;
@@ -117,7 +117,7 @@ internal sealed class WorkflowShortcutCatalog(ManualWorkflowStore store, IShortc
     private static void ValidateValue(string value)
     {
         if (value.Length > 256 || ShortcutRules.Split(value).Length == 0 || value.Any(char.IsControl))
-            throw new InvalidOperationException("Assign at least one shortcut (maximum 256 characters).");
+            throw new InvalidOperationException(Loc.T("Assign at least one shortcut (maximum 256 characters)."));
         foreach (var chord in ShortcutRules.Split(value))
             if (ShortcutRules.Validate(chord, false) is { } error) throw new InvalidOperationException(error);
     }

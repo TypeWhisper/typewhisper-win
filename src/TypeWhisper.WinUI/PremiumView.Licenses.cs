@@ -8,8 +8,8 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class PremiumView
 {
-    private readonly PasswordBox _licenseKey = new() { PlaceholderText = "License key", MaxLength = 512, HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly Button _activateLicense = new HandCursorButton { Content = "Activate", MinWidth = 96 };
+    private readonly PasswordBox _licenseKey = new() { PlaceholderText = Loc.T("License key"), MaxLength = 512, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly Button _activateLicense = new HandCursorButton { Content = Loc.T("Activate"), MinWidth = 96 };
     private readonly TextBlock _licenseNotice = Copy("", 12, true);
     private readonly StackPanel _licenseStatuses = new() { Spacing = 12 };
     private bool _confirmingDeactivation;
@@ -17,11 +17,11 @@ internal sealed partial class PremiumView
     private UIElement CreateLicenseSection()
     {
         var panel = new StackPanel { Spacing = 12 };
-        panel.Children.Add(SettingsHelp.Label("License", "Activate a commercial or supporter key from your purchase email. License credentials are encrypted for your Windows user and saved in this app profile. An activation uses a device slot; deactivate this device to release it.", 16));
+        panel.Children.Add(SettingsHelp.Label(Loc.T("License"), Loc.T("Activate a commercial or supporter key from your purchase email. License credentials are encrypted for your Windows user and saved in this app profile. An activation uses a device slot; deactivate this device to release it."), 16));
         panel.Children.Add(_licenseStatuses);
         var input = new Grid { ColumnSpacing = 10 };
         input.ColumnDefinitions.Add(new()); input.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        AutomationProperties.SetName(_licenseKey, "License key");
+        AutomationProperties.SetName(_licenseKey, Loc.T("License key"));
         _licenseKey.PasswordChanged += (_, _) => UpdateLicenseInput();
         _licenseKey.KeyDown += async (_, e) =>
         {
@@ -34,7 +34,7 @@ internal sealed partial class PremiumView
         AutomationProperties.SetLiveSetting(_licenseNotice, AutomationLiveSetting.Polite);
         panel.Children.Add(_licenseNotice);
         var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        links.Children.Add(new HyperlinkButton { Content = "Manage purchases", NavigateUri = new Uri("https://polar.sh/typewhisper/portal") });
+        links.Children.Add(new HyperlinkButton { Content = Loc.T("Manage purchases"), NavigateUri = new Uri("https://polar.sh/typewhisper/portal") });
         panel.Children.Add(links);
         return Card(panel);
     }
@@ -43,7 +43,7 @@ internal sealed partial class PremiumView
     {
         _activateLicense.IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation && !string.IsNullOrWhiteSpace(_licenseKey.Password);
         _licenseKey.IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation;
-        _activateLicense.Content = WinUILicensing.Busy ? "Please wait…" : "Activate";
+        _activateLicense.Content = WinUILicensing.Busy ? Loc.T("Please wait…") : Loc.T("Activate");
     }
 
     private async Task ActivateLicenseAsync()
@@ -58,24 +58,24 @@ internal sealed partial class PremiumView
     private void RefreshLicenseSection()
     {
         UpdateLicenseInput();
-        _licenseNotice.Text = WinUILicensing.Service.StorageError ?? WinUILicensing.Notice ?? (WinUILicensing.Busy ? "Checking license…" : "");
+        _licenseNotice.Text = WinUILicensing.Service.StorageError ?? WinUILicensing.Notice ?? (WinUILicensing.Busy ? Loc.T("Checking license…") : "");
         _licenseNotice.Visibility = string.IsNullOrEmpty(_licenseNotice.Text) ? Visibility.Collapsed : Visibility.Visible;
         _licenseStatuses.Children.Clear();
         var service = WinUILicensing.Service;
-        AddLicenseStatus(true, "Commercial license", service.CommercialStatus, service.CommercialTierDisplayName, service.HasCommercialActivation);
-        AddLicenseStatus(false, "Supporter", service.SupporterStatus, service.SupporterTierDisplayName, service.HasSupporterActivation);
+        AddLicenseStatus(true, Loc.T("Commercial license"), service.CommercialStatus, service.CommercialTierDisplayName, service.HasCommercialActivation);
+        AddLicenseStatus(false, Loc.T("Supporter"), service.SupporterStatus, service.SupporterTierDisplayName, service.HasSupporterActivation);
     }
 
     private void AddLicenseStatus(bool commercial, string title, LicenseStatus status, string? tier, bool activated)
     {
         if (!activated) return;
         var panel = new StackPanel { Spacing = 8 };
-        panel.Children.Add(Copy(title + (tier is null ? "" : " · " + tier) + " · " + status, 14));
+        panel.Children.Add(Copy(title + (tier is null ? "" : " · " + tier) + " · " + (status switch { LicenseStatus.Active => Loc.T("Active"), LicenseStatus.Expired => Loc.T("Expired"), _ => Loc.T("Unlicensed") }), 14));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var refresh = new HandCursorButton { Content = "Refresh status", IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
-        var deactivate = new HandCursorButton { Content = "Deactivate this device", IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
-        AutomationProperties.SetName(refresh, "Refresh " + title);
-        AutomationProperties.SetName(deactivate, "Deactivate " + title + " on this device");
+        var refresh = new HandCursorButton { Content = Loc.T("Refresh status"), IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
+        var deactivate = new HandCursorButton { Content = Loc.T("Deactivate this device"), IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
+        AutomationProperties.SetName(refresh, Loc.T("Refresh {0}", title));
+        AutomationProperties.SetName(deactivate, Loc.T("Deactivate {0} on this device", title));
         refresh.Click += async (_, _) => await WinUILicensing.RefreshAsync(commercial);
         deactivate.Click += async (_, _) =>
         {
@@ -83,9 +83,9 @@ internal sealed partial class PremiumView
             _confirmingDeactivation = true; RefreshLicenseSection();
             try
             {
-                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Deactivate " + title + "?",
-                    Content = "This releases this device's activation. Your subscription or purchase is not cancelled.",
-                    PrimaryButtonText = "Deactivate", CloseButtonText = "Keep active", DefaultButton = ContentDialogButton.Close };
+                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Deactivate {0}?", title),
+                    Content = Loc.T("This releases this device's activation. Your subscription or purchase is not cancelled."),
+                    PrimaryButtonText = Loc.T("Deactivate"), CloseButtonText = Loc.T("Keep active"), DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary) await WinUILicensing.DeactivateAsync(commercial);
             }
             finally { _confirmingDeactivation = false; RefreshLicenseSection(); }

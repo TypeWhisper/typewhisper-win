@@ -31,7 +31,7 @@ public sealed class DictationHotkeyPauseStore
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            Error = "Dictation hotkey pause choice could not be loaded. Hotkeys are active. Save the pause choice again.";
+            Error = Loc.T("Dictation hotkey pause choice could not be loaded. Hotkeys are active. Save the pause choice again.");
         }
     }
 
@@ -46,7 +46,7 @@ public sealed class DictationHotkeyPauseStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Error = "Dictation hotkey pause choice could not be saved. Your previous choice still applies.";
+            return Error = Loc.T("Dictation hotkey pause choice could not be saved. Your previous choice still applies.");
         }
     }
 }

@@ -8,8 +8,8 @@ internal sealed record DictationProviderOption(string Id, string PluginId, strin
     IReadOnlyList<DictationModelOption> Models)
 {
     internal bool Ready => Enabled && Configured && Models.Any(model => model.Ready);
-    internal string Status => !Enabled ? "Disabled" : !Configured ? "Setup required"
-        : !Ready ? "Download required" : "Ready";
+    internal string Status => !Enabled ? Loc.T("Disabled") : !Configured ? Loc.T("Setup required")
+        : !Ready ? Loc.T("Download required") : Loc.T("Ready");
     internal string? PreferredModelId => !Ready ? null
         : Models.FirstOrDefault(model => model.Id == SelectedModelId && model.Ready)?.Id
             ?? Models.First(model => model.Ready).Id;

@@ -16,7 +16,7 @@ internal static partial class WinUICloudSync
     internal static bool Busy { get; private set; }
     internal static bool CanUse => PremiumView.Access.Current.Commercial;
     internal static CloudFolderSyncPreferences Preferences => _service?.Preferences ?? new();
-    internal static string Status { get; private set; } = "Choose the same cloud folder on both devices.";
+    internal static string Status { get; private set; } = Loc.T("Choose the same cloud folder on both devices.");
     internal static event Action? Changed;
     internal static event Action? DataChanged;
 
@@ -25,7 +25,7 @@ internal static partial class WinUICloudSync
         if (_dispatcher is not null || _closing) return;
         _dispatcher = dispatcher;
         try { _service = new(WinUIProfile.Root); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = "Could not load sync preferences: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Could not load sync preferences: {0}", ex.Message); }
         _timer = dispatcher.CreateTimer(); _timer.Interval = TimeSpan.FromSeconds(15);
         _timer.Tick += (_, _) => { if (!ChoosingFolder && Preferences.Enabled && CanUse) _ = SyncAsync(); };
         _timer.Start();
@@ -39,10 +39,10 @@ internal static partial class WinUICloudSync
         if (_closing || Busy) return;
         try
         {
-            if (_service is null) throw new InvalidOperationException("Sync storage is unavailable.");
-            if (enabled && !CanUse) throw new InvalidOperationException("Cloud folder sync requires a commercial license.");
+            if (_service is null) throw new InvalidOperationException(Loc.T("Sync storage is unavailable."));
+            if (enabled && !CanUse) throw new InvalidOperationException(Loc.T("Cloud folder sync requires a commercial license."));
             _service.Configure(folder, enabled);
-            Status = enabled ? "Automatic sync is on. Checking every 15 seconds." : "Sync paused. Local and cloud files are kept.";
+            Status = enabled ? Loc.T("Automatic sync is on. Checking every 15 seconds.") : Loc.T("Sync paused. Local and cloud files are kept.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Status = ex.Message; }
         Changed?.Invoke();
@@ -52,7 +52,7 @@ internal static partial class WinUICloudSync
     internal static Task SyncAsync()
     {
         if (_closing || Busy || _service is null || !Preferences.Enabled || !CanUse) return _operation;
-        Busy = true; Status = "Synchronizing…"; Changed?.Invoke();
+        Busy = true; Status = Loc.T("Synchronizing…"); Changed?.Invoke();
         return _operation = RunAsync();
     }
     private static async Task RunAsync()
@@ -67,14 +67,14 @@ internal static partial class WinUICloudSync
                     try { action(); completion.SetResult(); }
                     catch (Exception ex) { completion.SetException(ex); }
                     finally { if (changed) DataChanged?.Invoke(); }
-                })) completion.SetException(new InvalidOperationException("The app is closing."));
+                })) completion.SetException(new InvalidOperationException(Loc.T("The app is closing.")));
                 return completion.Task;
             }, Lifetime.Token);
-            Status = $"Synced at {result.SyncedAt.ToLocalTime():t} · {result.OperationsWritten} sent · {result.MutationsApplied} applied";
+            Status = Loc.T("Synced at {0:t} · {1} sent · {2} applied", result.SyncedAt.ToLocalTime(), result.OperationsWritten, result.MutationsApplied);
             if (await SyncHistoryAsync() is { } history) Status += " · " + history;
         }
-        catch (OperationCanceledException) { Status = "Sync canceled."; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = "Sync could not finish: " + ex.Message; }
+        catch (OperationCanceledException) { Status = Loc.T("Sync canceled."); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Sync could not finish: {0}", ex.Message); }
         finally { Busy = false; Changed?.Invoke(); }
     }
     internal static Task ShutdownAsync()

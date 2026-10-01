@@ -30,7 +30,7 @@ public sealed partial class WorkflowsView
         var effective = EffectiveSelection(provider, model);
         var error = ManualWorkflowRunner.ConfigurationError(effective.Provider, effective.Model, Available);
         return error is null ? null : provider == WorkflowLlmDefaults.Inherit
-            ? "The default LLM is missing or unavailable. Open Default LLM to choose a provider and model, or select your own provider for this workflow."
+            ? Loc.T("The default LLM is missing or unavailable. Open Default LLM to choose a provider and model, or select your own provider for this workflow.")
             : error;
     }
     private void UpdateExecutionSummary()
@@ -38,28 +38,27 @@ public sealed partial class WorkflowsView
         if (_opened is null) return;
         var action = _session?.PluginRuntime.Actions.FirstOrDefault(a => a.PluginId == _opened.TargetActionPluginId);
         var destination = string.IsNullOrWhiteSpace(_opened.TargetActionPluginId) ? ""
-            : "\nAfter processing: " + (action?.Name ?? "Saved action unavailable") + ". The result is sent there instead of being pasted.";
+            : "\n" + Loc.T("After processing: {0}. The result is sent there instead of being pasted.", action?.Name ?? Loc.T("Saved action unavailable"));
         var activation = _opened.TriggerKind == TypeWhisper.Core.Models.WorkflowTriggerKind.Hotkey
-            ? "\nShortcut: " + _opened.Hotkeys + (_opened.HotkeyBehavior == TypeWhisper.Core.Models.WorkflowHotkeyBehavior.StartDictation
-                ? " — press in another app to start dictation, then press again to stop and run the action."
-                : " — process selected text.")
+            ? "\n" + (_opened.HotkeyBehavior == TypeWhisper.Core.Models.WorkflowHotkeyBehavior.StartDictation
+                ? Loc.T("Shortcut: {0} — press in another app to start dictation, then press again to stop and run the action.", _opened.Hotkeys)
+                : Loc.T("Shortcut: {0} — process selected text.", _opened.Hotkeys))
             : _opened.TriggerKind == TypeWhisper.Core.Models.WorkflowTriggerKind.Manual
-                ? "\nManual: enter text below and press the action button. The normal dictation shortcut does not run this workflow." : "";
+                ? "\n" + Loc.T("Manual: enter text below and press the action button. The normal dictation shortcut does not run this workflow.") : "";
         var recordingTask = _opened.SelectedTask switch
         {
-            "transcribe" => "\nRecording task: Transcribe.",
-            "translate" => "\nRecording task: Translate to English using a compatible transcription model.",
+            "transcribe" => "\n" + Loc.T("Recording task: Transcribe."),
+            "translate" => "\n" + Loc.T("Recording task: Translate to English using a compatible transcription model."),
             _ => ""
         };
-        if (_opened.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) { WorkflowExecutionSummary.Text = "No LLM processing" + recordingTask + destination + activation; return; }
+        if (_opened.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) { WorkflowExecutionSummary.Text = Loc.T("No LLM processing") + recordingTask + destination + activation; return; }
         var choice = EffectiveSelection(_opened.ProviderId, _opened.ModelId);
         WorkflowExecutionSummary.Text = EffectiveConfigurationError(_opened.ProviderId, _opened.ModelId)
-            ?? (_opened.ProviderId == WorkflowLlmDefaults.Inherit ? "Default LLM: " : "")
-                + (Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider)
-                + " \u00b7 " + choice.Model + " \u00b7 input is sent to this provider when you run";
-        var memory = string.IsNullOrWhiteSpace(_opened.MemoryPluginId) ? "" : "\nMemory context: "
-            + (_session?.PluginRuntime.MemoryProviders.FirstOrDefault(p => p.PluginId == _opened.MemoryPluginId)?.Name ?? "Saved source unavailable")
-            + " · matching saved facts are sent to this provider.";
+            ?? (_opened.ProviderId == WorkflowLlmDefaults.Inherit
+                ? Loc.T("Default LLM: {0} \u00b7 {1} \u00b7 input is sent to this provider when you run", Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider, choice.Model)
+                : Loc.T("{0} \u00b7 {1} \u00b7 input is sent to this provider when you run", Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider, choice.Model));
+        var memory = string.IsNullOrWhiteSpace(_opened.MemoryPluginId) ? "" : "\n" + Loc.T("Memory context: {0} · matching saved facts are sent to this provider.",
+            _session?.PluginRuntime.MemoryProviders.FirstOrDefault(p => p.PluginId == _opened.MemoryPluginId)?.Name ?? Loc.T("Saved source unavailable"));
         WorkflowExecutionSummary.Text += recordingTask + memory + destination + activation;
     }
     private async void DefaultLlm_Click(object sender, RoutedEventArgs e)
@@ -68,24 +67,24 @@ public sealed partial class WorkflowsView
         var completion = _defaultsCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var provider = new ChoicePicker();
         var model = new ChoicePicker();
-        provider.Configure("Provider", "plugin", "Default workflow LLM provider");
-        model.Configure("Model", "chip", "Default workflow LLM model");
+        provider.Configure(Loc.T("Provider"), "plugin", Loc.T("Default workflow LLM provider"));
+        model.Configure(Loc.T("Model"), "chip", Loc.T("Default workflow LLM model"));
         var saved = ReadDefaults();
         provider.SetOptions(Providers.Where(p => p.Id != WorkflowLlmDefaults.Inherit).ToArray(), saved?.Provider ?? "none");
         void RefreshModels(string selected) => model.SetOptions(
             _session.LlmProviders.FirstOrDefault(p => p.SelectionId == provider.SelectedId)?.Models
-                .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [], selected, "Choose a model");
+                .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [], selected, Loc.T("Choose a model"));
         RefreshModels(saved?.Model ?? "");
         provider.SelectionChanged += _ => RefreshModels("");
-        var help = SettingsHelp.Label("Default workflow LLM", "Used by workflows set to Use default. Existing custom selections stay unchanged.");
+        var help = SettingsHelp.Label(Loc.T("Default workflow LLM"), Loc.T("Used by workflows set to Use default. Existing custom selections stay unchanged."));
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var content = new StackPanel { Spacing = 16, MinWidth = 300 };
         content.Children.Add(help); content.Children.Add(provider); content.Children.Add(model); content.Children.Add(message);
         var dialog = _defaultsDialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "Default workflow LLM", Content = content,
-            PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Default workflow LLM"), Content = content,
+            PrimaryButtonText = Loc.T("Save"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
         };
         dialog.PrimaryButtonClick += (_, args) =>
         {
@@ -99,7 +98,7 @@ public sealed partial class WorkflowsView
             catch (Exception ex) when (ex is not OutOfMemoryException) { args.Cancel = true; message.Text = ex.Message; message.Visibility = Visibility.Visible; }
         };
         try { await dialog.ShowAsync(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowSummary.Text = "Default LLM settings could not open: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowSummary.Text = Loc.T("Default LLM settings could not open: {0}", ex.Message); }
         finally
         {
             _defaultsDialog = null;

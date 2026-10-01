@@ -65,7 +65,7 @@ public sealed class CloudFolderSyncNotEntitledException : InvalidOperationExcept
     /// Initializes a new instance of the CloudFolderSyncNotEntitledException class.
     /// </summary>
     public CloudFolderSyncNotEntitledException()
-        : base("Cloud Folder Sync requires an active Commercial license.")
+        : base(Loc.T("Cloud Folder Sync requires an active Commercial license."))
     {
     }
 }
@@ -79,7 +79,7 @@ public sealed class CloudFolderSyncMissingStoreException : InvalidOperationExcep
     /// Initializes a new instance of the CloudFolderSyncMissingStoreException class.
     /// </summary>
     public CloudFolderSyncMissingStoreException()
-        : base("TypeWhisper user data is unavailable.")
+        : base(Loc.T("TypeWhisper user data is unavailable."))
     {
     }
 }

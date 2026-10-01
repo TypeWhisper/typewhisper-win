@@ -12,24 +12,24 @@ internal static class AdvancedSettingsPage
     internal static void Render(StackPanel content, List<ChoicePicker> pickers, LocalDictationSession session, WinUIHttpApi api)
     {
         content.Children.Clear(); pickers.Clear();
-        var title = new TextBlock { Text = "Advanced", FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var title = new TextBlock { Text = Loc.T("Advanced"), FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
         AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         content.Children.Add(title);
         var sections = new StackPanel { Spacing = 24 };
         content.Children.Add(sections);
 
-        var recording = Section(sections, "Recording",
+        var recording = Section(sections, Loc.T("Recording"),
             Row("ModelAutoUnloadSeconds"), Row("TranscribeShortQuietClipsAggressively"), Row("CancellationBehavior"),
             WhisperModeRow(session));
         LiveModelMemorySettings.Configure(recording, pickers, session);
         LiveShortClipSettings.Configure(recording, session);
         LiveCancellationBehaviorSettings.Configure(recording, pickers, session);
 
-        Section(sections, "Spoken feedback", Tagged("SpokenFeedbackEnabled", new SystemVoiceSettingsControl(session, pickers)));
-        Section(sections, "API server", new HttpApiSettingsView(api));
-        Section(sections, "Command line tool", new CliSettingsView());
-        Section(sections, "Integrations", new RaycastIntegrationView());
-        Section(sections, "Support diagnostics", new DiagnosticsSettingsView());
+        Section(sections, Loc.T("Spoken feedback"), Tagged("SpokenFeedbackEnabled", new SystemVoiceSettingsControl(session, pickers)));
+        Section(sections, Loc.T("API server"), new HttpApiSettingsView(api));
+        Section(sections, Loc.T("Command line tool"), new CliSettingsView());
+        Section(sections, Loc.T("Integrations"), new RaycastIntegrationView());
+        Section(sections, Loc.T("Support diagnostics"), new DiagnosticsSettingsView());
     }
 
     // Rows are filled by their live settings; the card separates them with hairlines.
@@ -72,22 +72,22 @@ internal static class AdvancedSettingsPage
         var grid = new Grid { ColumnSpacing = 16 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        const string hint = "Automatically raises quiet microphone input before transcription. Helps with low-gain microphones, but very noisy rooms may sound louder too.";
-        var label = SettingsHelp.Label("Whisper mode", hint);
+        var hint = Loc.T("Automatically raises quiet microphone input before transcription. Helps with low-gain microphones, but very noisy rooms may sound louder too.");
+        var label = SettingsHelp.Label(Loc.T("Whisper mode"), hint);
         label.VerticalAlignment = VerticalAlignment.Center;
         grid.Children.Add(label);
         var toggle = AppToggleSwitch.Create(session.AudioPreferences.WhisperModeEnabled);
-        AutomationProperties.SetName(toggle, "Whisper mode"); AutomationProperties.SetHelpText(toggle, hint);
+        AutomationProperties.SetName(toggle, Loc.T("Whisper mode")); AutomationProperties.SetHelpText(toggle, hint);
         Grid.SetColumn(toggle, 1); grid.Children.Add(toggle);
         row.Children.Add(grid);
-        var status = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Text = session.AudioPreferencesError ?? "Saved for the next dictation." };
+        var status = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Text = session.AudioPreferencesError ?? Loc.T("Saved for the next dictation.") };
         row.Children.Add(status);
         var restoring = false;
         toggle.Toggled += (_, _) =>
         {
             if (restoring) return;
             var error = session.SaveAudioPreferences(session.AudioPreferences with { WhisperModeEnabled = toggle.IsOn });
-            status.Text = error ?? "Saved for the next dictation.";
+            status.Text = error ?? Loc.T("Saved for the next dictation.");
             if (error is not null) { restoring = true; toggle.IsOn = !toggle.IsOn; restoring = false; }
         };
         return row;

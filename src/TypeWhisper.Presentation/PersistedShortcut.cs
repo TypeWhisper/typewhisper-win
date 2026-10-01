@@ -31,7 +31,7 @@ public sealed class PersistedShortcut
         try
         {
             using var stream = File.OpenRead(_path);
-            if (stream.Length > 1024) return Error = $"{_displayName} could not be loaded. Assign them again in Settings.";
+            if (stream.Length > 1024) return Error = Loc.T("{0} could not be loaded. Assign them again in Settings.", _displayName);
             using var reader = new StreamReader(stream);
             var value = reader.ReadToEnd();
             return Error = Validate(value) ?? _backend.TryChange(value);
@@ -39,7 +39,7 @@ public sealed class PersistedShortcut
         catch (FileNotFoundException) { return null; }
         catch (DirectoryNotFoundException) { return null; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { return Error = $"{_displayName} could not be loaded. Assign them again in Settings."; }
+        { return Error = Loc.T("{0} could not be loaded. Assign them again in Settings.", _displayName); }
     }
     /// <summary>Registers and atomically saves a canonical value, rolling back registration if saving fails.</summary>
     public string? Save(string value)
@@ -57,13 +57,13 @@ public sealed class PersistedShortcut
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return RollBack(previous); }
     }
     private string? Validate(string value) => value.Length > 256 || value.Any(char.IsControl)
-        ? $"{_displayName}: the shortcut value is invalid or too long." : _validate(value);
+        ? Loc.T("{0}: the shortcut value is invalid or too long.", _displayName) : _validate(value);
     private string RollBack(string previous)
     {
         var error = _backend.TryChange(previous);
         return Error = error is null && SameBindings(Value, previous)
-            ? $"{_displayName} could not be saved. Previous shortcuts still apply."
-            : $"{_displayName} could not be saved and previous registration could not be restored. The displayed active shortcuts are authoritative; reassign them or restart.";
+            ? Loc.T("{0} could not be saved. Previous shortcuts still apply.", _displayName)
+            : Loc.T("{0} could not be saved and previous registration could not be restored. The displayed active shortcuts are authoritative; reassign them or restart.", _displayName);
     }
     private static bool SameBindings(string actual, string requested)
     {

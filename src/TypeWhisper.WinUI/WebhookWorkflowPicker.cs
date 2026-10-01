@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -16,7 +15,6 @@ internal sealed class WebhookWorkflowPicker : UserControl
     private readonly int _maximum;
     private readonly TextBlock _summary = new() { VerticalAlignment = VerticalAlignment.Center,
         TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 14 };
-    private static string L(string en, string de) => CultureInfo.CurrentUICulture.Name.StartsWith("de", StringComparison.OrdinalIgnoreCase) ? de : en;
 
     internal WebhookWorkflowPicker(string value, int maximum, Action<string> changed)
     {
@@ -37,8 +35,8 @@ internal sealed class WebhookWorkflowPicker : UserControl
         Content = button;
         void RefreshSummary()
         {
-            _summary.Text = _selected.Count == 0 ? L("All workflows", "Alle Workflows") : string.Join(", ", _selected);
-            AutomationProperties.SetName(button, L("Choose workflows: ", "Workflows auswählen: ") + _summary.Text);
+            _summary.Text = _selected.Count == 0 ? Loc.T("All workflows") : string.Join(", ", _selected);
+            AutomationProperties.SetName(button, Loc.T("Choose workflows: {0}", _summary.Text));
             ToolTipService.SetToolTip(button, _summary.Text);
         }
         _refreshSummary = RefreshSummary;
@@ -61,14 +59,12 @@ internal sealed class WebhookWorkflowPicker : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            note.Text = L("Workflows could not be loaded. Your saved selection is unchanged. Close and reopen this list to retry.",
-                "Workflows konnten nicht geladen werden. Deine gespeicherte Auswahl bleibt erhalten. Liste zum Wiederholen erneut öffnen.");
+            note.Text = Loc.T("Workflows could not be loaded. Your saved selection is unchanged. Close and reopen this list to retry.");
             panel.Children.Add(note); return panel;
         }
-        var all = new CheckBox { Content = L("All workflows", "Alle Workflows"), IsChecked = _selected.Count == 0 };
+        var all = new CheckBox { Content = Loc.T("All workflows"), IsChecked = _selected.Count == 0 };
         panel.Children.Add(all);
-        var hint = new TextBlock { Text = L("All includes dictation without a workflow. Changes take effect after saving.",
-            "Alle schließt Diktate ohne Workflow ein. Änderungen gelten nach dem Speichern."),
+        var hint = new TextBlock { Text = Loc.T("All includes dictation without a workflow. Changes take effect after saving."),
             TextWrapping = TextWrapping.Wrap, MaxWidth = 420, FontSize = 12,
             Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
         panel.Children.Add(hint);
@@ -90,7 +86,7 @@ internal sealed class WebhookWorkflowPicker : UserControl
         foreach (var name in names.Concat(_selected.Except(names, StringComparer.Ordinal)))
         {
             var available = names.Contains(name, StringComparer.Ordinal);
-            var title = name + (available ? "" : L(" (unavailable)", " (nicht verfügbar)"));
+            var title = available ? name : Loc.T("{0} (unavailable)", name);
             var box = new CheckBox { Content = new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap, MaxWidth = 380 }, IsChecked = _selected.Contains(name) };
             AutomationProperties.SetName(box, title);
             boxes.Add(name, box); list.Children.Add(box);
@@ -99,7 +95,7 @@ internal sealed class WebhookWorkflowPicker : UserControl
                 if (synchronizing) return;
                 _selected.Add(name);
                 if (string.Join("\n", _selected).Length > _maximum)
-                { _selected.Remove(name); note.Text = L("Too many workflows selected.", "Zu viele Workflows ausgewählt."); Synchronize(); return; }
+                { _selected.Remove(name); note.Text = Loc.T("Too many workflows selected."); Synchronize(); return; }
                 CommitDraft();
             };
             box.Unchecked += (_, _) =>
@@ -108,15 +104,13 @@ internal sealed class WebhookWorkflowPicker : UserControl
                 // An empty persisted filter means all. Never silently widen delivery by clearing the last item.
                 if (_selected.Count == 1 && _selected.Contains(name))
                 {
-                    note.Text = L("Select another workflow, choose All workflows, or turn off Send after dictation.",
-                        "Wähle einen anderen Workflow oder Alle Workflows, oder schalte Nach dem Diktieren senden aus.");
+                    note.Text = Loc.T("Select another workflow, choose All workflows, or turn off Send after dictation.");
                     Synchronize(); return;
                 }
                 _selected.Remove(name); CommitDraft();
             };
         }
-        if (names.Length == 0) list.Children.Add(new TextBlock { Text = L("No workflows yet. Create one in Workflows.",
-            "Noch keine Workflows. Lege zuerst einen unter Workflows an."), TextWrapping = TextWrapping.Wrap, MaxWidth = 420 });
+        if (names.Length == 0) list.Children.Add(new TextBlock { Text = Loc.T("No workflows yet. Create one in Workflows."), TextWrapping = TextWrapping.Wrap, MaxWidth = 420 });
         panel.Children.Add(new ScrollViewer { Content = list, MaxHeight = 280,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         panel.Children.Add(note);

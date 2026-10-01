@@ -28,7 +28,7 @@ public sealed partial class HistoryWindow
         if (_selection.Count > 1) { _detailHost.Child = MultipleSelection(); return; }
         if (Opened is not { } record)
         {
-            _detailHost.Child = EmptyState("file", "Select an Entry", "Choose an entry to read and edit its text or inspect its details.");
+            _detailHost.Child = EmptyState("file", Loc.T("Select an Entry"), Loc.T("Choose an entry to read and edit its text or inspect its details."));
             return;
         }
         var body = new StackPanel { Spacing = 16, Padding = new Thickness(28, 22, 28, 28), MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -37,7 +37,7 @@ public sealed partial class HistoryWindow
         var date = Text($"{local:D} · {local:t}", 18, bold: true);
         AutomationProperties.SetHeadingLevel(date, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         header.Children.Add(date);
-        if (record.InboxState is { } inbox) header.Children.Add(Tag(inbox == HistoryWorkspace.InboxOpen ? "Inbox" : "Completed", inbox == HistoryWorkspace.InboxOpen));
+        if (record.InboxState is { } inbox) header.Children.Add(Tag(inbox == HistoryWorkspace.InboxOpen ? Loc.T("Inbox") : Loc.T("Completed"), inbox == HistoryWorkspace.InboxOpen));
         body.Children.Add(header);
         var source = HistoryWorkspace.IsLocal(record, LocalDeviceId()) ? SourceName(HistoryWorkspace.SourceOf(record)) : OriginName(record);
         body.Children.Add(Text(string.Join(" · ", new[] { source, Duration(record.DurationSeconds), HistoryWorkspace.AppOf(record) }.OfType<string>()), 13, muted: true));
@@ -48,7 +48,7 @@ public sealed partial class HistoryWindow
         if (processed)
         {
             var tabs = new TabBar();
-            tabs.SetItems([new("final", "Final"), new("original", "Original"), new("changes", "Changes")], _detailMode);
+            tabs.SetItems([new("final", Loc.T("Final")), new("original", Loc.T("Original")), new("changes", Loc.T("Changes"))], _detailMode);
             tabs.SelectionChanged += async id =>
             {
                 if (id == _detailMode) return;
@@ -80,7 +80,7 @@ public sealed partial class HistoryWindow
             AcceptsReturn = true, Text = TextBoxText(_savedText), TextWrapping = TextWrapping.Wrap, FontSize = 15, MinHeight = 220,
             Padding = new Thickness(14, 12, 14, 12), IsReadOnly = record.Status != TranscriptionRecordStatus.Succeeded && string.IsNullOrWhiteSpace(record.DisplayText)
         };
-        AutomationProperties.SetName(editor, "Transcript text");
+        AutomationProperties.SetName(editor, Loc.T("Transcript text"));
         editor.TextChanged += (_, _) => RenderToolbar();
         return editor;
     }
@@ -90,7 +90,7 @@ public sealed partial class HistoryWindow
 
     private static UIElement ReadOnlyText(string text)
     {
-        var block = Text(string.IsNullOrWhiteSpace(text) ? "No original text was saved." : text, 15);
+        var block = Text(string.IsNullOrWhiteSpace(text) ? Loc.T("No original text was saved.") : text, 15);
         block.IsTextSelectionEnabled = true;
         block.LineHeight = 24;
         return new Border { Child = block, Padding = new Thickness(14, 12, 14, 12), CornerRadius = new CornerRadius(8),
@@ -100,7 +100,7 @@ public sealed partial class HistoryWindow
     private static UIElement Changes(TranscriptionRecord record)
     {
         if (HistoryWorkspace.WordDiff(record.RawText, record.DisplayText) is not { } diff)
-            return EmptyState("info", "Changes Unavailable", "This entry is too long to compare word by word. Open Final or Original to read it.");
+            return EmptyState("info", Loc.T("Changes Unavailable"), Loc.T("This entry is too long to compare word by word. Open Final or Original to read it."));
         var paragraph = new Paragraph { LineHeight = 24 };
         var removed = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0xFF, 0x6B, 0x6B));
         var added = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0x4C, 0xD9, 0x64));
@@ -113,11 +113,11 @@ public sealed partial class HistoryWindow
         }
         var text = new RichTextBlock { FontSize = 15, IsTextSelectionEnabled = true, TextWrapping = TextWrapping.Wrap, Foreground = Brush("TextBrush") };
         text.Blocks.Add(paragraph);
-        AutomationProperties.SetName(text, "Changes between original and final text. Removed words are struck through, added words are underlined.");
+        AutomationProperties.SetName(text, Loc.T("Changes between original and final text. Removed words are struck through, added words are underlined."));
         var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(new Border { Child = text, Padding = new Thickness(14, 12, 14, 12), CornerRadius = new CornerRadius(8),
             Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1) });
-        panel.Children.Add(Text("Struck-through words were removed from what you said; underlined words were added.", 12, muted: true));
+        panel.Children.Add(Text(Loc.T("Struck-through words were removed from what you said; underlined words were added."), 12, muted: true));
         return panel;
     }
 
@@ -128,13 +128,13 @@ public sealed partial class HistoryWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         var rows = new List<(string, string)>
         {
-            ("Language", string.IsNullOrWhiteSpace(record.Language) ? "Automatic" : record.Language!),
-            ("Engine", HistoryWorkspace.ModelLabel(record.EngineUsed, record.ModelUsed)),
-            ("Words", record.WordCount.ToString("N0")),
-            ("Origin", OriginName(record))
+            (Loc.T("Language"), string.IsNullOrWhiteSpace(record.Language) ? Loc.T("Automatic") : record.Language!),
+            (Loc.T("Engine"), HistoryWorkspace.ModelLabel(record.EngineUsed, record.ModelUsed)),
+            (Loc.T("Words"), record.WordCount.ToString("N0")),
+            (Loc.T("Origin"), OriginName(record))
         };
-        if (!string.IsNullOrWhiteSpace(record.ProfileName)) rows.Add(("Workflow", record.ProfileName!));
-        if (!string.IsNullOrWhiteSpace(record.AppUrl)) rows.Add(("Website", record.AppUrl!));
+        if (!string.IsNullOrWhiteSpace(record.ProfileName)) rows.Add((Loc.T("Workflow"), record.ProfileName!));
+        if (!string.IsNullOrWhiteSpace(record.AppUrl)) rows.Add((Loc.T("Website"), record.AppUrl!));
         foreach (var (label, value) in rows)
         {
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -144,16 +144,16 @@ public sealed partial class HistoryWindow
             Grid.SetRow(text, grid.RowDefinitions.Count - 1); Grid.SetColumn(text, 1);
             grid.Children.Add(name); grid.Children.Add(text);
         }
-        return new Expander { Header = "Details", Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        return new Expander { Header = Loc.T("Details"), Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
     }
 
     private static UIElement FailureStrip(TranscriptionRecord record)
     {
         var panel = new StackPanel { Spacing = 4 };
-        panel.Children.Add(Text("Processing Failed", 14, bold: true));
+        panel.Children.Add(Text(Loc.T("Processing Failed"), 14, bold: true));
         panel.Children.Add(Text(record.Status == TranscriptionRecordStatus.TextProcessorFailed
-            ? "Text processing failed. The preceding transcript was kept."
-            : record.WorkflowFailureMessage ?? "The workflow could not finish. The transcript was kept.", 13, muted: true));
+            ? Loc.T("Text processing failed. The preceding transcript was kept.")
+            : record.WorkflowFailureMessage ?? Loc.T("The workflow could not finish. The transcript was kept."), 13, muted: true));
         return new Border { Child = panel, Padding = new Thickness(14, 10, 14, 10), CornerRadius = new CornerRadius(8),
             Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0x33, 0xFF, 0x9F, 0x0A)),
             BorderBrush = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0x99, 0xFF, 0x9F, 0x0A)), BorderThickness = new Thickness(1) };
@@ -167,13 +167,13 @@ public sealed partial class HistoryWindow
 
     private UIElement MultipleSelection()
     {
-        var panel = EmptyState("history", $"{_selection.Count:N0} Entries Selected", "Copy, export, complete or delete them together.");
+        var panel = EmptyState("history", Loc.T("{0:N0} Entries Selected", _selection.Count), Loc.T("Copy, export, complete or delete them together."));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
-        actions.Children.Add(ActionButton("Copy", CopySelection));
+        actions.Children.Add(ActionButton(Loc.T("Copy"), CopySelection));
         if (SelectedRecords().Any(record => record.InboxState == HistoryWorkspace.InboxOpen))
-            actions.Children.Add(ActionButton("Mark Complete", () => _ = SetInboxAsync(true)));
-        actions.Children.Add(ActionButton("Export…", () => _ = ExportAsync(".md")));
-        var delete = ActionButton("Delete…", () => _ = DeleteSelectionAsync());
+            actions.Children.Add(ActionButton(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true)));
+        actions.Children.Add(ActionButton(Loc.T("Export…"), () => _ = ExportAsync(".md")));
+        var delete = ActionButton(Loc.T("Delete…"), () => _ = DeleteSelectionAsync());
         delete.Style = (Style)Application.Current.Resources["DestructiveButtonStyle"];
         actions.Children.Add(delete);
         panel.Children.Add(actions);
@@ -186,16 +186,16 @@ public sealed partial class HistoryWindow
         if (_selection.Count == 0) return;
         var records = SelectedRecords();
         if (records.Any(record => record.InboxState == HistoryWorkspace.InboxOpen))
-            _toolbarActions.Children.Add(ActionButton("Mark Complete", () => _ = SetInboxAsync(true)));
+            _toolbarActions.Children.Add(ActionButton(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true)));
         else if (records.Length == 1 && records[0].InboxState == HistoryWorkspace.InboxCompleted)
-            _toolbarActions.Children.Add(ActionButton("Reopen", () => _ = SetInboxAsync(false)));
-        _toolbarActions.Children.Add(ActionButton("Copy", CopySelection));
+            _toolbarActions.Children.Add(ActionButton(Loc.T("Reopen"), () => _ = SetInboxAsync(false)));
+        _toolbarActions.Children.Add(ActionButton(Loc.T("Copy"), CopySelection));
         if (!Dirty) return;
-        _toolbarActions.Children.Add(ActionButton("Discard", DiscardEdit));
-        var save = ActionButton("Save", () => _ = SaveAsync());
+        _toolbarActions.Children.Add(ActionButton(Loc.T("Discard"), DiscardEdit));
+        var save = ActionButton(Loc.T("Save"), () => _ = SaveAsync());
         save.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
         save.IsEnabled = !_saving && _editor?.Text.Trim().Length > 0;
-        ToolTipService.SetToolTip(save, "Save (Ctrl+S)");
+        ToolTipService.SetToolTip(save, Loc.T("Save (Ctrl+S)"));
         _toolbarActions.Children.Add(save);
     }
 
@@ -210,7 +210,7 @@ public sealed partial class HistoryWindow
     {
         if (!Dirty || _saving || _editor is null || _editedId is not { } id) return;
         var text = _editor.Text.ReplaceLineEndings("\n");
-        if (text.Trim().Length == 0) { _notice.Text = "Enter transcript text before saving."; return; }
+        if (text.Trim().Length == 0) { _notice.Text = Loc.T("Enter transcript text before saving."); return; }
         _saving = true;
         RenderToolbar();
         try
@@ -219,14 +219,14 @@ public sealed partial class HistoryWindow
             {
                 _savedText = updated.DisplayText;
                 _records = _records.Select(record => record.Id == id ? updated : record).ToArray();
-                _notice.Text = "Saved.";
+                _notice.Text = Loc.T("Saved.");
             }
-            else _notice.Text = "The entry could not be saved. It may have been deleted; your text is still here.";
+            else _notice.Text = Loc.T("The entry could not be saved. It may have been deleted; your text is still here.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Trace.TraceError("History save failed: {0}", ex);
-            _notice.Text = "The entry could not be saved. Your text is still here; try again.";
+            _notice.Text = Loc.T("The entry could not be saved. Your text is still here; try again.");
         }
         finally
         {
@@ -242,8 +242,8 @@ public sealed partial class HistoryWindow
         if (_dialogOpen) return false;
         var dialog = new ContentDialog
         {
-            XamlRoot = Content.XamlRoot, Title = "Save Changes?", Content = "You edited this entry. Save your changes before leaving it?",
-            PrimaryButtonText = "Save", SecondaryButtonText = "Discard", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+            XamlRoot = Content.XamlRoot, Title = Loc.T("Save Changes?"), Content = Loc.T("You edited this entry. Save your changes before leaving it?"),
+            PrimaryButtonText = Loc.T("Save"), SecondaryButtonText = Loc.T("Discard"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
         };
         _dialogOpen = true;
         ContentDialogResult result;

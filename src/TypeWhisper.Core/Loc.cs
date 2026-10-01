@@ -15,6 +15,7 @@ public sealed record InterfaceLanguage(string Code, string Name);
 public static class Loc
 {
     private static IReadOnlyDictionary<string, string> _catalog = new Dictionary<string, string>();
+    private static Dictionary<string, string> _english = [];
 
     /// <summary>The languages offered in Settings; they match the macOS app.</summary>
     public static IReadOnlyList<InterfaceLanguage> Languages { get; } =
@@ -40,6 +41,8 @@ public static class Loc
     {
         Language = Resolve(language, CultureInfo.InvariantCulture);
         _catalog = Language == "en" ? new Dictionary<string, string>() : Catalog(Language);
+        _english = [];
+        foreach (var entry in _catalog.OrderBy(entry => entry.Key, StringComparer.Ordinal)) _english.TryAdd(entry.Value, entry.Key);
         // Plugins choose their own translations from the UI culture.
         var culture = CultureInfo.GetCultureInfo(Language);
         CultureInfo.CurrentUICulture = culture;
@@ -52,6 +55,12 @@ public static class Loc
     /// <summary>Translates <paramref name="format"/> and fills its numbered placeholders, such as {0}.</summary>
     public static string T(string format, params object?[] arguments) =>
         string.Format(CultureInfo.CurrentCulture, T(format), arguments);
+
+    /// <summary>
+    /// Returns the English text behind a translated <paramref name="text"/>, or the text itself. Only for code that
+    /// has to recognize a label it did not create; text with filled placeholders is not recognized.
+    /// </summary>
+    public static string English(string text) => _english.TryGetValue(text, out var english) ? english : text;
 
     /// <summary>
     /// Returns <paramref name="text"/> unchanged and registers it for translation. Use it where an English text

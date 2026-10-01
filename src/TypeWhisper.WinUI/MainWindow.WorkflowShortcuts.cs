@@ -48,7 +48,7 @@ public sealed partial class MainWindow
         try { workflow = _dictation.WorkflowDefaults.Resolve(workflow); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ShowActivationNotice("Default LLM settings could not be loaded. Open Default LLM in Workflows and save the selection again.", workflow.Id);
+            ShowActivationNotice(Loc.T("Default LLM settings could not be loaded. Open Default LLM in Workflows and save the selection again."), workflow.Id);
             _noticeUsesDefault = true;
             return;
         }
@@ -59,7 +59,7 @@ public sealed partial class MainWindow
             if (error is not null)
             {
                 ShowActivationNotice(workflow.Name + "\n" + (usesDefault
-                    ? "The default LLM is missing or unavailable. Open Default LLM in Workflows, or choose a provider and model for this workflow."
+                    ? Loc.T("The default LLM is missing or unavailable. Open Default LLM in Workflows, or choose a provider and model for this workflow.")
                     : error), workflow.Id);
                 _noticeUsesDefault = usesDefault;
                 return;
@@ -84,13 +84,13 @@ public sealed partial class MainWindow
         using var cancellation = new CancellationTokenSource();
         _workflowCancellation = cancellation;
         var provider = _dictation.LlmProviders.FirstOrDefault(p => p.SelectionId == workflow.Behavior.ProviderOverride);
-        var label = workflow.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation ? "Dictation Only · no LLM processing" : (provider?.Name ?? workflow.Behavior.ProviderOverride ?? "Not configured") + " · " + workflow.Behavior.ModelOverride;
+        var label = workflow.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation ? Loc.T("Dictation Only · no LLM processing") : (provider?.Name ?? workflow.Behavior.ProviderOverride ?? Loc.T("Not configured")) + " · " + workflow.Behavior.ModelOverride;
         try
         {
             using var reservation = _dictation.ReserveWorkflowShortcut();
-            DictationChanged?.Invoke("Workflow: " + workflow.Name, false);
+            DictationChanged?.Invoke(Loc.T("Workflow: {0}", workflow.Name), false);
             if (workflow.Template != TypeWhisper.Core.Models.WorkflowTemplate.Dictation && (provider is not { Ready: true } || !provider.Models.Any(m => m.Id == workflow.Behavior.ModelOverride)))
-                throw new InvalidOperationException("The workflow provider or model is unavailable. Configure it in Workflows before running this shortcut.");
+                throw new InvalidOperationException(Loc.T("The workflow provider or model is unavailable. Configure it in Workflows before running this shortcut."));
             var capture = new WindowsSelectedTextCapture(WinRT.Interop.WindowNative.GetWindowHandle(this));
             var source = await capture.CaptureAsync(target, processId, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();

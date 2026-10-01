@@ -41,14 +41,14 @@ public sealed class RecordingModePreferencesStore
         catch (DirectoryNotFoundException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            Error = "Recording mode could not be loaded. Hybrid is active. Save a mode to restore this preference.";
+            Error = Loc.T("Recording mode could not be loaded. Hybrid is active. Save a mode to restore this preference.");
         }
     }
 
     /// <summary>Persists a valid mode; failed writes preserve the previous selection.</summary>
     public string? Save(RecordingMode mode)
     {
-        if (!Enum.IsDefined(mode)) return Error = "Choose a valid recording mode.";
+        if (!Enum.IsDefined(mode)) return Error = Loc.T("Choose a valid recording mode.");
         try
         {
             AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(new { Mode = mode.ToString() }));
@@ -57,7 +57,7 @@ public sealed class RecordingModePreferencesStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return Error = "Recording mode could not be saved. Your previous mode still applies.";
+            return Error = Loc.T("Recording mode could not be saved. Your previous mode still applies.");
         }
     }
 }

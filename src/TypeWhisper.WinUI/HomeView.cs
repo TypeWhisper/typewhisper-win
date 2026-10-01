@@ -27,7 +27,7 @@ public sealed class HomeView : UserControl
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition());
-        var title = Text("Home", 22);
+        var title = Text(Loc.T("Home"), 22);
         title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         AutomationProperties.SetHeadingLevel(title, AutomationHeadingLevel.Level1);
         root.Children.Add(new Border { Child = title, Padding = new Thickness(24, 14, 24, 16),
@@ -61,7 +61,7 @@ public sealed class HomeView : UserControl
                 _loadError = null;
             } while (_refreshAgain);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { _loadError = "Recent activity could not be loaded from local history."; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _loadError = Loc.T("Recent activity could not be loaded from local history."); }
         finally { _loading = false; Render(); }
     }
 
@@ -71,7 +71,7 @@ public sealed class HomeView : UserControl
         if (_loadError is not null)
         {
             _body.Children.Add(Text(_loadError, 13, true));
-            _body.Children.Add(Button("Retry", () => _ = RefreshAsync()));
+            _body.Children.Add(Button(Loc.T("Retry"), () => _ = RefreshAsync()));
             return;
         }
         _body.Children.Add(_records.Count == 0 && !_loading ? GettingStarted() : Activity());
@@ -82,26 +82,28 @@ public sealed class HomeView : UserControl
     {
         var panel = new StackPanel { Spacing = 12, Padding = new Thickness(8, 12, 8, 12), HorizontalAlignment = HorizontalAlignment.Center };
         panel.Children.Add(new TypeWhisperGlyph { Kind = "microphone", Width = 36, Height = 36, HorizontalAlignment = HorizontalAlignment.Center });
-        var heading = Text("Ready to start dictating?", 16);
+        var heading = Text(Loc.T("Ready to start dictating?"), 16);
         heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; heading.TextAlignment = TextAlignment.Center;
         panel.Children.Add(heading);
         var shortcut = _shortcut();
-        if (string.IsNullOrWhiteSpace(shortcut) || shortcut == "No shortcut assigned")
+        if (string.IsNullOrWhiteSpace(shortcut) || shortcut == "No shortcut assigned" || shortcut == Loc.T("No shortcut assigned"))
         {
-            var hint = Text("Assign a dictation shortcut in Shortcuts to begin.", 13, true);
+            var hint = Text(Loc.T("Assign a dictation shortcut in Shortcuts to begin."), 13, true);
             hint.TextAlignment = TextAlignment.Center;
             panel.Children.Add(hint);
         }
         else
         {
             var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center };
-            line.Children.Add(Centered(Text("Press", 13, true)));
+            // A translation places the shortcut wherever its sentence needs it.
+            var parts = Loc.T("Press {0} in any app to begin.").Split("{0}");
+            if (parts[0].Trim().Length > 0) line.Children.Add(Centered(Text(parts[0].Trim(), 13, true)));
             line.Children.Add(new Border { Child = Text(shortcut, 13), Padding = new Thickness(8, 3, 8, 3), CornerRadius = new CornerRadius(5),
                 Background = Brush("ElevatedBrush") });
-            line.Children.Add(Centered(Text("in any app to begin.", 13, true)));
+            if (parts.Length > 1 && parts[1].Trim().Length > 0) line.Children.Add(Centered(Text(parts[1].Trim(), 13, true)));
             panel.Children.Add(line);
         }
-        var setup = Button("Open setup wizard", () => NavigateRequested?.Invoke("Setup"));
+        var setup = Button(Loc.T("Open setup wizard"), () => NavigateRequested?.Invoke("Setup"));
         setup.HorizontalAlignment = HorizontalAlignment.Center;
         setup.Margin = new Thickness(0, 4, 0, 0);
         panel.Children.Add(setup);
@@ -112,13 +114,13 @@ public sealed class HomeView : UserControl
     {
         var summary = new UsageData(_records).Summarize(UsagePeriod.AllTime);
         var panel = new StackPanel { Spacing = 14 };
-        panel.Children.Add(Header("stats", "Your activity", "View all statistics", "Statistics"));
+        panel.Children.Add(Header("stats", Loc.T("Your activity"), Loc.T("View all statistics"), "Statistics"));
         var wpm = summary.Minutes > 0 && summary.Words > 0 ? ((int)(summary.Words / summary.Minutes)).ToString() : "—";
         var saved = summary.Words / TypingWordsPerMinute - summary.Minutes;
         (string Label, string Value, string Icon)[] metrics =
         [
-            ("Words", summary.Words.ToString("N0"), "text"), ("Avg. WPM", wpm, "speed"),
-            ("Apps used", summary.KnownApps.ToString(), "desktop"), ("Time saved", SavedTime(saved), "history")
+            (Loc.T("Words"), summary.Words.ToString("N0"), "text"), (Loc.T("Avg. WPM"), wpm, "speed"),
+            (Loc.T("Apps used"), summary.KnownApps.ToString(), "desktop"), (Loc.T("Time saved"), SavedTime(saved), "history")
         ];
         var grid = new Grid { ColumnSpacing = 12 };
         foreach (var (label, value, icon) in metrics)
@@ -137,7 +139,7 @@ public sealed class HomeView : UserControl
                 CornerRadius = new CornerRadius(10), Style = (Style)Application.Current.Resources["MenuButtonStyle"]
             };
             button.Click += (_, _) => NavigateRequested?.Invoke("Statistics");
-            AutomationProperties.SetName(button, $"{label}: {value}. View statistics");
+            AutomationProperties.SetName(button, Loc.T("{0}: {1}. View statistics", label, value));
             Grid.SetColumn(button, grid.Children.Count);
             grid.Children.Add(button);
         }
@@ -148,12 +150,12 @@ public sealed class HomeView : UserControl
     private Border Recent()
     {
         var panel = new StackPanel { Spacing = 8 };
-        panel.Children.Add(Header("history", "Recent transcriptions", "View all history", "History"));
+        panel.Children.Add(Header("history", Loc.T("Recent transcriptions"), Loc.T("View all history"), "History"));
         if (_records.Count == 0)
         {
             var shortcut = _shortcut();
-            var empty = Text(_loading ? "Loading local history…" : string.IsNullOrWhiteSpace(shortcut) || shortcut == "No shortcut assigned"
-                ? "Your transcriptions appear here after your first dictation." : $"Press {shortcut} in any app to get started.", 13, true);
+            var empty = Text(_loading ? Loc.T("Loading local history…") : string.IsNullOrWhiteSpace(shortcut) || shortcut == "No shortcut assigned" || shortcut == Loc.T("No shortcut assigned")
+                ? Loc.T("Your transcriptions appear here after your first dictation.") : Loc.T("Press {0} in any app to get started.", shortcut), 13, true);
             empty.TextAlignment = TextAlignment.Center;
             empty.Margin = new Thickness(0, 14, 0, 14);
             panel.Children.Add(empty);
@@ -183,7 +185,7 @@ public sealed class HomeView : UserControl
                 HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(8, 10, 8, 10),
                 Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
             button.Click += (_, _) => NavigateRequested?.Invoke("History");
-            AutomationProperties.SetName(button, "Open in History: " + text.Text);
+            AutomationProperties.SetName(button, Loc.T("Open in History: {0}", text.Text));
             rows.Children.Add(button);
         }
         panel.Children.Add(rows);
@@ -212,17 +214,17 @@ public sealed class HomeView : UserControl
     {
         if (minutes <= 0) return "—";
         var total = (int)minutes;
-        return total >= 60 ? $"{total / 60}h {total % 60}m" : $"{total}m";
+        return total >= 60 ? Loc.T("{0}h {1}m", total / 60, total % 60) : Loc.T("{0}m", total);
     }
 
     private static string Relative(DateTime timestamp)
     {
         var local = DateTime.SpecifyKind(timestamp, DateTimeKind.Utc).ToLocalTime();
         var elapsed = DateTime.Now - local;
-        if (elapsed < TimeSpan.FromMinutes(1)) return "Just now";
-        if (elapsed < TimeSpan.FromHours(1)) return $"{(int)elapsed.TotalMinutes} min ago";
-        if (elapsed < TimeSpan.FromHours(24)) return $"{(int)elapsed.TotalHours} {((int)elapsed.TotalHours == 1 ? "hour" : "hours")} ago";
-        if (local.Date == DateTime.Today.AddDays(-1)) return "Yesterday";
+        if (elapsed < TimeSpan.FromMinutes(1)) return Loc.T("Just now");
+        if (elapsed < TimeSpan.FromHours(1)) return Loc.T("{0} min ago", (int)elapsed.TotalMinutes);
+        if (elapsed < TimeSpan.FromHours(24)) return (int)elapsed.TotalHours == 1 ? Loc.T("1 hour ago") : Loc.T("{0} hours ago", (int)elapsed.TotalHours);
+        if (local.Date == DateTime.Today.AddDays(-1)) return Loc.T("Yesterday");
         return local.ToString("d");
     }
 

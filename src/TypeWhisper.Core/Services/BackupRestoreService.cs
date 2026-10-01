@@ -192,7 +192,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         {
             return new BackupImportResult
             {
-                Error = $"The backup could not be restored: {ex.Message}",
+                Error = Loc.T("The backup could not be restored: {0}", ex.Message),
                 Warnings = validationWarnings
             };
         }
@@ -284,13 +284,13 @@ public sealed class BackupRestoreService : IBackupRestoreService
             try
             {
                 if (workflowsChanged && !_workflowService.TryReplaceAll(workflowCandidate))
-                    throw new IOException("Workflows could not be persisted.");
+                    throw new IOException(Loc.T("Workflows could not be persisted."));
                 if (dictionaryChanged && !_dictionaryService.TryReplaceAll(dictionaryCandidate))
-                    throw new IOException("Dictionary entries could not be persisted.");
+                    throw new IOException(Loc.T("Dictionary entries could not be persisted."));
                 if (snippetsChanged && !_snippetService.TryReplaceAll(snippetCandidate))
-                    throw new IOException("Snippets could not be persisted.");
+                    throw new IOException(Loc.T("Snippets could not be persisted."));
                 if (historyChanged && !_historyService.TryReplaceAll(historyCandidate))
-                    throw new IOException("History entries could not be persisted.");
+                    throw new IOException(Loc.T("History entries could not be persisted."));
                 if (settingsChanged)
                     _settingsService.Save(settingsCandidate);
 
@@ -319,13 +319,13 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 if (rollbackFailures.Count > 0)
                 {
                     warnings.Add(
-                        $"Rollback could not restore: {string.Join(", ", rollbackFailures)}.");
+                        Loc.T("Rollback could not restore: {0}.", string.Join(", ", rollbackFailures)));
                 }
                 return new BackupImportResult
                 {
                     Error = rollbackFailures.Count == 0
-                        ? $"The local restore was rolled back: {ex.Message}"
-                        : $"The local restore failed and rollback was incomplete: {ex.Message}",
+                        ? Loc.T("The local restore was rolled back: {0}", ex.Message)
+                        : Loc.T("The local restore failed and rollback was incomplete: {0}", ex.Message),
                     Warnings = warnings,
                     Categories = results
                 };
@@ -349,7 +349,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 }
                 catch (Exception ex)
                 {
-                    warnings.Add($"History was restored, but usage statistics could not be updated: {ex.Message}");
+                    warnings.Add(Loc.T("History was restored, but usage statistics could not be updated: {0}", ex.Message));
                 }
             }
         }
@@ -369,7 +369,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
             }
             catch (Exception ex)
             {
-                warnings.Add($"Dictionary settings were restored, but packs could not be activated: {ex.Message}");
+                warnings.Add(Loc.T("Dictionary settings were restored, but packs could not be activated: {0}", ex.Message));
             }
         }
 
@@ -383,7 +383,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                     Skipped = document.Data.Plugins.Count
                 };
                 if (document.Data.Plugins.Count > 0)
-                    warnings.Add("Plugin restore is not available in this application context.");
+                    warnings.Add(Loc.T("Plugin restore is not available in this application context."));
             }
             else
             {
@@ -725,12 +725,12 @@ public sealed class BackupRestoreService : IBackupRestoreService
         warnings = warningList;
         if (string.IsNullOrWhiteSpace(json))
         {
-            error = "The selected backup file is empty.";
+            error = Loc.T("The selected backup file is empty.");
             return false;
         }
         if (json.Length > MaximumBackupBytes || Encoding.UTF8.GetByteCount(json) > MaximumBackupBytes)
         {
-            error = $"The backup exceeds the {MaximumBackupBytes / 1024 / 1024} MB size limit.";
+            error = Loc.T("The backup exceeds the {0} MB size limit.", MaximumBackupBytes / 1024 / 1024);
             return false;
         }
 
@@ -746,34 +746,34 @@ public sealed class BackupRestoreService : IBackupRestoreService
         }
         catch (JsonException ex)
         {
-            error = $"The selected file is not a valid TypeWhisper backup: {ex.Message}";
+            error = Loc.T("The selected file is not a valid TypeWhisper backup: {0}", ex.Message);
             return false;
         }
 
         if (document?.Data is null)
         {
-            error = "The backup does not contain a data section.";
+            error = Loc.T("The backup does not contain a data section.");
             return false;
         }
         if (!string.Equals(document.Format, SettingsBackupDocument.CurrentFormat, StringComparison.Ordinal))
         {
-            error = "The selected file is not a TypeWhisper backup.";
+            error = Loc.T("The selected file is not a TypeWhisper backup.");
             return false;
         }
         if (document.SchemaVersion != SettingsBackupDocument.CurrentSchemaVersion)
         {
             error = document.SchemaVersion > SettingsBackupDocument.CurrentSchemaVersion
-                ? "This backup was created with a newer unsupported schema version."
-                : "This backup schema version is not supported.";
+                ? Loc.T("This backup was created with a newer unsupported schema version.")
+                : Loc.T("This backup schema version is not supported.");
             return false;
         }
         if (document.ExportedAt == default || string.IsNullOrWhiteSpace(document.SourcePlatform))
         {
-            error = "The backup metadata is incomplete.";
+            error = Loc.T("The backup metadata is incomplete.");
             return false;
         }
         if (!string.Equals(document.SourcePlatform, "windows", StringComparison.OrdinalIgnoreCase))
-            warningList.Add($"This backup was created on {document.SourcePlatform}; some categories may not be portable.");
+            warningList.Add(Loc.T("This backup was created on {0}; some categories may not be portable.", document.SourcePlatform));
 
         try
         {
@@ -781,7 +781,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         }
         catch (Exception ex) when (ex is NullReferenceException or InvalidOperationException or ArgumentException)
         {
-            error = $"The backup data structure is invalid: {ex.Message}";
+            error = Loc.T("The backup data structure is invalid: {0}", ex.Message);
         }
         return error is null;
     }
@@ -791,22 +791,22 @@ public sealed class BackupRestoreService : IBackupRestoreService
         if (data.Workflows is null || data.Dictionary is null || data.Dictionary.Entries is null
             || data.Dictionary.EnabledPackIds is null || data.Snippets is null || data.Hotkeys is null
             || data.Hotkeys.Bindings is null || data.Plugins is null || data.History is null)
-            return "The backup contains a null collection or category.";
+            return Loc.T("The backup contains a null collection or category.");
         if (data.Workflows.Any(static workflow => workflow is null)
             || data.Dictionary.Entries.Any(static entry => entry is null)
             || data.Dictionary.EnabledPackIds.Any(static id => id is null)
             || data.Snippets.Any(static snippet => snippet is null)
             || data.Plugins.Any(static plugin => plugin is null)
             || data.History.Any(static entry => entry is null))
-            return "The backup contains a null item.";
+            return Loc.T("The backup contains a null item.");
 
-        if (data.Workflows.Count > MaximumWorkflows) return "The backup contains too many workflows.";
-        if (data.Dictionary.Entries.Count > MaximumDictionaryEntries) return "The backup contains too many dictionary entries.";
-        if (data.Snippets.Count > MaximumSnippets) return "The backup contains too many snippets.";
-        if (data.Plugins.Count > MaximumPlugins) return "The backup contains too many plugins.";
-        if (data.History.Count > MaximumHistoryEntries) return "The backup contains too many history entries.";
-        if (data.Dictionary.EnabledPackIds.Count > 1_000) return "The backup contains too many dictionary packs.";
-        if (data.Hotkeys.Bindings.Count > HotkeyActions.Length) return "The backup contains unknown hotkey actions.";
+        if (data.Workflows.Count > MaximumWorkflows) return Loc.T("The backup contains too many workflows.");
+        if (data.Dictionary.Entries.Count > MaximumDictionaryEntries) return Loc.T("The backup contains too many dictionary entries.");
+        if (data.Snippets.Count > MaximumSnippets) return Loc.T("The backup contains too many snippets.");
+        if (data.Plugins.Count > MaximumPlugins) return Loc.T("The backup contains too many plugins.");
+        if (data.History.Count > MaximumHistoryEntries) return Loc.T("The backup contains too many history entries.");
+        if (data.Dictionary.EnabledPackIds.Count > 1_000) return Loc.T("The backup contains too many dictionary packs.");
+        if (data.Hotkeys.Bindings.Count > HotkeyActions.Length) return Loc.T("The backup contains unknown hotkey actions.");
 
         foreach (var workflow in data.Workflows)
         {
@@ -814,17 +814,17 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 || workflow.Trigger.ProcessNames is null || workflow.Trigger.WebsitePatterns is null
                 || workflow.Trigger.Hotkeys is null || workflow.Behavior.Settings is null
                 || workflow.Behavior.InputLanguageHints is null)
-                return "A workflow contains a null object or collection.";
+                return Loc.T("A workflow contains a null object or collection.");
             if (!ValidRequired(workflow.Name) || workflow.Name.Length > 512)
-                return "A workflow has an invalid name.";
+                return Loc.T("A workflow has an invalid name.");
             if (!Enum.IsDefined(workflow.Template) || !Enum.IsDefined(workflow.Trigger.Kind))
-                return "A workflow contains an unsupported enum value.";
+                return Loc.T("A workflow contains an unsupported enum value.");
             if (workflow.Trigger.ProcessNames.Count > 1_000 || workflow.Trigger.WebsitePatterns.Count > 1_000 || workflow.Trigger.Hotkeys.Count > 32)
-                return "A workflow contains too many trigger values.";
+                return Loc.T("A workflow contains too many trigger values.");
             if (workflow.Trigger.ProcessNames.Any(value => !ValidRequired(value) || !ValidShort(value))
                 || workflow.Trigger.WebsitePatterns.Any(value => !ValidRequired(value) || !ValidShort(value))
                 || workflow.Trigger.Hotkeys.Any(value => !ValidHotkey(value)))
-                return "A workflow contains an invalid trigger value.";
+                return Loc.T("A workflow contains an invalid trigger value.");
             if (workflow.Behavior.Settings.Count > 1_000
                 || workflow.Behavior.Settings.Any(pair => !ValidRequired(pair.Key) || pair.Value is null || !ValidShort(pair.Key) || !ValidShort(pair.Value))
                 || workflow.Behavior.FineTuning is null || !ValidShort(workflow.Behavior.FineTuning)
@@ -835,58 +835,58 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 || workflow.Behavior.InputLanguageHints.Any(value => !ValidRequired(value) || !ValidShort(value))
                 || !ValidShort(workflow.Output.Format) || !ValidShort(workflow.Output.TargetActionPluginId)
                 || !ValidShort(workflow.Output.NumberNormalizationModeRaw))
-                return "A workflow contains invalid settings.";
+                return Loc.T("A workflow contains invalid settings.");
         }
         foreach (var entry in data.Dictionary.Entries)
         {
             if (!ValidRequired(entry.Original) || !ValidShort(entry.Original) || !ValidShort(entry.Replacement))
-                return "A dictionary entry contains invalid text.";
+                return Loc.T("A dictionary entry contains invalid text.");
             if (!Enum.IsDefined(entry.EntryType) || !Enum.IsDefined(entry.Source))
-                return "A dictionary entry contains an unsupported enum value.";
+                return Loc.T("A dictionary entry contains an unsupported enum value.");
             if (entry.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity is < 0 or > 1))
-                return "A dictionary entry contains an invalid acoustic similarity threshold.";
+                return Loc.T("A dictionary entry contains an invalid acoustic similarity threshold.");
             if (entry.EntryType == DictionaryEntryType.Correction && entry.Replacement is null)
-                return "A dictionary correction has no replacement.";
+                return Loc.T("A dictionary correction has no replacement.");
             if (entry.IsRegex)
             {
                 try { _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromMilliseconds(100)); }
-                catch (ArgumentException) { return "A dictionary entry contains an invalid regular expression."; }
+                catch (ArgumentException) { return Loc.T("A dictionary entry contains an invalid regular expression."); }
             }
         }
         if (data.Dictionary.EnabledPackIds.Any(id => !ValidRequired(id) || id.Length > 256))
-            return "A dictionary pack identifier is invalid.";
+            return Loc.T("A dictionary pack identifier is invalid.");
         foreach (var snippet in data.Snippets)
         {
             if (!ValidRequired(snippet.Trigger) || snippet.Trigger.Length > 1_024 || snippet.Replacement is null
                 || snippet.Replacement.Length > MaximumTranscriptionTextLength || snippet.Tags is null
                 || snippet.Tags.Length > MaximumShortTextLength)
-                return "A snippet contains invalid text.";
+                return Loc.T("A snippet contains invalid text.");
         }
         foreach (var pair in data.Hotkeys.Bindings)
         {
             if (pair.Key is null || pair.Value is null
                 || !HotkeyActions.Contains(pair.Key, StringComparer.OrdinalIgnoreCase)
                 || pair.Value.Count > 16 || pair.Value.Any(value => !ValidHotkey(value)))
-                return "The backup contains an invalid hotkey binding.";
+                return Loc.T("The backup contains an invalid hotkey binding.");
         }
         if (data.Hotkeys.Bindings.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != data.Hotkeys.Bindings.Count)
-            return "The backup contains duplicate hotkey actions.";
+            return Loc.T("The backup contains duplicate hotkey actions.");
         foreach (var plugin in data.Plugins)
         {
             if (!ValidRequired(plugin.Id) || plugin.Id.Length > 256 || !ValidShort(plugin.Name) || !ValidShort(plugin.Version))
-                return "A plugin reference is invalid.";
+                return Loc.T("A plugin reference is invalid.");
         }
         foreach (var entry in data.History)
         {
             if (entry.Timestamp == default || entry.RawText is null || entry.FinalText is null || entry.EngineUsed is null
                 || entry.RawText.Length > MaximumTranscriptionTextLength || entry.FinalText.Length > MaximumTranscriptionTextLength)
-                return "A history entry is invalid.";
+                return Loc.T("A history entry is invalid.");
             if (!double.IsFinite(entry.DurationSeconds) || entry.DurationSeconds < 0 || entry.DurationSeconds > 31_536_000)
-                return "A history entry has an invalid duration.";
+                return Loc.T("A history entry has an invalid duration.");
             if (!ValidShort(entry.AppName) || !ValidShort(entry.AppProcessName) || !ValidShort(entry.AppUrl)
                 || !ValidShort(entry.Language) || !ValidShort(entry.WorkflowName) || !ValidShort(entry.EngineUsed)
                 || !ValidShort(entry.ModelUsed) || !ValidShort(entry.TranscriptionTaskUsed) || !ValidShort(entry.SourceKind))
-                return "A history entry contains invalid metadata.";
+                return Loc.T("A history entry contains invalid metadata.");
         }
         if (data.Preferences is { } preferences)
         {
@@ -894,14 +894,14 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 || !Enum.IsDefined(preferences.IndicatorStyle) || !Enum.IsDefined(preferences.OverlayPosition)
                 || !Enum.IsDefined(preferences.OverlayLeftWidget) || !Enum.IsDefined(preferences.OverlayRightWidget)
                 || !Enum.IsDefined(preferences.EnglishOutputVariant) || !Enum.IsDefined(preferences.GermanOutputVariant))
-                return "The backup contains an unsupported preference value.";
+                return Loc.T("The backup contains an unsupported preference value.");
             if (preferences.HistoryRetentionMinutes < 1 || preferences.HistoryRetentionMinutes > 10 * 365 * 24 * 60
                 || preferences.AudioDuckingLevel is < 0 or > 1
                 || preferences.LiveTranscriptionFontSize is < AppSettings.MinLiveTranscriptionFontSize or > AppSettings.MaxLiveTranscriptionFontSize
                 || preferences.SilenceAutoStopSeconds is < 1 or > 3_600
                 || preferences.PreviewBubbleAutoHideMilliseconds is < AppSettings.MinPreviewBubbleAutoHideMilliseconds or > AppSettings.MaxPreviewBubbleAutoHideMilliseconds
                 || preferences.DictationRecoveryRetentionDays is not (-1 or 0 or 1 or 7 or 30 or 60 or 90 or 180))
-                return "The backup contains an out-of-range preference value.";
+                return Loc.T("The backup contains an out-of-range preference value.");
             if (!ValidRequired(preferences.Language) || !ValidShort(preferences.Language)
                 || preferences.LanguageHints is null || preferences.LanguageHints.Count > 32
                 || preferences.LanguageHints.Any(hint => !ValidRequired(hint) || !ValidShort(hint))
@@ -919,7 +919,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 || !ValidRequired(preferences.WatchFolderLanguage) || !ValidShort(preferences.WatchFolderLanguage)
                 || !ValidRequired(preferences.SelectedIndustryPresetId) || preferences.SelectedIndustryPresetId.Length > 256
                 || !ValidUpdateChannel(preferences.UpdateChannel))
-                return "The backup contains an invalid portable preference.";
+                return Loc.T("The backup contains an invalid portable preference.");
         }
 
         return null;

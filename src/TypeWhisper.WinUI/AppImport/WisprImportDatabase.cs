@@ -50,11 +50,11 @@ internal static class WisprImportDatabase
                 while ((result = sqlite3_step(statement)) == 100)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (rows.Count == MaximumRows) throw new InvalidDataException($"The source has more than {MaximumRows:N0} entries. Nothing was imported.");
+                    if (rows.Count == MaximumRows) throw new InvalidDataException(Loc.T("The source has more than {0:N0} entries. Nothing was imported.", MaximumRows));
                     var row = new WisprImportRow(Text(statement, 0)!, Text(statement, 1, optional: true), Boolean(statement, 2), Boolean(statement, 3));
                     characters += row.Phrase.Length + (row.Replacement?.Length ?? 0);
                     if (characters > LexiconAppImport.MaximumCatalogCharacters)
-                        throw new InvalidDataException("The source contains more than five million characters of dictionary text. Nothing was imported.");
+                        throw new InvalidDataException(Loc.T("The source contains more than five million characters of dictionary text. Nothing was imported."));
                     rows.Add(row);
                 }
                 cancellationToken.ThrowIfCancellationRequested();
@@ -80,7 +80,7 @@ internal static class WisprImportDatabase
         if (optional && type == 5) return null;
         if (type != 3) throw Unreadable();
         var length = sqlite3_column_bytes16(statement, column);
-        if (length > 20000) throw new InvalidDataException("A source entry exceeds 10,000 characters. Nothing was imported.");
+        if (length > 20000) throw new InvalidDataException(Loc.T("A source entry exceeds 10,000 characters. Nothing was imported."));
         return Marshal.PtrToStringUni(sqlite3_column_text16(statement, column), length / 2) ?? throw Unreadable();
     }
 
@@ -91,5 +91,5 @@ internal static class WisprImportDatabase
     }
 
     private static byte[] Utf8(string value) => Encoding.UTF8.GetBytes(value + '\0');
-    private static IOException Unreadable() => new("Could not read the Wispr Flow database format. Quitting Wispr Flow and trying again can help. Nothing was imported.");
+    private static IOException Unreadable() => new(Loc.T("Could not read the Wispr Flow database format. Quitting Wispr Flow and trying again can help. Nothing was imported."));
 }

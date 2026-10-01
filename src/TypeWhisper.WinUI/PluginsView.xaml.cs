@@ -45,11 +45,11 @@ public sealed partial class PluginsView : UserControl
             var enabled = state.Enabled;
             var provider = _runtime.DictationProviders.FirstOrDefault(item => item.PluginId == manifest?.Id);
             var setupRequired = enabled && provider is { Ready: false };
-            _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? "An installed plugin package could not be read.",
+            _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? Loc.T("An installed plugin package could not be read."),
                 "plugin", "", "", manifest?.Version ?? "Unknown", manifest?.MinHostVersion ?? "0.0.0")
             {
                 Enabled = enabled, RuntimeCanToggle = state.CanToggle,
-                Status = RuntimeUpdateStatus(manifest?.Id) ?? (state.Busy ? "Updating…" : error is not null ? "Needs attention" : setupRequired ? "Setup required" : enabled ? "Ready" : "Disabled")
+                Status = RuntimeUpdateStatus(manifest?.Id) ?? (state.Busy ? Loc.T("Updating…") : error is not null ? Loc.T("Needs attention") : setupRequired ? Loc.T("Setup required") : enabled ? Loc.T("Ready") : Loc.T("Disabled"))
             });
         }
         UpdateUpdateAction();
@@ -71,6 +71,9 @@ public sealed partial class PluginsView : UserControl
     public PluginsView()
     {
         InitializeComponent();
+        PluginPageTitle.Text = Loc.T("Integrations");
+        PluginSummary.Text = Loc.T("Loading installed plugins…");
+        InstalledUpdateButton.Content = Loc.T("Update all");
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
     }
 }

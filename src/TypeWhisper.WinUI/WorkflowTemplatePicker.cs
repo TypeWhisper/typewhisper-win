@@ -68,7 +68,7 @@ public sealed class WorkflowTemplatePicker : UserControl
             var selected = choice.Id == SelectedId;
             button.Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "SecondaryButtonStyle"];
             check.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-            AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
+            AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         }
     }
 

@@ -16,11 +16,11 @@ internal sealed class AccountView : UserControl
         identity.Children.Add(new SetupLogo { HorizontalAlignment = HorizontalAlignment.Center });
         identity.Children.Add(Copy("TypeWhisper", 26, center: true));
         identity.Children.Add(Copy("Windows", 13, true, true));
-        identity.Children.Add(Copy("Speak naturally. Keep your flow.", 14, true, true));
+        identity.Children.Add(Copy(Loc.T("Speak naturally. Keep your flow."), 14, true, true));
         body.Children.Add(identity);
 
-        body.Children.Add(Copy("Premium and licenses", 16));
-        body.Children.Add(Copy("Activate and manage your license under Premium in the sidebar.", 13, true));
+        body.Children.Add(Copy(Loc.T("Premium and licenses"), 16));
+        body.Children.Add(Copy(Loc.T("Activate and manage your license under Premium in the sidebar."), 13, true));
         body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush") });
         body.Children.Add(UpdatePanel);
     }

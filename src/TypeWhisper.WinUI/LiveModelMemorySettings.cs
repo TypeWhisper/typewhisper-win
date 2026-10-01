@@ -12,25 +12,24 @@ internal static class LiveModelMemorySettings
         var row = FindRow(content) ?? throw new InvalidOperationException("Model memory settings row is missing.");
         foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
         row.Children.Clear();
-        row.Children.Add(SettingsHelp.Label("Unload idle models",
-            "Releases the memory of local models after they were not used for this long. They load again automatically when needed, " +
-            "so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3 and local text models are affected; cloud providers are not."));
+        row.Children.Add(SettingsHelp.Label(Loc.T("Unload idle models"),
+            Loc.T("Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3 and local text models are affected; cloud providers are not.")));
         var picker = new ChoicePicker();
-        picker.Configure("Unload idle models", "history", "Unload idle models");
+        picker.Configure(Loc.T("Unload idle models"), "history", Loc.T("Unload idle models"));
         var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         string? selectionError = null;
         void Refresh()
         {
             picker.SetOptions([
-                new("0", "Never", "Keep local models loaded until you unload them or close TypeWhisper."),
-                new("-1", "Immediately", "Release memory right after each use. Every use loads the model again."),
-                new("120", "After 2 minutes", "Release memory after 2 minutes without use."),
-                new("300", "After 5 minutes", "Release memory after 5 minutes without use."),
-                new("600", "After 10 minutes", "Release memory after 10 minutes without use. This is the default."),
-                new("1800", "After 30 minutes", "Release memory after 30 minutes without use."),
-                new("3600", "After 1 hour", "Release memory after 1 hour without use.")
+                new("0", Loc.T("Never"), Loc.T("Keep local models loaded until you unload them or close TypeWhisper.")),
+                new("-1", Loc.T("Immediately"), Loc.T("Release memory right after each use. Every use loads the model again.")),
+                new("120", Loc.T("After 2 minutes"), Loc.T("Release memory after 2 minutes without use.")),
+                new("300", Loc.T("After 5 minutes"), Loc.T("Release memory after 5 minutes without use.")),
+                new("600", Loc.T("After 10 minutes"), Loc.T("Release memory after 10 minutes without use. This is the default.")),
+                new("1800", Loc.T("After 30 minutes"), Loc.T("Release memory after 30 minutes without use.")),
+                new("3600", Loc.T("After 1 hour"), Loc.T("Release memory after 1 hour without use."))
             ], session.ModelMemoryPreferences.AutoUnloadSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            hint.Text = selectionError ?? session.ModelMemoryPreferences.Error ?? "Saved for this profile. Applies to models that are loaded now.";
+            hint.Text = selectionError ?? session.ModelMemoryPreferences.Error ?? Loc.T("Saved for this profile. Applies to models that are loaded now.");
         }
         picker.SelectionChanged += id =>
         {

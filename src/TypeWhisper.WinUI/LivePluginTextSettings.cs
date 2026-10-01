@@ -92,7 +92,7 @@ internal sealed partial class LivePluginTextSettings : UserControl
             // A worker process runs the engine, so the in-process plugin cannot tell which device it uses.
             if (_session.PluginRuntime.IsolatedAccelerationStatus(_id) is { } running)
                 snapshot.Fields = snapshot.Fields.Select(field => field.Id == "acceleration"
-                    ? field with { Description = field.Description + " In use: " + running.DisplayText + (running.Detail is { } detail ? " · " + detail : "") }
+                    ? field with { Description = field.Description + " " + Loc.T("In use: {0}", running.DisplayText + (running.Detail is { } detail ? " · " + detail : "")) }
                     : field).ToArray();
             if (_models is LivePortableModelSettings modelSettings)
             {
@@ -112,8 +112,8 @@ internal sealed partial class LivePluginTextSettings : UserControl
                 _loaded = true;
                 return;
             }
-            var single = new PluginTextSetting("__host_settings", "Settings", "", "default")
-            { Choices = [new("default", "Settings")] };
+            var single = new PluginTextSetting("__host_settings", Loc.T("Settings"), "", "default")
+            { Choices = [new("default", Loc.T("Settings"))] };
             RenderProfileEditor(single, snapshot.Fields, snapshot.Actions, null, null, snapshot.ShowKey, generic: true);
             _loaded = true;
         }
@@ -121,7 +121,7 @@ internal sealed partial class LivePluginTextSettings : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             if (IsLoaded && generation == _generation)
-                SetStatus("Plugin settings could not be loaded. Reopen this page to retry.");
+                SetStatus(Loc.T("Plugin settings could not be loaded. Reopen this page to retry."));
         }
     }
 

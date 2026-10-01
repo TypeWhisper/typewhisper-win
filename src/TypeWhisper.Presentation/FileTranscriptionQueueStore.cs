@@ -70,9 +70,9 @@ public sealed record FileTranscriptionRecoveryEntry(Guid Id, string SourcePath,
     /// <summary>Explains interruption or uncertain persistence without claiming successful side effects.</summary>
     [JsonIgnore]
     public string? RecoveryNotice => Status == FileTranscriptionRecoveryStatus.Interrupted
-        ? "Processing was interrupted. Choose Retry to transcribe this file again."
+        ? Loc.T("Processing was interrupted. Choose Retry to transcribe this file again.")
         : Receipt == FileTranscriptionAcceptanceReceipt.Pending
-            ? "The transcript was recovered. History and snippet usage completion could not be verified; these actions were not repeated."
+            ? Loc.T("The transcript was recovered. History and snippet usage completion could not be verified; these actions were not repeated.")
             : null;
 }
 
@@ -122,7 +122,7 @@ public sealed class FileTranscriptionQueueStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         {
             Enabled = false; Entries = []; _writable = false;
-            Error = "File queue recovery could not be loaded. The existing file was preserved: " + ex.Message;
+            Error = Loc.T("File queue recovery could not be loaded. The existing file was preserved: {0}", ex.Message);
         }
     }
 
@@ -150,7 +150,7 @@ public sealed class FileTranscriptionQueueStore
     /// <summary>Checkpoints at most twenty jobs only when the user has enabled recovery.</summary>
     public bool TrySave(IReadOnlyList<FileTranscriptionRecoveryEntry> entries)
     {
-        if (!Enabled) { Error ??= "File queue recovery is off."; return false; }
+        if (!Enabled) { Error ??= Loc.T("File queue recovery is off."); return false; }
         return Write(true, entries);
     }
 
@@ -167,7 +167,7 @@ public sealed class FileTranscriptionQueueStore
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
-        { Error = "File queue recovery could not be saved. The previous setting and checkpoint remain in effect: " + ex.Message; return false; }
+        { Error = Loc.T("File queue recovery could not be saved. The previous setting and checkpoint remain in effect: {0}", ex.Message); return false; }
     }
 
     private static IReadOnlyList<FileTranscriptionRecoveryEntry> ValidateAndCopy(IReadOnlyList<FileTranscriptionRecoveryEntry> entries)
@@ -210,7 +210,7 @@ public sealed class FileTranscriptionQueueStore
                 if (result.Segments is null || result.Segments.Any(segment => segment is null) ||
                     result.Segments.Count > 0 && !FileTranscriptionQueue.HasSubtitles(result.ToOutput()))
                 {
-                    const string warning = "Invalid subtitle timing was omitted from recovery. TXT remains available.";
+                    var warning = Loc.T("Invalid subtitle timing was omitted from recovery. TXT remains available.");
                     result = result with { Segments = [], Warning = result.Warning is null ? warning : result.Warning[..Math.Min(result.Warning.Length, 16000)] + " · " + warning };
                 }
                 if (result.Segments.Count > 10000 - segments) throw new InvalidDataException("Too many recovery subtitle segments.");

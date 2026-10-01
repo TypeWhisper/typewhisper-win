@@ -15,7 +15,7 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
         if (Environment.CurrentManagedThreadId != _ownerThread)
             throw new InvalidOperationException("Selected-text capture must run on the owning UI thread.");
         if (originalWindow == IntPtr.Zero || originalProcessId == 0 || originalProcessId == (uint)Environment.ProcessId)
-            throw new InvalidOperationException("Select text in another application before running this workflow.");
+            throw new InvalidOperationException(Loc.T("Select text in another application before running this workflow."));
         await ClipboardTextInserter.TransactionGate.WaitAsync(ct);
         try
         {

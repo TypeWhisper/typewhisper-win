@@ -42,8 +42,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     internal Workflow? Stored { get; init; }
     internal string InstructionDescription => string.Join("\n", new[]
     {
-        !Enum.IsDefined(Template) ? "Unknown template" : Template == WorkflowTemplate.Custom ? null : WorkflowTemplateCatalog.DefinitionFor(Template).Description,
-        Template == WorkflowTemplate.Translation ? "Target language: " + (string.IsNullOrWhiteSpace(TranslationTarget) ? "English" : TranslationTarget) : null,
+        !Enum.IsDefined(Template) ? Loc.T("Unknown template") : Template == WorkflowTemplate.Custom ? null : Loc.T(WorkflowTemplateCatalog.DefinitionFor(Template).Description),
+        Template == WorkflowTemplate.Translation ? Loc.T("Target language: {0}", string.IsNullOrWhiteSpace(TranslationTarget) ? Loc.T("English") : TranslationTarget) : null,
         string.IsNullOrWhiteSpace(Instruction) ? null : Instruction
     }.Where(text => text is not null));
 
@@ -76,11 +76,11 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
 
     private string[] DomainPatterns() => WebsiteDomains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .Select(value => TypeWhisper.Presentation.BrowserWorkflowContext.NormalizePattern(value)
-            ?? throw new InvalidOperationException("Enter domains without paths, query strings or credentials."))
+            ?? throw new InvalidOperationException(Loc.T("Enter domains without paths, query strings or credentials.")))
         .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     internal static WorkflowDraft FromStored(Workflow workflow) => new(workflow.Id, workflow.Name,
-        (workflow.IsEnabled ? "" : "Disabled · ") + (TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(workflow) ? "" : "Unsupported - ") + workflow.Trigger.Kind + " · " + (Enum.IsDefined(workflow.Template) ? workflow.Definition.Name : "Unknown template"), TypeWhisper.Presentation.WorkflowIcons.Normalize(workflow.Icon), workflow.Behavior.FineTuning)
+        (workflow.IsEnabled ? "" : Loc.T("Disabled · ")) + (TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(workflow) ? "" : Loc.T("Unsupported - ")) + (workflow.Trigger.Kind switch { WorkflowTriggerKind.App => Loc.T("App"), WorkflowTriggerKind.Website => Loc.T("Website"), WorkflowTriggerKind.Hotkey => Loc.T("Hotkey"), WorkflowTriggerKind.Global => Loc.T("Global"), WorkflowTriggerKind.Manual => Loc.T("Manual"), _ => workflow.Trigger.Kind.ToString() }) + " · " + (Enum.IsDefined(workflow.Template) ? Loc.T(workflow.Definition.Name) : Loc.T("Unknown template")), TypeWhisper.Presentation.WorkflowIcons.Normalize(workflow.Icon), workflow.Behavior.FineTuning)
     {
         ProviderId = workflow.Behavior.ProviderOverride ?? "none", ModelId = workflow.Behavior.ModelOverride ?? "", IsEnabled = workflow.IsEnabled,
         TriggerKind = workflow.Trigger.Kind, AppProcesses = string.Join(", ", workflow.Trigger.ProcessNames), Priority = workflow.SortOrder,

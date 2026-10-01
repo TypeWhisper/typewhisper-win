@@ -15,7 +15,7 @@ public sealed partial class LexiconView
             if (_closing) return;
             _store.ReloadDictionary(); _store.ReloadSnippets();
             Render();
-            _notice.Text = result ?? "Import canceled. Nothing was changed.";
+            _notice.Text = result ?? Loc.T("Import canceled. Nothing was changed.");
         }
         finally { _appImportFlow = null; completion.TrySetResult(); }
     }

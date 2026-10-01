@@ -33,32 +33,32 @@ internal sealed class WorkflowShortcutWindow : Window
         body.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var heading = new StackPanel { Spacing = 6 };
         heading.Children.Add(new TextBlock { Text = name, FontSize = 24, TextWrapping = TextWrapping.Wrap, Foreground = Brush("TextBrush") });
-        _status = new() { Text = "Processing selected text with " + provider + "…", TextWrapping = TextWrapping.Wrap, Foreground = Brush("MutedBrush") };
+        _status = new() { Text = Loc.T("Processing selected text with {0}…", provider), TextWrapping = TextWrapping.Wrap, Foreground = Brush("MutedBrush") };
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         heading.Children.Add(_status); body.Children.Add(heading);
         _text = new() { AcceptsReturn = true, IsReadOnly = true, Text = source.ReplaceLineEndings("\r"),
             TextWrapping = TextWrapping.Wrap, VerticalContentAlignment = VerticalAlignment.Top, Padding = new Thickness(12),
             Foreground = Brush("TextBrush"), Background = Brush("SurfaceBrush"), FontFamily = (FontFamily)Application.Current.Resources["InterfaceFont"] };
-        AutomationProperties.SetName(_text, "Workflow selected text and result");
+        AutomationProperties.SetName(_text, Loc.T("Workflow selected text and result"));
         ScrollViewer.SetVerticalScrollBarVisibility(_text, ScrollBarVisibility.Auto);
         Grid.SetRow(_text, 1); body.Children.Add(_text);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Right };
-        _copy = new() { Content = "Copy text", IsEnabled = false, Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
+        _copy = new() { Content = Loc.T("Copy text"), IsEnabled = false, Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
         _copy.Click += (_, _) =>
         {
-            try { var data = new DataPackage(); data.SetText(_text.Text); Clipboard.SetContent(data); _status.Text = "Copied. Not saved to History."; }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { _status.Text = "The clipboard is unavailable. Your text is still here."; }
+            try { var data = new DataPackage(); data.SetText(_text.Text); Clipboard.SetContent(data); _status.Text = Loc.T("Copied. Not saved to History."); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { _status.Text = Loc.T("The clipboard is unavailable. Your text is still here."); }
         };
-        _cancel = new() { Content = "Cancel", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
+        _cancel = new() { Content = Loc.T("Cancel"), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         _cancel.Click += async (_, _) =>
         {
             try
             {
-                if (_run is not null) { RequestCancel(); _cancel.IsEnabled = false; _status.Text = "Canceling…"; }
+                if (_run is not null) { RequestCancel(); _cancel.IsEnabled = false; _status.Text = Loc.T("Canceling…"); }
                 else await ShutdownAsync();
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _status.Text = "The workflow could not finish closing. Your text is still here."; }
+            { _status.Text = Loc.T("The workflow could not finish closing. Your text is still here."); }
         };
         buttons.Children.Add(_copy); buttons.Children.Add(_cancel); Grid.SetRow(buttons, 2); body.Children.Add(buttons);
         Content = body;
@@ -68,7 +68,7 @@ internal sealed class WorkflowShortcutWindow : Window
             e.Cancel = true;
             try { await ShutdownAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _status.Text = "The workflow could not finish closing. Your text is still here."; }
+            { _status.Text = Loc.T("The workflow could not finish closing. Your text is still here."); }
         };
     }
     internal Task RunAsync(Workflow workflow, LocalDictationSession session, CancellationToken ct)
@@ -85,7 +85,7 @@ internal sealed class WorkflowShortcutWindow : Window
         try { await RunCoreAsync(workflow, session, ct); completion.TrySetResult(); }
         catch (Exception ex) { completion.TrySetException(ex); }
     }
-    internal void ShowCaptureError(string error) { _status.Text = error; _cancel.Content = "Done"; }
+    internal void ShowCaptureError(string error) { _status.Text = error; _cancel.Content = Loc.T("Done"); }
     private async Task RunCoreAsync(Workflow workflow, LocalDictationSession session, CancellationToken ct)
     {
         using var cancellation = new CancellationTokenSource();
@@ -98,12 +98,12 @@ internal sealed class WorkflowShortcutWindow : Window
             var result = execution.Text;
             if (_closing) return;
             _text.Text = result.ReplaceLineEndings("\r");
-            _status.Text = execution.Message ?? "Completed. Review and copy the result. Not saved to History.";
+            _status.Text = execution.Message ?? Loc.T("Completed. Review and copy the result. Not saved to History.");
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        { if (!_closing) _status.Text = "Canceled. Your selected text is still here; no result was applied."; }
+        { if (!_closing) _status.Text = Loc.T("Canceled. Your selected text is still here; no result was applied."); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_closing) _status.Text = "Processing failed. Your selected text is still here. " + ex.Message; }
+        { if (!_closing) _status.Text = Loc.T("Processing failed. Your selected text is still here. {0}", ex.Message); }
         finally
         {
             await parentCancellation.DisposeAsync();
@@ -111,7 +111,7 @@ internal sealed class WorkflowShortcutWindow : Window
             lock (_cancelSync) { _run = null; callbacks = _cancelTask; }
             await ObserveCancellationAsync(callbacks);
             _cancelTask = Task.CompletedTask;
-            if (!_closing) { _copy.IsEnabled = true; _cancel.IsEnabled = true; _cancel.Content = "Done"; }
+            if (!_closing) { _copy.IsEnabled = true; _cancel.IsEnabled = true; _cancel.Content = Loc.T("Done"); }
         }
     }
     private void RequestCancel()
@@ -132,7 +132,7 @@ internal sealed class WorkflowShortcutWindow : Window
         _shutdownTask = completion.Task;
         _closing = true;
         _copy.IsEnabled = _cancel.IsEnabled = false;
-        _status.Text = "Finishing workflow cancellation…";
+        _status.Text = Loc.T("Finishing workflow cancellation…");
         RequestCancel();
         _ = ShutdownCoreAsync(completion);
         return completion.Task;

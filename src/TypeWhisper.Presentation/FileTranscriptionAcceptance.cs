@@ -19,14 +19,14 @@ public static class FileTranscriptionAcceptance
             try
             {
                 if (!history.TryAddRecord(record))
-                    warnings.Add("History could not be saved. Your transcript remains available here for export.");
+                    warnings.Add(Loc.T("History could not be saved. Your transcript remains available here for export."));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { warnings.Add("History could not be saved. Your transcript remains available here for export."); }
+            { warnings.Add(Loc.T("History could not be saved. Your transcript remains available here for export.")); }
         }
         try { if (recordUsage(result.AppliedSnippetIds) is { } warning) warnings.Add(warning); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { warnings.Add("Snippet usage could not be saved. Your transcript is unchanged."); }
+        { warnings.Add(Loc.T("Snippet usage could not be saved. Your transcript is unchanged.")); }
         return warnings.Count == 0 ? null : string.Join(" · ", warnings);
     }
 }

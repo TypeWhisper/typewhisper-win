@@ -18,33 +18,33 @@ internal sealed partial class LocalDictationSession
 
     internal async Task<string?> DownloadRegistryModelAsync(PortableDownloadableModel model)
     {
-        if (!Packages.Store.IsInstalled(model.PluginId)) return "Install this plugin in Integrations first.";
+        if (!Packages.Store.IsInstalled(model.PluginId)) return Loc.T("Install this plugin in Integrations first.");
         if (!CanChangeProvider || Models.Busy || RegistryModelDownload.State.IsClosing || !_gate.Wait(0))
-            return "Finish dictation and model operations before downloading a model.";
+            return Loc.T("Finish dictation and model operations before downloading a model.");
         ActiveRegistryModelDownload = model;
         try
         {
-            SetStatus("Downloading " + model.DisplayName + "…", DictationPhase.Configuring);
+            SetStatus(Loc.T("Downloading {0}…", model.DisplayName), DictationPhase.Configuring);
             await RegistryModelDownload.RunAsync(async (progress, ct) =>
             {
                 await _livePreview.StopAsync();
                 ct.ThrowIfCancellationRequested();
                 await PluginRuntime.DownloadModelAsync(model, progress, ct);
             });
-            if (_disposed) return "The application is shutting down.";
+            if (_disposed) return Loc.T("The application is shutting down.");
             await PluginRuntime.RefreshCapabilitiesAsync();
             return RegistryModelDownload.State.Succeeded ? null : RegistryModelDownload.State.Message;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            return "The model operation could not finish. Refresh its status and check the plugin's configuration.";
+            return Loc.T("The model operation could not finish. Refresh its status and check the plugin's configuration.");
         }
         finally
         {
             ActiveRegistryModelDownload = null;
             _gate.Release();
             if (!_disposed)
-                SetStatus(IsReady ? ModelReadyStatus() : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
+                SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose and configure a transcription provider in Dictation."), DictationPhase.Idle);
         }
     }
 
@@ -53,10 +53,10 @@ internal sealed partial class LocalDictationSession
     internal async Task<string?> RemoveLocalModelAsync(string modelId, long expectedGeneration)
     {
         if (!CanChangeProvider || Models.Busy || RegistryModelDownload.State.IsClosing || !_gate.Wait(0))
-            return "Finish dictation and model operations before removing a model.";
+            return Loc.T("Finish dictation and model operations before removing a model.");
         try
         {
-            SetStatus("Removing model…", DictationPhase.Configuring);
+            SetStatus(Loc.T("Removing model…"), DictationPhase.Configuring);
             await RegistryModelDownload.RunRemovalAsync(async ct =>
             {
                 await _livePreview.StopAsync();
@@ -68,39 +68,39 @@ internal sealed partial class LocalDictationSession
         finally
         {
             _gate.Release();
-            if (!_disposed) SetStatus(IsReady ? ModelReadyStatus() : "Choose a downloaded model in Dictation.", DictationPhase.Idle);
+            if (!_disposed) SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose a downloaded model in Dictation."), DictationPhase.Idle);
         }
     }
 
     internal async Task<string?> RemoveRegistryModelAsync(PortableDownloadableModel model)
     {
-        if (!Packages.Store.IsInstalled(model.PluginId)) return "This plugin is no longer installed.";
+        if (!Packages.Store.IsInstalled(model.PluginId)) return Loc.T("This plugin is no longer installed.");
         if (!CanChangeProvider || Models.Busy || RegistryModelDownload.State.IsClosing || !_gate.Wait(0))
-            return "Finish dictation and model operations before removing a model.";
+            return Loc.T("Finish dictation and model operations before removing a model.");
         ActiveRegistryModelDownload = model;
         try
         {
-            SetStatus("Removing " + model.DisplayName + "…", DictationPhase.Configuring);
+            SetStatus(Loc.T("Removing {0}…", model.DisplayName), DictationPhase.Configuring);
             await RegistryModelDownload.RunRemovalAsync(async ct =>
             {
                 await _livePreview.StopAsync();
                 ct.ThrowIfCancellationRequested();
                 await PluginRuntime.RemoveModelAsync(model, ct);
             });
-            if (_disposed) return "The application is shutting down.";
+            if (_disposed) return Loc.T("The application is shutting down.");
             await PluginRuntime.RefreshCapabilitiesAsync();
             return RegistryModelDownload.State.Succeeded ? null : RegistryModelDownload.State.Message;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            return "The model operation could not finish. Refresh its status before trying again.";
+            return Loc.T("The model operation could not finish. Refresh its status before trying again.");
         }
         finally
         {
             ActiveRegistryModelDownload = null;
             _gate.Release();
             if (!_disposed)
-                SetStatus(IsReady ? ModelReadyStatus() : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
+                SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose and configure a transcription provider in Dictation."), DictationPhase.Idle);
         }
     }
 
@@ -120,7 +120,7 @@ internal sealed partial class LocalDictationSession
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                saveError = "The plugin selected the model, but saving the dictation provider failed. Check the active provider in Dictation before recording.";
+                saveError = Loc.T("The plugin selected the model, but saving the dictation provider failed. Check the active provider in Dictation before recording.");
             }
         }, loadingModel: true);
         return error ?? saveError;

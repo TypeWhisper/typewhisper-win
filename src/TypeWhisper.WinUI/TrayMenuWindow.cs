@@ -19,7 +19,7 @@ internal sealed class TrayMenuWindow : Window
     internal TrayMenuWindow(MenuFlyout menu)
     {
         NativeWindowAppearance.ApplyAppTitleBar(this);
-        Title = "TypeWhisper tray menu";
+        Title = Loc.T("TypeWhisper tray menu");
         _presenter = new MenuFlyoutPresenter
         {
             Style = menu.MenuFlyoutPresenterStyle,
