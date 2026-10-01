@@ -863,7 +863,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
-                _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && Models.ActiveModelId == "parakeet-tdt-0.6b" && CtcVocabulary.Enabled;
+                _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && TypeWhisper.Core.Models.ParakeetModels.IsParakeetTdt(Models.ActiveModelId) && CtcVocabulary.Enabled;
                 if (_cloudStream is null && _earlyStopSamples is null && LivePreviewEnabled && SupportsLiveTranscription &&
                     (!UsesRegistryProvider || ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)))
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
