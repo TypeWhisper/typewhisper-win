@@ -2,7 +2,7 @@
 """Fill the Windows translation catalogs from the macOS string catalog.
 
 Both apps use the English text as the key, so a text that reads the same on both platforms can reuse the macOS
-translation. The script collects every Loc.T("...") text in src/, looks it up in Localizable.xcstrings and writes
+translation. The script collects every Loc.T("...") and Loc.Mark("...") text in src/, looks it up in Localizable.xcstrings and writes
 the matches to src/TypeWhisper.Core/Localization/<language>.json. Translations already in a catalog are kept.
 
     python eng/Import-MacTranslations.py path/to/typewhisper-mac/TypeWhisper/Resources/Localizable.xcstrings
@@ -18,7 +18,7 @@ from pathlib import Path
 LANGUAGES = ["de", "ja", "zh-Hans"]
 ROOT = Path(__file__).resolve().parent.parent
 CATALOGS = ROOT / "src" / "TypeWhisper.Core" / "Localization"
-CALL = re.compile(r'Loc\.T\(\s*"((?:[^"\\]|\\.)*)"')
+CALL = re.compile(r'Loc\.(?:T|Mark)\(\s*"((?:[^"\\]|\\.)*)"')
 ESCAPE = re.compile(r'\\(u[0-9A-Fa-f]{4}|.)')
 MAC_PLACEHOLDER = re.compile(r'%(?:(\d+)\$)?(?:\.(\d+))?(@|l{0,2}[du]|f)|%%')
 SIMPLE_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "0": "\0"}

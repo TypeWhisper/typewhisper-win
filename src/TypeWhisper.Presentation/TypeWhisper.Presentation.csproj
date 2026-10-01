@@ -7,4 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="../TypeWhisper.Core/TypeWhisper.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Using Include="TypeWhisper.Core" />
+  </ItemGroup>
 </Project>

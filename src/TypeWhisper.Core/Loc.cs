@@ -53,6 +53,12 @@ public static class Loc
     public static string T(string format, params object?[] arguments) =>
         string.Format(CultureInfo.CurrentCulture, T(format), arguments);
 
+    /// <summary>
+    /// Returns <paramref name="text"/> unchanged and registers it for translation. Use it where an English text
+    /// also serves as an identifier, and translate the value with <see cref="T(string)"/> where it is displayed.
+    /// </summary>
+    public static string Mark(string text) => text;
+
     /// <summary>Returns the translations shipped for <paramref name="language"/>, keyed by English text.</summary>
     public static IReadOnlyDictionary<string, string> Catalog(string language)
     {

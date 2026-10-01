@@ -84,7 +84,7 @@ public sealed partial class LocTests : IDisposable
         // An interpolated or verbatim string cannot be looked up; pass a literal with numbered placeholders.
         var offenders = SourceFiles().Where(file => UnsupportedCall().IsMatch(File.ReadAllText(file))).ToArray();
 
-        Assert.True(offenders.Length == 0, "Loc.T needs a plain string literal in:\n" + string.Join("\n", offenders));
+        Assert.True(offenders.Length == 0, "Loc.T and Loc.Mark need a plain string literal in:\n" + string.Join("\n", offenders));
     }
 
     public static TheoryData<string> Languages() => new(Translated);
@@ -107,10 +107,10 @@ public sealed partial class LocTests : IDisposable
             .Where(file => !file.Contains($"{separator}obj{separator}") && !file.Contains($"{separator}bin{separator}"));
     }
 
-    [GeneratedRegex("""Loc\.T\(\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
+    [GeneratedRegex("""Loc\.(?:T|Mark)\(\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
     private static partial Regex Call();
 
-    [GeneratedRegex("""Loc\.T\(\s*[$@]""")]
+    [GeneratedRegex("""Loc\.(?:T|Mark)\(\s*[$@]""")]
     private static partial Regex UnsupportedCall();
 
     [GeneratedRegex(@"\{\d+(:[^}]*)?\}")]
