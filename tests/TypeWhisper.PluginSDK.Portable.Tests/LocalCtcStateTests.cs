@@ -35,6 +35,21 @@ public sealed class LocalCtcStateTests : IDisposable
         Assert.False(runtime.Enabled);
     }
 
+    // The final decode pads 0.3 s of silence, so token timings can end after the captured audio (#576).
+    [Fact]
+    public void TimingsEndingInDecodePaddingAreFittedToTheCapturedAudio()
+    {
+        VocabularyTokenTiming[] timings = [new("Type", 0.4, 0.8), new("Whisper", 1.44, 1.92), new(".", 1.9, 2.1)];
+
+        var fitted = LocalCtcVocabulary.FitTimingsToAudio(timings, 1.83);
+
+        Assert.Equal(timings[0], fitted[0]);
+        Assert.Equal(new VocabularyTokenTiming("Whisper", 1.44, 1.83), fitted[1]);
+        Assert.Equal(1.83, fitted[2].EndSeconds);
+        Assert.True(fitted[2].StartSeconds < fitted[2].EndSeconds);
+        Assert.Same(timings, LocalCtcVocabulary.FitTimingsToAudio(timings, 2.1));
+    }
+
     [Fact]
     public async Task FailedActivationCanBeRetriedAndDependencyCanBeDisabled()
     {

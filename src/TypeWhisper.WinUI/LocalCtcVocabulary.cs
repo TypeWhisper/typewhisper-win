@@ -83,6 +83,7 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
     internal async Task<VocabularyOutcome> RefineAsync(Guid recording, string text, float[] audio,
         IReadOnlyList<VocabularyTokenTiming> timings, IReadOnlyList<TypeWhisper.Core.Models.DictionaryEntry> terms, CancellationToken ct = default)
     {
+        timings = FitTimingsToAudio(timings, audio.Length / 16000d);
         Trace($"{recording} host-start enabled={Enabled} samples={audio.Length} timings={timings.Count} terms={terms.Count}");
         if (timings.Count == 0 || terms.Count == 0 || audio.Length == 0)
             Trace($"{recording} pipeline-skipped reason={(timings.Count == 0 ? "no-token-timings" : terms.Count == 0 ? "no-terms" : "no-audio")}");
@@ -96,6 +97,20 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (OperationCanceledException) { Trace($"{recording} cancelled"); return new(text, false); }
         catch (ObjectDisposedException) { Trace($"{recording} disposed"); return new(text, false); }
+    }
+    /// <summary>
+    /// The final decode appends silence (ShortClipCapturePolicy.PadForFinalDecode), so the last tokens can end
+    /// after the captured audio, which the rescorer rejects. Pulls them back inside it.
+    /// </summary>
+    internal static IReadOnlyList<VocabularyTokenTiming> FitTimingsToAudio(IReadOnlyList<VocabularyTokenTiming> timings, double audioSeconds)
+    {
+        const double minimumTokenSeconds = 0.01;
+        if (timings.Count == 0 || timings[^1].EndSeconds <= audioSeconds || audioSeconds <= minimumTokenSeconds) return timings;
+        return timings.Select(timing =>
+        {
+            if (timing.EndSeconds <= audioSeconds) return timing;
+            return timing with { StartSeconds = Math.Min(timing.StartSeconds, audioSeconds - minimumTokenSeconds), EndSeconds = audioSeconds };
+        }).ToArray();
     }
     private static async Task ObserveCancellationAsync(Task callbacks)
     {

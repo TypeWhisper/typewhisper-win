@@ -20,10 +20,12 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
         _sut = new SpokenFormattingStrategyResolver(_profileStore, new SpokenFormattingRulesLoader());
     }
 
-    [Fact]
-    public void Resolve_MissingProfile_DefaultsToNative()
+    [Theory]
+    [InlineData("parakeet-tdt-0.6b")]
+    [InlineData("parakeet-ultra-0.6b")]
+    public void Resolve_MissingProfile_DefaultsToNative(string modelId)
     {
-        var result = _sut.Resolve("sherpa-onnx", "parakeet-tdt-0.6b", ["de"], null);
+        var result = _sut.Resolve("sherpa-onnx", modelId, ["de"], null);
 
         Assert.NotNull(result);
         Assert.Equal("de", result.LanguageCode);
