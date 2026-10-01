@@ -25,6 +25,33 @@ public class HybridHotkeyStateTests
     }
 
     [Fact]
+    public void ChordSentWithGenericModifierKeysStartsDictation()
+    {
+        // Gesture and macro tools send VK_CONTROL, VK_SHIFT and VK_MENU instead of the left or right keys.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+ALT+SHIFT+M") };
+        Assert.Null(state.Key(0x11, true, 0, bindings));
+        Assert.Null(state.Key(0x10, true, 0, bindings));
+        Assert.Null(state.Key(0x12, true, 0, bindings));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x4D, true, 0, bindings));
+        Assert.Null(state.Key(0x4D, false, 1, bindings, true));
+        Assert.Null(state.Key(0x12, false, 1, bindings, true));
+        Assert.Null(state.Key(0x10, false, 1, bindings, true));
+        Assert.Null(state.Key(0x11, false, 1, bindings, true));
+        state.Key(0x11, true, 500, bindings, true);
+        state.Key(0x10, true, 500, bindings, true);
+        state.Key(0x12, true, 500, bindings, true);
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x4D, true, 500, bindings, true));
+    }
+
+    [Theory]
+    [InlineData(0x10u, TypeWhisper.WinUI.Platform.OwnKeyboardInput.Marker, true)]
+    [InlineData(0x10u, 0u, false)]
+    [InlineData(0x00u, TypeWhisper.WinUI.Platform.OwnKeyboardInput.Marker, false)]
+    public void OnlyInjectedKeysWithOurMarkerAreSkipped(uint flags, uint extra, bool own) =>
+        Assert.Equal(own, TypeWhisper.WinUI.Platform.OwnKeyboardInput.Sent(flags, extra));
+
+    [Fact]
     public void TypingWithAltGrDoesNotStartAModifierOnlyCtrlAltShortcut()
     {
         var state = new HybridHotkeyState();

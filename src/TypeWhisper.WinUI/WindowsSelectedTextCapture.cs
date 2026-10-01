@@ -98,7 +98,7 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
         public Task DelayAsync(TimeSpan delay, CancellationToken ct) => Task.Delay(delay, ct);
     }
 
-    private static Input Key(ushort key, bool up) => new() { Type = 1, Data = new InputUnion { Keyboard = new KeyboardInput { Key = key, Flags = up ? 2u : 0u } } };
+    private static Input Key(ushort key, bool up) => new() { Type = 1, Data = new InputUnion { Keyboard = new KeyboardInput { Key = key, Flags = up ? 2u : 0u, Extra = OwnKeyboardInput.Marker } } };
     [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputUnion Data; }
     [StructLayout(LayoutKind.Explicit)] private struct InputUnion
     {

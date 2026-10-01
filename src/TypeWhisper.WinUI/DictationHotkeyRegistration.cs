@@ -39,13 +39,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                 var pressed = message.ToInt64() is 0x100 or 0x104;
                 // A real left Ctrl or the right Alt release also ends AltGr, in case its Ctrl release was missed.
                 if (key.Key == 0xA2 || key.Key == 0xA5 && !pressed) AltGrControlDown = altGr && pressed;
-                var acceptInjectedProbeInput = false;
-#if DEBUG
-                // Computer Use emits injected keys. Accept them only in the explicit
-                // named-profile probe, whose session path returns before any audio work.
-                acceptInjectedProbeInput = LocalDictationSession.WorkflowProbeEnabled || LocalDictationSession.CorrectionProbeEnabled;
-#endif
-                if ((key.Flags & 0x10) == 0 || acceptInjectedProbeInput)
+                // Keys injected by other tools count like physical ones; only our own paste, copy and media keys are skipped.
+                if (!OwnKeyboardInput.Sent(key.Flags, key.Extra))
                 {
                     var down = message.ToInt64() is 0x100 or 0x104;
                     var up = message.ToInt64() is 0x101 or 0x105;
