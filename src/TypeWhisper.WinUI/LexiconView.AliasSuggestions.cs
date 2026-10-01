@@ -49,7 +49,7 @@ public sealed partial class LexiconView
             HorizontalAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(modelPicker, Loc.T("Local language model"));
         var status = Text(models.Length == 0
-            ? Loc.T("No local language model is ready. Enable a local LLM such as Gemma in Plugins, then download and load a model.")
+            ? Loc.T("No local language model is ready. Enable Local LLM in Plugins, then download and load a model.")
             : "", 12, true);
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         var progress = new ProgressBar { IsIndeterminate = true, Visibility = Visibility.Collapsed };

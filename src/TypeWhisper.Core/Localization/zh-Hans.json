@@ -1403,7 +1403,7 @@
   "No entries match your search or filters.": "没有符合搜索或筛选条件的条目。",
   "No folder selected": "未选择文件夹",
   "No installed Windows voice is available. Install a voice through Windows settings before testing.": "没有可用的已安装 Windows 语音。测试前请先通过 Windows 设置安装语音。",
-  "No local language model is ready. Enable a local LLM such as Gemma in Plugins, then download and load a model.": "没有可用的本地语言模型。请在“插件”中启用 Gemma 等本地 LLM，然后下载并加载模型。",
+  "No local language model is ready. Enable Local LLM in Plugins, then download and load a model.": "没有可用的本地语言模型。请在插件中启用 Local LLM，然后下载并加载模型。",
   "No local text models are currently available. Re-enable the plugin or reopen this page to retry.": "当前没有可用的本地文本模型。请重新启用插件或重新打开此页面后重试。",
   "No matches.": "没有匹配项。",
   "No matching entries": "没有匹配的条目",

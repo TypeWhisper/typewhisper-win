@@ -1403,7 +1403,7 @@
   "No entries match your search or filters.": "検索またはフィルタに一致する項目はありません。",
   "No folder selected": "フォルダが選択されていません",
   "No installed Windows voice is available. Install a voice through Windows settings before testing.": "利用できるWindowsの音声がインストールされていません。テストする前に、Windowsの設定から音声をインストールしてください。",
-  "No local language model is ready. Enable a local LLM such as Gemma in Plugins, then download and load a model.": "使用できるローカル言語モデルがありません。「プラグイン」でGemmaなどのローカルLLMを有効にし、モデルをダウンロードして読み込んでください。",
+  "No local language model is ready. Enable Local LLM in Plugins, then download and load a model.": "ローカルの言語モデルが準備できていません。プラグインで Local LLM を有効にしてから、モデルをダウンロードして読み込んでください。",
   "No local text models are currently available. Re-enable the plugin or reopen this page to retry.": "現在利用できるローカルテキストモデルがありません。プラグインを有効にし直すか、このページを開き直してもう一度お試しください。",
   "No matches.": "一致する項目はありません。",
   "No matching entries": "一致する項目はありません",

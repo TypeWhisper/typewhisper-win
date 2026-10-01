@@ -1403,7 +1403,7 @@
   "No entries match your search or filters.": "Keine Einträge entsprechen deiner Suche oder deinen Filtern.",
   "No folder selected": "Kein Ordner ausgewählt",
   "No installed Windows voice is available. Install a voice through Windows settings before testing.": "Es ist keine installierte Windows-Stimme verfügbar. Installiere vor dem Testen eine Stimme über die Windows-Einstellungen.",
-  "No local language model is ready. Enable a local LLM such as Gemma in Plugins, then download and load a model.": "Kein lokales Sprachmodell ist bereit. Aktiviere unter „Plugins“ ein lokales LLM wie Gemma, lade dann ein Modell herunter und lade es.",
+  "No local language model is ready. Enable Local LLM in Plugins, then download and load a model.": "Kein lokales Sprachmodell ist bereit. Aktiviere Local LLM unter Plugins, lade dann ein Modell herunter und lade es.",
   "No local text models are currently available. Re-enable the plugin or reopen this page to retry.": "Derzeit sind keine lokalen Textmodelle verfügbar. Aktiviere das Plugin erneut oder öffne diese Seite noch einmal, um es erneut zu versuchen.",
   "No matches.": "Keine Treffer.",
   "No matching entries": "Keine passenden Einträge",

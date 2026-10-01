@@ -71,8 +71,8 @@ in Dictionary or Snippets to review and add your existing entries. See the
 In Dictionary, choose **Suggest aliases…**, or use a word's or correction group's
 context menu to start with its spelling. Enter the correct term, choose German
 or English as the spoken language, and generate suggestions with a loaded local
-language model. For example, enable Gemma in Plugins and download and load a
-model first. This feature only uses local LLMs, even if your default workflow
+language model. For example, enable Local LLM in Plugins and download and load
+a Gemma 4, Qwen3.5 or LFM2.5 model first. This feature only uses local LLMs, even if your default workflow
 provider is a cloud service.
 
 Select the misheard variants you want to replace, then choose **Save aliases**.
