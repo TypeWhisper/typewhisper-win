@@ -7,11 +7,32 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
 {
     /// <summary>Opaque authorization callback; never include its query in diagnostics.</summary>
     public Uri? AccountCallback { get; init; }
+    /// <summary>The settings page requested with --page, as the category the settings window shows.</summary>
+    public string? SettingsCategory { get; init; }
     /// <summary>Redacts authorization callback data from diagnostic output.</summary>
     public override string ToString() => $"Activation: {Route ?? "default"}; account callback: {AccountCallback is not null}";
     /// <summary>Maximum files in one activation.</summary>
     public const int MaximumFiles = 20;
     private static readonly string[] Routes = ["--account", "--sync-backup", "--dashboard", "--statistics", "--dictionary", "--snippets", "--files", "--setup", "--compare-selects", "--settings"];
+    // Page names stay English and stable; the categories are the settings window's own.
+    private static readonly Dictionary<string, string> SettingsPages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["home"] = "Home", ["general"] = "General", ["appearance"] = "Appearance", ["dictation"] = "Dictation", ["audio"] = "Audio",
+        ["recovery"] = "Files & recovery", ["shortcuts"] = "Shortcuts", ["file-transcription"] = "File transcription",
+        ["recorder"] = "Recorder", ["history"] = "Privacy", ["statistics"] = "Statistics", ["dictionary"] = "Dictionary",
+        ["snippets"] = "Snippets", ["workflows"] = "Workflows", ["premium"] = "Premium", ["plugins"] = "Integrations",
+        ["sync-backup"] = "Sync & backup", ["advanced"] = "Advanced", ["about"] = "Account & about"
+    };
+
+    /// <summary>Maps a --page name to a settings category; "plugin:&lt;id&gt;" opens that plugin's page.</summary>
+    public static string? SettingsCategoryFor(string page)
+    {
+        if (SettingsPages.TryGetValue(page, out var category)) return category;
+        const string plugin = "plugin:";
+        if (!page.StartsWith(plugin, StringComparison.OrdinalIgnoreCase)) return null;
+        var id = page[plugin.Length..];
+        return id.Length is > 0 and <= 128 && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_') ? plugin + id : null;
+    }
 
     /// <summary>Parses already separated arguments, excluding the executable name.</summary>
     public static ApplicationActivationRequest Parse(IEnumerable<string> arguments, bool startup = false)
@@ -22,6 +43,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
                 ? new(null, [], null, true) { AccountCallback = callback } : Failure(Loc.T("Invalid account callback."));
         if (args.Length >= 128 || args.Sum(value => (long)value.Length) > 32767) return Failure(Loc.T("Too many activation arguments."));
         string? route = null;
+        string? category = null;
         var paths = new List<string>();
         bool minimized = startup;
         for (int i = 0; i < args.Length; i++)
@@ -33,6 +55,14 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
                 var next = value.ToLowerInvariant();
                 if (route is not null && route != next) return Failure(Loc.T("Choose one navigation destination per activation."));
                 route = next; continue;
+            }
+            if (value.Equals("--page", StringComparison.OrdinalIgnoreCase))
+            {
+                if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal)) return Failure(Loc.T("Provide a page name after --page."));
+                if (category is not null || route is not null && route != "--settings") return Failure(Loc.T("Choose one navigation destination per activation."));
+                category = SettingsCategoryFor(args[++i]);
+                if (category is null) return Failure(Loc.T("Unknown settings page: {0}", args[i]));
+                route = "--settings"; continue;
             }
             if (value.Equals("--transcribe-file", StringComparison.OrdinalIgnoreCase))
             {
@@ -54,7 +84,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
         }
         if (paths.Count > 0 && route is not null && route != "--files") return Failure(Loc.T("File activation cannot be combined with another destination."));
         return new(paths.Count > 0 ? "--files" : route, Array.AsReadOnly(paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()), null,
-            paths.Count > 0 || route is not null || !minimized);
+            paths.Count > 0 || route is not null || !minimized) { SettingsCategory = paths.Count > 0 ? null : category };
     }
 
     private static bool AbsoluteWindowsPath(string path) =>
