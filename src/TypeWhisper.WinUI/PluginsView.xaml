@@ -13,15 +13,16 @@
             </Border>
             <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
                 <TextBlock x:Name="PluginPageTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Border x:Name="PluginKindPill" Background="{ThemeResource ElevatedBrush}" CornerRadius="6" Padding="8,3" Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Border x:Name="PluginKindPill" Margin="0,0,6,0" Background="{ThemeResource ElevatedBrush}" CornerRadius="6" Padding="8,3" Visibility="Collapsed">
                         <TextBlock x:Name="PluginKind" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}" />
                     </Border>
-                    <Border x:Name="PluginSummaryPill" Background="{ThemeResource ElevatedBrush}" CornerRadius="6" Padding="8,3">
+                    <Border x:Name="PluginSummaryPill" Grid.Column="1" Background="{ThemeResource ElevatedBrush}" CornerRadius="6" Padding="8,3">
                         <TextBlock x:Name="PluginSummary" Text="Loading installed plugins…" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource MutedBrush}" />
                     </Border>
-                    <TextBlock x:Name="PluginMeta" Margin="4,0,0,0" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" Visibility="Collapsed" />
-                </StackPanel>
+                    <TextBlock x:Name="PluginMeta" Grid.Column="2" Margin="10,0,0,0" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                </Grid>
             </StackPanel>
             <ContentControl x:Name="SettingsPluginActions" Grid.Column="2" VerticalAlignment="Center" />
             <TextBlock x:Name="PluginDescription" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" Visibility="Collapsed" />

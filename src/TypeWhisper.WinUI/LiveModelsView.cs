@@ -114,8 +114,11 @@ internal sealed class LiveModelsView : UserControl
         badgeText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; badgeText.Foreground = Brush("AccentBrush");
         var badge = new Border { Child = badgeText, Padding = new Thickness(8, 2, 8, 3), CornerRadius = new CornerRadius(6),
             Background = Brush("ElevatedBrush"), VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
-        var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        title.Children.Add(name); title.Children.Add(badge);
+        // Left-aligned, the star column is as wide as the name but still wraps a long one.
+        var title = new Grid { ColumnSpacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
+        title.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+        title.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        title.Children.Add(name); Grid.SetColumn(badge, 1); title.Children.Add(badge);
         copy.Children.Add(title);
         var languages = Button(Loc.T("{0} languages", model.LanguageCount), Loc.T("Languages supported by {0}", model.DisplayName));
         languages.Padding = new Thickness(0); languages.BorderThickness = new Thickness(0); languages.MinHeight = 0;
