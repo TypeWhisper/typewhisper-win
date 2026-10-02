@@ -21,8 +21,9 @@ public sealed partial class PluginsView
         InstalledUpdateButton.Content = updates.Busy ? Loc.T("Updating...") : _updating ? Loc.T("Restarting...")
             : count > 0 ? Loc.T("Update all ({0})", count) : Loc.T("Restart now");
         InstalledUpdateButton.IsEnabled = !_updating && !updates.Busy && _runtime.CanChangeProvider && !_changingPlugin;
-        UpdateNotice.Text = _updateError ?? updates.Status ?? "";
-        UpdateNotice.Visibility = (_updateError ?? updates.Status) is not null ? Visibility.Visible : Visibility.Collapsed;
+        var notice = _updateError ?? PluginUpdateStatus.Text(updates);
+        UpdateNotice.Text = notice ?? "";
+        UpdateNotice.Visibility = notice is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void InstalledUpdate_Click(object sender, RoutedEventArgs e)

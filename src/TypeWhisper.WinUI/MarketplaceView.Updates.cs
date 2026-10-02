@@ -14,8 +14,9 @@ public sealed partial class MarketplaceView
             ? Visibility.Visible : Visibility.Collapsed;
         MarketUpdateAllButton.Content = updates.Busy ? Loc.T("Updating...") : count > 0 ? Loc.T("Update all ({0})", count) : Loc.T("Restart now");
         MarketUpdateAllButton.IsEnabled = !updates.Busy && !_restarting && _installation is null && _runtime.CanChangeProvider;
-        UpdateNotice.Text = _bulkError ?? updates.Status ?? "";
-        UpdateNotice.Visibility = !IsDetail && (_bulkError ?? updates.Status) is not null ? Visibility.Visible : Visibility.Collapsed;
+        var notice = _bulkError ?? PluginUpdateStatus.Text(updates);
+        UpdateNotice.Text = notice ?? "";
+        UpdateNotice.Visibility = !IsDetail && notice is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void MarketUpdateAll_Click(object sender, RoutedEventArgs e)

@@ -118,6 +118,7 @@ public sealed partial class MainWindow : Window
                 WinUICloudSync.Initialize(DispatcherQueue);
             }
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
+            _ = UpdatePluginsAutomaticallyAsync();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
     }
@@ -533,7 +534,8 @@ public sealed partial class MainWindow : Window
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
                 LiveLanguageSettings.Configure(category, content, pickers, AppLanguage.Store, RestartWhenIdleAsync);
-                LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates);
+                LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates,
+                    _dictation.Packages.Updates, PluginAutoUpdates, () => _dictation.CanChangeProvider, RestartWhenIdleAsync);
                 if (category == "Advanced")
                 {
                     AdvancedSettingsPage.Render(content, pickers, _dictation, _httpApi);

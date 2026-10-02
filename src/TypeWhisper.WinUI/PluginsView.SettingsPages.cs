@@ -122,7 +122,7 @@ public sealed partial class PluginsView
             finally { _changingPlugin = false; await RefreshRuntimeAsync(); }
         }
         toggle.Click += async (_, _) => await Run(() => _management!.SetEnabledAsync(row.Plugin.Id, !row.Plugin.Enabled));
-        update.Click += async (_, _) => await Run(async () => { await _runtime!.Packages.Updates.UpdateAsync(Path.GetFileName(row.Plugin.Id)); return _runtime.Packages.Updates.Status; });
+        update.Click += async (_, _) => await Run(async () => { await _runtime!.Packages.Updates.UpdateAsync(Path.GetFileName(row.Plugin.Id)); return PluginUpdateStatus.Text(_runtime.Packages.Updates); });
         remove.Click += async (_, _) =>
         {
             var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Uninstall {0}?", row.Plugin.Title),
