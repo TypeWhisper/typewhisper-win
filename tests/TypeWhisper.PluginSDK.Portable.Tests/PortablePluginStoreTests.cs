@@ -53,9 +53,16 @@ public sealed class PortablePluginStoreTests : IDisposable
         var first = Entry("1.1.0") with { Name = "First", Sha256 = new string('a', 64) };
         var second = Entry("1.1.0", id: otherId) with { Name = "Second" };
         var updates = new PortablePluginUpdates(store, new(_http), new(1, 1, 0), PortablePluginCatalog.Architecture);
+        Assert.False(updates.Checked);
+        // The fixture serves a package, not a catalog: a failed check reports no new catalog.
+        Assert.False(await updates.RefreshAsync());
+        Assert.True(updates.CheckFailed);
         updates.AcceptCatalog([first, second]);
+        Assert.False(updates.CheckFailed);
+        Assert.True(updates.Checked);
         Assert.Equal(2, updates.Available.Count);
         await updates.UpdateAsync();
+        Assert.Equal(["First"], updates.Failed);
         Assert.False(store.PendingRestart(Id));
         Assert.True(store.PendingRestart(otherId));
         Assert.Equal(Id, Assert.Single(updates.Available).Id);
@@ -104,6 +111,7 @@ public sealed class PortablePluginStoreTests : IDisposable
         Assert.Equal("1.0.0", store.InstalledVersion(Id));
         updates.AcceptCatalog([offered]);
         await updates.UpdateAsync(Id);
+        Assert.Empty(updates.Failed);
         Assert.True(updates.RestartRequired);
         await updates.ShutdownAsync();
     }

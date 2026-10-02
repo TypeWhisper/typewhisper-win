@@ -169,7 +169,7 @@ public sealed partial class MarketplaceView : UserControl
         MarketAccess.Text = item.Plugin.Permissions;
         MarketCompatibility.Text = Loc.T("Version {0} · Minimum host {1}", item.Plugin.Version, item.Plugin.MinimumHostVersion);
         MarketStatus.Text = busy ? Loc.T("Installing…") : _error is not null ? pending ? Loc.T("Restart unavailable") : Loc.T("Installation failed") : pending ? Loc.T("Restart required") : !item.Supported ? Loc.T("Not compatible") : update ? Loc.T("Update available") : installed ? Loc.T("Installed") : Loc.T("Available");
-        MarketStatusExplanation.Text = _error ?? (busy ? _runtime.Packages.Updates.Busy ? _runtime.Packages.Updates.Status : _operationMessage ?? Loc.T("Preparing installation…")
+        MarketStatusExplanation.Text = _error ?? (busy ? _runtime.Packages.Updates.Busy ? PluginUpdateStatus.Text(_runtime.Packages.Updates) : _operationMessage ?? Loc.T("Preparing installation…")
             : pending ? Loc.T("Restart TypeWhisper to use the update. The current version remains available until then.")
             : !item.Supported ? Loc.T("This package does not support your TypeWhisper version or Windows architecture.")
             : installed && !update ? Loc.T("Open plugin settings to finish setup or manage its models.")
