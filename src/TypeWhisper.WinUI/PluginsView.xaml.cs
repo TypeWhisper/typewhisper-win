@@ -48,7 +48,7 @@ public sealed partial class PluginsView : UserControl
             _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? Loc.T("An installed plugin package could not be read."),
                 "plugin", "", "", manifest?.Version ?? "Unknown", manifest?.MinHostVersion ?? "0.0.0")
             {
-                Enabled = enabled, RuntimeCanToggle = state.CanToggle,
+                Enabled = enabled, RuntimeCanToggle = state.CanToggle, Author = manifest?.Author, IsLocal = manifest?.IsLocal == true,
                 Status = RuntimeUpdateStatus(manifest?.Id) ?? (state.Busy ? Loc.T("Updating…") : error is not null ? Loc.T("Needs attention") : setupRequired ? Loc.T("Setup required") : enabled ? Loc.T("Ready") : Loc.T("Disabled"))
             });
         }

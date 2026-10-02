@@ -35,7 +35,7 @@ public sealed partial class PluginsView
             }
             row.Plugin = plugin;
             row.Status.Text = plugin.Status;
-            row.Toggle.Content = plugin.Enabled ? Loc.T("Disable plugin") : Loc.T("Enable plugin");
+            row.Toggle.Content = plugin.Enabled ? Loc.T("Disable") : Loc.T("Enable");
             AutomationProperties.SetName(row.Toggle, plugin.Enabled ? Loc.T("Disable {0}", plugin.Title) : Loc.T("Enable {0}", plugin.Title));
             row.Toggle.IsEnabled = plugin.RuntimeCanToggle && !_changingPlugin && !_runtime.CtcVocabulary.Busy && _runtime.CanChangeProvider;
             row.Remove.IsEnabled = !_changingPlugin && _runtime.CanChangeProvider && !_runtime.Models.Busy && !_runtime.CtcVocabulary.Busy;
@@ -49,6 +49,13 @@ public sealed partial class PluginsView
             {
                 PluginPageTitle.Text = plugin.Title;
                 PluginSummary.Text = plugin.Status;
+                PluginIcon.PluginId = id;
+                // Manifests only declare on-device plugins; the rest are not reliably cloud services.
+                PluginKind.Text = Loc.T("Local");
+                PluginKindPill.Visibility = plugin.IsLocal ? Visibility.Visible : Visibility.Collapsed;
+                PluginMeta.Text = string.Join(" · ", new[] { "v" + plugin.Version, plugin.Author }.Where(part => !string.IsNullOrWhiteSpace(part)));
+                PluginDescription.Text = plugin.Description;
+                PluginIconTile.Visibility = PluginMeta.Visibility = PluginDescription.Visibility = Visibility.Visible;
                 SettingsPluginActions.Content = row.Options;
                 row.Settings.Content ??= CreatePluginSettings(plugin);
             }
@@ -59,6 +66,7 @@ public sealed partial class PluginsView
             CloseSettingsPage();
             PluginPageTitle.Text = Loc.T("Plugin unavailable");
             PluginSummary.Text = Loc.T("Choose another integration from the sidebar.");
+            PluginIconTile.Visibility = PluginKindPill.Visibility = PluginMeta.Visibility = PluginDescription.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -75,7 +83,7 @@ public sealed partial class PluginsView
     private void SetProfileLayout(bool profile)
     {
         // The plugin summary describes its default provider, not the profile being edited.
-        PluginSummary.Visibility = profile ? Visibility.Collapsed : Visibility.Visible;
+        PluginSummaryPill.Visibility = profile ? Visibility.Collapsed : Visibility.Visible;
         PluginContentScroll.VerticalScrollMode = profile ? ScrollMode.Disabled : ScrollMode.Auto;
         PluginContentScroll.VerticalScrollBarVisibility = profile ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
         ContextActionsFooter.Visibility = profile ? Visibility.Collapsed : Visibility.Visible;
@@ -88,16 +96,12 @@ public sealed partial class PluginsView
         var body = new Grid { RowSpacing = 8 };
         body.RowDefinitions.Add(new() { Height = GridLength.Auto });
         body.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
-        var actions = new StackPanel { Spacing = 8 };
-        actions.Children.Add(new TextBlock { Text = plugin.Description, TextWrapping = TextWrapping.Wrap, FontSize = 12, MaxWidth = 280 });
-        var toggle = SettingsButton(Loc.T("Enable plugin"));
-        var update = SettingsButton(Loc.T("Update plugin"));
+        var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var toggle = SettingsButton(Loc.T("Enable"));
+        var update = SettingsButton(Loc.T("Update"));
         var remove = SettingsButton(Loc.T("Uninstall…"));
-        actions.Children.Add(toggle); actions.Children.Add(update); actions.Children.Add(remove);
-        var options = SettingsButton("•••");
-        AutomationProperties.SetName(options, Loc.T("Manage {0}", plugin.Title));
-        ToolTipService.SetToolTip(options, Loc.T("Manage plugin"));
-        options.Flyout = new Flyout { Content = actions };
+        AutomationProperties.SetName(update, Loc.T("Update plugin"));
+        options.Children.Add(update); options.Children.Add(toggle); options.Children.Add(remove);
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed };
         AutomationProperties.SetLiveSetting(message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         body.Children.Add(message);
@@ -111,7 +115,6 @@ public sealed partial class PluginsView
             _changingPlugin = true; RefreshSettingsPages();
             try
             {
-                options.Flyout?.Hide();
                 if (settings.Content is LivePortablePluginSettings editor && !await editor.CanLeaveAsync()) return;
                 if (_runtime?.CanChangeProvider != true) return;
                 var error = await operation();
@@ -152,13 +155,13 @@ public sealed partial class PluginsView
         Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], HorizontalAlignment = HorizontalAlignment.Left };
 
     private sealed class SettingsRow(Plugin plugin, Border page, TextBlock status, HandCursorButton toggle,
-        HandCursorButton update, HandCursorButton remove, ContentControl settings, HandCursorButton options)
+        HandCursorButton update, HandCursorButton remove, ContentControl settings, StackPanel options)
     {
         internal Plugin Plugin = plugin;
         internal readonly Border Page = page;
         internal readonly TextBlock Status = status;
         internal readonly HandCursorButton Toggle = toggle, Update = update, Remove = remove;
         internal readonly ContentControl Settings = settings;
-        internal readonly HandCursorButton Options = options;
+        internal readonly StackPanel Options = options;
     }
 }

@@ -5,11 +5,26 @@
     xmlns:local="using:TypeWhisper.WinUI">
     <Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-        <Grid Margin="12,0,12,12" MinHeight="32" ColumnSpacing="12">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <TextBlock x:Name="PluginPageTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="PluginSummary" Grid.Column="1" Text="Loading installed plugins…" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+        <Grid Margin="12,0,12,12" MinHeight="32" ColumnSpacing="14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Border x:Name="PluginIconTile" Width="46" Height="46" CornerRadius="11" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" VerticalAlignment="Center" Visibility="Collapsed">
+                <local:PluginBrandIcon x:Name="PluginIcon" Width="24" Height="24" />
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                <TextBlock x:Name="PluginPageTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Border x:Name="PluginKindPill" Background="{ThemeResource ElevatedBrush}" CornerRadius="6" Padding="8,3" Visibility="Collapsed">
+                        <TextBlock x:Name="PluginKind" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}" />
+                    </Border>
+                    <Border x:Name="PluginSummaryPill" Background="{ThemeResource ElevatedBrush}" CornerRadius="6" Padding="8,3">
+                        <TextBlock x:Name="PluginSummary" Text="Loading installed plugins…" FontSize="11" FontWeight="SemiBold" Foreground="{ThemeResource MutedBrush}" />
+                    </Border>
+                    <TextBlock x:Name="PluginMeta" Margin="4,0,0,0" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" Visibility="Collapsed" />
+                </StackPanel>
+            </StackPanel>
             <ContentControl x:Name="SettingsPluginActions" Grid.Column="2" VerticalAlignment="Center" />
+            <TextBlock x:Name="PluginDescription" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
         </Grid>
         <ScrollViewer x:Name="PluginContentScroll" Grid.Row="1" Margin="0,10,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
             <Grid x:Name="SettingsPages" Margin="4,4,4,0" />
