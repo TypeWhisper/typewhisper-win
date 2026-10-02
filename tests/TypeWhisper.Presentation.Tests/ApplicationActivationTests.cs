@@ -27,6 +27,36 @@ public sealed class ApplicationActivationTests
     }
 
     [Theory]
+    [InlineData("advanced", "Advanced")]
+    [InlineData("History", "Privacy")]
+    [InlineData("recovery", "Files & recovery")]
+    [InlineData("plugin:com.typewhisper.sherpa-onnx", "plugin:com.typewhisper.sherpa-onnx")]
+    public void PageOpensTheNamedSettingsPage(string page, string category)
+    {
+        var request = ApplicationActivationRequest.Parse(["--settings", "--page", page], startup: true);
+        Assert.Null(request.Error);
+        Assert.Equal("--settings", request.Route);
+        Assert.Equal(category, request.SettingsCategory);
+        Assert.True(request.ShowWindow);
+    }
+
+    [Theory]
+    [InlineData("--page")]
+    [InlineData("--page", "--settings")]
+    [InlineData("--page", "unknown")]
+    [InlineData("--page", "plugin:")]
+    [InlineData("--page", "plugin:../other")]
+    [InlineData("--page", "advanced", "--page", "about")]
+    [InlineData("--dictionary", "--page", "advanced")]
+    [InlineData("--page", "advanced", "--dictionary")]
+    public void PageRejectsMissingUnknownOrConflictingDestinations(params string[] arguments)
+    {
+        var request = ApplicationActivationRequest.Parse(arguments);
+        Assert.NotNull(request.Error);
+        Assert.Null(request.SettingsCategory);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void FailedRequestIsConsumedAndLaterRequestsContinueEvenIfReportingFails(bool reportingFails)
