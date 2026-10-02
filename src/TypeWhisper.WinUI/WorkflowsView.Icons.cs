@@ -45,7 +45,6 @@ public sealed partial class WorkflowsView
         _iconPicker.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
         _iconPicker.HorizontalAlignment = HorizontalAlignment.Left;
         _iconPicker.Flyout = flyout;
-        ConfigIconHost.Child = _iconPicker;
         SetDraftIcon("workflow");
     }
 
@@ -55,7 +54,7 @@ public sealed partial class WorkflowsView
         var label = Loc.T(WorkflowIcons.All.First(choice => choice.Id == _draftIcon).Label);
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         content.Children.Add(new TypeWhisperGlyph { Kind = _draftIcon, Width = 20, Height = 20 });
-        content.Children.Add(new TextBlock { Text = Loc.T("Icon · {0}", label), VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
         _iconPicker.Content = content;
         AutomationProperties.SetName(_iconPicker, Loc.T("Choose workflow icon: {0}", label));
         foreach (var button in _iconChoices)

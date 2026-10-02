@@ -11,13 +11,10 @@ internal static class LiveCancellationBehaviorSettings
     // Fills the Advanced page's Recording row.
     internal static void Configure(StackPanel content, List<ChoicePicker> pickers, LocalDictationSession session)
     {
-        var row = FindRow(content) ?? throw new InvalidOperationException("Cancellation behavior settings row is missing.");
-        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
-        row.Children.Clear();
-        row.Children.Add(SettingsHelp.Label(Loc.T("Cancellation behavior"), Hint));
+        var row = SettingsRow.Require(content, "CancellationBehavior").Reset(pickers);
         var picker = new ChoicePicker();
         picker.Configure(Loc.T("Cancellation behavior"), "microphone", Loc.T("Cancellation behavior"));
-        var status = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        row.Set(Loc.T("Cancellation behavior"), Hint, picker);
         void Refresh()
         {
             picker.SetOptions([
@@ -25,22 +22,14 @@ internal static class LiveCancellationBehaviorSettings
                 new("Single", Loc.T("Single"), Loc.T("Press Esc once to cancel.")),
                 new("Instant", Loc.T("Instant"), Loc.T("Press Esc once to cancel, without a banner."))
             ], session.EscapeCancelPreferences.Current.ToString());
-            status.Text = session.EscapeCancelPreferences.Error ?? Loc.T("Saved for this profile. Esc reaches the focused app while TypeWhisper is idle.");
+            row.Status = session.EscapeCancelPreferences.Error ?? "";
         }
         picker.SelectionChanged += id =>
         {
             if (Enum.TryParse<EscapeCancelBehavior>(id, out var behavior)) session.SelectEscapeCancelBehavior(behavior);
             Refresh();
         };
-        row.Children.Add(picker); row.Children.Add(status); pickers.Add(picker);
+        pickers.Add(picker);
         Refresh();
-    }
-
-    private static StackPanel? FindRow(StackPanel root)
-    {
-        if (Equals(root.Tag, "CancellationBehavior")) return root;
-        foreach (var child in root.Children.OfType<StackPanel>())
-            if (FindRow(child) is { } row) return row;
-        return null;
     }
 }

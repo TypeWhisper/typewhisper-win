@@ -17,35 +17,21 @@ internal static class LiveTextProcessingSettings
         var refreshers = new List<Action>();
         void RefreshAll() { foreach (var refresh in refreshers) refresh(); }
 
-        StackPanel Prepare(string key)
-        {
-            var row = FindRow(content, key) ?? throw new InvalidOperationException($"Text settings row '{key}' is missing.");
-            foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
-            row.Children.Clear();
-            return row;
-        }
-
         void AddToggle(string key, string title, string description, Func<DictationTextPreferences, bool> get,
             Func<DictationTextPreferences, bool, DictationTextPreferences> update)
         {
-            var row = Prepare(key);
-            var header = new Grid { ColumnSpacing = 12 };
-            header.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
-            header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            var row = SettingsRow.Require(content, key).Reset(pickers);
             var toggle = AppToggleSwitch.Create(get(store.Current));
             AutomationProperties.SetName(toggle, title);
             AutomationProperties.SetHelpText(toggle, Loc.T("{0} Changes apply to the next recording.", description));
-            header.Children.Add(SettingsHelp.Label(title, description));
-            Grid.SetColumn(toggle, 1); header.Children.Add(toggle);
-            row.Children.Add(header);
-            var status = Label(""); row.Children.Add(status);
+            row.Set(title, description, toggle);
             var restoring = false;
             refreshers.Add(() =>
             {
                 restoring = true;
                 toggle.IsOn = get(store.Current);
                 restoring = false;
-                status.Text = store.Error ?? Loc.T("Saved for the next recording.");
+                row.Status = store.Error ?? "";
             });
             toggle.Toggled += (_, _) =>
             {
@@ -59,16 +45,14 @@ internal static class LiveTextProcessingSettings
             Func<DictationTextPreferences, string> get, Func<DictationTextPreferences, string, DictationTextPreferences> update,
             string description)
         {
-            var row = Prepare(key);
-            row.Children.Add(SettingsHelp.Label(title, description));
+            var row = SettingsRow.Require(content, key).Reset(pickers);
             var picker = new ChoicePicker();
             picker.Configure(title, "language", "Preference " + key);
-            row.Children.Add(picker); pickers.Add(picker);
-            var status = Label(""); row.Children.Add(status);
+            row.Set(title, description, picker); pickers.Add(picker);
             refreshers.Add(() =>
             {
                 picker.SetOptions(options, get(store.Current));
-                status.Text = store.Error ?? Loc.T("Saved for the next recording.");
+                row.Status = store.Error ?? "";
             });
             picker.SelectionChanged += id =>
             {
@@ -100,19 +84,4 @@ internal static class LiveTextProcessingSettings
             Loc.T("Applied after snippets and dictionary corrections. Requires German to be detected or selected as the spoken language; automatic language without detection leaves spelling unchanged."));
         RefreshAll();
     }
-
-    private static StackPanel? FindRow(StackPanel root, string key)
-    {
-        if (Equals(root.Tag, key)) return root;
-        foreach (var child in root.Children.OfType<StackPanel>())
-            if (FindRow(child, key) is { } row) return row;
-        return null;
-    }
-
-    private static TextBlock Label(string text, double size = 12) => new()
-    {
-        Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap,
-        VerticalAlignment = VerticalAlignment.Center,
-        Foreground = (Brush)Application.Current.Resources[size > 12 ? "TextBrush" : "MutedBrush"]
-    };
 }

@@ -7,11 +7,11 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class PremiumAccountView : UserControl
 {
-    private readonly Button _signIn = new HandCursorButton { Content = Loc.T("Sign in with Apple"), CornerRadius = new(8) };
-    private readonly Button _refresh = new HandCursorButton { Content = Loc.T("Refresh account"), CornerRadius = new(8) };
-    private readonly Button _link = new HandCursorButton { Content = Loc.T("Link commercial license"), CornerRadius = new(8) };
-    private readonly Button _signOut = new HandCursorButton { Content = Loc.T("Sign out"), CornerRadius = new(8) };
-    private readonly Button _cancel = new HandCursorButton { Content = Loc.T("Cancel sign-in"), CornerRadius = new(8) };
+    private readonly Button _signIn = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Sign in with Apple") };
+    private readonly Button _refresh = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Refresh account") };
+    private readonly Button _link = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Link commercial license") };
+    private readonly Button _signOut = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Sign out") };
+    private readonly Button _cancel = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Cancel sign-in") };
     private readonly TextBlock _status = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
     internal PremiumAccountView()
     {
@@ -20,7 +20,8 @@ internal sealed class PremiumAccountView : UserControl
         var actions = new StackPanel { Spacing = 8 };
         foreach (var button in new[] { _signIn, _refresh, _link, _signOut, _cancel }) { button.HorizontalAlignment = HorizontalAlignment.Left; actions.Children.Add(button); }
         body.Children.Add(actions); body.Children.Add(_status);
-        Content = new Border { Child = body, Padding = new(16), CornerRadius = new(8), Background = (Brush)Application.Current.Resources["SurfaceBrush"] };
+        Content = new Border { Child = body, Padding = new(18, 14, 18, 14), CornerRadius = new(12), Background = (Brush)Application.Current.Resources["SurfaceBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new(1) };
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _signIn.Click += async (_, _) => await WinUIPremiumAccount.SignInAsync();
         _refresh.Click += async (_, _) => await WinUIPremiumAccount.RefreshAsync();

@@ -33,7 +33,7 @@
         </Grid>
         </Border>
         <ScrollViewer x:Name="SettingsScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="22" Margin="24,16,24,20">
+            <StackPanel Spacing="20" Margin="24,16,24,20">
                 <StackPanel Spacing="7">
                     <TextBlock x:Name="AppearanceTitle" Text="Appearance" FontSize="24" FontWeight="SemiBold" />
                     <TextBlock x:Name="AppearanceSubtitle" Text="Choose how much you want to see while you speak." FontSize="13" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
@@ -65,30 +65,40 @@
                         </local:HandCursorButton>
                     </Grid>
                 </StackPanel>
-                <Grid ColumnSpacing="24">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel Spacing="6" VerticalAlignment="Center">
-                        <TextBlock x:Name="LiveTextTitle" Text="Live transcription" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock x:Name="LiveTextDescription" Text="Show streaming text above the waveform. Longer text scrolls." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <Border Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="12" Padding="18,2">
+                    <StackPanel>
+                        <Grid ColumnSpacing="16" Padding="0,12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="LiveTextTitle" Text="Live transcription" FontSize="14" />
+                                <TextBlock x:Name="LiveTextDescription" Text="Show streaming text above the waveform. Longer text scrolls." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="LiveTextToggle" Grid.Column="1" Margin="0,0,-12,0" Toggled="Preference_Changed" AutomationProperties.Name="Settings live transcription" />
+                        </Grid>
+                        <Grid ColumnSpacing="16" Padding="0,12" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="DetailsTitle" Text="Technical details" FontSize="14" />
+                                <TextBlock x:Name="DetailsDescription" Text="Show the audio level in dBFS and measured render frequency. Off by default." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="DetailsToggle" Grid.Column="1" Margin="0,0,-12,0" Toggled="Preference_Changed" AutomationProperties.Name="Settings technical details" />
+                        </Grid>
+                        <Grid ColumnSpacing="16" Padding="0,12" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="LayoutTitle" Text="Layout" FontSize="14" />
+                                <TextBlock x:Name="LayoutDescription" Text="Choose screen position and arrange the left and right widgets." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <local:HandCursorButton x:Name="CustomizeLayoutButton" Grid.Column="1" Content="Customize layout" Click="CustomizeLayout_Click" VerticalAlignment="Center" Style="{StaticResource SecondaryButtonStyle}" AutomationProperties.Name="Customize overlay layout" />
+                        </Grid>
+                        <StackPanel x:Name="LiveTextOptions" />
                     </StackPanel>
-                    <ToggleSwitch x:Name="LiveTextToggle" Grid.Column="1" Toggled="Preference_Changed" AutomationProperties.Name="Settings live transcription" />
-                </Grid>
-                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
-                <Grid ColumnSpacing="24">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel Spacing="6" VerticalAlignment="Center">
-                        <TextBlock x:Name="DetailsTitle" Text="Technical details" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock x:Name="DetailsDescription" Text="Show the audio level in dBFS and measured render frequency. Off by default." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                    <ToggleSwitch x:Name="DetailsToggle" Grid.Column="1" Toggled="Preference_Changed" AutomationProperties.Name="Settings technical details" />
-                </Grid>
-                <local:HandCursorButton x:Name="CustomizeLayoutButton" Content="Customize layout" Click="CustomizeLayout_Click" Style="{StaticResource SecondaryButtonStyle}" AutomationProperties.Name="Customize overlay layout" />
-                <StackPanel x:Name="LiveTextOptions" Spacing="16" />
+                </Border>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <local:HandCursorButton x:Name="PreviewButton" Content="Preview overlay" Click="Preview_Click" Style="{StaticResource PrimaryButtonStyle}" AutomationProperties.Name="Preview overlay" />
                     <local:HandCursorButton x:Name="PausePreviewButton" Content="Pause preview" Click="PausePreview_Click" Style="{StaticResource SecondaryButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="Pause or resume preview" />
                 </StackPanel>
-                <TextBlock x:Name="PreviewExplanation" Text="Preview uses your microphone level when available, otherwise a simulated signal. Transcript text is a sample; no audio is saved." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="PreviewExplanation" Text="Preview uses your microphone level when available, otherwise a simulated signal. Transcript text is a sample; no audio is saved." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="EditorScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -104,7 +114,7 @@
                             <TextBlock x:Name="FloatingPositionLabel" Text="POSITION ON SCREEN" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
                             <Canvas x:Name="FloatingScreenCanvas" Height="156" SizeChanged="FloatingScreen_SizeChanged" IsHitTestVisible="False">
                                 <Border x:Name="FloatingScreenBounds" Background="{ThemeResource InkBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="4" />
-                                <Border x:Name="FloatingWindowThumb" Background="#FF123A63" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1" CornerRadius="3" />
+                                <Border x:Name="FloatingWindowThumb" Background="{ThemeResource SelectionSurfaceBrush}" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1" CornerRadius="3" />
                             </Canvas>
                             <TextBlock x:Name="FloatingPositionSummary" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                         </StackPanel>

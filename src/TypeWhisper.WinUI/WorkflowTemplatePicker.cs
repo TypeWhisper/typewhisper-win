@@ -68,6 +68,17 @@ public sealed class WorkflowTemplatePicker : UserControl
             var selected = choice.Id == SelectedId;
             button.Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "SecondaryButtonStyle"];
             check.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            // On the accent fill the title, the description and the check are white.
+            check.Foreground = selected ? new SolidColorBrush(Microsoft.UI.Colors.White) : Brush("AccentBrush");
+            if (button.Content is StackPanel { Children: [Grid top, TextBlock description] })
+            {
+                description.Foreground = selected ? new SolidColorBrush(Microsoft.UI.Colors.White) : Brush("MutedBrush");
+                foreach (var child in top.Children)
+                {
+                    if (child is TypeWhisperGlyph glyph) glyph.Inverse = selected;
+                    else if (child is TextBlock title && !ReferenceEquals(title, check)) title.Foreground = selected ? new SolidColorBrush(Microsoft.UI.Colors.White) : Brush("TextBrush");
+                }
+            }
             AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         }
     }

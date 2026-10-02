@@ -25,7 +25,7 @@ internal sealed partial class PremiumView : UserControl
         var body = new StackPanel { Spacing = 20 }; Content = body;
         body.Children.Add(_overview);
         body.Children.Add(_details);
-        var back = new HandCursorButton { Content = Loc.T("← Back to Premium") };
+        var back = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("← Back to Premium") };
         back.Click += (_, _) => ShowOverview();
         _details.Children.Add(back);
         _details.Children.Add(_detailTitle);
@@ -136,7 +136,8 @@ internal sealed partial class PremiumView : UserControl
     };
     private static Border Card(UIElement child) => new()
     {
-        Child = child, Padding = new Thickness(16), CornerRadius = new CornerRadius(8),
-        Background = (Brush)Application.Current.Resources["SurfaceBrush"]
+        Child = child, Padding = new Thickness(18, 14, 18, 14), CornerRadius = new CornerRadius(12),
+        Background = (Brush)Application.Current.Resources["SurfaceBrush"],
+        BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1)
     };
 }

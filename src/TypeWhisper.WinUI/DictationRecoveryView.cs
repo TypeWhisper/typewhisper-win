@@ -12,8 +12,8 @@ internal sealed class DictationRecoveryView : UserControl
     private readonly DictationRecoveryController _controller;
     private readonly DictationRecoveryPreferencesStore _preferences;
     private readonly Func<DictationRecoveryPreferences, Task<string?>> _commitPreferences;
-    private readonly StackPanel _body = new() { Spacing = 12 };
-    private readonly TextBlock _notice = Label("");
+    private readonly StackPanel _body = new() { Spacing = 20 };
+    private readonly TextBlock _notice = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MutedBrush"] };
     private ContentDialog? _dialog;
     private Task _uiOperation = Task.CompletedTask;
     private bool _working;
@@ -26,7 +26,8 @@ internal sealed class DictationRecoveryView : UserControl
         DictationRecoveryPreferencesStore preferences, Func<DictationRecoveryPreferences, Task<string?>> commitPreferences)
     {
         _controller = controller; _preferences = preferences; _commitPreferences = commitPreferences;
-        Content = new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _body, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        // The settings page scrolls.
+        Content = _body;
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite);
         Loaded += (_, _) => { _controller.Changed += Changed; Render(); };
         Unloaded += (_, _) => _controller.Changed -= Changed;
@@ -58,9 +59,9 @@ internal sealed class DictationRecoveryView : UserControl
     {
         if (_closing) return;
         _body.Children.Clear();
-        _body.Children.Add(Label(Loc.T("Dictation recovery"), 22));
-        _body.Children.Add(Label(Loc.T("Keep microphone audio on this device to recover interrupted dictations. Recovery is separate from History and the Recorder library.")));
-        var enabled = new ToggleSwitch { Header = Loc.T("Keep dictation audio for recovery"), OnContent = Loc.T("On"), OffContent = Loc.T("Off"), IsOn = _preferences.Current.Enabled };
+        _body.Children.Add(SettingsCard.PageTitle(Loc.T("Dictation recovery")));
+        var enabled = AppToggleSwitch.Create(_preferences.Current.Enabled);
+        AutomationProperties.SetName(enabled, Loc.T("Keep dictation audio for recovery"));
         var retention = new ChoicePicker();
         retention.Configure(Loc.T("Recovery audio retention"), "history", Loc.T("Recovery audio retention"));
         retention.SetOptions(new[] { 1, 7, 30, 60, 90, 180, 0 }.Select(days => new Choice(days.ToString(),
@@ -68,11 +69,15 @@ internal sealed class DictationRecoveryView : UserControl
             _preferences.Current.RetentionDays.ToString());
         var locked = _working || _controller.Busy;
         enabled.IsEnabled = retention.IsEnabled = !locked;
-        _body.Children.Add(enabled);
-        _body.Children.Add(Label(Loc.T("Keep recovery audio for")));
-        _body.Children.Add(retention);
-        _body.Children.Add(Label(Loc.T("Turning recovery off keeps existing recordings. A shorter retention deletes older audio after confirmation. An interrupted recording may be missing its final moments.")));
-        _body.Children.Add(Button(Loc.T("Save recovery preferences"), () => Start(async () =>
+        var preferences = new SettingsCard();
+        preferences.Children.Add(new SettingsRow().Set(Loc.T("Keep dictation audio for recovery"),
+            Loc.T("Keep microphone audio on this device to recover interrupted dictations. Recovery is separate from History and the Recorder library."), enabled));
+        preferences.Children.Add(new SettingsRow().Set(Loc.T("Keep recovery audio for"),
+            Loc.T("Turning recovery off keeps existing recordings. A shorter retention deletes older audio after confirmation. An interrupted recording may be missing its final moments."), retention));
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        preferences.Children.Add(new SettingsRow().Below(actions));
+        _body.Children.Add(preferences);
+        actions.Children.Add(Button(Loc.T("Save recovery preferences"), () => Start(async () =>
         {
             var next = new DictationRecoveryPreferences { Enabled = enabled.IsOn, RetentionDays = int.Parse(retention.SelectedId) };
             var old = _preferences.Current;
@@ -88,24 +93,23 @@ internal sealed class DictationRecoveryView : UserControl
             var error = await _commitPreferences(next);
             if (!_closing) _uiMessage = error ?? Loc.T("Recovery preferences saved. Existing audio is not deleted when recovery is turned off.");
         }), locked));
-        _body.Children.Add(Button(Loc.T("Refresh recordings"), () => Start(_controller.RefreshAsync), locked));
-        if (_controller.Busy) _body.Children.Add(Button(Loc.T("Cancel recovery"), _controller.Cancel));
-        _body.Children.Add(Label(_controller.Recordings.Count == 1 ? Loc.T("1 saved recovery recording") : Loc.T("{0} saved recovery recordings", _controller.Recordings.Count)));
+        actions.Children.Add(Button(Loc.T("Refresh recordings"), () => Start(_controller.RefreshAsync), locked));
+        if (_controller.Busy) actions.Children.Add(Button(Loc.T("Cancel recovery"), _controller.Cancel));
+        var recordings = new SettingsCard(_controller.Recordings.Count == 1 ? Loc.T("1 saved recovery recording") : Loc.T("{0} saved recovery recordings", _controller.Recordings.Count));
         foreach (var recording in _controller.Recordings)
         {
-            var row = new StackPanel { Spacing = 6 };
             var duration = TimeSpan.FromSeconds(recording.DurationSeconds);
             var elapsed = duration.ToString(duration.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss");
-            row.Children.Add(Label($"{recording.CreatedAt.LocalDateTime:g} · {elapsed}"));
-            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            actions.Children.Add(Button(Loc.T("Transcribe and review"), () => Start(() => _controller.RetryAsync(recording.Id)), locked));
-            actions.Children.Add(Button(Loc.T("Delete audio"), () => Start(async () =>
+            var recordingActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            recordingActions.Children.Add(Button(Loc.T("Transcribe and review"), () => Start(() => _controller.RetryAsync(recording.Id)), locked));
+            recordingActions.Children.Add(Button(Loc.T("Delete audio"), () => Start(async () =>
             {
                 if (await Confirm(Loc.T("Delete this recovery recording?"), Loc.T("Delete the audio recorded {0:g}? This permanently deletes one recording. Reviewed text is kept.", recording.CreatedAt.LocalDateTime), Loc.T("Delete audio")) && !_closing)
                     await _controller.DeleteConfirmedAsync(recording.Id);
             }), locked));
-            row.Children.Add(actions); _body.Children.Add(row);
+            recordings.Children.Add(new SettingsRow().Set($"{recording.CreatedAt.LocalDateTime:g} · {elapsed}", control: recordingActions));
         }
+        if (_controller.Recordings.Count > 0) _body.Children.Add(recordings);
         if (_controller.Review is { } review)
         {
             _body.Children.Add(Label(Loc.T("Recovered text · review before copying"), 16));
@@ -122,6 +126,7 @@ internal sealed class DictationRecoveryView : UserControl
             }));
         }
         _notice.Text = _uiMessage ?? _preferences.Error ?? _controller.Message ?? Loc.T("Recovery is off until you explicitly enable it.");
+        _notice.Visibility = _notice.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         _body.Children.Add(_notice);
     }
 
@@ -129,7 +134,7 @@ internal sealed class DictationRecoveryView : UserControl
     {
         if (_closing || XamlRoot is null) return false;
         _dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = message,
-            PrimaryButtonText = primary, CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close };
+            PrimaryButtonText = primary, CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
         try { return await _dialog.ShowAsync() == ContentDialogResult.Primary && !_closing; }
         finally { _dialog = null; }
     }

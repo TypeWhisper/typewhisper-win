@@ -18,11 +18,12 @@ internal sealed class SystemVoiceSettingsControl : UserControl
     internal SystemVoiceSettingsControl(LocalDictationSession session, List<ChoicePicker> pickers)
     {
         _session = session;
-        var content = new StackPanel { Spacing = 8 };
-        content.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"], Margin = new(0, 4, 0, 4) });
-        content.Children.Add(SettingsHelp.Label(Loc.T("Spoken feedback"), Loc.T("Read successfully inserted dictation aloud using the selected voice. Off by default. Review, failed processing and file jobs are not read automatically. Windows voices run locally. Selecting a cloud voice sends the text to that provider and may incur API charges. Uses the selected audio output. Supports up to 4,000 characters and two minutes of speech."), 16));
+        var content = new SettingsRows();
         var enabled = AppToggleSwitch.Create(session.AudioPreferences.SpokenFeedbackEnabled);
         AutomationProperties.SetName(enabled, Loc.T("Spoken feedback"));
+        var feedback = new SettingsRow("SpokenFeedbackEnabled").Set(Loc.T("Spoken feedback"), "",
+            Loc.T("Read successfully inserted dictation aloud using the selected voice. Off by default. Review, failed processing and file jobs are not read automatically. Windows voices run locally. Selecting a cloud voice sends the text to that provider and may incur API charges. Uses the selected audio output. Supports up to 4,000 characters and two minutes of speech."), enabled);
+        content.Children.Add(feedback);
         var restoring = false;
         enabled.Toggled += async (_, _) =>
         {
@@ -33,18 +34,17 @@ internal sealed class SystemVoiceSettingsControl : UserControl
             {
                 restoring = true; enabled.IsOn = previous; restoring = false; _status.Text = error; return;
             }
-            _status.Text = Loc.T("Saved. Applies to future successful dictations.");
+            _status.Text = "";
             if (!enabled.IsOn) await StopAsync();
         };
-        content.Children.Add(enabled);
         IReadOnlyList<SpokenFeedbackVoice> voices;
         try { voices = session.GetSpokenFeedbackVoices(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             voices = [];
-            content.Children.Add(Label(Loc.T("Installed Windows voices could not be read. Reopen Audio settings after checking Windows speech settings.")));
+            feedback.Below(Label(Loc.T("Installed Windows voices could not be read. Reopen Audio settings after checking Windows speech settings.")));
         }
-        if (voices.Count == 0) content.Children.Add(Label(Loc.T("No installed Windows voice is available. Install a voice through Windows settings before testing.")));
+        if (voices.Count == 0) feedback.Below(Label(Loc.T("No installed Windows voice is available. Install a voice through Windows settings before testing.")));
         var options = new List<Choice> { new("", Loc.T("Windows default voice"), Loc.T("Uses the Windows voice; no automatic language switch")) };
         options.AddRange(voices.Select(voice => new Choice(voice.Id, voice.DisplayName, voice.Language ?? (voice.Id.StartsWith("plugin:", StringComparison.Ordinal) ? (voice.IsLocal ? Loc.T("Local provider voice") : Loc.T("Cloud provider voice")) : Loc.T("Installed Windows voice")))));
         var savedVoice = session.AudioPreferences.SpokenFeedbackVoiceId ?? "";
@@ -61,13 +61,18 @@ internal sealed class SystemVoiceSettingsControl : UserControl
             {
                 restoring = true; voicePicker.SetOptions(options, savedVoice); restoring = false; _status.Text = error;
             }
-            else { savedVoice = id; _status.Text = Loc.T("Voice saved. Applies to the next playback."); }
+            else { savedVoice = id; _status.Text = ""; }
         };
-        content.Children.Add(voicePicker); pickers.Add(voicePicker);
+        pickers.Add(voicePicker);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        buttons.Children.Add(_test); buttons.Children.Add(_stop); content.Children.Add(buttons);
+        buttons.Children.Add(_test); buttons.Children.Add(_stop);
+        var voice = new SettingsRow("SpokenFeedbackVoiceId").Set(Loc.T("Voice"), control: voicePicker);
+        voice.Below(buttons).Below(_status);
+        content.Children.Add(voice);
+        _status.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => _status.Visibility = _status.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible);
+        _status.Visibility = Visibility.Collapsed;
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        content.Children.Add(_status); Content = content;
+        Content = content;
         _test.Click += async (_, _) =>
         {
             if (_testing || _stopping || !session.CanChangeProvider || session.SpokenFeedback.IsBusy) return;

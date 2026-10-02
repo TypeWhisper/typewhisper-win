@@ -155,7 +155,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
                     Title = Loc.T("Remove {0}?", row.Model.Model.DisplayName),
                     Content = Loc.T("The model will be unloaded and its downloaded file removed. You can download it again later."),
-                    PrimaryButtonText = Loc.T("Remove model"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close };
+                    PrimaryButtonText = Loc.T("Remove model"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary || !Current(lifetime)) return;
             }
             operation.Token.ThrowIfCancellationRequested();

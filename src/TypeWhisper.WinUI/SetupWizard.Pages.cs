@@ -13,7 +13,8 @@ public sealed partial class SetupWizard
     private string _testText = "";
     private bool _testSucceeded;
     private static Brush Resource(string key) => (Brush)Application.Current.Resources[key];
-    private static Brush WizardBackground() => new LinearGradientBrush
+    // The dark gradient belongs to the dark theme; text on it follows the theme.
+    private static Brush WizardBackground() => Application.Current.RequestedTheme == ApplicationTheme.Light ? Resource("InkBrush") : new LinearGradientBrush
     {
         StartPoint = new(0, 0), EndPoint = new(1, 0.7),
         GradientStops = { new() { Color = global::Windows.UI.Color.FromArgb(255, 7, 22, 29), Offset = 0 },

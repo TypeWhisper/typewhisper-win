@@ -30,6 +30,8 @@ public sealed class TypeWhisperGlyph : UserControl
         set => SetValue(InverseProperty, value);
     }
     private Color Accent => Inverse ? Color.FromArgb(255, 255, 255, 255) : AccentColor;
+    // Hides the strokes behind a part drawn in front; glyphs sit on cards and the sidebar, or on the selected row's fill.
+    private Color Backdrop => ((Microsoft.UI.Xaml.Media.SolidColorBrush)Application.Current.Resources[Inverse ? "SelectionFillBrush" : "SurfaceBrush"]).Color;
     private readonly CanvasControl _canvas;
 
     public TypeWhisperGlyph()
@@ -199,7 +201,7 @@ public sealed class TypeWhisperGlyph : UserControl
             case "lock":
                 drawing.DrawRoundedRectangle(4, 9, 12, 9, 2, 2, Accent, 1.4f);
                 drawing.DrawRoundedRectangle(6.5f, 2, 7, 10, 3.5f, 3.5f, Accent, 1.4f);
-                drawing.FillRectangle(5, 10, 10, 6, global::Windows.UI.Color.FromArgb(255, 42, 42, 44));
+                drawing.FillRectangle(5, 10, 10, 6, Backdrop);
                 drawing.FillCircle(10, 13, 1.2f, Accent);
                 break;
             case "info":
@@ -226,7 +228,7 @@ public sealed class TypeWhisperGlyph : UserControl
                 drawing.DrawRoundedRectangle(2, 3, 12, 9, 1, 1, Accent, 1.4f);
                 Line(drawing, 7, 12, 7, 16);
                 Line(drawing, 4, 16, 10, 16);
-                drawing.FillRoundedRectangle(11, 7, 8, 12, 1.5f, 1.5f, global::Windows.UI.Color.FromArgb(255, 42, 42, 44));
+                drawing.FillRoundedRectangle(11, 7, 8, 12, 1.5f, 1.5f, Backdrop);
                 drawing.DrawRoundedRectangle(12, 8, 6, 10, 1, 1, Accent, 1.4f);
                 break;
             case "check":

@@ -108,7 +108,7 @@ public sealed partial class RecorderView
             {
                 XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete recording?"),
                 Content = Loc.T("Permanently delete {0}? This cannot be undone.", entry.Name),
-                PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
+                PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
             };
             if (await confirmation.ShowAsync() != ContentDialogResult.Primary || _libraryClosing) return;
             if (IsQueuedSource?.Invoke(entry.FilePath) == true)

@@ -534,6 +534,7 @@ public sealed partial class MainWindow : Window
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
                 LiveLanguageSettings.Configure(category, content, pickers, AppLanguage.Store, RestartWhenIdleAsync);
+                LiveThemeSettings.Configure(category, content, pickers, AppTheme.Store, RestartWhenIdleAsync);
                 LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates,
                     _dictation.Packages.Updates, PluginAutoUpdates, () => _dictation.CanChangeProvider, RestartWhenIdleAsync);
                 if (category == "Advanced")
@@ -549,7 +550,7 @@ public sealed partial class MainWindow : Window
                     content.Children.Add(recoveryView);
                     _ = recoveryView.PresentAsync();
                 }
-                if (category == "Privacy") content.Children.Insert(Math.Min(1, content.Children.Count), HistoryWorkspaceSection());
+                if (category == "Privacy") content.Children.OfType<SettingsCard>().First().Children.Insert(0, HistoryWorkspaceRow());
             };
             _settingsWindow.WorkspaceChanged += SettingsPageChanged;
             _settingsWindow.WorkspaceBack = SettingsPageBack;

@@ -34,6 +34,9 @@ public sealed partial class ChoicePicker : UserControl
         AutomationProperties.SetName(ChoiceButton, automationName);
     }
 
+    // Beside a settings row's title the picker is as high as a button.
+    internal void UseRowHeight() => ChoiceButton.MinHeight = 36;
+
     internal void SetOptions(IReadOnlyList<Choice> options, string selectedId, string? placeholder = null)
     {
         _options = options;
@@ -154,7 +157,7 @@ public sealed partial class ChoicePicker : UserControl
             button.IsEnabled = option.Enabled;
             if (selected)
             {
-                button.Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 19, 40, 58));
+                button.Background = (Brush)Application.Current.Resources["SelectionSurfaceBrush"];
                 if (option.Enabled) _selectedButton = button;
             }
             AutomationProperties.SetName(button, Loc.T("{0} option {1}", _automationName, option.Id));

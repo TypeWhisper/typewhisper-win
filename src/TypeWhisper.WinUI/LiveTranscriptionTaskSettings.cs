@@ -11,29 +11,19 @@ internal static class LiveTranscriptionTaskSettings
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
-        var row = FindRow(content, "TranscriptionTask") ?? throw new InvalidOperationException("Transcription task row is missing.");
-        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
-        row.Children.Clear();
-        row.Children.Add(SettingsHelp.Label(Loc.T("Transcription task"),
-            Loc.T("Transcribe writes speech in its original language. Native translation produces English text using a compatible model. The choice is saved for this profile.")));
+        var row = SettingsRow.Require(content, "TranscriptionTask").Reset(pickers);
         var picker = new ChoicePicker();
         picker.Configure(Loc.T("Transcription task"), "language", "Preference TranscriptionTask");
-        row.Children.Add(picker); pickers.Add(picker);
-        var status = Label(""); row.Children.Add(status);
+        row.Set(Loc.T("Transcription task"),
+            Loc.T("Transcribe writes speech in its original language. Native translation produces English text using a compatible model. The choice is saved for this profile."), picker);
+        pickers.Add(picker);
         string? selectionError = null;
 
-        // Replace the preview-only target picker and detach it from its preview
-        // visibility rule, which reads a separate non-persistent values dictionary.
-        if (FindRow(content, "TranslationTargetLanguage") is { } target)
-        {
-            foreach (var old in target.Children.OfType<ChoicePicker>()) pickers.Remove(old);
-            RemoveRow(content, target);
-            target.Children.Clear();
-            target.Children.Add(SettingsHelp.Label(Loc.T("Translation language"),
-                Loc.T("English is the only native translation target. Translation to other languages is not available yet.")));
-            target.Children.Add(Label(Loc.T("English")));
-            row.Children.Add(target);
-        }
+        // English is the only target, so the row states it instead of offering a choice.
+        var target = SettingsRow.Require(content, "TranslationTargetLanguage").Reset(pickers);
+        target.Set(Loc.T("Translation language"),
+            Loc.T("English is the only native translation target. Translation to other languages is not available yet."),
+            new TextBlock { Text = Loc.T("English"), FontSize = 13, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
 
         void Refresh()
         {
@@ -43,13 +33,14 @@ internal static class LiveTranscriptionTaskSettings
                 new("Translate", Loc.T("Translate to English"), Loc.T("Use the active model's native audio-to-English translation."), session.SupportsTranslation)
             ], selected.ToString());
             picker.IsEnabled = session.CanChangeProvider;
-            status.Text = selectionError ?? session.TranscriptionTaskPreferences.Error ??
+            target.Visibility = selected == TranscriptionTask.Translate ? Visibility.Visible : Visibility.Collapsed;
+            row.Status = selectionError ?? session.TranscriptionTaskPreferences.Error ??
                 (selected == TranscriptionTask.Translate && !session.SupportsTranslation
                     ? Loc.T("Translate to English is saved, but this model does not support it. Recording is blocked until you choose Transcribe or a compatible model.")
                     : !session.CanChangeProvider
                         ? Loc.T("Finish or cancel the current dictation before changing the task.")
                         : session.SupportsTranslation
-                            ? Loc.T("Saved for this profile.")
+                            ? ""
                             : Loc.T("This model supports transcription only. Select a translation-capable model to translate audio to English."));
         }
         void OnChanged() => row.DispatcherQueue.TryEnqueue(() => { if (row.IsLoaded) Refresh(); });
@@ -69,27 +60,4 @@ internal static class LiveTranscriptionTaskSettings
         };
         Refresh();
     }
-
-    private static StackPanel? FindRow(StackPanel root, string key)
-    {
-        if (Equals(root.Tag, key)) return root;
-        foreach (var child in root.Children.OfType<StackPanel>())
-            if (FindRow(child, key) is { } row) return row;
-        return null;
-    }
-
-    private static bool RemoveRow(StackPanel root, StackPanel target)
-    {
-        var index = root.Children.IndexOf(target);
-        if (index >= 0) { root.Children.RemoveAt(index); return true; }
-        foreach (var child in root.Children.OfType<StackPanel>())
-            if (RemoveRow(child, target)) return true;
-        return false;
-    }
-
-    private static TextBlock Label(string text, double size = 12) => new()
-    {
-        Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap,
-        Foreground = (Brush)Application.Current.Resources[size > 12 ? "TextBrush" : "MutedBrush"]
-    };
 }

@@ -161,11 +161,12 @@ public sealed class HomeView : UserControl
             panel.Children.Add(empty);
             return Card(panel);
         }
-        var rows = new StackPanel();
-        foreach (var record in _records.Take(5))
+        // Rows span the card from edge to edge, so their hover is as wide and as square as the card.
+        var rows = new StackPanel { Margin = new Thickness(-18, 4, -18, -16) };
+        var recent = _records.Take(5).ToArray();
+        foreach (var record in recent)
         {
-            if (rows.Children.Count > 0)
-                rows.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(4, 0, 4, 0) });
+            rows.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush") });
             var content = new Grid { ColumnSpacing = 12 };
             content.ColumnDefinitions.Add(new ColumnDefinition());
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -182,8 +183,11 @@ public sealed class HomeView : UserControl
             Grid.SetColumn(chevron, 1);
             content.Children.Add(chevron);
             var button = new HandCursorButton { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(8, 10, 8, 10),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(18, 10, 18, 10),
                 Style = (Style)Application.Current.Resources["MenuButtonStyle"] };
+            // The last row follows the card's lower corners.
+            var corner = ReferenceEquals(record, recent[^1]) ? 11 : 0;
+            button.CornerRadius = new CornerRadius(0, 0, corner, corner);
             button.Click += (_, _) => NavigateRequested?.Invoke("History");
             AutomationProperties.SetName(button, Loc.T("Open in History: {0}", text.Text));
             rows.Children.Add(button);

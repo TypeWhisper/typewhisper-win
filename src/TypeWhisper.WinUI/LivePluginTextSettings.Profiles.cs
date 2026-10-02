@@ -24,7 +24,7 @@ internal sealed partial class LivePluginTextSettings
         if (!_dirtyProfiles.Values.Any(dirty => dirty) && _pendingApiKey() is null) return true;
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = _singleConfiguration ? Loc.T("Discard unsaved changes?") : Loc.T("Discard unsaved profile changes?"),
             Content = Loc.T("Your edits and any entered API key have not been saved. Stay here to save them, or discard them and leave."),
-            PrimaryButtonText = Loc.T("Discard changes"), CloseButtonText = Loc.T("Keep editing"), DefaultButton = ContentDialogButton.Close };
+            PrimaryButtonText = Loc.T("Discard changes"), CloseButtonText = Loc.T("Keep editing"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
@@ -346,7 +346,7 @@ internal sealed partial class LivePluginTextSettings
             {
                 var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Remove “{0}”?", name),
                     Content = memoryEditor ? Loc.T("This deletes the saved memory from this device. It will no longer be available to workflows.") : showKey ? Loc.T("This removes this configuration, its saved API key and any unsaved edits. Workflows using it will need another provider.") : Loc.T("This removes this configuration and any unsaved edits."),
-                    PrimaryButtonText = Loc.T("Remove"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close };
+                    PrimaryButtonText = Loc.T("Remove"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                     await RunProfileActionAsync(remove, name, removedFields: editable.Select(f => f.Id).ToArray(), removedProfileId: selector.Value);
             });

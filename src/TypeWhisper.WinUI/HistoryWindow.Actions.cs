@@ -135,7 +135,7 @@ public sealed partial class HistoryWindow
             XamlRoot = Content.XamlRoot,
             Title = ids.Length == 1 ? Loc.T("Delete this entry?") : Loc.T("Delete {0} entries?", ids.Length),
             Content = Loc.T("The transcript and any saved audio are removed from this PC. This cannot be undone."),
-            PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
+            PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
         };
         _dialogOpen = true;
         ContentDialogResult result;

@@ -10,14 +10,11 @@ internal static class LiveRecordingModeSettings
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
-        var row = FindModeRow(content) ?? throw new InvalidOperationException("Recording mode settings row is missing.");
-        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
-        row.Children.Clear();
-        row.Children.Add(SettingsHelp.Label(Loc.T("Recording mode"),
-            Loc.T("Toggle starts and stops with a press. Hold records while the shortcut is held. Hybrid toggles on a tap, or stops on release after a hold of at least 300 ms.")));
+        var row = SettingsRow.Require(content, "Mode").Reset(pickers);
         var picker = new ChoicePicker();
         picker.Configure(Loc.T("Recording mode"), "microphone", Loc.T("Recording mode"));
-        var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        row.Set(Loc.T("Recording mode"),
+            Loc.T("Toggle starts and stops with a press. Hold records while the shortcut is held. Hybrid toggles on a tap, or stops on release after a hold of at least 300 ms."), picker);
         string? selectionError = null;
         void Refresh()
         {
@@ -27,9 +24,8 @@ internal static class LiveRecordingModeSettings
                 new("Hold", Loc.T("Hold to record"), Loc.T("Record while the shortcut is held. Release to stop."))
             ], session.RecordingModePreferences.Current.ToString());
             picker.IsEnabled = session.CanChangeProvider;
-            hint.Text = selectionError ?? session.RecordingModePreferences.Error ??
-                (session.CanChangeProvider ? Loc.T("Saved for this profile. Release all shortcut keys before using a new mode.")
-                    : Loc.T("Finish or cancel the current dictation before changing recording mode."));
+            row.Status = selectionError ?? session.RecordingModePreferences.Error ??
+                (session.CanChangeProvider ? "" : Loc.T("Finish or cancel the current dictation before changing recording mode."));
         }
         void OnChanged() => row.DispatcherQueue.TryEnqueue(() => { if (row.IsLoaded) Refresh(); });
         picker.SelectionChanged += id =>
@@ -39,15 +35,7 @@ internal static class LiveRecordingModeSettings
         };
         row.Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
         row.Unloaded += (_, _) => session.Changed -= OnChanged;
-        row.Children.Add(picker); row.Children.Add(hint); pickers.Add(picker);
+        pickers.Add(picker);
         Refresh();
-    }
-
-    private static StackPanel? FindModeRow(StackPanel root)
-    {
-        if (Equals(root.Tag, "Mode")) return root;
-        foreach (var child in root.Children.OfType<StackPanel>())
-            if (FindModeRow(child) is { } row) return row;
-        return null;
     }
 }

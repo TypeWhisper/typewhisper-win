@@ -17,6 +17,7 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        AppTheme.Apply(this);
         UnhandledException += (_, args) =>
         {
             System.Diagnostics.Debug.WriteLine(args.Exception);

@@ -190,7 +190,7 @@ internal sealed class LiveModelsView : UserControl
                     XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
                     Title = Loc.T("Remove {0}?", model.DisplayName),
                     Content = Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."),
-                    PrimaryButtonText = Loc.T("Remove model"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
+                    PrimaryButtonText = Loc.T("Remove model"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
                 };
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary || !IsLoaded) return;
                 _message = await _session.RemoveLocalModelAsync(model.Id, expectedGeneration);

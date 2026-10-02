@@ -2,8 +2,7 @@
     x:Class="TypeWhisper.WinUI.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
-    RequestedTheme="Dark">
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -20,6 +19,10 @@
                     <SolidColorBrush x:Key="MutedBrush" Color="#FFA1A1A6" />
                     <SolidColorBrush x:Key="HairlineBrush" Color="#FF3A3A3C" />
                     <SolidColorBrush x:Key="SelectionFillBrush" Color="#FF0A6BD6" />
+                    <SolidColorBrush x:Key="SelectionSurfaceBrush" Color="#FF13283A" />
+                    <SolidColorBrush x:Key="ControlFillBrush" Color="#0FFFFFFF" />
+                    <SolidColorBrush x:Key="ControlBorderBrush" Color="#FF48484A" />
+                    <SolidColorBrush x:Key="StateOverlayBrush" Color="#FFFFFFFF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="InkBrush" Color="#FFF2F2F7" />
@@ -31,6 +34,10 @@
                     <SolidColorBrush x:Key="MutedBrush" Color="#FF6E6E73" />
                     <SolidColorBrush x:Key="HairlineBrush" Color="#FFD1D1D6" />
                     <SolidColorBrush x:Key="SelectionFillBrush" Color="#FF0066CC" />
+                    <SolidColorBrush x:Key="SelectionSurfaceBrush" Color="#FFD9E9FA" />
+                    <SolidColorBrush x:Key="ControlFillBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="ControlBorderBrush" Color="#FFC7C7CC" />
+                    <SolidColorBrush x:Key="StateOverlayBrush" Color="#FF000000" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -167,7 +174,7 @@
                                         CornerRadius="{TemplateBinding CornerRadius}">
                                     <Grid>
                                         <Border x:Name="StateOverlay" Opacity="0"
-                                                Background="White"
+                                                Background="{ThemeResource StateOverlayBrush}"
                                                 CornerRadius="{TemplateBinding CornerRadius}" />
                                         <ContentPresenter Content="{TemplateBinding Content}"
                                                           ContentTemplate="{TemplateBinding ContentTemplate}"
@@ -211,7 +218,7 @@
                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="1" CornerRadius="7">
                                     <Grid>
-                                        <Border x:Name="ToggleHover" Background="White" Opacity="0" CornerRadius="7" />
+                                        <Border x:Name="ToggleHover" Background="{ThemeResource StateOverlayBrush}" Opacity="0" CornerRadius="7" />
                                         <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}"
                                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" />
                                     </Grid>
@@ -232,8 +239,8 @@
 
             <Style x:Key="SecondaryButtonStyle" TargetType="Button"
                    BasedOn="{StaticResource ButtonStyle}">
-                <Setter Property="Background" Value="#0FFFFFFF" />
-                <Setter Property="BorderBrush" Value="#FF48484A" />
+                <Setter Property="Background" Value="{ThemeResource ControlFillBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource ControlBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
             </Style>
@@ -353,9 +360,11 @@
                                     </VisualStateGroup>
                                 </VisualStateManager.VisualStateGroups>
                                 <Border x:Name="SelectionSurface" Opacity="0"
-                                        Background="#FF13283A" CornerRadius="7" />
+                                        Background="{ThemeResource SelectionSurfaceBrush}" CornerRadius="7" />
                                 <Border x:Name="HoverSurface" Opacity="0"
-                                        Background="#12FFFFFF" CornerRadius="7" />
+                                        CornerRadius="7">
+                                    <Border Background="{ThemeResource StateOverlayBrush}" Opacity="0.07" CornerRadius="7" />
+                                </Border>
                                 <Border x:Name="SignalRail" Opacity="0"
                                         Width="2" Margin="0,9,0,9"
                                         HorizontalAlignment="Left"
