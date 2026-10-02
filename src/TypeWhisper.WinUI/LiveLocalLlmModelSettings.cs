@@ -12,7 +12,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private readonly LocalDictationSession _session;
     private readonly string _pluginId;
     private readonly StackPanel _content = new() { Spacing = 12 };
-    private readonly TextBlock _status = Label("");
+    private readonly TextBlock _status = Label("", true);
     private readonly List<Row> _rows = [];
     private readonly ProgressBar _downloadProgress = new() { Minimum = 0, Maximum = 100, Height = 6 };
     private readonly HandCursorButton _cancelDownload = Button(Loc.T("Cancel download"));
@@ -66,12 +66,20 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 _content.Children.Add(_status);
                 return;
             }
-            _content.Children.Add(Label(Loc.T("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device. An idle model is released as set under Unload idle models in Advanced settings and loads again when needed.")));
+            // One card for all models, as on the NVIDIA Parakeet page.
+            var list = new StackPanel();
+            var heading = Label(Loc.T("Models")); heading.FontSize = 13; heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            list.Children.Add(heading);
+            var intro = Label(Loc.T("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device. An idle model is released as set under Unload idle models in Advanced settings and loads again when needed."), true);
+            intro.Margin = new Thickness(0, 4, 0, 14);
+            list.Children.Add(intro);
+            _content.Children.Add(new Border { Child = list, Padding = new Thickness(18, 16, 18, 2), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1),
+                Background = (Brush)Application.Current.Resources["SurfaceBrush"], BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] });
             _content.Children.Add(_status);
             foreach (var model in models)
             {
                 var row = new Row(model, !model.Loaded && restorable == model.Model.Id);
-                _rows.Add(row); _content.Children.Add(row.Panel);
+                _rows.Add(row); list.Children.Add(row.Panel);
                 row.Download.Click += async (_, _) => await RunAsync(row, "download");
                 row.Load.Click += async (_, _) => await RunAsync(row, "load");
                 row.Unload.Click += async (_, _) => await RunAsync(row, "unload");
@@ -183,26 +191,46 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private sealed class Row
     {
         internal readonly LocalLlmModelState Model;
-        internal readonly Border Panel = new() { Padding = new(18), CornerRadius = new(12), BorderThickness = new(1) };
-        internal readonly StackPanel Actions = new() { Spacing = 8 };
+        // A hairline separates each row from the heading or the row above.
+        internal readonly Border Panel = new() { Padding = new(0, 14, 0, 14), BorderThickness = new(0, 1, 0, 0) };
+        internal readonly StackPanel Actions = new() { Spacing = 8, Orientation = Orientation.Horizontal };
         internal readonly TextBlock State;
-        internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100, Height = 6, Visibility = Visibility.Collapsed };
+        internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100, Height = 6, Margin = new(0, 4, 0, 0), Visibility = Visibility.Collapsed };
         internal readonly HandCursorButton Download = Button(Loc.T("Download model"));
         internal readonly HandCursorButton Load = Button(Loc.T("Load model"));
         internal readonly HandCursorButton Unload = Button(Loc.T("Unload model"));
-        internal readonly HandCursorButton Remove = Button(Loc.T("Remove model"));
+        internal readonly HandCursorButton Remove = Button(Loc.T("Remove"));
         internal readonly HandCursorButton Cancel = Button(Loc.T("Cancel"));
         // A remembered model is released from memory but loads again on its next use.
         internal Row(LocalLlmModelState model, bool remembered)
         {
             Model = model;
-            var body = new StackPanel { Spacing = 12 };
-            var title = Label(model.Model.DisplayName); title.FontSize = 16; title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-            body.Children.Add(title);
-            body.Children.Add(Label(model.Model.SizeDescription + (model.Model.IsRecommended ? " · " + Loc.T("Recommended") : "")));
-            State = Label(model.Loaded ? Loc.T("Loaded · ready for text processing") : remembered ? Loc.T("Ready · released while idle, loads again on next use")
-                : model.Downloaded ? Loc.T("Downloaded · 100%") : Loc.T("Not downloaded"));
-            body.Children.Add(State); body.Children.Add(Progress);
+            var layout = new Grid { ColumnSpacing = 14 };
+            layout.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+            layout.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
+            layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
+            var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+            var name = Label(model.Model.DisplayName); name.FontSize = 15; name.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            var badgeText = Label(model.Loaded ? Loc.T("Loaded") : Loc.T("Ready")); badgeText.FontSize = 11; badgeText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            var badge = new Border { Child = badgeText, Padding = new(8, 2, 8, 3), CornerRadius = new(6), VerticalAlignment = VerticalAlignment.Center,
+                Visibility = model.Loaded || remembered ? Visibility.Visible : Visibility.Collapsed };
+            // Left-aligned, the star column is as wide as the name but still wraps a long one.
+            var title = new Grid { ColumnSpacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
+            title.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+            title.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            title.Children.Add(name); Grid.SetColumn(badge, 1); title.Children.Add(badge);
+            copy.Children.Add(title);
+            var meta = Label(string.Join(" · ", new[] { model.Model.SizeDescription, model.Model.IsRecommended ? Loc.T("Recommended") : null }
+                .Where(fact => !string.IsNullOrWhiteSpace(fact))), true);
+            meta.Visibility = meta.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+            copy.Children.Add(meta);
+            // The buttons already say whether a model is downloaded; the note explains an idle release or a running operation.
+            State = Label(remembered ? Loc.T("Released while idle. It loads again on its next use.") : "", true);
+            State.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => State.Visibility = State.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible);
+            State.Visibility = State.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+            copy.Children.Add(State); copy.Children.Add(Progress);
+            layout.Children.Add(copy);
             Download.Visibility = model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
             Load.Visibility = model.Downloaded && !model.Loaded && !remembered ? Visibility.Visible : Visibility.Collapsed;
             Unload.Visibility = model.Loaded || remembered ? Visibility.Visible : Visibility.Collapsed;
@@ -211,12 +239,23 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             ToolTipService.SetToolTip(Download, Loc.T("Download missing files or verify an existing copy."));
             Download.Style = Load.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
             foreach (var button in new[] { Download, Load, Unload, Remove }) Actions.Children.Add(button);
-            body.Children.Add(Actions); body.Children.Add(Cancel); Panel.Child = body;
-            Panel.SizeChanged += (_, e) => Actions.Orientation = e.NewSize.Width < 440 ? Orientation.Vertical : Orientation.Horizontal;
+            // Cancel stays outside Actions, which are disabled as a group during an operation.
+            var side = new StackPanel { Spacing = 8, Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            side.Children.Add(Actions); side.Children.Add(Cancel);
+            Grid.SetColumn(side, 1); layout.Children.Add(side);
+            Panel.Child = layout;
+            Panel.SizeChanged += (_, e) =>
+            {
+                var narrow = e.NewSize.Width < 480;
+                Grid.SetColumnSpan(copy, narrow ? 2 : 1);
+                Grid.SetColumn(side, narrow ? 0 : 1); Grid.SetRow(side, narrow ? 1 : 0);
+                side.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+            };
             void Theme()
             {
-                Panel.Background = (Brush)Application.Current.Resources["SurfaceBrush"];
-                Panel.BorderBrush = (Brush)Application.Current.Resources[model.Loaded || remembered ? "AccentBrush" : "HairlineBrush"];
+                Panel.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
+                badge.Background = (Brush)Application.Current.Resources["ElevatedBrush"];
+                badgeText.Foreground = (Brush)Application.Current.Resources["AccentBrush"];
             }
             Panel.ActualThemeChanged += (_, _) => Theme(); Theme();
             AutomationProperties.SetName(Progress, Loc.T("{0} download progress", model.Model.DisplayName));
@@ -225,7 +264,8 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             AutomationProperties.SetName(Remove, Loc.T("Remove {0}", model.Model.DisplayName));
         }
     }
-    private static TextBlock Label(string text) => new() { Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap };
+    private static TextBlock Label(string text, bool muted = false) => new() { Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+        Foreground = (Brush)Application.Current.Resources[muted ? "MutedBrush" : "TextBrush"] };
     private static HandCursorButton Button(string text) => new() { Content = text, HorizontalAlignment = HorizontalAlignment.Left,
         Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
 }
