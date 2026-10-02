@@ -13,9 +13,8 @@ internal class SettingsRows : StackPanel
     internal SettingsRows() => LayoutUpdated += (_, _) =>
     {
         var first = true;
-        foreach (var child in Children)
+        foreach (var child in Children.Where(child => child.Visibility == Visibility.Visible))
         {
-            if (child.Visibility != Visibility.Visible) continue;
             if (child is SettingsRow row) row.Divider = !first;
             first = false;
         }

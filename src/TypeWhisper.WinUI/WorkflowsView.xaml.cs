@@ -152,6 +152,9 @@ public sealed partial class WorkflowsView : UserControl
             var last = args.ItemIndex == FilteredWorkflows.Count - 1;
             args.ItemContainer.CornerRadius = new CornerRadius(first ? 11 : 0, first ? 11 : 0, last ? 11 : 0, last ? 11 : 0);
             args.ItemContainer.BorderThickness = new Thickness(0, first ? 0 : 1, 0, 0);
+            // A recycled row keeps its controls, so their names follow the workflow now shown.
+            if (args.Item is WorkflowDraft workflow && args.ItemContainer.ContentTemplateRoot is Panel row)
+                foreach (var control in row.Children.OfType<Control>()) NameRowAction(control, workflow);
         };
         ConfigMemory.Configure(Loc.T("Memory context"), "file", Loc.T("Workflow memory source"));
         ConfigMemory.SelectionChanged += _ => UpdateConfigurationState();
@@ -351,14 +354,19 @@ public sealed partial class WorkflowsView : UserControl
     {
         var toggle = (ToggleSwitch)sender;
         AppToggleSwitch.Configure(toggle);
-        AutomationProperties.SetName(toggle, Loc.T("Enable workflow"));
+        if (toggle.Tag is WorkflowDraft workflow) NameRowAction(toggle, workflow);
     }
 
     private void RowDelete_Loaded(object sender, RoutedEventArgs e)
     {
-        AutomationProperties.SetName((Button)sender, Loc.T("Delete workflow"));
-        ToolTipService.SetToolTip((Button)sender, Loc.T("Delete"));
+        var button = (Button)sender;
+        ToolTipService.SetToolTip(button, Loc.T("Delete"));
+        if (button.Tag is WorkflowDraft workflow) NameRowAction(button, workflow);
     }
+
+    // Screen readers hear which workflow a row's switch or delete button belongs to.
+    private static void NameRowAction(Control control, WorkflowDraft workflow) => AutomationProperties.SetName(control,
+        (control is ToggleSwitch ? Loc.T("Enable workflow") : Loc.T("Delete workflow")) + ": " + workflow.Title);
 
     // A recycled row sets its switch before its workflow; compare once both are in place.
     private void RowToggle_Toggled(object sender, RoutedEventArgs e)
@@ -587,7 +595,7 @@ public sealed partial class WorkflowsView : UserControl
         WorkflowPrimaryButton.IsEnabled = error is null && (_creating || dirty) && !prompting;
         CancelConfigurationButton.IsEnabled = !prompting;
         // A test runs the saved workflow, so it waits until the changes are saved.
-        TestWorkflowButton.IsEnabled = !dirty && !prompting;
+        TestWorkflowButton.IsEnabled = !dirty && !prompting && _apiConfigurationConflict is null;
     }
 
     private void SaveConfiguration()
@@ -663,7 +671,7 @@ public sealed partial class WorkflowsView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             var message = Loc.T("The workflow was not deleted. {0}", ex.Message);
-            if (_page == Page.Configuration) ConfigurationValidation.Text = message; else WorkflowSummary.Text = message;
+            (_page == Page.Configuration ? ConfigurationValidation : WorkflowSummary).Text = message;
         }
         finally
         {
@@ -712,7 +720,9 @@ public sealed partial class WorkflowsView : UserControl
                 : !string.IsNullOrEmpty(workflow.TargetActionPluginId) ? Loc.T("Run processes this text and sends the result to the saved plugin action.")
                 : Loc.T("Run sends this text to the selected provider. Review the result before copying.");
         }
-        source.TextChanged += (_, _) => { _workflowRunFailure = null; _drafts[workflow.Id] = source.Text; Refresh(); };
+        // A result belongs to the text it was made from.
+        void ClearResult() { result.Visibility = Visibility.Collapsed; resultText.Text = ""; dialog.IsSecondaryButtonEnabled = false; }
+        source.TextChanged += (_, _) => { _workflowRunFailure = null; _drafts[workflow.Id] = source.Text; ClearResult(); Refresh(); };
         async Task RunAsync()
         {
             using var cancellation = new CancellationTokenSource();
@@ -722,6 +732,9 @@ public sealed partial class WorkflowsView : UserControl
             try
             {
                 source.IsReadOnly = true;
+                ClearResult();
+                // The workflow may have changed or gone through the API since this dialog opened.
+                RequireUnchangedApiWorkflow(workflow);
                 dialog.PrimaryButtonText = Loc.T("Cancel run");
                 hint.Text = string.IsNullOrWhiteSpace(workflow.TargetActionPluginId) ? Loc.T("Processing with the saved provider and model…") : Loc.T("Processing and sending to the selected action…");
                 var execution = await session.RunWorkflowWithActionAsync(session.WorkflowDefaults.Resolve(workflow.ToStored()), source.Text, cancellation.Token);
@@ -737,7 +750,12 @@ public sealed partial class WorkflowsView : UserControl
             {
                 _run = null;
                 source.IsReadOnly = false;
-                try { if (!_closing) Refresh(); }
+                try
+                {
+                    if (!_closing) Refresh();
+                    // The dialog closed while this run was still ending.
+                    if (!_closing && _testDialog is null && _page == Page.List) Filter(_query);
+                }
                 finally { completion.TrySetResult(); }
             }
         }
@@ -765,6 +783,8 @@ public sealed partial class WorkflowsView : UserControl
         try { await dialog.ShowAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowSummary.Text = ex.Message; }
         finally { _run?.Cancel(); _testDialog = null; _workflowRunFailure = null; }
+        // An update that arrived through the API during a run could not refresh the list.
+        if (!_closing && _page == Page.List) Filter(_query);
     }
 
     private void LeaveConfiguration()

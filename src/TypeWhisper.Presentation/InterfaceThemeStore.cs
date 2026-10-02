@@ -34,7 +34,10 @@ public sealed class InterfaceThemeStore
                 Enum.GetNames<InterfaceTheme>().Contains(value.GetString()))
                 Saved = Enum.Parse<InterfaceTheme>(value.GetString()!);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            // A missing or unreadable file follows Windows.
+        }
     }
 
     /// <summary>Persists the theme; a failed write keeps the previous choice and returns the reason.</summary>

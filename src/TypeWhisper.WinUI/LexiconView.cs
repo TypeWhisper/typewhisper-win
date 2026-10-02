@@ -270,7 +270,15 @@ public sealed partial class LexiconView : UserControl
                 var row = new Grid { ColumnSpacing = 12 };
                 row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
                 var edit = Button("", () => OpenEditor(current));
-                EntryActionMenu.Attach(edit, () => [new(Loc.T("Edit variant"), () => OpenEditor(current)), new(Loc.T("Delete variant…"), () => DeleteEntry(current))]);
+                EntryActionMenu.Attach(edit, () => [new(Loc.T("Edit variant"), () => OpenEditor(current)),
+                    // A variant switched off earlier has no other way back.
+                    .. current.Enabled ? [] : new EntryActionMenu.Action[] { new(Loc.T("Enable"), () =>
+                    {
+                        var error = _store.Save(current with { Enabled = true });
+                        _notice.Text = error ?? "";
+                        if (error is null) Render();
+                    }) },
+                    new(Loc.T("Delete variant…"), () => DeleteEntry(current))]);
                 var label = Text(alias.Enabled ? alias.Key : alias.Key + "  ·  " + Loc.T("Off"), 13, !alias.Enabled);
                 label.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
                 edit.Content = label;
@@ -409,8 +417,10 @@ public sealed partial class LexiconView : UserControl
         };
         dialog.Opened += (_, _) => _firstInput?.Focus(FocusState.Programmatic);
         try { await dialog.ShowAsync(); }
-        // Another dialog is still open.
-        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+        {
+            // Another dialog is still open; this one did not show.
+        }
         finally { _editorDialog = null; _draft = _original = null; }
         if (!_closing) Render();
     }
