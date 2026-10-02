@@ -35,9 +35,10 @@ public sealed class PortablePluginUpdates(PortablePluginStore store, PortablePlu
         Changed?.Invoke();
     }
 
-    public async Task RefreshAsync()
+    /// <summary>Fetches the catalog; true only when this call received a new one.</summary>
+    public async Task<bool> RefreshAsync()
     {
-        if (_shutdown.IsCancellationRequested || !await _gate.WaitAsync(0)) return;
+        if (_shutdown.IsCancellationRequested || !await _gate.WaitAsync(0)) return false;
         Checking = true;
         Changed?.Invoke();
         try
@@ -47,9 +48,10 @@ public sealed class PortablePluginUpdates(PortablePluginStore store, PortablePlu
             var entries = await catalog.FetchAsync(timeout.Token);
             if (Status?.StartsWith("Update check unavailable", StringComparison.Ordinal) == true) Status = null;
             AcceptCatalog(entries);
+            return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (!_shutdown.IsCancellationRequested) { CheckFailed = true; Status = "Update check unavailable. Try opening Integrations again."; } }
+        { if (!_shutdown.IsCancellationRequested) { CheckFailed = true; Status = "Update check unavailable. Try opening Integrations again."; } return false; }
         finally { Checking = false; _gate.Release(); Changed?.Invoke(); }
     }
 

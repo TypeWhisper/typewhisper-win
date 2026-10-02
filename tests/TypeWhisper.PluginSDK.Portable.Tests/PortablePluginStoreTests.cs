@@ -54,7 +54,11 @@ public sealed class PortablePluginStoreTests : IDisposable
         var second = Entry("1.1.0", id: otherId) with { Name = "Second" };
         var updates = new PortablePluginUpdates(store, new(_http), new(1, 1, 0), PortablePluginCatalog.Architecture);
         Assert.False(updates.Checked);
+        // The fixture serves a package, not a catalog: a failed check reports no new catalog.
+        Assert.False(await updates.RefreshAsync());
+        Assert.True(updates.CheckFailed);
         updates.AcceptCatalog([first, second]);
+        Assert.False(updates.CheckFailed);
         Assert.True(updates.Checked);
         Assert.Equal(2, updates.Available.Count);
         await updates.UpdateAsync();

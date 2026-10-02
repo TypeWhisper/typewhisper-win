@@ -25,7 +25,8 @@ internal sealed class PluginAutoUpdatePreference
     {
         _path = path;
         try { if (File.Exists(path)) Enabled = File.ReadAllText(path).Trim() != "false"; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { System.Diagnostics.Trace.TraceWarning("Could not read the plugin update preference: {0}", ex.Message); }
     }
 
     /// <summary>Saves the choice; a failed write keeps the previous one.</summary>

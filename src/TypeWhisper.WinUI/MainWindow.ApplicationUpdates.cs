@@ -23,17 +23,21 @@ public sealed partial class MainWindow
     {
         var updates = _dictation.Packages.Updates;
         var wait = TimeSpan.FromMinutes(1);
-        while (!_closing && !_profileRestoreClosing)
+        bool CanUpdate() => PluginAutoUpdates.Enabled && _dictation.CanChangeProvider && !_dictation.IsRecording && !_dictation.Models.Busy && !updates.Busy;
+        while (true)
         {
             await Task.Delay(wait);
             if (_closing || _profileRestoreClosing) return;
-            // Turned off, or busy below: look again soon. A failed download waits for the next day.
+            // Turned off or busy: look again soon. A failed check or download waits for the next day.
             wait = TimeSpan.FromMinutes(15);
-            if (!PluginAutoUpdates.Enabled) continue;
-            if (!_dictation.CanChangeProvider || _dictation.IsRecording || _dictation.Models.Busy || updates.Busy) continue;
+            if (!CanUpdate()) continue;
+            var refreshed = await updates.RefreshAsync();
+            if (_closing || _profileRestoreClosing) return;
+            // A recording may have started during the request.
+            if (!CanUpdate()) continue;
             wait = TimeSpan.FromHours(24);
-            await updates.RefreshAsync();
-            if (updates.Available.Count > 0) await updates.UpdateAsync();
+            // Never install from an earlier catalog after a failed or skipped check.
+            if (refreshed && updates.Available.Count > 0) await updates.UpdateAsync();
         }
     }
 
