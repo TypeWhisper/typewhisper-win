@@ -11,27 +11,32 @@ internal sealed class LiveModelsView : UserControl
     private readonly LocalDictationSession _session;
     private readonly bool _setup;
     private readonly StackPanel _panel = new() { Spacing = 12 };
-    private readonly StackPanel _cards = new() { Spacing = 12 };
-    private readonly TextBlock _active = Copy("", 16);
+    private readonly StackPanel _cards = new();
     private readonly TextBlock _vocabulary = Copy("", 12, true);
     private readonly HandCursorButton _setupAction = Button(Loc.T("Retry setup"), Loc.T("Retry dictionary boosting setup"));
     private readonly TextBlock _feedback = Copy("", 12, true);
     private readonly List<ModelRow> _rows = [];
     private string? _message;
     private bool _confirmingRemoval;
-    private sealed record ModelRow(PluginModelInfo Model, Border Card, TextBlock Status, HandCursorButton Action, HandCursorButton Remove, HandCursorButton Cancel, Border Progress, Border Fill);
+    private sealed record ModelRow(PluginModelInfo Model, Border Badge, TextBlock Status, HandCursorButton Action, HandCursorButton Remove, HandCursorButton Cancel, Border Progress, Border Fill);
 
     internal LiveModelsView(LocalDictationSession session, bool setup = false)
     {
         _session = session; _setup = setup;
         Tag = "SelectedModelId";
+        var list = new StackPanel();
         if (!setup)
         {
-            _panel.Children.Add(Copy(Loc.T("ACTIVE MODEL"), 10, true));
-            _panel.Children.Add(_active);
-            _panel.Children.Add(Copy(Loc.T("Local models support dictation and live preview. Downloads continue when you leave this page."), 12, true));
+            var heading = Copy(Loc.T("Models"), 13);
+            heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            list.Children.Add(heading);
+            var intro = Copy(Loc.T("Local models support dictation and live preview. Downloads continue when you leave this page."), 12, true);
+            intro.Margin = new Thickness(0, 4, 0, 14);
+            list.Children.Add(intro);
         }
-        _panel.Children.Add(_cards);
+        list.Children.Add(_cards);
+        _panel.Children.Add(new Border { Child = list, Padding = new Thickness(18, setup ? 2 : 16, 18, 2), CornerRadius = new CornerRadius(12),
+            Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1) });
         if (!setup) _panel.Children.Add(_vocabulary);
         _setupAction.HorizontalAlignment = HorizontalAlignment.Left;
         _setupAction.Click += async (_, _) =>
@@ -59,7 +64,6 @@ internal sealed class LiveModelsView : UserControl
             _cards.Children.Clear(); _rows.Clear();
             foreach (var item in states) _cards.Children.Add(CreateRow(item.Model));
         }
-        _active.Text = _session.ActiveModelName;
         _vocabulary.Text = _session.CtcVocabulary.Error ?? (_session.CtcVocabulary.Busy
             ? _session.CtcVocabulary.Status ?? Loc.T("Preparing dictionary boosting…") : _session.CtcVocabulary.Enabled
                 ? Loc.T("Dictionary boosting is included for Parakeet. Add terms in Dictionary.")
@@ -78,7 +82,10 @@ internal sealed class LiveModelsView : UserControl
             var removing = models.RemovingModelId == row.Model.Id;
             var active = !_session.UsesRegistryProvider && models.ActiveModelId == row.Model.Id;
             row.Status.Text = removing ? Loc.T("Removing downloaded files…") : downloading ? Loc.T("Downloading · {0:P0}", models.Progress) : active ? Loc.T("Active · ready for dictation") : state.Downloaded ? Loc.T("Downloaded · ready to activate") : Loc.T("Available to download");
+            row.Status.Visibility = downloading || removing ? Visibility.Visible : Visibility.Collapsed;
             row.Action.Content = downloading ? $"{models.Progress:P0}" : active ? Loc.T("Active") : state.Downloaded ? Loc.T("Use model") : Loc.T("Download");
+            row.Action.Visibility = active ? Visibility.Collapsed : Visibility.Visible;
+            row.Badge.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             row.Action.IsEnabled = !_confirmingRemoval && !models.Busy && !active && (!state.Downloaded || _session.CanSelectModel);
             row.Remove.Visibility = !_setup && models.SupportsModelRemoval && state.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             row.Remove.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanChangeProvider && models.CanRemoveModel(row.Model.Id);
@@ -88,7 +95,6 @@ internal sealed class LiveModelsView : UserControl
             AutomationProperties.SetName(row.Cancel, removing ? Loc.T("Cancel {0} removal", row.Model.DisplayName) : Loc.T("Cancel {0} download", row.Model.DisplayName));
             row.Progress.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
             row.Fill.Width = row.Progress.ActualWidth * models.Progress;
-            row.Card.BorderBrush = Brush(active ? "AccentBrush" : "HairlineBrush");
             AutomationProperties.SetName(row.Action, $"{row.Action.Content} {row.Model.DisplayName}");
             AutomationProperties.SetItemStatus(row.Action, row.Status.Text);
         }
@@ -101,13 +107,29 @@ internal sealed class LiveModelsView : UserControl
         layout.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        var copy = new StackPanel { Spacing = 5 };
-        copy.Children.Add(Copy(Loc.T("LOCAL MODELS · ON-DEVICE · {0} · {1}", model.Publisher, model.SizeDescription), 10, true));
-        copy.Children.Add(Copy(model.DisplayName, _setup ? 14 : 16));
+        var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+        var name = Copy(model.DisplayName, _setup ? 14 : 15);
+        name.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        var badgeText = Copy(Loc.T("Active"), 11);
+        badgeText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; badgeText.Foreground = Brush("AccentBrush");
+        var badge = new Border { Child = badgeText, Padding = new Thickness(8, 2, 8, 3), CornerRadius = new CornerRadius(6),
+            Background = Brush("ElevatedBrush"), VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+        // Left-aligned, the star column is as wide as the name but still wraps a long one.
+        var title = new Grid { ColumnSpacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
+        title.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+        title.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        title.Children.Add(name); Grid.SetColumn(badge, 1); title.Children.Add(badge);
+        copy.Children.Add(title);
         var languages = Button(Loc.T("{0} languages", model.LanguageCount), Loc.T("Languages supported by {0}", model.DisplayName));
-        languages.Padding = new Thickness(0); languages.BorderThickness = new Thickness(0);
+        languages.Padding = new Thickness(0); languages.BorderThickness = new Thickness(0); languages.MinHeight = 0;
         languages.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        languages.HorizontalAlignment = HorizontalAlignment.Left; languages.FontSize = 12;
+        languages.VerticalAlignment = VerticalAlignment.Center; languages.FontSize = 12;
+        languages.FontWeight = Microsoft.UI.Text.FontWeights.Normal; languages.Foreground = Brush("MutedBrush");
+        var facts = string.Join(" · ", new[] { model.SizeDescription, model.Publisher }.Where(fact => !string.IsNullOrWhiteSpace(fact)));
+        var meta = new StackPanel { Orientation = Orientation.Horizontal };
+        // A TextBlock drops trailing spaces, so the gap after the separator is a margin.
+        if (facts.Length > 0) { meta.Children.Add(Copy(facts + " ·", 12, true)); languages.Margin = new Thickness(4, 0, 0, 0); }
+        meta.Children.Add(languages);
         var languageNames = model.LanguageCodes.Select(code =>
         {
             try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
@@ -121,16 +143,17 @@ internal sealed class LiveModelsView : UserControl
         languages.LostFocus += (_, _) => tooltip.IsOpen = false;
         languages.Click += (_, _) => tooltip.IsOpen = true;
         languages.Unloaded += (_, _) => tooltip.IsOpen = false;
-        copy.Children.Add(languages);
+        copy.Children.Add(meta);
         var status = Copy("", 12, true); copy.Children.Add(status);
         var fill = new Border { Background = Brush("AccentBrush"), HorizontalAlignment = HorizontalAlignment.Left, Width = 0, CornerRadius = new CornerRadius(2) };
-        var progress = new Border { Background = Brush("HairlineBrush"), Child = fill, Height = 4, CornerRadius = new CornerRadius(2) };
+        var progress = new Border { Background = Brush("HairlineBrush"), Child = fill, Height = 4, CornerRadius = new CornerRadius(2), Margin = new Thickness(0, 4, 0, 0) };
         progress.SizeChanged += (_, e) => fill.Width = e.NewSize.Width * _session.Models.Progress;
         AutomationProperties.SetName(progress, Loc.T("{0} download progress", model.DisplayName));
         copy.Children.Add(progress); layout.Children.Add(copy);
-        var actions = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         var action = Button(Loc.T("Download"), Loc.T("Download {0}", model.DisplayName));
-        action.MinWidth = 124;
+        action.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
+        action.MinWidth = 104;
         action.Click += async (_, _) =>
         {
             _message = null;
@@ -141,7 +164,7 @@ internal sealed class LiveModelsView : UserControl
                 else await _session.Models.DownloadAsync(model.Id);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { _message = ex.Message; }
-            if (IsLoaded) { Update(); action.Focus(FocusState.Programmatic); }
+            if (IsLoaded) { Update(); (action.Visibility == Visibility.Visible ? action : languages).Focus(FocusState.Programmatic); }
         };
         var cancel = Button(Loc.T("Cancel"), Loc.T("Cancel {0} download", model.DisplayName));
         cancel.Click += async (_, _) =>
@@ -154,7 +177,7 @@ internal sealed class LiveModelsView : UserControl
             }
             else _session.Models.CancelDownload();
         };
-        var remove = Button(Loc.T("Remove model"), Loc.T("Remove {0}", model.DisplayName));
+        var remove = Button(Loc.T("Remove"), Loc.T("Remove {0}", model.DisplayName));
         remove.Click += async (_, _) =>
         {
             if (_confirmingRemoval || !remove.IsEnabled) return;
@@ -175,18 +198,19 @@ internal sealed class LiveModelsView : UserControl
             catch (Exception ex) when (ex is not OutOfMemoryException) { _message = ex.Message; }
             finally { _confirmingRemoval = false; if (IsLoaded) Update(); }
         };
-        actions.Children.Add(action); actions.Children.Add(remove); actions.Children.Add(cancel);
+        actions.Children.Add(action); actions.Children.Add(cancel); actions.Children.Add(remove);
         Grid.SetColumn(actions, 1); layout.Children.Add(actions);
-        var card = new Border { Child = layout, Padding = new Thickness(_setup ? 12 : 16), CornerRadius = new CornerRadius(10),
-            Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1) };
+        // Rows share one card; a hairline separates each from the heading or the row above.
+        var card = new Border { Child = layout, Padding = new Thickness(0, 14, 0, 14), BorderBrush = Brush("HairlineBrush"),
+            BorderThickness = new Thickness(0, _setup && _rows.Count == 0 ? 0 : 1, 0, 0) };
         card.SizeChanged += (_, e) =>
         {
-            var narrow = e.NewSize.Width < 480;
+            var narrow = e.NewSize.Width < 440;
             Grid.SetColumnSpan(copy, narrow ? 2 : 1);
             Grid.SetColumn(actions, narrow ? 0 : 1); Grid.SetRow(actions, narrow ? 1 : 0);
             actions.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
         };
-        _rows.Add(new(model, card, status, action, remove, cancel, progress, fill));
+        _rows.Add(new(model, badge, status, action, remove, cancel, progress, fill));
         return card;
     }
     private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
