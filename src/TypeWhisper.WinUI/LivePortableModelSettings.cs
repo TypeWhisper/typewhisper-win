@@ -157,7 +157,6 @@ internal sealed class LivePortableModelSettings : UserControl
             var hasModelSetting = _cloudMode && TranscriptionModelSettingChoices.Any(choices =>
                 choices.SetEquals(models.Select(model => model.ModelId)));
             _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
-            _modelCard.Visibility = _cloudMode || models.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             _refresh.Visibility = _cloudMode || !_session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)
                 ? Visibility.Collapsed : Visibility.Visible;
             _localLlm.Visibility = HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
@@ -180,10 +179,14 @@ internal sealed class LivePortableModelSettings : UserControl
         finally
         {
             _reading = false;
-            if (Current(lifetime)) UpdateButtons();
+            if (Current(lifetime)) { UpdateButtons(); UpdateModelCard(); }
             if (IsLoaded && _reloadRequested) QueueUpdate();
         }
     }
+
+    // Refresh sits in the card, so the card stays while a provider has no rows yet or a read failed.
+    private void UpdateModelCard() => _modelCard.Visibility = !_cloudMode && (_rows.Children.Count > 0
+        || _session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)) ? Visibility.Visible : Visibility.Collapsed;
 
     private void SetRow(PortableDownloadableModel model)
     {
@@ -192,7 +195,7 @@ internal sealed class LivePortableModelSettings : UserControl
         {
             row = new Row(model);
             _items.Add(key, row); _rows.Children.Add(row.Panel);
-            if (!_cloudMode) _modelCard.Visibility = Visibility.Visible;
+            UpdateModelCard();
             var captured = row;
             row.Download.Click += async (_, _) => await DownloadAsync(captured);
             row.Use.Click += async (_, _) => await UseAsync(captured);
@@ -476,6 +479,9 @@ internal sealed class LivePortableModelSettings : UserControl
                 Grid.SetColumnSpan(copy, narrow ? 2 : 1);
                 Grid.SetColumn(actions, narrow ? 0 : 1); Grid.SetRow(actions, narrow ? 1 : 0);
                 actions.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+                // Three buttons can show at once; stacked, none is cut off in a narrow window.
+                actions.Orientation = narrow ? Orientation.Vertical : Orientation.Horizontal;
+                actions.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
             };
             void Theme() {
                 Panel.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];

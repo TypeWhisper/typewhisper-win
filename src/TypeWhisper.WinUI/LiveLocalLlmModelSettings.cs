@@ -250,6 +250,9 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 Grid.SetColumnSpan(copy, narrow ? 2 : 1);
                 Grid.SetColumn(side, narrow ? 0 : 1); Grid.SetRow(side, narrow ? 1 : 0);
                 side.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+                // Three buttons can show at once; stacked, none is cut off in a narrow window.
+                side.Orientation = Actions.Orientation = narrow ? Orientation.Vertical : Orientation.Horizontal;
+                side.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
             };
             void Theme()
             {
