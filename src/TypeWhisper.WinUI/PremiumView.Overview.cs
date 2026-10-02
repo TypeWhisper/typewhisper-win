@@ -66,7 +66,7 @@ internal sealed partial class PremiumView
         _status.FontSize = 16;
         status.Children.Add(Copy(_status.Text, 16));
         Grid.SetColumn(status, 1); accessRow.Children.Add(status);
-        var manage = new HandCursorButton { Content = Loc.T("Manage Access…"), CornerRadius = new CornerRadius(8), VerticalAlignment = VerticalAlignment.Center };
+        var manage = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Manage Access…"), VerticalAlignment = VerticalAlignment.Center };
         manage.Click += (_, _) => ShowDetails(null);
         Grid.SetColumn(manage, 2); accessRow.Children.Add(manage);
         _overview.Children.Add(Card(accessRow));
@@ -77,7 +77,7 @@ internal sealed partial class PremiumView
             hero.Children.Add(Copy(Loc.T("Premium features that save you work"), 22));
             hero.Children.Add(Copy(Loc.T("Record scheduled meetings automatically, learn from your corrections, and keep your dictionary and snippets in sync."), 14, true));
             hero.Children.Add(Copy(Loc.T("Correction learning is available on Windows. Cloud folder sync is also available; meeting automation is coming later."), 12, true));
-            var unlock = new HandCursorButton { Content = Loc.T("Unlock Premium") };
+            var unlock = new HandCursorButton { Style = (Style)Application.Current.Resources["PrimaryButtonStyle"], Content = Loc.T("Unlock Premium") };
             unlock.Click += (_, _) => ShowDetails(null);
             hero.Children.Add(unlock);
             if (Access.Current.Supporter) hero.Children.Add(Copy(Loc.T("Supporter status alone does not unlock Premium features."), 12, true));
@@ -128,7 +128,7 @@ internal sealed partial class PremiumView
         Grid.SetRow(content, 1); panel.Children.Add(content);
         if (Access.Current.Any)
         {
-            var settings = new HandCursorButton { Content = Loc.T("Settings…"), CornerRadius = new CornerRadius(8), HorizontalAlignment = HorizontalAlignment.Left };
+            var settings = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Settings…"), HorizontalAlignment = HorizontalAlignment.Left };
             settings.Click += (_, _) => ShowDetails(feature);
             Grid.SetRow(settings, 2); panel.Children.Add(settings);
         }

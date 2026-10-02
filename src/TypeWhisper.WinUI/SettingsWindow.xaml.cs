@@ -94,7 +94,6 @@ public sealed partial class SettingsWindow : Window
         LocalizeXamlText();
         PageKeyboardNavigation.Attach(SettingsRoot);
         NativeWindowAppearance.ApplyAppTitleBar(this);
-        CatalogContent.LayoutUpdated += (_, _) => SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
         AppToggleSwitch.Configure(LiveTextToggle);
         AppToggleSwitch.Configure(DetailsToggle);
         OverlayEditor.Changed += Publish;
@@ -211,6 +210,8 @@ public sealed partial class SettingsWindow : Window
         AutomationProperties.SetName(LiveTextToggle, Loc.T("Settings live transcription"));
         DetailsTitle.Text = Loc.T("Technical details");
         AutomationProperties.SetName(DetailsToggle, Loc.T("Settings technical details"));
+        LayoutTitle.Text = Loc.T("Layout");
+        LayoutDescription.Text = Loc.T("Choose screen position and arrange the left and right widgets.");
         CustomizeLayoutButton.Content = Loc.T("Customize layout");
         AutomationProperties.SetName(CustomizeLayoutButton, Loc.T("Customize overlay layout"));
         PreviewButton.Content = Loc.T("Preview overlay");
@@ -265,12 +266,12 @@ public sealed partial class SettingsWindow : Window
         var placement = preferences.FloatingLiveText ? "Floating window" : "Attached to recording";
         _values["LiveTextPlacement"] = placement;
         _appearancePickers.FirstOrDefault(p => p.Tag is "LiveTextPlacement")?.SetOptions(
-            new[] { "Attached to recording", "Floating window" }.Select(label => new Choice(label, Loc.T(label), Loc.T("Saved on this device"))).ToArray(), placement, Loc.T(placement));
+            new[] { "Attached to recording", "Floating window" }.Select(label => new Choice(label, Loc.T(label), "")).ToArray(), placement, Loc.T(placement));
         var duration = DurationChoices.FirstOrDefault(c => c.Milliseconds == preferences.PreviewBubbleAutoHideMilliseconds).Label
             ?? $"{preferences.PreviewBubbleAutoHideMilliseconds} milliseconds";
         _values["PreviewBubbleAutoHideMilliseconds"] = duration;
         _appearancePickers.FirstOrDefault(p => p.Tag is "LiveTranscriptionFontSize")?.SetOptions(
-            Enumerable.Range(10, 9).Select(n => new Choice(n.ToString(), n.ToString(), Loc.T("Saved on this device"))).ToArray(), size, size);
+            Enumerable.Range(10, 9).Select(n => new Choice(n.ToString(), n.ToString(), "")).ToArray(), size, size);
         _appearancePickers.FirstOrDefault(p => p.Tag is "PreviewBubbleAutoHideMilliseconds")?.SetOptions(
             DurationChoices.Select(c => new Choice(c.Label, Loc.T(c.Label), Loc.T("After successful paste; errors remain visible for five seconds"))).ToArray(), duration, Loc.T("{0} milliseconds", preferences.PreviewBubbleAutoHideMilliseconds));
         OverlayEditor.SetPreferences(preferences);
@@ -279,6 +280,15 @@ public sealed partial class SettingsWindow : Window
             var selected = (string)button.Tag == preferences.Mode.ToString();
             button.Style = (Style)Application.Current.Resources[selected ? "PrimaryButtonStyle" : "SecondaryButtonStyle"];
             AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
+            if (button.Content is not Panel choice) continue;
+            foreach (var child in choice.Children)
+            {
+                if (child is TypeWhisperGlyph glyph) glyph.Inverse = selected;
+                // The description is the muted text; on the accent fill both are white.
+                else if (child is TextBlock text)
+                    text.Foreground = selected ? new SolidColorBrush(Microsoft.UI.Colors.White)
+                        : (Brush)Application.Current.Resources[text.FontWeight.Weight >= 600 ? "TextBrush" : "MutedBrush"];
+            }
         }
         LiveTextToggle.IsOn = _liveTranscriptionAvailable && preferences.LiveText;
         DetailsToggle.IsOn = preferences.TechnicalDetails;
@@ -548,13 +558,12 @@ public sealed partial class SettingsWindow : Window
             _catalogPickers.Clear();
             SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitPasteLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
-            SettingsCatalog.UpdateTrailingSeparators(CatalogContent);
-            if (category == "General")
+            if (category == "General" && CatalogContent.Children.OfType<SettingsCard>().FirstOrDefault() is { } general)
             {
-                var setup = new HandCursorButton { Content = Loc.T("Open setup wizard"), HorizontalAlignment = HorizontalAlignment.Left,
+                var setup = new HandCursorButton { Content = Loc.T("Open setup wizard"),
                     Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
                 setup.Click += (_, _) => ShowSetup();
-                CatalogContent.Children.Add(setup);
+                general.Children.Add(new SettingsRow().Set(Loc.T("TypeWhisper Setup"), Loc.T("Set up voice typing in a few simple steps."), setup));
             }
             CatalogScroll.ChangeView(null, 0, null, true);
         }
@@ -569,7 +578,12 @@ public sealed partial class SettingsWindow : Window
         foreach (var child in row.Children)
         {
             if (child is TypeWhisperGlyph glyph) glyph.Inverse = selected;
-            else if (child is TextBlock label) label.FontWeight = selected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+            else if (child is TextBlock label)
+            {
+                label.FontWeight = selected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+                // The text block's own style would keep the page text color on the accent fill.
+                label.Foreground = selected ? new SolidColorBrush(Microsoft.UI.Colors.White) : (Brush)Application.Current.Resources["TextBrush"];
+            }
         }
     }
 
@@ -587,7 +601,6 @@ public sealed partial class SettingsWindow : Window
         var titled = panel.Children is [StackPanel live] ? live : panel;
         if (titled.Children.Count > 0) titled.Children.RemoveAt(0);
         panel.Children.Insert(0, new TextBlock { Text = Loc.T("Defaults"), FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        SettingsCatalog.UpdateTrailingSeparators(panel);
     }
 
     internal void ShowRecoveryFromTray(bool allowNavigation)

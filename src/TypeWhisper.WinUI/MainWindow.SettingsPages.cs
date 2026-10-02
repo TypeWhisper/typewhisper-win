@@ -24,24 +24,31 @@ public sealed partial class MainWindow
 
     private void InitializeSettingsPages()
     {
-        var page = _workflowsPage = new Grid { RowSpacing = 12 };
-        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var search = _workflowSearch = new TextBox { PlaceholderText = Loc.T("Search workflows…"), Margin = new Thickness(12, 0, 12, 0) };
+        var page = _workflowsPage = new Grid();
+        var search = _workflowSearch = new TextBox { MinHeight = 36, Padding = new Thickness(12, 8, 12, 8), Style = (Style)Application.Current.Resources["SearchTextBoxStyle"] };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search, Loc.T("Search workflows"));
-        search.TextChanged += (_, _) => WorkflowsView.Filter(search.Text.Trim());
+        var placeholder = new TextBlock { Text = Loc.T("Search workflows…"), FontSize = 14, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false, Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
+        search.TextChanged += (_, _) =>
+        {
+            placeholder.Visibility = search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            WorkflowsView.Filter(search.Text.Trim());
+        };
         search.KeyDown += (_, e) =>
         {
             if (e.Key is not (global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)) return;
             WorkflowsView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
             e.Handled = true;
         };
-        page.Children.Add(search);
-        Grid.SetRow(WorkflowsView, 1);
+        // The same search field as on the Dictionary page.
+        var searchGrid = new Grid { ColumnSpacing = 8 };
+        searchGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) }); searchGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        searchGrid.Children.Add(new TypeWhisperGlyph { Kind = "search", Width = 18, Height = 18 });
+        Grid.SetColumn(search, 1); Grid.SetColumn(placeholder, 1); searchGrid.Children.Add(search); searchGrid.Children.Add(placeholder);
+        WorkflowsView.SetSearch(new Border { Child = searchGrid, Padding = new Thickness(12, 2, 4, 2), CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1),
+            Background = (Brush)Application.Current.Resources["SurfaceBrush"], BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] });
         page.Children.Add(WorkflowsView);
         WorkflowsView.ClearSearchRequested += (_, _) => search.Text = "";
-        // Search applies to the list only; detail pages have their own breadcrumb back to it.
-        WorkflowsView.DetailModeChanged += detail => search.Visibility = detail ? Visibility.Collapsed : Visibility.Visible;
         WorkflowsView.ExitRequested += (_, _) => _settingsPageExited = true;
     }
 
@@ -103,18 +110,11 @@ public sealed partial class MainWindow
         _backup.ConnectRestore(RestoreProfile);
         _backup.ConnectDeleteAllData(DeleteAllData);
         var page = _backupPage = new Grid();
-        page.RowDefinitions.Add(new RowDefinition());
-        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var body = new StackPanel { Spacing = 16 };
-        body.Children.Add(new TextBlock { Text = Loc.T("Sync & backup"), FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        var body = new StackPanel { Spacing = 20 };
+        body.Children.Add(SettingsCard.PageTitle(Loc.T("Sync & backup")));
         body.Children.Add(_backup);
         page.Children.Add(new ScrollViewer { Content = body, Padding = new Thickness(12, 4, 12, 16),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        _backup.Actions.Margin = new Thickness(0, 12, 0, 12);
-        var footer = new Border { Child = _backup.Actions, Margin = new Thickness(12, 0, 12, 0), BorderThickness = new Thickness(0, 1, 0, 0),
-            BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] };
-        Grid.SetRow(footer, 1);
-        page.Children.Add(footer);
         return page;
     }
 
@@ -152,17 +152,12 @@ public sealed partial class MainWindow
     }
 
     // The first section of History & Sync, as on macOS.
-    private StackPanel HistoryWorkspaceSection()
+    private SettingsRow HistoryWorkspaceRow()
     {
-        var section = new StackPanel { Spacing = 8 };
-        section.Children.Add(new TextBlock { Text = Loc.T("History workspace"), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        section.Children.Add(new TextBlock { Text = Loc.T("Search, review, edit, copy and export your transcriptions in a dedicated view."),
-            FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] });
-        var open = new HandCursorButton { Content = Loc.T("Open History"), HorizontalAlignment = HorizontalAlignment.Left,
-            Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
+        var open = new HandCursorButton { Content = Loc.T("Open History"), Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
         open.Click += (_, _) => ShowHistoryFromTray();
-        section.Children.Add(open);
-        return section;
+        return new SettingsRow().Set(Loc.T("History workspace"),
+            Loc.T("Search, review, edit, copy and export your transcriptions in a dedicated view."), open);
     }
 
     private void NavigateFromSettingsPage(string destination)

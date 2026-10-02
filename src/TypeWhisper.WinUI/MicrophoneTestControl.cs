@@ -12,7 +12,7 @@ internal sealed class MicrophoneTestControl : StackPanel
 {
     private readonly LocalDictationSession _session;
     private readonly HandCursorButton _button;
-    private readonly TextBlock _status = Copy(Loc.T("Speak into your microphone to check its input."));
+    private readonly TextBlock _status = Copy(Loc.T("Speak into your microphone to check its input."), true);
     private readonly TextBlock _device = Copy("", true);
     private readonly TextBlock _explanation = Copy("", true);
     private readonly ProgressBar _level = new() { Minimum = 0, Maximum = 100, Height = 6, IsTabStop = false };
@@ -23,20 +23,27 @@ internal sealed class MicrophoneTestControl : StackPanel
     {
         _session = session;
         Spacing = 8;
-        Margin = new Thickness(0, 8, 0, 8);
-        Children.Add(SettingsHelp.Label(Loc.T("Microphone test"), Loc.T("Checks the microphone selected by your priority list. No audio is saved or sent. Stops automatically after 15 seconds.")));
+        Padding = new Thickness(0, 12, 0, 12);
         _button = new HandCursorButton
         {
-            Content = Loc.T("Test microphone"), HorizontalAlignment = HorizontalAlignment.Left,
+            Content = Loc.T("Test microphone"), VerticalAlignment = VerticalAlignment.Center,
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"]
         };
         _button.Click += (_, _) => ToggleTest();
+        var header = new Grid { ColumnSpacing = 16 };
+        header.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        var copy = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        copy.Children.Add(SettingsHelp.Label(Loc.T("Microphone test"), Loc.T("Checks the microphone selected by your priority list. No audio is saved or sent. Stops automatically after 15 seconds.")));
+        copy.Children.Add(_status);
+        header.Children.Add(copy);
+        Grid.SetColumn(_button, 1); header.Children.Add(_button);
         AutomationProperties.SetName(_level, Loc.T("Microphone input level"));
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        Children.Add(_button);
+        _level.Visibility = Visibility.Collapsed;
+        Children.Add(header);
         Children.Add(_device);
         Children.Add(_level);
-        Children.Add(_status);
         Children.Add(_explanation);
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(100);
@@ -57,6 +64,7 @@ internal sealed class MicrophoneTestControl : StackPanel
             return;
         }
         _ownsTest = true;
+        _level.Visibility = Visibility.Visible;
         _button.Content = Loc.T("Stop test");
         _timer.Start();
         Update();
@@ -89,6 +97,7 @@ internal sealed class MicrophoneTestControl : StackPanel
         if (_session.MicrophoneTest is { } test) Render(test);
         _button.Content = Loc.T("Test microphone");
         _level.Value = 0;
+        _level.Visibility = Visibility.Collapsed;
     }
 
     private void Render(MicrophoneTestSnapshot test)

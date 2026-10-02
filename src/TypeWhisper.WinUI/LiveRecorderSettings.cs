@@ -15,26 +15,30 @@ internal static class LiveRecorderSettings
         if (category != "Recorder") return;
         parent.Children.Clear();
         // The catalog parent is reused between categories; this child owns exactly this binding's events.
-        var content = new StackPanel { Spacing = 12 };
+        var content = new StackPanel { Spacing = 20 };
         parent.Children.Add(content);
         pickers.Clear();
-        content.Children.Add(SettingsHelp.Label(Loc.T("Recorder"), Loc.T("Source choices are saved for your next recording. Changes never switch sources during an active recording."), 24));
+        content.Children.Add(SettingsCard.PageTitle(Loc.T("Recorder"), Loc.T("Source choices are saved for your next recording. Changes never switch sources during an active recording.")));
+        var card = new SettingsCard();
+        content.Children.Add(card);
         var microphone = AppToggleSwitch.Create(preferences.Current.MicrophoneEnabled);
         var system = AppToggleSwitch.Create(preferences.Current.SystemAudioEnabled);
-        AddToggle(Loc.T("Microphone on by default"), microphone);
-        AddToggle(Loc.T("System audio on by default"), system);
-        content.Children.Add(SettingsHelp.Label(Loc.T("System audio device"), Loc.T("The microphone uses your Audio settings priority list. This output selection controls which system audio is recorded, independently of feedback sounds.")));
+        AddToggle(Loc.T("Microphone on by default"), Loc.T("Start new recorder sessions with your microphone enabled."), microphone);
+        AddToggle(Loc.T("System audio on by default"), Loc.T("Start new recorder sessions with sound from your computer enabled."), system);
         var device = new ChoicePicker();
         device.Configure(Loc.T("System audio device"), "speaker", Loc.T("Recorder system audio device"));
-        content.Children.Add(device); pickers.Add(device);
-        var refreshDevices = new HandCursorButton { Content = Loc.T("Refresh devices"), HorizontalAlignment = HorizontalAlignment.Left,
-            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
-        content.Children.Add(refreshDevices);
-        content.Children.Add(SettingsHelp.Label(Loc.T("Audio format: WAV · 16 kHz mono"), Loc.T("Recordings are saved locally. Choose Transcribe on a saved recording to process it.")));
-        content.Children.Add(Label(Loc.T("Tracks: Mixed · microphone ducking off"), 14));
-        var status = Label("");
-        AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
-        content.Children.Add(status);
+        device.Width = 220; device.UseRowHeight();
+        pickers.Add(device);
+        var refreshDevices = new HandCursorButton { Content = new FontIcon { Glyph = "\uE72C", FontSize = 16 }, Width = 36, Height = 36,
+            Padding = new Thickness(8), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
+        AutomationProperties.SetName(refreshDevices, Loc.T("Refresh devices")); ToolTipService.SetToolTip(refreshDevices, Loc.T("Refresh devices"));
+        var deviceControls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        deviceControls.Children.Add(device); deviceControls.Children.Add(refreshDevices);
+        var deviceRow = new SettingsRow("RecorderSystemAudioDeviceId").Set(Loc.T("System audio device"),
+            Loc.T("The microphone uses your Audio settings priority list. This output selection controls which system audio is recorded, independently of feedback sounds."), deviceControls);
+        card.Children.Add(deviceRow);
+        card.Children.Add(new SettingsRow().Set(Loc.T("Audio format: WAV · 16 kHz mono"), Loc.T("Tracks: Mixed · microphone ducking off"),
+            Loc.T("Recordings are saved locally. Choose Transcribe on a saved recording to process it.")));
         var refreshing = false;
         var subscribed = false;
         IReadOnlyList<Choice> choices = [];
@@ -51,9 +55,9 @@ internal static class LiveRecorderSettings
             var options = available ? choices : choices.Concat([new Choice(id,
                 Loc.T("Saved device · unavailable"), Loc.T("Reconnect it or choose another device. No automatic fallback."))]).ToArray();
             device.SetOptions(options, id);
-            status.Text = preferences.Error ?? deviceError ?? (!available
+            deviceRow.Status = preferences.Error ?? deviceError ?? (!available
                 ? Loc.T("The saved output is unavailable. Reconnect it or choose another output before recording system audio.")
-                : Loc.T("Saved · applies to the next recording."));
+                : "");
             refreshing = false;
         }
         void RefreshDevices()
@@ -89,20 +93,10 @@ internal static class LiveRecorderSettings
         if (content.IsLoaded) Attach();
         RefreshDevices();
 
-        void AddToggle(string title, ToggleSwitch toggle)
+        void AddToggle(string title, string description, ToggleSwitch toggle)
         {
-            var row = new Grid { ColumnSpacing = 16, Padding = new Thickness(0, 8, 0, 8) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var label = Label(title, 14);
-            label.VerticalAlignment = VerticalAlignment.Center;
-            row.Children.Add(label);
             AutomationProperties.SetName(toggle, title);
-            Grid.SetColumn(toggle, 1);
-            row.Children.Add(toggle);
-            content.Children.Add(row);
+            card.Children.Add(new SettingsRow().Set(title, description, toggle));
         }
     }
-
-    private static TextBlock Label(string text, double size = 12) => new() { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap };
 }

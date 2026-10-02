@@ -243,7 +243,8 @@ public sealed partial class HistoryWindow
         var dialog = new ContentDialog
         {
             XamlRoot = Content.XamlRoot, Title = Loc.T("Save Changes?"), Content = Loc.T("You edited this entry. Save your changes before leaving it?"),
-            PrimaryButtonText = Loc.T("Save"), SecondaryButtonText = Loc.T("Discard"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
+            PrimaryButtonText = Loc.T("Save"), SecondaryButtonText = Loc.T("Discard"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary,
+            SecondaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
         };
         _dialogOpen = true;
         ContentDialogResult result;

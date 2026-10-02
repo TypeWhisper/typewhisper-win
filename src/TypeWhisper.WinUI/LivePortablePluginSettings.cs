@@ -48,7 +48,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         if (string.IsNullOrEmpty(_key.Password)) return true;
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Unsaved API key"),
             Content = Loc.T("The key entered for “{0}” has not been saved. Use Save profile before switching, or discard the entered key.", _connectionTitle),
-            PrimaryButtonText = Loc.T("Discard entered key"), CloseButtonText = Loc.T("Keep editing"), DefaultButton = ContentDialogButton.Close };
+            PrimaryButtonText = Loc.T("Discard entered key"), CloseButtonText = Loc.T("Keep editing"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
         _key.Password = "";
         return true;

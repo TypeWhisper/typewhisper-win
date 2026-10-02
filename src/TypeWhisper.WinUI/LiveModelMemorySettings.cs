@@ -9,14 +9,11 @@ internal static class LiveModelMemorySettings
     // Fills the Advanced page's Recording row.
     internal static void Configure(StackPanel content, List<ChoicePicker> pickers, LocalDictationSession session)
     {
-        var row = FindRow(content) ?? throw new InvalidOperationException("Model memory settings row is missing.");
-        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
-        row.Children.Clear();
-        row.Children.Add(SettingsHelp.Label(Loc.T("Unload idle models"),
-            Loc.T("Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3 and local text models are affected; cloud providers are not.")));
+        var row = SettingsRow.Require(content, "ModelAutoUnloadSeconds").Reset(pickers);
         var picker = new ChoicePicker();
         picker.Configure(Loc.T("Unload idle models"), "history", Loc.T("Unload idle models"));
-        var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        row.Set(Loc.T("Unload idle models"), Loc.T("Release the memory of local models after inactivity. They load again when needed."),
+            Loc.T("Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3 and local text models are affected; cloud providers are not."), picker);
         string? selectionError = null;
         void Refresh()
         {
@@ -29,7 +26,7 @@ internal static class LiveModelMemorySettings
                 new("1800", Loc.T("After 30 minutes"), Loc.T("Release memory after 30 minutes without use.")),
                 new("3600", Loc.T("After 1 hour"), Loc.T("Release memory after 1 hour without use."))
             ], session.ModelMemoryPreferences.AutoUnloadSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            hint.Text = selectionError ?? session.ModelMemoryPreferences.Error ?? Loc.T("Saved for this profile. Applies to models that are loaded now.");
+            row.Status = selectionError ?? session.ModelMemoryPreferences.Error ?? "";
         }
         picker.SelectionChanged += id =>
         {
@@ -37,15 +34,7 @@ internal static class LiveModelMemorySettings
                 selectionError = session.SelectModelAutoUnload(seconds);
             Refresh();
         };
-        row.Children.Add(picker); row.Children.Add(hint); pickers.Add(picker);
+        pickers.Add(picker);
         Refresh();
-    }
-
-    private static StackPanel? FindRow(StackPanel root)
-    {
-        if (Equals(root.Tag, "ModelAutoUnloadSeconds")) return root;
-        foreach (var child in root.Children.OfType<StackPanel>())
-            if (FindRow(child) is { } row) return row;
-        return null;
     }
 }

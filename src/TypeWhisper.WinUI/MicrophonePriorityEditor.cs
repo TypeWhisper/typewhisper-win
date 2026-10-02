@@ -12,13 +12,13 @@ internal sealed class MicrophonePriorityEditor : StackPanel
     private readonly LocalDictationSession _session;
     private readonly ObservableCollection<PriorityRow> _items = [];
     private readonly ListView _list;
-    private readonly TextBlock _hint = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _hint = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MutedBrush"] };
     private readonly ChoicePicker _add = new();
     internal ChoicePicker AddPicker => _add;
 
     internal MicrophonePriorityEditor(LocalDictationSession session)
     {
-        _session = session; Spacing = 8;
+        _session = session; Spacing = 8; Padding = new Thickness(0, 12, 0, 12);
         Children.Add(SettingsHelp.Label(Loc.T("Microphones"), Loc.T("Drag to prioritize or use the arrow buttons. The first available microphone wins; Windows default is the fallback.")));
         _list = new ListView
         {
@@ -49,7 +49,7 @@ internal sealed class MicrophonePriorityEditor : StackPanel
                               <VisualState x:Name="Disabled"><VisualState.Setters><Setter Target="RowSurface.Opacity" Value="0.5"/></VisualState.Setters></VisualState>
                             </VisualStateGroup>
                           </VisualStateManager.VisualStateGroups>
-                          <Border x:Name="RowSurface" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="8">
+                          <Border x:Name="RowSurface" Background="{ThemeResource InkBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="8">
                             <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalContentAlignment="Stretch"/>
                           </Border>
                         </Grid>
@@ -98,13 +98,13 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         var addRow = new Grid { ColumnSpacing = 8 };
         addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _add.UseRowHeight();
         addRow.Children.Add(_add);
-        var refresh = new HandCursorButton { Content = new FontIcon { Glyph = "\uE72C", FontSize = 16 }, Width = 42, Height = 42,
+        var refresh = new HandCursorButton { Content = new FontIcon { Glyph = "\uE72C", FontSize = 16 }, Width = 36, Height = 36,
             Padding = new Thickness(8), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         AutomationProperties.SetName(refresh, Loc.T("Refresh microphones")); ToolTipService.SetToolTip(refresh, Loc.T("Refresh microphones"));
         refresh.Click += (_, _) => Refresh(); Grid.SetColumn(refresh, 1); addRow.Children.Add(refresh);
         Children.Add(addRow); Children.Add(_hint);
-        Children.Add(new MicrophoneTestControl(session));
         Loaded += (_, _) => session.MicrophonesChanged += Refresh;
         Unloaded += (_, _) => session.MicrophonesChanged -= Refresh;
         Refresh();
@@ -142,7 +142,8 @@ internal sealed class MicrophonePriorityEditor : StackPanel
         var missing = _items.Where(item => !devices.Any(device => Platform.MicrophoneFailure.IsSameMicrophone(device, item.Item))).Select(item => item.Name).ToArray();
         _hint.Text = _session.MicrophoneNotice() is { } notice ? notice
             : missing.Length > 0 ? Loc.T("Disconnected (kept in priority list): {0}", string.Join(", ", missing))
-            : _items.Count == 0 ? Loc.T("Uses Windows default until you add a microphone.") : Loc.T("Priority saved.");
+            : _items.Count == 0 ? Loc.T("Uses Windows default until you add a microphone.") : "";
+        _hint.Visibility = _hint.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     public sealed class PriorityRow(MicrophonePriorityItem item, bool canMoveUp, bool canMoveDown)

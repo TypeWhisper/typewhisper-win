@@ -13,8 +13,8 @@ namespace TypeWhisper.WinUI;
 internal sealed class SyncBackupView : UserControl
 {
     private readonly PersistedProfileBackup _store = new(WinUIProfile.Root);
-    private readonly StackPanel _body = new() { Spacing = 16 };
-    private readonly StackPanel _selection = new() { Spacing = 8 };
+    private readonly StackPanel _body = new() { Spacing = 20 };
+    private readonly StackPanel _selection = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     private readonly StackPanel _review = new() { Spacing = 10 };
     private readonly TextBlock _notice = Copy(Loc.T("Choose the categories to include. History contains saved text only."), 13, true);
     private readonly HandCursorButton _export;
@@ -36,34 +36,32 @@ internal sealed class SyncBackupView : UserControl
     internal SyncBackupView()
     {
         Content = _body;
-        _body.Children.Add(SettingsHelp.Label(Loc.T("Local backup"), Loc.T("Save a portable JSON file or merge data from an existing TypeWhisper backup. Audio, model files, API keys, licenses, plugin installation and device preferences are excluded."), 22));
         foreach (var (category, label) in new[]
         {
             (BackupCategory.Dictionary, Loc.T("Dictionary")), (BackupCategory.Snippets, Loc.T("Snippets")),
             (BackupCategory.Workflows, Loc.T("Workflows")), (BackupCategory.History, Loc.T("History (text only)"))
         })
         {
-            var toggle = new CheckBox { Content = label, IsChecked = _categories.HasFlag(category) };
+            var toggle = new CheckBox { Content = label, IsChecked = _categories.HasFlag(category), MinWidth = 0, Margin = new Thickness(0, 0, 12, 0) };
             AutomationProperties.SetName(toggle, Loc.T("Include {0} in backup", label));
             toggle.Checked += (_, _) => { _categories |= category; InvalidatePreview(); };
             toggle.Unchecked += (_, _) => { _categories &= ~category; InvalidatePreview(); };
             _selection.Children.Add(toggle);
         }
-        _body.Children.Add(_selection);
         _export = Button(Loc.T("Export backup…"), () => RunAsync(ExportAsync));
         _import = Button(Loc.T("Choose backup to restore…"), () => RunAsync(PreviewAsync));
         Actions.Children.Add(_export); Actions.Children.Add(_import);
         AutomationProperties.SetLiveSetting(_notice, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        _body.Children.Add(_notice); _body.Children.Add(_review);
-        _body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new(0, 8, 0, 8) });
+        var backup = new SettingsCard(Loc.T("Local backup"), Loc.T("Save a portable JSON file or merge data from an existing TypeWhisper backup. Audio, model files, API keys, licenses, plugin installation and device preferences are excluded."));
+        backup.Add(Block(_selection, _notice, _review, Actions));
+        _body.Children.Add(backup);
         _body.Children.Add(new CloudSyncView());
-        _body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new(0, 8, 0, 8) });
-        _body.Children.Add(SettingsHelp.Label(Loc.T("All data"), Loc.T("Take a complete copy of your TypeWhisper data with you, or remove everything TypeWhisper stores on this PC and start fresh."), 22));
         _exportAll = Button(Loc.T("Export all data…"), () => RunAsync(ExportAllAsync, _dataNotice, Loc.T("Export failed: {0}")));
         _deleteAll = Button(Loc.T("Delete all data…"), () => RunAsync(ConfirmDeleteAllAsync, _dataNotice, Loc.T("Delete all data failed: {0}")), "DestructiveButtonStyle");
-        _body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _exportAll, _deleteAll } });
         AutomationProperties.SetLiveSetting(_dataNotice, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        _body.Children.Add(_dataNotice);
+        var data = new SettingsCard(Loc.T("All data"), Loc.T("Take a complete copy of your TypeWhisper data with you, or remove everything TypeWhisper stores on this PC and start fresh."));
+        data.Add(Block(_dataNotice, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _exportAll, _deleteAll } }));
+        _body.Children.Add(data);
         Unloaded += (_, _) => { _unloaded = true; _lifetime.Cancel(); _dialog?.Hide(); };
         UpdateButtons();
     }
@@ -225,6 +223,14 @@ internal sealed class SyncBackupView : UserControl
         >= 1L << 20 => $"{bytes / (double)(1L << 20):0.0} MB",
         _ => $"{Math.Max(1, bytes / 1024.0):0} KB"
     };
+
+    // The content of a card under its heading.
+    private static StackPanel Block(params UIElement[] children)
+    {
+        var block = new StackPanel { Spacing = 12, Padding = new Thickness(0, 14, 0, 14) };
+        foreach (var child in children) block.Children.Add(child);
+        return block;
+    }
 
     private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
     private static TextBlock Copy(string text, double size, bool muted = false) => new()

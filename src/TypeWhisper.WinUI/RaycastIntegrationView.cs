@@ -10,11 +10,9 @@ internal sealed class RaycastIntegrationView : UserControl
     private static readonly Uri Store = new("https://www.raycast.com/SeoFood/typewhisper");
     internal RaycastIntegrationView()
     {
-        var row = new StackPanel { Spacing = 6 };
-        row.Children.Add(SettingsHelp.Label(Loc.T("Raycast Extension"), Loc.T("Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running.")));
-        var link = new HyperlinkButton { Content = Loc.T("Learn more"), Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Left };
-        ToolTipService.SetToolTip(link, Loc.T("Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running."));
-        row.Children.Add(link);
+        var link = new HyperlinkButton { Content = Loc.T("Learn more") };
+        var row = new SettingsRow().Set(Loc.T("Raycast Extension"),
+            Loc.T("Start dictation, search History and switch profiles from Raycast. Requires the HTTP API to be running."), link);
         var installed = false;
         Loaded += async (_, _) =>
         {

@@ -9,7 +9,7 @@ namespace TypeWhisper.WinUI;
 internal sealed partial class PremiumView
 {
     private readonly PasswordBox _licenseKey = new() { PlaceholderText = Loc.T("License key"), MaxLength = 512, HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly Button _activateLicense = new HandCursorButton { Content = Loc.T("Activate"), MinWidth = 96 };
+    private readonly Button _activateLicense = new HandCursorButton { Style = (Style)Application.Current.Resources["PrimaryButtonStyle"], Content = Loc.T("Activate"), MinWidth = 96 };
     private readonly TextBlock _licenseNotice = Copy("", 12, true);
     private readonly StackPanel _licenseStatuses = new() { Spacing = 12 };
     private bool _confirmingDeactivation;
@@ -72,8 +72,8 @@ internal sealed partial class PremiumView
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(Copy(title + (tier is null ? "" : " · " + tier) + " · " + (status switch { LicenseStatus.Active => Loc.T("Active"), LicenseStatus.Expired => Loc.T("Expired"), _ => Loc.T("Unlicensed") }), 14));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var refresh = new HandCursorButton { Content = Loc.T("Refresh status"), IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
-        var deactivate = new HandCursorButton { Content = Loc.T("Deactivate this device"), IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
+        var refresh = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Refresh status"), IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
+        var deactivate = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Deactivate this device"), IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
         AutomationProperties.SetName(refresh, Loc.T("Refresh {0}", title));
         AutomationProperties.SetName(deactivate, Loc.T("Deactivate {0} on this device", title));
         refresh.Click += async (_, _) => await WinUILicensing.RefreshAsync(commercial);
@@ -85,7 +85,7 @@ internal sealed partial class PremiumView
             {
                 var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Deactivate {0}?", title),
                     Content = Loc.T("This releases this device's activation. Your subscription or purchase is not cancelled."),
-                    PrimaryButtonText = Loc.T("Deactivate"), CloseButtonText = Loc.T("Keep active"), DefaultButton = ContentDialogButton.Close };
+                    PrimaryButtonText = Loc.T("Deactivate"), CloseButtonText = Loc.T("Keep active"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary) await WinUILicensing.DeactivateAsync(commercial);
             }
             finally { _confirmingDeactivation = false; RefreshLicenseSection(); }

@@ -7,10 +7,11 @@ namespace TypeWhisper.WinUI;
 // About information reflects this build; Premium owns access state.
 internal sealed class AccountView : UserControl
 {
-    internal StackPanel UpdatePanel { get; } = new() { Spacing = 10, Tag = "UpdateChannel" };
+    // LiveApplicationUpdateSettings fills this with the update cards.
+    internal StackPanel UpdatePanel { get; } = new() { Spacing = 20 };
     internal AccountView(Dictionary<string, string> values, List<ChoicePicker> pickers)
     {
-        var body = new StackPanel { Spacing = 22 };
+        var body = new StackPanel { Spacing = 20 };
         Content = body;
         var identity = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         identity.Children.Add(new SetupLogo { HorizontalAlignment = HorizontalAlignment.Center });
@@ -19,9 +20,9 @@ internal sealed class AccountView : UserControl
         identity.Children.Add(Copy(Loc.T("Speak naturally. Keep your flow."), 14, true, true));
         body.Children.Add(identity);
 
-        body.Children.Add(Copy(Loc.T("Premium and licenses"), 16));
-        body.Children.Add(Copy(Loc.T("Activate and manage your license under Premium in the sidebar."), 13, true));
-        body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush") });
+        var licenses = new SettingsCard();
+        licenses.Children.Add(new SettingsRow().Set(Loc.T("Premium and licenses"), Loc.T("Activate and manage your license under Premium in the sidebar.")));
+        body.Children.Add(licenses);
         body.Children.Add(UpdatePanel);
     }
 

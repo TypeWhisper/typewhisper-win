@@ -20,6 +20,7 @@ public sealed partial class LexiconView : UserControl
         _trainingDialog?.Hide();
         _aliasCancellation?.Cancel();
         _aliasDialog?.Hide();
+        _editorDialog?.Hide();
         _appImportFlow?.Cancel();
         try { _cancelPicker?.Invoke(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
@@ -32,8 +33,10 @@ public sealed partial class LexiconView : UserControl
     private readonly TabBar _tabs = new();
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly StackPanel _rows = new() { Spacing = 6 };
+    private StackPanel? _editor;
+    private ContentDialog? _editorDialog;
+    private TextBox? _firstInput;
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-    private readonly Breadcrumbs _crumbs = new();
     private readonly TextBlock _heading = Text(Loc.T("Dictionary"), 22);
     private readonly HandCursorButton _headingHelp = SettingsHelp.Button(Loc.T("Dictionary"), Loc.T("Dictionary and snippets are saved in this profile."));
     private readonly TextBlock _notice = Text(Loc.T("Dictionary and snippets are saved in this profile."), 11, true);
@@ -42,8 +45,6 @@ public sealed partial class LexiconView : UserControl
     private LexiconKind _kind;
     private LexiconEntry? _original;
     private LexiconEntry? _draft;
-    private Action? _pending;
-    private bool _confirmDelete;
     private string _query = "";
     private readonly HashSet<string> _expandedCorrections = new(StringComparer.Ordinal);
     internal event Action? ExitRequested;
@@ -57,18 +58,17 @@ public sealed partial class LexiconView : UserControl
         _heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         AutomationProperties.SetHeadingLevel(_heading, AutomationHeadingLevel.Level1);
         var header = new StackPanel { Spacing = 12 };
-        _heading.FontSize = 20; _heading.MinHeight = 32; _heading.Margin = new Thickness(4, 0, 0, 0);
+        _heading.FontSize = 24; _heading.MinHeight = 32; _heading.Margin = new Thickness(4, 0, 0, 0);
         // Settings list Dictionary and Snippets as separate pages, so only the dictionary has tabs.
         _tabs.SetItems([new("Word", Loc.T("Words")), new("Correction", Loc.T("Corrections")), new("packs", Loc.T("Term packs"))], "Word");
         _tabs.SelectionChanged += id =>
         {
             _showPacks = id == "packs";
             if (!_showPacks) { _kind = Enum.Parse<LexiconKind>(id); _query = ""; }
-            Render();
+            Render(); _scroll!.ChangeView(null, 0, null, true);
         };
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         titleRow.Children.Add(_heading); titleRow.Children.Add(_headingHelp);
-        header.Children.Add(_crumbs);
         header.Children.Add(_tabs); header.Children.Add(titleRow); root.Children.Add(header);
         _scroll = new ScrollViewer { Content = _body, Padding = new Thickness(0, 0, 20, 4), HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -87,47 +87,28 @@ public sealed partial class LexiconView : UserControl
         _store.ReloadSnippets();
         _kind = section == "corrections" ? LexiconKind.Correction : snippets ? LexiconKind.Snippet : LexiconKind.Word;
         _showPacks = section == "packs";
-        _draft = _original = null; _pending = null; _query = ""; Render();
+        _query = ""; Render(); _scroll.ChangeView(null, 0, null, true);
     }
 
-    internal void GoBack()
-    {
-        if (_confirmDelete) { _confirmDelete = false; RenderActions(); _notice.Text = Loc.T("Entry kept."); return; }
-        if (_pending is not null) { _pending = null; Render(); return; }
-        Navigate(_draft is not null ? CloseEditor : () => ExitRequested?.Invoke());
-    }
+    internal void GoBack() => ExitRequested?.Invoke();
 
-    private void Navigate(Action next)
-    {
-        if (_draft is not null && _draft != _original)
-        {
-            _pending = next; RenderActions(); _notice.Text = Loc.T("You have unsaved changes. Keep editing or discard them to leave.");
-            _actions.Children.OfType<Control>().FirstOrDefault()?.Focus(FocusState.Programmatic);
-        }
-        else next();
-    }
-
-    private void CloseEditor() { _draft = _original = null; _pending = null; _confirmDelete = false; Render(); }
     private string Section => _kind switch { LexiconKind.Word => Loc.T("Words"), LexiconKind.Correction => Loc.T("Corrections"), _ => Loc.T("Snippets") };
     private string Icon => _kind == LexiconKind.Snippet ? "text" : "dictionary";
 
     private void Render()
     {
         _body.Children.Clear(); _rows.Children.Clear();
-        _tabs.Visibility = _draft is null && !(_kind == LexiconKind.Snippet && !_showPacks) ? Visibility.Visible : Visibility.Collapsed;
-        if (_draft is null) RenderTabs();
+        _tabs.Visibility = _kind == LexiconKind.Snippet && !_showPacks ? Visibility.Collapsed : Visibility.Visible;
+        RenderTabs();
         if (_showPacks) { RenderPacks(); return; }
-        _heading.Text = _draft is null ? (_kind == LexiconKind.Snippet ? Loc.T("Snippets") : Loc.T("Dictionary")) :
-            _store.Entries.Any(entry => entry.Id == _draft.Id)
-                ? _kind switch { LexiconKind.Word => Loc.T("Edit word"), LexiconKind.Correction => Loc.T("Edit correction"), _ => Loc.T("Edit snippet") }
-                : _kind switch { LexiconKind.Word => Loc.T("New word"), LexiconKind.Correction => Loc.T("New correction"), _ => Loc.T("New snippet") };
-        if (_draft is null) _crumbs.SetItems(new Crumb(Section));
-        else _crumbs.SetItems(new(Section, () => Navigate(CloseEditor)), new(Loc.T("Editor")));
-        _notice.Text = _store.LastError ?? (_kind == LexiconKind.Snippet ? Loc.T("Saved snippets are applied to your next dictation.") : Loc.T("Saved · applied to the next dictation using existing Windows dictionary rules."));
-        AutomationProperties.SetName(_headingHelp, Loc.T("About {0}", _draft is null ? Section : _heading.Text));
-        if (_draft is null) RenderList(); else RenderEditor();
-        RenderActions(); _scroll.ChangeView(null, 0, null, true);
+        _heading.Text = _kind == LexiconKind.Snippet ? Loc.T("Snippets") : Loc.T("Dictionary");
+        _notice.Text = _store.LastError ?? "";
+        AutomationProperties.SetName(_headingHelp, Loc.T("About {0}", Section));
+        RenderList();
+        RenderActions();
     }
+
+    private LexiconEntry? Stored(LexiconEntry? entry) => entry is null ? null : _store.Entries.FirstOrDefault(current => current.Id == entry.Id);
 
     private void RenderTabs() => _tabs.SetSelected(_showPacks ? "packs" : _kind.ToString());
 
@@ -148,7 +129,8 @@ public sealed partial class LexiconView : UserControl
         Grid.SetColumn(search, 1); Grid.SetColumn(placeholder, 1); searchGrid.Children.Add(search); searchGrid.Children.Add(placeholder);
         void SearchChanged() { _query = search.Text; placeholder.Visibility = _query.Length == 0 ? Visibility.Visible : Visibility.Collapsed; RenderRows(); }
         search.TextChanged += (_, _) => SearchChanged();
-        _body.Children.Add(Surface(searchGrid, 6)); _body.Children.Add(_count); _body.Children.Add(_rows); SearchChanged();
+        var searchBox = Surface(searchGrid, 2); searchBox.Padding = new Thickness(12, 2, 4, 2);
+        _body.Children.Add(searchBox); _count.Margin = new Thickness(4, 0, 0, 0); _body.Children.Add(_count); _body.Children.Add(_rows); SearchChanged();
     }
 
     private void RenderRows()
@@ -158,34 +140,109 @@ public sealed partial class LexiconView : UserControl
         _count.Text = _kind switch { LexiconKind.Word => Loc.T("{0} of {1} words", entries.Length, total), LexiconKind.Correction => Loc.T("{0} of {1} corrections", entries.Length, total), _ => Loc.T("{0} of {1} snippets", entries.Length, total) };
         if (entries.Length == 0)
         {
-            var empty = new StackPanel { Spacing = 10, Padding = new Thickness(16, 24, 16, 24) };
-            empty.Children.Add(new TypeWhisperGlyph { Kind = "search", Width = 30, Height = 30, HorizontalAlignment = HorizontalAlignment.Center });
-            var title = Text(_query.Length == 0 ? _kind switch { LexiconKind.Word => Loc.T("Your first word starts here"), LexiconKind.Correction => Loc.T("Your first correction starts here"), _ => Loc.T("Your first snippet starts here") } : Loc.T("No matching entries"), 16); title.TextAlignment = TextAlignment.Center; empty.Children.Add(title);
+            var empty = new StackPanel { Spacing = 10, Padding = new Thickness(16, 28, 16, 28) };
+            empty.Children.Add(new TypeWhisperGlyph { Kind = _query.Length == 0 ? Icon : "search", Width = 30, Height = 30, HorizontalAlignment = HorizontalAlignment.Center });
+            var title = Text(_query.Length == 0 ? _kind switch { LexiconKind.Word => Loc.T("Your first word starts here"), LexiconKind.Correction => Loc.T("Your first correction starts here"), _ => Loc.T("Your first snippet starts here") } : Loc.T("No matching entries"), 16); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; title.TextAlignment = TextAlignment.Center; empty.Children.Add(title);
             var hint = Text(_query.Length == 0 ? Loc.T("Add a term or phrase with the button below.") : Loc.T("Try a different word, phrase, or tag."), 12, true); hint.TextAlignment = TextAlignment.Center; empty.Children.Add(hint);
-            _rows.Children.Add(empty); return;
+            var emptyCard = ListCard(); emptyCard.Add(empty);
+            _rows.Children.Add(emptyCard);
         }
+        if (entries.Length == 0) return;
         if (_kind == LexiconKind.Correction) { RenderCorrectionGroups(entries); return; }
+        var card = ListCard();
         foreach (var entry in entries)
         {
-            var content = new Grid { ColumnSpacing = 14, Padding = new Thickness(2, 6, 2, 6) };
-            content.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); content.ColumnDefinitions.Add(new()); content.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            content.Children.Add(new TypeWhisperGlyph { Kind = Icon, Width = 20, Height = 20 });
-            var labels = new StackPanel { Spacing = 5 }; var title = Text(_kind == LexiconKind.Correction ? entry.Value : entry.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; labels.Children.Add(title);
-            if (_kind != LexiconKind.Word)
+            var current = entry;
+            var corners = RowCorners(ReferenceEquals(entry, entries[0]), ReferenceEquals(entry, entries[^1]));
+            var content = new Grid { ColumnSpacing = 10 };
+            content.ColumnDefinitions.Add(new()); content.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            var labels = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+            var title = Text(entry.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; labels.Children.Add(title);
+            if (_kind == LexiconKind.Snippet)
             {
-                var description = Text(_kind == LexiconKind.Correction ? Loc.T("Recognized as: {0}", entry.Key) : entry.Value.Replace('\n', ' '), 12, true);
+                var description = Text(entry.Value.Replace('\n', ' '), 12, true);
                 description.MaxLines = 1; description.TextTrimming = TextTrimming.CharacterEllipsis; labels.Children.Add(description);
             }
-            if (entry.Tags.Length > 0) labels.Children.Add(Text(entry.Tags, 11, true));
-            if (entry.Kind == LexiconKind.Snippet) labels.Children.Add(Text(entry.UsageCount == 1 ? Loc.T("Used 1 time") : Loc.T("Used {0} times", entry.UsageCount), 11, true));
-            Grid.SetColumn(labels, 1); content.Children.Add(labels);
-            var trailing = Text(entry.Enabled ? Loc.T("Edit  ›") : Loc.T("Off  ·  Edit  ›"), 11, true); trailing.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(trailing, 2); content.Children.Add(trailing);
-            var row = Button("", () => { if (entry.FromPack) { _showPacks = true; Render(); } else OpenEditor(entry); }); row.ContextFlyout = LexiconEntryMenu(entry); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
-            if (entry.FromPack) trailing.Text = Loc.T("Term packs  ›");
-            row.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
-            AutomationProperties.SetName(row, entry.FromPack ? Loc.T("Manage term pack for {0}", entry.Key) : entry.Kind == LexiconKind.Correction ? Loc.T("Edit correction: {0}, recognized as {1}", entry.Value, entry.Key) : _kind == LexiconKind.Snippet ? Loc.T("Edit snippet: {0}", entry.Key) : Loc.T("Edit word: {0}", entry.Key)); _rows.Children.Add(row);
+            content.Children.Add(labels);
+            var badges = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+            foreach (var tag in entry.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) badges.Children.Add(Badge(tag));
+            if (entry.Kind == LexiconKind.Snippet && entry.UsageCount > 0) badges.Children.Add(Badge(entry.UsageCount == 1 ? Loc.T("Used 1 time") : Loc.T("Used {0} times", entry.UsageCount)));
+            if (entry.FromPack) badges.Children.Add(Badge(Loc.T("Term pack"), true));
+            // Entries switched off earlier stay recognizable; the context menu turns them on again.
+            if (!entry.Enabled) badges.Children.Add(Badge(Loc.T("Off")));
+            Grid.SetColumn(badges, 1); content.Children.Add(badges);
+            var open = Button("", () => { if (current.FromPack) { _showPacks = true; Render(); } else OpenEditor(current); });
+            open.ContextFlyout = LexiconEntryMenu(entry); open.Content = content;
+            open.HorizontalContentAlignment = HorizontalAlignment.Stretch; open.HorizontalAlignment = HorizontalAlignment.Stretch;
+            open.MinHeight = 44; open.Padding = new Thickness(18, 8, 18, 8);
+            open.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
+            open.CornerRadius = corners;
+            AutomationProperties.SetName(open, entry.FromPack ? Loc.T("Manage term pack for {0}", entry.Key) : _kind == LexiconKind.Snippet ? Loc.T("Edit snippet: {0}", entry.Key) : Loc.T("Edit word: {0}", entry.Key));
+            var row = new Grid { ColumnSpacing = 8 };
+            row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            row.Children.Add(open);
+            // A term pack is switched on its own page.
+            if (!entry.FromPack)
+            {
+                var delete = DeleteButton(entry);
+                Grid.SetColumn(delete, 1); row.Children.Add(delete);
+                FillRow(row, open, delete, new Thickness(18, 8, 62, 8));
+            }
+            card.Add(row);
         }
+        _rows.Children.Add(card);
+    }
+
+    private HandCursorButton DeleteButton(LexiconEntry entry)
+    {
+        var button = new HandCursorButton { Content = new FontIcon { Glyph = "\uE74D", FontSize = 14 }, Width = 32, Height = 32, MinWidth = 32, MinHeight = 32,
+            Padding = new Thickness(0), Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Application.Current.Resources["IconButtonStyle"] };
+        AutomationProperties.SetName(button, Loc.T("Delete entry") + ": " + entry.Key);
+        ToolTipService.SetToolTip(button, Loc.T("Delete"));
+        button.Click += (_, _) => DeleteEntry(entry);
+        return button;
+    }
+
+    private async void DeleteEntry(LexiconEntry entry)
+    {
+        if (_closing) return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete this entry?"), Content = entry.Key,
+            PrimaryButtonText = Loc.T("Delete entry"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
+        };
+        try { if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return; }
+        // Another dialog is still open.
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException) { return; }
+        if (!_store.Remove(entry.Id)) { _notice.Text = _store.LastError ?? Loc.T("Could not delete entry."); return; }
+        Render();
+    }
+
+    // The button fills the row under the control on its right, so the hover covers the whole row.
+    // Over that control the row draws the same shade itself.
+    private static void FillRow(Grid row, HandCursorButton main, FrameworkElement trailing, Thickness padding)
+    {
+        Grid.SetColumnSpan(main, 2);
+        main.Padding = padding;
+        row.CornerRadius = main.CornerRadius;
+        var hover = new SolidColorBrush(((SolidColorBrush)Brush("StateOverlayBrush")).Color) { Opacity = 0.09 };
+        trailing.PointerEntered += (_, _) => row.Background = hover;
+        trailing.PointerExited += (_, _) => row.Background = null;
+        trailing.PointerCaptureLost += (_, _) => row.Background = null;
+    }
+
+    // One card for the whole list; rows fill it from edge to edge so the hover covers a row.
+    private static SettingsCard ListCard() => new() { Padding = new Thickness(0) };
+
+    // The hover is square like the row, and follows the card's corners on its first and last row.
+    private static CornerRadius RowCorners(bool first, bool last) => new(first ? 11 : 0, first ? 11 : 0, last ? 11 : 0, last ? 11 : 0);
+
+    private static Border Badge(string text, bool accent = false)
+    {
+        var label = Text(text, 11, !accent); label.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        if (accent) label.Foreground = Brush("AccentBrush");
+        return new Border { Child = label, Padding = new Thickness(8, 2, 8, 3), CornerRadius = new CornerRadius(6), Background = Brush("ElevatedBrush"), VerticalAlignment = VerticalAlignment.Center };
     }
 
     private void RenderCorrectionGroups(LexiconEntry[] matches)
@@ -196,59 +253,62 @@ public sealed partial class LexiconView : UserControl
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase).ToArray();
         _count.Text = groups.Length == 1 ? Loc.T("{0} spelling · {1} variants", groups.Length, groups.Sum(group => group.Count()))
             : Loc.T("{0} spellings · {1} variants", groups.Length, groups.Sum(group => group.Count()));
+        var groupCard = ListCard();
+        _rows.Children.Add(groupCard);
         foreach (var group in groups)
         {
             var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
             var title = Text(group.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
             header.Children.Add(title);
-            header.Children.Add(Text(group.Count() == 1 ? Loc.T("1 variant") : Loc.T("{0} variants", group.Count()), 12, true));
-            var aliases = new StackPanel { Spacing = 6 };
-            foreach (var alias in group.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+            header.Children.Add(Badge(group.Count() == 1 ? Loc.T("1 variant") : Loc.T("{0} variants", group.Count())));
+            // Variants span the card like the rows above them; only their text is indented.
+            var aliases = new StackPanel();
+            var ordered = group.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase).ToArray();
+            foreach (var alias in ordered)
             {
                 var current = alias;
                 var row = new Grid { ColumnSpacing = 12 };
                 row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
                 var edit = Button("", () => OpenEditor(current));
-                EntryActionMenu.Attach(edit, () => [new(Loc.T("Edit variant"), () => OpenEditor(current)), new(Loc.T("Delete variant…"), () => { OpenEditor(current); EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == Loc.T("Delete"))?.Invoke(); })]);
-                var label = Text(alias.Key, 13);
+                EntryActionMenu.Attach(edit, () => [new(Loc.T("Edit variant"), () => OpenEditor(current)),
+                    // A variant switched off earlier has no other way back.
+                    .. current.Enabled ? [] : new EntryActionMenu.Action[] { new(Loc.T("Enable"), () =>
+                    {
+                        var error = _store.Save(current with { Enabled = true });
+                        _notice.Text = error ?? "";
+                        if (error is null) Render();
+                    }) },
+                    new(Loc.T("Delete variant…"), () => DeleteEntry(current))]);
+                var label = Text(alias.Enabled ? alias.Key : alias.Key + "  ·  " + Loc.T("Off"), 13, !alias.Enabled);
                 label.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
                 edit.Content = label;
                 edit.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
+                edit.CornerRadius = RowCorners(false, ReferenceEquals(group, groups[^1]) && ReferenceEquals(alias, ordered[^1]));
+                edit.MinHeight = 38;
                 edit.HorizontalAlignment = HorizontalAlignment.Stretch;
                 edit.HorizontalContentAlignment = HorizontalAlignment.Left;
                 AutomationProperties.SetName(edit, Loc.T("Edit variant {0} for {1}", alias.Key, group.Key));
                 ToolTipService.SetToolTip(edit, Loc.T("Edit variant"));
                 row.Children.Add(edit);
-                var toggle = AppToggleSwitch.Create(alias.Enabled);
-                AutomationProperties.SetName(toggle, Loc.T("Enable correction from {0} to {1}", alias.Key, group.Key));
-                var restoring = false;
-                toggle.Toggled += (_, _) =>
-                {
-                    if (restoring || _closing) return;
-                    var updated = current with { Enabled = toggle.IsOn };
-                    var error = _store.Save(updated);
-                    if (error is null) { current = updated; _notice.Text = Loc.T("Correction saved."); }
-                    else
-                    {
-                        restoring = true; toggle.IsOn = current.Enabled; restoring = false;
-                        _notice.Text = error;
-                    }
-                };
-                Grid.SetColumn(toggle, 1); row.Children.Add(toggle); aliases.Children.Add(row);
+                var remove = DeleteButton(alias);
+                Grid.SetColumn(remove, 1); row.Children.Add(remove); aliases.Children.Add(row);
+                FillRow(row, edit, remove, new Thickness(40, 7, 62, 7));
             }
-            var panel = new StackPanel { Spacing = 4 };
+            var panel = new StackPanel();
             var headingRow = new Grid { ColumnSpacing = 12 };
             headingRow.ColumnDefinitions.Add(new());
             headingRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            var chevron = Text("", 12, true);
+            var chevron = Text("", 14, true); chevron.Width = 12; chevron.VerticalAlignment = VerticalAlignment.Center;
             header.Children.Insert(0, chevron);
+            HandCursorButton? expand = null;
             void UpdateExpansion()
             {
                 var expanded = _expandedCorrections.Contains(group.Key);
                 aliases.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
                 chevron.Text = expanded ? "⌄" : "›";
+                headingRow.CornerRadius = expand!.CornerRadius = RowCorners(ReferenceEquals(group, groups[0]), ReferenceEquals(group, groups[^1]) && !expanded);
             }
-            var expand = Button("", () =>
+            expand = Button("", () =>
             {
                 if (!_expandedCorrections.Add(group.Key)) _expandedCorrections.Remove(group.Key);
                 UpdateExpansion();
@@ -257,8 +317,8 @@ public sealed partial class LexiconView : UserControl
             expand.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
             expand.HorizontalAlignment = HorizontalAlignment.Stretch;
             expand.HorizontalContentAlignment = HorizontalAlignment.Left;
-            expand.MinHeight = 32;
-            expand.Padding = new Thickness(4, 4, 4, 4);
+            expand.MinHeight = 44;
+            expand.Padding = new Thickness(18, 8, 18, 8);
             AutomationProperties.SetName(expand, Loc.T("Expand or collapse corrections for {0}", group.Key));
             headingRow.Children.Add(expand);
             var add = Button("+", () => OpenEditor(new LexiconEntry(Guid.NewGuid(), LexiconKind.Correction, "") with { Value = group.Key }));
@@ -269,12 +329,13 @@ public sealed partial class LexiconView : UserControl
             add.Padding = new Thickness(4);
             AutomationProperties.SetName(add, Loc.T("Add variant for {0}", group.Key));
             ToolTipService.SetToolTip(add, Loc.T("Add variant"));
+            add.Margin = new Thickness(0, 0, 18, 0);
             Grid.SetColumn(add, 1); headingRow.Children.Add(add);
+            FillRow(headingRow, expand, add, new Thickness(18, 8, 62, 8));
             panel.Children.Add(headingRow);
             panel.Children.Add(aliases);
             UpdateExpansion();
-            var card = Surface(panel, 6);
-            card.Padding = new Thickness(8, 5, 8, 5);
+            var card = SettingsRow.Host(panel);
             MenuFlyout GroupMenu()
             {
                 var menu = new MenuFlyout();
@@ -291,7 +352,7 @@ public sealed partial class LexiconView : UserControl
                         Title = Loc.T("Delete corrections for {0}?", group.Key),
                         Content = Loc.T("This deletes all {0} variants in this group. This cannot be undone.", group.Count()),
                         PrimaryButtonText = Loc.T("Delete group"), CloseButtonText = Loc.T("Cancel"),
-                        DefaultButton = ContentDialogButton.Close
+                        DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
                     };
                     if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
                     if (!_store.RemoveCorrectionGroup(group.Key))
@@ -305,7 +366,7 @@ public sealed partial class LexiconView : UserControl
             }
             card.ContextFlyout = GroupMenu();
             expand.ContextFlyout = GroupMenu();
-            _rows.Children.Add(card);
+            groupCard.Children.Add(card);
         }
     }
 
@@ -316,36 +377,56 @@ public sealed partial class LexiconView : UserControl
         return EntryActionMenu.Create([
             new(Loc.T("Edit"), () => OpenEditor(entry)),
             .. entry.Kind == LexiconKind.Word ? new EntryActionMenu.Action[] { new(Loc.T("Suggest aliases…"), () => StartAliasSuggestions(entry.Key)) } : [],
-            new(entry.Enabled ? Loc.T("Disable") : Loc.T("Enable"), () =>
+            .. entry.Enabled ? [] : new EntryActionMenu.Action[] { new(Loc.T("Enable"), () =>
             {
-                var error = _store.Save(entry with { Enabled = !entry.Enabled });
-                _notice.Text = error ?? Loc.T("Entry updated.");
+                var error = _store.Save(entry with { Enabled = true });
+                _notice.Text = error ?? "";
                 if (error is null) Render();
-            }),
-            new(Loc.T("Delete…"), () =>
-            {
-                OpenEditor(entry);
-                EntryActionMenu.FromButtons(_actions).FirstOrDefault(action => action.Label == Loc.T("Delete"))?.Invoke();
-            })
+            }) },
+            new(Loc.T("Delete…"), () => DeleteEntry(entry))
         ]);
     }
 
-    private void OpenEditor(LexiconEntry entry)
+    // Editing happens in a dialog, so the list stays as it is behind it.
+    private async void OpenEditor(LexiconEntry entry)
     {
-        _apiEditorBaseline = _store.Entries.FirstOrDefault(current => current.Id == entry.Id);
-        _original = _draft = entry; Render();
-        DispatcherQueue.TryEnqueue(() => _body.Children.OfType<StackPanel>().SelectMany(panel => panel.Children).OfType<Border>()
-            .Select(border => border.Child).OfType<TextBox>().FirstOrDefault()?.Focus(FocusState.Programmatic));
+        if (_closing || _editorDialog is not null) return;
+        _apiEditorBaseline = Stored(entry);
+        _original = _draft = entry;
+        _firstInput = null;
+        _editor = new StackPanel { Spacing = 14, MinWidth = 420 };
+        RenderEditor();
+        var error = Text("", 12, true); error.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Polite);
+        _editor.Children.Add(error);
+        var dialog = _editorDialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Content = _editor,
+            Title = _apiEditorBaseline is not null
+                ? _kind switch { LexiconKind.Word => Loc.T("Edit word"), LexiconKind.Correction => Loc.T("Edit correction"), _ => Loc.T("Edit snippet") }
+                : _kind switch { LexiconKind.Word => Loc.T("New word"), LexiconKind.Correction => Loc.T("New correction"), _ => Loc.T("New snippet") },
+            PrimaryButtonText = Loc.T("Save"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
+        };
+        // A failed save keeps the dialog and its text open.
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = CanSaveApiEditor() ? _store.Save(_draft!) : _notice.Text;
+            if (message is null) return;
+            args.Cancel = true;
+            error.Text = message; error.Visibility = Visibility.Visible;
+        };
+        dialog.Opened += (_, _) => _firstInput?.Focus(FocusState.Programmatic);
+        try { await dialog.ShowAsync(); }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+        {
+            // Another dialog is still open; this one did not show.
+        }
+        finally { _editorDialog = null; _draft = _original = null; }
+        if (!_closing) Render();
     }
 
     private void RenderEditor()
     {
-        SettingsHelp.Update(_headingHelp, _kind switch
-        {
-            LexiconKind.Word => Loc.T("Save the exact spelling of a name or specialist term."),
-            LexiconKind.Correction => Loc.T("When this phrase is recognized, use your preferred spelling instead."),
-            _ => Loc.T("Say the trigger phrase to insert this text when dictation finishes.")
-        });
         if (_kind == LexiconKind.Correction)
         {
             AddField(Loc.T("Correct spelling"), _draft!.Value, value => _draft = _draft! with { Value = value }, 10000, help:
@@ -362,7 +443,6 @@ public sealed partial class LexiconView : UserControl
         {
             AddField(Loc.T("Tags · optional, separated by commas"), _draft.Tags, value => _draft = _draft! with { Tags = value }, 300);
         }
-        AddToggle(Loc.T("Enabled"), Loc.T("Keep this entry available without removing it."), _draft.Enabled, value => _draft = _draft! with { Enabled = value });
         if (_kind == LexiconKind.Word) AddBoostingOptions();
         if (_kind != LexiconKind.Word)
             AddToggle(Loc.T("Match capitalization"), Loc.T("Only match the trigger with this exact capitalization."), _draft.CaseSensitive, value => _draft = _draft! with { CaseSensitive = value });
@@ -370,9 +450,8 @@ public sealed partial class LexiconView : UserControl
 
     private void AddBoostingOptions()
     {
-        var panel = new StackPanel { Spacing = 10 };
-        panel.Children.Add(SettingsHelp.Label(Loc.T("Boosting"), Loc.T("Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size.")));
-        var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var picker = new ChoicePicker { Width = 220 };
+        picker.Configure(Loc.T("Boosting"), "signal", Loc.T("Boosting"));
         var slider = new Slider { Minimum = 40, Maximum = 95, StepFrequency = 1, Value = (_draft!.CtcMinSimilarity ?? .65f) * 100 };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, Loc.T("Minimum CTC similarity in percent"));
         var valueLabel = Text("", 12, true);
@@ -382,53 +461,46 @@ public sealed partial class LexiconView : UserControl
         if (selected < 0) selected = 4;
         void Refresh()
         {
-            options.Children.Clear();
-            for (var index = 0; index < choices.Length; index++)
-            {
-                var choice = index;
-                options.Children.Add(Button(choices[index].Name, () =>
-                {
-                    selected = choice;
-                    _draft = _draft! with { CtcMinSimilarity = choice == 4 ? (float)(slider.Value / 100) : choices[choice].Value };
-                    Refresh();
-                }, primary: index == selected));
-            }
+            picker.SetOptions(choices.Select((choice, index) => new Choice(index.ToString(), choice.Name,
+                choice.Value is { } value ? Loc.T("Minimum similarity: {0:0}%", value * 100) : "")).ToArray(), selected.ToString());
             advanced.Visibility = selected == 4 ? Visibility.Visible : Visibility.Collapsed;
             valueLabel.Text = Loc.T("Minimum similarity: {0:0}%", slider.Value);
         }
+        picker.SelectionChanged += id =>
+        {
+            selected = int.Parse(id);
+            _draft = _draft! with { CtcMinSimilarity = selected == 4 ? (float)(slider.Value / 100) : choices[selected].Value };
+            Refresh();
+        };
         slider.ValueChanged += (_, _) =>
         {
             if (selected == 4) _draft = _draft! with { CtcMinSimilarity = (float)(slider.Value / 100) };
             valueLabel.Text = Loc.T("Minimum similarity: {0:0}%", slider.Value);
         };
-        Refresh(); panel.Children.Add(options); panel.Children.Add(advanced);
-        _body.Children.Add(Surface(panel, 14));
+        Refresh();
+        _editor!.Children.Add(new SettingsRow { Padding = new Thickness(0) }.Set(Loc.T("Boosting"), "",
+            Loc.T("Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size."), picker).Below(advanced));
     }
 
     private void AddField(string label, string value, Action<string> update, int maxLength, bool multiline = false, string? help = null)
     {
-        var field = new StackPanel { Spacing = 7 }; field.Children.Add(help is null ? Text(label, 12, true) : SettingsHelp.Label(label, help, 12));
+        var field = new StackPanel { Spacing = 6 }; field.Children.Add(help is null ? Text(label, 12, true) : SettingsHelp.Label(label, help, 12));
         var input = Input(value, label, multiline); input.MaxLength = maxLength;
-        input.TextChanged += (_, _) => update(input.Text); field.Children.Add(Surface(input, 2)); _body.Children.Add(field);
+        input.TextChanged += (_, _) => update(input.Text);
+        _firstInput ??= input;
+        var box = Surface(input, 2); box.Background = Brush("InkBrush");
+        field.Children.Add(box); _editor!.Children.Add(field);
     }
 
     private void AddToggle(string title, string hint, bool value, Action<bool> update)
     {
-        var row = new Grid { ColumnSpacing = 16 }; row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        row.Children.Add(SettingsHelp.Label(title, hint, 13));
         var toggle = AppToggleSwitch.Create(value); AutomationProperties.SetName(toggle, title); toggle.Toggled += (_, _) => update(toggle.IsOn);
-        Grid.SetColumn(toggle, 1); row.Children.Add(toggle); _body.Children.Add(row);
+        _editor!.Children.Add(new SettingsRow { Padding = new Thickness(0) }.Set(title, hint, toggle));
     }
 
     private void RenderActions()
     {
-        _confirmDelete = false;
         _actions.Children.Clear();
-        if (_pending is not null)
-        {
-            _actions.Children.Add(Button(Loc.T("Keep editing"), () => { _pending = null; _notice.Text = Loc.T("Your changes are still here."); RenderActions(); }));
-            _actions.Children.Add(Button(Loc.T("Discard"), () => { var next = _pending; _pending = null; next?.Invoke(); }, destructive: true)); return;
-        }
         if (_draft is null)
         {
             if (_kind != LexiconKind.Snippet)
@@ -451,45 +523,21 @@ public sealed partial class LexiconView : UserControl
             _actions.Children.Add(Button(Loc.T("Export"), () => _ = ExportAsync()));
             _actions.Children.Add(Button(_kind switch { LexiconKind.Word => Loc.T("+ Add word"), LexiconKind.Correction => Loc.T("+ Add correction"), _ => Loc.T("+ Add snippet") }, () => OpenEditor(new(Guid.NewGuid(), _kind, "")), primary: true)); return;
         }
-        if (_store.Entries.Any(entry => entry.Id == _draft.Id))
-            _actions.Children.Add(Button(Loc.T("Delete"), () =>
-            {
-                _confirmDelete = true;
-                _notice.Text = Loc.T("Delete this entry? Installed production data is unchanged.");
-                _actions.Children.Clear();
-                _actions.Children.Add(Button(Loc.T("Keep entry"), () => { RenderActions(); _notice.Text = Loc.T("Entry kept."); }));
-                _actions.Children.Add(Button(Loc.T("Delete entry"), () => { if (!CanSaveApiEditor()) return; if (!_store.Remove(_draft!.Id)) { _notice.Text = _store.LastError ?? Loc.T("Could not delete entry."); return; } CloseEditor(); _notice.Text = Loc.T("Entry deleted."); }, destructive: true));
-            }, destructive: true));
-        _actions.Children.Add(Button(Loc.T("Cancel"), () => Navigate(CloseEditor)));
-        _actions.Children.Add(Button(Loc.T("Save"), () =>
-        {
-            if (!CanSaveApiEditor()) return;
-            var error = _store.Save(_draft!);
-            if (error is not null) { _notice.Text = error; return; }
-            CloseEditor(); _notice.Text = _kind == LexiconKind.Snippet ? Loc.T("Snippet saved for the next dictation.") : Loc.T("Dictionary saved for the next dictation.");
-        }, primary: true));
     }
 
     private void RenderPacks()
     {
         _heading.Text = Loc.T("Dictionary");
         AutomationProperties.SetName(_headingHelp, Loc.T("About term packs"));
-        _crumbs.SetItems(new(Loc.T("Dictionary"), () => { _showPacks = false; Render(); }), new(Loc.T("Term packs")));
         _actions.Children.Clear();
         _actions.Children.Add(Button(Loc.T("Back to Dictionary"), () => { _showPacks = false; _kind = LexiconKind.Word; Render(); }));
-        _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
-            ? Loc.T("Saved packs provide dictionary terms for enabled vocabulary processing.")
-            : Loc.T("Saved packs · enable Vocabulary boosting in Settings > Dictation > More options to use them."));
+        _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load() ? ""
+            : Loc.T("Vocabulary boosting is off. Turn it on in Settings > Dictation to use term packs."));
+        var packs = new SettingsCard();
+        _body.Children.Add(packs);
         SettingsHelp.Update(_headingHelp, Loc.T("Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off."));
         foreach (var pack in TypeWhisper.Core.Models.TermPack.AllPacks.Where(p => !p.RequiresCommercialLicense))
         {
-            var row = new Grid { ColumnSpacing = 14 };
-            row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            row.Children.Add(new TypeWhisperGlyph { Kind = "dictionary", Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Center });
-            var labels = new StackPanel { Spacing = 5 };
-            labels.Children.Add(Text(Loc.T("{0} · {1} terms", pack.Name, pack.Terms.Length), 14));
-            labels.Children.Add(Text(string.Join(", ", pack.Terms.Take(8)) + (pack.Terms.Length > 8 ? "…" : ""), 12, true));
-            Grid.SetColumn(labels, 1); row.Children.Add(labels);
             var toggle = AppToggleSwitch.Create(_store.PackEnabled(pack.Id));
             AutomationProperties.SetName(toggle, Loc.T("Enable term pack {0}", pack.Name));
             var restoring = false;
@@ -498,11 +546,11 @@ public sealed partial class LexiconView : UserControl
                 if (restoring) return;
                 if (_closing) return;
                 var error = _store.SetPackEnabled(pack, toggle.IsOn);
-                _notice.Text = error ?? (toggle.IsOn ? Loc.T("{0} enabled · saved.", pack.Name) : Loc.T("{0} disabled · saved.", pack.Name));
+                if (error is not null) _notice.Text = error;
                 if (error is not null) { restoring = true; toggle.IsOn = _store.PackEnabled(pack.Id); restoring = false; }
             };
-            Grid.SetColumn(toggle, 2); row.Children.Add(toggle);
-            _body.Children.Add(Surface(row, 14));
+            var terms = string.Join(", ", pack.Terms.Take(8)) + (pack.Terms.Length > 8 ? "…" : "");
+            packs.Children.Add(new SettingsRow().Set(Loc.T("{0} · {1} terms", pack.Name, pack.Terms.Length), terms, "", toggle));
         }
         _scroll.ChangeView(null, 0, null, true);
     }

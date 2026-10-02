@@ -31,7 +31,6 @@ internal static partial class SettingsCatalog
         "WorkflowRequestRecoveryEnabled" => Loc.T("Keep failed requests available so you can try them again."),
         "SaveToHistoryEnabled" => Loc.T("Keep completed transcripts available in History."),
         "SaveHistoryAudio" => Loc.T("Keep a local audio copy with new dictation entries. Audio follows history deletion and retention."),
-        "MemoryEnabled" => Loc.T("Use personal context to help tailor future results."),
         "WatchFolderAutoStart" => Loc.T("Start watching your chosen folder when TypeWhisper opens."),
         "ApiServerRequiresAuthentication" => Loc.T("Require authentication before accepting API requests."),
         _ => ""
@@ -41,6 +40,7 @@ internal static partial class SettingsCatalog
     private static readonly Field[] Fields =
     [
         Choice("General", "UiLanguage", Loc.T("App Language"), "English", ["English"]),
+        Choice("General", "InterfaceTheme", Loc.T("Theme"), "System", [Loc.Mark("System"), Loc.Mark("Light"), Loc.Mark("Dark")]),
         Toggle("General", "AutostartEnabled", Loc.T("Start with Windows")),
         Choice("Account & about", "UpdateChannel", Loc.T("Update channel"), "Stable", [Loc.Mark("Stable"), Loc.Mark("Daily"), Loc.Mark("Release Candidate")]),
 
@@ -114,7 +114,6 @@ internal static partial class SettingsCatalog
         Toggle("Privacy", "SaveHistoryAudio", Loc.T("Keep dictation audio")),
         Choice("Privacy", "HistoryRetentionMode", Loc.T("History retention"), "For a duration", [Loc.Mark("For a duration"), Loc.Mark("Forever"), Loc.Mark("Until the app closes")]),
         Choice("Privacy", "HistoryRetentionMinutes", Loc.T("Keep history for"), "90 days", [Loc.Mark("1 day"), Loc.Mark("7 days"), Loc.Mark("30 days"), Loc.Mark("90 days"), Loc.Mark("180 days")]),
-        Toggle("Privacy", "MemoryEnabled", Loc.T("Personal memory")),
 
 
     ];
@@ -138,17 +137,13 @@ internal static partial class SettingsCatalog
     internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null, Func<string, string?>? commitRecentTranscriptionsHotkeys = null, Func<string, string?>? commitCopyLastTranscriptionHotkeys = null, Func<string, string?>? commitPasteLastTranscriptionHotkeys = null, Func<string, string?>? commitReadLastTranscriptionHotkeys = null, Func<string, string?>? commitWorkflowPaletteHotkeys = null, Func<string, string, string?>? commitRecordingShortcut = null, Func<string, string?>? commitRecorderHotkeys = null)
     {
         target.Children.Clear();
-        var title = Label(SettingsWindow.DisplayName(category), 24);
-        title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        titleRow.Children.Add(title);
-        if (category == "Shortcuts")
-            titleRow.Children.Add(SettingsHelp.Button(Loc.T(category), Loc.T("These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable.")));
-        else if (category == "Privacy")
-            titleRow.Children.Add(SettingsHelp.Button(Loc.T(category), Loc.T("Settings are saved automatically. History retention changes take effect when you choose Apply retention. Unavailable controls are disabled.")));
-        else if (category is not "Premium" and not "Account & about" and not "Dictation")
-            titleRow.Children.Add(SettingsHelp.Button(Loc.T(category), Loc.T("Settings are saved automatically. Unavailable controls are disabled.")));
-        target.Children.Add(titleRow);
+        target.Children.Add(SettingsCard.PageTitle(SettingsWindow.DisplayName(category), category switch
+        {
+            "Shortcuts" => Loc.T("These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable."),
+            "Privacy" => Loc.T("Settings are saved automatically. History retention changes take effect when you choose Apply retention. Unavailable controls are disabled."),
+            "Premium" or "Account & about" or "Dictation" => "",
+            _ => Loc.T("Settings are saved automatically. Unavailable controls are disabled.")
+        }));
         if (category == "Premium")
         {
             target.Children.Add(new PremiumView(pickers));
@@ -207,7 +202,7 @@ internal static partial class SettingsCatalog
                 }
                 section.Children.Add(new Border
                 {
-                    Child = rows, Padding = new Thickness(2), CornerRadius = new CornerRadius(10),
+                    Child = rows, Padding = new Thickness(2), CornerRadius = new CornerRadius(12),
                     Background = (Brush)Application.Current.Resources["SurfaceBrush"],
                     BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1)
                 });
@@ -221,70 +216,26 @@ internal static partial class SettingsCatalog
             RenderDictation(target, values, pickers);
             return;
         }
-        if (category == "Audio")
-        {
-            RenderAudio(target, values, pickers);
-            return;
-        }
-        RenderFields(Fields.Where(f => f.Category == category), target, values, pickers, refresh);
+        var card = new SettingsCard();
+        target.Children.Add(card);
+        RenderFields(Fields.Where(f => f.Category == category), card, values, pickers, refresh);
     }
 
+    // These rows continue the card that holds the Appearance page's switches.
     internal static void RenderLiveTextOptions(StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers)
     {
         RenderFields(Fields.Where(f => f.Category == "Live text" && f.Key != "OnlineAsrBatchLiveTranscriptionEnabled"), target, values, pickers, null);
+        foreach (var row in target.Children.OfType<SettingsRow>()) row.Divider = true;
     }
 
-    private static void RenderAudio(StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers)
-    {
-        // Preserve every existing preference, but reveal dependent fields in place.
-        // Toggling an option must not rebuild the page or discard an open picker.
-        void FieldsInto(StackPanel panel, params string[] keys) => RenderFields(
-            keys.Select(key => Fields.Single(f => f.Key == key)), panel, values, pickers, null);
-        StackPanel Group(params string[] keys)
-        {
-            var panel = new StackPanel { Spacing = 16 };
-            FieldsInto(panel, keys);
-            return panel;
-        }
-        StackPanel Conditional(string key, params string[] dependentKeys)
-        {
-            var panel = new StackPanel { Spacing = 16 };
-            var details = Group(dependentKeys);
-            void Update() => details.Visibility = values.GetValueOrDefault(key, "Off") == "On" ? Visibility.Visible : Visibility.Collapsed;
-            RenderFields(Fields.Where(f => f.Key == key), panel, values, pickers, Update);
-            Update();
-            panel.Children.Add(details);
-            return panel;
-        }
-
-        FieldsInto(target, "SelectedMicrophoneDevice", "SoundFeedbackEnabled", "WhisperModeEnabled");
-        target.Children.Add(Conditional("AudioDuckingEnabled", "AudioDuckingLevel"));
-        FieldsInto(target, "PauseMediaDuringRecording");
-        target.Children.Add(Conditional("SpokenFeedbackEnabled", "SpokenFeedbackProviderId", "SpokenFeedbackVoiceId"));
-        target.Children.Add(Conditional("SilenceAutoStopEnabled", "SilenceAutoStopSeconds"));
-        FieldsInto(target, "MicrophonePriorityList");
-    }
-
-    private static void RenderFields(IEnumerable<Field> fields, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh)
+    private static void RenderFields(IEnumerable<Field> fields, Panel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh)
     {
         foreach (var field in fields)
         {
             var value = values.GetValueOrDefault(field.Key, field.Value);
-            var stack = new StackPanel { Spacing = 8, Tag = field.Key };
-            if (field.Category == "Shortcuts")
+            var row = new SettingsRow(field.Key);
+            if (field.Choices is ["Off", "On"])
             {
-                stack.Children.Add(new ShortcutRecorder(field.Key, field.Label, field.Value, values,
-                    () => Fields.Where(setting => setting.Category == "Shortcuts").Select(setting =>
-                        (setting.Key, setting.Label, values.GetValueOrDefault(setting.Key, setting.Value)))));
-            }
-            else if (field.Choices is ["Off", "On"])
-            {
-                var row = new Grid { ColumnSpacing = 16 };
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
-                copy.Children.Add(SettingsHelp.Label(field.Label, field.Hint));
-                row.Children.Add(copy);
                 var toggle = AppToggleSwitch.Create(value == "On");
                 toggle.Toggled += (_, _) =>
                 {
@@ -293,11 +244,10 @@ internal static partial class SettingsCatalog
                 };
                 AutomationProperties.SetName(toggle, $"Preference {field.Key}");
                 AutomationProperties.SetHelpText(toggle, $"{field.Label}. {field.Hint}");
-                Grid.SetColumn(toggle, 1); row.Children.Add(toggle); stack.Children.Add(row);
+                row.Set(field.Label, field.Hint, toggle);
             }
             else if (field.Choices is not null)
             {
-                stack.Children.Add(SettingsHelp.Label(field.Label, field.Hint));
                 var picker = new ChoicePicker { Tag = field.Key };
                 picker.Configure(field.Label, ChoiceIcon(field), $"Preference {field.Key}");
                 picker.SetOptions(field.Choices.Select(v => new Choice(v, Loc.T(v), Loc.T("Session-only setting"))).ToArray(), value);
@@ -306,50 +256,21 @@ internal static partial class SettingsCatalog
                     values[field.Key] = selected;
                     if (field.Category == "Dictation") refresh?.Invoke();
                 };
-                pickers.Add(picker); stack.Children.Add(picker);
+                pickers.Add(picker);
+                row.Set(field.Label, field.Hint, picker);
             }
             else
             {
-                stack.Children.Add(SettingsHelp.Label(field.Label, field.Hint));
-                var input = new TextBox { Text = value, MinHeight = 40, Style = (Style)Application.Current.Resources["SearchTextBoxStyle"] };
+                var input = new TextBox { Text = value, MinHeight = 36, Style = (Style)Application.Current.Resources["SearchTextBoxStyle"] };
                 AutomationProperties.SetName(input, $"Preference {field.Key}");
                 AutomationProperties.SetHelpText(input, field.Label);
                 input.TextChanged += (_, _) => values[field.Key] = input.Text;
-                stack.Children.Add(new Border { Background = (Brush)Application.Current.Resources["SurfaceBrush"], BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Child = input });
+                row.Set(field.Label, field.Hint, (FrameworkElement?)null);
+                row.Below(new Border { Background = (Brush)Application.Current.Resources["InkBrush"], BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"], BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Child = input });
             }
-            if (field.Hint.Length > 0 && field.Category == "Shortcuts")
-                stack.Children.Add(SettingsHelp.Button(field.Label, field.Hint));
-            target.Children.Add(stack);
-            if (field.Category != "Shortcuts") target.Children.Add(new Border { Tag = "SettingSeparator", Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });
+            target.Children.Add(row);
         }
     }
-
-    // Follow the visible content, including expanded/collapsed dependent fields.
-    // Keeping the separator in the tree lets it reappear when another row is shown.
-    internal static void UpdateTrailingSeparators(StackPanel root)
-    {
-        bool Visit(StackPanel panel, bool followingContent)
-        {
-            var hasContent = false;
-            for (var index = panel.Children.Count - 1; index >= 0; index--)
-            {
-                var child = panel.Children[index];
-                if (child is Border { Tag: "SettingSeparator" } separator)
-                {
-                    var visibility = followingContent ? Visibility.Visible : Visibility.Collapsed;
-                    if (separator.Visibility != visibility) separator.Visibility = visibility;
-                    continue;
-                }
-                if (child.Visibility != Visibility.Visible) continue;
-                var contributes = child is StackPanel nested ? Visit(nested, followingContent) : true;
-                followingContent |= contributes;
-                hasContent |= contributes;
-            }
-            return hasContent;
-        }
-        Visit(root, false);
-    }
-
     // Variant 1 is the selected shared pattern; icons identify the setting, not its current value.
     private static string ChoiceIcon(Field field) => field.Key switch
     {
@@ -368,6 +289,7 @@ internal static partial class SettingsCatalog
         "RecorderOutputFormat" or "WatchFolderOutputFormat" => "file",
         "TranscriptionTask" or "RecorderTranscriptionTask" or "DictationRecoveryTask" => "workflow",
         "RecorderTrackMode" => "layout",
+        "InterfaceTheme" => "desktop",
         "Mode" or "CancellationBehavior" => "microphone",
         "RecorderMicDuckingMode" => "speaker",
         _ => "settings"

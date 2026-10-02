@@ -21,22 +21,7 @@ public sealed partial class WorkflowsView
                 _apiConfigurationConflict = ApiWorkflowConflict(_opened, items);
                 UpdateConfigurationState();
             }
-            else if (_page == Page.List) Filter(_query);
-            else if (_opened is not null)
-            {
-                var latest = _workflows.FirstOrDefault(workflow => workflow.Id == _opened.Id);
-                if (latest is not null)
-                {
-                    _opened = latest;
-                    WorkflowInstruction.Text = latest.InstructionDescription;
-                    UpdateSourceState();
-                }
-                else
-                {
-                    WorkflowPrimaryButton.IsEnabled = false;
-                    WorkflowInputHint.Text = Loc.T("This workflow was removed through the API. Your source text is still here.");
-                }
-            }
+            else Filter(_query);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -46,7 +31,7 @@ public sealed partial class WorkflowsView
                 _apiConfigurationConflict = _loadError;
                 UpdateConfigurationState();
             }
-            else WorkflowInputHint.Text = _loadError;
+            else WorkflowSummary.Text = _loadError;
         }
     }
 

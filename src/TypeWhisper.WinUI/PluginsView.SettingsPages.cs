@@ -129,7 +129,7 @@ public sealed partial class PluginsView
         remove.Click += async (_, _) =>
         {
             var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Uninstall {0}?", row.Plugin.Title),
-                Content = Loc.T("Your API key, preferences and downloaded models will be kept."), PrimaryButtonText = Loc.T("Uninstall"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close };
+                Content = Loc.T("Your API key, preferences and downloaded models will be kept."), PrimaryButtonText = Loc.T("Uninstall"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                 await Run(() => _runtime!.UninstallPluginAsync(Path.GetFileName(row.Plugin.Id)));
         };

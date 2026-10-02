@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace TypeWhisper.WinUI;
@@ -10,15 +9,14 @@ internal static class LiveLanguageHintSettings
         LocalDictationSession session)
     {
         if (category != "Dictation") return;
-        var row = FindRow(content) ?? throw new InvalidOperationException("Preferred language settings row is missing.");
-        foreach (var old in row.Children.OfType<ChoicePicker>()) pickers.Remove(old);
-        row.Children.Clear();
-        row.Children.Add(SettingsHelp.Label(Loc.T("Preferred languages"),
-            Loc.T("Choose up to two languages in preference order. Hints guide detection; they do not force an output language. Changes apply to the next recording.")));
+        var row = SettingsRow.Require(content, "LanguageHints").Reset(pickers);
         var first = new ChoicePicker(); first.Configure(Loc.T("First language"), "language", Loc.T("First preferred language"));
         var second = new ChoicePicker(); second.Configure(Loc.T("Second language"), "language", Loc.T("Second preferred language"));
-        row.Children.Add(first); row.Children.Add(second); pickers.Add(first); pickers.Add(second);
-        var hint = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap }; row.Children.Add(hint);
+        var both = new StackPanel { Spacing = 6, Width = 260 };
+        first.UseRowHeight(); second.UseRowHeight();
+        both.Children.Add(first); both.Children.Add(second); pickers.Add(first); pickers.Add(second);
+        row.Set(Loc.T("Preferred languages"),
+            Loc.T("Choose up to two languages in preference order. Hints guide detection; they do not force an output language. Changes apply to the next recording."), both);
         var restoring = false;
         void Refresh()
         {
@@ -35,10 +33,10 @@ internal static class LiveLanguageHintSettings
             second.SetOptions(new[] { new Choice("", Loc.T("None"), Loc.T("Use only the first preferred language")) }.Concat(options.Where(option => option.Id != selected.FirstOrDefault())).ToArray(), selected.Skip(1).FirstOrDefault() ?? "");
             first.IsEnabled = session.SupportsLanguageHints && session.Language == "auto";
             second.IsEnabled = first.IsEnabled && selected.Length > 0;
-            hint.Text = session.TextPreferences.Error ?? (!session.SupportsLanguageHints
+            row.Status = session.TextPreferences.Error ?? (!session.SupportsLanguageHints
                 ? Loc.T("The selected model does not support multiple language hints. Saved preferences remain available for compatible models.")
                 : session.Language != "auto" ? Loc.T("Your explicit spoken language takes precedence. Choose Automatic to use preferred languages.")
-                : Loc.T("Saved for the next recording."));
+                : "");
             restoring = false;
         }
         void Save(bool primary, string code)
@@ -61,12 +59,5 @@ internal static class LiveLanguageHintSettings
     private static string Name(string code)
     {
         try { return CultureInfo.GetCultureInfo(code).EnglishName; } catch (CultureNotFoundException) { return code; }
-    }
-    private static StackPanel? FindRow(StackPanel root)
-    {
-        if (Equals(root.Tag, "LanguageHints")) return root;
-        foreach (var child in root.Children.OfType<StackPanel>())
-            if (FindRow(child) is { } row) return row;
-        return null;
     }
 }

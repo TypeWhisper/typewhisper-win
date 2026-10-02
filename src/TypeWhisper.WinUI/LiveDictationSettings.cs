@@ -27,23 +27,21 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
         }
         if (category == "Dictation")
         {
-            var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "DictationModel"));
-            row.Children.Clear();
+            var row = SettingsRow.Require(content, "DictationModel");
             var provider = new ChoicePicker();
             provider.Configure(Loc.T("Provider"), "plugin", Loc.T("Dictation provider"));
-            row.Children.Add(new TextBlock { Text = Loc.T("Provider"), FontSize = 14 });
-            row.Children.Add(provider); pickers.Add(provider);
-            var modelSection = new StackPanel { Spacing = 8 };
+            pickers.Add(provider);
+            var setup = new HandCursorButton { Content = Loc.T("Provider settings"),
+                Style = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["SecondaryButtonStyle"] };
+            provider.Width = 240; provider.UseRowHeight();
+            var providerControls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            providerControls.Children.Add(setup); providerControls.Children.Add(provider);
+            row.Set(Loc.T("Provider"), control: providerControls);
             var model = new ChoicePicker();
             model.Configure(Loc.T("Model"), "chip", Loc.T("Active dictation model"));
-            modelSection.Children.Add(new TextBlock { Text = Loc.T("Model"), FontSize = 14 });
-            modelSection.Children.Add(model); pickers.Add(model);
-            row.Children.Add(modelSection);
-            var hint = new TextBlock { FontSize = 12, TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap };
-            row.Children.Add(hint);
-            var setup = new HandCursorButton { Content = Loc.T("Provider settings"), HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left,
-                Style = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["SecondaryButtonStyle"] };
-            row.Children.Add(setup);
+            pickers.Add(model);
+            var modelSection = new SettingsRow().Set(Loc.T("Model"), control: model);
+            row.InsertAfter(content, modelSection);
             var selectedProviderId = session.ActiveProviderId;
             var observedActiveProviderId = session.ActiveProviderId;
             string? selectionError = null;
@@ -65,7 +63,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 model.IsEnabled = canChange && selected?.Enabled == true && selected.Models.Any(item => item.Ready);
                 setup.IsEnabled = !selecting && selected is not null;
                 setup.Content = selected?.Ready != true ? Loc.T("Set up provider") : selected.Id != session.ActiveProviderId ? Loc.T("Use provider") : Loc.T("Provider settings");
-                hint.Text = selectionError ?? (selected is null ? Loc.T("Set up a transcription provider in Integrations.")
+                row.Description = selectionError ?? (selected is null ? Loc.T("Set up a transcription provider in Integrations.")
                     : !selected.Ready ? Loc.T("{0}. Open provider settings to finish setup. Active: {1}.", selected.Status, session.ActiveModelName)
                     : selected.Id != session.ActiveProviderId ? Loc.T("Ready. Select this provider to use it for dictation.")
                     : selected.Cloud ? session.SupportsLiveTranscription
@@ -96,8 +94,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                     await Select(selected.Id, modelId);
                 else if (selected is not null) openPluginSettings(selected.PluginId);
             };
-            var languageRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "Language"));
-            languageRow.Children.Clear();
+            var languageRow = SettingsRow.Require(content, "Language").Reset(pickers);
             var language = new ChoicePicker();
             language.Configure(Loc.T("Spoken language"), "language", Loc.T("Dictation language"));
             void RefreshLanguage() => languageRow.DispatcherQueue.TryEnqueue(() =>
@@ -110,9 +107,8 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
             });
             languageRow.Loaded += (_, _) => { session.Models.Changed += RefreshLanguage; session.Changed += RefreshLanguage; RefreshLanguage(); };
             languageRow.Unloaded += (_, _) => { session.Models.Changed -= RefreshLanguage; session.Changed -= RefreshLanguage; };
-            language.SelectionChanged += id => { var error = session.SelectLanguage(id); RefreshLanguage(); if (error is not null) hint.Text = error; };
-            languageRow.Children.Add(new TextBlock { Text = Loc.T("Spoken language"), FontSize = 14 });
-            languageRow.Children.Add(language); pickers.Add(language);
+            language.SelectionChanged += id => { var error = session.SelectLanguage(id); RefreshLanguage(); languageRow.Status = error ?? ""; };
+            languageRow.Set(Loc.T("Spoken language"), control: language); pickers.Add(language);
             provider.SelectionChanged += _ => RefreshLanguage();
         }
     }

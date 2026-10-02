@@ -10,7 +10,7 @@
         <Border BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="12" Background="{ThemeResource SurfaceBrush}" Padding="10">
             <Canvas x:Name="ScreenCanvas" Height="118" Background="Transparent" SizeChanged="Canvas_SizeChanged">
                 <TextBlock x:Name="ScreenPreviewLabel" Text="SCREEN PREVIEW" FontSize="10" Foreground="{ThemeResource MutedBrush}" Canvas.Left="8" Canvas.Top="50" IsHitTestVisible="False" />
-                <Border x:Name="OverlayThumb" Width="126" Height="34" CornerRadius="8" Background="#FF123A63" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1"
+                <Border x:Name="OverlayThumb" Width="126" Height="34" CornerRadius="8" Background="{ThemeResource SelectionSurfaceBrush}" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1"
                     PointerPressed="Thumb_Pressed" PointerMoved="Thumb_Moved" PointerReleased="Thumb_Released" PointerCaptureLost="Thumb_CaptureLost">
                     <TextBlock x:Name="ThumbText" Text="●  ┃┃┃┃  00:12" FontSize="12" Margin="8,0" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" />
                 </Border>

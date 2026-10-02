@@ -322,7 +322,7 @@ internal sealed class LivePortableModelSettings : UserControl
                 Content = Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."),
                 PrimaryButtonText = Loc.T("Remove model"),
                 CloseButtonText = Loc.T("Cancel"),
-                DefaultButton = ContentDialogButton.Close
+                DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
             };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || !Current(lifetime)) return;
             var error = await _session.RemoveRegistryModelAsync(expected);
