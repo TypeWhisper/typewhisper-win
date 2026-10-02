@@ -14,7 +14,8 @@ internal sealed class LivePortableModelSettings : UserControl
     internal event Action? ConfigurationChanged;
     private readonly LocalDictationSession _session;
     private readonly string _pluginId;
-    private readonly StackPanel _rows = new() { Spacing = 12 };
+    private readonly StackPanel _rows = new();
+    private readonly Border _modelCard;
     private readonly TextBlock _status = Label("");
     private readonly TextBlock _llm = Label("");
     private readonly HandCursorButton _refresh;
@@ -60,7 +61,22 @@ internal sealed class LivePortableModelSettings : UserControl
         content.Children.Add(_localTts);
         _localLlm = new(session, pluginId) { Visibility = Visibility.Collapsed };
         content.Children.Add(_localLlm);
-        content.Children.Add(_refresh); content.Children.Add(_status); content.Children.Add(_cloudPanel); content.Children.Add(_rows); content.Children.Add(_llm);
+        // One card for all models, as on the NVIDIA Parakeet page; Refresh sits in its heading.
+        var heading = new Grid { ColumnSpacing = 12, Margin = new Thickness(0, 0, 0, 12) };
+        heading.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+        heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        heading.Children.Add(new TextBlock { Text = Loc.T("Models"), FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        Grid.SetColumn(_refresh, 1); heading.Children.Add(_refresh);
+        var list = new StackPanel();
+        list.Children.Add(heading); list.Children.Add(_rows);
+        _modelCard = new Border { Child = list, Padding = new Thickness(18, 12, 18, 2), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Visibility = Visibility.Collapsed };
+        void Theme()
+        {
+            _modelCard.Background = (Brush)Application.Current.Resources["SurfaceBrush"];
+            _modelCard.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
+        }
+        _modelCard.ActualThemeChanged += (_, _) => Theme(); Theme();
+        content.Children.Add(_status); content.Children.Add(_cloudPanel); content.Children.Add(_modelCard); content.Children.Add(_llm);
         Content = content;
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _refresh.Click += (_, _) => RequestRefresh();
@@ -141,7 +157,6 @@ internal sealed class LivePortableModelSettings : UserControl
             var hasModelSetting = _cloudMode && TranscriptionModelSettingChoices.Any(choices =>
                 choices.SetEquals(models.Select(model => model.ModelId)));
             _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
-            _rows.Visibility = _cloudMode ? Visibility.Collapsed : Visibility.Visible;
             _refresh.Visibility = _cloudMode || !_session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)
                 ? Visibility.Collapsed : Visibility.Visible;
             _localLlm.Visibility = HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
@@ -164,10 +179,14 @@ internal sealed class LivePortableModelSettings : UserControl
         finally
         {
             _reading = false;
-            if (Current(lifetime)) UpdateButtons();
+            if (Current(lifetime)) { UpdateButtons(); UpdateModelCard(); }
             if (IsLoaded && _reloadRequested) QueueUpdate();
         }
     }
+
+    // Refresh sits in the card, so the card stays while a provider has no rows yet or a read failed.
+    private void UpdateModelCard() => _modelCard.Visibility = !_cloudMode && (_rows.Children.Count > 0
+        || _session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)) ? Visibility.Visible : Visibility.Collapsed;
 
     private void SetRow(PortableDownloadableModel model)
     {
@@ -176,6 +195,7 @@ internal sealed class LivePortableModelSettings : UserControl
         {
             row = new Row(model);
             _items.Add(key, row); _rows.Children.Add(row.Panel);
+            UpdateModelCard();
             var captured = row;
             row.Download.Click += async (_, _) => await DownloadAsync(captured);
             row.Use.Click += async (_, _) => await UseAsync(captured);
@@ -334,12 +354,11 @@ internal sealed class LivePortableModelSettings : UserControl
             var required = model.Requirements.Any(r => r.IsRequired && !r.IsSatisfied);
             row.Download.Visibility = model.SupportsDownload && !model.Downloaded && !(active && state.IsBusy) ? Visibility.Visible : Visibility.Collapsed;
             row.Download.IsEnabled = available && provider is not null && !required;
-            row.Use.Content = selected ? Loc.T("Active model") : Loc.T("Use model");
-            row.Use.Visibility = model.SupportsDownload && !model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
+            // The badge marks the selected model, so its button is not shown.
+            row.Use.Visibility = selected || model.SupportsDownload && !model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
             var loading = ReferenceEquals(_loadingRow, row);
             var recommended = provider?.Models.FirstOrDefault(m => m.Id == model.ModelId)?.IsRecommended == true;
-            row.Badge.Text = loading ? Loc.T("Loading…") : active && state.IsBusy ? state.IsRemoval ? Loc.T("Removing…") : Loc.T("Downloading…") : selected ? Loc.T("Active") : model.Downloaded ? Loc.T("Downloaded") : recommended ? Loc.T("Recommended") : Loc.T("Available");
-            row.SetActive(selected);
+            row.SetBadge(selected ? Loc.T("Active") : recommended && !model.Downloaded ? Loc.T("Recommended") : "");
             row.Use.IsEnabled = available && provider is not null && !selected &&
                 (model.SupportsDownload ? model.Downloaded : provider.Ready);
             row.Remove.Visibility = model.SupportsRemoval && model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
@@ -351,13 +370,16 @@ internal sealed class LivePortableModelSettings : UserControl
             row.Cancel.IsEnabled = !_canceling && active && state.IsBusy && !state.IsClosing;
             row.Progress.Visibility = loading || active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
             row.Percent.Text = active && state.IsBusy && state.Progress is { } fraction ? $"{fraction:P0}" : "";
-            row.Percent.Visibility = row.Progress.Visibility;
+            row.Percent.Visibility = row.ProgressLine.Visibility = row.Progress.Visibility;
             row.Progress.IsIndeterminate = loading || state.Progress is null;
             row.Progress.Value = (state.Progress ?? 0) * 100;
             row.State.Text = loading ? Loc.T("Loading model into memory…") : active && state.Message is not null ? state.Message : provider is null
                 ? Loc.T("Provider unavailable. Refresh after enabling the plugin.") : model.SupportsDownload
                     ? selected ? Loc.T("Downloaded · 100%. Selected for dictation.") : model.Downloaded ? Loc.T("Downloaded · 100%. Choose Use model to load it.") : Loc.T("Not downloaded.")
                     : provider.Ready ? Loc.T("Provider ready.") : Loc.T("Complete provider configuration before selecting a model.");
+            // Shown only when it says more than the badge and buttons do.
+            row.State.Visibility = loading || active && state.Message is not null || provider is null || !model.SupportsDownload && !provider.Ready
+                ? Visibility.Visible : Visibility.Collapsed;
         }
         if (_cloudMode)
         {
@@ -397,7 +419,8 @@ internal sealed class LivePortableModelSettings : UserControl
     private sealed class Row
     {
         internal PortableDownloadableModel Model;
-        internal readonly Border Panel = new() { Padding = new Thickness(18), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Stretch };
+        // A hairline separates each row from the heading or the row above.
+        internal readonly Border Panel = new() { Padding = new Thickness(0, 14, 0, 14), BorderThickness = new Thickness(0, 1, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch };
         internal readonly StackPanel CredentialPanel = new() { Spacing = 8 };
         internal readonly Dictionary<string, CredentialRow> Credentials = [];
         internal readonly TextBlock Title = Label("");
@@ -408,47 +431,65 @@ internal sealed class LivePortableModelSettings : UserControl
         internal readonly TextBlock State = Label("");
         internal readonly TextBlock RemovalNote = Label("");
         internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100, Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        internal readonly Grid ProgressLine = new() { ColumnSpacing = 12, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
         internal readonly HandCursorButton Download = Button(Loc.T("Download model"));
         internal readonly HandCursorButton Use = Button(Loc.T("Use model"));
-        internal readonly HandCursorButton Remove = Button(Loc.T("Remove model"));
+        internal readonly HandCursorButton Remove = Button(Loc.T("Remove"));
         internal readonly HandCursorButton Cancel = Button(Loc.T("Cancel operation"));
-        private bool _active;
-        internal void SetActive(bool active) {
-            _active = active;
-            Panel.BorderBrush = (Brush)Application.Current.Resources[active ? "AccentBrush" : "HairlineBrush"];
+        private readonly Border _badge;
+        // An empty badge is hidden; the buttons already say whether a model is downloaded.
+        internal void SetBadge(string text)
+        {
+            Badge.Text = text;
+            _badge.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         internal Row(PortableDownloadableModel model)
         {
             Model = model;
             Download.Style = Use.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
-            Title.FontSize = 16; Title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-            Size.FontSize = 12; Badge.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-            var body = new StackPanel { Spacing = 12 };
-            var heading = new Grid { ColumnSpacing = 12 };
-            heading.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
-            heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            var identity = new StackPanel { Spacing = 4 };
-            identity.Children.Add(Title); identity.Children.Add(Size); heading.Children.Add(identity);
-            var badge = new Border { Child = Badge, Padding = new Thickness(9, 4, 9, 4), CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Top };
-            Grid.SetColumn(badge, 1); heading.Children.Add(badge);
-            var progressLine = new Grid { ColumnSpacing = 12 };
+            Title.FontSize = 15; Title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            Badge.FontSize = 11; Badge.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            var layout = new Grid { ColumnSpacing = 14 };
+            layout.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+            layout.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
+            layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
+            var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+            _badge = new Border { Child = Badge, Padding = new Thickness(8, 2, 8, 3), CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+            // Left-aligned, the star column is as wide as the name but still wraps a long one.
+            var title = new Grid { ColumnSpacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
+            title.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+            title.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            title.Children.Add(Title); Grid.SetColumn(_badge, 1); title.Children.Add(_badge);
+            // Collapsed with its bar, so an idle row keeps no gap for it.
+            var progressLine = ProgressLine;
             progressLine.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
             progressLine.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
             progressLine.Children.Add(Progress); Grid.SetColumn(Percent, 1); progressLine.Children.Add(Percent);
-            body.Children.Add(heading); body.Children.Add(Requirements); body.Children.Add(CredentialPanel); body.Children.Add(State); body.Children.Add(RemovalNote); body.Children.Add(progressLine);
-            Panel.Child = body;
+            copy.Children.Add(title); copy.Children.Add(Size); copy.Children.Add(Requirements); copy.Children.Add(CredentialPanel);
+            copy.Children.Add(State); copy.Children.Add(RemovalNote); copy.Children.Add(progressLine);
+            layout.Children.Add(copy);
+            var actions = new StackPanel { Spacing = 8, Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            actions.Children.Add(Download); actions.Children.Add(Use); actions.Children.Add(Cancel); actions.Children.Add(Remove);
+            Grid.SetColumn(actions, 1); layout.Children.Add(actions);
+            Panel.Child = layout;
+            Panel.SizeChanged += (_, e) =>
+            {
+                var narrow = e.NewSize.Width < 480;
+                Grid.SetColumnSpan(copy, narrow ? 2 : 1);
+                Grid.SetColumn(actions, narrow ? 0 : 1); Grid.SetRow(actions, narrow ? 1 : 0);
+                actions.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+                // Three buttons can show at once; stacked, none is cut off in a narrow window.
+                actions.Orientation = narrow ? Orientation.Vertical : Orientation.Horizontal;
+                actions.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+            };
             void Theme() {
-                Panel.Background = (Brush)Application.Current.Resources["SurfaceBrush"];
+                Panel.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
                 Size.Foreground = State.Foreground = RemovalNote.Foreground = (Brush)Application.Current.Resources["MutedBrush"];
-                badge.Background = (Brush)Application.Current.Resources["ElevatedBrush"];
+                _badge.Background = (Brush)Application.Current.Resources["ElevatedBrush"];
                 Badge.Foreground = Progress.Foreground = (Brush)Application.Current.Resources["AccentBrush"];
-                SetActive(_active);
             }
             Panel.ActualThemeChanged += (_, _) => Theme(); Theme();
-            var actions = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
-            Panel.SizeChanged += (_, e) => actions.Orientation = e.NewSize.Width < 440 ? Orientation.Vertical : Orientation.Horizontal;
-            actions.Children.Add(Download); actions.Children.Add(Use); actions.Children.Add(Remove); actions.Children.Add(Cancel);
-            body.Children.Add(actions);
             AutomationProperties.SetName(Progress, Loc.T("{0} model operation progress", model.DisplayName));
             AutomationProperties.SetName(Remove, Loc.T("Remove {0}", model.DisplayName));
         }
