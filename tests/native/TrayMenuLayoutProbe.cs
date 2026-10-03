@@ -17,6 +17,9 @@ internal static class TrayMenuLayoutProbe
     {
         var samples = new List<object>();
         var failures = new List<string>();
+        Directory.CreateDirectory(WinUIProfile.Root);
+        // An interrupted run must not leave an earlier successful result behind.
+        File.Delete(WinUIProfile.DataPath("tray-layout-probe.json"));
         try
         {
             static void Noop() { }
@@ -140,7 +143,6 @@ internal static class TrayMenuLayoutProbe
             if (menu.AppWindow.IsVisible) failures.Add("A queued layout reopened the dismissed menu.");
         }
         catch (Exception ex) { failures.Add(ex.ToString()); }
-        Directory.CreateDirectory(WinUIProfile.Root);
         File.WriteAllText(WinUIProfile.DataPath("tray-layout-probe.json"), JsonSerializer.Serialize(
             new { passed = failures.Count == 0, failures, samples }, new JsonSerializerOptions { WriteIndented = true }));
     }
