@@ -156,7 +156,8 @@ internal sealed class TrayMenuWindow : Window
 
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
     {
-        if (sender.RasterizationScale != _scale) QueueLayout();
+        // Ignore projection rounding noise; a single native DPI step is 1/96.
+        if (Math.Abs(sender.RasterizationScale - _scale) > 0.0001) QueueLayout();
     }
 
     private void ResizeToContent()

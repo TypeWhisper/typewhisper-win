@@ -104,6 +104,21 @@ internal static class TrayMenuLayoutProbe
             menu.Present();
             await Task.Delay(150);
             samples.Add(Snapshot("reopen-from-tiny-hidden"));
+
+            // Exercise the real change handler without changing the desktop's scaling.
+            var scaleField = typeof(TrayMenuWindow).GetField("_scale", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var queuedField = typeof(TrayMenuWindow).GetField("_layoutQueued", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var scaleChanged = typeof(TrayMenuWindow).GetMethod("OnXamlRootChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var root = presenter.XamlRoot;
+            scaleField.SetValue(menu, root.RasterizationScale + 0.00000001);
+            scaleChanged.Invoke(menu, [root, null]);
+            if ((bool)queuedField.GetValue(menu)!) failures.Add("Scale rounding noise queued a layout update.");
+            scaleField.SetValue(menu, root.RasterizationScale + 0.25);
+            scaleChanged.Invoke(menu, [root, null]);
+            if (!(bool)queuedField.GetValue(menu)!) failures.Add("A material scale change did not queue a layout update.");
+            await Task.Delay(150);
+            samples.Add(Snapshot("scale-change-notification"));
+
             var area = DisplayArea.GetFromWindowId(menu.AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
             var previousPosition = menu.AppWindow.Position;
             var previousRight = menu.AppWindow.Position.X + menu.AppWindow.Size.Width;
