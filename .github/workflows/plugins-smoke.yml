@@ -15,6 +15,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  plugin-tests:
+    name: Plugin tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test plugins without models or provider credentials
+        shell: pwsh
+        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite Plugins -ResultsDirectory artifacts/test-results/plugins
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: plugin-tests-${{ matrix.os }}
+          path: artifacts/test-results/plugins/
+          if-no-files-found: warn
+
   release-script-tests:
     runs-on: ubuntu-latest
     steps:

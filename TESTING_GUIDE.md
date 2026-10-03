@@ -28,6 +28,13 @@ tests on Windows, and discovered plugin-owned .NET tests. Results are written to
 `artifacts/test-results/winui-headless`, including `summary.json`. It does not run
 provider Python tests or the browser experiment automatically.
 
+Use `-Suite App` for application, plugin host/SDK and Windows platform tests, or
+`-Suite Plugins` for plugin-owned tests only. The default `-Suite All` keeps the
+complete local and Candidate check. CI runs `App` on Windows and Linux; the
+Plugins workflow runs `Plugins` on both systems, including after shared SDK or
+host changes. These plugin tests use fake providers and local endpoints, not
+live services or provider credentials.
+
 For a focused iteration:
 
 ```powershell
@@ -38,6 +45,7 @@ For changed release tooling or the retained experiment:
 
 ```powershell
 ./eng/Get-ChangedPluginProjects.Tests.ps1
+./eng/Test-WinUIHeadless.Tests.ps1
 ./eng/Test-WinUIDailyCandidate.Tests.ps1
 ./eng/Test-DailyUpgradePackage.Tests.ps1
 ./eng/Test-WinUILocalAudio.Tests.ps1
@@ -126,10 +134,10 @@ fixtures and their limits.
 
 | Workflow | Responsibility |
 | --- | --- |
-| CI | WinUI solution build and headless application/provider suites |
+| CI | WinUI solution build and headless application, plugin host/SDK and platform suites |
 | Candidate | x64/ARM64 candidates and gated Daily publication |
 | Packaging | Installer/portable-package validation without publication |
-| Plugins | Manifest and changed-provider builds; full sweep on manual runs |
+| Plugins | All plugin tests on Windows/Linux, release tooling, Python sidecar tests and manifests; changed-provider builds, with all builds on manual runs |
 | Release plugins | Tested plugin packages and catalog publication |
 | Security | Dependency review and package audits |
 | Store | Manual MSIX packaging; separate Store installation/activation acceptance |

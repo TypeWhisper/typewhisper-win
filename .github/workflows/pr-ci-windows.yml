@@ -48,7 +48,7 @@ jobs:
           if-no-files-found: ignore
 
   headless:
-    name: Tests (${{ matrix.os }})
+    name: App tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -60,9 +60,12 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
-      - name: Run without desktop, microphone, models or provider credentials
+      - name: Verify headless suite selection and failure reporting
         shell: pwsh
-        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release
+        run: ./eng/Test-WinUIHeadless.Tests.ps1
+      - name: Test application and plugin host without desktop or provider credentials
+        shell: pwsh
+        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite App
       - name: Verify audio test orchestration with fake endpoints
         shell: pwsh
         run: ./eng/Test-WinUILocalAudio.Tests.ps1

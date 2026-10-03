@@ -2,6 +2,7 @@ using TypeWhisper.Plugin.Script;
 using TypeWhisper.PluginSDK.Models;
 namespace PortableMigration.Tests;
 
+[Collection("Windows script processes")]
 public sealed class ScriptTemplatesTests
 {
     public static TheoryData<string, string, string> Cases => new()

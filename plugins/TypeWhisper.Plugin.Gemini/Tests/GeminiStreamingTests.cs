@@ -113,12 +113,13 @@ public sealed partial class GeminiPluginTests
     }
 
     [Fact]
-    public async Task LiveWebSocket_ExchangesSetupPcmTranscriptAndEndOfAudio()
+    public async Task LoopbackWebSocket_ExchangesSetupPcmTranscriptAndEndOfAudio()
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15)); var ct = deadline.Token;
         using var reservation = new TcpListener(IPAddress.Loopback, 0); reservation.Start();
         var port = ((IPEndPoint)reservation.LocalEndpoint).Port; reservation.Stop();
         using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var clientFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = Task.Run(async () =>
         {
             var context = await listener.GetContextAsync().WaitAsync(ct);
@@ -137,15 +138,25 @@ public sealed partial class GeminiPluginTests
             await socket.SendAsync(transcript.AsMemory(12), WebSocketMessageType.Binary, true, ct);
             await socket.SendAsync(Encoding.UTF8.GetBytes("""{"voiceActivity":{"type":"ACTIVITY_END","audioOffset":"0.000125s"}}"""), WebSocketMessageType.Text, true, ct);
             await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, ct);
+            // Disposing HttpListener's socket early can reset the Windows connection
+            // before the client has consumed the buffered transcript and acknowledgement.
+            await clientFinished.Task.WaitAsync(ct);
         }, ct);
-        await using var stream = await GeminiStreamingSession.ConnectAsync("fixture", GeminiPlugin.DefaultLiveTranscriptionModel,
-            ["de-DE"], ["TypeWhisper"], GeminiTranscriptionMode.Smart, ct, new Uri($"ws://127.0.0.1:{port}/"));
-        var completion = new TaskCompletionSource<StreamingTranscriptEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        stream.TranscriptReceived += update => completion.TrySetResult(update);
-        await stream.SendAudioAsync(new byte[] { 1, 2, 3, 4 }, ct);
-        await stream.FinalizeAsync(ct);
-        var result = await completion.Task.WaitAsync(ct); Assert.Equal("Hallo Welt", result.Text); Assert.True(result.IsFinal);
-        await server.WaitAsync(ct);
+        try
+        {
+            await using var stream = await GeminiStreamingSession.ConnectAsync("fixture", GeminiPlugin.DefaultLiveTranscriptionModel,
+                ["de-DE"], ["TypeWhisper"], GeminiTranscriptionMode.Smart, ct, new Uri($"ws://127.0.0.1:{port}/"));
+            var completion = new TaskCompletionSource<StreamingTranscriptEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+            stream.TranscriptReceived += update => completion.TrySetResult(update);
+            await stream.SendAudioAsync(new byte[] { 1, 2, 3, 4 }, ct);
+            await stream.FinalizeAsync(ct);
+            var result = await completion.Task.WaitAsync(ct); Assert.Equal("Hallo Welt", result.Text); Assert.True(result.IsFinal);
+        }
+        finally
+        {
+            clientFinished.TrySetResult();
+            await server.WaitAsync(ct);
+        }
     }
 
     private static async Task<string> Receive(WebSocket socket, CancellationToken ct)

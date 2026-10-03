@@ -40,7 +40,7 @@ foreach ($file in $changedFiles) {
     }
 }
 
-# Only tracked, top-level package projects; nested test projects run in headless CI.
+# Only tracked, top-level package projects; the Plugins workflow also runs all plugin tests.
 # Shared host/SDK/workflow changes do not expand this matrix. Use a manual run
 # when a cross-plugin compatibility sweep is needed.
 $projects = @(foreach ($path in (Invoke-RepositoryGit @('ls-files', '--', 'plugins') | Sort-Object)) {
