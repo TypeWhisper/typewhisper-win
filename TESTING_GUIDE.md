@@ -89,6 +89,30 @@ Automated output tests cover disabled insertion, processing/action failure,
 History/audio save warnings, cancellation and changed output preferences.
 A native first-dictation test remains necessary for target capture/paste behavior.
 
+## Tray-menu layout regression check
+
+The Debug-only native probe uses the real tray menu in a named test profile,
+without initializing recording, providers or the normal application profile:
+
+```powershell
+$env:TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE = '1'
+try {
+    & F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run --profile tray-layout-probe <checkout-path>
+} finally {
+    Remove-Item Env:TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE -ErrorAction SilentlyContinue
+}
+```
+
+The probe briefly opens and closes the menu, then exits. It writes
+`%TEMP%/TypeWhisper-WinUI-TestProfiles/tray-layout-probe/tray-layout-probe.json`;
+check that its timestamp belongs to this run, `passed` is `true` and `failures`
+is empty. It checks repeated opens, recovery from a constrained window,
+content changes while open, anchor stability and dismissal during a queued
+layout update. Run with enough desktop work area to fit the complete menu.
+Mixed-DPI monitor transitions and keyboard interaction still need manual checks.
+Run the development helper again without the probe flag or `--profile` to
+return to the normal development profile.
+
 ## Focused native acceptance
 
 Exercise the changed flow and its most relevant failure case. For release work,
