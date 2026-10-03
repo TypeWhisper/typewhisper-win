@@ -101,6 +101,7 @@
     <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../eng/Optimize-CliBundle.ps1&quot; -PublishDirectory &quot;$(PublishDir)/.&quot;" />
   </Target>
   <ItemGroup>
+    <Compile Include="../../tests/native/TrayMenuLayoutProbe.cs" Link="Testing/TrayMenuLayoutProbe.cs" Condition="'$(Configuration)' == 'Debug'" />
     <Using Include="TypeWhisper.Core" />
   </ItemGroup>
 </Project>

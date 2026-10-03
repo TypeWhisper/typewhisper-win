@@ -35,6 +35,14 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+#if DEBUG
+        if (WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE") == "1")
+        {
+            await TrayMenuLayoutProbe.RunAsync();
+            Exit();
+            return;
+        }
+#endif
         try { await LaunchAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

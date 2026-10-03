@@ -15,6 +15,10 @@ internal sealed class TrayMenuWindow : Window
 {
     private readonly MenuFlyoutPresenter _presenter;
     private bool _opening;
+    private bool _layoutQueued;
+    private bool _closed;
+    private PointInt32 _anchor;
+    private double _scale;
 
     internal TrayMenuWindow(MenuFlyout menu)
     {
@@ -55,6 +59,7 @@ internal sealed class TrayMenuWindow : Window
         {
             menu.Items.Remove(item);
             _presenter.Items.Add(item);
+            item.RegisterPropertyChangedCallback(UIElement.VisibilityProperty, (_, _) => QueueLayout());
             if (item is not MenuFlyoutSeparator)
             {
                 item.MinHeight = 0;
@@ -65,7 +70,8 @@ internal sealed class TrayMenuWindow : Window
             {
                 action.Template = itemTemplate;
                 action.UseSystemFocusVisuals = true;
-                action.Click += (_, _) => AppWindow.Hide();
+                action.RegisterPropertyChangedCallback(MenuFlyoutItem.TextProperty, (_, _) => QueueLayout());
+                action.Click += (_, _) => Hide();
             }
         }
         Content = _presenter;
@@ -81,19 +87,22 @@ internal sealed class TrayMenuWindow : Window
         AppWindow.Resize(new SizeInt32(1, 1));
         _presenter.Loaded += (_, _) =>
         {
+            _presenter.XamlRoot.Changed -= OnXamlRootChanged;
+            _presenter.XamlRoot.Changed += OnXamlRootChanged;
             if (_opening) DispatcherQueue.TryEnqueue(LayoutAndShow);
         };
+        Closed += (_, _) => { _closed = true; _opening = false; };
         _presenter.KeyDown += (_, args) =>
         {
             if (args.Key != VirtualKey.Escape) return;
-            AppWindow.Hide();
+            Hide();
             args.Handled = true;
         };
         Activated += (_, args) =>
         {
             NativeWindowAppearance.RemoveSystemBorder(this);
             if (!_opening && args.WindowActivationState == WindowActivationState.Deactivated)
-                AppWindow.Hide();
+                Hide();
         };
     }
 
@@ -104,6 +113,7 @@ internal sealed class TrayMenuWindow : Window
 
     internal void Present()
     {
+        NativeMethods.GetCursorPos(out _anchor);
         _opening = true;
         // Initial activation loads XAML off-screen, without a visible empty surface.
         if (!_presenter.IsLoaded)
@@ -116,23 +126,68 @@ internal sealed class TrayMenuWindow : Window
 
     private void LayoutAndShow()
     {
-        NativeMethods.GetCursorPos(out var cursor);
-        var area = DisplayArea.GetFromPoint(cursor, DisplayAreaFallback.Primary).WorkArea;
-        AppWindow.Move(new PointInt32(cursor.X, cursor.Y));
-        var scale = _presenter.XamlRoot?.RasterizationScale ?? 1;
-        _presenter.MaxHeight = Math.Max(100, (area.Height - 16) / scale);
-        _presenter.Measure(new global::Windows.Foundation.Size(Math.Min(420, area.Width / scale), _presenter.MaxHeight));
-        var width = Math.Min(area.Width, (int)Math.Ceiling(_presenter.DesiredSize.Width * scale) + 2);
-        var height = Math.Min(area.Height, (int)Math.Ceiling(_presenter.DesiredSize.Height * scale) + 2);
-        AppWindow.MoveAndResize(new RectInt32(
-            Math.Clamp(cursor.X - width, area.X, area.X + area.Width - width),
-            Math.Clamp(cursor.Y - height, area.Y, area.Y + area.Height - height),
-            width, height));
+        if (_closed || !_opening) return;
+        AppWindow.Move(_anchor);
+        ResizeToContent();
         AppWindow.Show();
         Activate();
         NativeMethods.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
         _opening = false;
         var firstAction = _presenter.Items.OfType<MenuFlyoutItem>().FirstOrDefault(item => item.IsEnabled);
         firstAction?.Focus(FocusState.Programmatic);
+    }
+
+    private void Hide()
+    {
+        _opening = false;
+        AppWindow.Hide();
+    }
+
+    private void QueueLayout()
+    {
+        if (_closed || _opening || !AppWindow.IsVisible || _layoutQueued) return;
+        _layoutQueued = DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            _layoutQueued = false;
+            // A status update must not reopen a dismissed menu or move it to the current pointer.
+            if (!_closed && !_opening && AppWindow.IsVisible) ResizeToContent();
+        });
+    }
+
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+    {
+        // Ignore projection rounding noise; a single native DPI step is 1/96.
+        if (Math.Abs(sender.RasterizationScale - _scale) > 0.0001) QueueLayout();
+    }
+
+    private void ResizeToContent()
+    {
+        var area = DisplayArea.GetFromPoint(_anchor, DisplayAreaFallback.Primary).WorkArea;
+        // The native DPI is current after moving monitors; XamlRoot can catch up later.
+        _scale = NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96d;
+        var availableWidth = Math.Min(420, area.Width / _scale);
+        _presenter.MaxHeight = Math.Max(1, (area.Height - 16) / _scale);
+        _presenter.Measure(new global::Windows.Foundation.Size(availableWidth, _presenter.MaxHeight));
+
+        // Measure the complete item list, not the ScrollViewer's last constrained viewport.
+        // This also works on the first open and after a hidden menu's content has changed.
+        var horizontalInsets = _presenter.Padding.Left + _presenter.Padding.Right
+            + _presenter.BorderThickness.Left + _presenter.BorderThickness.Right;
+        var contentWidth = Math.Max(0, _presenter.MinWidth - horizontalInsets);
+        var contentHeight = _presenter.Padding.Top + _presenter.Padding.Bottom
+            + _presenter.BorderThickness.Top + _presenter.BorderThickness.Bottom;
+        foreach (var item in _presenter.Items.OfType<MenuFlyoutItemBase>())
+        {
+            if (item.Visibility != Visibility.Visible) continue;
+            item.Measure(new global::Windows.Foundation.Size(Math.Max(0, availableWidth - horizontalInsets), double.PositiveInfinity));
+            contentWidth = Math.Max(contentWidth, item.DesiredSize.Width);
+            contentHeight += item.DesiredSize.Height;
+        }
+        var width = Math.Min(area.Width, (int)Math.Ceiling(Math.Min(availableWidth, contentWidth + horizontalInsets) * _scale) + 2);
+        var height = Math.Min(area.Height, (int)Math.Ceiling(Math.Min(_presenter.MaxHeight, contentHeight) * _scale) + 2);
+        AppWindow.MoveAndResize(new RectInt32(
+            Math.Clamp(_anchor.X - width, area.X, area.X + area.Width - width),
+            Math.Clamp(_anchor.Y - height, area.Y, area.Y + area.Height - height),
+            width, height));
     }
 }
