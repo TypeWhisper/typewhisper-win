@@ -1,7 +1,9 @@
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
-    [string]$ResultsDirectory
+    [string]$ResultsDirectory,
+    [ValidateSet('All', 'App', 'Plugins')]
+    [string]$Suite = 'All'
 )
 
 Set-StrictMode -Version Latest
@@ -13,19 +15,24 @@ if ([string]::IsNullOrWhiteSpace($ResultsDirectory)) {
 }
 $ResultsDirectory = [IO.Path]::GetFullPath($ResultsDirectory)
 New-Item -ItemType Directory -Force -Path $ResultsDirectory | Out-Null
-$checks = @(
-    @{ Name = 'Core'; Project = 'tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj' },
-    @{ Name = 'PluginHost'; Project = 'tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Portable.Tests.csproj' },
-    @{ Name = 'CLI'; Project = 'tests/TypeWhisper.Cli.Tests/TypeWhisper.Cli.Tests.csproj' },
-    @{ Name = 'Presentation'; Project = 'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj' }
-)
-if ($IsWindows) {
-    $checks += @{ Name = 'Platform'; Project = 'tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj' }
+$checks = @()
+if ($Suite -in @('All', 'App')) {
+    $checks += @(
+        @{ Name = 'Core'; Project = 'tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj' },
+        @{ Name = 'PluginHost'; Project = 'tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Portable.Tests.csproj' },
+        @{ Name = 'CLI'; Project = 'tests/TypeWhisper.Cli.Tests/TypeWhisper.Cli.Tests.csproj' },
+        @{ Name = 'Presentation'; Project = 'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj' }
+    )
+    if ($IsWindows) {
+        $checks += @{ Name = 'Platform'; Project = 'tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj' }
+    }
 }
-# Each portable plugin owns its tests; discovery needs no host-side provider list.
-$checks += @(Get-ChildItem -Path (Join-Path $repository 'plugins/*/Tests/*.csproj') | ForEach-Object {
-    @{ Name = $_.BaseName; Project = [IO.Path]::GetRelativePath($repository, $_.FullName) }
-})
+if ($Suite -in @('All', 'Plugins')) {
+    # Each portable plugin owns its tests; discovery needs no host-side provider list.
+    $checks += @(Get-ChildItem -Path (Join-Path $repository 'plugins/*/Tests/*.csproj') | Sort-Object FullName | ForEach-Object {
+        @{ Name = $_.BaseName; Project = [IO.Path]::GetRelativePath($repository, $_.FullName) }
+    })
+}
 $results = [System.Collections.Generic.List[object]]::new()
 foreach ($check in $checks) {
     $project = Join-Path $repository $check.Project
@@ -38,6 +45,7 @@ $failed = @($results | Where-Object { $_.exitCode -ne 0 })
 [pscustomobject]@{
     passed = $failed.Count -eq 0
     configuration = $Configuration
+    suite = $Suite
     checks = $results.ToArray()
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ResultsDirectory 'summary.json')
 if ($failed.Count -gt 0) { throw "Headless checks failed: $($failed.name -join ', '). See $ResultsDirectory" }

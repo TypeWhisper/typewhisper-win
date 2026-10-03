@@ -1,6 +1,8 @@
 using TypeWhisper.Plugin.Script;
 using TypeWhisper.PluginSDK.Models;
 namespace PortableMigration.Tests;
+// Share a collection with template tests so cold Windows shells do not start in parallel on CI.
+[Collection("Windows script processes")]
 public sealed class ScriptBehaviorTests
 {
     [WindowsFact]
