@@ -203,18 +203,20 @@ public sealed class QwenTests : IDisposable
         Assert.True(loaded[0].Recognizer.Disposed);
         Assert.EndsWith(Qwen3LocalPlugin.ModelId, loaded[1].Directory);
 
-        // Removing another model keeps the selection and the loaded model.
-        await plugin.RemoveModelAsync(Qwen3LocalPlugin.LargeModelId, default);
+        // The host keeps blocking the earlier model's removal, so its own action removes it while the selection
+        // and the loaded model stay.
+        Assert.Equal(["remove-" + Qwen3LocalPlugin.ModelId, "remove-" + Qwen3LocalPlugin.LargeModelId], plugin.SettingsActions.Select(action => action.Id));
+        await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.LargeModelId, default);
         Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.LargeModelId));
         Assert.Equal(Qwen3LocalPlugin.ModelId, plugin.SelectedModelId);
         Assert.False(loaded[1].Recognizer.Disposed);
         Assert.True(plugin.IsConfigured);
 
-        await plugin.ExecuteSettingsActionAsync("remove-model", default);
+        await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, default);
         Assert.True(loaded[1].Recognizer.Disposed);
         Assert.Null(plugin.SelectedModelId);
         Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.ModelId));
-        Assert.StartsWith("No Qwen model is selected.", await plugin.ExecuteSettingsActionAsync("remove-model", default));
+        Assert.Equal("Qwen3-ASR 0.6B INT8 is not downloaded.", await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, default));
 
         host.SetSetting("selectedModel", Qwen3LocalPlugin.LargeModelId);
         await plugin.DeactivateAsync();
@@ -285,10 +287,10 @@ public sealed class QwenTests : IDisposable
         await plugin.LoadModelAsync(Qwen3LocalPlugin.ModelId, default);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.ExecuteSettingsActionAsync("remove-model", cancelled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, cancelled.Token));
         Assert.True(plugin.IsConfigured);
         Assert.False(decoder.Disposed);
-        await plugin.ExecuteSettingsActionAsync(Assert.Single(plugin.SettingsActions).Id, default);
+        await plugin.ExecuteSettingsActionAsync(plugin.SettingsActions[0].Id, default);
         Assert.True(decoder.Disposed);
         Assert.False(Directory.Exists(directory));
         Assert.False(plugin.IsConfigured);

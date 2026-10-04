@@ -79,23 +79,25 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         }
     ];
 
+    // The host blocks removing a selected model and any model it loaded before, even after the plugin has
+    // switched to another one. One action per model therefore unloads and removes exactly that model.
     /// <inheritdoc />
-    public IReadOnlyList<PluginSettingsAction> SettingsActions { get; } =
-    [
-        new("remove-model", "Unload and remove selected Qwen model",
-            "Delete the files of the Qwen model selected for dictation and clear the selection. You can download it again.")
-        { Section = PluginSettingsSection.Transcription }
-    ];
+    public IReadOnlyList<PluginSettingsAction> SettingsActions => TranscriptionModels.Select(model =>
+        new PluginSettingsAction(RemoveActionPrefix + model.Id, $"Unload and remove {model.DisplayName}",
+            "Delete this model's files, unloading it and clearing the selection if needed. You can download it again.")
+        { Section = PluginSettingsSection.Transcription }).ToArray();
+
+    private const string RemoveActionPrefix = "remove-";
 
     /// <inheritdoc />
     public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
     {
-        if (id != "remove-model") throw new ArgumentException("Unknown Qwen settings action.", nameof(id));
-        // The host blocks removing the selected model, so this action covers it. The host runs settings
-        // actions under its configuration lease; the plugin's gate also drains native inference first.
-        if (_selected is not { } selected) return "No Qwen model is selected. Remove other downloaded models from the model list.";
-        await RemoveModelAsync(selected, cancellationToken).ConfigureAwait(false);
-        return "Qwen model removed. Reopen these settings to download it again, then choose Use model.";
+        var model = TranscriptionModels.FirstOrDefault(candidate => id == RemoveActionPrefix + candidate.Id)
+            ?? throw new ArgumentException("Unknown Qwen settings action.", nameof(id));
+        // The host runs settings actions under its configuration lease; the plugin's gate also drains native inference first.
+        if (!IsModelDownloaded(model.Id)) return $"{model.DisplayName} is not downloaded.";
+        await RemoveModelAsync(model.Id, cancellationToken).ConfigureAwait(false);
+        return $"{model.DisplayName} removed. Reopen these settings to download it again, then choose Use model.";
     }
 
     /// <inheritdoc />

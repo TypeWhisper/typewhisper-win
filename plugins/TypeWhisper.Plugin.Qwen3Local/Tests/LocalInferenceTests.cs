@@ -79,7 +79,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
                 Assert.NotNull(Assert.Single(await registry.GetModelStatesAsync(entry.Id), model => model.ModelId == Qwen3LocalPlugin.ModelId).RemovalBlockedReason);
                 // The explicit settings action remains reachable for the sole selected model.
                 await registry.UseConfigurationAsync(entry.Id, (plugin, ct) =>
-                    ((IPluginSettingsActions)plugin).ExecuteSettingsActionAsync("remove-model", ct));
+                    ((IPluginSettingsActions)plugin).ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, ct));
                 await registry.RefreshCapabilitiesAsync();
                 Assert.False(Assert.Single(registry.TranscriptionProviders).Ready);
                 Assert.Null(Assert.Single(registry.TranscriptionProviders).SelectedModelId);
