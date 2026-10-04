@@ -20,6 +20,16 @@ dotnet run -c Release --project tools/TypeWhisper.Benchmarks -- wer C:\path\to\m
 
 `wer` downloads the first clips per language of the pinned public FLEURS test corpus (`FluidInference/fleurs`, the corpus `eng/benchmark_cohere_quantizations.py` uses) into the cache directory and decodes them with the plugin's CPU configuration. Each clip is first raised to the 0.707 peak the app's recorder normalizes to, because FLEURS contains near-silent recordings that otherwise decode to nothing. It prints WER, CER, real-time factor and median latency per language, then the macro and micro averages, load time and peak working set. `--languages de_de,en_us` and `--samples 100` select the subset, `--noise-snr 10` adds seeded white noise at that signal-to-noise ratio, and `--concat-seconds 300` joins clips into single passes of that length. Text is lowercased and stripped of punctuation before scoring, without number or spelling normalization, so absolute values are higher than leaderboard figures. Compare models only on the same subset and options.
 
+`wer` also accepts a Qwen3-ASR directory (`conv_frontend.onnx`, `encoder.int8.onnx`, `decoder.int8.onnx`, `tokenizer/`) and then decodes like the Qwen3 ASR (Local) plugin, in windows of at most ten seconds.
+
+To transcribe your own recordings, put 16 kHz mono 16-bit PCM WAV files in one directory:
+
+```powershell
+dotnet run -c Release --project tools/TypeWhisper.Benchmarks -- files C:\path\to\model C:\path\to\recordings --threads 4 --output results.json
+```
+
+A UTF-8 `name.txt` next to `name.wav` holds what was said (verbatim). Such clips get word and character edits after the same normalization as `wer`. An optional `name.formatted.txt` holds the intended final text, for example digits and code identifiers; the `exact` flag compares the transcript with it, or with `name.txt` when it is missing, including punctuation and casing. The summary adds micro WER/CER and the number of exact matches. Clips without a `.txt` are only transcribed and timed. Like `wer`, `files` raises each clip to the recorder's 0.707 peak; `--raw` decodes the files at their original level instead. Keep personal recordings outside the repository.
+
 The `api` and `decoder` modes use only synthetic English Windows speech. No microphone, clipboard, dictation-control endpoints or history endpoints are accessed. The inspected legacy local-file transcription handler does not add history entries. Tokens, if required, come from `TYPEWHISPER_BENCHMARK_TOKEN` and are never logged. Requests and authentication are restricted to loopback without redirects.
 
 Each clip has one unmeasured warm-up and three measured runs; JSON lines include PCM hashes, transcripts, wall time, API-reported processing time, median and range. Verify hashes before comparing separate invocations. Three runs provide a preliminary baseline, not a reliable tail-latency estimate.

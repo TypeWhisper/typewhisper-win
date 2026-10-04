@@ -46,6 +46,18 @@ internal static class QwenAudio
         return samples;
     }
 
+    // The 1.7B export drops whole windows of quiet speech that it decodes correctly at the recorder's level.
+    // Dictation arrives already raised to this peak; files and API audio are raised the same way here.
+    internal const float NormalizationTarget = 0.707f;
+
+    internal static float NormalizationGain(ReadOnlySpan<float> samples)
+    {
+        var peak = 0f;
+        foreach (var sample in samples) peak = MathF.Max(peak, MathF.Abs(sample));
+        // Same rule as the recorder: near-silence stays untouched and loud audio is never attenuated.
+        return peak < 0.01f || peak >= NormalizationTarget ? 1 : NormalizationTarget / peak;
+    }
+
     internal static int ChunkLength(ReadOnlySpan<float> remaining)
     {
         if (remaining.Length <= ChunkSamples) return remaining.Length;

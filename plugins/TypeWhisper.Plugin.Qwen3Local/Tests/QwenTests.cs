@@ -87,6 +87,143 @@ public sealed class QwenTests : IDisposable
     }
 
     [Fact]
+    public async Task PinnedFileSourceInstallsOnlyVerifiedFilesAndRetriesAfterFailure()
+    {
+        var files = QwenModelAssets.RequiredFiles.ToDictionary(name => name, name => System.Text.Encoding.UTF8.GetBytes("model:" + name));
+        var source = FileSource(files);
+        var requested = new List<string>();
+        var corrupt = "decoder.int8.onnx";
+        using var http = Http(request =>
+        {
+            var name = request.RequestUri!.AbsolutePath["/pinned/".Length..];
+            requested.Add(name);
+            var bytes = files[name].ToArray();
+            if (name == corrupt) bytes[0] ^= 1;
+            return new ByteArrayContent(bytes);
+        });
+        var assets = new QwenModelAssets(http, source);
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => assets.DownloadAsync(_root, null, default));
+        Assert.Contains("checksum", error.Message);
+        Assert.False(assets.IsReady(_root));
+        Assert.False(Directory.Exists(_root));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(_root)!, Path.GetFileName(_root) + ".download-*"));
+
+        corrupt = "";
+        requested.Clear();
+        var reports = new List<double>();
+        await assets.DownloadAsync(_root, new CallbackProgress(reports.Add), default);
+        Assert.True(assets.IsReady(_root));
+        Assert.Equal(QwenModelAssets.RequiredFiles, requested);
+        Assert.Equal(1, reports[^1]);
+        Assert.Equal(reports.Order(), reports);
+        foreach (var (name, bytes) in files) Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(_root, name)));
+
+        // Changing any pinned hash changes the identity, so the files are downloaded again.
+        var repinned = source with { Files = source.Files!.Select((file, index) => index == 0 ? file with { Sha256 = new string('0', 64) } : file).ToArray() };
+        Assert.False(new QwenModelAssets(http, QwenAssetSource.FromFiles(repinned.Name, repinned.Url, [.. repinned.Files!])).IsReady(_root));
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("long")]
+    public async Task PinnedFileSourceRejectsUnexpectedSizes(string failure)
+    {
+        var files = QwenModelAssets.RequiredFiles.ToDictionary(name => name, name => System.Text.Encoding.UTF8.GetBytes("model:" + name));
+        using var http = Http(request =>
+        {
+            var bytes = files[request.RequestUri!.AbsolutePath["/pinned/".Length..]];
+            // Without a Content-Length header the copy itself must enforce the pinned size.
+            var stream = new MemoryStream(failure == "short" ? bytes[..^1] : [.. bytes, 0]);
+            return new StreamContent(new NonSeekableStream(stream));
+        });
+        var assets = new QwenModelAssets(http, FileSource(files));
+        await Assert.ThrowsAsync<InvalidDataException>(() => assets.DownloadAsync(_root, null, default));
+        Assert.False(assets.IsReady(_root));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(_root)!, Path.GetFileName(_root) + ".download-*"));
+    }
+
+    [Fact]
+    public async Task AbandonedFileSourceStagingIsRemovedButAnActiveDownloadIsKept()
+    {
+        var abandoned = Path.Join(_root + ".download-" + Guid.NewGuid().ToString("N"), "model", "tokenizer");
+        var active = Path.Join(_root + ".download-" + Guid.NewGuid().ToString("N"), "model", "tokenizer");
+        Directory.CreateDirectory(abandoned); Directory.CreateDirectory(active);
+        File.WriteAllBytes(Path.Join(abandoned, "vocab.json"), new byte[16]);
+        File.WriteAllBytes(Path.Join(active, "..", "encoder.int8.onnx"), new byte[16]);
+        try
+        {
+            using (new FileStream(Path.Join(active, "vocab.json"), FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                QwenModelAssets.RemoveAbandonedStaging(_root);
+            Assert.False(Directory.Exists(Path.Join(abandoned, "..", "..")));
+            Assert.True(File.Exists(Path.Join(active, "..", "encoder.int8.onnx")));
+        }
+        finally
+        {
+            var staging = Path.GetFullPath(Path.Join(active, "..", ".."));
+            if (Directory.Exists(staging)) Directory.Delete(staging, true);
+        }
+    }
+
+    [Fact]
+    public void LargeModelPinsRevisionAndEveryRequiredFile()
+    {
+        var source = QwenModelAssets.Model17B;
+        Assert.Matches("/resolve/[0-9a-f]{40}$", source.Url);
+        Assert.Equal(QwenModelAssets.RequiredFiles, source.Files!.Select(file => file.Name));
+        Assert.All(source.Files!, file => { Assert.Matches("^[0-9a-f]{64}$", file.Sha256); Assert.True(file.Size > 0); });
+        Assert.Equal(source.Files!.Sum(file => file.Size), source.Size);
+        Assert.Null(QwenModelAssets.Model06B.Files);
+    }
+
+    [Fact]
+    public async Task ModelsAreDownloadedSelectedLoadedAndRemovedIndependently()
+    {
+        var bytes = Archive();
+        var host = new TestHost(_root);
+        var loaded = new List<(string Directory, FakeRecognizer Recognizer)>();
+        using var plugin = new Qwen3LocalPlugin(Http(() => new ByteArrayContent(bytes)), directory =>
+        { var recognizer = new FakeRecognizer(); loaded.Add((directory, recognizer)); return recognizer; }, Source(bytes));
+        await plugin.ActivateAsync(host);
+        Assert.Equal([Qwen3LocalPlugin.ModelId, Qwen3LocalPlugin.LargeModelId], plugin.TranscriptionModels.Select(model => model.Id));
+        Assert.Single(plugin.TranscriptionModels, model => model.IsRecommended);
+
+        await plugin.DownloadModelAsync(Qwen3LocalPlugin.LargeModelId, null, default);
+        Assert.True(plugin.IsModelDownloaded(Qwen3LocalPlugin.LargeModelId));
+        Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.ModelId));
+        plugin.SelectModel(Qwen3LocalPlugin.LargeModelId);
+        Assert.True(plugin.IsConfigured);
+        await plugin.TranscribePcmAsync(new[] { .5f }, null, false, default);
+        Assert.EndsWith(Qwen3LocalPlugin.LargeModelId, Assert.Single(loaded).Directory);
+
+        // Switching models keeps only the newly selected one resident.
+        await plugin.DownloadModelAsync(Qwen3LocalPlugin.ModelId, null, default);
+        plugin.SelectModel(Qwen3LocalPlugin.ModelId);
+        await plugin.TranscribePcmAsync(new[] { .5f }, null, false, default);
+        Assert.Equal(2, loaded.Count);
+        Assert.True(loaded[0].Recognizer.Disposed);
+        Assert.EndsWith(Qwen3LocalPlugin.ModelId, loaded[1].Directory);
+
+        // Removing another model keeps the selection and the loaded model.
+        await plugin.RemoveModelAsync(Qwen3LocalPlugin.LargeModelId, default);
+        Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.LargeModelId));
+        Assert.Equal(Qwen3LocalPlugin.ModelId, plugin.SelectedModelId);
+        Assert.False(loaded[1].Recognizer.Disposed);
+        Assert.True(plugin.IsConfigured);
+
+        await plugin.ExecuteSettingsActionAsync("remove-model", default);
+        Assert.True(loaded[1].Recognizer.Disposed);
+        Assert.Null(plugin.SelectedModelId);
+        Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.ModelId));
+        Assert.StartsWith("No Qwen model is selected.", await plugin.ExecuteSettingsActionAsync("remove-model", default));
+
+        host.SetSetting("selectedModel", Qwen3LocalPlugin.LargeModelId);
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(host);
+        Assert.Equal(Qwen3LocalPlugin.LargeModelId, plugin.SelectedModelId);
+        Assert.False(plugin.IsConfigured);
+    }
+
+    [Fact]
     public async Task CancelledDownloadCleansStagingAndCanRetry()
     {
         var bytes = Archive();
@@ -225,6 +362,31 @@ public sealed class QwenTests : IDisposable
         Assert.Throws<ArgumentException>(() => Qwen3LocalPlugin.NormalizeLanguage("xx"));
     }
 
+    [Theory]
+    [InlineData(.2f, .707f)]
+    [InlineData(.9f, .9f)]
+    [InlineData(.005f, .005f)]
+    public async Task QuietAudioIsRaisedToTheRecorderLevelBeforeDecoding(float peak, float expected)
+    {
+        var bytes = Archive();
+        var decoder = new FakeRecognizer();
+        using var plugin = new Qwen3LocalPlugin(Http(() => new ByteArrayContent(bytes)), _ => decoder, Source(bytes));
+        await plugin.ActivateAsync(new TestHost(_root));
+        await plugin.DownloadModelAsync(Qwen3LocalPlugin.ModelId, null, default);
+        var samples = Enumerable.Range(0, QwenAudio.SampleRate * 12).Select(i => i % 100 == 0 ? peak : peak / 4).ToArray();
+        await plugin.TranscribePcmAsync(samples, null, false, default);
+        Assert.Equal(2, decoder.Peaks.Count);
+        Assert.All(decoder.Peaks, value => Assert.Equal(expected, value, 4));
+    }
+
+    [Theory]
+    [InlineData("language German<asr_text>Es leben noch viele Menschen.", "Es leben noch viele Menschen.")]
+    [InlineData("Nachdem der Damm erbaut war. language German<asr_text>Kamen die Fluten.", "Nachdem der Damm erbaut war. Kamen die Fluten.")]
+    [InlineData("<asr_text>Hello there.", "Hello there.")]
+    [InlineData("Die Sprache language ist wichtig.", "Die Sprache language ist wichtig.")]
+    public void LanguageMarkersLeakedByTheModelAreRemoved(string text, string expected) =>
+        Assert.Equal(expected, QwenRecognizer.StripLanguageMarkers(text));
+
     [Fact]
     public void WavParsingHandlesMetadataAndRejectsWrongFormatsAndTruncation()
     {
@@ -268,20 +430,40 @@ public sealed class QwenTests : IDisposable
         { rawTar.CopyTo(zip); zip.Finish(); }
         return memory.ToArray();
     }
-    private static QwenAssetSource Source(byte[] bytes) => new("https://fixture.invalid/model", Convert.ToHexString(SHA256.HashData(bytes)), bytes.Length);
-    internal static HttpClient Http(Func<HttpContent> content) => new(new Handler(content));
-    private sealed class Handler(Func<HttpContent> content) : HttpMessageHandler
+    private static QwenAssetSource Source(byte[] bytes) => new("Qwen3-ASR 0.6B", "https://fixture.invalid/model", Convert.ToHexString(SHA256.HashData(bytes)), bytes.Length);
+    private static QwenAssetSource FileSource(Dictionary<string, byte[]> files) =>
+        QwenAssetSource.FromFiles("Qwen3-ASR 1.7B", "https://fixture.invalid/pinned", files.Select(file =>
+            new QwenAssetFile(file.Key, Convert.ToHexStringLower(SHA256.HashData(file.Value)), file.Value.Length)).ToArray());
+    internal static HttpClient Http(Func<HttpContent> content) => Http(_ => content());
+    internal static HttpClient Http(Func<HttpRequestMessage, HttpContent> content) => new(new Handler(content));
+    private sealed class Handler(Func<HttpRequestMessage, HttpContent> content) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        { ct.ThrowIfCancellationRequested(); return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content() }); }
+        { ct.ThrowIfCancellationRequested(); return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content(request) }); }
+    }
+    private sealed class NonSeekableStream(Stream inner) : Stream
+    {
+        public override bool CanRead => true; public override bool CanSeek => false; public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        protected override void Dispose(bool disposing) { if (disposing) inner.Dispose(); base.Dispose(disposing); }
     }
     private sealed class CallbackProgress(Action<double> report) : IProgress<double> { public void Report(double value) => report(value); }
     private sealed class FakeRecognizer : IQwenRecognizer
     {
         public List<int> Lengths { get; } = [];
+        public List<float> Peaks { get; } = [];
         public string? Language; public bool Disposed; public Action? AfterDecode;
         public string Decode(float[] samples, string? language)
-        { Lengths.Add(samples.Length); Language = language; AfterDecode?.Invoke(); return "Test transcript."; }
+        {
+            Lengths.Add(samples.Length); Peaks.Add(samples.Max(MathF.Abs)); Language = language;
+            AfterDecode?.Invoke(); return "Test transcript.";
+        }
         public void Dispose() => Disposed = true;
     }
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

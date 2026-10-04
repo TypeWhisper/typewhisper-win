@@ -1,12 +1,12 @@
 {
   "id": "com.typewhisper.qwen3-local",
   "name": "Qwen3 ASR (Local)",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minHostVersion": "1.1.6",
   "author": "TypeWhisper",
-  "description": "Offline multilingual speech recognition with Qwen3-ASR 0.6B. Download the model once, then transcribe on your CPU.",
+  "description": "Offline multilingual speech recognition with Qwen3-ASR 0.6B or 1.7B. Download a model once, then transcribe on your CPU.",
   "descriptions": {
-    "de": "Lokale mehrsprachige Spracherkennung mit Qwen3-ASR 0.6B. Modell einmal herunterladen, danach offline auf der CPU transkribieren."
+    "de": "Lokale mehrsprachige Spracherkennung mit Qwen3-ASR 0.6B oder 1.7B. Modell einmal herunterladen, danach offline auf der CPU transkribieren."
   },
   "categories": ["transcription"],
   "isLocal": true,

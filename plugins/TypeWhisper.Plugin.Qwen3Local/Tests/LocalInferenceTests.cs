@@ -38,7 +38,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
             var host = new TestHost(Path.Combine(root, "assets"));
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.qwen3-local", Name = "Qwen3 ASR (Local)", Version = "1.0.1", MinHostVersion = "1.1.6",
+                Id = "com.typewhisper.qwen3-local", Name = "Qwen3 ASR (Local)", Version = "1.1.0", MinHostVersion = "1.1.6",
                 DownloadUrl = "https://fixture.invalid/qwen.zip", Size = new FileInfo(zip).Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))),
                 SupportedArchitectures = ["x64", "arm64"], Categories = ["transcription"]
@@ -68,7 +68,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
             }
             await File.WriteAllTextAsync(Path.Combine(modelDirectory, "ready.json"), JsonSerializer.Serialize(new
             {
-                QwenModelAssets.Official.Sha256,
+                QwenModelAssets.Model06B.Sha256,
                 Files = QwenModelAssets.RequiredFiles.ToDictionary(name => name, _ => 7L)
             }));
             await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 6), _ => host))
@@ -76,7 +76,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
                 await registry.InitializeAsync();
                 Assert.Null(await registry.SetEnabledAsync(entry.Id, true));
                 Assert.True(Assert.Single(registry.TranscriptionProviders).Ready);
-                Assert.NotNull(Assert.Single(await registry.GetModelStatesAsync(entry.Id)).RemovalBlockedReason);
+                Assert.NotNull(Assert.Single(await registry.GetModelStatesAsync(entry.Id), model => model.ModelId == Qwen3LocalPlugin.ModelId).RemovalBlockedReason);
                 // The explicit settings action remains reachable for the sole selected model.
                 await registry.UseConfigurationAsync(entry.Id, (plugin, ct) =>
                     ((IPluginSettingsActions)plugin).ExecuteSettingsActionAsync("remove-model", ct));
@@ -96,23 +96,44 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
         }
     }
 
-    [LocalModelFact]
+    [LocalModelFact("QWEN_LOCAL_TEST_ARCHIVE")]
     public async Task RealCpuInferenceGermanEnglishLongAudioCancellationAndReload()
     {
         var archive = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_ARCHIVE")!;
-        var assetRoot = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_ASSETS")!;
-        var wavRoot = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_WAVS")!;
         // Exercise the production download, hash verification and extraction code against
         // the previously downloaded official archive. No audio leaves the process.
         using var http = QwenTests.Http(() => new StreamContent(File.OpenRead(archive)));
-        var assets = new QwenModelAssets(http);
-        var modelDirectory = Path.Combine(assetRoot, "Models", Qwen3LocalPlugin.ModelId);
+        await RunRealInferenceAsync(new QwenModelAssets(http, QwenModelAssets.Model06B), Qwen3LocalPlugin.ModelId);
+    }
+
+    [LocalModelFact("QWEN_LOCAL_TEST_LARGE_FILES")]
+    public async Task RealCpuInferenceWithPinnedLargeModel()
+    {
+        var files = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_LARGE_FILES")!;
+        // Serves the previously downloaded files under their pinned names, so every production
+        // size and SHA-256 check runs against the real 1.7B files.
+        var prefix = new Uri(QwenModelAssets.Model17B.Url + "/").AbsolutePath;
+        using var http = QwenTests.Http(request =>
+        {
+            Assert.StartsWith(prefix, request.RequestUri!.AbsolutePath);
+            return new StreamContent(File.OpenRead(Path.Combine(files, request.RequestUri.AbsolutePath[prefix.Length..])));
+        });
+        await RunRealInferenceAsync(new QwenModelAssets(http, QwenModelAssets.Model17B), Qwen3LocalPlugin.LargeModelId);
+    }
+
+    private async Task RunRealInferenceAsync(QwenModelAssets assets, string modelId)
+    {
+        var assetRoot = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_ASSETS")!;
+        var wavRoot = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_WAVS")!;
+        var modelDirectory = Path.Combine(assetRoot, "Models", modelId);
+        var timer = Stopwatch.StartNew();
         await assets.DownloadAsync(modelDirectory, null, default);
+        output.WriteLine($"Install {modelId}: {timer.Elapsed.TotalSeconds:F3}s");
         var metrics = new List<object>();
         await using var package = await PortablePluginPackage.LoadAsync(PackageDirectory, new TestHost(assetRoot), new(1, 1, 6));
         var engine = (IPcmTranscriptionEnginePlugin)package.Plugin;
-        engine.SelectModel(Qwen3LocalPlugin.ModelId);
-        var timer = Stopwatch.StartNew(); await engine.LoadModelAsync(Qwen3LocalPlugin.ModelId, default);
+        engine.SelectModel(modelId);
+        timer.Restart(); await engine.LoadModelAsync(modelId, default);
         output.WriteLine($"CPU model load: {timer.Elapsed.TotalSeconds:F3}s");
         foreach (var (file, language, expected) in new[] { ("de.wav", "de", "Bergbau"), ("f1_noise.wav", "en", "Charles") })
         {
@@ -134,21 +155,21 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
         var silence = await engine.TranscribePcmAsync(new float[16000], null, false, default); Assert.Empty(silence.Text);
         using var cts = new CancellationTokenSource(); cts.CancelAfter(50);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => engine.TranscribePcmAsync(german, null, false, cts.Token));
-        await engine.UnloadModelAsync(); await engine.LoadModelAsync(Qwen3LocalPlugin.ModelId, default);
+        await engine.UnloadModelAsync(); await engine.LoadModelAsync(modelId, default);
         var reloaded = await engine.TranscribePcmAsync(german, "de", false, default);
         Assert.Contains("Bergbau", reloaded.Text);
         output.WriteLine($"Reload: {reloaded.Text}");
         output.WriteLine($"Peak process working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB");
-        await File.WriteAllTextAsync(Path.Combine(assetRoot, "qwen-local-validation.json"), JsonSerializer.Serialize(metrics, new JsonSerializerOptions { WriteIndented = true }));
+        await File.WriteAllTextAsync(Path.Combine(assetRoot, $"qwen-local-validation-{modelId}.json"), JsonSerializer.Serialize(metrics, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
 
 public sealed class LocalModelFactAttribute : FactAttribute
 {
-    public LocalModelFactAttribute()
+    public LocalModelFactAttribute(string modelVariable)
     {
-        if (new[] { "QWEN_LOCAL_TEST_ARCHIVE", "QWEN_LOCAL_TEST_ASSETS", "QWEN_LOCAL_TEST_WAVS" }
+        if (new[] { modelVariable, "QWEN_LOCAL_TEST_ASSETS", "QWEN_LOCAL_TEST_WAVS" }
             .Any(name => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name))))
-            Skip = "Set the QWEN_LOCAL_TEST_ARCHIVE, QWEN_LOCAL_TEST_ASSETS and QWEN_LOCAL_TEST_WAVS paths to run real local inference.";
+            Skip = $"Set the {modelVariable}, QWEN_LOCAL_TEST_ASSETS and QWEN_LOCAL_TEST_WAVS paths to run real local inference.";
     }
 }
