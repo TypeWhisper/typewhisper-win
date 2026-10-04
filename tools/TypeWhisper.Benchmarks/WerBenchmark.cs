@@ -154,19 +154,19 @@ internal static class WerBenchmark
     private static OfflineRecognizerConfig CreateConfig(string modelDirectory, int threads, out bool qwen, out string[] modelFiles)
     {
         // A Qwen3-ASR directory is recognized by its conv frontend; everything else is scored as a transducer.
-        qwen = File.Exists(Path.Combine(modelDirectory, "conv_frontend.onnx"));
+        qwen = File.Exists(Path.Join(modelDirectory, "conv_frontend.onnx"));
         var config = new OfflineRecognizerConfig();
         if (qwen)
         {
             // Mirrors QwenRecognizer in the Qwen3 ASR (Local) plugin.
             modelFiles = new[] { "conv_frontend.onnx", "encoder.int8.onnx", "decoder.int8.onnx", "tokenizer/vocab.json",
-                "tokenizer/merges.txt", "tokenizer/tokenizer_config.json" }.Select(name => Path.Combine(modelDirectory, name)).ToArray();
+                "tokenizer/merges.txt", "tokenizer/tokenizer_config.json" }.Select(name => Path.Join(modelDirectory, name)).ToArray();
             if (modelFiles.FirstOrDefault(path => !File.Exists(path)) is { } missing)
                 throw new FileNotFoundException("Missing model file: " + Path.GetRelativePath(modelDirectory, missing));
             config.ModelConfig.Qwen3Asr.ConvFrontend = modelFiles[0];
             config.ModelConfig.Qwen3Asr.Encoder = modelFiles[1];
             config.ModelConfig.Qwen3Asr.Decoder = modelFiles[2];
-            config.ModelConfig.Qwen3Asr.Tokenizer = Path.Combine(modelDirectory, "tokenizer");
+            config.ModelConfig.Qwen3Asr.Tokenizer = Path.Join(modelDirectory, "tokenizer");
             config.ModelConfig.Qwen3Asr.MaxTotalLen = 512;
             config.ModelConfig.Qwen3Asr.MaxNewTokens = 256;
             config.ModelConfig.Tokens = "";
@@ -174,7 +174,7 @@ internal static class WerBenchmark
         else
         {
             var files = new[] { "encoder", "decoder", "joiner" }.ToDictionary(name => name, name => ResolveModelFile(modelDirectory, name));
-            var tokens = Path.Combine(modelDirectory, "tokens.txt");
+            var tokens = Path.Join(modelDirectory, "tokens.txt");
             if (!File.Exists(tokens)) throw new FileNotFoundException("Missing model file: tokens.txt");
             modelFiles = files.Values.Append(tokens).ToArray();
 
