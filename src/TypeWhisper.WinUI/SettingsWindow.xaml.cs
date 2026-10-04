@@ -440,12 +440,17 @@ public sealed partial class SettingsWindow : Window
     }
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Only one recorder edits at a time. Without one, skip walking the page on every key press.
+        if (!ShortcutRecorder.AnyEditing) return;
         var recorder = Descendants(SettingsRoot).OfType<ShortcutRecorder>().FirstOrDefault(control => control.IsEditing);
         if (recorder is not null && (recorder.IsCapturing || e.Key == global::Windows.System.VirtualKey.Escape)) recorder.CaptureKeyDown(e);
     }
 
-    private void Root_KeyUp(object sender, KeyRoutedEventArgs e) =>
+    private void Root_KeyUp(object sender, KeyRoutedEventArgs e)
+    {
+        if (!ShortcutRecorder.AnyEditing) return;
         Descendants(SettingsRoot).OfType<ShortcutRecorder>().FirstOrDefault(control => control.IsCapturing)?.CaptureKeyUp(e);
+    }
 
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {

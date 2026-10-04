@@ -22,8 +22,13 @@ public sealed partial class HistoryWindow
     private TextBlock? _position;
     private bool _updatingTimeline;
 
-    private TranscriptionRecord[] SelectedRecords() => _selection
-        .Select(id => _records.FirstOrDefault(record => record.Id == id)).OfType<TranscriptionRecord>().ToArray();
+    private TranscriptionRecord[] SelectedRecords()
+    {
+        if (_selection is [var only]) return _records.FirstOrDefault(record => record.Id == only) is { } record ? [record] : [];
+        var byId = new Dictionary<string, TranscriptionRecord>(StringComparer.Ordinal);
+        foreach (var record in _records) byId.TryAdd(record.Id, record);
+        return _selection.Select(id => byId.GetValueOrDefault(id)).OfType<TranscriptionRecord>().ToArray();
+    }
 
     private static HandCursorButton ActionButton(string label, Action click)
     {

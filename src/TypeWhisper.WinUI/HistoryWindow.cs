@@ -89,8 +89,9 @@ public sealed partial class HistoryWindow : Window
         _listScroll = new ScrollViewer { Content = _list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         _listScroll.ViewChanged += (_, _) =>
         {
-            // Load the next page when the last rows come into view.
-            if (_shown < VisibleRowCount() && _listScroll.VerticalOffset >= _listScroll.ScrollableHeight - 200) { _shown += PageSize; RenderList(); }
+            // Load the next page when the last rows come into view. Counting the rows walks the whole
+            // history, so it only runs near the end of the list, not on every scroll step.
+            if (_listScroll.VerticalOffset >= _listScroll.ScrollableHeight - 200 && _shown < VisibleRowCount()) { _shown += PageSize; RenderList(); }
         };
         // Search, filter and sort sit above the list they narrow down, so they keep their width at any window size.
         var find = new Grid { ColumnSpacing = 6, Margin = new Thickness(18, 12, 16, 8) };
@@ -198,7 +199,8 @@ public sealed partial class HistoryWindow : Window
         finally { _loading = false; }
         if (_closing) return;
         // Drop selections of entries that no longer exist.
-        _selection.RemoveAll(id => _records.All(record => record.Id != id));
+        var existing = _records.Select(record => record.Id).ToHashSet(StringComparer.Ordinal);
+        _selection.RemoveAll(id => !existing.Contains(id));
         BuildMenus();
         Render();
     }
