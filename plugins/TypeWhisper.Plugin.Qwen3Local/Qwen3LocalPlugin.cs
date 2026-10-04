@@ -190,7 +190,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
                     cancellationToken.ThrowIfCancellationRequested();
                     var length = QwenAudio.ChunkLength(samples.Span[offset..]);
                     var chunk = samples.Slice(offset, length).ToArray();
-                    if (gain != 1) for (var i = 0; i < chunk.Length; i++) chunk[i] *= gain;
+                    if (gain > 1) for (var i = 0; i < chunk.Length; i++) chunk[i] *= gain;
                     // Native decoding cannot be interrupted safely. Drain the current bounded
                     // window before honoring cancellation; never publish partial success.
                     var text = chunk.All(value => value == 0) ? "" : _recognizer!.Decode(chunk, hint);
@@ -206,7 +206,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         finally { _gate.Release(); }
     }
 
-    private string ModelDirectory(string modelId) => Path.Combine(_host!.PluginAssetDirectory, "Models", modelId);
+    private string ModelDirectory(string modelId) => Path.Join(_host!.PluginAssetDirectory, "Models", modelId);
     private void EnsureActive()
     { ObjectDisposedException.ThrowIf(_disposed, this); if (_host is null) throw new InvalidOperationException("Qwen plugin is not active."); }
     private async Task EnsureLoadedAsync(string modelId, CancellationToken ct)

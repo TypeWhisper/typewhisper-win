@@ -116,7 +116,7 @@ public sealed class QwenTests : IDisposable
         Assert.Equal(QwenModelAssets.RequiredFiles, requested);
         Assert.Equal(1, reports[^1]);
         Assert.Equal(reports.Order(), reports);
-        foreach (var (name, bytes) in files) Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(_root, name)));
+        foreach (var (name, bytes) in files) Assert.Equal(bytes, File.ReadAllBytes(Path.Join(_root, name)));
 
         // Changing any pinned hash changes the identity, so the files are downloaded again.
         var repinned = source with { Files = source.Files!.Select((file, index) => index == 0 ? file with { Sha256 = new string('0', 64) } : file).ToArray() };

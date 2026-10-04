@@ -80,7 +80,7 @@ internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource source, F
 
     private async Task DownloadArchiveAsync(string staging, string extracted, IProgress<double>? progress, CancellationToken ct)
     {
-        var archive = Path.Combine(staging, "model.tar.bz2");
+        var archive = Path.Join(staging, "model.tar.bz2");
         using (var response = await http.GetAsync(_source.Url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
         {
             response.EnsureSuccessStatusCode();
@@ -105,7 +105,7 @@ internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource source, F
         long completed = 0;
         foreach (var file in files)
         {
-            var path = Path.Combine(destination, file.Name);
+            var path = Path.Join(destination, file.Name);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             using (var response = await http.GetAsync(_source.Url + "/" + file.Name, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))

@@ -116,7 +116,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
         using var http = QwenTests.Http(request =>
         {
             Assert.StartsWith(prefix, request.RequestUri!.AbsolutePath);
-            return new StreamContent(File.OpenRead(Path.Combine(files, request.RequestUri.AbsolutePath[prefix.Length..])));
+            return new StreamContent(File.OpenRead(Path.Join(files, request.RequestUri.AbsolutePath[prefix.Length..])));
         });
         await RunRealInferenceAsync(new QwenModelAssets(http, QwenModelAssets.Model17B), Qwen3LocalPlugin.LargeModelId);
     }
@@ -125,7 +125,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
     {
         var assetRoot = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_ASSETS")!;
         var wavRoot = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_WAVS")!;
-        var modelDirectory = Path.Combine(assetRoot, "Models", modelId);
+        var modelDirectory = Path.Join(assetRoot, "Models", modelId);
         var timer = Stopwatch.StartNew();
         await assets.DownloadAsync(modelDirectory, null, default);
         output.WriteLine($"Install {modelId}: {timer.Elapsed.TotalSeconds:F3}s");
@@ -160,7 +160,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
         Assert.Contains("Bergbau", reloaded.Text);
         output.WriteLine($"Reload: {reloaded.Text}");
         output.WriteLine($"Peak process working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB");
-        await File.WriteAllTextAsync(Path.Combine(assetRoot, $"qwen-local-validation-{modelId}.json"), JsonSerializer.Serialize(metrics, new JsonSerializerOptions { WriteIndented = true }));
+        await File.WriteAllTextAsync(Path.Join(assetRoot, $"qwen-local-validation-{modelId}.json"), JsonSerializer.Serialize(metrics, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
 
