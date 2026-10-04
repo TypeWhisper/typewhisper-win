@@ -139,9 +139,20 @@ internal sealed class LiveModelsView : UserControl
         AutomationProperties.SetHelpText(languages, description);
         var tooltip = new ToolTip { Content = new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 } };
         ToolTipService.SetToolTip(languages, tooltip);
-        languages.GotFocus += (_, _) => tooltip.IsOpen = true;
+        // Focus also lands here when a download disables the Download button; only keyboard focus opens the list.
+        languages.GotFocus += (_, _) => tooltip.IsOpen = languages.FocusState == FocusState.Keyboard;
         languages.LostFocus += (_, _) => tooltip.IsOpen = false;
         languages.Click += (_, _) => tooltip.IsOpen = true;
+        languages.PointerExited += (_, e) =>
+        {
+            if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Mouse && languages.FocusState != FocusState.Keyboard)
+                tooltip.IsOpen = false;
+        };
+        languages.KeyDown += (_, e) =>
+        {
+            if (e.Key == global::Windows.System.VirtualKey.Escape && tooltip.IsOpen)
+            { tooltip.IsOpen = false; e.Handled = true; }
+        };
         languages.Unloaded += (_, _) => tooltip.IsOpen = false;
         copy.Children.Add(meta);
         var status = Copy("", 12, true); copy.Children.Add(status);
