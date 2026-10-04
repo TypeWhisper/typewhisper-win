@@ -15,6 +15,8 @@ public sealed class DeviceCacheTests
         using var audio = new AudioRecordingService(devices, new Captures(), Timeout.InfiniteTimeSpan, notifier);
         Assert.True(audio.WarmUp());
         Assert.True(notifier.Started);
+        audio.StartRecording(enableRecovery: false);
+        audio.StopRecording();
 
         devices.EnumerationsOn(Environment.CurrentManagedThreadId, out var before);
         audio.StartRecording(enableRecovery: false);
@@ -22,6 +24,22 @@ public sealed class DeviceCacheTests
 
         Assert.True(audio.IsRecording);
         Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void FirstRecordingAfterNotificationRegistrationEnumeratesAgain()
+    {
+        var devices = new Devices { List = [QuadCast, Headset] };
+        var notifier = new Notifier();
+        using var audio = new AudioRecordingService(devices, new Captures(), Timeout.InfiniteTimeSpan, notifier);
+        Assert.True(audio.WarmUp());
+
+        // The list cached before registration may predate an unreported change.
+        devices.EnumerationsOn(Environment.CurrentManagedThreadId, out var before);
+        audio.StartRecording(enableRecovery: false);
+        devices.EnumerationsOn(Environment.CurrentManagedThreadId, out var after);
+
+        Assert.Equal(before + 1, after);
     }
 
     [Fact]

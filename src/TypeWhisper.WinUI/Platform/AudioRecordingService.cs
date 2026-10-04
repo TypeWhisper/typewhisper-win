@@ -1088,6 +1088,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             _deviceChangeNotifier.DevicesChanged += OnDeviceChangeNotification;
             if (_deviceChangeNotifier.Start())
             {
+                // A change between the last enumeration and registration raised no notification,
+                // so the first recording must not trust the list cached before registration.
+                MarkDeviceTopologyChanged();
                 _deviceNotificationsStarted = true;
                 return;
             }
