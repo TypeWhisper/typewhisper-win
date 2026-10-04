@@ -1,0 +1,18 @@
+{
+  "stable": {
+    "packageIdentityName": "TypeWhisper.TypeWhisper",
+    "packagePublisher": "CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75",
+    "publisherDisplayName": "TypeWhisper",
+    "packageFamilyName": "TypeWhisper.TypeWhisper_51tqb5623pxja",
+    "storeProductId": "9PF42ZCR0JR0",
+    "displayName": "TypeWhisper"
+  },
+  "beta": {
+    "packageIdentityName": "TypeWhisper.TypeWhisperBeta",
+    "packagePublisher": "CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75",
+    "publisherDisplayName": "TypeWhisper",
+    "packageFamilyName": "TypeWhisper.TypeWhisperBeta_51tqb5623pxja",
+    "storeProductId": "9N183R19SQQ8",
+    "displayName": "TypeWhisper Beta"
+  }
+}

@@ -315,6 +315,7 @@ public sealed partial class MainWindow : Window
     internal MainWindow()
     {
         InitializeComponent();
+        Title = WinUIProfile.DisplayName;
         CorrectionLearning.CorrectionsLearned += ShowLearnedCorrections;
         CorrectionLearning.ObservationCancelled += HideLearnedCorrections;
         Closed += (_, _) =>

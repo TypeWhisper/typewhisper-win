@@ -48,7 +48,9 @@ internal static class WinUIPremiumAccount
     });
     internal static Task SignInAsync() => Run(async ct =>
     {
+#if !TYPEWHISPER_STORE
         ActivationRegistrationManager.RegisterForProtocolActivation("typewhisper", "", "TypeWhisper", Environment.ProcessPath!);
+#endif
         var address = await Client.BeginAsync(ct);
         _callback = new(TaskCreationOptions.RunContinuationsAsynchronously);
         Status = Loc.T("Finish signing in in your browser. This request expires in 10 minutes."); Changed?.Invoke();

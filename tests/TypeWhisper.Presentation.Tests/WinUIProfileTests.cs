@@ -24,6 +24,16 @@ public sealed class WinUIProfileTests
     }
 
     [Fact]
+    public void PublicStoreBetaHasItsOwnProfileAndIgnoresSmokeOverrides()
+    {
+        var beta = WinUIProfile.ResolveRoot("../profile", "local", "temp", development: false, storeBeta: true);
+        Assert.Equal(Path.Combine("local", "TypeWhisper-WinUI-StoreBeta"), beta);
+        Assert.NotEqual(WinUIProfile.ResolveRoot(null, "local", "temp", development: false), beta);
+        Assert.Equal(WinUIProfile.ResolveRoot(null, "local", "temp"),
+            WinUIProfile.ResolveRoot(null, "local", "temp", development: true, storeBeta: true));
+    }
+
+    [Fact]
     public void NamedSmokeProfileLivesOnlyInTemporaryDirectory()
     {
         Assert.Equal(Path.Combine("temp", "TypeWhisper-WinUI-TestProfiles", "smoke-1_a"),

@@ -9,14 +9,14 @@
   IgnorableNamespaces="uap uap2 uap3 uap5 rescap">
 
   <Identity
-    Name="TypeWhisper.TypeWhisper"
-    Publisher="CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75"
+    Name="__IDENTITY_NAME__"
+    Publisher="__PUBLISHER__"
     Version="__VERSION__"
     ProcessorArchitecture="__ARCHITECTURE__" />
 
   <Properties>
-    <DisplayName>TypeWhisper</DisplayName>
-    <PublisherDisplayName>TypeWhisper</PublisherDisplayName>
+    <DisplayName>__DISPLAY_NAME__</DisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -40,7 +40,7 @@
       Executable="TypeWhisper.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="TypeWhisper"
+        DisplayName="__DISPLAY_NAME__"
         Description="Speech-to-text and AI text processing for Windows."
         BackgroundColor="#10151D"
         Square44x44Logo="Assets\Square44x44Logo.png"
@@ -58,7 +58,7 @@
           <uap5:StartupTask
             TaskId="TypeWhisperStartup"
             Enabled="true"
-            DisplayName="TypeWhisper" />
+            DisplayName="__DISPLAY_NAME__" />
         </uap5:Extension>
         <uap:Extension Category="windows.protocol">
           <uap:Protocol Name="typewhisper" />

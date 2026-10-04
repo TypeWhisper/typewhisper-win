@@ -19,8 +19,8 @@ public sealed class CliInstallation
     private string ManifestPath => Path.Combine(_destination, ManifestName);
 
     /// <summary>Uses the current application's bundle and the current user's environment.</summary>
-    public CliInstallation(string? profileDirectory = null) : this(Path.Combine(AppContext.BaseDirectory, "Cli"),
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper", "1.1", "Cli"),
+    public CliInstallation(string? profileDirectory = null, string? installDirectory = null) : this(Path.Combine(AppContext.BaseDirectory, "Cli"),
+        installDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper", "1.1", "Cli"),
         () => Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "",
         value => Environment.SetEnvironmentVariable("PATH", value, EnvironmentVariableTarget.User), profileDirectory) { }
 

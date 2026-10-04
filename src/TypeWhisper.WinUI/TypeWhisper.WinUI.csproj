@@ -27,6 +27,9 @@
   <PropertyGroup Condition="'$(TypeWhisperStoreBuild)' == 'true'">
     <DefineConstants>$(DefineConstants);TYPEWHISPER_STORE</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TypeWhisperStoreBuild)' == 'true' and '$(TypeWhisperStoreProduct)' == 'beta'">
+    <DefineConstants>$(DefineConstants);TYPEWHISPER_STORE_BETA</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
     <PackageReference Include="Velopack" Version="0.0.1298" />
@@ -68,6 +71,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources/LicenseStrings.json" LogicalName="TypeWhisper.LicenseStrings.json" />
+    <EmbeddedResource Include="../TypeWhisper.Windows.StorePackage/StoreProducts.json" LogicalName="TypeWhisper.StoreProducts.json" />
   </ItemGroup>
   <Target Name="PublishWinUIResources" AfterTargets="Publish">
     <ItemGroup>

@@ -63,6 +63,14 @@ jobs:
       - name: Verify headless suite selection and failure reporting
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.Tests.ps1
+      - name: Verify Store package version rules
+        shell: pwsh
+        run: |
+          ./eng/Get-StorePackageVersion.Tests.ps1
+          ./eng/New-StorePackageManifest.Tests.ps1
+      - name: Verify public Store beta profile isolation
+        shell: pwsh
+        run: dotnet test tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj -c Release -p:DefineConstants=TYPEWHISPER_STORE_BETA --filter 'FullyQualifiedName~WinUIProfileTests|FullyQualifiedName~StoreProfileIsolationTests|FullyQualifiedName~AppImportTests'
       - name: Test application and plugin host without desktop or provider credentials
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite App

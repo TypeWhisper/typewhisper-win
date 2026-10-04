@@ -33,7 +33,7 @@ internal static class AppDiagnostics
             _pruneTimer = new(_ => _log?.PruneIfDue(), null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
         }
         // Earlier builds wrote full exception text here; this log replaces it.
-        try { File.Delete(Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log")); }
+        try { File.Delete(WinUIProfile.LegacyErrorLogPath); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         Write($"app.start version={WindowsApplicationUpdates.CurrentVersion} os={Environment.OSVersion.Version} " +
             $"arch={RuntimeInformation.ProcessArchitecture} build={(WinUIProfile.DevelopmentBuild ? "debug" : "release")}");
