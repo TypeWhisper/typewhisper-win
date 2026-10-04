@@ -82,7 +82,11 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private System.Timers.Timer? _devicePollTimer;
     private IReadOnlyList<AudioInputDeviceInfo> _cachedDeviceInfos = [];
     private bool _hasDeviceInfoCache;
-    private bool _deviceNotificationsStarted;
+    // Endpoint notifications advance the topology generation; a cache read at the current
+    // generation lets a recording start without enumerating endpoints (~40 ms per name read).
+    private long _deviceTopologyGeneration;
+    private long _deviceInfoCacheGeneration = -1;
+    private volatile bool _deviceNotificationsStarted;
     private int _deviceChangeRefreshQueued;
     private string _lastKnownDeviceSignature = "";
     private bool _lastKnownHasDevices;
@@ -273,6 +277,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private void RecordCaptureFailure(Exception error, string? deviceId)
     {
+        // A failing endpoint may have changed without a notification; enumerate on the next start.
+        MarkDeviceTopologyChanged();
         _lastCaptureFailure = error;
         _lastCaptureFailureDeviceId = deviceId;
     }
@@ -433,7 +439,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (_previewWaveIn is not null)
                 StopPreview();
 
-            RefreshPreparedCaptureSelection();
+            var verifyDevicesAfterStart = RefreshPreparedCaptureSelection();
 
             if ((!_isWarmedUp || _waveIn is null) && !WarmUp(openCapture: true))
             {
@@ -471,6 +477,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _lastCaptureFailure = null;
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording active sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
+                // Safety net for a missed endpoint notification: recheck the devices off the
+                // capture path, so a stale microphone is replaced before the next recording.
+                if (verifyDevicesAfterStart)
+                    QueueDeviceChangeCheck();
             }
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
@@ -978,10 +988,12 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (!refresh && _hasDeviceInfoCache)
                 return _cachedDeviceInfos;
 
+            var generation = Interlocked.Read(ref _deviceTopologyGeneration);
             try
             {
                 _cachedDeviceInfos = [.. _deviceProvider.GetDeviceInfos()];
                 _hasDeviceInfoCache = true;
+                Volatile.Write(ref _deviceInfoCacheGeneration, generation);
             }
             catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
@@ -1008,18 +1020,41 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         _activeDeviceName = selection.Name;
     }
 
-    private void RefreshPreparedCaptureSelection()
+    private bool IsDeviceInfoCacheCurrent()
+    {
+        if (!_deviceNotificationsStarted)
+            return false;
+
+        lock (_deviceInfoCacheLock)
+        {
+            return _hasDeviceInfoCache
+                && Volatile.Read(ref _deviceInfoCacheGeneration) == Interlocked.Read(ref _deviceTopologyGeneration);
+        }
+    }
+
+    private void MarkDeviceTopologyChanged() =>
+        Interlocked.Increment(ref _deviceTopologyGeneration);
+
+    /// <summary>
+    /// Validates the prepared capture before a recording starts. Returns true when the check
+    /// used the cached endpoint list, so the caller verifies it in the background afterwards.
+    /// </summary>
+    private bool RefreshPreparedCaptureSelection()
     {
         if (!_isWarmedUp || _waveIn is null)
-            return;
+            return false;
 
-        var snapshot = GetDeviceSnapshot(refresh: true);
+        // Without a reported endpoint change since the last enumeration, the cached list is
+        // current; enumerating again here delayed every recording start by ~200 ms.
+        var cacheIsCurrent = IsDeviceInfoCacheCurrent();
+        var snapshot = GetDeviceSnapshot(refresh: !cacheIsCurrent);
         if (IsActiveDeviceAvailable(snapshot) && IsActiveDevicePreferred())
-            return;
+            return cacheIsCurrent;
 
         AudioCaptureDiagnostics.Log(
             $"Prepared capture identity is stale active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} id={_activeDeviceId ?? "<unknown>"}");
         DisposeWaveIn(reason: "stale prepared capture identity");
+        return cacheIsCurrent;
     }
 
     private bool ActiveDeviceMatches(int deviceNumber)
@@ -1053,6 +1088,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             _deviceChangeNotifier.DevicesChanged += OnDeviceChangeNotification;
             if (_deviceChangeNotifier.Start())
             {
+                // A change between the last enumeration and registration raised no notification,
+                // so the first recording must not trust the list cached before registration.
+                MarkDeviceTopologyChanged();
                 _deviceNotificationsStarted = true;
                 return;
             }
@@ -1070,6 +1108,15 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     }
 
     private void OnDeviceChangeNotification(object? sender, EventArgs e)
+    {
+        if (_disposed)
+            return;
+
+        MarkDeviceTopologyChanged();
+        QueueDeviceChangeCheck();
+    }
+
+    private void QueueDeviceChangeCheck()
     {
         if (_disposed)
             return;
@@ -1357,6 +1404,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     internal void RefreshAfterDisplayOrPowerChange()
     {
+        MarkDeviceTopologyChanged();
         var recreatePreparedCapture = false;
         lock (_captureLifecycleLock)
         {
@@ -1990,7 +2038,7 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
         try
         {
             var defaultDeviceId = WasapiAudioInputDeviceResolver.TryGetDefaultCaptureDeviceId();
-            var defaultDeviceName = WasapiAudioInputDeviceResolver.TryGetDefaultCaptureDeviceName();
+            var defaultDeviceName = WasapiAudioInputDeviceResolver.DefaultCaptureDeviceName(devices, defaultDeviceId);
             var infos = new List<AudioInputDeviceInfo>(waveInNames.Count);
 
             for (var i = 0; i < waveInNames.Count; i++)
@@ -1998,8 +2046,7 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
                 var waveInName = waveInNames[i];
                 if (i < devices.Count)
                 {
-                    var device = devices[i];
-                    var name = device.FriendlyName;
+                    var (device, name) = devices[i];
                     infos.Add(new AudioInputDeviceInfo(
                         i,
                         StableWasapiDeviceId(device.ID, name),
@@ -2326,7 +2373,7 @@ internal sealed class WasapiAudioInputDeviceProvider : IAudioInputDeviceProvider
             if (deviceNumber < 0 || deviceNumber >= devices.Count)
                 throw new ArgumentOutOfRangeException(nameof(deviceNumber));
 
-            return devices[deviceNumber].FriendlyName;
+            return devices[deviceNumber].Name;
         }
         finally
         {
@@ -2350,13 +2397,13 @@ internal sealed class WasapiAudioInputDeviceProvider : IAudioInputDeviceProvider
         {
             var defaultDeviceId = WasapiAudioInputDeviceResolver.TryGetDefaultCaptureDeviceId();
             return devices
-                .Select((device, index) => new AudioInputDeviceInfo(
+                .Select((endpoint, index) => new AudioInputDeviceInfo(
                     index,
-                    string.IsNullOrWhiteSpace(device.ID)
-                        ? $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(device.FriendlyName).ToUpperInvariant()}"
-                        : device.ID,
-                    device.FriendlyName,
-                    string.Equals(device.ID, defaultDeviceId, StringComparison.OrdinalIgnoreCase)))
+                    string.IsNullOrWhiteSpace(endpoint.Device.ID)
+                        ? $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(endpoint.Name).ToUpperInvariant()}"
+                        : endpoint.Device.ID,
+                    endpoint.Name,
+                    string.Equals(endpoint.Device.ID, defaultDeviceId, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
         }
         finally
@@ -2380,19 +2427,19 @@ internal sealed class WasapiAudioInputCaptureFactory : IAudioInputCaptureFactory
         try
         {
             var currentDevices = devices
-                .Select((device, index) => new AudioInputDeviceInfo(
+                .Select((endpoint, index) => new AudioInputDeviceInfo(
                     index,
-                    string.IsNullOrWhiteSpace(device.ID)
-                        ? $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(device.FriendlyName).ToUpperInvariant()}"
-                        : device.ID,
-                    device.FriendlyName,
+                    string.IsNullOrWhiteSpace(endpoint.Device.ID)
+                        ? $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(endpoint.Name).ToUpperInvariant()}"
+                        : endpoint.Device.ID,
+                    endpoint.Name,
                     false))
                 .ToList();
             var resolved = AudioInputDeviceSelectionResolver.Resolve(selection, currentDevices)
                 ?? throw new InvalidOperationException(
                     $"Microphone '{selection.Name}' is no longer available for WASAPI capture.");
 
-            var selectedDevice = devices[resolved.DeviceNumber];
+            var selectedDevice = devices[resolved.DeviceNumber].Device;
             devices.RemoveAt(resolved.DeviceNumber);
             AudioCaptureDiagnostics.Log(
                 $"WASAPI capture resolved id={selection.Id} oldIndex={selection.LastKnownDeviceNumber} currentIndex={resolved.DeviceNumber} name={resolved.Name}");
@@ -2603,6 +2650,8 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
     }
 }
 
+internal readonly record struct CaptureEndpoint(MMDevice Device, string Name);
+
 internal static class WasapiAudioInputDeviceResolver
 {
     public static string? TryGetDefaultCaptureDeviceName()
@@ -2643,23 +2692,47 @@ internal static class WasapiAudioInputDeviceResolver
         }
     }
 
-    public static List<MMDevice> GetCaptureDevicesInWaveInOrder()
+    /// <summary>
+    /// Returns active capture endpoints in WaveIn order with their friendly names. Each name read
+    /// opens the endpoint's property store (~40 ms), so callers use these names instead of
+    /// reading <see cref="MMDevice.FriendlyName"/> again.
+    /// </summary>
+    public static List<CaptureEndpoint> GetCaptureDevicesInWaveInOrder()
     {
         using var enumerator = new MMDeviceEnumerator();
         var devices = enumerator
             .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+            .Select(device => new CaptureEndpoint(device, device.FriendlyName))
             .ToList();
         var order = WasapiAudioInputDeviceOrdering.BuildWaveInCompatibleOrder(
-            devices.Select(device => device.FriendlyName).ToArray(),
+            devices.Select(endpoint => endpoint.Name).ToArray(),
             GetWaveInDeviceNames());
 
         return order.Select(index => devices[index]).ToList();
     }
 
-    public static void DisposeDevices(IEnumerable<MMDevice> devices)
+    /// <summary>
+    /// Takes the default endpoint's name from the enumerated list and only opens the default
+    /// endpoint itself when it is not part of that list.
+    /// </summary>
+    public static string? DefaultCaptureDeviceName(IReadOnlyList<CaptureEndpoint> devices, string? defaultDeviceId)
     {
-        foreach (var device in devices)
-            device.Dispose();
+        if (!string.IsNullOrWhiteSpace(defaultDeviceId))
+        {
+            foreach (var endpoint in devices)
+            {
+                if (string.Equals(endpoint.Device.ID, defaultDeviceId, StringComparison.OrdinalIgnoreCase))
+                    return endpoint.Name;
+            }
+        }
+
+        return TryGetDefaultCaptureDeviceName();
+    }
+
+    public static void DisposeDevices(IEnumerable<CaptureEndpoint> devices)
+    {
+        foreach (var endpoint in devices)
+            endpoint.Device.Dispose();
     }
 
     private static string[] GetWaveInDeviceNames()

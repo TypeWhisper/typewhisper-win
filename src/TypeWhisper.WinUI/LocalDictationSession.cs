@@ -539,8 +539,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal async Task InitializeAsync()
     {
         if (_disposed) return;
-        await ApplyHistoryRetentionAsync();
-        if (_disposed) return;
+        // Retention loads the whole history; the model load need not wait for it.
+        _ = ApplyHistoryRetentionAsync();
         _retentionTimer.Start();
         await _gate.WaitAsync();
         try

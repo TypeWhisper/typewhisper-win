@@ -109,16 +109,24 @@ public sealed partial class MainWindow : Window
             InitializeRecorderShortcut();
             InitializeEscapeCancel();
             InitializeHotkeyRecovery();
-            await WinUILicensing.ValidateAsync();
-            if (!_closing) await WinUIPremiumAccount.RefreshAsync();
-            await YieldToQueuedWorkAsync();
-            if (!_closing)
-            {
-                WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
-                WinUICloudSync.Initialize(DispatcherQueue);
-            }
+            // License and account checks can wait up to 30 s on the network. They run side by side
+            // and no longer hold up activations such as --settings; sync still starts after them.
+            _ = StartCloudSyncAfterAccessChecksAsync(Task.WhenAll(WinUILicensing.ValidateAsync(), WinUIPremiumAccount.RefreshAsync()));
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
             _ = UpdatePluginsAutomaticallyAsync();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
+    }
+
+    private async Task StartCloudSyncAfterAccessChecksAsync(Task accessChecks)
+    {
+        try
+        {
+            await accessChecks;
+            await YieldToQueuedWorkAsync();
+            if (_closing) return;
+            WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
+            WinUICloudSync.Initialize(DispatcherQueue);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
     }

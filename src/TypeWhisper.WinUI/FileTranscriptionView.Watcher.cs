@@ -32,6 +32,7 @@ public sealed partial class FileTranscriptionView
     {
         _watcher.Changed += () =>
         {
+            UpdateWatchTimer();
             if (_watchStatus is not null) _watchStatus.Text = _watcher.Error ?? _watcher.Status;
             if (_watchTab && _watchResult is null && !_watchEditing && !_picking && IsLoaded && _watchRenderedState != WatchState) Render();
         };
@@ -40,7 +41,15 @@ public sealed partial class FileTranscriptionView
             if (_session is not null && !_queue.IsShutdown)
                 await _watcher.PollAsync(!_queue.Running && _session.CanTranscribeFile, _session.TranscribeFileAsync);
         };
-        _watchTimer.Start();
+        UpdateWatchTimer();
+    }
+
+    // Polling does nothing while paused, so the timer only runs while watching instead of waking the app
+    // every 3 seconds all day. Every change of Watching raises Changed.
+    private void UpdateWatchTimer()
+    {
+        if (!_watcher.Watching) _watchTimer.Stop();
+        else if (!_watchTimer.IsEnabled) _watchTimer.Start();
     }
 
     private void RenderWatcher()
