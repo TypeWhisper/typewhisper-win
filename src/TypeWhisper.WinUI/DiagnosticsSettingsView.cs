@@ -22,7 +22,7 @@ internal sealed class DiagnosticsSettingsView : UserControl
         AutomationProperties.SetName(reportExport, Loc.T("Export support report"));
         var reportRow = new SettingsRow(SettingKey).Set(Loc.T("Support report"),
             Loc.T("Save a report to attach when you contact support."),
-            Loc.T("Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically."), reportExport);
+            Loc.T("Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Microphone names may contain personal names. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically."), reportExport);
         body.Children.Add(reportRow);
         reportExport.Click += async (_, _) =>
         {

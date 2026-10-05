@@ -43,7 +43,7 @@ public sealed record SupportDiagnosticsReport(
         bool Recording, bool PreferredInputIsSystemDefault, int UnavailablePreferredInputCount,
         IReadOnlyList<InputDeviceInfo> InputDevices, bool UsesSystemDefaultOutput, MicrophoneTestInfo? MicrophoneTest);
 
-    /// <summary>Device labels match the microphone picker; priority is one-based when explicitly configured.</summary>
+    /// <summary>Device labels match the microphone picker and may contain personal names; priority is one-based when explicitly configured.</summary>
     public sealed record InputDeviceInfo(string Name, bool IsDefault, int? Priority);
 
     /// <summary>The last microphone test's state, without its error message or captured audio.</summary>

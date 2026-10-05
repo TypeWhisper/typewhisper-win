@@ -1101,7 +1101,7 @@
   "Inbox": "Posteingang",
   "Inbox is Empty": "Posteingang ist leer",
   "Include {0} in backup": "{0} in das Backup aufnehmen",
-  "Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically.": "Enthält App- und Systemdetails, Mikrofonnamen und Zugriffsstatus, Modelle, Plugins, Workflow-Metadaten, Einstellungen und vorhandene Diagnoseprotokolle. API-Schlüssel, Audio, Transkripte, Prompt-Inhalte und Dateipfade werden ausgelassen. Es wird nichts automatisch gesendet.",
+  "Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Microphone names may contain personal names. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically.": "Enthält App- und Systemdetails, Mikrofonnamen und Zugriffsstatus, Modelle, Plugins, Workflow-Metadaten, Einstellungen und vorhandene Diagnoseprotokolle. Mikrofonnamen können Personennamen enthalten. API-Schlüssel, Audio, Transkripte, Prompt-Inhalte und Dateipfade werden ausgelassen. Es wird nichts automatisch gesendet.",
   "Indicator": "Indikator",
   "Industry": "Branche",
   "Inherited from Default LLM": "Vom Standard-LLM übernommen",

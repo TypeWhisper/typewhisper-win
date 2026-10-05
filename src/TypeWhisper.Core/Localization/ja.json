@@ -1101,7 +1101,7 @@
   "Inbox": "受信箱",
   "Inbox is Empty": "受信箱は空です",
   "Include {0} in backup": "{0}をバックアップに含める",
-  "Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically.": "アプリとシステムの詳細、マイク名とアクセス状態、モデル、プラグイン、ワークフローのメタデータ、設定、保存されている診断ログを含みます。APIキー、音声、文字起こし、プロンプトの内容、ファイルパスは含みません。自動送信はされません。",
+  "Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Microphone names may contain personal names. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically.": "アプリとシステムの詳細、マイク名とアクセス状態、モデル、プラグイン、ワークフローのメタデータ、設定、保存されている診断ログを含みます。マイク名には個人の名前が含まれる場合があります。APIキー、音声、文字起こし、プロンプトの内容、ファイルパスは含みません。自動送信はされません。",
   "Indicator": "インジケーター",
   "Industry": "業種",
   "Inherited from Default LLM": "デフォルトのLLMから継承",

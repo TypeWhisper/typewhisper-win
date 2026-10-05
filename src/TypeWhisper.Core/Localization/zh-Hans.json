@@ -1101,7 +1101,7 @@
   "Inbox": "收件箱",
   "Inbox is Empty": "收件箱为空",
   "Include {0} in backup": "在备份中包含{0}",
-  "Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically.": "包含应用和系统详情、麦克风名称和访问状态、模型、插件、工作流元数据、设置及保留的诊断日志。不包含 API 密钥、音频、转录文本、提示词内容或文件路径。不会自动发送任何信息。",
+  "Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Microphone names may contain personal names. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically.": "包含应用和系统详情、麦克风名称和访问状态、模型、插件、工作流元数据、设置及保留的诊断日志。麦克风名称可能包含个人姓名。不包含 API 密钥、音频、转录文本、提示词内容或文件路径。不会自动发送任何信息。",
   "Indicator": "指示器",
   "Industry": "行业",
   "Inherited from Default LLM": "继承自默认 LLM",
