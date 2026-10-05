@@ -674,7 +674,7 @@ public sealed partial class SettingsWindow : Window
         new(Loc.Mark("Overlay editor"), "", Loc.T("Customize layout"), Loc.T("Choose screen position and arrange the left and right widgets."), "layout", "appearance monitor top bottom drag"),
         new(Loc.Mark("Integrations"), "", Loc.T("Integrations"), Loc.T("Manage installed plugins, accounts, models and updates."), "plugin", "OpenAI ChatGPT Groq ElevenLabs API key login discover marketplace"),
         new("Advanced", "", Loc.T("HTTP API"), Loc.T("Connect local scripts and apps, configure the port, and copy the API token."), "settings", "advanced server localhost auto-discovery automation"),
-        new("Advanced", DiagnosticsSettingsView.SettingKey, Loc.T("Diagnostics"), Loc.T("Keep a local log without dictated text and export it for support."), "settings", "error log crash troubleshooting support export retention"),
+        new("Advanced", DiagnosticsSettingsView.SettingKey, Loc.T("Diagnostics"), Loc.T("Export a support report or manage the local diagnostic log."), "settings", "error log crash troubleshooting support export retention json system microphone plugins"),
         new("Premium", "", Loc.T("Premium"), Loc.T("Premium access, commercial license and development activation."), "lock", "supporter calendar correction learning cloud sync"),
         new("Account & about", "", Loc.T("Account & about"), Loc.T("License, Premium, updates and app information."), "info"),
         new("Home", "", Loc.T("Home"), Loc.T("Recent activity and transcriptions."), "home", "dashboard overview start"),

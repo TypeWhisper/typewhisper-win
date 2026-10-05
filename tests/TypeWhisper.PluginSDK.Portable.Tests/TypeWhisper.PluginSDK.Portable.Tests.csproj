@@ -19,6 +19,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalCtcVocabulary.cs" Link="LocalCtcVocabulary.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalTranscriptionPlugin.cs" Link="LocalTranscriptionPlugin.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/SupportDiagnosticsExporter.Plugins.cs" Link="SupportDiagnosticsExporter.Plugins.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalDictationSession.ApiModelOverride.cs" Link="LocalDictationSession.ApiModelOverride.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />

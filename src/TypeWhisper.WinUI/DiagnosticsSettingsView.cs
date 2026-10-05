@@ -11,12 +11,48 @@ internal sealed class DiagnosticsSettingsView : UserControl
 {
     internal const string SettingKey = "Diagnostics";
 
-    internal DiagnosticsSettingsView()
+    internal DiagnosticsSettingsView(LocalDictationSession session, WinUIHttpApi api)
     {
         var body = new SettingsRows();
+        var reportExport = new HandCursorButton
+        {
+            Content = Loc.T("Export diagnostics…"),
+            Style = (Style)Application.Current.Resources["PrimaryButtonStyle"]
+        };
+        AutomationProperties.SetName(reportExport, Loc.T("Export support report"));
+        var reportRow = new SettingsRow(SettingKey).Set(Loc.T("Support report"),
+            Loc.T("Save a report to attach when you contact support."),
+            Loc.T("Includes app and system details, microphone names and access, models, plugins, workflow metadata, settings and any retained diagnostic log. Microphone names may contain personal names. Excludes API keys, audio, transcripts, prompt contents and file paths. Nothing is sent automatically."), reportExport);
+        body.Children.Add(reportRow);
+        reportExport.Click += async (_, _) =>
+        {
+            reportExport.IsEnabled = false;
+            try
+            {
+                var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
+                {
+                    Title = Loc.T("Export support report"),
+                    SuggestedFileName = "typewhisper-diagnostics-" + DateTime.Now.ToString("yyyy-MM-dd-HHmmss")
+                };
+                picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
+                var file = await picker.PickSaveFileAsync();
+                if (file is null) { reportRow.Status = Loc.T("Export canceled."); return; }
+                var report = await SupportDiagnosticsExporter.CaptureAsync(session, api);
+                await Task.Run(() => report.Export(file.Path));
+                reportRow.Status = report.CollectionErrors.Count == 0
+                    ? Loc.T("Support report exported to {0}", file.Path)
+                    : Loc.T("Support report exported to {0}. Some details were unavailable and are listed in the report.", file.Path);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                reportRow.Status = Loc.T("The support report could not be exported. Choose another location and try again.");
+            }
+            finally { reportExport.IsEnabled = true; }
+        };
+
         var enabled = AppToggleSwitch.Create(false);
         AutomationProperties.SetName(enabled, Loc.T("Keep diagnostic log"));
-        var log = new SettingsRow(SettingKey).Set(Loc.T("Keep diagnostic log"),
+        var log = new SettingsRow().Set(Loc.T("Keep diagnostic log"),
             Loc.T("Export the log and attach it when you contact support. Turning the log off deletes it."),
             Loc.T("Records dictation steps, timings, settings choices such as the engine, and error types on this device. It never contains dictated text, clipboard contents, window titles, file names or error messages, and it is never sent automatically."), enabled);
         log.Status = AppDiagnostics.Preferences?.Error ?? "";

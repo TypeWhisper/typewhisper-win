@@ -51,6 +51,13 @@ internal static class AppDiagnostics
 
     internal static bool Clear() => _log?.Clear() ?? true;
 
+    internal static SupportDiagnosticsReport.LogInfo CaptureLog()
+    {
+        if (_log is not { } log) throw new InvalidOperationException();
+        var preferences = log.Preferences;
+        return new(preferences.Enabled, preferences.RetentionDays, log.Snapshot());
+    }
+
     internal static int Export(string destination)
     {
         if (_log is not { } log) throw new InvalidOperationException("Diagnostics are not available until TypeWhisper has finished starting.");
