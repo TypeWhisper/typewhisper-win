@@ -535,22 +535,21 @@
     {
       "id": "com.typewhisper.qwen3-local",
       "name": "Qwen3 ASR (Local)",
-      "version": "1.0.0",
-      "minHostVersion": "1.1.2",
+      "version": "1.1.0",
+      "minHostVersion": "1.1.6",
       "author": "TypeWhisper",
-      "description": "Offline multilingual speech recognition with Qwen3-ASR 0.6B. Download the model once, then transcribe on your CPU.",
+      "description": "Offline multilingual speech recognition with Qwen3-ASR 0.6B or 1.7B. Download a model once, then transcribe on your CPU.",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-qwen3-local-1.0.0-20260915/com.typewhisper.qwen3-local-1.0.0-windows.zip",
-      "sha256": "3febbc11c4517b5a70b7408af7c6bb2c47d8b7751a67691e377fe4b79c6b53d8",
-      "size": 28130586,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-qwen3-local-v1.1.0/com.typewhisper.qwen3-local-1.1.0-win-x64.zip",
+      "sha256": "7a039dee8d442e01faf3d644ff1d25d6045fd3f7a46cae21984e2d51f3678e02",
+      "size": 27354893,
       "platforms": [
         "windows"
       ],
       "supportedArchitectures": [
-        "x64",
-        "arm64"
+        "x64"
       ]
     },
     {
