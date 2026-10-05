@@ -14,6 +14,7 @@ internal static class WerBenchmark
 {
     private const int SampleRate = 16000;
     private const float NormalizationTarget = 0.707f;
+    private const float RecorderMinimumPeak = 0.01f;
     // Same pinned corpus as eng/benchmark_cohere_quantizations.py.
     private const string DatasetRepository = "FluidInference/fleurs";
     private const string DatasetRevision = "8944693da251acbaf2f9686bddc4fedce8bd2edd";
@@ -224,7 +225,7 @@ internal static class WerBenchmark
         if (paths.Length == 0) throw new FileNotFoundException("No WAV files in " + wavDirectory);
         // Each recording is read when it is scored, so long directories never hold more than one decoded file.
         static Clip Load(string path, bool normalize) => new(Path.GetFileNameWithoutExtension(path), ReadOptional(Path.ChangeExtension(path, ".txt")),
-            ReadWav(path, normalize), ReadOptional(Path.ChangeExtension(path, ".formatted.txt")));
+            ReadWav(path, normalize, RecorderMinimumPeak), ReadOptional(Path.ChangeExtension(path, ".formatted.txt")));
         Decode(recognizer, Load(paths[0], normalize).Samples, qwen);
         var results = new List<object>();
         double audioSeconds = 0, decodeSeconds = 0;
@@ -371,7 +372,7 @@ internal static class WerBenchmark
         }
     }
 
-    private static float[] ReadWav(string path, bool normalize = true)
+    private static float[] ReadWav(string path, bool normalize = true, float minimumPeak = 0)
     {
         using var reader = new WaveFileReader(path);
         if (reader.WaveFormat is not { SampleRate: SampleRate, Channels: 1, BitsPerSample: 16, Encoding: WaveFormatEncoding.Pcm })
@@ -381,10 +382,11 @@ internal static class WerBenchmark
         var samples = new float[bytes.Length / 2];
         for (var i = 0; i < samples.Length; i++) samples[i] = BitConverter.ToInt16(bytes, i * 2) / 32768f;
 
-        // AudioRecordingService raises quiet recordings to this peak before transcription. FLEURS has clips
-        // far below its 0.01 threshold that decode to nothing unscaled, so every clip is raised here.
+        // AudioRecordingService raises quiet recordings to this peak before transcription and leaves near-silence
+        // below 0.01 unscaled. FLEURS has clips far below that threshold that decode to nothing unscaled, so the
+        // corpus path raises every clip; own recordings pass the recorder's threshold instead.
         var peak = samples.Max(MathF.Abs);
-        if (normalize && peak > 0 && peak < NormalizationTarget)
+        if (normalize && peak > 0 && peak >= minimumPeak && peak < NormalizationTarget)
             for (var i = 0; i < samples.Length; i++) samples[i] *= NormalizationTarget / peak;
         return samples;
     }
