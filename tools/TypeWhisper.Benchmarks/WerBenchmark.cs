@@ -230,9 +230,8 @@ internal static class WerBenchmark
         double audioSeconds = 0, decodeSeconds = 0;
         long wordEdits = 0, words = 0, characterEdits = 0, characters = 0;
         int scored = 0, exact = 0;
-        foreach (var path in paths)
+        foreach (var clip in paths.Select(path => Load(path, normalize)))
         {
-            var clip = Load(path, normalize);
             var timer = Stopwatch.StartNew();
             var hypothesis = Decode(recognizer, clip.Samples, qwen);
             timer.Stop();
