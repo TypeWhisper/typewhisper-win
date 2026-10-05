@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 
 namespace TypeWhisper.WinUI.Platform;
 
@@ -36,13 +37,25 @@ public static class AppDistribution
     /// <summary>
     /// Gets the Microsoft Store package identity reserved in Partner Center.
     /// </summary>
-    public static StorePackageIdentity StoreIdentity { get; } = new(
-        "TypeWhisper.TypeWhisper",
-        "CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75",
-        "TypeWhisper",
-        "TypeWhisper.TypeWhisper_51tqb5623pxja",
-        "9PF42ZCR0JR0",
-        "ms-windows-store://pdp/?productid=9PF42ZCR0JR0");
+    public static StorePackageIdentity StoreIdentity { get; } = LoadStoreIdentity(
+#if TYPEWHISPER_STORE_BETA
+        beta: true);
+#else
+        beta: false);
+#endif
+
+    internal static StorePackageIdentity LoadStoreIdentity(bool beta)
+    {
+        using var stream = typeof(AppDistribution).Assembly.GetManifestResourceStream("TypeWhisper.StoreProducts.json")
+            ?? throw new InvalidOperationException("Store product metadata is missing.");
+        using var document = JsonDocument.Parse(stream);
+        var product = document.RootElement.GetProperty(beta ? "beta" : "stable");
+        string Value(string name) => product.GetProperty(name).GetString()
+            ?? throw new InvalidOperationException($"Store product metadata is missing '{name}'.");
+        return new(Value("packageIdentityName"), Value("packagePublisher"), Value("publisherDisplayName"),
+            Value("packageFamilyName"), Value("storeProductId"),
+            "ms-windows-store://pdp/?productid=" + Value("storeProductId"));
+    }
 
     internal static string ResolveShellVisiblePath(string path) =>
         ResolveShellVisiblePath(

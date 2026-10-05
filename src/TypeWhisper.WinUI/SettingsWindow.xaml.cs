@@ -188,7 +188,7 @@ public sealed partial class SettingsWindow : Window
     // The XAML keeps the English text as a fallback.
     private void LocalizeXamlText()
     {
-        Title = Loc.T("TypeWhisper Settings");
+        Title = WinUIProfile.StoreBetaBuild ? "TypeWhisper Beta · " + Loc.T("Settings") : Loc.T("TypeWhisper Settings");
         SettingsBrandTitle.Text = Loc.T("Settings");
         AutomationProperties.SetName(CloseSettingsButton, Loc.T("Close settings"));
         AutomationProperties.SetName(SettingsSearch, Loc.T("Search settings"));

@@ -114,7 +114,7 @@ public partial class App : Application
 #if !DEBUG
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             // #318: a failed 1.0.4 migration can leave an empty TypeWhisper-UserData beside the real profile.
-            if (!Directory.Exists(WinUIProfile.Root) && TypeWhisper.Core.Services.LegacyDailyProfileMigration.SelectSource(
+            if (WinUIProfile.UsesLegacyData && !Directory.Exists(WinUIProfile.Root) && TypeWhisper.Core.Services.LegacyDailyProfileMigration.SelectSource(
                     Path.Combine(localData, "TypeWhisper-UserData"), Path.Combine(localData, "TypeWhisper")) is { } legacy &&
                 !await ImportLegacyProfileAsync(legacy, request, initialShare, skipLegacyImport))
                 return;
@@ -412,7 +412,7 @@ public partial class App : Application
     {
         try
         {
-            var cli = new TypeWhisper.Presentation.CliInstallation(WinUIProfile.Root);
+            var cli = new TypeWhisper.Presentation.CliInstallation(WinUIProfile.Root, WinUIProfile.CliInstallDirectory);
             switch (cli.IsBoundTo(WinUIProfile.Root))
             {
                 // No tool, or another profile's, such as the release app's next to a development build: it stays.

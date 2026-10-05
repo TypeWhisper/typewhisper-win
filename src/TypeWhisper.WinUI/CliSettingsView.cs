@@ -11,7 +11,7 @@ internal sealed class CliSettingsView : UserControl
 {
     internal CliSettingsView()
     {
-        var installation = new CliInstallation(WinUIProfile.Root);
+        var installation = new CliInstallation(WinUIProfile.Root, WinUIProfile.CliInstallDirectory);
         var body = new SettingsRows();
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var install = new HandCursorButton { Content = Loc.T("Install"), Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };

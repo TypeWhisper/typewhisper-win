@@ -1,5 +1,7 @@
 param(
     [string]$Version = $env:VERSION,
+    [ValidateSet('stable', 'beta')]
+    [string]$StoreProduct = 'stable',
     [ValidateSet("win-x64", "win-arm64")]
     [string]$RuntimeIdentifier = "win-x64",
     [string]$Configuration = "Release",
@@ -7,33 +9,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-
-function Convert-ToMsixVersion([string]$value) {
-    if ([string]::IsNullOrWhiteSpace($value)) {
-        return "0.0.1.0"
-    }
-
-    $main = ($value -split "[-+]")[0]
-    $parts = @($main -split "\.")
-    while ($parts.Count -lt 4) {
-        $parts += "0"
-    }
-
-    $numeric = $parts[0..3] | ForEach-Object {
-        if ($_ -notmatch '^\d+$') {
-            throw "MSIX version '$value' must start with numeric version segments."
-        }
-
-        $segment = [int]$_
-        if ($segment -lt 0 -or $segment -gt 65535) {
-            throw "MSIX version segment '$_' must be in the range 0-65535."
-        }
-
-        $segment
-    }
-
-    return ($numeric -join ".")
-}
 
 function Get-MakeAppxPath {
     $kitsRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
@@ -54,24 +29,24 @@ function Get-MakeAppxPath {
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$msixVersion = Convert-ToMsixVersion $Version
-$architecture = switch ($RuntimeIdentifier) {
-    "win-arm64" { "arm64" }
-    default { "x64" }
-}
+$msixVersion = & (Join-Path $PSScriptRoot 'Get-StorePackageVersion.ps1') -Version $Version
+$manifest = & (Join-Path $PSScriptRoot 'New-StorePackageManifest.ps1') -Version $msixVersion -StoreProduct $StoreProduct -RuntimeIdentifier $RuntimeIdentifier
 $platform = if ($RuntimeIdentifier -eq 'win-arm64') { 'ARM64' } else { 'x64' }
 
-$outputRootPath = Join-Path $repoRoot $OutputRoot
+$outputRootPath = [IO.Path]::GetFullPath((Join-Path $repoRoot "$OutputRoot/$StoreProduct"))
+$repoPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+if (-not $outputRootPath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Store output must be inside the checkout.'
+}
 $publishDir = Join-Path $outputRootPath "publish/$RuntimeIdentifier"
 $layoutDir = Join-Path $outputRootPath "layout/$RuntimeIdentifier"
 $packageDir = Join-Path $outputRootPath "packages"
-$packagePath = Join-Path $packageDir "TypeWhisper-$RuntimeIdentifier-$msixVersion.msix"
-$templatePath = Join-Path $repoRoot "src/TypeWhisper.Windows.StorePackage/Package.appxmanifest.template"
+$packagePath = Join-Path $packageDir "TypeWhisper-$StoreProduct-$RuntimeIdentifier-$msixVersion.msix"
 $assetsPath = Join-Path $repoRoot "src/TypeWhisper.Windows.StorePackage/Assets"
 
 Remove-Item -LiteralPath $publishDir, $layoutDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $publishDir, $layoutDir, $packageDir | Out-Null
-Get-ChildItem -Path $packageDir -Filter "TypeWhisper-$RuntimeIdentifier-*.msix" -File |
+Get-ChildItem -Path $packageDir -Filter "TypeWhisper-$StoreProduct-$RuntimeIdentifier-*.msix" -File |
     Remove-Item -Force
 
 dotnet publish (Join-Path $repoRoot "src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj") `
@@ -79,8 +54,9 @@ dotnet publish (Join-Path $repoRoot "src/TypeWhisper.WinUI/TypeWhisper.WinUI.csp
     -r $RuntimeIdentifier `
     -p:Platform=$platform `
     --self-contained true `
-    -p:Version=$Version `
+    -p:Version=$msixVersion `
     -p:TypeWhisperStoreBuild=true `
+    -p:TypeWhisperStoreProduct=$StoreProduct `
     -o $publishDir
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed."
@@ -97,8 +73,6 @@ $layoutAssetsPath = Join-Path $layoutDir "Assets"
 New-Item -ItemType Directory -Force -Path $layoutAssetsPath | Out-Null
 Copy-Item -Path (Join-Path $assetsPath "*") -Destination $layoutAssetsPath -Recurse -Force
 
-$manifest = Get-Content -Raw $templatePath
-$manifest = $manifest.Replace("__VERSION__", $msixVersion).Replace("__ARCHITECTURE__", $architecture)
 Set-Content -Path (Join-Path $layoutDir "AppxManifest.xml") -Value $manifest -Encoding UTF8
 
 $makeAppx = Get-MakeAppxPath

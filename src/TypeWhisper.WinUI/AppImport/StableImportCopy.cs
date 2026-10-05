@@ -9,7 +9,7 @@ internal static class StableImportCopy
     private static readonly string[] Suffixes = ["", "-wal", "-shm", "-journal"];
     private sealed record Part(bool Exists, long Length = 0, long Written = 0, string? Hash = null);
 
-    private const string ScratchPrefix = "typewhisper-import-";
+    private static readonly string ScratchPrefix = WinUIProfile.StoreBetaBuild ? "typewhisper-beta-import-" : "typewhisper-import-";
 
     internal static T Read<T>(string source, Func<string, T> read, Action? afterCopy = null, string? scratchParent = null,
         CancellationToken cancellationToken = default)

@@ -76,7 +76,7 @@ internal sealed class TrayIconService : IDisposable
         _menuWindow = new TrayMenuWindow(menu);
         _icon = new TaskbarIcon
         {
-            ToolTipText = "TypeWhisper",
+            ToolTipText = WinUIProfile.DisplayName,
             IconSource = new BitmapImage(new Uri("ms-appx:///app.ico")),
             RightClickCommand = new TrayCommand(_menuWindow.Present),
             LeftClickCommand = new TrayCommand(settings),
@@ -98,7 +98,7 @@ internal sealed class TrayIconService : IDisposable
         _status.Text = _pauseError ?? (_hotkeysPaused ? Loc.T("Dictation hotkeys paused. Resume them from the tray menu.") : _dictationStatus);
         _recordingAction.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
         ToolTipService.SetToolTip(_status, _status.Text);
-        _icon.ToolTipText = "TypeWhisper · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
+        _icon.ToolTipText = WinUIProfile.DisplayName + " · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
     }
 
     internal void UpdateHotkeyPause(bool paused, bool canChange, string? error)
@@ -109,7 +109,7 @@ internal sealed class TrayIconService : IDisposable
         _pauseHotkeys.IsEnabled = canChange;
         _status.Text = error ?? (paused ? Loc.T("Dictation hotkeys paused. Resume them from the tray menu.") : _dictationStatus);
         ToolTipService.SetToolTip(_status, _status.Text);
-        _icon.ToolTipText = "TypeWhisper · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
+        _icon.ToolTipText = WinUIProfile.DisplayName + " · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
     }
 
     internal void SetShutdownState(string status)
@@ -117,7 +117,7 @@ internal sealed class TrayIconService : IDisposable
         _closing = true;
         _menuWindow.DisableActions();
         _status.Text = status;
-        _icon.ToolTipText = "TypeWhisper · " + status;
+        _icon.ToolTipText = WinUIProfile.DisplayName + " · " + status;
     }
 
     internal void UpdateProcessing(bool canCancel)

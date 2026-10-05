@@ -1,26 +1,53 @@
 name: Store
+run-name: Store ${{ inputs.destination }} ${{ inputs.version }}
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Package version, for example 1.0.1.1"
+      destination:
+        description: "Intended submission (packages only; does not publish)"
+        type: choice
         required: true
-        default: "1.0.1.1"
+        default: internal-flight
+        options:
+          - internal-flight
+          - public-beta
+          - stable
+      version:
+        description: "New numeric Store version: Major.Minor.Build.0, e.g. 1.1.1.0"
+        type: string
+        required: true
+
+permissions:
+  contents: read
 
 jobs:
   package:
     name: Build Store MSIX
     runs-on: windows-latest
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         rid: [win-x64, win-arm64]
     env:
       VERSION: ${{ inputs.version }}
+      DESTINATION: ${{ inputs.destination }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Validate version and resolve Store product
+        id: meta
+        shell: pwsh
+        run: |
+          ./eng/Get-StorePackageVersion.Tests.ps1
+          ./eng/New-StorePackageManifest.Tests.ps1
+          $version = ./eng/Get-StorePackageVersion.ps1 -Version $env:VERSION
+          $product = if ($env:DESTINATION -eq 'public-beta') { 'beta' } else { 'stable' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "product=$product" >> $env:GITHUB_OUTPUT
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -35,13 +62,50 @@ jobs:
 
       - name: Build solution
         shell: pwsh
-        run: dotnet build TypeWhisper.slnx -c Release "-p:Version=$env:VERSION" --no-restore
+        run: dotnet build TypeWhisper.slnx -c Release -p:Version=${{ steps.meta.outputs.version }} -p:TypeWhisperStoreBuild=true -p:TypeWhisperStoreProduct=${{ steps.meta.outputs.product }} --no-restore
 
       - name: Build MSIX package
         shell: pwsh
-        run: ./eng/Build-StorePackage.ps1 -Version $env:VERSION -RuntimeIdentifier ${{ matrix.rid }}
+        run: ./eng/Build-StorePackage.ps1 -Version ${{ steps.meta.outputs.version }} -StoreProduct ${{ steps.meta.outputs.product }} -RuntimeIdentifier ${{ matrix.rid }}
+
+      - name: Record package provenance and submission destination
+        shell: pwsh
+        env:
+          STORE_PRODUCT: ${{ steps.meta.outputs.product }}
+          PACKAGE_VERSION: ${{ steps.meta.outputs.version }}
+          PACKAGE_RID: ${{ matrix.rid }}
+        run: |
+          $identity = ./eng/Get-StorePackageIdentity.ps1 -StoreProduct $env:STORE_PRODUCT
+          $directory = "artifacts/store/$env:STORE_PRODUCT/packages"
+          $package = Get-Item "$directory/TypeWhisper-$env:STORE_PRODUCT-$env:PACKAGE_RID-$env:PACKAGE_VERSION.msix"
+          $sha256 = (Get-FileHash -LiteralPath $package.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          [ordered]@{
+            product = $env:STORE_PRODUCT
+            destination = $env:DESTINATION
+            version = $env:PACKAGE_VERSION
+            runtimeIdentifier = $env:PACKAGE_RID
+            sourceRevision = $env:GITHUB_SHA
+            identity = $identity
+            package = $package.Name
+            sha256 = $sha256
+          } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$directory/package-info-$env:PACKAGE_RID.json" -Encoding utf8
+          $target = if ($env:DESTINATION -eq 'internal-flight') { 'Internal Beta flight in TypeWhisper' }
+            elseif ($env:DESTINATION -eq 'public-beta') { 'TypeWhisper Beta (public audience, direct link only)' }
+            else { 'TypeWhisper regular submission' }
+          @"
+          ## Store package prepared
+
+          - Destination: $target
+          - Store ID: $($identity.storeProductId)
+          - Package: $($package.Name)
+          - Source revision: $env:GITHUB_SHA
+          - SHA-256: $sha256
+
+          Download both architecture artifacts from this run. Submit them manually in Partner Center after installed-package acceptance. This run does not publish or certify the app.
+          "@ >> $env:GITHUB_STEP_SUMMARY
 
       - uses: actions/upload-artifact@v7
         with:
-          name: store-msix-${{ matrix.rid }}
-          path: artifacts/store/packages/*.msix
+          name: store-msix-${{ inputs.destination }}-${{ steps.meta.outputs.version }}-${{ matrix.rid }}
+          path: artifacts/store/${{ steps.meta.outputs.product }}/packages/*
+          if-no-files-found: error

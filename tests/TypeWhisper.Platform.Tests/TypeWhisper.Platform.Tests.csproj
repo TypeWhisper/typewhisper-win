@@ -23,6 +23,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/NativeMethods.Clipboard.cs" Link="NativeMethods.Clipboard.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LicenseText.cs" Link="LicenseText.cs" />
     <EmbeddedResource Include="../../src/TypeWhisper.WinUI/Resources/LicenseStrings.json" LogicalName="TypeWhisper.LicenseStrings.json" />
+    <EmbeddedResource Include="../../src/TypeWhisper.Windows.StorePackage/StoreProducts.json" LogicalName="TypeWhisper.StoreProducts.json" />
   </ItemGroup>
   <ItemGroup>
     <!-- The app files compiled into these tests rely on the app's project-wide import. -->

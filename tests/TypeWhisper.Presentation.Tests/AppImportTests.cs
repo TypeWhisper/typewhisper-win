@@ -13,6 +13,8 @@ public sealed class AppImportTests : IDisposable
     private string Source => Path.Combine(_directory, "flow.sqlite");
     private string DictionaryPath => Path.Combine(_directory, "dictionary.json");
     private string SnippetPath => Path.Combine(_directory, "snippets.json");
+    private static string CopyPrefix => WinUIProfile.StoreBetaBuild ? "typewhisper-beta-import-" : "typewhisper-import-";
+    private static string OtherCopyPrefix => WinUIProfile.StoreBetaBuild ? "typewhisper-import-" : "typewhisper-beta-import-";
     public AppImportTests() => Directory.CreateDirectory(_directory);
 
     [Fact]
@@ -197,9 +199,10 @@ public sealed class AppImportTests : IDisposable
             if (old) Directory.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
             return path;
         }
-        var abandoned = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"), true);
-        var active = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"), true);
-        var recent = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"), false);
+        var abandoned = Create(CopyPrefix + Guid.NewGuid().ToString("N"), true);
+        var active = Create(CopyPrefix + Guid.NewGuid().ToString("N"), true);
+        var recent = Create(CopyPrefix + Guid.NewGuid().ToString("N"), false);
+        var otherDistribution = Create(OtherCopyPrefix + Guid.NewGuid().ToString("N"), true);
         var unrelated = Create("typewhisper-import-user-notes", true);
         using (new FileStream(Path.Combine(active, ".lease"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
@@ -208,6 +211,7 @@ public sealed class AppImportTests : IDisposable
             Assert.True(Directory.Exists(active));
             Assert.True(Directory.Exists(recent));
             Assert.True(Directory.Exists(unrelated));
+            Assert.True(Directory.Exists(otherDistribution));
         }
         StableImportCopy.CleanupAbandonedCopies(_directory);
         Assert.False(Directory.Exists(active));
@@ -224,8 +228,9 @@ public sealed class AppImportTests : IDisposable
             File.WriteAllText(Path.Join(path, "flow.sqlite"), "private copied data");
             return path;
         }
-        var recent = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"));
-        var active = Create("typewhisper-import-" + Guid.NewGuid().ToString("N"));
+        var recent = Create(CopyPrefix + Guid.NewGuid().ToString("N"));
+        var active = Create(CopyPrefix + Guid.NewGuid().ToString("N"));
+        var otherDistribution = Create(OtherCopyPrefix + Guid.NewGuid().ToString("N"));
         var unrelated = Create("typewhisper-import-user-notes");
         using (new FileStream(Path.Join(active, ".lease"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
@@ -233,6 +238,7 @@ public sealed class AppImportTests : IDisposable
             Assert.False(Directory.Exists(recent));
             Assert.True(File.Exists(Path.Join(active, "flow.sqlite")));
             Assert.True(Directory.Exists(unrelated));
+            Assert.True(Directory.Exists(otherDistribution));
         }
         Assert.Equal(0, StableImportCopy.DeleteCopies(_directory));
         Assert.False(Directory.Exists(active));

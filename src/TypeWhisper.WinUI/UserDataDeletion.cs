@@ -19,28 +19,25 @@ internal static class UserDataDeletion
         "api-port", "api-discovery.json", "api-token",
     ];
 
-    // Development builds never read the 1.0 folders, so they neither export nor delete them.
+    // Development and public Store beta builds neither export nor delete the 1.0 folders.
     internal static ErasureTarget[] PreviousVersionData
     {
         get
         {
-#if DEBUG
-            return [];
-#else
+            if (!WinUIProfile.UsesLegacyData) return [];
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             return
             [
                 new(Path.Join(localData, "TypeWhisper-UserData")),
                 new(Path.Join(localData, "TypeWhisper"), LegacyInstallDataEntries),
             ];
-#endif
         }
     }
 
     internal static ErasureTarget[] Targets =>
     [
         .. PreviousVersionData,
-        ErasureTarget.Entry(Path.Join(Path.GetTempPath(), "TypeWhisper-WinUI-errors.log")),
+        ErasureTarget.Entry(WinUIProfile.LegacyErrorLogPath),
     ];
 
     // The previous process lets go of its files a moment after it ends, so a few passes a moment apart.
