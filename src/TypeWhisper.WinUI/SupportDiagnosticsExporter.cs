@@ -3,13 +3,12 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using TypeWhisper.Core.Models;
-using TypeWhisper.PluginHost;
 using TypeWhisper.Presentation;
 using Report = TypeWhisper.Presentation.SupportDiagnosticsReport;
 
 namespace TypeWhisper.WinUI;
 
-internal static class SupportDiagnosticsExporter
+internal static partial class SupportDiagnosticsExporter
 {
     // Capture live UI state first, then read files and write the report off the UI thread.
     internal static async Task<Report> CaptureAsync(LocalDictationSession session, WinUIHttpApi api)
@@ -39,11 +38,7 @@ internal static class SupportDiagnosticsExporter
         var audio = capture.Try("audio", () => session.DiagnosticAudio(permission ?? "Unknown"));
         var settings = capture.Try("settings", session.DiagnosticSettings);
         var history = capture.Try("historyCount", () => new Count(session.DiagnosticHistoryCount));
-        var localStates = new Dictionary<string, (bool Enabled, bool HasError)>
-        {
-            [LocalTranscriptionPlugin.PluginId] = (session.Models.Enabled, session.LocalPluginError is not null || session.Models.Error is not null),
-            [LocalCtcVocabulary.PluginId] = (session.CtcVocabulary.Enabled, session.CtcVocabulary.Error is not null)
-        };
+        var localStates = CaptureLocalPluginStates(session.Models, session.CtcVocabulary, session.LocalPluginError);
 
         return await Task.Run(() =>
         {
@@ -60,33 +55,6 @@ internal static class SupportDiagnosticsExporter
             var log = capture.Try("diagnosticLog", AppDiagnostics.CaptureLog);
             return new Report(exportedAt, app, system, model, apiInfo, audio, settings, plugins, workflows, counts, log, capture.Errors);
         });
-    }
-
-    private static Report.PluginInfo[] Plugins(PortablePluginStore store, PortablePluginRuntimeRegistry runtime,
-        IReadOnlyDictionary<string, (bool Enabled, bool HasError)> localStates)
-    {
-        if (!store.Initialized) throw new InvalidOperationException();
-        var states = runtime.Snapshot().ToDictionary(state => state.PluginId, StringComparer.Ordinal);
-        var transcription = runtime.TranscriptionProviders;
-        var llm = runtime.LlmProviders;
-        var tts = runtime.TtsProviders;
-        return store.Inventory().Select(package =>
-        {
-            var manifest = package.Manifest;
-            var id = manifest?.Id ?? Path.GetFileName(package.Directory);
-            states.TryGetValue(id, out var state);
-            var local = localStates.GetValueOrDefault(id);
-            var providers = transcription.Where(provider => provider.PluginId == id)
-                .Select(provider => new Report.ProviderInfo("transcription", Report.Identifier(provider.SelectionId),
-                    provider.Ready, Report.Identifier(provider.SelectedModelId)))
-                .Concat(llm.Where(provider => provider.PluginId == id).Select(provider =>
-                    new Report.ProviderInfo("llm", Report.Identifier(provider.SelectionId), provider.Ready, null)))
-                .Concat(tts.Where(provider => provider.PluginId == id).Select(provider =>
-                    new Report.ProviderInfo("tts", Report.Identifier(provider.PluginId), provider.Ready, null))).ToArray();
-            return new Report.PluginInfo(Report.Identifier(id), Report.Identifier(manifest?.Version), manifest?.IsLocal,
-                state?.Enabled ?? local.Enabled, package.Error is not null || state?.Error is not null || local.HasError,
-                store.PendingRestart(id), store.UpdateWarning(id) is not null, providers);
-        }).OrderBy(plugin => plugin.Id, StringComparer.Ordinal).ToArray();
     }
 
     private static DictionaryEntry[] ReadDictionary()
