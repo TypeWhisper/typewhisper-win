@@ -220,17 +220,19 @@ internal static class WerBenchmark
         var load = Stopwatch.StartNew();
         using var recognizer = new OfflineRecognizer(config);
         load.Stop();
-        var clips = Directory.GetFiles(wavDirectory, "*.wav").Order(StringComparer.Ordinal)
-            .Select(path => new Clip(Path.GetFileNameWithoutExtension(path), ReadOptional(Path.ChangeExtension(path, ".txt")),
-                ReadWav(path, normalize), ReadOptional(Path.ChangeExtension(path, ".formatted.txt")))).ToList();
-        if (clips.Count == 0) throw new FileNotFoundException("No WAV files in " + wavDirectory);
-        Decode(recognizer, clips[0].Samples, qwen);
+        var paths = Directory.GetFiles(wavDirectory, "*.wav").Order(StringComparer.Ordinal).ToArray();
+        if (paths.Length == 0) throw new FileNotFoundException("No WAV files in " + wavDirectory);
+        // Each recording is read when it is scored, so long directories never hold more than one decoded file.
+        static Clip Load(string path, bool normalize) => new(Path.GetFileNameWithoutExtension(path), ReadOptional(Path.ChangeExtension(path, ".txt")),
+            ReadWav(path, normalize), ReadOptional(Path.ChangeExtension(path, ".formatted.txt")));
+        Decode(recognizer, Load(paths[0], normalize).Samples, qwen);
         var results = new List<object>();
         double audioSeconds = 0, decodeSeconds = 0;
         long wordEdits = 0, words = 0, characterEdits = 0, characters = 0;
         int scored = 0, exact = 0;
-        foreach (var clip in clips)
+        foreach (var path in paths)
         {
+            var clip = Load(path, normalize);
             var timer = Stopwatch.StartNew();
             var hypothesis = Decode(recognizer, clip.Samples, qwen);
             timer.Stop();

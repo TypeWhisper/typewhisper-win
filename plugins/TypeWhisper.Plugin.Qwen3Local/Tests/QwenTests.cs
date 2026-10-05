@@ -218,6 +218,14 @@ public sealed class QwenTests : IDisposable
         Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.ModelId));
         Assert.Equal("Qwen3-ASR 0.6B INT8 is not downloaded.", await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, default));
 
+        // A model directory that fails the readiness check is still removable through its action.
+        var incomplete = Path.Join(((TypeWhisper.PluginSDK.IPluginHostServices)host).PluginAssetDirectory, "Models", Qwen3LocalPlugin.LargeModelId);
+        Directory.CreateDirectory(incomplete);
+        await File.WriteAllTextAsync(Path.Join(incomplete, "encoder.int8.onnx"), "partial");
+        Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.LargeModelId));
+        await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.LargeModelId, default);
+        Assert.False(Directory.Exists(incomplete));
+
         host.SetSetting("selectedModel", Qwen3LocalPlugin.LargeModelId);
         await plugin.DeactivateAsync();
         await plugin.ActivateAsync(host);

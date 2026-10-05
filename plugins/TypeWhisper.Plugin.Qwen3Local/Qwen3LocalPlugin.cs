@@ -95,7 +95,8 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         var model = TranscriptionModels.FirstOrDefault(candidate => id == RemoveActionPrefix + candidate.Id)
             ?? throw new ArgumentException("Unknown Qwen settings action.", nameof(id));
         // The host runs settings actions under its configuration lease; the plugin's gate also drains native inference first.
-        if (!IsModelDownloaded(model.Id)) return $"{model.DisplayName} is not downloaded.";
+        // Checks the directory, not readiness, so an incomplete or damaged model can still be removed.
+        if (_host is null || !Directory.Exists(ModelDirectory(model.Id))) return $"{model.DisplayName} is not downloaded.";
         await RemoveModelAsync(model.Id, cancellationToken).ConfigureAwait(false);
         return $"{model.DisplayName} removed. Reopen these settings to download it again, then choose Use model.";
     }
