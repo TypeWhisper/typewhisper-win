@@ -121,9 +121,12 @@ public sealed record SupportDiagnosticsReport(
         }).ToArray(), Identifier(defaults?.Provider), Identifier(defaults?.Model));
 
     /// <summary>Keeps technical IDs, including provider/model IDs, while omitting paths, URLs and free text.</summary>
+    // Namespaced IDs and relative paths cannot be distinguished without a trusted catalog.
+    // Omit directory separators and Windows drive prefixes on every operating system.
     public static string? Identifier(string? value) => value is null ? null :
         value.Length is > 0 and <= 160 && char.IsAsciiLetterOrDigit(value[0]) && !value.Contains("..") &&
-        !value.Contains(":/") && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' or '+' or ':' or '/')
+        !(value.Length >= 2 && char.IsAsciiLetter(value[0]) && value[1] == ':') &&
+        value.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' or '+' or ':')
             ? value : "[omitted]";
 }
 

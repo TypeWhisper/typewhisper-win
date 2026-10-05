@@ -83,12 +83,54 @@ public sealed class SupportDiagnosticsReportTests
     [InlineData("C:\\Users\\private\\model.gguf", "[omitted]")]
     [InlineData("C:/Users/private/model.gguf", "[omitted]")]
     [InlineData("/home/private/model.gguf", "[omitted]")]
+    [InlineData("Users/Alice/private/model.gguf", "[omitted]")]
+    [InlineData("models/private.gguf", "[omitted]")]
+    [InlineData("models\\private.gguf", "[omitted]")]
+    [InlineData("C:Users/Alice/private.gguf", "[omitted]")]
+    [InlineData("C:private.gguf", "[omitted]")]
+    [InlineData("c:private", "[omitted]")]
+    [InlineData("./private", "[omitted]")]
+    [InlineData("../private", "[omitted]")]
     [InlineData("https://private.example/api?key=secret", "[omitted]")]
     [InlineData("private sentence", "[omitted]")]
-    [InlineData("org/model-1.2:latest", "org/model-1.2:latest")]
+    [InlineData("org/model-1.2:latest", "[omitted]")]
+    [InlineData("model-1.2:latest", "model-1.2:latest")]
+    [InlineData("com.typewhisper.openai", "com.typewhisper.openai")]
+    [InlineData("gpt-4.1", "gpt-4.1")]
     [InlineData(null, null)]
     public void IdentifiersExcludePathsUrlsAndFreeText(string? input, string? expected) =>
         Assert.Equal(expected, Report.Identifier(input));
+
+    [Theory]
+    [InlineData("Users/Alice/private/model.gguf")]
+    [InlineData("C:Users/Alice/private.gguf")]
+    [InlineData("C:private.gguf")]
+    public void WorkflowReportOmitsRelativePathsFromOverridesAndDefaults(string path)
+    {
+        var workflow = new Workflow
+        {
+            Id = "private-id", Name = "private-name", Template = WorkflowTemplate.Custom,
+            Trigger = WorkflowTrigger.Manual(),
+            Behavior = new() { ProviderOverride = path, ModelOverride = path, TranscriptionModelOverride = path },
+            Output = new() { TargetActionPluginId = path }
+        };
+        var inherited = workflow with { Behavior = new() { ProviderOverride = WorkflowLlmDefaults.Inherit } };
+        var report = Empty() with { Workflows = Report.SummarizeWorkflows([workflow, inherited], new(path, path)) };
+
+        var json = report.ToJson();
+        Assert.DoesNotContain("private", json, StringComparison.OrdinalIgnoreCase);
+        using var document = JsonDocument.Parse(json);
+        var workflows = document.RootElement.GetProperty("workflows");
+        Assert.Equal("[omitted]", workflows.GetProperty("defaultProviderId").GetString());
+        Assert.Equal("[omitted]", workflows.GetProperty("defaultModelId").GetString());
+        foreach (var metadata in workflows.GetProperty("enabledWorkflows").EnumerateArray())
+        {
+            Assert.Equal("[omitted]", metadata.GetProperty("providerId").GetString());
+            Assert.Equal("[omitted]", metadata.GetProperty("modelId").GetString());
+            Assert.Equal("[omitted]", metadata.GetProperty("actionPluginId").GetString());
+        }
+        Assert.Equal("[omitted]", workflows.GetProperty("enabledWorkflows")[0].GetProperty("transcriptionModelId").GetString());
+    }
 
     [Fact]
     public void DisabledLoggingStillExportsReportWithoutRetainedEntries()

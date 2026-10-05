@@ -12,6 +12,8 @@ plugin state, workflow metadata, selected behavior settings, data counts, and
 retained diagnostic log entries. It excludes API keys, audio, transcripts,
 workflow names and prompts, app and website bindings, and file paths. Collection
 failures contain only the affected section, exception type, and HRESULT.
+Ambiguous identifiers containing directory separators or Windows drive prefixes
+are omitted, including model IDs that use slash-separated namespaces.
 
 The support report remains available when diagnostic logging is off; in that
 case it contains no log entries. The separate JSON Lines log export remains
