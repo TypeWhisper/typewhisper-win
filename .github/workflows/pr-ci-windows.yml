@@ -68,6 +68,11 @@ jobs:
         run: |
           ./eng/Get-StorePackageVersion.Tests.ps1
           ./eng/New-StorePackageManifest.Tests.ps1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify Store beta submission guards without credentials
+        run: python -m unittest discover -s eng/tests -p test_store_beta_release.py -v
       - name: Verify public Store beta profile isolation
         shell: pwsh
         run: dotnet test tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj -c Release -p:DefineConstants=TYPEWHISPER_STORE_BETA --filter 'FullyQualifiedName~WinUIProfileTests|FullyQualifiedName~StoreProfileIsolationTests|FullyQualifiedName~AppImportTests'

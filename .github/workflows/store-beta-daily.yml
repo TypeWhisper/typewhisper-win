@@ -1,0 +1,118 @@
+name: Store Beta Daily
+run-name: Store beta from Daily ${{ github.event.workflow_run.id || inputs.daily_run_id }}
+
+on:
+  workflow_run:
+    workflows: [Candidate]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      daily_run_id:
+        description: "Successful Candidate run that published a Daily from main"
+        type: string
+        required: true
+      dry_run:
+        description: "Inspect Store state and plan only; do not build or submit"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+
+# Never cancel an upload or commit when the next Daily finishes.
+concurrency:
+  group: store-beta-submissions
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.dry_run == true) ||
+       (vars.STORE_BETA_AUTOPUBLISH_ENABLED == 'true' &&
+        (github.event_name == 'workflow_dispatch' ||
+         (github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          (github.event.workflow_run.event == 'schedule' || github.event.workflow_run.event == 'workflow_dispatch')))))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: store-beta
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      source: ${{ steps.plan.outputs.source }}
+      version: ${{ steps.plan.outputs.version }}
+      destinations: ${{ steps.plan.outputs.destinations }}
+    steps:
+      # Execute automation from the trusted workflow revision, not an upstream artifact.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Plan beta submissions from the verified Daily
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAILY_RUN_ID: ${{ github.event.workflow_run.id || inputs.daily_run_id }}
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: python eng/store_beta_release.py plan --daily-run "$DAILY_RUN_ID"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: store-beta-plan
+          path: artifacts/store-beta/plan.json
+          if-no-files-found: error
+
+  package:
+    needs: plan
+    if: needs.plan.outputs.publish == 'true' && inputs.dry_run != true
+    strategy:
+      fail-fast: false
+      matrix:
+        destination: ${{ fromJSON(needs.plan.outputs.destinations) }}
+    uses: ./.github/workflows/store-package.yml
+    with:
+      destination: ${{ matrix.destination }}
+      version: ${{ needs.plan.outputs.version }}
+      source_revision: ${{ needs.plan.outputs.source }}
+
+  submit:
+    needs: [plan, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: store-beta
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: store-beta-plan
+          path: artifacts/store-beta
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: store-msix-*
+          path: artifacts/store-beta/packages
+      - name: Verify and submit both beta destinations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: >-
+          python eng/store_beta_release.py submit
+          --plan artifacts/store-beta/plan.json
+          --packages artifacts/store-beta/packages
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: store-beta-submission-receipt
+          path: artifacts/store-beta/submission-receipt.json
+          if-no-files-found: warn

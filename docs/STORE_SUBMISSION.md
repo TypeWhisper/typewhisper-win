@@ -1,6 +1,6 @@
 # Microsoft Store Submission
 
-TypeWhisper 1.1 supports two Store products and three submission destinations. Daily builds remain on the direct-download channel. Microsoft Store owns updates for all Store builds; Velopack is disabled.
+TypeWhisper 1.1 supports two Store products and three submission destinations. A successfully published direct-download Daily can also trigger updates to both Store betas. Microsoft Store owns updates for all Store builds; Velopack is disabled.
 
 | Workflow destination | Product and audience | Installed app |
 | --- | --- | --- |
@@ -12,12 +12,13 @@ Both beta routes can run together. A normal Store link does not enroll someone i
 
 ## Partner Center setup
 
-Prepared on October 5, 2026:
+Initial beta submissions on October 5, 2026:
 
 - TypeWhisper has live x64 and ARM64 packages at `1.0.9.0` (Submission 8).
-- `Internal Beta` is a draft flight assigned to `TypeWhisper Internal Testers`. Manage members in Partner Center; do not commit tester email addresses.
-- TypeWhisper Beta is a separate reserved MSIX product. Its first submission is a draft with public audience, direct-link-only discovery, and a free Store download.
-- Neither beta has been certified or published. Packages, installed-package acceptance, and the public beta's remaining listing, properties, and age ratings are still required.
+- `Internal Beta` is assigned to `TypeWhisper Internal Testers`. Manage members in Partner Center; do not commit tester email addresses.
+- TypeWhisper Beta is a separate MSIX product with public audience, direct-link-only discovery, and a free Store download.
+- Both initial betas were submitted for certification at `1.1.1.0`, built from `main` revision `9ceaf011c73f1a285e6c88599478e732c8630ef8`. Check Partner Center for current certification and publication status.
+- The public beta listing, properties, and IARC questionnaire are complete. The rating considers possible AI-generated text (Germany: USK 12). Installed-MSIX and native ARM64 acceptance are separate from the completed package checks.
 
 | Identity | TypeWhisper / internal flight | Public beta |
 | --- | --- | --- |
@@ -38,6 +39,50 @@ Both use publisher `CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75` and publisher displ
 Open GitHub Actions -> **Store** -> **Run workflow**. Choose the source branch/tag, destination, and a new numeric version. Build both beta products from the same revision and verify their `sourceRevision` receipts match.
 
 Each x64/ARM64 artifact includes its MSIX and a `package-info-<rid>.json` receipt with the source commit, destination, Store identity, and SHA-256. The workflow does not upload to Partner Center, enroll testers, or publish.
+
+## Automatic beta updates after Daily
+
+The **Store Beta Daily** workflow runs after **Candidate** completes on `main`. It verifies that the upstream run belongs to this repository, used the scheduled or manual trigger, completed successfully, and actually published its Daily release. Validation-only manual runs and PR runs cannot publish Store updates.
+
+The automation then:
+
+1. Reads the two Store products and all flights on TypeWhisper. An existing submission or draft makes the run wait without changing it; a failed submission requires review. The first submissions must finish publishing before automatic updates can start.
+2. Compares the Daily source with each beta's last published source. Unchanged destinations are skipped, and an older or diverged source cannot replace a newer beta.
+3. Allocates a version on the `1.1` release line above the packages currently visible in the regular submission, all flights, and public beta. The fourth component remains zero. Exhausting the numeric build component requires deliberately updating the release line.
+4. Calls **Store** to build x64 and ARM64 packages for the selected destinations at the exact Daily commit. The receipts record the checked-out source, not the newer workflow commit.
+5. Verifies receipts, hashes, manifest identities, architectures and required payloads, then rechecks Store state before writing. It creates new submissions, retains listing/rating/availability data, replaces the packages, and requests publication after certification.
+
+The workflow uses one concurrency group and never cancels an in-progress upload to make room for the next Daily. It never deletes existing drafts, submits a regular stable update, or modifies tester groups. There is no guaranteed daily publication time: every update still goes through Microsoft certification and Store delivery.
+
+### One-time API setup
+
+Associate a Microsoft Entra application with the Partner Center account and grant the Store submission permissions described in Microsoft's [API prerequisites](https://learn.microsoft.com/en-us/windows/uwp/monetize/create-and-manage-submissions-using-windows-store-services). Use a dedicated application for this automation.
+
+Create the GitHub environment **`store-beta`**, restricted to deployments from `main`, with these environment secrets:
+
+- `PARTNER_CENTER_TENANT_ID`
+- `PARTNER_CENTER_CLIENT_ID`
+- `PARTNER_CENTER_CLIENT_SECRET`
+
+Store the client secret directly as a GitHub secret. Do not put its value in source files, issues, logs, or workflow inputs. Track its expiration and rotate it before it expires. The submission API does not need a Seller ID.
+
+Set repository variable **`STORE_BETA_AUTOPUBLISH_ENABLED=true`** after the access check. Setting it to `false` disables future automatic runs; it does not cancel an already submitted certification.
+
+For a read-only check, run **Store Beta Daily** on `main`, supply the numeric ID of a successful published Daily run, and leave **dry_run** enabled. Inspect `store-beta-plan` and the job summary. With **dry_run** disabled, the same command builds and submits eligible updates. No arbitrary source branch or stable destination is accepted by this workflow.
+
+### Receipts and recovery
+
+Each run retains a plan, the package artifacts, and `store-beta-submission-receipt` when a submission job starts. The receipt identifies every newly created submission and its last observed status, including partial failures. It contains no access tokens or upload SAS URLs. Certification notes retain the source SHA and Daily run URL for future duplicate and rollback checks.
+
+If a build fails, nothing is submitted. If Store state changes during a build, the submission job stops before creating a draft. If upload or commit fails after draft creation, inspect the receipt and Partner Center; the draft remains available for diagnosis. Do not automatically delete it or repeatedly retry a commit whose outcome is unknown.
+
+For submissions created through the API, make further edits through the API. Microsoft warns that mixing dashboard edits into an API-created submission can prevent subsequent API commits. Resolve a failed or abandoned submission deliberately before rerunning. Once a partially successful destination has published, a later run skips that source there and can update the other destination.
+
+Validate the automation without credentials or an app build:
+
+```powershell
+python -m unittest discover -s eng/tests -p test_store_beta_release.py -v
+```
 
 | Destination | Packaging argument | Artifact directory |
 | --- | --- | --- |
@@ -85,7 +130,7 @@ Public beta uses `TypeWhisper-WinUI-StoreBeta` instead of `TypeWhisper-WinUI` fo
 
 Both Store products declare the existing `typewhisper:` callback protocol. Store builds do not write an unpackaged protocol registration. If Windows asks which app should open a sign-in callback, choose the app that started sign-in; the other rejects unmatched pending state. Test this with both installed products. Global dictation shortcuts also need coordination when both apps run together.
 
-Before submitting either beta:
+Device acceptance and release checks remain necessary alongside automation:
 
 - Verify installation, Store/Start-menu activation, microphone capture, curated plugin installation, restart, and Store-controlled updates on the supported architectures.
 - Verify the internal flight's installed upgrade and data migration. Both 1.1 Store packages require Windows 11 build 26100 or later; the existing 1.0.9 packages support older Windows.
@@ -100,3 +145,5 @@ Store packages contain the host only. Plugins use the curated channel and requir
 - [Known user groups](https://learn.microsoft.com/en-us/windows/apps/publish/create-known-user-groups)
 - [Visibility options](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/visibility-options)
 - [MSIX package and version requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/app-package-requirements?pivots=store-installer-msix)
+- [Manage app submissions through the API](https://learn.microsoft.com/en-us/windows/uwp/monetize/manage-app-submissions)
+- [Manage flight submissions through the API](https://learn.microsoft.com/en-us/windows/uwp/monetize/manage-flight-submissions)
