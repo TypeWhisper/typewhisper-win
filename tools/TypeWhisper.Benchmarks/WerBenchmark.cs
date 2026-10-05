@@ -221,7 +221,7 @@ internal static class WerBenchmark
         var load = Stopwatch.StartNew();
         using var recognizer = new OfflineRecognizer(config);
         load.Stop();
-        var paths = Directory.GetFiles(wavDirectory, "*.wav").Order(StringComparer.Ordinal).ToArray();
+        var paths = Directory.GetFiles(wavDirectory, "*.wav").Order(StringComparer.Ordinal).Where(HasAudio).ToArray();
         if (paths.Length == 0) throw new FileNotFoundException("No WAV files in " + wavDirectory);
         // Each recording is read when it is scored, so long directories never hold more than one decoded file.
         static Clip Load(string path, bool normalize) => new(Path.GetFileNameWithoutExtension(path), ReadOptional(Path.ChangeExtension(path, ".txt")),
@@ -370,6 +370,14 @@ internal static class WerBenchmark
                 await Task.Delay(TimeSpan.FromSeconds(attempt));
             }
         }
+    }
+
+    private static bool HasAudio(string path)
+    {
+        using var reader = new WaveFileReader(path);
+        if (reader.Length > 0) return true;
+        Console.Error.WriteLine("Skipping recording without audio: " + path);
+        return false;
     }
 
     private static float[] ReadWav(string path, bool normalize = true, float minimumPeak = 0)
