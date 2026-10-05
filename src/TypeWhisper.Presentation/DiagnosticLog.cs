@@ -180,17 +180,23 @@ public sealed partial class DiagnosticLogFile
     /// <exception cref="IOException">The destination could not be written.</exception>
     public int Export(string destination, DiagnosticLogLine header)
     {
-        List<DiagnosticLogLine> lines;
-        lock (_lock)
-        {
-            BestEffort(PruneUnsafe);
-            // Filter again: the prune fails while another program keeps the file from being rewritten.
-            var cutoff = _clock() - TimeSpan.FromDays(_preferences.RetentionDays);
-            lines = ReadUnsafe(line => line.Time >= cutoff);
-        }
+        var lines = Snapshot();
         AtomicFileWriter.WriteAllText(destination, string.Concat(new[] { Admit(header) }.Concat(lines)
             .Select(line => JsonSerializer.Serialize(line, Options) + "\n")));
         return lines.Count;
+    }
+
+    /// <summary>Reads only retained, admitted entries. Disabled logging never exposes a leftover file.</summary>
+    public IReadOnlyList<DiagnosticLogLine> Snapshot()
+    {
+        lock (_lock)
+        {
+            if (!_preferences.Enabled) return [];
+            BestEffort(PruneUnsafe);
+            // Filter again: the prune fails while another program keeps the file from being rewritten.
+            var cutoff = _clock() - TimeSpan.FromDays(_preferences.RetentionDays);
+            return ReadUnsafe(line => line.Time >= cutoff);
+        }
     }
 
     /// <summary>Deletes every line. The log continues with new events while it is on.</summary>

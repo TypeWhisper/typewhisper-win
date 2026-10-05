@@ -13,6 +13,27 @@ public sealed class DiagnosticLogTests : IDisposable
     private string[] Lines() => File.Exists(LogPath) ? File.ReadAllLines(LogPath) : [];
 
     [Fact]
+    public void DisabledSnapshotDoesNotReadResidualLog()
+    {
+        Log().Write(Line("dictation.start"));
+        // The deletion may have failed while an external program held the file.
+        var disabled = Log(new(Enabled: false));
+        Assert.Empty(disabled.Snapshot());
+        Assert.Single(Lines());
+    }
+
+    [Fact]
+    public void SnapshotKeepsOnlyRetainedAndAdmittedLines()
+    {
+        var log = Log(new(RetentionDays: 1));
+        log.Write(Line("dictation.old"));
+        _now += TimeSpan.FromDays(2);
+        log.Write(Line("dictation.current"));
+        File.AppendAllText(LogPath, "{\"time\":\"2026-09-29T12:00:00Z\",\"event\":\"dictation.secret\",\"message\":\"private transcript\"}\n");
+        Assert.Equal("dictation.current", Assert.Single(log.Snapshot()).Event);
+    }
+
+    [Fact]
     public void WritesOneCompactJsonLinePerEvent()
     {
         var dictation = Guid.NewGuid();

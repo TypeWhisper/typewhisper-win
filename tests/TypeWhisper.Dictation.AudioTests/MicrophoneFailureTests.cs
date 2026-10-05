@@ -72,6 +72,25 @@ public sealed class MicrophoneFailureTests
     }
 
     [Fact]
+    public void PriorityResolutionRecognizesChangedEndpointIdsByName()
+    {
+        AudioInputDeviceInfo[] devices = [new(0, "new-quadcast", "Microphone (HyperX QuadCast 2)", true),
+            new(1, "new-headset", "Microphone (HyperX Cloud III S Wireless)", false)];
+
+        Assert.Same(devices[0], MicrophoneFailure.ResolvePriorityDevice(new("old-quadcast", "Microphone (HyperX QuadCast 2)"), devices));
+        Assert.Same(devices[1], MicrophoneFailure.ResolvePriorityDevice(new("old-headset", "Microphone (HyperX Cloud III S Wireless)"), devices));
+        Assert.Null(MicrophoneFailure.ResolvePriorityDevice(new("disconnected", "Webcam microphone"), devices));
+    }
+
+    [Fact]
+    public void PriorityResolutionPrefersCaseInsensitiveEndpointIdOverAnotherDevicesMatchingName()
+    {
+        AudioInputDeviceInfo[] devices = [new(0, "other-device", "USB Mic", false), new(1, "saved-id", "Renamed USB Mic", true)];
+
+        Assert.Same(devices[1], MicrophoneFailure.ResolvePriorityDevice(new("SAVED-ID", "USB Mic"), devices));
+    }
+
+    [Fact]
     public void DeferredWarmUpKeepsTheFailureOfTheLastOpenAttempt()
     {
         var factory = new Switchable { Error = new COMException("Access denied", unchecked((int)0x80070005)) };

@@ -32,6 +32,11 @@ internal static class MicrophoneFailure
     internal static bool IsSameMicrophone(AudioInputDeviceInfo device, MicrophonePriorityItem item) =>
         string.Equals(device.Id, item.Id, StringComparison.OrdinalIgnoreCase) || WasapiAudioInputDeviceOrdering.DeviceNamesMatch(device.Name, item.Name);
 
+    // Prefer a matching endpoint ID before trying the saved name, as capture does.
+    internal static AudioInputDeviceInfo? ResolvePriorityDevice(MicrophonePriorityItem item, IReadOnlyList<AudioInputDeviceInfo> devices) =>
+        devices.FirstOrDefault(device => string.Equals(device.Id, item.Id, StringComparison.OrdinalIgnoreCase))
+        ?? devices.FirstOrDefault(device => WasapiAudioInputDeviceOrdering.DeviceNamesMatch(device.Name, item.Name));
+
     // The saved entry a connected device stands in for after its endpoint ID changed, for example after a driver
     // reinstall: the same name while the saved ID is gone. Unlike the resolver this ignores prefix matches, so
     // "USB Mic 2" stays a separate microphone. Returns -1 when the device is new to the list, or when several
@@ -59,8 +64,7 @@ internal static class MicrophoneFailure
         var missing = new List<string>();
         foreach (var item in priority)
         {
-            var device = devices.FirstOrDefault(device => string.Equals(device.Id, item.Id, StringComparison.OrdinalIgnoreCase))
-                ?? devices.FirstOrDefault(device => WasapiAudioInputDeviceOrdering.DeviceNamesMatch(device.Name, item.Name));
+            var device = ResolvePriorityDevice(item, devices);
             if (device is not null)
                 return missing.Count == 0 ? null : Loc.T("{0} disconnected · using {1}", string.Join(", ", missing), device.Name);
             missing.Add(item.Name);

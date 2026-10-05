@@ -24,7 +24,7 @@ internal static class AdvancedSettingsPage
         Section(content, Loc.T("API server"), new HttpApiSettingsView(api));
         Section(content, Loc.T("Command line tool"), new CliSettingsView());
         Section(content, Loc.T("Integrations"), new RaycastIntegrationView());
-        Section(content, Loc.T("Support diagnostics"), new DiagnosticsSettingsView());
+        Section(content, Loc.T("Support diagnostics"), new DiagnosticsSettingsView(session, api));
     }
 
     // Rows are filled by their live settings.
