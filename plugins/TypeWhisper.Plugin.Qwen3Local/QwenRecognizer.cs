@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using SherpaOnnx;
 
 namespace TypeWhisper.Plugin.Qwen3Local;
@@ -9,7 +10,7 @@ internal interface IQwenRecognizer : IDisposable
     string Decode(float[] samples, string? language);
 }
 
-internal sealed class QwenRecognizer : IQwenRecognizer
+internal sealed partial class QwenRecognizer : IQwenRecognizer
 {
     private readonly OfflineRecognizer _recognizer;
     private static readonly object RuntimeLock = new();
@@ -44,8 +45,15 @@ internal sealed class QwenRecognizer : IQwenRecognizer
         if (language is not null) stream.SetOption("language", language);
         stream.AcceptWaveform(QwenAudio.SampleRate, samples);
         _recognizer.Decode(stream);
-        return stream.Result.Text.Trim();
+        return StripLanguageMarkers(stream.Result.Text);
     }
+
+    // sherpa-onnx strips the "language X<asr_text>" prefix for the 0.6B model, but the 1.7B export leaves it
+    // in the text of some windows, sometimes mid-window, so any remaining marker is removed here.
+    internal static string StripLanguageMarkers(string text) => LanguageMarker().Replace(text, "").Trim();
+
+    [GeneratedRegex(@"(?:language\s+[A-Za-z]+(?:\s[A-Za-z]+)?\s*)?<asr_text>", RegexOptions.CultureInvariant)]
+    private static partial Regex LanguageMarker();
 
     public void Dispose() => _recognizer.Dispose();
 

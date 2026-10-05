@@ -14,6 +14,7 @@ internal static class WerBenchmark
 {
     private const int SampleRate = 16000;
     private const float NormalizationTarget = 0.707f;
+    private const float RecorderMinimumPeak = 0.01f;
     // Same pinned corpus as eng/benchmark_cohere_quantizations.py.
     private const string DatasetRepository = "FluidInference/fleurs";
     private const string DatasetRevision = "8944693da251acbaf2f9686bddc4fedce8bd2edd";
@@ -27,6 +28,7 @@ internal static class WerBenchmark
     internal const string Usage =
         "wer <existing-model-directory> <corpus-cache-directory> [--languages de_de,en_us] [--samples 100] " +
         "[--threads N] [--noise-snr dB] [--concat-seconds N] [--output results.json]";
+    internal const string FilesUsage = "files <existing-model-directory> <wav-directory> [--threads N] [--raw] [--output results.json]";
 
     internal static async Task RunAsync(string[] args)
     {
@@ -57,20 +59,7 @@ internal static class WerBenchmark
         if (languages.Except(AllLanguages).FirstOrDefault() is { } unknown)
             throw new ArgumentException("Unsupported FLEURS language: " + unknown);
 
-        var files = new[] { "encoder", "decoder", "joiner" }.ToDictionary(name => name, name => ResolveModelFile(modelDirectory, name));
-        var tokens = Path.Combine(modelDirectory, "tokens.txt");
-        if (!File.Exists(tokens)) throw new FileNotFoundException("Missing model file: tokens.txt");
-
-        // Mirrors SherpaOnnxPlugin.CreateParakeetConfig apart from the resolved file names.
-        var config = new OfflineRecognizerConfig();
-        config.ModelConfig.Transducer.Encoder = files["encoder"];
-        config.ModelConfig.Transducer.Decoder = files["decoder"];
-        config.ModelConfig.Transducer.Joiner = files["joiner"];
-        config.ModelConfig.Tokens = tokens;
-        config.ModelConfig.NumThreads = threads;
-        config.ModelConfig.Provider = "cpu";
-        config.ModelConfig.Debug = 0;
-        config.DecodingMethod = "greedy_search";
+        var config = CreateConfig(modelDirectory, threads, out var qwen, out var modelFiles);
 
         var load = Stopwatch.StartNew();
         using var recognizer = new OfflineRecognizer(config);
@@ -98,12 +87,12 @@ internal static class WerBenchmark
                 if (noiseSnr is { } snr) samples = AddNoise(samples, snr, unit.Id);
                 if (!warmedUp)
                 {
-                    Decode(recognizer, samples);
+                    Decode(recognizer, samples, qwen);
                     warmedUp = true;
                 }
 
                 var timer = Stopwatch.StartNew();
-                var hypothesis = Decode(recognizer, samples);
+                var hypothesis = Decode(recognizer, samples, qwen);
                 timer.Stop();
 
                 var reference = Normalize(unit.Reference);
@@ -137,7 +126,7 @@ internal static class WerBenchmark
         var summary = new
         {
             model_directory = modelDirectory,
-            model_files = files.Values.Append(tokens).Select(path => new { name = Path.GetFileName(path), bytes = new FileInfo(path).Length,
+            model_files = modelFiles.Select(path => new { name = Path.GetRelativePath(modelDirectory, path).Replace('\\', '/'), bytes = new FileInfo(path).Length,
                 sha256 = Sha256(path) }),
             dataset = DatasetRepository + "@" + DatasetRevision,
             samples_per_language = sampleCount,
@@ -163,11 +152,156 @@ internal static class WerBenchmark
         }
     }
 
+    private static OfflineRecognizerConfig CreateConfig(string modelDirectory, int threads, out bool qwen, out string[] modelFiles)
+    {
+        // A Qwen3-ASR directory is recognized by its conv frontend; everything else is scored as a transducer.
+        qwen = File.Exists(Path.Join(modelDirectory, "conv_frontend.onnx"));
+        var config = new OfflineRecognizerConfig();
+        if (qwen)
+        {
+            // Mirrors QwenRecognizer in the Qwen3 ASR (Local) plugin.
+            modelFiles = new[] { "conv_frontend.onnx", "encoder.int8.onnx", "decoder.int8.onnx", "tokenizer/vocab.json",
+                "tokenizer/merges.txt", "tokenizer/tokenizer_config.json" }.Select(name => Path.Join(modelDirectory, name)).ToArray();
+            if (modelFiles.FirstOrDefault(path => !File.Exists(path)) is { } missing)
+                throw new FileNotFoundException("Missing model file: " + Path.GetRelativePath(modelDirectory, missing));
+            config.ModelConfig.Qwen3Asr.ConvFrontend = modelFiles[0];
+            config.ModelConfig.Qwen3Asr.Encoder = modelFiles[1];
+            config.ModelConfig.Qwen3Asr.Decoder = modelFiles[2];
+            config.ModelConfig.Qwen3Asr.Tokenizer = Path.Join(modelDirectory, "tokenizer");
+            config.ModelConfig.Qwen3Asr.MaxTotalLen = 512;
+            config.ModelConfig.Qwen3Asr.MaxNewTokens = 256;
+            config.ModelConfig.Tokens = "";
+        }
+        else
+        {
+            var files = new[] { "encoder", "decoder", "joiner" }.ToDictionary(name => name, name => ResolveModelFile(modelDirectory, name));
+            var tokens = Path.Join(modelDirectory, "tokens.txt");
+            if (!File.Exists(tokens)) throw new FileNotFoundException("Missing model file: tokens.txt");
+            modelFiles = files.Values.Append(tokens).ToArray();
+
+            // Mirrors SherpaOnnxPlugin.CreateParakeetConfig apart from the resolved file names.
+            config.ModelConfig.Transducer.Encoder = files["encoder"];
+            config.ModelConfig.Transducer.Decoder = files["decoder"];
+            config.ModelConfig.Transducer.Joiner = files["joiner"];
+            config.ModelConfig.Tokens = tokens;
+            config.DecodingMethod = "greedy_search";
+        }
+        config.ModelConfig.NumThreads = threads;
+        config.ModelConfig.Provider = "cpu";
+        config.ModelConfig.Debug = 0;
+        return config;
+    }
+
+    /// <summary>
+    /// Transcribes every WAV in a directory. A UTF-8 <c>name.txt</c> next to <c>name.wav</c> holds what was said and is
+    /// scored for WER and CER after normalization. An optional <c>name.formatted.txt</c> holds the intended final text;
+    /// the exact flag compares against it (or against <c>name.txt</c>) including punctuation and casing.
+    /// </summary>
+    internal static async Task FilesAsync(string[] args)
+    {
+        if (args.Length < 3) throw new ArgumentException("Usage: " + FilesUsage);
+        var modelDirectory = Path.GetFullPath(args[1]);
+        var wavDirectory = Path.GetFullPath(args[2]);
+        var threads = Math.Max(1, Environment.ProcessorCount / 2);
+        string? output = null;
+        var normalize = true;
+        for (var index = 3; index < args.Length; index += 2)
+        {
+            // --raw skips the recorder's peak normalization, like file transcription of an unprocessed WAV.
+            if (args[index] == "--raw") { normalize = false; index--; continue; }
+            if (index + 1 >= args.Length) throw new ArgumentException("Missing value for " + args[index]);
+            switch (args[index])
+            {
+                case "--threads": threads = int.Parse(args[index + 1], CultureInfo.InvariantCulture); break;
+                case "--output": output = Path.GetFullPath(args[index + 1]); break;
+                default: throw new ArgumentException("Unknown option: " + args[index]);
+            }
+        }
+        var config = CreateConfig(modelDirectory, threads, out var qwen, out var modelFiles);
+        var load = Stopwatch.StartNew();
+        using var recognizer = new OfflineRecognizer(config);
+        load.Stop();
+        var paths = Directory.GetFiles(wavDirectory, "*.wav").Order(StringComparer.Ordinal).Where(HasAudio).ToArray();
+        if (paths.Length == 0) throw new FileNotFoundException("No WAV files in " + wavDirectory);
+        // Each recording is read when it is scored, so long directories never hold more than one decoded file.
+        static Clip Load(string path, bool normalize) => new(Path.GetFileNameWithoutExtension(path), ReadOptional(Path.ChangeExtension(path, ".txt")),
+            ReadWav(path, normalize, RecorderMinimumPeak), ReadOptional(Path.ChangeExtension(path, ".formatted.txt")));
+        Decode(recognizer, Load(paths[0], normalize).Samples, qwen);
+        var results = new List<object>();
+        double audioSeconds = 0, decodeSeconds = 0;
+        long wordEdits = 0, words = 0, characterEdits = 0, characters = 0;
+        int scored = 0, exact = 0;
+        foreach (var clip in paths.Select(path => Load(path, normalize)))
+        {
+            var timer = Stopwatch.StartNew();
+            var hypothesis = Decode(recognizer, clip.Samples, qwen);
+            timer.Stop();
+            var seconds = clip.Samples.Length / (double)SampleRate;
+            audioSeconds += seconds; decodeSeconds += timer.Elapsed.TotalSeconds;
+            int? clipWordEdits = null, referenceWords = null;
+            bool? exactMatch = null;
+            if (clip.Reference.Length > 0)
+            {
+                var reference = Normalize(clip.Reference);
+                var normalized = Normalize(hypothesis);
+                var referenceTokens = reference.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                clipWordEdits = EditDistance(referenceTokens, normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+                referenceWords = referenceTokens.Length;
+                var referenceRunes = reference.Replace(" ", "").EnumerateRunes().ToArray();
+                characterEdits += EditDistance(referenceRunes, normalized.Replace(" ", "").EnumerateRunes().ToArray());
+                characters += referenceRunes.Length;
+                wordEdits += clipWordEdits.Value; words += referenceTokens.Length;
+                var target = clip.Formatted.Length > 0 ? clip.Formatted : clip.Reference;
+                exactMatch = string.Equals(target.Normalize(NormalizationForm.FormKC), hypothesis.Normalize(NormalizationForm.FormKC), StringComparison.Ordinal);
+                scored++; if (exactMatch == true) exact++;
+            }
+            var row = new { id = clip.Id, audio_seconds = seconds, elapsed_ms = timer.Elapsed.TotalMilliseconds, hypothesis,
+                reference = clip.Reference.Length > 0 ? clip.Reference : null, formatted = clip.Formatted.Length > 0 ? clip.Formatted : null, word_edits = clipWordEdits, reference_words = referenceWords, exact = exactMatch };
+            results.Add(row);
+            Console.WriteLine(JsonSerializer.Serialize(row, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+        }
+        using var process = Process.GetCurrentProcess();
+        var summary = new
+        {
+            model_directory = modelDirectory,
+            model_files = modelFiles.Select(path => new { name = Path.GetRelativePath(modelDirectory, path).Replace('\\', '/'), bytes = new FileInfo(path).Length }),
+            threads, load_ms = load.Elapsed.TotalMilliseconds, peak_working_set_mb = process.PeakWorkingSet64 / (1024d * 1024),
+            audio_seconds = audioSeconds, realtime_factor = decodeSeconds / audioSeconds,
+            scored_clips = scored, exact_matches = exact,
+            micro_wer = words > 0 ? wordEdits / (double)words : (double?)null,
+            micro_cer = characters > 0 ? characterEdits / (double)characters : (double?)null
+        };
+        Console.WriteLine(JsonSerializer.Serialize(summary));
+        if (output is not null)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { summary, clips = results },
+                new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+        }
+    }
+
     private static string ResolveModelFile(string directory, string name)
     {
         foreach (var candidate in new[] { name + ".int8.onnx", name + ".onnx" })
             if (File.Exists(Path.Combine(directory, candidate))) return Path.Combine(directory, candidate);
         throw new FileNotFoundException("Missing model file: " + name + "[.int8].onnx");
+    }
+
+    private static string Decode(OfflineRecognizer recognizer, float[] samples, bool qwen)
+    {
+        if (!qwen) return Decode(recognizer, samples);
+        // The Qwen plugin decodes bounded windows of at most ten seconds and joins their text.
+        var parts = new List<string>();
+        for (var offset = 0; offset < samples.Length;)
+        {
+            var length = QwenChunkLength(samples.AsSpan(offset));
+            // Same marker cleanup as QwenRecognizer.StripLanguageMarkers.
+            var text = System.Text.RegularExpressions.Regex.Replace(Decode(recognizer, samples[offset..(offset + length)]),
+                @"(?:language\s+[A-Za-z]+(?:\s[A-Za-z]+)?\s*)?<asr_text>", "").Trim();
+            if (text.Length > 0) parts.Add(text);
+            offset += length;
+        }
+        return string.Join(' ', parts);
     }
 
     private static string Decode(OfflineRecognizer recognizer, float[] samples)
@@ -176,6 +310,23 @@ internal static class WerBenchmark
         stream.AcceptWaveform(SampleRate, samples);
         recognizer.Decode(stream);
         return stream.Result.Text.Trim();
+    }
+
+    // Same rule as QwenAudio.ChunkLength in the Qwen3 ASR (Local) plugin.
+    private static int QwenChunkLength(ReadOnlySpan<float> remaining)
+    {
+        const int chunk = 10 * SampleRate;
+        if (remaining.Length <= chunk) return remaining.Length;
+        const int window = SampleRate / 50;
+        var best = chunk;
+        var minimum = double.MaxValue;
+        for (var start = chunk - 3 * SampleRate; start + window <= chunk; start += window)
+        {
+            double energy = 0;
+            foreach (var sample in remaining.Slice(start, window)) energy += sample * sample;
+            if (energy <= minimum) { minimum = energy; best = start + window / 2; }
+        }
+        return best;
     }
 
     private static async Task<List<Clip>> PrepareClipsAsync(HttpClient client, string cacheDirectory, string language, int sampleCount)
@@ -221,7 +372,15 @@ internal static class WerBenchmark
         }
     }
 
-    private static float[] ReadWav(string path)
+    private static bool HasAudio(string path)
+    {
+        using var reader = new WaveFileReader(path);
+        if (reader.Length > 0) return true;
+        Console.Error.WriteLine("Skipping recording without audio: " + path);
+        return false;
+    }
+
+    private static float[] ReadWav(string path, bool normalize = true, float minimumPeak = 0)
     {
         using var reader = new WaveFileReader(path);
         if (reader.WaveFormat is not { SampleRate: SampleRate, Channels: 1, BitsPerSample: 16, Encoding: WaveFormatEncoding.Pcm })
@@ -231,10 +390,11 @@ internal static class WerBenchmark
         var samples = new float[bytes.Length / 2];
         for (var i = 0; i < samples.Length; i++) samples[i] = BitConverter.ToInt16(bytes, i * 2) / 32768f;
 
-        // AudioRecordingService raises quiet recordings to this peak before transcription. FLEURS has clips
-        // far below its 0.01 threshold that decode to nothing unscaled, so every clip is raised here.
+        // AudioRecordingService raises quiet recordings to this peak before transcription and leaves near-silence
+        // below 0.01 unscaled. FLEURS has clips far below that threshold that decode to nothing unscaled, so the
+        // corpus path raises every clip; own recordings pass the recorder's threshold instead.
         var peak = samples.Max(MathF.Abs);
-        if (peak > 0 && peak < NormalizationTarget)
+        if (normalize && peak > 0 && peak >= minimumPeak && peak < NormalizationTarget)
             for (var i = 0; i < samples.Length; i++) samples[i] *= NormalizationTarget / peak;
         return samples;
     }
@@ -317,5 +477,7 @@ internal static class WerBenchmark
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
-    private sealed record Clip(string Id, string Reference, float[] Samples);
+    private static string ReadOptional(string path) => File.Exists(path) ? File.ReadAllText(path).Trim() : "";
+
+    private sealed record Clip(string Id, string Reference, float[] Samples, string Formatted = "");
 }

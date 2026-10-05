@@ -7,6 +7,7 @@ namespace TypeWhisper.Plugin.Qwen3Local;
 public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSettingsActions
 {
     internal const string ModelId = "qwen3-asr-0.6b-int8";
+    internal const string LargeModelId = "qwen3-asr-1.7b-int8";
     private static readonly IReadOnlyDictionary<string, string> Languages = new Dictionary<string, string>
     {
         ["zh"] = "Chinese", ["en"] = "English", ["yue"] = "Cantonese", ["ar"] = "Arabic", ["de"] = "German",
@@ -18,31 +19,40 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
     };
     private readonly SemaphoreSlim _gate = new(1);
     private readonly HttpClient _http;
-    private readonly QwenModelAssets _assets;
+    private readonly IReadOnlyDictionary<string, QwenModelAssets> _assets;
     private readonly Func<string, IQwenRecognizer> _factory;
     private IPluginHostServices? _host;
     private IQwenRecognizer? _recognizer;
+    private string? _loaded;
     private string? _selected;
     private bool _disposed;
 
     /// <summary>Creates the local Qwen provider.</summary>
     public Qwen3LocalPlugin() : this(new HttpClient { Timeout = TimeSpan.FromHours(2) }, path => new QwenRecognizer(path)) { }
+    // A test source replaces the download of every model.
     internal Qwen3LocalPlugin(HttpClient http, Func<string, IQwenRecognizer> factory, QwenAssetSource? source = null,
         Func<string, long?>? availableBytes = null)
-    { _http = http; _factory = factory; _assets = new(http, source, availableBytes); }
+    {
+        _http = http; _factory = factory;
+        _assets = new Dictionary<string, QwenModelAssets>
+        {
+            [ModelId] = new(http, source ?? QwenModelAssets.Model06B, availableBytes),
+            [LargeModelId] = new(http, source ?? QwenModelAssets.Model17B, availableBytes)
+        };
+    }
 
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.qwen3-local";
     /// <inheritdoc />
     public string PluginName => "Qwen3 ASR (Local)";
     /// <inheritdoc />
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.1.0";
     /// <inheritdoc />
     public string ProviderId => "qwen3-local";
     /// <inheritdoc />
     public string ProviderDisplayName => PluginName;
     /// <inheritdoc />
-    public bool IsConfigured => _selected == ModelId && IsModelDownloaded(ModelId);
+    public bool IsConfigured => _selected is { } id && IsModelDownloaded(id);
     /// <inheritdoc />
     public string? SelectedModelId => _selected;
     /// <inheritdoc />
@@ -53,29 +63,42 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
     public bool SupportsModelRemoval => true;
     /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages => Languages.Keys.ToArray();
+    // The tier leads the size line because the host shows no other per-model description.
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new(ModelId, "Qwen3-ASR 0.6B INT8")
-    {
-        Publisher = "Qwen", SizeDescription = "~879 MB download · ~1 GB installed", EstimatedSizeMB = 879,
-        LanguageCount = Languages.Count, LanguageCodes = Languages.Keys.ToArray()
-    }];
-
-    /// <inheritdoc />
-    public IReadOnlyList<PluginSettingsAction> SettingsActions { get; } =
+    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
     [
-        new("remove-model", "Unload and remove Qwen model",
-            "Delete the downloaded Qwen model (about 1 GB), including the current selection. You can download it again.")
-        { Section = PluginSettingsSection.Transcription }
+        new(ModelId, "Qwen3-ASR 0.6B INT8")
+        {
+            Publisher = "Qwen", SizeDescription = "Low memory · ~879 MB download · ~1 GB installed · ~2 GB RAM", EstimatedSizeMB = 879,
+            IsRecommended = true, LanguageCount = Languages.Count, LanguageCodes = Languages.Keys.ToArray()
+        },
+        new(LargeModelId, "Qwen3-ASR 1.7B INT8")
+        {
+            Publisher = "Qwen", SizeDescription = "Higher accuracy, slower · ~2.4 GB download · ~2.4 GB installed · ~3.5 GB RAM", EstimatedSizeMB = 2404,
+            LanguageCount = Languages.Count, LanguageCodes = Languages.Keys.ToArray()
+        }
     ];
+
+    // The host blocks removing a selected model and any model it loaded before, even after the plugin has
+    // switched to another one. One action per model therefore unloads and removes exactly that model.
+    /// <inheritdoc />
+    public IReadOnlyList<PluginSettingsAction> SettingsActions => TranscriptionModels.Select(model =>
+        new PluginSettingsAction(RemoveActionPrefix + model.Id, $"Unload and remove {model.DisplayName}",
+            "Delete this model's files, unloading it and clearing the selection if needed. You can download it again.")
+        { Section = PluginSettingsSection.Transcription }).ToArray();
+
+    private const string RemoveActionPrefix = "remove-";
 
     /// <inheritdoc />
     public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
     {
-        if (id != "remove-model") throw new ArgumentException("Unknown Qwen settings action.", nameof(id));
-        // The host runs settings actions under its configuration lease. The plugin's
-        // operation gate also drains native inference before deleting selected assets.
-        await RemoveModelAsync(ModelId, cancellationToken).ConfigureAwait(false);
-        return "Qwen model removed. Reopen these settings to download it again, then choose Use model.";
+        var model = TranscriptionModels.FirstOrDefault(candidate => id == RemoveActionPrefix + candidate.Id)
+            ?? throw new ArgumentException("Unknown Qwen settings action.", nameof(id));
+        // The host runs settings actions under its configuration lease; the plugin's gate also drains native inference first.
+        // Checks the directory, not readiness, so an incomplete or damaged model can still be removed.
+        if (_host is null || !Directory.Exists(ModelDirectory(model.Id))) return $"{model.DisplayName} is not downloaded.";
+        await RemoveModelAsync(model.Id, cancellationToken).ConfigureAwait(false);
+        return $"{model.DisplayName} removed. Reopen these settings to download it again, then choose Use model.";
     }
 
     /// <inheritdoc />
@@ -83,7 +106,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _host = host;
-        _selected = host.GetSetting<string>("selectedModel") == ModelId ? ModelId : null;
+        _selected = host.GetSetting<string>("selectedModel") is { } saved && _assets.ContainsKey(saved) ? saved : null;
         return Task.CompletedTask;
     }
     /// <inheritdoc />
@@ -101,13 +124,14 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         _selected = modelId;
     }
     /// <inheritdoc />
-    public bool IsModelDownloaded(string modelId) => modelId == ModelId && _host is not null && _assets.IsReady(ModelDirectory);
+    public bool IsModelDownloaded(string modelId) =>
+        _assets.TryGetValue(modelId, out var assets) && _host is not null && assets.IsReady(ModelDirectory(modelId));
     /// <inheritdoc />
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
         ValidateModel(modelId);
         await _gate.WaitAsync(ct).ConfigureAwait(false);
-        try { EnsureActive(); await _assets.DownloadAsync(ModelDirectory, progress, ct).ConfigureAwait(false); _host!.NotifyCapabilitiesChanged(); }
+        try { EnsureActive(); await _assets[modelId].DownloadAsync(ModelDirectory(modelId), progress, ct).ConfigureAwait(false); _host!.NotifyCapabilitiesChanged(); }
         finally { _gate.Release(); }
     }
     /// <inheritdoc />
@@ -117,10 +141,14 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            EnsureActive(); ct.ThrowIfCancellationRequested(); Release();
-            if (Directory.Exists(ModelDirectory)) Directory.Delete(ModelDirectory, true);
-            _host!.SetSetting<string?>("selectedModel", null);
-            _selected = null;
+            EnsureActive(); ct.ThrowIfCancellationRequested();
+            if (_loaded == modelId) Release();
+            if (Directory.Exists(ModelDirectory(modelId))) Directory.Delete(ModelDirectory(modelId), true);
+            if (_selected == modelId)
+            {
+                _host!.SetSetting<string?>("selectedModel", null);
+                _selected = null;
+            }
             _host!.NotifyCapabilitiesChanged();
         }
         finally { _gate.Release(); }
@@ -130,7 +158,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
     {
         ValidateModel(modelId);
         await _gate.WaitAsync(ct).ConfigureAwait(false);
-        try { await EnsureLoadedAsync(ct).ConfigureAwait(false); }
+        try { await EnsureLoadedAsync(modelId, ct).ConfigureAwait(false); }
         finally { _gate.Release(); }
     }
     /// <inheritdoc />
@@ -155,15 +183,17 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
             if (samples.Span.ContainsAnyExceptInRange(-1f, 1f))
                 throw new ArgumentException("PCM samples must be finite and normalized to [-1, 1].", nameof(samples));
             if (samples.IsEmpty) return new("", null, 0, null);
-            await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureLoadedAsync(_selected ?? ModelId, cancellationToken).ConfigureAwait(false);
             return await Task.Run(() =>
             {
                 var segments = new List<PluginTranscriptionSegment>();
+                var gain = QwenAudio.NormalizationGain(samples.Span);
                 for (var offset = 0; offset < samples.Length;)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var length = QwenAudio.ChunkLength(samples.Span[offset..]);
                     var chunk = samples.Slice(offset, length).ToArray();
+                    if (gain > 1) for (var i = 0; i < chunk.Length; i++) chunk[i] *= gain;
                     // Native decoding cannot be interrupted safely. Drain the current bounded
                     // window before honoring cancellation; never publish partial success.
                     var text = chunk.All(value => value == 0) ? "" : _recognizer!.Decode(chunk, hint);
@@ -179,21 +209,25 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         finally { _gate.Release(); }
     }
 
-    private string ModelDirectory => Path.Combine(_host!.PluginAssetDirectory, "Models", ModelId);
+    private string ModelDirectory(string modelId) => Path.Join(_host!.PluginAssetDirectory, "Models", modelId);
     private void EnsureActive()
     { ObjectDisposedException.ThrowIf(_disposed, this); if (_host is null) throw new InvalidOperationException("Qwen plugin is not active."); }
-    private async Task EnsureLoadedAsync(CancellationToken ct)
+    private async Task EnsureLoadedAsync(string modelId, CancellationToken ct)
     {
         EnsureActive(); ct.ThrowIfCancellationRequested();
-        if (_recognizer is not null) return;
-        if (!_assets.IsReady(ModelDirectory)) throw new InvalidOperationException("Download the Qwen3-ASR model before using it.");
-        var loaded = await Task.Run(() => _factory(ModelDirectory), ct).ConfigureAwait(false);
+        if (_recognizer is not null && _loaded == modelId) return;
+        if (!_assets[modelId].IsReady(ModelDirectory(modelId))) throw new InvalidOperationException("Download the Qwen3-ASR model before using it.");
+        // Only one model stays resident; the 1.7B model alone needs several gigabytes.
+        Release();
+        var directory = ModelDirectory(modelId);
+        var loaded = await Task.Run(() => _factory(directory), ct).ConfigureAwait(false);
         if (ct.IsCancellationRequested) { loaded.Dispose(); ct.ThrowIfCancellationRequested(); }
         _recognizer = loaded;
+        _loaded = modelId;
     }
-    private void Release() { _recognizer?.Dispose(); _recognizer = null; }
-    private static void ValidateModel(string modelId)
-    { if (modelId != ModelId) throw new ArgumentException("Unknown Qwen model.", nameof(modelId)); }
+    private void Release() { _recognizer?.Dispose(); _recognizer = null; _loaded = null; }
+    private void ValidateModel(string modelId)
+    { if (!_assets.ContainsKey(modelId)) throw new ArgumentException("Unknown Qwen model.", nameof(modelId)); }
     internal static string? NormalizeLanguage(string? language)
     {
         if (string.IsNullOrWhiteSpace(language) || language.Equals("auto", StringComparison.OrdinalIgnoreCase)) return null;

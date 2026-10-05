@@ -14,8 +14,13 @@ if (args.Length > 0 && args[0] == "wer")
     await WerBenchmark.RunAsync(args);
     return;
 }
+if (args.Length > 0 && args[0] == "files")
+{
+    await WerBenchmark.FilesAsync(args);
+    return;
+}
 if (args.Length != 2 || args[0] is not ("api" or "decoder"))
-    throw new ArgumentException("Usage: api http://127.0.0.1:8978 OR decoder <existing-model-directory> OR " + WerBenchmark.Usage);
+    throw new ArgumentException("Usage: api http://127.0.0.1:8978 OR decoder <existing-model-directory> OR " + WerBenchmark.Usage + " OR " + WerBenchmark.FilesUsage);
 var mode = args[0];
 using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(3) };
 JsonElement? status = null;
