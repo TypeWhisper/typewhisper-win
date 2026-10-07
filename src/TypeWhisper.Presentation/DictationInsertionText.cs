@@ -19,9 +19,12 @@ public static class DictationInsertionText
     /// <summary>Returns the text to paste for the given field context.</summary>
     /// <remarks>Without context the text stays unchanged. With context, spaces at the boundaries are trimmed (line
     /// breaks and tabs from spoken commands stay), a missing space between words is added, and a dictation
-    /// continuing a sentence starts lowercase and loses a final period when more text follows. A value such as an email address inserted into an empty field loses a
-    /// model-added final period when <paramref name="standaloneValueFinalPeriodCleanup"/> is set.</remarks>
-    public static string ForPaste(string text, DictationInsertionContext? context, bool standaloneValueFinalPeriodCleanup = true)
+    /// continuing a sentence starts lowercase and loses a final period when more text follows. A value such as an
+    /// email address inserted into an empty field loses a model-added final period when
+    /// <paramref name="standaloneValueFinalPeriodCleanup"/> is set. When <paramref name="language"/> capitalizes
+    /// nouns, as German does, the first word keeps its casing.</remarks>
+    public static string ForPaste(string text, DictationInsertionContext? context, bool standaloneValueFinalPeriodCleanup = true,
+        string? language = null)
     {
         if (context is null) return text;
         var before = Elements(context.Before);
@@ -39,7 +42,7 @@ public static class DictationInsertionText
         var trailing = BoundaryBreaks(result, fromStart: false);
         TrimWhitespace(result);
         // A kept break starts a new line before the dictation or ends its sentence before the following text.
-        if (midSentence && leading.Count == 0) LowercaseFirstWordIfSafe(result);
+        if (midSentence && leading.Count == 0 && !CapitalizesNouns(language)) LowercaseFirstWordIfSafe(result);
         if (midSentence && trailing.Count == 0 && nextNonWhitespace is not null && (IsWordLike(nextNonWhitespace) || ClosingPunctuation.Contains(nextNonWhitespace)))
             StripSingleFinalPeriod(result);
         // Mutually exclusive with the mid-sentence rule above: that one needs surrounding text, this one needs none.
@@ -74,8 +77,15 @@ public static class DictationInsertionText
     // and takes a space before the next word. After a delimiter such as `:` or `=` it opens one, as in `{"key":"`.
     // macOS treats it as opening everywhere. Apostrophes stay ambiguous because of elisions such as "l'".
     private static bool ClosesQuote(string? beforeQuote, string quote) =>
-        quote == "\"" && beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote));
-    private static readonly HashSet<string> EndsQuotedPhrase = [".", ",", "!", "?", ")", "]", "}", "”", "’"];
+        quote == "\"" && beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote) ||
+            beforeQuote.EnumerateRunes().Any(rune => Rune.GetUnicodeCategory(rune) == UnicodeCategory.OtherSymbol));
+    // Symbols such as emoji also end a quoted phrase, as in `"👍"`; math symbols such as `=` do not.
+    private static readonly HashSet<string> EndsQuotedPhrase = [".", ",", "!", "?", "%", ")", "]", "}", "”", "’"];
+
+    // In German and Luxembourgish, a capital at the start of a continuation is usually a noun, not a sentence start.
+    // macOS lowercases it regardless.
+    private static bool CapitalizesNouns(string? language) =>
+        language?.Split('-', '_')[0].ToLowerInvariant() is "de" or "lb" or "gsw";
 
     // Lowercases "Presented" but keeps "NASA", "TypeWhisper" and single letters such as "I".
     private static void LowercaseFirstWordIfSafe(List<string> text)

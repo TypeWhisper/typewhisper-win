@@ -65,6 +65,8 @@ public sealed class DictationInsertionTextTests
     [InlineData("l'", 2, 0, "amour", "amour")]
     [InlineData("{\"key\":\"", 8, 0, "value", "value")]
     [InlineData("x=\"", 3, 0, "Value", "Value")]
+    [InlineData("He said \"\ud83d\udc4d\"", 12, 0, "Next.", " Next.")]
+    [InlineData("It grew 50%\"", 12, 0, "Next.", " Next.")]
     // Spoken line breaks and tabs at either end stay; spaces there do not. A kept break also ends the sentence
     // context, so the dictation keeps its casing and final period.
     [InlineData("Hello.", 6, 0, "\nThanks", "\nThanks")]
@@ -74,6 +76,15 @@ public sealed class DictationInsertionTextTests
     [InlineData("ab", 2, 0, "  \n", "\n")]
     public void FitsTextToTheCursorPosition(string value, int location, int length, string text, string expected) =>
         Assert.Equal(expected, DictationInsertionText.ForPaste(text, Context(value, location, length)));
+
+    [Theory]
+    [InlineData("de", "H\u00e4user.")]
+    [InlineData("de-CH", "H\u00e4user.")]
+    [InlineData("lb", "H\u00e4user.")]
+    [InlineData("en", "h\u00e4user.")]
+    [InlineData(null, "h\u00e4user.")]
+    public void KeepsTheFirstWordsCasingInLanguagesThatCapitalizeNouns(string? language, string expected) =>
+        Assert.Equal(expected, DictationInsertionText.ForPaste("H\u00e4user.", Context("Ich sehe ", 9), language: language));
 
     [Theory]
     [InlineData("name@example.com.", "name@example.com")]

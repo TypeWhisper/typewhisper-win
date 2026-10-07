@@ -1002,7 +1002,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     var context = _textAtStart.AppAwareFormattingEnabled ? await InsertionContextReader.ReadAsync(_target) : null;
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     AppDiagnostics.Write($"delivery.context available={context is not null}");
-                    var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues);
+                    var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues, record.Language);
                     // A dictation of only a spoken line break must still insert it.
                     if (pasted.Length == 0) pasted = text;
                     var inserted = await _inserter.InsertAsync(pasted, _target, () =>
