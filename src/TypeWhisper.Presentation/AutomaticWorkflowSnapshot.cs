@@ -38,7 +38,7 @@ public sealed class AutomaticWorkflowSnapshot
     /// <summary>The spoken language for this recording; null inherits the global preference.</summary>
     public string? InputLanguage => _workflow?.Behavior.InputLanguage;
     /// <summary>The provider-qualified transcription model for this recording; null uses the selected model.</summary>
-    public string? TranscriptionModel => string.IsNullOrWhiteSpace(_workflow?.Behavior.TranscriptionModelOverride) ? null : _workflow.Behavior.TranscriptionModelOverride;
+    public string? TranscriptionModel => _workflow?.Behavior.TranscriptionModelOverride is { } model && !string.IsNullOrWhiteSpace(model) ? model : null;
     /// <summary>Whether the workflow translates, so its output can be in another language than the dictation.</summary>
     public bool Translates => _workflow?.Template == WorkflowTemplate.Translation;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
