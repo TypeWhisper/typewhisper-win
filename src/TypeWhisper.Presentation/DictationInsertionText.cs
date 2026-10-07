@@ -17,9 +17,9 @@ public static class DictationInsertionText
     public const int ContextLength = 256;
 
     /// <summary>Returns the text to paste for the given field context.</summary>
-    /// <remarks>Without context the text stays unchanged. With context, boundary whitespace is trimmed, a missing
-    /// space between words is added, and a dictation continuing a sentence starts lowercase and loses a final
-    /// period when more text follows. A value such as an email address inserted into an empty field loses a
+    /// <remarks>Without context the text stays unchanged. With context, spaces at the boundaries are trimmed (line
+    /// breaks and tabs from spoken commands stay), a missing space between words is added, and a dictation
+    /// continuing a sentence starts lowercase and loses a final period when more text follows. A value such as an email address inserted into an empty field loses a
     /// model-added final period when <paramref name="standaloneValueFinalPeriodCleanup"/> is set.</remarks>
     public static string ForPaste(string text, DictationInsertionContext? context, bool standaloneValueFinalPeriodCleanup = true)
     {
@@ -33,19 +33,27 @@ public static class DictationInsertionText
         var midSentence = previousNonWhitespace is not null && IsWordLike(previousNonWhitespace);
 
         var result = Elements(text);
+        // Spoken "new line" or "tab" commands at either end are kept; plain spaces there are not. Unlike macOS,
+        // which trims both.
+        var leading = BoundaryBreaks(result, fromStart: true);
+        var trailing = BoundaryBreaks(result, fromStart: false);
         TrimWhitespace(result);
-        if (midSentence) LowercaseFirstWordIfSafe(result);
-        if (midSentence && nextNonWhitespace is not null && (IsWordLike(nextNonWhitespace) || ClosingPunctuation.Contains(nextNonWhitespace)))
+        // A kept break starts a new line before the dictation or ends its sentence before the following text.
+        if (midSentence && leading.Count == 0) LowercaseFirstWordIfSafe(result);
+        if (midSentence && trailing.Count == 0 && nextNonWhitespace is not null && (IsWordLike(nextNonWhitespace) || ClosingPunctuation.Contains(nextNonWhitespace)))
             StripSingleFinalPeriod(result);
         // Mutually exclusive with the mid-sentence rule above: that one needs surrounding text, this one needs none.
         if (standaloneValueFinalPeriodCleanup && previousNonWhitespace is null && nextNonWhitespace is null &&
             StandaloneValue.ShouldStripFinalPeriod(string.Concat(result)))
             StripSingleFinalPeriod(result);
 
+        result.InsertRange(0, leading);
+        result.AddRange(trailing);
         if (result.Count == 0) return "";
         var formatted = string.Concat(result);
-        if (previous is not null && ShouldInsertSpace(previous, result[0])) formatted = " " + formatted;
-        if (next is not null && ShouldInsertSpace(result[^1], next)) formatted += " ";
+        if (previous is not null && ShouldInsertSpace(before.Count > 1 ? before[^2] : null, previous, result[0]))
+            formatted = " " + formatted;
+        if (next is not null && ShouldInsertSpace(result.Count > 1 ? result[^2] : previous, result[^1], next)) formatted += " ";
         return formatted;
     }
 
@@ -53,14 +61,20 @@ public static class DictationInsertionText
     private static readonly HashSet<string> ClosingPunctuation = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"];
     private static readonly HashSet<string> PunctuationThatTakesFollowingSpace = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"];
 
-    private static bool ShouldInsertSpace(string left, string right)
+    private static bool ShouldInsertSpace(string? beforeLeft, string left, string right)
     {
         if (IsWhitespace(left) || IsWhitespace(right)) return false;
-        if (ClosingPunctuation.Contains(right) || OpeningPunctuation.Contains(left)) return false;
+        if (ClosingPunctuation.Contains(right) || (OpeningPunctuation.Contains(left) && !ClosesQuote(beforeLeft, left))) return false;
         if (IsCjk(left) && IsCjk(right)) return false;
         if (IsWordLike(left) && IsWordLike(right)) return true;
         return IsWordLike(right) && PunctuationThatTakesFollowingSpace.Contains(left);
     }
+
+    // A straight double quote right after a word or punctuation closes a quotation, as in `He said "hello"`, and
+    // takes a space before the next word. macOS treats it as opening everywhere. Apostrophes stay ambiguous
+    // because of elisions such as "l'".
+    private static bool ClosesQuote(string? beforeQuote, string quote) =>
+        quote == "\"" && beforeQuote is not null && !IsWhitespace(beforeQuote) && !OpeningPunctuation.Contains(beforeQuote);
 
     // Lowercases "Presented" but keeps "NASA", "TypeWhisper" and single letters such as "I".
     private static void LowercaseFirstWordIfSafe(List<string> text)
@@ -73,15 +87,23 @@ public static class DictationInsertionText
         var remainder = text.GetRange(start + 1, end - start - 1);
         if (!remainder.Any(IsLowercase) || remainder.Any(IsUppercase)) return;
         // Full case mapping as in Swift: U+0130 is the one letter whose lowercase form is two characters.
-        text[start] = text[start].ToLowerInvariant().Replace("İ", "i̇", StringComparison.Ordinal);
+        text[start] = text[start].ToLowerInvariant().Replace("\u0130", "i\u0307", StringComparison.Ordinal);
     }
 
-    // Removes one final period, together with any whitespace after it, but never part of an ellipsis.
+    // Removes one final period of trimmed text, but never part of an ellipsis.
     private static void StripSingleFinalPeriod(List<string> text)
     {
-        var last = text.FindLastIndex(element => !IsWhitespace(element));
-        if (last < 0 || text[last] != "." || (last > 0 && text[last - 1] == ".")) return;
-        text.RemoveRange(last, text.Count - last);
+        if (text.Count == 0 || text[^1] != "." || (text.Count > 1 && text[^2] == ".")) return;
+        text.RemoveAt(text.Count - 1);
+    }
+
+    // Line breaks and tabs in the whitespace run at one end of the text, without the spaces around them.
+    private static List<string> BoundaryBreaks(List<string> text, bool fromStart)
+    {
+        var run = fromStart ? text.TakeWhile(IsWhitespace) : text.AsEnumerable().Reverse().TakeWhile(IsWhitespace).Reverse();
+        // A text of only whitespace keeps its breaks once, at the start.
+        if (!fromStart && text.All(IsWhitespace)) return [];
+        return run.Where(element => element.Any(c => c is '\n' or '\r' or '\t' or '\v' or '\f' or '\u0085' or '\u2028' or '\u2029')).ToList();
     }
 
     private static void TrimWhitespace(List<string> text)
@@ -110,15 +132,51 @@ public static class DictationInsertionText
     private static bool IsLowercase(string element) => element.EnumerateRunes().Any(rune =>
         Rune.GetUnicodeCategory(rune) == UnicodeCategory.LowercaseLetter);
 
-    // Han, Hiragana, Katakana and Hangul. Words in these scripts are not separated by spaces. Marks shared by
-    // several scripts, such as the prolonged sound mark, belong to none of them.
-    private static bool IsCjk(string element) => element.EnumerateRunes().Any(rune => rune.Value is not
-        (0x309B or 0x309C or 0x30A0 or 0x30FB or 0x30FC or 0xFF70 or 0xFF9E or 0xFF9F) and
-        ((>= 0x1100 and <= 0x11FF) or (>= 0x2E80 and <= 0x2FDF) or 0x3005 or 0x3007 or (>= 0x3021 and <= 0x3029) or
-        (>= 0x3038 and <= 0x303B) or (>= 0x3041 and <= 0x30FF) or (>= 0x3130 and <= 0x318F) or (>= 0x31F0 and <= 0x31FF) or
-        (>= 0x32D0 and <= 0x32FE) or (>= 0x3300 and <= 0x3357) or (>= 0x3400 and <= 0x4DBF) or (>= 0x4E00 and <= 0x9FFF) or
-        (>= 0xA960 and <= 0xA97F) or (>= 0xAC00 and <= 0xD7FF) or (>= 0xF900 and <= 0xFAFF) or (>= 0xFF66 and <= 0xFFDC) or
-        (>= 0x1AFF0 and <= 0x1B16F) or (>= 0x20000 and <= 0x3FFFF)));
+    // Han, Hiragana, Katakana and Hangul words are not separated by spaces. Like macOS, this uses the base character's
+    // Script_Extensions, so shared marks such as the prolonged sound mark ー count, while a combining mark after a
+    // Latin letter does not.
+    private static bool IsCjk(string element)
+    {
+        var enumerator = element.EnumerateRunes();
+        if (!enumerator.MoveNext()) return false;
+        var value = enumerator.Current.Value;
+        int low = 0, high = CjkRanges.Length - 1;
+        while (low <= high)
+        {
+            var middle = (low + high) / 2;
+            if (value < CjkRanges[middle].First) high = middle - 1;
+            else if (value > CjkRanges[middle].Last) low = middle + 1;
+            else return true;
+        }
+        return false;
+    }
+
+    // Code points whose Script_Extensions include Han, Hiragana, Katakana or Hangul (Unicode 18.0 Scripts.txt and
+    // ScriptExtensions.txt).
+    private static readonly (int First, int Last)[] CjkRanges =
+    [
+        (0xB7, 0xB7), (0x305, 0x305), (0x323, 0x323), (0x1100, 0x11FF), (0x2E80, 0x2E99), (0x2E9B, 0x2EF3),
+
+        (0x2F00, 0x2FD5), (0x2FF0, 0x2FFF), (0x3001, 0x3003), (0x3005, 0x3011), (0x3013, 0x301F), (0x3021, 0x3035),
+
+        (0x3037, 0x303F), (0x3041, 0x3096), (0x3099, 0x30FF), (0x3131, 0x318E), (0x3190, 0x319F), (0x31C0, 0x31E5),
+
+        (0x31EF, 0x321E), (0x3220, 0x3247), (0x3260, 0x327E), (0x3280, 0x32B0), (0x32C0, 0x32CB), (0x32D0, 0x3370),
+
+        (0x337B, 0x337F), (0x33E0, 0x33FE), (0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xA700, 0xA707), (0xA960, 0xA97C),
+
+        (0xAC00, 0xD7A3), (0xD7B0, 0xD7C6), (0xD7CB, 0xD7FB), (0xF900, 0xFA6D), (0xFA70, 0xFAD9), (0xFE45, 0xFE46),
+
+        (0xFF61, 0xFFBE), (0xFFC2, 0xFFC7), (0xFFCA, 0xFFCF), (0xFFD2, 0xFFD7), (0xFFDA, 0xFFDC), (0x16FE2, 0x16FE3),
+
+        (0x16FF0, 0x16FF6), (0x1AFF0, 0x1AFF3), (0x1AFF5, 0x1AFFB), (0x1AFFD, 0x1AFFE), (0x1B000, 0x1B128),
+
+        (0x1B132, 0x1B132), (0x1B150, 0x1B152), (0x1B155, 0x1B155), (0x1B164, 0x1B168), (0x1D360, 0x1D371),
+
+        (0x1F200, 0x1F200), (0x1F250, 0x1F251), (0x20000, 0x2A6DF), (0x2A700, 0x2B81E), (0x2B820, 0x2CEAD),
+
+        (0x2CEB0, 0x2EBE0), (0x2EBF0, 0x2EE5D), (0x2F800, 0x2FA1D), (0x30000, 0x3134A), (0x31350, 0x33479)
+    ];
 
     /// <summary>Decides whether a transcript standing on its own is a value whose final period the model added,
     /// as in <c>name@example.com.</c> dictated into an empty field.</summary>

@@ -39,24 +39,37 @@ public sealed class DictationInsertionTextTests
     [InlineData("coffeemachine", 6, 0, "Strong.", " strong ")]
     [InlineData("coffeemachine", 6, 0, "Really?", " really? ")]
     // Han, Kana and Hangul words are not separated by spaces; mixed Latin boundaries are.
-    [InlineData("你好", 1, 0, "世", "世")]
-    [InlineData("あい", 1, 0, "カ", "カ")]
-    [InlineData("가나", 1, 0, "다", "다")]
-    [InlineData("AB", 1, 0, "中", " 中 ")]
+    [InlineData("\u4f60\u597d", 1, 0, "\u4e16", "\u4e16")]
+    [InlineData("\u3042\u3044", 1, 0, "\u30ab", "\u30ab")]
+    [InlineData("\uac00\ub098", 1, 0, "\ub2e4", "\ub2e4")]
+    [InlineData("AB", 1, 0, "\u4e2d", " \u4e2d ")]
     // A replaced selection is ignored; only the text around it counts.
     [InlineData("say hello there", 4, 5, "goodbye", "goodbye")]
     // Character classes checked against the Swift formatter on macOS.
-    [InlineData("Café", 5, 0, "Noir", " noir")]
-    [InlineData("word ", 5, 0, "Next", "next")]
-    [InlineData("a￼", 2, 0, "Hi", "Hi")]
-    [InlineData("Nice 👍", 7, 0, "Thanks", "Thanks")]
-    [InlineData("x١٢", 3, 0, "Abc", " abc")]
-    [InlineData("the ", 4, 0, "ǅungla", "ǆungla")]
-    [InlineData("in ", 3, 0, "İstanbul", "i̇stanbul")]
+    [InlineData("Cafe\u0301", 5, 0, "Noir", " noir")]
+    [InlineData("word\u00a0", 5, 0, "Next", "next")]
+    [InlineData("a\ufffc", 2, 0, "Hi", "Hi")]
+    [InlineData("Nice \ud83d\udc4d", 7, 0, "Thanks", "Thanks")]
+    [InlineData("x\u0661\u0662", 3, 0, "Abc", " abc")]
+    [InlineData("the ", 4, 0, "\u01c5ungla", "\u01c6ungla")]
+    [InlineData("in ", 3, 0, "\u0130stanbul", "i\u0307stanbul")]
     [InlineData("Line\r\n", 6, 0, "Next", "next")]
-    // The prolonged sound mark and the halfwidth voiced mark belong to no CJK script on macOS either.
-    [InlineData("カー", 1, 0, "ド", "ド ")]
-    [InlineData("ｶｷ", 1, 0, "ﾞ", " ﾞ ")]
+    // Kana marks shared by Hiragana and Katakana count as CJK; a combining mark after a Latin letter does not.
+    [InlineData("\u30ab\u30fc", 1, 0, "\u30c9", "\u30c9")]
+    [InlineData("\uff76\uff77", 1, 0, "\uff9e", "\uff9e")]
+    [InlineData("a\u0323", 2, 0, "o\u0323c", " o\u0323c")]
+    // A straight double quote after a word closes a quotation; elsewhere, and an apostrophe, still opens one.
+    [InlineData("He said \"hello\"", 15, 0, "Next sentence.", " Next sentence.")]
+    [InlineData("He said \"hello.\"", 16, 0, "Next.", " Next.")]
+    [InlineData("He said \"", 9, 0, "Hello", "Hello")]
+    [InlineData("l'", 2, 0, "amour", "amour")]
+    // Spoken line breaks and tabs at either end stay; spaces there do not. A kept break also ends the sentence
+    // context, so the dictation keeps its casing and final period.
+    [InlineData("Hello.", 6, 0, "\nThanks", "\nThanks")]
+    [InlineData("ab", 1, 0, "Hello\n", " hello\n")]
+    [InlineData("ab", 1, 0, "Hello.\n", " hello.\n")]
+    [InlineData("Intro", 5, 0, " \tNext point. \n ", "\tNext point.\n")]
+    [InlineData("ab", 2, 0, "  \n", "\n")]
     public void FitsTextToTheCursorPosition(string value, int location, int length, string text, string expected) =>
         Assert.Equal(expected, DictationInsertionText.ForPaste(text, Context(value, location, length)));
 
@@ -74,7 +87,7 @@ public sealed class DictationInsertionTextTests
     [InlineData("1.2.3.", "1.2.3")]
     [InlineData("v2.10.4.", "v2.10.4")]
     [InlineData("Name@Example.COM.", "Name@Example.COM")]
-    [InlineData("١٢٣.٤٥.", "١٢٣.٤٥")]
+    [InlineData("\u0661\u0662\u0663.\u0664\u0665.", "\u0661\u0662\u0663.\u0664\u0665")]
     [InlineData("example.com:8080.", "example.com:8080")]
     [InlineData("localhost:8080.", "localhost:8080.")]
     [InlineData("WAIT.", "WAIT.")]
