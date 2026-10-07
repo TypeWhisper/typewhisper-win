@@ -997,12 +997,24 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         if (!_originalField.IsCurrent()) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
                     if (NativeMethods.GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
-                    var inserted = await _inserter.InsertAsync(text, _target, () =>
+                    // Spacing and casing for the cursor position only reach the target field; history, API and
+                    // actions keep the final text. A field without readable context gets the text unchanged.
+                    var context = _textAtStart.AppAwareFormattingEnabled ? await InsertionContextReader.ReadAsync(_target) : null;
+                    _operationCancellation.Token.ThrowIfCancellationRequested();
+                    AppDiagnostics.Write($"delivery.context available={context is not null}");
+                    // Casing follows the language of the pasted text: English after native translation, unknown
+                    // after a translation workflow, otherwise the dictated language.
+                    var outputLanguage = _workflowAtStart?.Translates == true ? null
+                        : _taskAtStart == TranscriptionTask.Translate ? "en" : record.Language;
+                    var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues, outputLanguage);
+                    // A dictation of only a spoken line break must still insert it.
+                    if (pasted.Length == 0) pasted = text;
+                    var inserted = await _inserter.InsertAsync(pasted, _target, () =>
                         !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
                         (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.IsCurrent() == true));
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
-                        _ = ObserveCorrectionsAfterPasteAsync(text, _target, _operationCancellation.Token);
+                        _ = ObserveCorrectionsAfterPasteAsync(pasted, _target, _operationCancellation.Token);
                     return inserted;
                 }, _operationCancellation.Token, samples, 16000,
                 string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(

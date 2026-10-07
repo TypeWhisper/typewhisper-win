@@ -55,6 +55,6 @@ internal sealed partial class LocalDictationSession
             audio.PauseMediaDuringRecording, audio.SoundFeedbackEnabled, audio.SpokenFeedbackEnabled,
             audio.SilenceAutoStopEnabled, audio.SilenceAutoStopSeconds, text.TranscribeShortQuietClipsAggressively,
             text.TranscriptionNumberNormalizationEnabled, text.ShortUtterancePunctuationEnabled,
-            text.AppFormattingEnabled, unavailable);
+            text.AppAwareFormattingEnabled, text.StripFinalPeriodFromStandaloneValues, unavailable);
     }
 }

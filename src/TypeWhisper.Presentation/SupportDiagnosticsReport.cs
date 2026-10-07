@@ -21,7 +21,9 @@ public sealed record SupportDiagnosticsReport(
     IReadOnlyList<SupportDiagnosticsReport.CollectionError> CollectionErrors)
 {
     /// <summary>The Windows support-report schema, independent of the macOS schema.</summary>
-    public int SchemaVersion => 1;
+    /// <remarks>Version 2 replaced settings.appFormattingEnabled with appAwareFormattingEnabled and added
+    /// stripFinalPeriodFromStandaloneValues.</remarks>
+    public int SchemaVersion => 2;
 
     /// <summary>App identity and process lifetime, without installation paths.</summary>
     public sealed record AppInfo(string Version, string Build, bool IsDevelopment, double UptimeSeconds);
@@ -56,7 +58,8 @@ public sealed record SupportDiagnosticsReport(
         int ModelAutoUnloadSeconds, bool WhisperModeEnabled, bool AudioDuckingEnabled, float AudioDuckingLevel,
         bool PauseMediaDuringRecording, bool SoundFeedbackEnabled, bool SpokenFeedbackEnabled,
         bool SilenceAutoStopEnabled, int SilenceAutoStopSeconds, bool TranscribeShortQuietClipsAggressively,
-        bool NumberNormalizationEnabled, bool ShortUtterancePunctuationEnabled, bool AppFormattingEnabled,
+        bool NumberNormalizationEnabled, bool ShortUtterancePunctuationEnabled, bool AppAwareFormattingEnabled,
+        bool StripFinalPeriodFromStandaloneValues,
         IReadOnlyList<string> UnavailablePreferences);
 
     /// <summary>Installed package state; errors are flags instead of plugin-supplied messages.</summary>

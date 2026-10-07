@@ -160,7 +160,7 @@ public sealed class SupportDiagnosticsReportTests
             var json = File.ReadAllText(destination);
             Assert.DoesNotContain("private", json, StringComparison.OrdinalIgnoreCase);
             using var document = JsonDocument.Parse(json);
-            Assert.Equal(1, document.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(2, document.RootElement.GetProperty("schemaVersion").GetInt32());
             var entry = Assert.Single(document.RootElement.GetProperty("log").GetProperty("entries").EnumerateArray());
             Assert.Equal("sherpa-onnx", entry.GetProperty("data").GetProperty("engine").GetString());
             Assert.False(entry.TryGetProperty("error", out _));

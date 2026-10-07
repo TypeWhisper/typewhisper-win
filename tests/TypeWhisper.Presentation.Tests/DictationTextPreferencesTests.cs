@@ -29,7 +29,8 @@ public sealed class DictationTextPreferencesTests : IDisposable
             ShortUtterancePunctuationEnabled = false,
             EnglishOutputVariant = EnglishOutputVariant.UnitedKingdom,
             GermanOutputVariant = GermanOutputVariant.Switzerland,
-            AppFormattingEnabled = true,
+            AppAwareFormattingEnabled = false,
+            StripFinalPeriodFromStandaloneValues = false,
             SpokenFormattingProfiles = [new()
             {
                 EngineId = "sherpa-onnx", ModelId = "parakeet-tdt-0.6b", LanguageCode = "de",
@@ -110,7 +111,8 @@ public sealed class DictationTextPreferencesTests : IDisposable
         Assert.Equal(expected.ShortUtterancePunctuationEnabled, actual.ShortUtterancePunctuationEnabled);
         Assert.Equal(expected.EnglishOutputVariant, actual.EnglishOutputVariant);
         Assert.Equal(expected.GermanOutputVariant, actual.GermanOutputVariant);
-        Assert.Equal(expected.AppFormattingEnabled, actual.AppFormattingEnabled);
+        Assert.Equal(expected.AppAwareFormattingEnabled, actual.AppAwareFormattingEnabled);
+        Assert.Equal(expected.StripFinalPeriodFromStandaloneValues, actual.StripFinalPeriodFromStandaloneValues);
         Assert.Equal(expected.SpokenFormattingProfiles.ToArray(), actual.SpokenFormattingProfiles.ToArray());
     }
 

@@ -20,8 +20,11 @@ public sealed record DictationTextPreferences
     public EnglishOutputVariant EnglishOutputVariant { get; init; } = EnglishOutputVariant.AsTranscribed;
     /// <summary>Preserves German spelling or converts sharp s to Swiss Standard German spelling.</summary>
     public GermanOutputVariant GermanOutputVariant { get; init; } = GermanOutputVariant.AsTranscribed;
-    /// <summary>Applies existing application-specific Markdown bullet formatting to known target processes.</summary>
-    public bool AppFormattingEnabled { get; init; }
+    /// <summary>Applies Markdown bullet formatting in known apps and fits pasted text to the cursor context, as on macOS.</summary>
+    /// <remarks>Replaces the former Markdown-only AppFormattingEnabled, which defaulted to off; its stored value is ignored.</remarks>
+    public bool AppAwareFormattingEnabled { get; init; } = true;
+    /// <summary>Removes a model-added final period from an email address, URL, number or version inserted into an empty field.</summary>
+    public bool StripFinalPeriodFromStandaloneValues { get; init; } = true;
     /// <summary>Spoken formatting overrides keyed by engine, model and language; absent profiles retain engine output.</summary>
     public IReadOnlyList<DictationSpokenFormattingProfile> SpokenFormattingProfiles { get; init; } = [];
 

@@ -34,6 +34,8 @@ public sealed class AutomaticWorkflowSnapshot
     public string? MemoryPluginId => _workflow?.Behavior.MemoryPluginId;
     /// <summary>The native transcription task for this recording; null inherits the global preference.</summary>
     public string? SelectedTask => _workflow?.Behavior.SelectedTask;
+    /// <summary>Whether the workflow translates, so its output can be in another language than the dictation.</summary>
+    public bool Translates => _workflow?.Template == WorkflowTemplate.Translation;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
     public string? Error { get; }
 
