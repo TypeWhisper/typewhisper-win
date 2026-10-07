@@ -530,6 +530,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _cloudStream?.Cancel();
             _effects.End();
             if (_phase == DictationPhase.Recording) SetStatus(Loc.T("Microphone disconnected · recording stopped"), DictationPhase.Error);
+            _ = RestoreAfterCaptureLossAsync();
         });
         try
         {
@@ -591,8 +592,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal Task ToggleAsync() => SetRecordingAsync(null);
     // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
     // hotkey while one is active so it can reach that cancellation before using a provider.
-    internal bool CanStartFromShortcut => CanCaptureWhileModelLoads || CanStartSessionOperation
-        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (IsReady
+    internal bool CanStartFromShortcut => CanStartShortcut(IsReady);
+    // A workflow with its own model can start while the selected model is unavailable; its model loads at the start.
+    internal bool CanStartWorkflowModelShortcut(string? model) => CanStartShortcut(IsReady || !string.IsNullOrWhiteSpace(model));
+    private bool CanStartShortcut(bool ready) => CanCaptureWhileModelLoads || CanStartSessionOperation
+        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (ready
 #if DEBUG
         || CorrectionProbeEnabled
 #endif
@@ -612,16 +616,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         return rejection;
     }
     private bool _stopPending;
+    // The stop itself waits for the model; remember where the user finished speaking.
+    internal void MarkEarlyStop()
+    {
+        if (_disposed || !_audio.IsRecording || !_earlyCapture || _earlyStopSamples is not null) return;
+        _earlyStopSamples = _audio.SampleCountAfterStopDrain;
+        AppDiagnostics.Write("dictation.early-stop");
+        Changed?.Invoke();
+    }
     internal async Task StopAsync()
     {
         if (_disposed || !_audio.IsRecording || _stopPending) return;
-        // The stop itself waits for the model; remember where the user finished speaking.
-        if (_earlyCapture && _earlyStopSamples is null)
-        {
-            _earlyStopSamples = _audio.SampleCountAfterStopDrain;
-            AppDiagnostics.Write("dictation.early-stop");
-            Changed?.Invoke();
-        }
+        MarkEarlyStop();
         _stopPending = true;
         try { await SetRecordingAsync(false); }
         finally { _stopPending = false; }
@@ -645,6 +651,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await StopCloudStreamAsync();
             _effects.End();
             await _livePreview.StopAsync();
+            if (!_audio.IsRecording) await RestoreWorkflowModelAsync();
             // Like every ready status, the cancellation keeps the current microphone notice visible.
             SetStatus(_microphoneStatus = (_microphoneNotice = MicrophoneNotice()) is { } notice
                 ? Loc.T("Shortcut cancelled · {0} ready · {1}", ActiveModelName, notice) : Loc.T("Shortcut cancelled · {0} ready", ActiveModelName));
@@ -722,7 +729,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
             }
             else if (recording.HasValue && recording.Value == _audio.IsRecording) return;
-            if (!IsReady)
+            if (!IsReady && !SwitchesWorkflowModel(workflow?.TranscriptionModel))
             {
                 AppDiagnostics.Write("dictation.not-ready");
                 SetStatus(Loc.T("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."));
@@ -731,6 +738,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!_audio.IsRecording || adoptEarlyCapture)
             {
                 if (!adoptEarlyCapture) _earlyStopSamples = null;
+                // A workflow model left over from a capture that ended elsewhere never outlives the next start.
+                if (_workflowModelOverride is not null) await RestoreWorkflowModelAsync();
+                // A dictation workflow's own model applies before its task and language are checked against it.
+                // API starts are registered once capture begins, so they load the model before the microphone opens.
+                if (!adoptEarlyCapture && captureStarted is null && SwitchesWorkflowModel(workflow?.TranscriptionModel) && BeginWorkflowModelCapture())
+                {
+                    adoptEarlyCapture = true;
+                    preparingRecording = true;
+                }
+                if (await RejectWorkflowModelAsync(workflow?.TranscriptionModel, rejected)) return;
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
                 _taskAtStart = globalTaskAtStart;
                 // Unsupported tasks fail before microphone capture. When the model cannot translate
@@ -788,7 +805,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _outputAtStart = OutputPreferences.Current;
                 _textAtStart = TextPreferences.Current;
                 _processorsAtStart = PluginRuntime.PostProcessors.ToArray();
-                _languageAtStart = Language;
+                _languageAtStart = InheritedLanguage();
                 _recoveryAtStart = RecoveryPreferences.Current;
                 LivePreviewText = "";
                 _hasConfirmedPreviewText = false;
@@ -1109,7 +1126,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     if (!_disposed) Changed?.Invoke();
                 }
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-                if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }
+                if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
                 if (finishingRecording) PublishMicrophoneNoticeAfterDictation();
                 if (!_audio.IsRecording) AppDiagnostics.EndDictation();
             }

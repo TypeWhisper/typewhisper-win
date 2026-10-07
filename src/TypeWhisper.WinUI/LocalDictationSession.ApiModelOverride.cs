@@ -5,13 +5,15 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    // The file pipeline owns _gate and _fileBusy until this scope is disposed.
-    internal async Task<IAsyncDisposable?> BeginApiModelOverrideAsync(ParsedApiTranscription request, CancellationToken ct)
+    internal Task<IAsyncDisposable?> BeginApiModelOverrideAsync(ParsedApiTranscription request, CancellationToken ct) =>
+        BeginApiModelOverrideAsync(request.Engine, request.Model, request.AwaitDownload, ct);
+
+    // The caller owns _gate (and the file pipeline _fileBusy) until this scope is disposed.
+    internal async Task<IAsyncDisposable?> BeginApiModelOverrideAsync(string? engine, string? modelId, bool awaitDownload, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var modelId = request.Model;
         DictationProviderOption? provider = null;
-        if (request.Engine is { Length: > 0 } engine)
+        if (engine is { Length: > 0 })
             provider = ApiModelProvider(engine) ?? throw new LocalApiRequestException(404, "Transcription engine not found.");
         if (modelId is { Length: > 0 })
         {
@@ -37,12 +39,12 @@ internal sealed partial class LocalDictationSession
         if (!provider.Enabled) throw new LocalApiRequestException(409, "Enable this transcription provider first.");
         if (provider.Cloud && !provider.Configured) throw new LocalApiRequestException(409, "Configure this transcription provider first.");
         modelId ??= provider.SelectedModelId ?? provider.PreferredModelId
-            ?? (request.AwaitDownload ? provider.Models.FirstOrDefault()?.Id : null);
+            ?? (awaitDownload ? provider.Models.FirstOrDefault()?.Id : null);
         if (modelId is null) throw new LocalApiRequestException(409, "Choose a downloaded model, or set await_download to true.");
         var model = provider.Models.FirstOrDefault(item => item.Id == modelId)
             ?? throw new LocalApiRequestException(404, "Transcription model not found in this engine.");
         if (provider.Id == _providerId && modelId == ActiveModelId && IsReady) return null;
-        if (!model.Ready && !request.AwaitDownload)
+        if (!model.Ready && !awaitDownload)
             throw new LocalApiRequestException(409, "The requested model is not downloaded. Set await_download to true to download it.");
 
         var previousProvider = _providerId;
@@ -88,7 +90,7 @@ internal sealed partial class LocalDictationSession
                     ?? throw new LocalApiRequestException(404, "The requested model is no longer available.");
                 if (target.SupportsDownload && !target.Downloaded)
                 {
-                    if (!request.AwaitDownload) throw new LocalApiRequestException(409, "Set await_download to true to download this model.");
+                    if (!awaitDownload) throw new LocalApiRequestException(409, "Set await_download to true to download this model.");
                     await PluginRuntime.DownloadModelAsync(target, null, ct);
                 }
                 changedModel = true;

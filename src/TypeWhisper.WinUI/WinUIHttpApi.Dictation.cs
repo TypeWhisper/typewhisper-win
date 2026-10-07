@@ -37,7 +37,7 @@ internal sealed partial class WinUIHttpApi
         ct.ThrowIfCancellationRequested();
         if (request.Path == "/v1/dictation/start")
         {
-            if (_startingDictation || !session.CanTranscribeFile || !_dictationCompletion.IsCompleted) return Error(409, "Finish the current operation before starting dictation.");
+            if (_startingDictation || !session.CanStartApiFile || !_dictationCompletion.IsCompleted) return Error(409, "Finish the current operation before starting dictation.");
             AutomaticWorkflowSnapshot? workflow = null;
             if (request.Body.Length > 0)
             {
@@ -52,12 +52,18 @@ internal sealed partial class WinUIHttpApi
                     {
                         workflow = AutomaticWorkflowSnapshot.ForApi(session.WorkflowDefaults.Resolve(selected));
                         // Report the task error here; a rejected start only reaches the generic message below.
-                        WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, session.TranscriptionTaskPreferences.Current, session.SupportsTranslation);
-                        WorkflowSpokenLanguage.Resolve(workflow.InputLanguage, session.Language, session.LanguageChoices, session.DetectsLanguage);
+                        // A workflow's own model is checked once it has loaded at the start.
+                        if (workflow.TranscriptionModel is null)
+                        {
+                            WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, session.TranscriptionTaskPreferences.Current, session.SupportsTranslation);
+                            WorkflowSpokenLanguage.Resolve(workflow.InputLanguage, session.Language, session.LanguageChoices, session.DetectsLanguage);
+                        }
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return Error(409, ex.Message); }
                 }
             }
+            // A workflow model loads at the start, so only other starts need the selected model to be ready.
+            if (workflow?.TranscriptionModel is null && !session.CanTranscribeFile) return Error(409, "Finish the current operation before starting dictation.");
             _startingDictation = true;
             try
             {

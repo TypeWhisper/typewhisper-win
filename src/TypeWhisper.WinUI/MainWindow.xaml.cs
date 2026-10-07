@@ -59,7 +59,8 @@ public sealed partial class MainWindow : Window
                 () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanStartFromShortcut,
                 () => _dictation.RecordingModePreferences.Current,
                 dispatch: action => DispatcherQueue.TryEnqueue(() => action()),
-                reportError: error => System.Diagnostics.Debug.WriteLine("Dictation input failed: " + error.GetType().Name));
+                reportError: error => System.Diagnostics.Debug.WriteLine("Dictation input failed: " + error.GetType().Name),
+                markStop: _dictation.MarkEarlyStop);
             _observeInputMode = () =>
             {
                 if (DispatcherQueue.HasThreadAccess) _dictationInput.ObserveMode();

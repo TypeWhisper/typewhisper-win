@@ -18,7 +18,8 @@ public sealed class AutomaticWorkflowSnapshot
             {
                 MemoryPluginId = workflow.Behavior.MemoryPluginId, ProviderOverride = workflow.Behavior.ProviderOverride, ModelOverride = workflow.Behavior.ModelOverride,
                 FineTuning = workflow.Behavior.FineTuning, TranslationTarget = workflow.Behavior.TranslationTarget,
-                SelectedTask = workflow.Behavior.SelectedTask, InputLanguage = workflow.Behavior.InputLanguage
+                SelectedTask = workflow.Behavior.SelectedTask, InputLanguage = workflow.Behavior.InputLanguage,
+                TranscriptionModelOverride = workflow.Behavior.TranscriptionModelOverride
             }
         };
         Error = error;
@@ -36,6 +37,8 @@ public sealed class AutomaticWorkflowSnapshot
     public string? SelectedTask => _workflow?.Behavior.SelectedTask;
     /// <summary>The spoken language for this recording; null inherits the global preference.</summary>
     public string? InputLanguage => _workflow?.Behavior.InputLanguage;
+    /// <summary>The provider-qualified transcription model for this recording; null uses the selected model.</summary>
+    public string? TranscriptionModel => _workflow?.Behavior.TranscriptionModelOverride is { } model && !string.IsNullOrWhiteSpace(model) ? model : null;
     /// <summary>Whether the workflow translates, so its output can be in another language than the dictation.</summary>
     public bool Translates => _workflow?.Template == WorkflowTemplate.Translation;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
@@ -89,7 +92,7 @@ public sealed class AutomaticWorkflowSnapshot
             || workflow.Trigger.Hotkeys.Count != 0
             || behavior.Settings.Count != 0 || !WorkflowSpokenLanguage.IsSupported(behavior.InputLanguage)
             || behavior.InputLanguageHints.Count != 0 || !WorkflowTranscriptionTask.IsSupported(behavior.SelectedTask)
-            || behavior.WhisperModeOverride is not null || !string.IsNullOrWhiteSpace(behavior.TranscriptionModelOverride)
+            || behavior.WhisperModeOverride is not null || !SupportsTranscriptionModel(workflow)
             || !string.IsNullOrWhiteSpace(output.Format) || output.AutoEnter
             || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw))
             return Loc.T("The selected workflow has unsupported trigger, recording or output settings. Review your transcript; nothing was pasted.");
@@ -97,6 +100,11 @@ public sealed class AutomaticWorkflowSnapshot
             return Loc.T("The selected custom workflow requires instructions. Review your transcript; nothing was pasted.");
         return null;
     }
+
+    // Only dictation shortcuts and API starts know their workflow before capture, when the model can still change.
+    private static bool SupportsTranscriptionModel(Workflow workflow) => string.IsNullOrWhiteSpace(workflow.Behavior.TranscriptionModelOverride)
+        || workflow.Template == WorkflowTemplate.Dictation && workflow.Trigger.Kind is WorkflowTriggerKind.Hotkey or WorkflowTriggerKind.Manual
+            && workflow.Behavior.TranscriptionModelOverride.Length <= 256 && workflow.Behavior.TranscriptionModelOverride.Contains(':');
 
     /// <summary>Runs the exact provider and model with the Core prompt, rejecting late canceled or empty results.</summary>
     public async Task<string> ProcessAsync(string text, string? configuredLanguage, string? detectedLanguage,
