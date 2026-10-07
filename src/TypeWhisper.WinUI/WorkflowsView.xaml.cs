@@ -429,9 +429,11 @@ public sealed partial class WorkflowsView : UserControl
         ? (string.IsNullOrEmpty(ConfigLanguage.SelectedId) ? null : ConfigLanguage.SelectedId)
         : _opened is { } opened && ConfigTrigger.SelectedId == opened.ActivationId ? opened.InputLanguage : null;
     private bool ConfigUsesTranscriptionModel => ConfigTrigger.SelectedId == "DictationHotkey" && ConfigTemplate.SelectedId == nameof(WorkflowTemplate.Dictation);
-    // Other activations and templates cannot switch models, so their saved choice is dropped.
-    private string? ConfigSelectedTranscriptionModel => ConfigUsesTranscriptionModel && !string.IsNullOrEmpty(ConfigTranscriptionModel.SelectedId)
-        ? ConfigTranscriptionModel.SelectedId : null;
+    // Other templates cannot switch models. An unchanged manual workflow keeps the model its API starts use.
+    private string? ConfigSelectedTranscriptionModel => ConfigUsesTranscriptionModel
+        ? (string.IsNullOrEmpty(ConfigTranscriptionModel.SelectedId) ? null : ConfigTranscriptionModel.SelectedId)
+        : ConfigTemplate.SelectedId == nameof(WorkflowTemplate.Dictation) && _opened is { } opened && ConfigTrigger.SelectedId == opened.ActivationId
+            ? opened.TranscriptionModel : null;
     // The languages the current transcription model accepts; a workflow model is checked once it loads.
     private bool ConfigLanguageUnsupported => ConfigSelectedTranscriptionModel is null && ConfigSelectedLanguage is { } language && language != "auto"
         && _session is { } session && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase);
@@ -569,7 +571,9 @@ public sealed partial class WorkflowsView : UserControl
 
     private void ConfigureTranscriptionModels(string model)
     {
-        var models = (_session?.DictationProviders ?? []).Where(provider => provider.Enabled && provider.Configured)
+        // A provider without an initial model selection cannot be restored after a workflow switches it.
+        var models = (_session?.DictationProviders ?? []).Where(provider => provider.Enabled && provider.Configured
+                && (provider.Id == "local" || provider.SelectedModelId is not null))
             .SelectMany(provider => provider.Models.Where(item => item.Ready).Select(item =>
                 new Choice(provider.Id + ":" + item.Id, item.Name, provider.Name) { PluginId = provider.PluginId }));
         Choice[] options = [new("", Loc.T("Use selected model"), Loc.T("Use the transcription model selected in Dictation")), .. models];

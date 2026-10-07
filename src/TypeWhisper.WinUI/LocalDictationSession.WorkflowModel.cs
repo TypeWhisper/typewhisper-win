@@ -4,6 +4,8 @@ internal sealed partial class LocalDictationSession
 {
     // Restores the selected transcription model after a workflow recording; owned by the dictation gate.
     private IAsyncDisposable? _workflowModelOverride;
+    // The language selected in Dictation before a workflow model replaced the provider.
+    private string? _languageBeforeWorkflowModel;
 
     // Whether the start has to load a workflow model other than the loaded one.
     private bool SwitchesWorkflowModel(string? model) =>
@@ -23,10 +25,13 @@ internal sealed partial class LocalDictationSession
     // Loads a dictation workflow's transcription model without saving it as the selection.
     private async Task<bool> RejectWorkflowModelAsync(string? model, Action<string>? rejected)
     {
+        _languageBeforeWorkflowModel = null;
         if (string.IsNullOrWhiteSpace(model)) return false;
+        var language = Language;
         try
         {
             _workflowModelOverride = await BeginApiModelOverrideAsync(null, model, awaitDownload: false, CancellationToken.None);
+            if (_workflowModelOverride is not null) _languageBeforeWorkflowModel = language;
             AppDiagnostics.Write($"dictation.workflow-model engine={ActiveEngineId} model={ActiveModelId} switched={_workflowModelOverride is not null}");
             return false;
         }
@@ -39,6 +44,11 @@ internal sealed partial class LocalDictationSession
             return true;
         }
     }
+
+    // "Use global setting" keeps the language selected in Dictation when the workflow model accepts it,
+    // and otherwise that model's own setting.
+    private string InheritedLanguage() => _languageBeforeWorkflowModel is { } before && before != "auto"
+        && LanguageChoices.Contains(before, StringComparer.OrdinalIgnoreCase) ? before : Language;
 
     // Runs once the recording has finished or failed to start, before the gate admits the next dictation.
     private async Task RestoreWorkflowModelAsync()

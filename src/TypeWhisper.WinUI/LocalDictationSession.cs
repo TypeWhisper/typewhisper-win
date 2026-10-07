@@ -613,16 +613,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         return rejection;
     }
     private bool _stopPending;
+    // The stop itself waits for the model; remember where the user finished speaking.
+    internal void MarkEarlyStop()
+    {
+        if (_disposed || !_audio.IsRecording || !_earlyCapture || _earlyStopSamples is not null) return;
+        _earlyStopSamples = _audio.SampleCountAfterStopDrain;
+        AppDiagnostics.Write("dictation.early-stop");
+        Changed?.Invoke();
+    }
     internal async Task StopAsync()
     {
         if (_disposed || !_audio.IsRecording || _stopPending) return;
-        // The stop itself waits for the model; remember where the user finished speaking.
-        if (_earlyCapture && _earlyStopSamples is null)
-        {
-            _earlyStopSamples = _audio.SampleCountAfterStopDrain;
-            AppDiagnostics.Write("dictation.early-stop");
-            Changed?.Invoke();
-        }
+        MarkEarlyStop();
         _stopPending = true;
         try { await SetRecordingAsync(false); }
         finally { _stopPending = false; }
@@ -646,6 +648,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await StopCloudStreamAsync();
             _effects.End();
             await _livePreview.StopAsync();
+            if (!_audio.IsRecording) await RestoreWorkflowModelAsync();
             // Like every ready status, the cancellation keeps the current microphone notice visible.
             SetStatus(_microphoneStatus = (_microphoneNotice = MicrophoneNotice()) is { } notice
                 ? Loc.T("Shortcut cancelled · {0} ready · {1}", ActiveModelName, notice) : Loc.T("Shortcut cancelled · {0} ready", ActiveModelName));
@@ -796,7 +799,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _outputAtStart = OutputPreferences.Current;
                 _textAtStart = TextPreferences.Current;
                 _processorsAtStart = PluginRuntime.PostProcessors.ToArray();
-                _languageAtStart = Language;
+                _languageAtStart = InheritedLanguage();
                 _recoveryAtStart = RecoveryPreferences.Current;
                 LivePreviewText = "";
                 _hasConfirmedPreviewText = false;

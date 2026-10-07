@@ -21,18 +21,20 @@ public sealed class DictationInputCoordinator : IDisposable
     private readonly Func<RecordingMode> _mode;
     private readonly Func<Action, bool> _dispatch;
     private readonly Action<Exception>? _reportError;
+    private readonly Action? _markStop;
     private bool _busy, _starting, _disposed;
     private DictationInputAction? _terminal;
     private RecordingMode _observedMode;
     private TaskCompletionSource _completion = Completed();
 
-    /// <summary>Creates a coordinator. Submit, configuration observations and disposal must use the same UI thread; dispatch schedules audio work on that thread.</summary>
+    /// <summary>Creates a coordinator. Submit, configuration observations and disposal must use the same UI thread; dispatch schedules audio work on that thread.
+    /// markStop records where the user stopped speaking when a stop arrives while a start is still running.</summary>
     public DictationInputCoordinator(Func<Task> start, Func<Task> stop, Func<Task> cancel,
         Func<bool> recording, Func<bool> canStart, Func<RecordingMode> mode,
-        Func<Action, bool>? dispatch = null, Action<Exception>? reportError = null)
+        Func<Action, bool>? dispatch = null, Action<Exception>? reportError = null, Action? markStop = null)
     {
         _start = start; _stop = stop; _cancel = cancel; _recording = recording; _canStart = canStart; _mode = mode;
-        _dispatch = dispatch ?? (action => { action(); return true; }); _reportError = reportError;
+        _dispatch = dispatch ?? (action => { action(); return true; }); _reportError = reportError; _markStop = markStop;
         _observedMode = mode();
     }
 
@@ -59,7 +61,11 @@ public sealed class DictationInputCoordinator : IDisposable
         if (_starting)
         {
             if (action == DictationInputAction.Cancel || action == DictationInputAction.Stop && _terminal != DictationInputAction.Cancel)
+            {
                 _terminal = action;
+                // A start that keeps capturing while it loads must not keep the audio after this stop.
+                if (action == DictationInputAction.Stop) _markStop?.Invoke();
+            }
             return Completion;
         }
         if (_busy) return Completion;

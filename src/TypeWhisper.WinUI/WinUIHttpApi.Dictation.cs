@@ -37,7 +37,7 @@ internal sealed partial class WinUIHttpApi
         ct.ThrowIfCancellationRequested();
         if (request.Path == "/v1/dictation/start")
         {
-            if (_startingDictation || !session.CanTranscribeFile || !_dictationCompletion.IsCompleted) return Error(409, "Finish the current operation before starting dictation.");
+            if (_startingDictation || !session.CanStartApiFile || !_dictationCompletion.IsCompleted) return Error(409, "Finish the current operation before starting dictation.");
             AutomaticWorkflowSnapshot? workflow = null;
             if (request.Body.Length > 0)
             {
@@ -62,6 +62,8 @@ internal sealed partial class WinUIHttpApi
                     catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return Error(409, ex.Message); }
                 }
             }
+            // A workflow model loads at the start, so only other starts need the selected model to be ready.
+            if (workflow?.TranscriptionModel is null && !session.CanTranscribeFile) return Error(409, "Finish the current operation before starting dictation.");
             _startingDictation = true;
             try
             {
