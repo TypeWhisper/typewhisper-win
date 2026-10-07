@@ -53,7 +53,6 @@ public sealed class DictationInsertionTextTests
     [InlineData("x\u0661\u0662", 3, 0, "Abc", " abc")]
     [InlineData("the ", 4, 0, "\u01c5ungla", "\u01c6ungla")]
     [InlineData("in ", 3, 0, "\u0130stanbul", "i\u0307stanbul")]
-    [InlineData("Line\r\n", 6, 0, "Next", "next")]
     // Kana marks shared by Hiragana and Katakana count as CJK; a combining mark after a Latin letter does not.
     [InlineData("\u30ab\u30fc", 1, 0, "\u30c9", "\u30c9")]
     [InlineData("\uff76\uff77", 1, 0, "\uff9e", "\uff9e")]
@@ -68,6 +67,12 @@ public sealed class DictationInsertionTextTests
     [InlineData("He said \"\ud83d\udc4d\"", 12, 0, "Next.", " Next.")]
     [InlineData("It grew 50%\"", 12, 0, "Next.", " Next.")]
     [InlineData("He answered \"$\"", 15, 0, "Next.", " Next.")]
+    [InlineData("Er sagte \u201eHallo\u201c", 16, 0, "N\u00e4chster Satz.", " N\u00e4chster Satz.")]
+    [InlineData("Er sagte \u201e", 10, 0, "Hallo", "Hallo")]
+    // A line break next to the caret ends the sentence on that side.
+    [InlineData("I think \nNext paragraph", 8, 0, "This is right.", "this is right.")]
+    [InlineData("Hello world\n", 12, 0, "Next one", "Next one")]
+    [InlineData("Line\r\n", 6, 0, "Next", "Next")]
     [InlineData("Price \"\u20ac\"", 9, 0, "Next.", " Next.")]
     [InlineData("\u0532\u0561\u0580\u0587\u0589", 5, 0, "\u053b\u0576\u0579\u057a\u0565\u055e\u057d \u0565\u0584\u0589", " \u053b\u0576\u0579\u057a\u0565\u055e\u057d \u0565\u0584\u0589")]
     [InlineData("\u03a4\u03b9 \u03ba\u03ac\u03bd\u03b5\u03b9\u03c2\u037e", 10, 0, "\u039a\u03b1\u03bb\u03ac", " \u039a\u03b1\u03bb\u03ac")]

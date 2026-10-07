@@ -33,7 +33,10 @@ public static class DictationInsertionText
         var next = after.Count > 0 ? after[0] : null;
         var previousNonWhitespace = before.LastOrDefault(element => !IsWhitespace(element));
         var nextNonWhitespace = after.FirstOrDefault(element => !IsWhitespace(element));
-        var midSentence = previousNonWhitespace is not null && IsWordLike(previousNonWhitespace);
+        // A line break between the caret and the nearest text ends the sentence on that side.
+        var lineBreakBefore = before.AsEnumerable().Reverse().TakeWhile(IsWhitespace).Any(IsLineBreak);
+        var lineBreakAfter = after.TakeWhile(IsWhitespace).Any(IsLineBreak);
+        var midSentence = previousNonWhitespace is not null && IsWordLike(previousNonWhitespace) && !lineBreakBefore;
 
         var result = Elements(text);
         // Spoken "new line" or "tab" commands at either end are kept; plain spaces there are not. Unlike macOS,
@@ -43,7 +46,8 @@ public static class DictationInsertionText
         TrimWhitespace(result);
         // A kept break starts a new line before the dictation or ends its sentence before the following text.
         if (midSentence && leading.Count == 0 && !CapitalizesNouns(language)) LowercaseFirstWordIfSafe(result);
-        if (midSentence && trailing.Count == 0 && nextNonWhitespace is not null && (IsWordLike(nextNonWhitespace) || ClosingPunctuation.Contains(nextNonWhitespace)))
+        if (midSentence && trailing.Count == 0 && !lineBreakAfter && nextNonWhitespace is not null &&
+            (IsWordLike(nextNonWhitespace) || ClosingPunctuation.Contains(nextNonWhitespace)))
             StripSingleFinalPeriod(result);
         // Mutually exclusive with the mid-sentence rule above: that one needs surrounding text, this one needs none.
         if (standaloneValueFinalPeriodCleanup && previousNonWhitespace is null && nextNonWhitespace is null &&
@@ -80,14 +84,16 @@ public static class DictationInsertionText
         if (ClosingPunctuation.Contains(right) || (OpeningPunctuation.Contains(left) && !ClosesQuote(beforeLeft, left))) return false;
         if (IsCjk(left) && IsCjk(right)) return false;
         if (IsWordLike(left) && IsWordLike(right)) return true;
-        return IsWordLike(right) && PunctuationThatTakesFollowingSpace.Contains(left);
+        return IsWordLike(right) && (PunctuationThatTakesFollowingSpace.Contains(left) || ClosesQuote(beforeLeft, left));
     }
 
     // A straight double quote right after a word or the end of a phrase closes a quotation, as in `He said "hello."`,
-    // and takes a space before the next word. After a delimiter such as `:` or `=` it opens one, as in `{"key":"`.
-    // macOS treats it as opening everywhere. Apostrophes stay ambiguous because of elisions such as "l'".
+    // and takes a space before the next word. So do the German closing quotes, as in `Er sagte „Hallo“`.
+    // After a delimiter such as `:` or `=` a straight quote opens one, as in `{"key":"`. macOS treats these
+    // quotes as opening everywhere. Apostrophes stay ambiguous because of elisions such as "l'".
     private static bool ClosesQuote(string? beforeQuote, string quote) =>
-        quote == "\"" && beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote) ||
+        quote is "\"" or "\u201C" or "\u2018" &&
+        beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote) ||
             beforeQuote.EnumerateRunes().Any(rune =>
                 Rune.GetUnicodeCategory(rune) is UnicodeCategory.OtherSymbol or UnicodeCategory.CurrencySymbol));
     // Emoji, other symbols and currency signs also end a quoted phrase, as in `"$"`; math symbols such as `=` do not.
@@ -125,8 +131,11 @@ public static class DictationInsertionText
         var run = fromStart ? text.TakeWhile(IsWhitespace) : text.AsEnumerable().Reverse().TakeWhile(IsWhitespace).Reverse();
         // A text of only whitespace keeps its breaks once, at the start.
         if (!fromStart && text.All(IsWhitespace)) return [];
-        return run.Where(element => element.Any(c => c is '\n' or '\r' or '\t' or '\v' or '\f' or '\u0085' or '\u2028' or '\u2029')).ToList();
+        return run.Where(element => IsLineBreak(element) || element.Contains('\t')).ToList();
     }
+
+    private static bool IsLineBreak(string element) =>
+        element.Any(c => c is '\n' or '\r' or '\v' or '\f' or '\u0085' or '\u2028' or '\u2029');
 
     private static void TrimWhitespace(List<string> text)
     {
