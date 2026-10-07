@@ -13,10 +13,14 @@ internal static class InsertionContextReader
     private const int TextPatternId = 10014;
     // UIA timeouts do not bound every text-range call, so a slow provider must not hold up the paste.
     private static readonly TimeSpan ReadLimit = TimeSpan.FromMilliseconds(500);
+    // Callers are serialized by the dictation gate, which the time limit releases before a stalled read ends.
+    private static Task<DictationInsertionContext?>? _pending;
 
     internal static async Task<DictationInsertionContext?> ReadAsync(IntPtr target)
     {
-        var read = Task.Run(() => Read(target));
+        // A read past its time limit still holds a worker; never queue another one behind a stalled provider.
+        if (_pending is { IsCompleted: false }) { AppDiagnostics.Write("insertion.context.skipped-pending"); return null; }
+        var read = _pending = Task.Run(() => Read(target));
         if (await Task.WhenAny(read, Task.Delay(ReadLimit)) == read) return await read;
         AppDiagnostics.Write("insertion.context.timeout");
         return null;
