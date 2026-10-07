@@ -43,11 +43,11 @@ public sealed partial class WorkflowsView : UserControl
     // The fields of the configuration page. They are created in code so that they can sit in settings rows.
     private readonly WorkflowTemplatePicker ConfigTemplate = new();
     private readonly ChoicePicker ConfigActionTarget = new(), ConfigMemory = new(), ConfigTrigger = new(), ConfigContextMode = new(),
-        ConfigTask = new(), ConfigProvider = new(), ConfigModel = new();
+        ConfigTask = new(), ConfigLanguage = new(), ConfigProvider = new(), ConfigModel = new();
     private readonly ToggleSwitch ConfigEnabled = AppToggleSwitch.Create(true);
     private readonly StackPanel ConfigShortcutHost = new();
     private readonly SettingsRow ConfigShortcutSection = new(), ConfigAppSection = new(), ConfigWebsiteSection = new(), ConfigContextSection = new(),
-        ConfigTaskSection = new(), ConfigMemorySection = new(), ConfigInstructionSection = new(), ConfigProviderSection = new(),
+        ConfigTaskSection = new(), ConfigLanguageSection = new(), ConfigMemorySection = new(), ConfigInstructionSection = new(), ConfigProviderSection = new(),
         ConfigModelSection = new(), ConfigTranslationSection = new(), ConfigActionSection = new();
     private TextBox ConfigName = null!, ConfigAppProcesses = null!, ConfigWebsiteDomains = null!, ConfigTranslationTarget = null!,
         ConfigPriority = null!, ConfigInstruction = null!;
@@ -164,6 +164,8 @@ public sealed partial class WorkflowsView : UserControl
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTask.Configure(Loc.T("Transcription task"), "microphone", Loc.T("Workflow transcription task"));
         ConfigTask.SelectionChanged += _ => UpdateConfigurationState();
+        ConfigLanguage.Configure(Loc.T("Spoken language"), "language", Loc.T("Workflow spoken language"));
+        ConfigLanguage.SelectionChanged += _ => UpdateConfigurationState();
         ConfigContextMode.Configure(Loc.T("App and website conditions"), "workflow", Loc.T("Workflow context match mode"));
         ConfigContextMode.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTemplate.SelectionChanged += _ =>
@@ -238,6 +240,8 @@ public sealed partial class WorkflowsView : UserControl
             Loc.T("Match all requires an app from your list AND a domain from your list. Match any allows either component, so the app rule can still run when a browser address is unavailable."), ConfigContextMode));
         // Its description names the limits of the chosen task.
         trigger.Children.Add(ConfigTaskSection.Set(Loc.T("Transcription task"), control: ConfigTask));
+        // Its description names a language the current model cannot use.
+        trigger.Children.Add(ConfigLanguageSection.Set(Loc.T("Spoken language"), control: ConfigLanguage));
         ConfigurationFields.Children.Add(trigger);
 
         var behavior = new SettingsCard(Loc.T("Behavior"));
@@ -294,7 +298,7 @@ public sealed partial class WorkflowsView : UserControl
     {
         if (_page != Page.Configuration) return;
         if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
-        else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigActionTarget.IsPopupOpen && !ConfigMemory.IsPopupOpen && !ConfigTask.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
+        else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigActionTarget.IsPopupOpen && !ConfigMemory.IsPopupOpen && !ConfigTask.IsPopupOpen && !ConfigLanguage.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
     }
 
     private void ShowPage(Page page)
@@ -321,7 +325,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_closing) return;
         if (_run is not null) { _run.Cancel(); return; }
         if (_page != Page.Configuration) { ExitRequested?.Invoke(this, EventArgs.Empty); return; }
-        foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget, ConfigMemory, ConfigTask })
+        foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget, ConfigMemory, ConfigTask, ConfigLanguage })
             if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
         if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { DismissDiscard(); return; }
         if (!ConfigurationDirty) { LeaveConfiguration(); return; }
@@ -417,6 +421,13 @@ public sealed partial class WorkflowsView : UserControl
     private string? ConfigSelectedTask => ConfigUsesRecordingTask
         ? (string.IsNullOrEmpty(ConfigTask.SelectedId) ? null : ConfigTask.SelectedId)
         : _opened is { } opened && ConfigTrigger.SelectedId == opened.ActivationId ? opened.SelectedTask : null;
+    private string? ConfigSelectedLanguage => ConfigUsesRecordingTask
+        ? (string.IsNullOrEmpty(ConfigLanguage.SelectedId) ? null : ConfigLanguage.SelectedId)
+        : _opened is { } opened && ConfigTrigger.SelectedId == opened.ActivationId ? opened.InputLanguage : null;
+    // The languages the current transcription model accepts; others stay selectable from a saved workflow.
+    private bool ConfigLanguageUnsupported => ConfigSelectedLanguage is { } language && _session is { } session
+        && (language == "auto" ? !session.DetectsLanguage
+            : session.LanguageChoices.Count > 0 && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
@@ -424,6 +435,7 @@ public sealed partial class WorkflowsView : UserControl
         || ConfigTrigger.SelectedId != _opened.ActivationId || ConfigAppProcesses.Text != _opened.AppProcesses
         || DraftHotkeys != _opened.Hotkeys
         || ConfigSelectedTask != (string.IsNullOrWhiteSpace(_opened.SelectedTask) ? null : _opened.SelectedTask)
+        || ConfigSelectedLanguage != _opened.InputLanguage
         || ConfigWebsiteDomains.Text != _opened.WebsiteDomains || ConfigContextMode.SelectedId != _opened.ContextMatchMode.ToString()
         || ConfigPriority.Text != _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
         || ConfigTemplate.SelectedId != _opened.Template.ToString() || ConfigTranslationTarget.Text != (_opened.TranslationTarget ?? "")
@@ -507,6 +519,7 @@ public sealed partial class WorkflowsView : UserControl
             new("", Loc.T("Use global setting"), Loc.T("Use the transcription task selected in Dictation")),
             new("transcribe", Loc.T("Transcribe"), Loc.T("Keep speech in its original language")),
             new("translate", Loc.T("Translate to English"), Loc.T("Use the transcription model's native English translation"))], string.IsNullOrWhiteSpace(_opened.SelectedTask) ? "" : _opened.SelectedTask);
+        ConfigureLanguages(_opened.InputLanguage ?? "");
         ConfigAppProcesses.Text = _opened.AppProcesses;
         _shortcutDraft["WorkflowSelectedTextHotkeys"] = _opened.Hotkeys;
         ConfigShortcutHost.Children.Clear();
@@ -530,6 +543,19 @@ public sealed partial class WorkflowsView : UserControl
         ShowPage(Page.Configuration);
         ConfigurationScroll.ChangeView(null, 0, null, true);
         FocusEntry();
+    }
+
+    private void ConfigureLanguages(string language)
+    {
+        // A provider without a language list accepts every language.
+        var codes = _session?.LanguageChoices is { Count: > 0 } choices ? choices : SpokenLanguageChoices.All;
+        var detects = _session?.SupportedLanguages.Count == 0;
+        var languages = codes.Select(code => new Choice(code, LiveDictationSettings.LanguageName(code), Loc.T("Use this language for recordings with this workflow")))
+            .OrderBy(choice => detects ? choice.Label : "", StringComparer.CurrentCulture);
+        // Like the Dictation picker, Automatic is offered only for models that detect the language.
+        Choice[] automatic = _session?.DetectsLanguage != false ? [new("auto", Loc.T("Automatic"), Loc.T("Language detection by the model"))] : [];
+        Choice[] options = [new("", Loc.T("Use global setting"), Loc.T("Use the spoken language selected in Dictation")), .. automatic, .. languages];
+        ConfigLanguage.SetOptions(options, language, Loc.T("{0} (unavailable)", LiveDictationSettings.LanguageName(language)));
     }
 
     private void ConfigureModels(string modelId)
@@ -566,6 +592,9 @@ public sealed partial class WorkflowsView : UserControl
         ConfigTaskSection.Description = Loc.T("Applies only to this recording. Native translation outputs English and requires a compatible transcription model. With Dictation Only, no LLM is needed; local models work offline.")
             + (ConfigTask.SelectedId == "translate" && _session?.SupportsTranslation != true
                 ? " " + Loc.T("The current model cannot translate to English. Choose a compatible model in Dictation before running this workflow.") : "");
+        ConfigLanguageSection.Visibility = ConfigTaskSection.Visibility;
+        ConfigLanguageSection.Description = Loc.T("Applies only to this recording. Use it for a shortcut per language; the global spoken language stays unchanged.")
+            + (ConfigLanguageUnsupported ? " " + Loc.T("The current transcription model does not support this language. Choose another language, or another model in Dictation, before running this workflow.") : "");
         ConfigShortcutSection.Visibility = ConfigTrigger.SelectedId is "Hotkey" or "DictationHotkey" ? Visibility.Visible : Visibility.Collapsed;
         ConfigAppSection.Visibility = ConfigWebsiteSection.Visibility = contextual ? Visibility.Visible : Visibility.Collapsed;
         ConfigContextSection.Visibility = contextual && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Visibility.Visible : Visibility.Collapsed;
@@ -609,7 +638,7 @@ public sealed partial class WorkflowsView : UserControl
             Priority = int.Parse(ConfigPriority.Text),
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
-            SelectedTask = ConfigSelectedTask,
+            SelectedTask = ConfigSelectedTask, InputLanguage = ConfigSelectedLanguage,
             TargetActionPluginId = string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? null : ConfigActionTarget.SelectedId,
             MemoryPluginId = string.IsNullOrEmpty(ConfigMemory.SelectedId) ? null : ConfigMemory.SelectedId,
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,

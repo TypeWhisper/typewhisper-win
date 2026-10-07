@@ -64,6 +64,22 @@ internal sealed partial class LocalDictationSession
         }
     }
 
+    // Rejects an explicitly requested language the active model cannot use before microphone capture.
+    private bool RejectLanguage(string? language, Action<string>? rejected)
+    {
+        try
+        {
+            WorkflowSpokenLanguage.Resolve(language, Language, LanguageChoices, DetectsLanguage);
+            return false;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        {
+            rejected?.Invoke(ex.Message);
+            SetStatus(ex.Message, DictationPhase.Error);
+            return true;
+        }
+    }
+
     private Func<string, CancellationToken, Task<string>>? WorkflowProcessor(string? configuredLanguage, string? detectedLanguage)
     {
         var snapshot = _workflowAtStart;

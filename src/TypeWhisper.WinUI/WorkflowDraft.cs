@@ -22,6 +22,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string? TranslationTarget { get; init; }
     /// <summary>The native recording task; null inherits the global preference.</summary>
     public string? SelectedTask { get; init; }
+    /// <summary>The spoken language for recordings; null inherits the global preference.</summary>
+    public string? InputLanguage { get; init; }
     /// <summary>The explicit activation kind.</summary>
     public WorkflowTriggerKind TriggerKind { get; init; } = WorkflowTriggerKind.Manual;
     /// <summary>Canonical shortcuts that process the selected text.</summary>
@@ -71,7 +73,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Output = Stored?.Output is { } output && output.TargetActionPluginId == TargetActionPluginId
             ? output : (Stored?.Output ?? new WorkflowOutput()) with { TargetActionPluginId = TargetActionPluginId },
         Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with
-        { MemoryPluginId = MemoryPluginId, FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget, SelectedTask = SelectedTask }
+        { MemoryPluginId = MemoryPluginId, FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget, SelectedTask = SelectedTask, InputLanguage = InputLanguage }
     };
 
     private string[] DomainPatterns() => WebsiteDomains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -88,6 +90,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         HotkeyBehavior = workflow.Trigger.HotkeyBehavior,
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
         TargetActionPluginId = workflow.Output.TargetActionPluginId, MemoryPluginId = workflow.Behavior.MemoryPluginId,
-        Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, SelectedTask = workflow.Behavior.SelectedTask, Stored = workflow
+        Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, SelectedTask = workflow.Behavior.SelectedTask,
+        InputLanguage = TypeWhisper.Presentation.WorkflowSpokenLanguage.Inherits(workflow.Behavior.InputLanguage) ? null : workflow.Behavior.InputLanguage, Stored = workflow
     };
 }
