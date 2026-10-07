@@ -90,7 +90,7 @@ File-transcription endpoints do not paste into another application, read clipboa
 
 Uploads are bounded to 32 MiB, including multipart framing. Decoding retains the application's 60-minute audio limit. Network/UNC/device paths and reparse-point paths are rejected for local-file requests. Temporary uploads are removed after success, cancellation and failure.
 
-Up to four HTTP requests are admitted; excess traffic returns 429. The shared transcription gate allows one decode at a time and returns 409 when dictation, recording, training, file processing or another API request owns the engine. Without a usable current model or loadable request override, transcription returns a readiness/configuration error (409 or 503). Undecodable audio returns 422. Transport timeouts cancel processing; native work is still drained before the engine is released. Shutdown/profile restore closes admission, cancels requests and awaits active work.
+Up to four HTTP requests are admitted; excess traffic returns 429. The shared transcription gate allows one decode at a time and returns 409 when dictation, recording, training, file processing or another API request owns the engine. Without a usable current model or loadable request override, transcription returns a readiness/configuration error (409 or 503). Undecodable audio returns 422. A request must arrive within five minutes and other requests must also finish within five minutes; once a transcription body has arrived, processing may take up to two hours, so long recordings fit the 60-minute audio limit. Timeouts return 408 and cancel processing; native work is still drained before the engine is released. Shutdown/profile restore closes admission, cancels requests and awaits active work.
 
 ## Tests
 

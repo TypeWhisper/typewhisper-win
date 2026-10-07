@@ -68,7 +68,8 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
                 await _secrets.StoreAsync("token", _token);
             }
             if (_closed) return;
-            _host = new LocalHttpApi(port, _token, DispatchAsync, requireAuthentication: requireAuthentication, statusHandler: token => DispatchAsync(new LocalApiRequest("GET", "/v1/status", [], null, new Dictionary<string, string?>()), token));
+            _host = new LocalHttpApi(port, _token, DispatchAsync, requireAuthentication: requireAuthentication, statusHandler: token => DispatchAsync(new LocalApiRequest("GET", "/v1/status", [], null, new Dictionary<string, string?>()), token),
+                processingTimeout: TranscriptionTimeout);
             await _host.StartAsync();
             var discovery = new FileInfo(DiscoveryPath + ".tmp");
             using (discovery.Create()) { }
@@ -96,6 +97,11 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         }
         finally { _changes.Release(); Changed?.Invoke(); }
     }
+
+    // Audio may run 60 minutes and CPU models can be slower than real time, so the
+    // default five-minute request limit would cut off long recordings.
+    internal static TimeSpan? TranscriptionTimeout(string method, string path) =>
+        method == "POST" && path is "/v1/transcribe" or "/v1/transcribe/local-file" ? TimeSpan.FromHours(2) : null;
 
     internal string? TokenForCopy => Running ? _token : null;
     internal Task ShutdownAsync()

@@ -40,6 +40,7 @@ public sealed class LocalHttpApi : IAsyncDisposable
     private readonly bool _requireAuthentication;
     private readonly int _maxBodyBytes;
     private readonly TimeSpan _requestTimeout;
+    private readonly Func<string, string, TimeSpan?>? _processingTimeout;
     private readonly SemaphoreSlim _slots;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly object _requestsLock = new();
@@ -48,11 +49,14 @@ public sealed class LocalHttpApi : IAsyncDisposable
     private CancellationTokenSource? _stopping;
     private Task? _acceptLoop;
 
-    /// <summary>Creates a host with configurable token authentication and bounded request admission.</summary>
+    /// <summary>Creates a host with configurable token authentication and bounded request admission.
+    /// <c>processingTimeout</c> may return a longer limit for the backend work of a method and path; the body
+    /// must still arrive within <c>requestTimeout</c>, and the longer limit starts once it has.</summary>
     public LocalHttpApi(int port, string token,
         Func<LocalApiRequest, CancellationToken, Task<LocalApiResponse>> handler,
         int maxBodyBytes = 32 * 1024 * 1024, int maxConcurrency = 4, TimeSpan? requestTimeout = null,
-        bool requireAuthentication = true, Func<CancellationToken, Task<LocalApiResponse>>? statusHandler = null)
+        bool requireAuthentication = true, Func<CancellationToken, Task<LocalApiResponse>>? statusHandler = null,
+        Func<string, string, TimeSpan?>? processingTimeout = null)
     {
         if (port is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(port));
         if (string.IsNullOrWhiteSpace(token) || token.Length < 32 || token.Any(char.IsWhiteSpace))
@@ -63,6 +67,7 @@ public sealed class LocalHttpApi : IAsyncDisposable
         if (_requestTimeout <= TimeSpan.Zero || _requestTimeout.TotalMilliseconds > uint.MaxValue - 1)
             throw new ArgumentOutOfRangeException(nameof(requestTimeout));
         _statusHandler = statusHandler;
+        _processingTimeout = processingTimeout;
         Port = port;
         _tokenHash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
         _requireAuthentication = requireAuthentication;
@@ -190,6 +195,10 @@ public sealed class LocalHttpApi : IAsyncDisposable
                     body.Write(buffer, 0, count);
                 }
                 timeout.Token.ThrowIfCancellationRequested();
+                // Long transcriptions may outlast the transport limit, which still bounds the upload above.
+                if (_processingTimeout?.Invoke(request.HttpMethod, request.Url!.AbsolutePath) is { } processing &&
+                    processing > _requestTimeout && processing.TotalMilliseconds <= uint.MaxValue - 1)
+                    timeout.CancelAfter(processing);
                 var query = request.QueryString.AllKeys
                     .ToDictionary(key => key!, key => request.QueryString[key], StringComparer.Ordinal);
                 response = await _handler(new LocalApiRequest(request.HttpMethod, request.Url!.AbsolutePath,

@@ -381,6 +381,40 @@ public sealed class LocalHttpApiTests
     }
 
     [Fact]
+    public async Task ProcessingTimeoutLetsSelectedRoutesOutlastRequestTimeout()
+    {
+        await using var server = new LocalHttpApi(FreePort(), Token, async (_, token) =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500), token);
+            return LocalApiResponse.Json(200, new { });
+        }, requestTimeout: TimeSpan.FromMilliseconds(100),
+            processingTimeout: (method, path) => method == "POST" && path == "/v1/transcribe" ? TimeSpan.FromSeconds(10) : null);
+        await server.StartAsync();
+        using var client = Client(server, true);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("v1/transcribe", new StringContent("{}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.RequestTimeout, (await client.GetAsync("v1/transcribe")).StatusCode);
+        Assert.Equal(HttpStatusCode.RequestTimeout, (await client.GetAsync("v1/models")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ProcessingTimeoutDoesNotExtendUpload()
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            calls++;
+            return Task.FromResult(LocalApiResponse.Json(200, new { }));
+        }, requestTimeout: TimeSpan.FromMilliseconds(100), processingTimeout: (_, _) => TimeSpan.FromHours(1));
+        await server.StartAsync();
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, server.Port);
+        await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"POST /v1/transcribe HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nAuthorization: Bearer {Token}\r\nContent-Length: 100\r\n\r\nx"));
+        using var reader = new StreamReader(tcp.GetStream());
+        Assert.Contains("408", await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
     public async Task PublicStatusDoesNotBufferDeclaredRequestBody()
     {
         await using var server = new LocalHttpApi(FreePort(), Token, (_, _) => throw new InvalidOperationException());
