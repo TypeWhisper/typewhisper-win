@@ -42,8 +42,8 @@ public sealed class WorkflowSpokenLanguageTests
     {
         var error = Assert.Throws<NotSupportedException>(() => WorkflowSpokenLanguage.Resolve("ja", "en", Choices, true));
         Assert.Contains("does not support this workflow's spoken language", error.Message);
-        // A provider without a language list only detects automatically.
-        Assert.Throws<NotSupportedException>(() => WorkflowSpokenLanguage.Resolve("de", "auto", [], true));
+        // A provider without a language list accepts every language, as the plugin SDK defines.
+        Assert.Equal("de", WorkflowSpokenLanguage.Resolve("de", "auto", [], true));
         Assert.Equal("auto", WorkflowSpokenLanguage.Resolve("auto", "auto", [], true));
     }
 

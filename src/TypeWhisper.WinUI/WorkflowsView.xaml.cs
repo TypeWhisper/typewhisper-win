@@ -426,7 +426,8 @@ public sealed partial class WorkflowsView : UserControl
         : _opened is { } opened && ConfigTrigger.SelectedId == opened.ActivationId ? opened.InputLanguage : null;
     // The languages the current transcription model accepts; others stay selectable from a saved workflow.
     private bool ConfigLanguageUnsupported => ConfigSelectedLanguage is { } language && _session is { } session
-        && (language == "auto" ? !session.DetectsLanguage : !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
+        && (language == "auto" ? !session.DetectsLanguage
+            : session.LanguageChoices.Count > 0 && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
@@ -546,7 +547,8 @@ public sealed partial class WorkflowsView : UserControl
 
     private void ConfigureLanguages(string language)
     {
-        var codes = _session?.LanguageChoices ?? [];
+        // A provider without a language list accepts every language.
+        var codes = _session?.LanguageChoices is { Count: > 0 } choices ? choices : SpokenLanguageChoices.All;
         var detects = _session?.SupportedLanguages.Count == 0;
         var languages = codes.Select(code => new Choice(code, LiveDictationSettings.LanguageName(code), Loc.T("Use this language for recordings with this workflow")))
             .OrderBy(choice => detects ? choice.Label : "", StringComparer.CurrentCulture);
