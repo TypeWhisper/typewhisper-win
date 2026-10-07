@@ -65,6 +65,11 @@ internal static class InsertionContextReader
             // Providers may count characters differently; never look further than the formatter expects.
             if (beforeText.Length > DictationInsertionText.ContextLength) beforeText = beforeText[^DictationInsertionText.ContextLength..];
             if (afterText.Length > DictationInsertionText.ContextLength) afterText = afterText[..DictationInsertionText.ContextLength];
+            // Focus may move to another control during the read. Its text says nothing about the field that
+            // receives the paste, so the paste then goes ahead unformatted.
+            var focused = automation.GetFocusedElement();
+            try { if (focused is null || automation.CompareElements(element, focused) == 0) return null; }
+            finally { Release(focused); }
             return new(beforeText, afterText);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

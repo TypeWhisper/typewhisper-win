@@ -33,10 +33,10 @@ public static class DictationInsertionText
         var next = after.Count > 0 ? after[0] : null;
         var previousNonWhitespace = before.LastOrDefault(element => !IsWhitespace(element));
         var nextNonWhitespace = after.FirstOrDefault(element => !IsWhitespace(element));
-        // A line break between the caret and the nearest text ends the sentence on that side.
-        var lineBreakBefore = before.AsEnumerable().Reverse().TakeWhile(IsWhitespace).Any(IsLineBreak);
-        var lineBreakAfter = after.TakeWhile(IsWhitespace).Any(IsLineBreak);
-        var midSentence = previousNonWhitespace is not null && IsWordLike(previousNonWhitespace) && !lineBreakBefore;
+        // A line break or tab between the caret and the nearest text ends the sentence on that side.
+        var breakBefore = before.AsEnumerable().Reverse().TakeWhile(IsWhitespace).Any(IsStructuralBreak);
+        var breakAfter = after.TakeWhile(IsWhitespace).Any(IsStructuralBreak);
+        var midSentence = previousNonWhitespace is not null && IsWordLike(previousNonWhitespace) && !breakBefore;
 
         var result = Elements(text);
         // Spoken "new line" or "tab" commands at either end are kept; plain spaces there are not. Unlike macOS,
@@ -46,7 +46,7 @@ public static class DictationInsertionText
         TrimWhitespace(result);
         // A kept break starts a new line before the dictation or ends its sentence before the following text.
         if (midSentence && leading.Count == 0 && !CapitalizesNouns(language)) LowercaseFirstWordIfSafe(result);
-        if (midSentence && trailing.Count == 0 && !lineBreakAfter && nextNonWhitespace is not null &&
+        if (midSentence && trailing.Count == 0 && !breakAfter && nextNonWhitespace is not null &&
             (IsWordLike(nextNonWhitespace) || ClosingPunctuation.Contains(nextNonWhitespace)))
             StripSingleFinalPeriod(result);
         // Mutually exclusive with the mid-sentence rule above: that one needs surrounding text, this one needs none.
@@ -88,11 +88,11 @@ public static class DictationInsertionText
     }
 
     // A straight double quote right after a word or the end of a phrase closes a quotation, as in `He said "hello."`,
-    // and takes a space before the next word. So do the German closing quotes, as in `Er sagte „Hallo“`.
+    // and takes a space before the next word. So do guillemets and the German closing quotes, as in `Er sagte „Hallo“`.
     // After a delimiter such as `:` or `=` a straight quote opens one, as in `{"key":"`. macOS treats these
     // quotes as opening everywhere. Apostrophes stay ambiguous because of elisions such as "l'".
     private static bool ClosesQuote(string? beforeQuote, string quote) =>
-        quote is "\"" or "\u201C" or "\u2018" &&
+        quote is "\"" or "\u201C" or "\u2018" or "\u00BB" or "\u00AB" &&
         beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote) ||
             beforeQuote.EnumerateRunes().Any(rune =>
                 Rune.GetUnicodeCategory(rune) is UnicodeCategory.OtherSymbol or UnicodeCategory.CurrencySymbol));
@@ -131,8 +131,10 @@ public static class DictationInsertionText
         var run = fromStart ? text.TakeWhile(IsWhitespace) : text.AsEnumerable().Reverse().TakeWhile(IsWhitespace).Reverse();
         // A text of only whitespace keeps its breaks once, at the start.
         if (!fromStart && text.All(IsWhitespace)) return [];
-        return run.Where(element => IsLineBreak(element) || element.Contains('\t')).ToList();
+        return run.Where(IsStructuralBreak).ToList();
     }
+
+    private static bool IsStructuralBreak(string element) => element.Contains('\t') || IsLineBreak(element);
 
     private static bool IsLineBreak(string element) =>
         element.Any(c => c is '\n' or '\r' or '\v' or '\f' or '\u0085' or '\u2028' or '\u2029');
