@@ -69,7 +69,7 @@ public sealed partial class MainWindow
             {
                 _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
                 ShowTaskStartError(await _dictation.StartAsync(snapshot), workflow);
-            });
+            }, () => !DictationHotkeysPaused && _dictation.CanStartWorkflowModelShortcut(snapshot.TranscriptionModel));
             return;
         }
         var target = NativeMethods.GetForegroundWindow();

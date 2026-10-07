@@ -608,7 +608,7 @@ public sealed partial class WorkflowsView : UserControl
         var contextual = ConfigTrigger.SelectedId is "App" or "Website";
         ConfigTaskSection.Visibility = ConfigUsesRecordingTask ? Visibility.Visible : Visibility.Collapsed;
         ConfigTaskSection.Description = Loc.T("Applies only to this recording. Native translation outputs English and requires a compatible transcription model. With Dictation Only, no LLM is needed; local models work offline.")
-            + (ConfigTask.SelectedId == "translate" && _session?.SupportsTranslation != true
+            + (ConfigTask.SelectedId == "translate" && ConfigSelectedTranscriptionModel is null && _session?.SupportsTranslation != true
                 ? " " + Loc.T("The current model cannot translate to English. Choose a compatible model in Dictation before running this workflow.") : "");
         ConfigLanguageSection.Visibility = ConfigTaskSection.Visibility;
         ConfigTranscriptionModelSection.Visibility = ConfigUsesTranscriptionModel ? Visibility.Visible : Visibility.Collapsed;

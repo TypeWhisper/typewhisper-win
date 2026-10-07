@@ -48,7 +48,10 @@ public sealed class DictationInputCoordinator : IDisposable
     }
 
     /// <summary>Captures intent immediately, before UI dispatch. A cancel supersedes a pending stop; competing starts are discarded.</summary>
-    public Task SubmitAsync(DictationInputAction action, Func<Task>? startOverride = null)
+    /// <param name="action">The requested input action.</param>
+    /// <param name="startOverride">Starts this request instead of the default start.</param>
+    /// <param name="canStartOverride">Decides whether this start may run instead of the default condition.</param>
+    public Task SubmitAsync(DictationInputAction action, Func<Task>? startOverride = null, Func<bool>? canStartOverride = null)
     {
         if (_disposed) return Completion;
         ObserveMode();
@@ -62,14 +65,14 @@ public sealed class DictationInputCoordinator : IDisposable
         if (_busy) return Completion;
         if (action == DictationInputAction.Start)
         {
-            if (_recording() || !_canStart()) return Completion;
+            if (_recording() || !(canStartOverride ?? _canStart)()) return Completion;
             _starting = true;
         }
         else if (!_recording()) return Completion;
         _busy = true; _terminal = null;
         _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var completion = _completion;
-        if (!_dispatch(() => _ = RunAsync(action, completion, startOverride))) Finish(completion);
+        if (!_dispatch(() => _ = RunAsync(action, completion, startOverride, canStartOverride ?? _canStart))) Finish(completion);
         return completion.Task;
     }
 
@@ -81,14 +84,14 @@ public sealed class DictationInputCoordinator : IDisposable
         _observedMode = mode;
     }
 
-    private async Task RunAsync(DictationInputAction action, TaskCompletionSource completion, Func<Task>? startOverride)
+    private async Task RunAsync(DictationInputAction action, TaskCompletionSource completion, Func<Task>? startOverride, Func<bool> canStart)
     {
         try
         {
             if (action == DictationInputAction.Start)
             {
                 ObserveMode();
-                if (_disposed || _terminal == DictationInputAction.Cancel || !_canStart()) return;
+                if (_disposed || _terminal == DictationInputAction.Cancel || !canStart()) return;
                 await (startOverride ?? _start)();
                 ObserveMode();
                 _starting = false;

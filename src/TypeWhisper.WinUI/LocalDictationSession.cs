@@ -589,8 +589,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal Task ToggleAsync() => SetRecordingAsync(null);
     // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
     // hotkey while one is active so it can reach that cancellation before using a provider.
-    internal bool CanStartFromShortcut => CanCaptureWhileModelLoads || CanStartSessionOperation
-        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (IsReady
+    internal bool CanStartFromShortcut => CanStartShortcut(IsReady);
+    // A workflow with its own model can start while the selected model is unavailable; its model loads at the start.
+    internal bool CanStartWorkflowModelShortcut(string? model) => CanStartShortcut(IsReady || !string.IsNullOrWhiteSpace(model));
+    private bool CanStartShortcut(bool ready) => CanCaptureWhileModelLoads || CanStartSessionOperation
+        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (ready
 #if DEBUG
         || CorrectionProbeEnabled
 #endif
@@ -720,7 +723,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
             }
             else if (recording.HasValue && recording.Value == _audio.IsRecording) return;
-            if (!IsReady)
+            if (!IsReady && !SwitchesWorkflowModel(workflow?.TranscriptionModel))
             {
                 AppDiagnostics.Write("dictation.not-ready");
                 SetStatus(Loc.T("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."));

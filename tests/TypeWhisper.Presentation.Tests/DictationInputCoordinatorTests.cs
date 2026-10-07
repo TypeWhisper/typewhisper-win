@@ -31,6 +31,23 @@ public sealed class DictationInputCoordinatorTests
     }
 
     [Fact]
+    public async Task StartConditionOverrideAppliesOnlyToItsOwnRequest()
+    {
+        var session = new Session { Ready = false }; using var input = session.Coordinator();
+        session.StartBarrier.SetResult();
+        await input.SubmitAsync(DictationInputAction.Start);
+        Assert.Equal(0, session.Starts);
+        var started = false;
+        await input.SubmitAsync(DictationInputAction.Start, () => { started = true; session.Recording = true; return Task.CompletedTask; }, () => true)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(started);
+        await input.SubmitAsync(DictationInputAction.Stop).WaitAsync(TimeSpan.FromSeconds(5));
+        session.Ready = true;
+        await input.SubmitAsync(DictationInputAction.Start, canStartOverride: () => false);
+        Assert.Equal(0, session.Starts);
+    }
+
+    [Fact]
     public async Task StopDuringEarlyCaptureWaitsForStartupAndStopsExactlyOnce()
     {
         var setup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
