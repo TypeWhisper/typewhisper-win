@@ -84,7 +84,7 @@ internal static class LocalApiDocumentation
         <h2 id="discovery">Auto-discovery</h2>
         <p>The active profile contains <code>api-discovery.json</code> (base_url, port, token and process information) and <code>api-port</code>. The normal development profile is <code>%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData</code>. The discovery token is accessible only to your Windows user. Files are removed when the API stops; verify liveness after an unexpected app exit.</p>
         <h2 id="errors">Limits and errors</h2>
-        <p>Uploads: up to 32 MiB including multipart framing. Audio: up to 60 minutes. Local-file paths cannot use network shares or reparse points. Only loopback connections are accepted; browser-origin API requests are blocked.</p>
+        <p>Uploads: up to 32 MiB including multipart framing. Audio: up to 60 minutes. Transcriptions may run up to two hours once the upload has arrived; other requests time out after five minutes. Local-file paths cannot use network shares or reparse points. Only loopback connections are accepted; browser-origin API requests are blocked.</p>
         <table><thead><tr><th scope="col">Status</th><th scope="col">Meaning</th></tr></thead><tbody>
         <tr><td>400</td><td>Invalid, duplicate or unsupported options.</td></tr><tr><td>401 / 403</td><td>Missing/invalid token or disallowed request origin.</td></tr>
         <tr><td>409</td><td>Engine busy, model operation unavailable or required model assets missing.</td></tr><tr><td>413 / 422</td><td>Upload too large, invalid audio, unsupported language/task/hints, missing translation configuration or missing subtitle timestamps.</td></tr>

@@ -11,6 +11,9 @@ namespace TypeWhisper.Cli;
 static class Program
 {
     private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromMinutes(5) };
+    // The app bounds transcriptions itself and keeps the engine until native work has drained,
+    // so wait for its response (or Ctrl+C) instead of abandoning a request that keeps it busy.
+    private static readonly HttpClient TranscriptionHttp = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = Timeout.InfiniteTimeSpan };
 
     private static readonly CancellationTokenSource Cancellation = new();
 
@@ -409,7 +412,7 @@ static class Program
                 var path = options.AwaitDownload ? "/v1/transcribe?await_download=1" : "/v1/transcribe";
                 using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}{path}") { Content = content };
                 CliRequestBuilder.ApplyApiToken(request, apiToken);
-                using var response = await Http.SendAsync(request, Cancellation.Token);
+                using var response = await TranscriptionHttp.SendAsync(request, Cancellation.Token);
                 var body = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
@@ -445,7 +448,7 @@ static class Program
                     options.AwaitDownload,
                     options.ApplyCorrections),
                 apiToken);
-            using var response = await Http.SendAsync(request, Cancellation.Token);
+            using var response = await TranscriptionHttp.SendAsync(request, Cancellation.Token);
             var body = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
