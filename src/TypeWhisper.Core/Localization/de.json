@@ -2786,6 +2786,7 @@
   "Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches.": "Verwende {date}, {time}, {datetime}, {day}, {year} oder ein Format wie {date:dd.MM.yyyy}. {clipboard} fügt den Text der Zwischenablage ein, wenn der gesprochene Auslöser passt.",
   "Used 1 time": "1-mal verwendet",
   "Used by workflows set to Use default. Existing custom selections stay unchanged.": "Wird von Workflows mit der Einstellung Standard verwenden genutzt. Bestehende eigene Auswahlen bleiben unverändert.",
+  "Used for spoken commands and formatting; the model still detects the language": "Für Sprachbefehle und Formatierung; das Modell erkennt die Sprache weiterhin selbst",
   "Used when Stop after silence is enabled. Changes apply to the next recording.": "Wird verwendet, wenn „Nach Stille stoppen“ aktiviert ist. Änderungen gelten ab der nächsten Aufnahme.",
   "Used when automatic paste is enabled. Keep the target fixed when dictation starts.": "Gilt, wenn automatisches Einfügen aktiviert ist. Das Ziel bleibt ab Diktatbeginn festgelegt.",
   "Used {0} times": "{0}-mal verwendet",

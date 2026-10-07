@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.UI.Xaml.Controls;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
@@ -21,9 +22,7 @@ internal static class LiveLanguageHintSettings
         void Refresh()
         {
             restoring = true;
-            var codes = session.SupportedLanguages.Count > 0 ? session.SupportedLanguages : CultureInfo.GetCultures(CultureTypes.NeutralCultures)
-                .Select(culture => culture.TwoLetterISOLanguageName).Where(code => code != "iv").Distinct().ToArray();
-            var options = codes.Where(code => code.Length is 2 or 3 && code.All(c => c is >= 'a' and <= 'z'))
+            var options = SpokenLanguageChoices.For(session.SupportedLanguages).Where(code => code.Length is 2 or 3 && code.All(c => c is >= 'a' and <= 'z'))
                 .Select(code => new Choice(code, Name(code), Loc.T("Preferred input language"))).OrderBy(choice => choice.Label).ToList();
             var selected = session.TextPreferences.Current.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries);
             // Preserve saved choices visibly when switching to a provider with a narrower language list.

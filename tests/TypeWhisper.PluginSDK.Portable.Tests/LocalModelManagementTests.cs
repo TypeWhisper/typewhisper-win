@@ -91,6 +91,7 @@ public sealed class LocalModelManagementTests : IDisposable
     {
         var response = new PluginTranscriptionResult("Hallo Welt", "de", 2, 0.2f)
         { Segments = [new("Hallo", 0.12, 0.83), new("Welt", 1.1, 1.72)] };
+        _engine.SetupGet(e => e.SupportedLanguages).Returns(["de"]);
         _engine.Setup(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), "de", false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(response);
         await using var runtime = Create(); await runtime.InitializeAsync();
@@ -276,6 +277,26 @@ public sealed class LocalModelManagementTests : IDisposable
         Assert.Equal(probability, result.NoSpeechProbability);
         Assert.Equal("de", new VocabularyHostServices(_root).GetSetting<string>("Language"));
         Assert.Throws<ArgumentException>(() => runtime.SelectLanguage("xx"));
+    }
+    [Fact]
+    public async Task ModelThatDetectsTheLanguageKeepsTheChoiceForTextProcessingOnly()
+    {
+        new VocabularyHostServices(_root).SetSetting("Language", "en");
+        _engine.SetupGet(e => e.SupportedLanguages).Returns([]);
+        _engine.Setup(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), null, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PluginTranscriptionResult("Hallo", null, 1, null));
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        // A language saved for a model with a language list does not carry over.
+        Assert.Equal("auto", runtime.Language);
+        runtime.SelectLanguage("de");
+        Assert.Equal("de", runtime.Language);
+        Assert.Equal("de", new VocabularyHostServices(_root).GetSetting<string>("TextLanguage"));
+        Assert.Equal("en", new VocabularyHostServices(_root).GetSetting<string>("Language"));
+        Assert.Equal("Hallo", (await runtime.DecodeAsync([0f], false)).Text);
+        _engine.Verify(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), null, false, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Throws<ArgumentException>(() => runtime.SelectLanguage("xx"));
+        runtime.SelectLanguage("auto");
+        Assert.Equal("auto", runtime.Language);
     }
     [Fact]
     public async Task InitialLoadFailureLeavesCatalogAvailableAndRetryWorks()
