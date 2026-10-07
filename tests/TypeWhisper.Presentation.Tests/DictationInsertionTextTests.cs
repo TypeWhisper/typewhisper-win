@@ -63,6 +63,8 @@ public sealed class DictationInsertionTextTests
     [InlineData("He said \"hello.\"", 16, 0, "Next.", " Next.")]
     [InlineData("He said \"", 9, 0, "Hello", "Hello")]
     [InlineData("l'", 2, 0, "amour", "amour")]
+    [InlineData("{\"key\":\"", 8, 0, "value", "value")]
+    [InlineData("x=\"", 3, 0, "Value", "Value")]
     // Spoken line breaks and tabs at either end stay; spaces there do not. A kept break also ends the sentence
     // context, so the dictation keeps its casing and final period.
     [InlineData("Hello.", 6, 0, "\nThanks", "\nThanks")]

@@ -70,11 +70,12 @@ public static class DictationInsertionText
         return IsWordLike(right) && PunctuationThatTakesFollowingSpace.Contains(left);
     }
 
-    // A straight double quote right after a word or punctuation closes a quotation, as in `He said "hello"`, and
-    // takes a space before the next word. macOS treats it as opening everywhere. Apostrophes stay ambiguous
-    // because of elisions such as "l'".
+    // A straight double quote right after a word or the end of a phrase closes a quotation, as in `He said "hello."`,
+    // and takes a space before the next word. After a delimiter such as `:` or `=` it opens one, as in `{"key":"`.
+    // macOS treats it as opening everywhere. Apostrophes stay ambiguous because of elisions such as "l'".
     private static bool ClosesQuote(string? beforeQuote, string quote) =>
-        quote == "\"" && beforeQuote is not null && !IsWhitespace(beforeQuote) && !OpeningPunctuation.Contains(beforeQuote);
+        quote == "\"" && beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote));
+    private static readonly HashSet<string> EndsQuotedPhrase = [".", ",", "!", "?", ")", "]", "}", "”", "’"];
 
     // Lowercases "Presented" but keeps "NASA", "TypeWhisper" and single letters such as "I".
     private static void LowercaseFirstWordIfSafe(List<string> text)

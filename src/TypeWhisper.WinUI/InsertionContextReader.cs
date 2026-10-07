@@ -21,6 +21,8 @@ internal static class InsertionContextReader
         // A read past its time limit still holds a worker; never queue another one behind a stalled provider.
         if (_pending is { IsCompleted: false }) { AppDiagnostics.Write("insertion.context.skipped-pending"); return null; }
         var read = _pending = Task.Run(() => Read(target));
+        // The result holds text from another app's field; do not keep it reachable once the read is over.
+        _ = read.ContinueWith(done => Interlocked.CompareExchange(ref _pending, null, done), TaskScheduler.Default);
         if (await Task.WhenAny(read, Task.Delay(ReadLimit)) == read) return await read;
         AppDiagnostics.Write("insertion.context.timeout");
         return null;
@@ -41,7 +43,8 @@ internal static class InsertionContextReader
             automation = (IUIAutomation2)new CUIAutomation8();
             automation.ConnectionTimeout = 200; automation.TransactionTimeout = 200;
             element = automation.GetFocusedElement();
-            if (element is null || element.CurrentIsPassword != 0) return null;
+            // Focus can lag behind a foreground change; never read another window's field.
+            if (element is null || element.CurrentIsPassword != 0 || !BelongsTo(automation, element, target)) return null;
             pattern = element.GetCurrentPattern(TextPatternId);
             if (pattern is not IUIAutomationTextPattern text) return null;
             selections = text.GetSelection();
@@ -74,6 +77,25 @@ internal static class InsertionContextReader
             Release(after); Release(before); Release(selection); Release(selections);
             Release(pattern); Release(element); Release(automation);
         }
+    }
+
+    private static bool BelongsTo(IUIAutomation2 automation, IUIAutomationElement element, IntPtr target)
+    {
+        var walker = automation.RawViewWalker;
+        IUIAutomationElement? parent = null;
+        try
+        {
+            var current = element;
+            for (var depth = 0; depth < 64; depth++)
+            {
+                if ((IntPtr)current.CurrentNativeWindowHandle == target) return true;
+                var next = walker.GetParentElement(current); Release(parent); parent = next;
+                if (next is null) return false;
+                current = next;
+            }
+            return false;
+        }
+        finally { Release(parent); Release(walker); }
     }
 
     private static void Release(object? value) { if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
