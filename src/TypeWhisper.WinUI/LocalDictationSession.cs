@@ -151,8 +151,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _ => SelectRegistryModelAsync(providerId, modelId)
     };
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
-    internal string Language => SupportedLanguages.Count == 0 ? "auto" : UsesRegistryProvider ? ActiveRegistryProvider is { } provider
-        ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
+    /// <summary>Languages the spoken-language picker offers; a local model without its own list offers every language.</summary>
+    internal IReadOnlyList<string> LanguageChoices => UsesRegistryProvider ? SupportedLanguages : SpokenLanguageChoices.For(SupportedLanguages);
+    internal string Language => !UsesRegistryProvider ? Models.Language : SupportedLanguages.Count == 0 ? "auto" : ActiveRegistryProvider is { } provider
+        ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto";
     private bool CanStartSessionOperation => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel);
     internal bool CanChangeProvider => CanStartSessionOperation && !PluginRuntime.IsBusy;
     internal bool CanStartPluginSettingsAction => CanChangeProvider && _gate.CurrentCount > 0;

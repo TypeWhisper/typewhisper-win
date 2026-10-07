@@ -100,9 +100,11 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
             void RefreshLanguage() => languageRow.DispatcherQueue.TryEnqueue(() =>
             {
                 if (!languageRow.IsLoaded) return;
-                var options = session.SupportedLanguages.Select(code => new Choice(code,
-                    LanguageName(code), Loc.T("Supported by the active model"))).ToArray();
-                language.SetOptions(options.Length == 0 || session.UsesRegistryProvider ? new Choice[] { new("auto", Loc.T("Automatic"), Loc.T("Language detection by the model")) }.Concat(options).ToArray() : options, options.Length == 0 ? "auto" : session.Language);
+                var detects = session.SupportedLanguages.Count == 0;
+                var options = session.LanguageChoices.Select(code => new Choice(code, LanguageName(code),
+                    detects ? Loc.T("Used for spoken commands and formatting; the model still detects the language") : Loc.T("Supported by the active model")))
+                    .OrderBy(choice => detects ? choice.Label : "", StringComparer.CurrentCulture).ToArray();
+                language.SetOptions(detects || session.UsesRegistryProvider ? new Choice[] { new("auto", Loc.T("Automatic"), Loc.T("Language detection by the model")) }.Concat(options).ToArray() : options, options.Length == 0 ? "auto" : session.Language);
                 language.IsEnabled = selectedProviderId == session.ActiveProviderId && session.CanChangeProvider && (session.UsesRegistryProvider ? session.IsReady : session.CanSelectModel) && options.Length > 0;
             });
             languageRow.Loaded += (_, _) => { session.Models.Changed += RefreshLanguage; session.Changed += RefreshLanguage; RefreshLanguage(); };

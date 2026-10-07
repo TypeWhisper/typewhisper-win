@@ -2786,6 +2786,7 @@
   "Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches.": "可使用 {date}、{time}、{datetime}、{day}、{year}，或 {date:dd.MM.yyyy} 这样的格式。口述触发词匹配时，{clipboard} 会插入剪贴板文本。",
   "Used 1 time": "已使用 1 次",
   "Used by workflows set to Use default. Existing custom selections stay unchanged.": "供设置为“使用默认”的工作流使用。现有的自定义选择保持不变。",
+  "Used for spoken commands and formatting; the model still detects the language": "用于语音命令和格式设置；语言仍由模型检测",
   "Used when Stop after silence is enabled. Changes apply to the next recording.": "启用“静音后停止”时使用。更改将在下次录音时生效。",
   "Used when automatic paste is enabled. Keep the target fixed when dictation starts.": "在启用自动粘贴时使用。听写开始时固定目标。",
   "Used {0} times": "已使用 {0} 次",

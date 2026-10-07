@@ -212,9 +212,13 @@ public sealed partial class SetupWizard : UserControl
             _providerPicker.SetOptions(providers.Select(item => new Choice(item.Id, item.Name, item.Cloud ? Loc.T("{0} - cloud", item.Status) : Loc.T("{0} - on device", item.Status))).ToArray(), _selectedProvider ?? "", Loc.T("Provider unavailable"));
             _modelPicker.SetOptions(selected?.Models.Where(item => item.Ready).Select(item => new Choice(item.Id, item.Name, Loc.T("Ready"))).ToArray() ?? [],
                 _selectedProvider == _session.ActiveProviderId ? selected?.SelectedModelId ?? "" : "", Loc.T("Choose a ready model; otherwise configure the plugin"));
-            var codes = _session.SupportedLanguages;
-            var options = (codes.Count == 0 || _session.UsesRegistryProvider ? new[] { "auto" }.Concat(codes) : codes).Distinct().ToArray();
-            _languagePicker.SetOptions(options.Select(code => new Choice(code, LanguageName(code), Loc.T("Supported by the active model"))).ToArray(), _session.Language);
+            var detects = _session.SupportedLanguages.Count == 0;
+            var codes = _session.LanguageChoices;
+            var choices = codes.Select(code => new Choice(code, LanguageName(code), detects
+                ? Loc.T("Used for spoken commands and formatting; the model still detects the language") : Loc.T("Supported by the active model")))
+                .OrderBy(choice => detects ? choice.Label : "", StringComparer.CurrentCulture);
+            _languagePicker.SetOptions((detects || _session.UsesRegistryProvider ? new[] { new Choice("auto", LanguageName("auto"), Loc.T("Language detection by the model")) }.Concat(choices) : choices)
+                .DistinctBy(choice => choice.Id).ToArray(), _session.Language);
             var canChange = !_selecting && _session.CanChangeProvider;
             _providerPicker.IsEnabled = canChange;
             _modelPicker.IsEnabled = canChange && selected?.Ready == true;

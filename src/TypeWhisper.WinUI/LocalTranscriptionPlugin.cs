@@ -2,6 +2,7 @@ using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
@@ -31,13 +32,15 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal string? ActiveModelId { get; private set; }
     internal string? SelectedModelId => _lease?.Engine.SelectedModelId;
     internal IReadOnlyList<string> SupportedLanguages => _lease?.Engine.SupportedLanguages ?? [];
-    internal string Language => SupportedLanguages.Count == 0 ? "auto" :
-        SupportedLanguages.Contains(_host.GetSetting<string>("Language") ?? "en") ? _host.GetSetting<string>("Language") ?? "en" : SupportedLanguages[0];
+    // A model without a language list detects the language itself. Its choice is kept apart from the model language,
+    // so a language saved for Canary does not silently apply to Parakeet.
+    private string LanguageSetting => SupportedLanguages.Count == 0 ? "TextLanguage" : "Language";
+    internal string Language => SpokenLanguageChoices.Resolve(SupportedLanguages, _host.GetSetting<string>(LanguageSetting));
     internal void SelectLanguage(string language)
     {
-        if (!Ready || (SupportedLanguages.Count == 0 ? language != "auto" : !SupportedLanguages.Contains(language)))
+        if (!Ready || !SpokenLanguageChoices.CanSelect(SupportedLanguages, language))
             throw new ArgumentException(Loc.T("This model does not support that language."));
-        _host.SetSetting("Language", language); Changed?.Invoke();
+        _host.SetSetting(LanguageSetting, language); Changed?.Invoke();
     }
     internal string ActiveModelName => Models.FirstOrDefault(m => m.Model.Id == ActiveModelId)?.Model.DisplayName ?? Loc.T("No model loaded");
     internal string? DownloadingModelId { get; private set; }
@@ -287,7 +290,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
 
     internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false, CancellationToken ct = default)
     {
-        var result = await DecodeResultAsync(samples, Language == "auto" ? null : Language, translate, ct);
+        var result = await DecodeResultAsync(samples, Language, translate, ct);
         return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage, result.NoSpeechProbability);
     }
 
@@ -298,7 +301,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         if (translate && !SupportsTranslation)
             throw new NotSupportedException(Loc.T("The selected local model cannot translate audio to English. Choose a translation-capable model or switch to Transcribe."));
         ct.ThrowIfCancellationRequested();
-        var result = await _lease!.Engine.TranscribePcmAsync(samples, language, translate, ct);
+        var result = await _lease!.Engine.TranscribePcmAsync(samples,
+            SpokenLanguageChoices.ForEngine(_lease.Engine.SupportedLanguages, language), translate, ct);
         ct.ThrowIfCancellationRequested();
         return result;
     }

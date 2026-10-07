@@ -2786,6 +2786,7 @@
   "Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches.": "{date}、{time}、{datetime}、{day}、{year}、または {date:dd.MM.yyyy} のような書式を使用できます。{clipboard} は、音声トリガーが一致したときにクリップボードのテキストを挿入します。",
   "Used 1 time": "1回使用",
   "Used by workflows set to Use default. Existing custom selections stay unchanged.": "「デフォルトを使用」に設定されたワークフローで使用されます。既存の個別の選択は変更されません。",
+  "Used for spoken commands and formatting; the model still detects the language": "音声コマンドと書式設定に使用されます。言語は引き続きモデルが検出します",
   "Used when Stop after silence is enabled. Changes apply to the next recording.": "「無音で停止」が有効な場合に使用されます。変更は次回の録音から適用されます。",
   "Used when automatic paste is enabled. Keep the target fixed when dictation starts.": "自動貼り付けが有効な場合に使用されます。ディクテーション開始時の対象を固定します。",
   "Used {0} times": "{0}回使用",
