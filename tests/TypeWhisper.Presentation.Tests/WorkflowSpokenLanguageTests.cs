@@ -20,6 +20,9 @@ public sealed class WorkflowSpokenLanguageTests
     [InlineData("", "en")]
     [InlineData(" ", "en")]
     [InlineData("global", "en")]
+    [InlineData("Global", "en")]
+    [InlineData("INHERIT_GLOBAL", "en")]
+    [InlineData("AUTO", "auto")]
     [InlineData("inherit_global", "en")]
     [InlineData("auto", "auto")]
     [InlineData("de", "de")]
@@ -27,34 +30,35 @@ public sealed class WorkflowSpokenLanguageTests
     public void ShortcutUsesExplicitLanguageOrCapturedGlobal(string? language, string expected)
     {
         var snapshot = AutomaticWorkflowSnapshot.ForDictationShortcut(Dictation(language));
-        Assert.Equal(expected, WorkflowSpokenLanguage.Resolve(WorkflowSpokenLanguage.SelectedLanguageFor(snapshot), "en", Choices));
+        Assert.Equal(expected, WorkflowSpokenLanguage.Resolve(WorkflowSpokenLanguage.SelectedLanguageFor(snapshot), "en", Choices, true));
     }
 
     [Fact]
     public void LanguageMatchesTheModelsSpelling() =>
-        Assert.Equal("zh-Hans", WorkflowSpokenLanguage.Resolve("zh-hans", "en", ["en", "zh-Hans"]));
+        Assert.Equal("zh-Hans", WorkflowSpokenLanguage.Resolve("zh-hans", "en", ["en", "zh-Hans"], true));
 
     [Fact]
     public void LanguageTheModelCannotUseIsRejected()
     {
-        var error = Assert.Throws<NotSupportedException>(() => WorkflowSpokenLanguage.Resolve("ja", "en", Choices));
+        var error = Assert.Throws<NotSupportedException>(() => WorkflowSpokenLanguage.Resolve("ja", "en", Choices, true));
         Assert.Contains("does not support this workflow's spoken language", error.Message);
         // A provider without a language list only detects automatically.
-        Assert.Throws<NotSupportedException>(() => WorkflowSpokenLanguage.Resolve("de", "auto", []));
-        Assert.Equal("auto", WorkflowSpokenLanguage.Resolve("auto", "auto", []));
+        Assert.Throws<NotSupportedException>(() => WorkflowSpokenLanguage.Resolve("de", "auto", [], true));
+        Assert.Equal("auto", WorkflowSpokenLanguage.Resolve("auto", "auto", [], true));
     }
 
     [Theory]
     [InlineData("D")]
     [InlineData("d")]
-    [InlineData("de_DE")]
+    [InlineData("de DE")]
+    [InlineData("_de")]
     [InlineData("1de")]
-    [InlineData("averyveryverylongcode")]
+    [InlineData("averyveryverylongcodethatkeepsgoing")]
     public void MalformedLanguageIsRejectedOrFallsBackToTranscriptReview(string language)
     {
         Assert.False(ManualWorkflowStore.IsDictationShortcut(Dictation(language)));
         Assert.Throws<InvalidOperationException>(() => AutomaticWorkflowSnapshot.ForDictationShortcut(Dictation(language)));
-        Assert.Throws<InvalidOperationException>(() => WorkflowSpokenLanguage.Resolve(language, "en", Choices));
+        Assert.Throws<InvalidOperationException>(() => WorkflowSpokenLanguage.Resolve(language, "en", Choices, true));
         // An unsupported automatic rule still records for transcript review, using the global language.
         var snapshot = AutomaticWorkflowSnapshot.Select([Dictation(language, WorkflowTrigger.Global())], "editor")!;
         Assert.NotNull(snapshot.Error);
@@ -87,11 +91,11 @@ public sealed class WorkflowSpokenLanguageTests
     [InlineData("de")]
     public void EditorAndStorageRoundTripLanguageWithoutChangingOtherSettings(string? language)
     {
-        var directory = Path.Combine(Path.GetTempPath(), "workflow-language-" + Guid.NewGuid());
+        var directory = Path.Join(Path.GetTempPath(), "workflow-language-" + Guid.NewGuid());
         Directory.CreateDirectory(directory);
         try
         {
-            var store = new ManualWorkflowStore(Path.Combine(directory, "workflows.json"));
+            var store = new ManualWorkflowStore(Path.Join(directory, "workflows.json"));
             var workflow = Dictation(null) with { Behavior = new() { SelectedTask = "transcribe" } };
             var draft = WorkflowDraft.FromStored(workflow) with { InputLanguage = language };
             store.Save(draft.ToStored(), allowAutomatic: true);
@@ -105,6 +109,33 @@ public sealed class WorkflowSpokenLanguageTests
             Assert.Equal(language, snapshot.InputLanguage);
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    [Theory]
+    [InlineData("ar_en")]
+    [InlineData("cmn_en_ms_ta")]
+    [InlineData("zh-Hans")]
+    public void ProviderLanguageIdentifiersAreAccepted(string language)
+    {
+        Assert.True(ManualWorkflowStore.IsDictationShortcut(Dictation(language)));
+        Assert.Equal(language, WorkflowSpokenLanguage.Resolve(language, "en", ["en", language], false));
+    }
+
+    [Fact]
+    public void AutomaticNeedsAModelThatDetectsTheLanguage()
+    {
+        var error = Assert.Throws<NotSupportedException>(() => WorkflowSpokenLanguage.Resolve("auto", "de", Choices, false));
+        Assert.Contains("cannot detect the language automatically", error.Message);
+        // Inheriting stays possible; the global picker already offers only valid choices.
+        Assert.Equal("de", WorkflowSpokenLanguage.Resolve(null, "de", Choices, false));
+    }
+
+    [Fact]
+    public void RejectedAutomaticRuleKeepsTheRecordingForReview()
+    {
+        var snapshot = AutomaticWorkflowSnapshot.Rejected("Review it");
+        Assert.Equal("Review it", snapshot.Error);
+        Assert.Null(WorkflowSpokenLanguage.SelectedLanguageFor(snapshot));
     }
 
     [Fact]

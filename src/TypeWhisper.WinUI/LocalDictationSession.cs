@@ -152,6 +152,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     };
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     /// <summary>Languages the spoken-language picker offers; a local model without its own list offers every language.</summary>
+    /// <summary>Whether the spoken-language picker offers automatic detection for the active model.</summary>
+    internal bool DetectsLanguage => UsesRegistryProvider || SupportedLanguages.Count == 0;
     internal IReadOnlyList<string> LanguageChoices => UsesRegistryProvider ? SupportedLanguages : SpokenLanguageChoices.For(SupportedLanguages);
     internal string Language => !UsesRegistryProvider ? Models.Language : SupportedLanguages.Count == 0 ? "auto" : ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto";
@@ -841,7 +843,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     AppDiagnostics.Write($"dictation.task-resolved task={resolvedTask}");
                 }
                 // The spoken language follows the same rule, before any streaming connection or preview decodes.
-                var resolvedLanguage = WorkflowSpokenLanguage.Resolve(WorkflowSpokenLanguage.SelectedLanguageFor(_workflowAtStart), _languageAtStart, LanguageChoices);
+                string resolvedLanguage;
+                try { resolvedLanguage = WorkflowSpokenLanguage.Resolve(WorkflowSpokenLanguage.SelectedLanguageFor(_workflowAtStart), _languageAtStart, LanguageChoices, DetectsLanguage); }
+                catch (NotSupportedException) when (workflow is null && _workflowAtStart is { Error: null })
+                {
+                    // An automatic rule matched after capture began: keep the speech for review in the global language.
+                    _workflowAtStart = AutomaticWorkflowSnapshot.Rejected(Loc.T("This workflow's spoken language is not supported by the current transcription model. Review your transcript; nothing was pasted."));
+                    resolvedLanguage = _languageAtStart;
+                    AppDiagnostics.Write("dictation.language-rejected");
+                }
                 if (resolvedLanguage != _languageAtStart)
                 {
                     _languageAtStart = resolvedLanguage;

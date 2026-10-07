@@ -69,7 +69,7 @@ internal sealed partial class LocalDictationSession
     {
         try
         {
-            WorkflowSpokenLanguage.Resolve(language, Language, LanguageChoices);
+            WorkflowSpokenLanguage.Resolve(language, Language, LanguageChoices, DetectsLanguage);
             return false;
         }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
