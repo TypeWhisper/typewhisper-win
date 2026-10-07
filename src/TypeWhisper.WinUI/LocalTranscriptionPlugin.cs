@@ -302,7 +302,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             throw new NotSupportedException(Loc.T("The selected local model cannot translate audio to English. Choose a translation-capable model or switch to Transcribe."));
         ct.ThrowIfCancellationRequested();
         var result = await _lease!.Engine.TranscribePcmAsync(samples,
-            SpokenLanguageChoices.ForEngine(_lease.Engine.SupportedLanguages, language), translate, ct);
+            SpokenLanguageChoices.ForEngine(SupportedLanguages, language), translate, ct);
         ct.ThrowIfCancellationRequested();
         return result;
     }
