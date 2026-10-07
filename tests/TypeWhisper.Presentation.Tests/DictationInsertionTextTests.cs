@@ -45,6 +45,18 @@ public sealed class DictationInsertionTextTests
     [InlineData("AB", 1, 0, "中", " 中 ")]
     // A replaced selection is ignored; only the text around it counts.
     [InlineData("say hello there", 4, 5, "goodbye", "goodbye")]
+    // Character classes checked against the Swift formatter on macOS.
+    [InlineData("Café", 5, 0, "Noir", " noir")]
+    [InlineData("word ", 5, 0, "Next", "next")]
+    [InlineData("a￼", 2, 0, "Hi", "Hi")]
+    [InlineData("Nice 👍", 7, 0, "Thanks", "Thanks")]
+    [InlineData("x١٢", 3, 0, "Abc", " abc")]
+    [InlineData("the ", 4, 0, "ǅungla", "ǆungla")]
+    [InlineData("in ", 3, 0, "İstanbul", "i̇stanbul")]
+    [InlineData("Line\r\n", 6, 0, "Next", "next")]
+    // The prolonged sound mark and the halfwidth voiced mark belong to no CJK script on macOS either.
+    [InlineData("カー", 1, 0, "ド", "ド ")]
+    [InlineData("ｶｷ", 1, 0, "ﾞ", " ﾞ ")]
     public void FitsTextToTheCursorPosition(string value, int location, int length, string text, string expected) =>
         Assert.Equal(expected, DictationInsertionText.ForPaste(text, Context(value, location, length)));
 
@@ -61,6 +73,11 @@ public sealed class DictationInsertionTextTests
     [InlineData("(030) 123456.", "(030) 123456")]
     [InlineData("1.2.3.", "1.2.3")]
     [InlineData("v2.10.4.", "v2.10.4")]
+    [InlineData("Name@Example.COM.", "Name@Example.COM")]
+    [InlineData("١٢٣.٤٥.", "١٢٣.٤٥")]
+    [InlineData("example.com:8080.", "example.com:8080")]
+    [InlineData("localhost:8080.", "localhost:8080.")]
+    [InlineData("WAIT.", "WAIT.")]
     // A period is a legal part of URL paths and queries (RFC 3986 section 2.3).
     [InlineData("https://example.com/docs.", "https://example.com/docs.")]
     [InlineData("https://example.com/files/report.", "https://example.com/files/report.")]

@@ -72,7 +72,8 @@ public static class DictationInsertionText
         if (end - start < 2 || !IsUppercase(text[start])) return;
         var remainder = text.GetRange(start + 1, end - start - 1);
         if (!remainder.Any(IsLowercase) || remainder.Any(IsUppercase)) return;
-        text[start] = text[start].ToLowerInvariant();
+        // Full case mapping as in Swift: U+0130 is the one letter whose lowercase form is two characters.
+        text[start] = text[start].ToLowerInvariant().Replace("İ", "i̇", StringComparison.Ordinal);
     }
 
     // Removes one final period, together with any whitespace after it, but never part of an ellipsis.
