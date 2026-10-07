@@ -61,8 +61,12 @@ public static class DictationInsertionText
     }
 
     private static readonly HashSet<string> OpeningPunctuation = ["(", "[", "{", "\"", "'", "“", "‘"];
-    private static readonly HashSet<string> ClosingPunctuation = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"];
-    private static readonly HashSet<string> PunctuationThatTakesFollowingSpace = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"];
+    // Beyond the macOS sets: the ellipsis and the sentence punctuation of Arabic, Urdu and Devanagari scripts, which
+    // are also followed by a space. CJK punctuation is not, so it stays out.
+    private static readonly HashSet<string> ClosingPunctuation =
+        [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’", "…", "،", "؛", "؟", "۔", "।", "॥"];
+    private static readonly HashSet<string> PunctuationThatTakesFollowingSpace =
+        [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’", "…", "،", "؛", "؟", "۔", "।", "॥"];
 
     private static bool ShouldInsertSpace(string? beforeLeft, string left, string right)
     {
@@ -80,7 +84,7 @@ public static class DictationInsertionText
         quote == "\"" && beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote) ||
             beforeQuote.EnumerateRunes().Any(rune => Rune.GetUnicodeCategory(rune) == UnicodeCategory.OtherSymbol));
     // Symbols such as emoji also end a quoted phrase, as in `"👍"`; math symbols such as `=` do not.
-    private static readonly HashSet<string> EndsQuotedPhrase = [".", ",", "!", "?", "%", ")", "]", "}", "”", "’"];
+    private static readonly HashSet<string> EndsQuotedPhrase = [".", ",", "!", "?", "%", ")", "]", "}", "”", "’", "…", "؟"];
 
     // In German and Luxembourgish, a capital at the start of a continuation is usually a noun, not a sentence start.
     // macOS lowercases it regardless.
@@ -206,7 +210,8 @@ public static class DictationInsertionText
             @"^(?:https?://|ftp://|www\.)?(?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::\d+)?$",
             Options | RegexOptions.IgnoreCase);
         // 3.14, 1,5, 1,000.50 and 1.000,50: English and German forms.
-        private static readonly Regex Decimal = new(@"^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?$|^\d+[.,]\d+$", Options);
+        // An optional sign, including the minus sign U+2212, as in -3.14.
+        private static readonly Regex Decimal = new(@"^[+\-−]?(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?|\d+[.,]\d+)$", Options);
         // Dictation often spaces the separators ("27 / 09 / 2026"); such dates must not pass as phone numbers.
         private static readonly Regex Date = new(
             @"^\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{2,4}$|^\d{4}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{1,2}$", Options);

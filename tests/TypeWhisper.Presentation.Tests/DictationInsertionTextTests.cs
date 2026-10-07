@@ -67,6 +67,11 @@ public sealed class DictationInsertionTextTests
     [InlineData("x=\"", 3, 0, "Value", "Value")]
     [InlineData("He said \"\ud83d\udc4d\"", 12, 0, "Next.", " Next.")]
     [InlineData("It grew 50%\"", 12, 0, "Next.", " Next.")]
+    // Sentence punctuation of other space-separated scripts, and the ellipsis character.
+    [InlineData("\u0645\u0631\u062d\u0628\u0627\u061f", 6, 0, "\u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f", " \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f")]
+    [InlineData("\u0645\u0631\u062d\u0628\u0627\u060c", 5, 0, "\u0635\u062f\u064a\u0642\u064a", " \u0635\u062f\u064a\u0642\u064a")]
+    [InlineData("\u0928\u092e\u0938\u094d\u0924\u0947\u0964", 7, 0, "\u0906\u092a \u0915\u0948\u0938\u0947 \u0939\u0948\u0902", " \u0906\u092a \u0915\u0948\u0938\u0947 \u0939\u0948\u0902")]
+    [InlineData("Wait\u2026", 5, 0, "Okay", " Okay")]
     // Spoken line breaks and tabs at either end stay; spaces there do not. A kept break also ends the sentence
     // context, so the dictation keeps its casing and final period.
     [InlineData("Hello.", 6, 0, "\nThanks", "\nThanks")]
@@ -95,6 +100,9 @@ public sealed class DictationInsertionTextTests
     [InlineData("1,5.", "1,5")]
     [InlineData("1,000.50.", "1,000.50")]
     [InlineData("1.000,50.", "1.000,50")]
+    [InlineData("-3.14.", "-3.14")]
+    [InlineData("+1,5.", "+1,5")]
+    [InlineData("\u22122.5.", "\u22122.5")]
     [InlineData("+49 171 2345678.", "+49 171 2345678")]
     [InlineData("(030) 123456.", "(030) 123456")]
     [InlineData("1.2.3.", "1.2.3")]

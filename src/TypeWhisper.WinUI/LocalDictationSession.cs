@@ -1002,7 +1002,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     var context = _textAtStart.AppAwareFormattingEnabled ? await InsertionContextReader.ReadAsync(_target) : null;
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     AppDiagnostics.Write($"delivery.context available={context is not null}");
-                    var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues, record.Language);
+                    // Casing follows the language of the pasted text: English after native translation, unknown
+                    // after a translation workflow, otherwise the dictated language.
+                    var outputLanguage = _workflowAtStart?.Translates == true ? null
+                        : _taskAtStart == TranscriptionTask.Translate ? "en" : record.Language;
+                    var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues, outputLanguage);
                     // A dictation of only a spoken line break must still insert it.
                     if (pasted.Length == 0) pasted = text;
                     var inserted = await _inserter.InsertAsync(pasted, _target, () =>
