@@ -54,11 +54,11 @@ public sealed class WorkflowTranscriptionModelTests
     [InlineData(Model)]
     public void EditorAndStorageRoundTripModel(string? model)
     {
-        var directory = Path.Combine(Path.GetTempPath(), "workflow-model-" + Guid.NewGuid());
+        var directory = Path.Join(Path.GetTempPath(), "workflow-model-" + Guid.NewGuid());
         Directory.CreateDirectory(directory);
         try
         {
-            var store = new ManualWorkflowStore(Path.Combine(directory, "workflows.json"));
+            var store = new ManualWorkflowStore(Path.Join(directory, "workflows.json"));
             var draft = WorkflowDraft.FromStored(Workflow(null)) with { TranscriptionModel = model, InputLanguage = "de" };
             store.Save(draft.ToStored(), allowAutomatic: true);
             var restored = WorkflowDraft.FromStored(Assert.Single(store.Read()));

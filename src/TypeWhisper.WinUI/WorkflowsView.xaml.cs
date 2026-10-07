@@ -435,8 +435,8 @@ public sealed partial class WorkflowsView : UserControl
         : ConfigTemplate.SelectedId == nameof(WorkflowTemplate.Dictation) && _opened is { } opened && ConfigTrigger.SelectedId == opened.ActivationId
             ? opened.TranscriptionModel : null;
     // The languages the current transcription model accepts; a workflow model is checked once it loads.
-    private bool ConfigLanguageUnsupported => ConfigSelectedTranscriptionModel is null && ConfigSelectedLanguage is { } language && language != "auto"
-        && _session is { } session && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase);
+    private bool ConfigLanguageUnsupported => ConfigSelectedTranscriptionModel is null && ConfigSelectedLanguage is { } language && _session is { } session
+        && (language == "auto" ? !session.DetectsLanguage : !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
@@ -564,8 +564,9 @@ public sealed partial class WorkflowsView : UserControl
         var detects = _languagesForWorkflowModel || _session?.SupportedLanguages.Count == 0;
         var languages = codes.Select(code => new Choice(code, LiveDictationSettings.LanguageName(code), Loc.T("Use this language for recordings with this workflow")))
             .OrderBy(choice => detects ? choice.Label : "", StringComparer.CurrentCulture);
-        Choice[] options = [new("", Loc.T("Use global setting"), Loc.T("Use the spoken language selected in Dictation")),
-            new("auto", Loc.T("Automatic"), Loc.T("Language detection by the model")), .. languages];
+        // Like the Dictation picker, Automatic is offered only for models that detect the language.
+        Choice[] automatic = _languagesForWorkflowModel || _session?.DetectsLanguage != false ? [new("auto", Loc.T("Automatic"), Loc.T("Language detection by the model"))] : [];
+        Choice[] options = [new("", Loc.T("Use global setting"), Loc.T("Use the spoken language selected in Dictation")), .. automatic, .. languages];
         ConfigLanguage.SetOptions(options, language, Loc.T("{0} (unavailable)", LiveDictationSettings.LanguageName(language)));
     }
 

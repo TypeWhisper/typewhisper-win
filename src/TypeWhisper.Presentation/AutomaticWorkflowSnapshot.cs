@@ -47,6 +47,9 @@ public sealed class AutomaticWorkflowSnapshot
     /// <summary>Creates a review-only result when the catalog cannot be read safely.</summary>
     public static AutomaticWorkflowSnapshot Unavailable() => new(null, Loc.T("Workflows could not be loaded. Review your transcript; nothing was pasted."));
 
+    /// <summary>Keeps a recording for review when its matched automatic rule cannot run with the active model.</summary>
+    public static AutomaticWorkflowSnapshot Rejected(string error) => new(null, error);
+
     /// <summary>Captures an explicit shortcut independently of app and global matching.</summary>
     public static AutomaticWorkflowSnapshot ForDictationShortcut(Workflow workflow)
     {

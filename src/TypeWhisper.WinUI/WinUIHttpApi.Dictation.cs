@@ -56,7 +56,7 @@ internal sealed partial class WinUIHttpApi
                         if (workflow.TranscriptionModel is null)
                         {
                             WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, session.TranscriptionTaskPreferences.Current, session.SupportsTranslation);
-                            WorkflowSpokenLanguage.Resolve(workflow.InputLanguage, session.Language, session.LanguageChoices);
+                            WorkflowSpokenLanguage.Resolve(workflow.InputLanguage, session.Language, session.LanguageChoices, session.DetectsLanguage);
                         }
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return Error(409, ex.Message); }
