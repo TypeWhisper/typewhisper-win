@@ -11,8 +11,16 @@ namespace TypeWhisper.WinUI;
 internal static class InsertionContextReader
 {
     private const int TextPatternId = 10014;
+    // UIA timeouts do not bound every text-range call, so a slow provider must not hold up the paste.
+    private static readonly TimeSpan ReadLimit = TimeSpan.FromMilliseconds(500);
 
-    internal static Task<DictationInsertionContext?> ReadAsync(IntPtr target) => Task.Run(() => Read(target));
+    internal static async Task<DictationInsertionContext?> ReadAsync(IntPtr target)
+    {
+        var read = Task.Run(() => Read(target));
+        if (await Task.WhenAny(read, Task.Delay(ReadLimit)) == read) return await read;
+        AppDiagnostics.Write("insertion.context.timeout");
+        return null;
+    }
 
     private static DictationInsertionContext? Read(IntPtr target)
     {
@@ -52,7 +60,7 @@ internal static class InsertionContextReader
             if (afterText.Length > DictationInsertionText.ContextLength) afterText = afterText[..DictationInsertionText.ContextLength];
             return new(beforeText, afterText);
         }
-        catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppDiagnostics.Write("insertion.context.failed", ex);
             return null;
