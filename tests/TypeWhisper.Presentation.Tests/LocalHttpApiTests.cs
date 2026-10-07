@@ -391,7 +391,8 @@ public sealed class LocalHttpApiTests
             processingTimeout: (method, path) => method == "POST" && path == "/v1/transcribe" ? TimeSpan.FromSeconds(10) : null);
         await server.StartAsync();
         using var client = Client(server, true);
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("v1/transcribe", new StringContent("{}"))).StatusCode);
+        using var body = new StringContent("{}");
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("v1/transcribe", body)).StatusCode);
         Assert.Equal(HttpStatusCode.RequestTimeout, (await client.GetAsync("v1/transcribe")).StatusCode);
         Assert.Equal(HttpStatusCode.RequestTimeout, (await client.GetAsync("v1/models")).StatusCode);
     }
