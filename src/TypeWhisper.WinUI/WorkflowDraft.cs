@@ -24,6 +24,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string? SelectedTask { get; init; }
     /// <summary>The spoken language for recordings; null inherits the global preference.</summary>
     public string? InputLanguage { get; init; }
+    /// <summary>The provider-qualified transcription model for Dictation Only shortcuts; null uses the selected model.</summary>
+    public string? TranscriptionModel { get; init; }
     /// <summary>The explicit activation kind.</summary>
     public WorkflowTriggerKind TriggerKind { get; init; } = WorkflowTriggerKind.Manual;
     /// <summary>Canonical shortcuts that process the selected text.</summary>
@@ -73,7 +75,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Output = Stored?.Output is { } output && output.TargetActionPluginId == TargetActionPluginId
             ? output : (Stored?.Output ?? new WorkflowOutput()) with { TargetActionPluginId = TargetActionPluginId },
         Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with
-        { MemoryPluginId = MemoryPluginId, FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget, SelectedTask = SelectedTask, InputLanguage = InputLanguage }
+        { MemoryPluginId = MemoryPluginId, FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget, SelectedTask = SelectedTask, InputLanguage = InputLanguage, TranscriptionModelOverride = TranscriptionModel }
     };
 
     private string[] DomainPatterns() => WebsiteDomains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -91,6 +93,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
         TargetActionPluginId = workflow.Output.TargetActionPluginId, MemoryPluginId = workflow.Behavior.MemoryPluginId,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, SelectedTask = workflow.Behavior.SelectedTask,
-        InputLanguage = TypeWhisper.Presentation.WorkflowSpokenLanguage.Inherits(workflow.Behavior.InputLanguage) ? null : workflow.Behavior.InputLanguage, Stored = workflow
+        InputLanguage = TypeWhisper.Presentation.WorkflowSpokenLanguage.Inherits(workflow.Behavior.InputLanguage) ? null : workflow.Behavior.InputLanguage,
+        TranscriptionModel = string.IsNullOrWhiteSpace(workflow.Behavior.TranscriptionModelOverride) ? null : workflow.Behavior.TranscriptionModelOverride, Stored = workflow
     };
 }

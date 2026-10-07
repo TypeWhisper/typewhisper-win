@@ -1,0 +1,54 @@
+namespace TypeWhisper.WinUI;
+
+internal sealed partial class LocalDictationSession
+{
+    // Restores the selected transcription model after a workflow recording; owned by the dictation gate.
+    private IAsyncDisposable? _workflowModelOverride;
+
+    // Whether the start has to load a workflow model other than the loaded one.
+    private bool SwitchesWorkflowModel(string? model) =>
+        !string.IsNullOrWhiteSpace(model) && !(IsReady && model == _providerId + ":" + ActiveModelId);
+
+    // Like any loading model, a workflow model must not cost the first words: the microphone opens
+    // before the load and the start adopts that capture. Without it, the overlay shows the load.
+    private bool BeginWorkflowModelCapture()
+    {
+        SetStatus(Loc.T("Loading the workflow's transcription model…"), DictationPhase.LoadingModel);
+        if (BeginEarlyCapture()) return true;
+        _showModelLoadingForDictation = true;
+        Changed?.Invoke();
+        return false;
+    }
+
+    // Loads a dictation workflow's transcription model without saving it as the selection.
+    private async Task<bool> RejectWorkflowModelAsync(string? model, Action<string>? rejected)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        try
+        {
+            _workflowModelOverride = await BeginApiModelOverrideAsync(null, model, awaitDownload: false, CancellationToken.None);
+            AppDiagnostics.Write($"dictation.workflow-model engine={ActiveEngineId} model={ActiveModelId} switched={_workflowModelOverride is not null}");
+            return false;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppDiagnostics.Write("dictation.workflow-model.failed " + ex.GetType().Name);
+            var message = Loc.T("This workflow's transcription model could not be loaded. Download or set it up in Dictation, or choose another model in the workflow.");
+            rejected?.Invoke(message);
+            SetStatus(message, DictationPhase.Error);
+            return true;
+        }
+    }
+
+    // Runs once the recording has finished or failed to start, before the gate admits the next dictation.
+    private async Task RestoreWorkflowModelAsync()
+    {
+        if (Interlocked.Exchange(ref _workflowModelOverride, null) is not { } scope) return;
+        try { await scope.DisposeAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppDiagnostics.Write("dictation.workflow-model.restore-failed " + ex.GetType().Name);
+            SetStatus(Loc.T("Your selected transcription model could not be restored after the workflow. Select it again in Dictation."), DictationPhase.Error);
+        }
+    }
+}

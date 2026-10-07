@@ -51,6 +51,8 @@ internal sealed partial class LocalDictationSession
             await Release(() => StopRecoveryCaptureAsync(preserve: true));
             await Release(_livePreview.StopAsync);
             await Release(StopCloudStreamAsync);
+            // A recording still open at exit has not restored the model its workflow replaced.
+            await Release(RestoreWorkflowModelAsync);
             await Release(() => CtcVocabulary.DisposeAsync().AsTask());
             await Release(() => PluginRuntime.DisposeAsync().AsTask());
             await Release(() => _transcriptionPlugin.DisposeAsync().AsTask());

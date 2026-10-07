@@ -729,6 +729,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!_audio.IsRecording || adoptEarlyCapture)
             {
                 if (!adoptEarlyCapture) _earlyStopSamples = null;
+                // A dictation workflow's own model applies before its task and language are checked against it.
+                if (!adoptEarlyCapture && SwitchesWorkflowModel(workflow?.TranscriptionModel) && BeginWorkflowModelCapture())
+                {
+                    adoptEarlyCapture = true;
+                    preparingRecording = true;
+                }
+                if (await RejectWorkflowModelAsync(workflow?.TranscriptionModel, rejected)) return;
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
                 _taskAtStart = globalTaskAtStart;
                 // Unsupported tasks fail before microphone capture. When the model cannot translate
@@ -1095,7 +1102,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     if (!_disposed) Changed?.Invoke();
                 }
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-                if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }
+                if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
                 if (finishingRecording) PublishMicrophoneNoticeAfterDictation();
                 if (!_audio.IsRecording) AppDiagnostics.EndDictation();
             }
