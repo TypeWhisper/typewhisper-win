@@ -24,11 +24,16 @@ internal static class LiveSpokenFormattingSettings
         row.Set(Loc.T("Spoken formatting"), "",
             Loc.T("Local rules are available for English and German. A profile applies only to its engine, model and language. Automatic language needs a recognized language; native translation uses the English profile."), both);
 
-        var appToggle = AppToggleSwitch.Create(session.TextPreferences.Current.AppFormattingEnabled);
-        AutomationProperties.SetName(appToggle, Loc.T("Markdown bullets in supported apps"));
-        var appRow = new SettingsRow("AppFormattingEnabled").Set(Loc.T("Markdown bullets in supported apps"),
-            Loc.T("In Obsidian, Notion, MarkText, Typora and Bear, convert lines starting with “bullet ” to Markdown list items. Other output stays unchanged. Uses the app where recording started."), appToggle);
+        var appToggle = AppToggleSwitch.Create(session.TextPreferences.Current.AppAwareFormattingEnabled);
+        AutomationProperties.SetName(appToggle, Loc.T("App-aware formatting"));
+        var appRow = new SettingsRow("AppAwareFormattingEnabled").Set(Loc.T("App-aware formatting"),
+            Loc.T("Fits dictations to the text around the cursor: adds missing spaces between words, continues a sentence in lowercase and drops a final period when text follows. In Obsidian, Notion, MarkText, Typora and Bear, lines starting with “bullet ” become Markdown list items."), appToggle);
         row.InsertAfter(content, appRow);
+        var periodToggle = AppToggleSwitch.Create(session.TextPreferences.Current.StripFinalPeriodFromStandaloneValues);
+        AutomationProperties.SetName(periodToggle, Loc.T("Strip final period from standalone values"));
+        var periodRow = new SettingsRow("StripFinalPeriodFromStandaloneValues").Set(Loc.T("Strip final period from standalone values"),
+            Loc.T("Removes a model-added period when a dictated email address, URL, number, or version string is inserted on its own, keeping the value usable in form fields. Abbreviations, dates, and sentences are left alone."), periodToggle);
+        appRow.InsertAfter(content, periodRow);
         var selectedLanguage = SpokenFormattingLanguageNormalizer.Normalize(session.Language) is "de" ? "de" : "en";
         string? displayedEngine = null;
         string? displayedModel = null;
@@ -62,8 +67,14 @@ internal static class LiveSpokenFormattingSettings
                 : selectedTask != TranscriptionTask.Translate && configured is not null && !DictationFormatting.SupportedLanguages.Contains(configured)
                     ? Loc.T("The current spoken language has no local rules. This saved English/German profile applies when that language is selected or detected.")
                     : "");
-            restoring = true; appToggle.IsOn = preferences.AppFormattingEnabled; restoring = false;
+            restoring = true;
+            appToggle.IsOn = preferences.AppAwareFormattingEnabled;
+            periodToggle.IsOn = preferences.StripFinalPeriodFromStandaloneValues;
+            // The period cleanup needs the cursor context that app-aware formatting reads.
+            periodToggle.IsEnabled = preferences.AppAwareFormattingEnabled;
+            restoring = false;
             appRow.Status = session.TextPreferences.Error ?? "";
+            periodRow.Status = session.TextPreferences.Error ?? "";
         }
         language.SelectionChanged += id => { selectedLanguage = id; Refresh(); };
         strategy.SelectionChanged += id =>
@@ -80,7 +91,12 @@ internal static class LiveSpokenFormattingSettings
         appToggle.Toggled += (_, _) =>
         {
             if (restoring) return;
-            session.TextPreferences.Save(session.TextPreferences.Current with { AppFormattingEnabled = appToggle.IsOn }); Refresh();
+            session.TextPreferences.Save(session.TextPreferences.Current with { AppAwareFormattingEnabled = appToggle.IsOn }); Refresh();
+        };
+        periodToggle.Toggled += (_, _) =>
+        {
+            if (restoring) return;
+            session.TextPreferences.Save(session.TextPreferences.Current with { StripFinalPeriodFromStandaloneValues = periodToggle.IsOn }); Refresh();
         };
         void OnChanged() => row.DispatcherQueue.TryEnqueue(() => { if (row.IsLoaded) Refresh(); });
         row.Loaded += (_, _) => { session.Changed += OnChanged; session.Models.Changed += OnChanged; session.PluginRuntime.Changed += OnChanged; Refresh(); };

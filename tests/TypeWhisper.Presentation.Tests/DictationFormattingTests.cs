@@ -19,7 +19,7 @@ public sealed class DictationFormattingTests : IDisposable
     [InlineData(true, null, "bullet Hello")]
     public async Task AppFormattingUsesRealTargetAndOnlyChangesSupportedMarkdownApps(bool enabled, string? process, string expected)
     {
-        var result = await DictationTextPipeline.ProcessAsync("bullet Hello", new() { AppFormattingEnabled = enabled }, "en", targetProcessName: process);
+        var result = await DictationTextPipeline.ProcessAsync("bullet Hello", new() { AppAwareFormattingEnabled = enabled }, "en", targetProcessName: process);
         Assert.Equal(expected, result.Text);
     }
 
@@ -65,7 +65,7 @@ public sealed class DictationFormattingTests : IDisposable
     {
         string? snippetInput = null;
         var result = await DictationTextPipeline.ProcessAsync("bullet Hello comma world",
-            Profile(SpokenFormattingStrategy.Automatic) with { AppFormattingEnabled = true }, "en",
+            Profile(SpokenFormattingStrategy.Automatic) with { AppAwareFormattingEnabled = true }, "en",
             expandSnippets: (text, _) => { snippetInput = text; return Task.FromResult("replacement new line item"); },
             targetProcessName: "Obsidian", engineId: "sherpa-onnx", modelId: "parakeet-tdt-0.6b");
         Assert.Equal("- Hello, world", snippetInput);
@@ -83,18 +83,34 @@ public sealed class DictationFormattingTests : IDisposable
         var store = new DictationTextPreferencesStore(PreferencesPath);
         Assert.Null(store.Error);
         Assert.False(store.Current.TranscriptionNumberNormalizationEnabled);
-        Assert.False(store.Current.AppFormattingEnabled);
+        Assert.True(store.Current.AppAwareFormattingEnabled);
+        Assert.True(store.Current.StripFinalPeriodFromStandaloneValues);
         Assert.Empty(store.Current.SpokenFormattingProfiles);
         Assert.Equal(EnglishOutputVariant.UnitedKingdom, store.Current.EnglishOutputVariant);
+    }
+
+    [Fact]
+    public void MarkdownOnlyPreferenceFromEarlierVersionsDoesNotTurnOffAppAwareFormatting()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(PreferencesPath, """
+            {"TranscriptionNumberNormalizationEnabled":true,"ShortUtterancePunctuationEnabled":true,
+             "EnglishOutputVariant":"AsTranscribed","GermanOutputVariant":"AsTranscribed","AppFormattingEnabled":false}
+            """);
+        var store = new DictationTextPreferencesStore(PreferencesPath);
+        Assert.Null(store.Error);
+        Assert.True(store.Current.AppAwareFormattingEnabled);
     }
 
     [Fact]
     public void ProfilesAndAppPreferencePersistWithoutInventingVerification()
     {
         var store = new DictationTextPreferencesStore(PreferencesPath);
-        Assert.Null(store.Save(Profile(SpokenFormattingStrategy.Automatic) with { AppFormattingEnabled = true }));
+        Assert.Null(store.Save(Profile(SpokenFormattingStrategy.Automatic) with
+            { AppAwareFormattingEnabled = false, StripFinalPeriodFromStandaloneValues = false }));
         var restarted = new DictationTextPreferencesStore(PreferencesPath);
-        Assert.True(restarted.Current.AppFormattingEnabled);
+        Assert.False(restarted.Current.AppAwareFormattingEnabled);
+        Assert.False(restarted.Current.StripFinalPeriodFromStandaloneValues);
         var profile = Assert.Single(restarted.Current.SpokenFormattingProfiles);
         Assert.Equal("sherpa-onnx", profile.EngineId);
         Assert.Equal("parakeet-tdt-0.6b", profile.ModelId);

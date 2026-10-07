@@ -123,7 +123,7 @@ public static class DictationTextPipeline
                 DetectedLanguage = detectedLanguage,
                 PluginPostProcessors = processors,
                 TargetProcessName = targetProcessName,
-                AppFormatter = preferences.AppFormattingEnabled ? (text, process) => AppFormatterService.Format(text, process) : null,
+                AppFormatter = preferences.AppAwareFormattingEnabled ? (text, process) => AppFormatterService.Format(text, process) : null,
                 SpokenFormatter = text => DictationFormatting.Apply(text, spokenFormatting),
                 VocabularyBooster = Protect(Loc.T("Vocabulary boosting failed. Text from the preceding step was retained."), boostVocabulary),
                 DictionaryCorrector = Protect(Loc.T("Dictionary corrections failed. Text from the preceding step was retained."), correctDictionary)

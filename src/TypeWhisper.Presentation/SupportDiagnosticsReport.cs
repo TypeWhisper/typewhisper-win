@@ -56,7 +56,8 @@ public sealed record SupportDiagnosticsReport(
         int ModelAutoUnloadSeconds, bool WhisperModeEnabled, bool AudioDuckingEnabled, float AudioDuckingLevel,
         bool PauseMediaDuringRecording, bool SoundFeedbackEnabled, bool SpokenFeedbackEnabled,
         bool SilenceAutoStopEnabled, int SilenceAutoStopSeconds, bool TranscribeShortQuietClipsAggressively,
-        bool NumberNormalizationEnabled, bool ShortUtterancePunctuationEnabled, bool AppFormattingEnabled,
+        bool NumberNormalizationEnabled, bool ShortUtterancePunctuationEnabled, bool AppAwareFormattingEnabled,
+        bool StripFinalPeriodFromStandaloneValues,
         IReadOnlyList<string> UnavailablePreferences);
 
     /// <summary>Installed package state; errors are flags instead of plugin-supplied messages.</summary>
