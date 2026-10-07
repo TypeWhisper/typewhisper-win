@@ -21,7 +21,7 @@ public static class WorkflowSpokenLanguage
     /// <summary>Validates the effective language against the active model before decoding.</summary>
     /// <param name="language">The workflow's stored language.</param>
     /// <param name="globalLanguage">The language selected in Dictation.</param>
-    /// <param name="choices">The languages the active model accepts.</param>
+    /// <param name="choices">The languages the active model accepts; empty accepts every language, as in the plugin SDK.</param>
     /// <param name="detectsLanguage">Whether the active model offers automatic detection.</param>
     public static string Resolve(string? language, string globalLanguage, IReadOnlyList<string> choices, bool detectsLanguage)
     {
@@ -30,6 +30,7 @@ public static class WorkflowSpokenLanguage
         if (IsAutomatic(language))
             return detectsLanguage ? "auto"
                 : throw new NotSupportedException(Loc.T("The current transcription model cannot detect the language automatically. Choose a language in the workflow."));
+        if (choices.Count == 0) return language!;
         return choices.FirstOrDefault(code => code.Equals(language, StringComparison.OrdinalIgnoreCase))
             ?? throw new NotSupportedException(Loc.T("The current transcription model does not support this workflow's spoken language. Choose another language in the workflow, or another model in Dictation."));
     }

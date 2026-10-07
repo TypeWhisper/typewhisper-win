@@ -436,7 +436,8 @@ public sealed partial class WorkflowsView : UserControl
             ? opened.TranscriptionModel : null;
     // The languages the current transcription model accepts; a workflow model is checked once it loads.
     private bool ConfigLanguageUnsupported => ConfigSelectedTranscriptionModel is null && ConfigSelectedLanguage is { } language && _session is { } session
-        && (language == "auto" ? !session.DetectsLanguage : !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
+        && (language == "auto" ? !session.DetectsLanguage
+            : session.LanguageChoices.Count > 0 && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
@@ -560,7 +561,8 @@ public sealed partial class WorkflowsView : UserControl
     private void ConfigureLanguages(string language)
     {
         _languagesForWorkflowModel = ConfigSelectedTranscriptionModel is not null;
-        var codes = _languagesForWorkflowModel ? SpokenLanguageChoices.All : _session?.LanguageChoices ?? [];
+        // A workflow model, like a provider without a language list, offers every language.
+        var codes = !_languagesForWorkflowModel && _session?.LanguageChoices is { Count: > 0 } choices ? choices : SpokenLanguageChoices.All;
         var detects = _languagesForWorkflowModel || _session?.SupportedLanguages.Count == 0;
         var languages = codes.Select(code => new Choice(code, LiveDictationSettings.LanguageName(code), Loc.T("Use this language for recordings with this workflow")))
             .OrderBy(choice => detects ? choice.Label : "", StringComparer.CurrentCulture);

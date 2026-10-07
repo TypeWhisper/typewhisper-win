@@ -863,6 +863,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     // An automatic rule matched after capture began: keep the speech for review in the global language.
                     _workflowAtStart = AutomaticWorkflowSnapshot.Rejected(Loc.T("This workflow's spoken language is not supported by the current transcription model. Review your transcript; nothing was pasted."));
                     resolvedLanguage = _languageAtStart;
+                    // None of the rejected rule's settings apply, including its task. A global translation the
+                    // model cannot run falls back to the original-language transcript.
+                    var reviewTask = globalTaskAtStart == TranscriptionTask.Translate && !SupportsTranslation ? TranscriptionTask.Transcribe : globalTaskAtStart;
+                    if (reviewTask != _taskAtStart) { _taskAtStart = reviewTask; Changed?.Invoke(); }
                     AppDiagnostics.Write("dictation.language-rejected");
                 }
                 if (resolvedLanguage != _languageAtStart)
