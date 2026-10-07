@@ -288,9 +288,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         }
     }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false, CancellationToken ct = default)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false, CancellationToken ct = default, string? language = null)
     {
-        var result = await DecodeResultAsync(samples, Language, translate, ct);
+        var result = await DecodeResultAsync(samples, language ?? Language, translate, ct);
         return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage, result.NoSpeechProbability);
     }
 

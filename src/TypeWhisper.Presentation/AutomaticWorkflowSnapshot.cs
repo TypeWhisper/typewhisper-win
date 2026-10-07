@@ -18,7 +18,7 @@ public sealed class AutomaticWorkflowSnapshot
             {
                 MemoryPluginId = workflow.Behavior.MemoryPluginId, ProviderOverride = workflow.Behavior.ProviderOverride, ModelOverride = workflow.Behavior.ModelOverride,
                 FineTuning = workflow.Behavior.FineTuning, TranslationTarget = workflow.Behavior.TranslationTarget,
-                SelectedTask = workflow.Behavior.SelectedTask
+                SelectedTask = workflow.Behavior.SelectedTask, InputLanguage = workflow.Behavior.InputLanguage
             }
         };
         Error = error;
@@ -34,6 +34,8 @@ public sealed class AutomaticWorkflowSnapshot
     public string? MemoryPluginId => _workflow?.Behavior.MemoryPluginId;
     /// <summary>The native transcription task for this recording; null inherits the global preference.</summary>
     public string? SelectedTask => _workflow?.Behavior.SelectedTask;
+    /// <summary>The spoken language for this recording; null inherits the global preference.</summary>
+    public string? InputLanguage => _workflow?.Behavior.InputLanguage;
     /// <summary>Whether the workflow translates, so its output can be in another language than the dictation.</summary>
     public bool Translates => _workflow?.Template == WorkflowTemplate.Translation;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
@@ -82,7 +84,7 @@ public sealed class AutomaticWorkflowSnapshot
             || !Enum.IsDefined(workflow.Template) || !Enum.IsDefined(workflow.Trigger.ContextMatchMode)
             || workflow.Trigger.WebsitePatterns.Any(pattern => BrowserWorkflowContext.NormalizePattern(pattern) is null)
             || workflow.Trigger.Hotkeys.Count != 0
-            || behavior.Settings.Count != 0 || !string.IsNullOrWhiteSpace(behavior.InputLanguage)
+            || behavior.Settings.Count != 0 || !WorkflowSpokenLanguage.IsSupported(behavior.InputLanguage)
             || behavior.InputLanguageHints.Count != 0 || !WorkflowTranscriptionTask.IsSupported(behavior.SelectedTask)
             || behavior.WhisperModeOverride is not null || !string.IsNullOrWhiteSpace(behavior.TranscriptionModelOverride)
             || !string.IsNullOrWhiteSpace(output.Format) || output.AutoEnter

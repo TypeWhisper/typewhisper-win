@@ -5,7 +5,7 @@ namespace TypeWhisper.WinUI;
 // Runtime binding stays separate from the remaining preview settings catalog.
 internal sealed class LiveDictationSettings(LocalDictationSession session, Action<string> openPluginSettings)
 {
-    private static string LanguageName(string code)
+    internal static string LanguageName(string code)
     {
         try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
         catch (System.Globalization.CultureNotFoundException) { return code; }

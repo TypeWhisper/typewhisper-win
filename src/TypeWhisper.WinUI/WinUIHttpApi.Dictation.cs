@@ -53,6 +53,7 @@ internal sealed partial class WinUIHttpApi
                         workflow = AutomaticWorkflowSnapshot.ForApi(session.WorkflowDefaults.Resolve(selected));
                         // Report the task error here; a rejected start only reaches the generic message below.
                         WorkflowTranscriptionTask.Resolve(workflow.SelectedTask, session.TranscriptionTaskPreferences.Current, session.SupportsTranslation);
+                        WorkflowSpokenLanguage.Resolve(workflow.InputLanguage, session.Language, session.LanguageChoices);
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return Error(409, ex.Message); }
                 }

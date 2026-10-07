@@ -737,7 +737,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 // preview, streaming connection or final decoding.
                 var matchRuleBeforeCapture = workflow is null && AutomaticRuleDecidesTask(globalTaskAtStart);
                 var ruleMatched = false;
-                if (!matchRuleBeforeCapture && RejectTask(workflow?.SelectedTask, globalTaskAtStart, rejected)) return;
+                if (!matchRuleBeforeCapture && (RejectTask(workflow?.SelectedTask, globalTaskAtStart, rejected)
+                    || RejectLanguage(workflow?.InputLanguage, rejected))) return;
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 _originalField?.Dispose(); _originalField = null;
@@ -838,6 +839,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 {
                     _taskAtStart = resolvedTask; Changed?.Invoke();
                     AppDiagnostics.Write($"dictation.task-resolved task={resolvedTask}");
+                }
+                // The spoken language follows the same rule, before any streaming connection or preview decodes.
+                var resolvedLanguage = WorkflowSpokenLanguage.Resolve(WorkflowSpokenLanguage.SelectedLanguageFor(_workflowAtStart), _languageAtStart, LanguageChoices);
+                if (resolvedLanguage != _languageAtStart)
+                {
+                    _languageAtStart = resolvedLanguage;
+                    AppDiagnostics.Write($"dictation.language-resolved language={resolvedLanguage}");
                 }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
@@ -1109,7 +1117,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
         UsesRegistryProvider ? DecodeRegistryAsync(samples)
-            : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token);
+            : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
     private void StopSilenceMonitoring()
     {
         _silence = null;
