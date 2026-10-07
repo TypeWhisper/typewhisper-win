@@ -21,7 +21,9 @@ public sealed record SupportDiagnosticsReport(
     IReadOnlyList<SupportDiagnosticsReport.CollectionError> CollectionErrors)
 {
     /// <summary>The Windows support-report schema, independent of the macOS schema.</summary>
-    public int SchemaVersion => 1;
+    /// <remarks>Version 2 replaced settings.appFormattingEnabled with appAwareFormattingEnabled and added
+    /// stripFinalPeriodFromStandaloneValues.</remarks>
+    public int SchemaVersion => 2;
 
     /// <summary>App identity and process lifetime, without installation paths.</summary>
     public sealed record AppInfo(string Version, string Build, bool IsDevelopment, double UptimeSeconds);

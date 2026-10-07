@@ -67,6 +67,12 @@ public sealed class DictationInsertionTextTests
     [InlineData("x=\"", 3, 0, "Value", "Value")]
     [InlineData("He said \"\ud83d\udc4d\"", 12, 0, "Next.", " Next.")]
     [InlineData("It grew 50%\"", 12, 0, "Next.", " Next.")]
+    [InlineData("He answered \"$\"", 15, 0, "Next.", " Next.")]
+    [InlineData("Price \"\u20ac\"", 9, 0, "Next.", " Next.")]
+    [InlineData("\u0532\u0561\u0580\u0587\u0589", 5, 0, "\u053b\u0576\u0579\u057a\u0565\u055e\u057d \u0565\u0584\u0589", " \u053b\u0576\u0579\u057a\u0565\u055e\u057d \u0565\u0584\u0589")]
+    [InlineData("\u03a4\u03b9 \u03ba\u03ac\u03bd\u03b5\u03b9\u03c2\u037e", 10, 0, "\u039a\u03b1\u03bb\u03ac", " \u039a\u03b1\u03bb\u03ac")]
+    [InlineData("\u1230\u120b\u121d\u1362", 4, 0, "\u12a5\u1295\u12f4\u1275 \u1290\u1205", " \u12a5\u1295\u12f4\u1275 \u1290\u1205")]
+    [InlineData("What\u203d", 5, 0, "Really", " Really")]
     // Sentence punctuation of other space-separated scripts, and the ellipsis character.
     [InlineData("\u0645\u0631\u062d\u0628\u0627\u061f", 6, 0, "\u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f", " \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f")]
     [InlineData("\u0645\u0631\u062d\u0628\u0627\u060c", 5, 0, "\u0635\u062f\u064a\u0642\u064a", " \u0635\u062f\u064a\u0642\u064a")]

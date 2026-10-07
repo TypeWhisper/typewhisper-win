@@ -61,12 +61,18 @@ public static class DictationInsertionText
     }
 
     private static readonly HashSet<string> OpeningPunctuation = ["(", "[", "{", "\"", "'", "“", "‘"];
-    // Beyond the macOS sets: the ellipsis and the sentence punctuation of Arabic, Urdu and Devanagari scripts, which
-    // are also followed by a space. CJK punctuation is not, so it stays out.
+    // Beyond the macOS sets: the ellipsis and double marks, and the sentence punctuation of other scripts that
+    // separate words with spaces (Arabic, Urdu, Devanagari, Greek, Armenian, Ethiopic, Mongolian, N'Ko). CJK
+    // punctuation is not followed by a space, so it stays out.
     private static readonly HashSet<string> ClosingPunctuation =
-        [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’", "…", "،", "؛", "؟", "۔", "।", "॥"];
-    private static readonly HashSet<string> PunctuationThatTakesFollowingSpace =
-        [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’", "…", "،", "؛", "؟", "۔", "।", "॥"];
+    [
+        ".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’",
+        "\u2026", "\u203C", "\u203D", "\u2047", "\u2048", "\u2049",
+        "\u060C", "\u061B", "\u061F", "\u06D4", "\u0964", "\u0965", "\u037E", "\u0387", "\u055D", "\u0589",
+        "\u1362", "\u1363", "\u1364", "\u1365", "\u1366", "\u1367", "\u1802", "\u1803", "\u1808", "\u1809",
+        "\u07F8", "\u07F9"
+    ];
+    private static readonly HashSet<string> PunctuationThatTakesFollowingSpace = ClosingPunctuation;
 
     private static bool ShouldInsertSpace(string? beforeLeft, string left, string right)
     {
@@ -82,8 +88,9 @@ public static class DictationInsertionText
     // macOS treats it as opening everywhere. Apostrophes stay ambiguous because of elisions such as "l'".
     private static bool ClosesQuote(string? beforeQuote, string quote) =>
         quote == "\"" && beforeQuote is not null && (IsWordLike(beforeQuote) || EndsQuotedPhrase.Contains(beforeQuote) ||
-            beforeQuote.EnumerateRunes().Any(rune => Rune.GetUnicodeCategory(rune) == UnicodeCategory.OtherSymbol));
-    // Symbols such as emoji also end a quoted phrase, as in `"👍"`; math symbols such as `=` do not.
+            beforeQuote.EnumerateRunes().Any(rune =>
+                Rune.GetUnicodeCategory(rune) is UnicodeCategory.OtherSymbol or UnicodeCategory.CurrencySymbol));
+    // Emoji, other symbols and currency signs also end a quoted phrase, as in `"$"`; math symbols such as `=` do not.
     private static readonly HashSet<string> EndsQuotedPhrase = [".", ",", "!", "?", "%", ")", "]", "}", "”", "’", "…", "؟"];
 
     // In German and Luxembourgish, a capital at the start of a continuation is usually a noun, not a sentence start.
