@@ -50,6 +50,15 @@ internal sealed partial class LocalDictationSession
     private string InheritedLanguage() => _languageBeforeWorkflowModel is { } before && before != "auto"
         && LanguageChoices.Contains(before, StringComparer.OrdinalIgnoreCase) ? before : Language;
 
+    // A capture that ended outside the start and stop paths, such as a lost microphone, still restores the model.
+    private async Task RestoreAfterCaptureLossAsync()
+    {
+        if (_workflowModelOverride is null) return;
+        await _gate.WaitAsync();
+        try { if (!_disposed && !_audio.IsRecording) await RestoreWorkflowModelAsync(); }
+        finally { _gate.Release(); }
+    }
+
     // Runs once the recording has finished or failed to start, before the gate admits the next dictation.
     private async Task RestoreWorkflowModelAsync()
     {

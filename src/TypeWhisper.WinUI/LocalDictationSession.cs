@@ -530,6 +530,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _cloudStream?.Cancel();
             _effects.End();
             if (_phase == DictationPhase.Recording) SetStatus(Loc.T("Microphone disconnected · recording stopped"), DictationPhase.Error);
+            _ = RestoreAfterCaptureLossAsync();
         });
         try
         {
@@ -737,8 +738,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!_audio.IsRecording || adoptEarlyCapture)
             {
                 if (!adoptEarlyCapture) _earlyStopSamples = null;
+                // A workflow model left over from a capture that ended elsewhere never outlives the next start.
+                if (_workflowModelOverride is not null) await RestoreWorkflowModelAsync();
                 // A dictation workflow's own model applies before its task and language are checked against it.
-                if (!adoptEarlyCapture && SwitchesWorkflowModel(workflow?.TranscriptionModel) && BeginWorkflowModelCapture())
+                // API starts are registered once capture begins, so they load the model before the microphone opens.
+                if (!adoptEarlyCapture && captureStarted is null && SwitchesWorkflowModel(workflow?.TranscriptionModel) && BeginWorkflowModelCapture())
                 {
                     adoptEarlyCapture = true;
                     preparingRecording = true;
