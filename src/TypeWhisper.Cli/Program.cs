@@ -11,9 +11,9 @@ namespace TypeWhisper.Cli;
 static class Program
 {
     private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromMinutes(5) };
-    // The app lets transcriptions run for two hours; wait slightly longer so its 408 arrives
-    // instead of the CLI abandoning a request that keeps the engine busy.
-    private static readonly HttpClient TranscriptionHttp = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromHours(2) + TimeSpan.FromMinutes(1) };
+    // The app bounds transcriptions itself and keeps the engine until native work has drained,
+    // so wait for its response (or Ctrl+C) instead of abandoning a request that keeps it busy.
+    private static readonly HttpClient TranscriptionHttp = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = Timeout.InfiniteTimeSpan };
 
     private static readonly CancellationTokenSource Cancellation = new();
 
