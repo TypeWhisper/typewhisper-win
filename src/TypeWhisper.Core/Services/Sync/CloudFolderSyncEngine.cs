@@ -616,6 +616,7 @@ public static class CloudFolderSyncEngine
     private static void WritePackageMetadata(string packagePath, string devicesPath, string deviceId, DateTime now)
     {
         var manifestPath = Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName)));
+        // The manifest identifies the package format. Device records carry sync liveness on both platforms.
         if (!HasCompatibleManifest(manifestPath))
         {
             try
@@ -624,7 +625,7 @@ public static class CloudFolderSyncEngine
             }
             catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && HasCompatibleManifest(manifestPath))
             {
-                // Another device published the complete manifest first. Keep its creation time and unknown fields.
+                // Another device published the complete manifest first. Keep its timestamp and unknown fields.
                 // Never replace incompatible/unreadable metadata or contend on this shared file on every pass.
             }
         }

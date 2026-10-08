@@ -250,13 +250,13 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
-    public async Task ExistingManifestKeepsCreationTimeAndUnknownMetadataAcrossPasses()
+    public async Task ExistingManifestIsPreservedWhileDeviceTimestampIsUpdated()
     {
         var package = CloudFolderSyncEngine.PackagePath(_tempDir);
         Directory.CreateDirectory(package);
         var path = Path.Combine(package, "manifest.json");
         const string original = """
-            {"schemaVersion":1,"createdBy":"TypeWhisper","createdAt":"2025-01-01T00:00:00Z","futureField":"preserve"}
+            {"schemaVersion":1,"createdBy":"TypeWhisper","updatedAt":"2025-01-01T00:00:00Z","futureField":"preserve"}
             """;
         File.WriteAllText(path, original);
 
@@ -264,6 +264,8 @@ public sealed class CloudFolderSyncTests : IDisposable
             new PaidEntitlements(CanUseCloudFolderSync: true), now: Date(20));
 
         Assert.Equal(original, File.ReadAllText(path));
+        using var device = JsonDocument.Parse(File.ReadAllText(Path.Combine(package, "devices", "win-a.json")));
+        Assert.Equal(Date(20), device.RootElement.GetProperty("updatedAt").GetDateTime());
     }
 
     [Theory]
