@@ -19,8 +19,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private readonly RecordingAudioEffects _effects;
     private readonly LocalLivePreview _livePreview = new();
     private StreamingDictation? _cloudStream;
-    internal WinUIPluginPackages Packages { get; } = new();
-    internal LocalCtcVocabulary CtcVocabulary { get; }
+    private readonly DictationPluginServices _plugins;
+    internal WinUIPluginPackages Packages => _plugins.Packages;
+    internal LocalCtcVocabulary CtcVocabulary => _plugins.Vocabulary;
+    internal event Action<string> EngineNotice
+    {
+        add => _plugins.EngineNotice += value;
+        remove => _plugins.EngineNotice -= value;
+    }
     private bool _ctcAtStart;
     private Task<DictationDictionarySnapshot>? _dictionarySnapshot;
     private Task<DictationSnippetSnapshot>? _snippetSnapshot;
@@ -108,9 +114,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal HistoryActions HistoryActions => new(_history);
     private readonly ClipboardTextInserter _inserter;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly LocalTranscriptionPlugin _transcriptionPlugin;
+    private LocalTranscriptionPlugin _transcriptionPlugin => _plugins.Models;
     internal LocalTranscriptionPlugin Models => _transcriptionPlugin;
-    internal PortablePluginRuntimeRegistry PluginRuntime { get; }
+    internal PortablePluginRuntimeRegistry PluginRuntime => _plugins.Runtime;
     internal IReadOnlyList<PortableLlmProvider> LlmProviders => PluginRuntime.LlmProviders;
     internal async Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct)
     {
@@ -494,16 +500,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         _audio = new(_recoveryAudio) { ReleaseCaptureBetweenRecordings = Platform.RemoteSession.IsActive };
         Recovery = new(_recoveryAudio, DecodeRecoveryAudioAsync);
-        var isolation = CreateTranscriptionIsolation();
-        _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), isolation: isolation);
-        CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId),
-            idlePolicy: ModelIdlePolicy);
-        CtcVocabulary.LoadFailed += ex => AppDiagnostics.Write("dictation.vocabulary-load.failed", ex);
-        PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
-            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId)) { TranscriptionIsolation = isolation, IdleUnloadPolicy = ModelIdlePolicy };
-        _speechBackend = new(PluginRuntime, new WindowsSystemVoiceBackend());
-        SpokenFeedback = new(_speechBackend);
-        PluginRuntime.Changed += () => Changed?.Invoke();
+        _plugins = new(() => CanStartSessionOperation);
+        _plugins.Changed += () => Changed?.Invoke();
         _history = history;
         HistoryRetention = new(history, new HistoryRetentionPreferencesStore(WinUIProfile.DataPath("history-retention.json")));
         _inserter = new(owner);

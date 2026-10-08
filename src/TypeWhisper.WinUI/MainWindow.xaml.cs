@@ -10,7 +10,8 @@ namespace TypeWhisper.WinUI;
 public sealed partial class MainWindow : Window
 {
     internal nint TrayMenuHandle { set => _dictation.TrayMenuHandle = value; }
-    private readonly WinUIHttpApi _httpApi;
+    private readonly ApplicationServices _services;
+    private WinUIHttpApi _httpApi => _services.HttpApi;
     private DictationHotkeyRegistration? _dictationHotkey;
     private TypeWhisper.Presentation.DictationInputCoordinator? _dictationInput;
     private Action? _observeInputMode;
@@ -38,7 +39,7 @@ public sealed partial class MainWindow : Window
         _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? Loc.Mark("No shortcut assigned") : _dictationHotkey.Value;
         return null;
     }
-    private readonly LocalDictationSession _dictation;
+    private LocalDictationSession _dictation => _services.Dictation;
     private OverlayWindow? _liveOverlay;
     internal event Action<string, bool>? DictationChanged;
 
@@ -326,48 +327,7 @@ public sealed partial class MainWindow : Window
         };
         LoadOverlayPreferences();
         RemoveRetiredQuickLaunchFiles();
-        var historyPath = WinUIProfile.DataPath("history.json");
-#if DEBUG
-        // Opt-in fixture uses an ephemeral history store, never the development profile's history.
-        if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
-            historyPath = Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-HistoryFixture", Guid.NewGuid().ToString("N"), "history.json");
-#endif
-        var historyAudio = new TypeWhisper.Core.Services.HistoryAudioStore(Path.Combine(Path.GetDirectoryName(historyPath)!, "history-audio"));
-        var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath, audioStore: historyAudio) { ThrowOnLoadFailure = true };
-#if DEBUG
-        if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
-        {
-            var fixtureRecord = new TypeWhisper.Core.Models.TranscriptionRecord
-            {
-                Id = "history-ui-fixture", Timestamp = DateTime.UtcNow, SourceKind = "dictation",
-                RawText = "Synthetic history test.\nSecond paragraph.",
-                FinalText = "Synthetic history test.\n\nSecond paragraph for editing and export.",
-                AppName = "UI test fixture", AppProcessName = "fixture", Language = "en",
-                EngineUsed = "fixture", ModelUsed = "synthetic-model", TranscriptionTaskUsed = "transcribe"
-            };
-            if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_AUDIO_FIXTURE") == "1")
-            {
-                // A quiet one-second generated tone, only in the ephemeral History fixture.
-                // This exercises the real store and detail actions without recording a microphone.
-                var samples = Enumerable.Range(0, 16000).Select(index => (float)(0.03 * Math.Sin(2 * Math.PI * 440 * index / 16000))).ToArray();
-                historyService.TryAddRecordWithAudio(fixtureRecord with
-                {
-                    RawText = "Synthetic history audio test.", FinalText = "Synthetic history audio test.\n\nA generated tone was saved with this entry. No microphone was recorded.",
-                    DurationSeconds = 1
-                }, samples, 16000, () => true);
-                var missing = historyService.TryAddRecordWithAudio(fixtureRecord with
-                {
-                    Id = "history-missing-audio-fixture", RawText = "Missing audio test.", FinalText = "Missing audio test.\n\nThe generated test audio was removed. This transcript remains available.", DurationSeconds = 1
-                }, samples, 16000, () => true);
-                if (historyService.ResolveAudioPath(missing.Record.AudioFileName) is { } missingPath) File.Delete(missingPath);
-            }
-            else historyService.TryAddRecord(fixtureRecord);
-        }
-#endif
-        _historyService = historyService;
-        WinUICloudSync.History = historyService;
-        _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
-        _httpApi = new WinUIHttpApi(_dictation, DispatcherQueue);
+        _services = new(WinRT.Interop.WindowNative.GetWindowHandle(this), DispatcherQueue);
         _httpApi.DataChanged += () =>
         {
             _lexicon?.RefreshApiData();
@@ -393,7 +353,7 @@ public sealed partial class MainWindow : Window
             if (!_closing) ShowNotice(new AppNotice(message, Loc.T("Speech engine")));
         });
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
-        historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
+        _historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
         {
             if (_historyWindow is not null) await _historyWindow.RefreshAsync();
             await RefreshSettingsPagesAsync();

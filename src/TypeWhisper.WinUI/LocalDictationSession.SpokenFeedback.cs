@@ -5,9 +5,8 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    private readonly PluginSpokenFeedbackBackend _speechBackend;
-    internal SpokenFeedbackController SpokenFeedback { get; }
-    internal IReadOnlyList<SpokenFeedbackVoice> GetSpokenFeedbackVoices() => _speechBackend.GetVoices();
+    internal SpokenFeedbackController SpokenFeedback => _plugins.SpokenFeedback;
+    internal IReadOnlyList<SpokenFeedbackVoice> GetSpokenFeedbackVoices() => _plugins.SpeechBackend.GetVoices();
     private DictationAudioPreferences _spokenFeedbackAtStart = new();
     private Task _spokenFeedbackActivity = Task.CompletedTask;
     internal Action? StopHistoryPlayback { get; set; }

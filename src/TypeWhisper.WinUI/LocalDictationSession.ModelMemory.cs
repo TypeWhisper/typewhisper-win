@@ -7,12 +7,10 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    internal ModelMemoryPreferencesStore ModelMemoryPreferences { get; } = new(WinUIProfile.DataPath("model-memory.json"));
-    private ModelIdleUnloadPolicy? _modelIdlePolicy;
+    internal ModelMemoryPreferencesStore ModelMemoryPreferences => _plugins.ModelMemoryPreferences;
     // Shared by transcription workers and local text models. Releases wait while dictation, file
     // transcription, the recorder or a workflow may still use a model.
-    private ModelIdleUnloadPolicy ModelIdlePolicy => _modelIdlePolicy ??=
-        new(ModelMemoryPreferences.AutoUnloadSeconds) { CanUnload = () => CanStartSessionOperation };
+    private ModelIdleUnloadPolicy ModelIdlePolicy => _plugins.IdlePolicy;
 
     internal string? SelectModelAutoUnload(int seconds)
     {
