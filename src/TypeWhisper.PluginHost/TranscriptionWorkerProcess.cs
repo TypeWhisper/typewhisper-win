@@ -71,7 +71,7 @@ internal sealed record TranscriptionWorkerLaunch(string ExecutablePath, IReadOnl
         // PCM transport is 16 kHz mono float32; the WAV path normally uses PCM16.
         // Counting WAV headers as audio only increases the budget slightly.
         var bytesPerSecond = request.AudioFormat == TranscriptionWorkerAudioFormats.Pcm ? 16000 * 4d : 16000 * 2d;
-        return TimeSpan.FromSeconds(120 + 10 * payloadBytes / bytesPerSecond);
+        return TimeSpan.FromSeconds(120 + 10d * payloadBytes / bytesPerSecond);
     }
 }
 

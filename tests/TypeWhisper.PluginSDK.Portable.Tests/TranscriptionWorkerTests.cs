@@ -78,6 +78,17 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.Equal(Timeout.InfiniteTimeSpan, (launch with { RequestTimeout = Timeout.InfiniteTimeSpan }).TimeoutFor(request, 0));
     }
 
+    [Theory]
+    [InlineData(TranscriptionWorkerAudioFormats.Pcm, 230400000, 10)] // One hour of float32 audio.
+    [InlineData(TranscriptionWorkerAudioFormats.Wav, 230400000, 20)] // Two hours of PCM16 audio.
+    public void LargeAudioBudgetsDoNotOverflowBeforeConversion(string format, int payloadBytes, int budgetHours)
+    {
+        var launch = new TranscriptionWorkerLaunch("unused", [], "package", "data", "assets", "model", new(1, 1, 6));
+        var request = new TranscriptionWorkerMessage { Command = TranscriptionWorkerCommands.Transcribe, AudioFormat = format };
+        Assert.Equal(TimeSpan.FromHours(budgetHours) + TimeSpan.FromMinutes(2), launch.TimeoutFor(request, payloadBytes));
+        Assert.True(launch.TimeoutFor(request, int.MaxValue) > launch.TimeoutFor(request, payloadBytes));
+    }
+
     private IsolatedTranscriptionEngine WatchedEngine()
     {
         var isolation = new TranscriptionIsolation(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5))
