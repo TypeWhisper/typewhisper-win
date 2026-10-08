@@ -21,12 +21,19 @@ public static class AtomicFileWriter
     public static void WriteAllText(string filePath, string contents) =>
         WriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
 
+    // Publish immutable shared metadata without replacing a file another writer just created.
+    internal static void CreateAllText(string filePath, string contents) =>
+        WriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents), overwrite: false);
+
     /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/>.</summary>
     /// <param name="filePath">The file to create or replace.</param>
     /// <param name="contents">The new bytes of the file.</param>
     /// <exception cref="IOException">The file could not be written or replaced.</exception>
     /// <exception cref="UnauthorizedAccessException">Access to the file or its directory was denied.</exception>
-    public static void WriteAllBytes(string filePath, byte[] contents)
+    public static void WriteAllBytes(string filePath, byte[] contents) =>
+        WriteAllBytes(filePath, contents, overwrite: true);
+
+    private static void WriteAllBytes(string filePath, byte[] contents, bool overwrite)
     {
         string? temporaryPath = null;
         try
@@ -51,7 +58,7 @@ public static class AtomicFileWriter
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporaryPath, filePath, overwrite: true);
+            File.Move(temporaryPath, filePath, overwrite);
             temporaryPath = null;
         }
         finally

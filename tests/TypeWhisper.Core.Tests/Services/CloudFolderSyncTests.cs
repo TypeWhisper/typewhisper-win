@@ -250,6 +250,41 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task ExistingManifestKeepsCreationTimeAndUnknownMetadataAcrossPasses()
+    {
+        var package = CloudFolderSyncEngine.PackagePath(_tempDir);
+        Directory.CreateDirectory(package);
+        var path = Path.Combine(package, "manifest.json");
+        const string original = """
+            {"schemaVersion":1,"createdBy":"TypeWhisper","createdAt":"2025-01-01T00:00:00Z","futureField":"preserve"}
+            """;
+        File.WriteAllText(path, original);
+
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, new InMemoryUserDataSyncStore(), new CloudFolderSyncState { DeviceId = "win-a" },
+            new PaidEntitlements(CanUseCloudFolderSync: true), now: Date(20));
+
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Theory]
+    [InlineData("{\"schemaVersion\":2,\"createdBy\":\"TypeWhisper\"}")]
+    [InlineData("not json")]
+    public async Task IncompatibleOrUnreadableManifestIsNeverOverwritten(string original)
+    {
+        var package = CloudFolderSyncEngine.PackagePath(_tempDir);
+        Directory.CreateDirectory(package);
+        var path = Path.Combine(package, "manifest.json");
+        File.WriteAllText(path, original);
+
+        await Assert.ThrowsAnyAsync<IOException>(() => CloudFolderSyncEngine.SyncAsync(_tempDir,
+            new InMemoryUserDataSyncStore(), new CloudFolderSyncState { DeviceId = "win-a" },
+            new PaidEntitlements(CanUseCloudFolderSync: true), now: Date(20)));
+
+        Assert.Equal(original, File.ReadAllText(path));
+        Assert.Empty(Directory.EnumerateFiles(package, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task ConcurrentPassesOfTwoDevicesOnOneFolderNeverCollide()
     {
         var entitlements = new PaidEntitlements(CanUseCloudFolderSync: true);
