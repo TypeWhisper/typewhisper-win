@@ -233,7 +233,9 @@ internal sealed class CliProviderDescriptor
                 "--safe-mode",
                 "--disable-slash-commands",
                 "--tools", "",
-                "--disallowedTools", "*", "mcp__*",
+                // --tools disables built-ins; a blanket denial also blocks the
+                // internal StructuredOutput tool required by --json-schema.
+                "--disallowedTools", "mcp__*",
                 "--strict-mcp-config",
                 "--no-chrome",
                 "--no-session-persistence",

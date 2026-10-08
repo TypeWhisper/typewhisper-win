@@ -4,10 +4,37 @@ using System.Security.Cryptography;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.AuthenticatedCli;
+using TypeWhisper.PluginSystem.Tests;
 namespace PortableMigration.Tests;
 
 public sealed class PortablePackageTests
 {
+    [LiveClaudeFact]
+    public async Task LiveClaudePackage_ReturnsStructuredWorkflowResult()
+    {
+        using var fixture = new PortableFixture();
+        var executable = Environment.GetEnvironmentVariable("TYPEWHISPER_LIVE_CLAUDE_PATH");
+        if (!string.IsNullOrWhiteSpace(executable))
+            fixture.Host.SetSetting("selectedExecutable.claude", executable);
+        var project = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var manifest = PortablePluginPackage.ReadManifest(project);
+        var source = Path.Combine(project, "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,
+            "portable-host", "Plugins", manifest.Id);
+        await using var package = await PortablePluginPackage.LoadAsync(source, fixture.Host, new(1, 1, 3));
+        Assert.Equal(manifest.Version, package.Plugin.PluginVersion);
+        var providers = Assert.IsAssignableFrom<IAdditionalLlmProvidersProvider>(package.Plugin);
+        var claude = providers.AdditionalLlmProviders.Single(provider =>
+            ((ILlmProviderSelectionIdentity)provider).LlmSelectionId == "authenticated-cli-claude");
+
+        var result = await claude.ProcessAsync(
+            "Correct the German spelling, capitalization and punctuation. Return only the corrected text.",
+            "das ist ein test ob es funktioniert",
+            "opus",
+            CancellationToken.None);
+
+        Assert.Equal("Das ist ein Test, ob es funktioniert.", result);
+    }
+
     [Fact]
     public async Task ActualHostServices_CanActivateAndReadAllSettingsWithoutWpf()
     {

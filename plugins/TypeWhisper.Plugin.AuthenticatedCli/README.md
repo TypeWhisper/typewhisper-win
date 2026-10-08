@@ -2,7 +2,7 @@
 
 Authenticated CLI providers with process isolation, discovery, status refresh and portable provider/path settings.
 
-Version `1.3.3`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
+Version `1.3.4`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
 Independent branch: `seofood/authenticatedcli-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -27,6 +27,35 @@ dotnet test plugins/TypeWhisper.Plugin.AuthenticatedCli/Tests -c Release
 ```
 
 The complete package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.authenticated-cli` inside the plugin project. Package that directory as the ZIP root.
+
+Claude invocations disable built-in tools with `--tools ""` and MCP tools with
+`--disallowedTools "mcp__*"`. A blanket `"*"` denial also blocks Claude's internal
+`StructuredOutput` tool, so it must not be added. Regression tests check both the
+invocation contract and the arguments received by the fake CLI.
+
+The authenticated Claude package test is opt-in and sends only synthetic text
+through the staged package's real provider and native process runner:
+
+```powershell
+$env:TYPEWHISPER_LIVE_CLAUDE_TEST = '1'
+# Optional: select a native CLI executable directly, without a workaround wrapper.
+# $env:TYPEWHISPER_LIVE_CLAUDE_PATH = 'C:/path/to/claude.exe'
+try {
+    dotnet test plugins/TypeWhisper.Plugin.AuthenticatedCli/Tests -c Release `
+        --filter FullyQualifiedName~LiveClaudePackage_ReturnsStructuredWorkflowResult
+} finally {
+    Remove-Item Env:TYPEWHISPER_LIVE_CLAUDE_TEST -ErrorAction SilentlyContinue
+    Remove-Item Env:TYPEWHISPER_LIVE_CLAUDE_PATH -ErrorAction SilentlyContinue
+}
+```
+
+Live verification on Windows 11 build 26300 with Claude Code 2.1.293 and the
+`opus` alias reproduced the `StructuredOutput` denial with the blanket `"*"`.
+Removing it returned `Das ist ein Test, ob es funktioniert.` with exit code 0
+and no permission denials. The staged 1.3.4 package returned the same result
+through the portable loader and native process runner. The native WinUI
+development host's **Test workflow** dialog also completed the saved Claude/Opus
+workflow with that corrected result in an isolated test profile.
 
 Plugin regression tests cover installer junctions, npm native binary discovery, model pagination and explicit model arguments. Fake CLI protocol, executable discovery, process cancellation and package lifecycle. Native process/job-object and directory-junction fixtures run on Windows; platform-independent profile, catalog and package tests also run on Linux. One real OpenCode test is intentionally opt-in via TYPEWHISPER_LIVE_OPENCODE_TEST=1. Activation can inspect installed CLI availability/authentication status; it does not submit inference requests. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
