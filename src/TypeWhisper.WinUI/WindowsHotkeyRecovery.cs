@@ -16,6 +16,8 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
     private readonly Action<string?> _report;
     private bool _disposed;
     private bool _sessionRegistered;
+    internal event Action<uint, long>? SessionActivity;
+    internal bool SessionNotificationsAvailable => _sessionRegistered;
 
     internal WindowsHotkeyRecovery(Microsoft.UI.Xaml.Window window, Action interrupt, Func<string?> recover, Action<string?> report)
     {
@@ -41,6 +43,7 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
             var signal = HotkeyRecoveryState.Classify(message, reason.ToInt64());
             if (!_disposed && signal != HotkeyRecoverySignal.None)
             {
+                SessionActivity?.Invoke(message, reason.ToInt64());
                 var revision = _state.Invalidate();
                 _interrupt();
                 if (signal == HotkeyRecoverySignal.Resume) _ = RecoverAsync(revision);

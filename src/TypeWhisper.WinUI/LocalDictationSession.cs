@@ -82,6 +82,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             preferences = preferences.Validated();
             AtomicFileWriter.WriteAllText(AudioPreferencesPath, System.Text.Json.JsonSerializer.Serialize(preferences));
             AudioPreferences = preferences;
+            _audio.MicrophonePrerollEnabled = preferences.MicrophonePrerollEnabled;
             AudioPreferencesError = null;
             return null;
         }
@@ -543,6 +544,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         { AudioPreferencesError = Loc.T("Audio preferences could not be loaded. Defaults are in use: {0}", ex.Message); }
+        _audio.SuspendMicrophonePreroll(!PrerollDesktop.IsInteractive());
+        _audio.MicrophonePrerollEnabled = AudioPreferences.MicrophonePrerollEnabled;
     }
 
     internal async Task InitializeAsync()

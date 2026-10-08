@@ -11,7 +11,7 @@ namespace TypeWhisper.WinUI.Platform;
 /// <summary>
 /// Provides audio recording service behavior.
 /// </summary>
-public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
+public sealed partial class AudioRecordingService : IStreamingAudioSource, IDisposable
 {
     private enum CaptureDisposalClassification
     {
@@ -300,7 +300,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// <summary>
     /// Performs warm up.
     /// </summary>
-    public bool WarmUp() => WarmUp(openCapture: !ReleaseCaptureBetweenRecordings());
+    public bool WarmUp() => WarmUp(openCapture: !ReleaseCaptureBetweenRecordings() && !_prerollSuspended);
 
     private bool WarmUp(bool openCapture)
     {
@@ -309,7 +309,11 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             AudioCaptureDiagnostics.Log(
                 $"WarmUp enter warmed={_isWarmedUp} openCapture={openCapture} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
             if (_disposed) return false;
-            if (_isWarmedUp && (_waveIn is not null || !openCapture)) return true;
+            if (_isWarmedUp && (_waveIn is not null || !openCapture))
+            {
+                TryArmPreroll();
+                return true;
+            }
 
             if (_deviceProvider.DeviceCount == 0)
             {
@@ -360,6 +364,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _isWarmedUp = true;
                 _lastCaptureFailure = null;
                 _activeCaptureGeneration = ++_captureGeneration;
+                TryArmPreroll();
                 AudioCaptureDiagnostics.Log(
                     $"WarmUp prepared captureGeneration={_activeCaptureGeneration} reusable={_waveIn.CanRestartAfterStop} active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
             }
@@ -465,7 +470,6 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             _recordingStartTime = DateTime.UtcNow;
             _recordingStartTimestamp = startTimestamp;
             _activeRecordingSequence = ++_recordingSequence;
-            _isRecording = true;
             Interlocked.Exchange(ref _diagnosticDataAvailableCount, 0);
 
             try
@@ -473,7 +477,12 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _activeRecoveryRecordingId = enableRecovery
                     ? _recoveryStore?.BeginRecording()
                     : null;
-                _waveIn.StartRecording();
+                lock (_bufferLock)
+                {
+                    AppendPrerollToRecording();
+                    _isRecording = true;
+                }
+                if (!_prerollArmed) _waveIn.StartRecording();
                 _lastCaptureFailure = null;
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording active sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
@@ -557,8 +566,17 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _sampleBuffer = null;
             }
 
-            if (_waveIn.CanRestartAfterStop && !ReleaseCaptureBetweenRecordings())
+            if (CanArmPreroll)
+            {
+                // The same running stream supplies the next bounded prefix; no idle audio goes to disk.
+                _prerollArmed = true;
+                ClearPreroll();
+            }
+            else if (_waveIn.CanRestartAfterStop && !ReleaseCaptureBetweenRecordings())
+            {
+                _prerollArmed = false;
                 StopAndRetainWaveIn(_waveIn);
+            }
             else if (_waveIn.CanRestartAfterStop)
                 DisposeWaveIn(resetWarmUp: false, reason: "released between recordings");
             else
@@ -660,7 +678,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private void OnDataAvailable(object? sender, AudioInputDataAvailableEventArgs e)
     {
         var capture = _waveIn;
-        if (!_isRecording || capture is null || !ReferenceEquals(sender, capture))
+        if ((!_isRecording && !_prerollArmed) || capture is null || !ReferenceEquals(sender, capture))
             return;
 
         var decodedSamples = SystemAudioCaptureService.ConvertToTranscriptionSamples(
@@ -668,6 +686,15 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             e.BytesRecorded,
             capture.WaveFormat);
         var sampleCount = decodedSamples.Length;
+        lock (_bufferLock)
+        {
+            if (!ReferenceEquals(sender, _waveIn)) return;
+            if (!_isRecording)
+            {
+                if (_prerollArmed) BufferPreroll(decodedSamples);
+                return;
+            }
+        }
         var dataAvailableCount = Interlocked.Increment(ref _diagnosticDataAvailableCount);
         if (dataAvailableCount == 1)
         {
@@ -1564,6 +1591,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             StopPreview();
             _previewDiagnostics = null;
             if (_isRecording || _disposed) return;
+            if (_prerollArmed) DisposeWaveIn(reason: "microphone test");
             if (_deviceProvider.DeviceCount == 0)
             {
                 _previewDiagnostics = new(Loc.T("No microphone"), false);
@@ -1638,6 +1666,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 capture.RecordingStopped -= OnPreviewRecordingStopped;
                 StopRecordingForCleanup(capture);
                 capture.Dispose();
+                if (CanArmPreroll && !_isRecording) WarmUp();
             }
         }
     }
@@ -1800,6 +1829,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         lock (_captureLifecycleLock)
         {
+            _prerollArmed = false;
+            ClearPreroll();
             if (_waveIn is not null)
             {
                 var waveIn = _waveIn;

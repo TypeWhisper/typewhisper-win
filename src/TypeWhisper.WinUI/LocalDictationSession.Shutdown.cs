@@ -23,6 +23,7 @@ internal sealed partial class LocalDictationSession
     internal Task ShutdownAsync() => _shutdown.Run(() =>
     {
         _disposed = true;
+        _audio.SuspendMicrophonePreroll(true);
         _lastCompletedDictation.Close();
         CtcVocabulary.RequestCancelActivation();
         try { _operationCancellation.Close(); }

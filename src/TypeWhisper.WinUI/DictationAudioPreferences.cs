@@ -6,6 +6,7 @@ internal sealed record DictationAudioPreferences
     public bool SpokenFeedbackEnabled { get; init; }
     public string? SpokenFeedbackVoiceId { get; init; }
     public bool WhisperModeEnabled { get; init; }
+    public bool MicrophonePrerollEnabled { get; init; }
     public bool AudioDuckingEnabled { get; init; }
     public float AudioDuckingLevel { get; init; } = 0.2f;
     public bool PauseMediaDuringRecording { get; init; }
