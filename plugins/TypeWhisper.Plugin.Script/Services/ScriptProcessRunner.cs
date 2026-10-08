@@ -294,7 +294,8 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             throw new InvalidOperationException("The started script shell could not be verified.", new Win32Exception(Marshal.GetLastWin32Error()));
         var actualPath = buffer.ToString(0, length);
         if (string.IsNullOrWhiteSpace(actualPath)
-            || !string.Equals(NormalizeComparisonPath(actualPath), NormalizeComparisonPath(expectedPath), StringComparison.OrdinalIgnoreCase))
+            || (!string.Equals(NormalizeComparisonPath(actualPath), NormalizeComparisonPath(expectedPath), StringComparison.OrdinalIgnoreCase)
+                && !PackagedPowerShellAlias.Matches(process.Handle, expectedPath, actualPath)))
             throw new InvalidOperationException("The started script shell did not match the resolved shell path.");
     }
 

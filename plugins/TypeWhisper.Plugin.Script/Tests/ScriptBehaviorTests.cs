@@ -247,6 +247,17 @@ public sealed class ScriptBehaviorTests
     }
 
     [Fact]
+    public void StoreAliasExceptionDoesNotApplyToArbitraryShellsOrDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "alias-root");
+        Assert.True(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, "pwsh.exe"), root));
+        Assert.True(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, PackagedPowerShellAlias.Family, "pwsh.exe"), root));
+        Assert.False(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, "cmd.exe"), root));
+        Assert.False(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, "other-package", "pwsh.exe"), root));
+        Assert.False(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root + "-other", "pwsh.exe"), root));
+    }
+
+    [Fact]
     public async Task RecognizedPersistedShellNamesAreCanonicalized()
     {
         using var fixture = new PortableFixture();
