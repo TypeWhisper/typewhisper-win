@@ -18,7 +18,7 @@
     <PackageVersion Include="Interop.UIAutomationClient" Version="10.19041.0" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
-    <PackageVersion Include="NAudio" Version="2.2.1" />
+    <PackageVersion Include="NAudio" Version="2.4.0" />
     <PackageVersion Include="NAudio.Wasapi" Version="2.2.1" />
     <PackageVersion Include="NAudio.WinMM" Version="2.2.1" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
@@ -31,9 +31,9 @@
   <ItemGroup Label="Local model runtimes">
     <PackageVersion Include="LLamaSharp" Version="0.27.0" />
     <PackageVersion Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
-    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.1" />
-    <PackageVersion Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
-    <PackageVersion Include="SharpCompress" Version="0.48.0" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
+    <PackageVersion Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />
+    <PackageVersion Include="SharpCompress" Version="0.50.4" />
     <PackageVersion Include="Whisper.net" Version="1.9.0" />
     <PackageVersion Include="Whisper.net.Runtime" Version="1.9.0" />
     <PackageVersion Include="Whisper.net.Runtime.Cuda.Windows" Version="1.9.0" />
