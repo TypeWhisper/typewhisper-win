@@ -9,6 +9,7 @@
     <Using Include="Xunit" /><PackageReference Include="Moq" Version="4.20.72" />
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../TypeWhisper.Plugin.LocalLlm.csproj" />
+    <Compile Include="../../shared/tests/ResumableModelDownloaderTests.cs" Link="Shared/ResumableModelDownloaderTests.cs" />
     <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

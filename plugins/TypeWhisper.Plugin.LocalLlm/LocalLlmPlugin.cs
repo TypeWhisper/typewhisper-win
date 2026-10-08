@@ -491,4 +491,4 @@ internal sealed record LocalLlmModelDefinition(
     string FileName,
     long SizeBytes,
     string Sha256,
-    LocalLlmModelFamily Family = LocalLlmModelFamily.Gemma4);
+    LocalLlmModelFamily Family = LocalLlmModelFamily.Gemma4) : IDownloadableModel;

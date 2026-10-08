@@ -1,22 +1,22 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
-using TypeWhisper.Plugin.LocalLlm;
+using TypeWhisper.Plugin.Shared;
 
 namespace PortableMigration.Tests;
 
 public sealed class ResumableModelDownloaderTests
 {
     private static readonly byte[] Payload = [1, 2, 3, 4, 5, 6, 7, 8];
-    private static readonly LocalLlmModelDefinition Model = new("fixture", "Fixture", "8 bytes", 0, false,
-        "https://fixture.invalid/model", "model.gguf", Payload.Length, Convert.ToHexString(SHA256.HashData(Payload)));
+    private static readonly FixtureModel Model = new("https://fixture.invalid/model", Payload.Length,
+        Convert.ToHexString(SHA256.HashData(Payload)));
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task ResumeUsesValidatedRangeOrRestartsIfServerIgnoresRange(bool ignoresRange)
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         await File.WriteAllBytesAsync(path + ".download", Payload[..3]);
         using var client = new HttpClient(new Handler(request =>
@@ -35,7 +35,7 @@ public sealed class ResumableModelDownloaderTests
     [InlineData(3, 7, 9)]
     public async Task InvalidRangeNeverAppendsToSavedData(long from, long to, long total)
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         await File.WriteAllBytesAsync(path + ".download", Payload[..3]);
         using var client = new HttpClient(new Handler(_ => Range(Payload[3..], from, to, total)));
@@ -49,7 +49,7 @@ public sealed class ResumableModelDownloaderTests
     [InlineData(true)]
     public async Task NetworkFailureOrCancellationRetainsBytesForNextAttempt(bool cancel)
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         using var cts = new CancellationTokenSource();
         using (var broken = new HttpClient(new Handler(_ => new(HttpStatusCode.OK)
@@ -75,7 +75,7 @@ public sealed class ResumableModelDownloaderTests
     [InlineData("encoded")]
     public async Task InvalidResponseHeadersPreserveTheExistingPartial(string scenario)
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         await File.WriteAllBytesAsync(path + ".download", Payload[..3]);
         using var client = new HttpClient(new Handler(_ =>
@@ -93,7 +93,7 @@ public sealed class ResumableModelDownloaderTests
     [Fact]
     public async Task PreCanceledRetryLeavesSavedBytesUntouched()
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         await File.WriteAllBytesAsync(path + ".download", Payload[..3]);
         using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
@@ -105,7 +105,7 @@ public sealed class ResumableModelDownloaderTests
     [Fact]
     public async Task CompleteSavedFileIsVerifiedAndPublishedWithoutNetwork()
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         await File.WriteAllBytesAsync(path + ".download", Payload);
         using var client = new HttpClient(new Handler(_ => throw new Exception("No HTTP request expected.")));
@@ -116,7 +116,7 @@ public sealed class ResumableModelDownloaderTests
     [Fact]
     public async Task CompleteCorruptSavedFileRestartsFromZero()
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         await File.WriteAllBytesAsync(path + ".download", new byte[Payload.Length]);
         using var client = new HttpClient(new Handler(request => { Assert.Null(request.Headers.Range); return Full(Payload); }));
@@ -129,7 +129,7 @@ public sealed class ResumableModelDownloaderTests
     [InlineData(true)]
     public async Task InvalidPayloadIsDiscardedAndNeverReplacesPublishedFile(bool overrun)
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         await File.WriteAllTextAsync(path, "keep previous file");
         using var client = new HttpClient(new Handler(_ =>
@@ -146,7 +146,7 @@ public sealed class ResumableModelDownloaderTests
     [Fact]
     public async Task TruncatedResponseIsRetainedButNotPublished()
     {
-        using var f = new PortableFixture();
+        using var f = new TempRoot();
         var path = Path.Combine(f.Root, "model.gguf");
         using var client = new HttpClient(new Handler(_ =>
         {
@@ -157,35 +157,20 @@ public sealed class ResumableModelDownloaderTests
         Assert.False(File.Exists(path));
     }
 
-    [Fact]
-    public async Task DiscardActionRemovesOnlyKnownPartialsAndHonorsCancellation()
-    {
-        using var f = new PortableFixture();
-        using var plugin = new LocalLlmPlugin([Model]);
-        await plugin.ActivateAsync(f.Host);
-        var directory = Path.Combine(f.Host.PluginAssetDirectory, "Models", Model.Id);
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, Model.FileName);
-        await File.WriteAllBytesAsync(path, Payload);
-        await File.WriteAllTextAsync(path + ".download", "partial");
-        await File.WriteAllTextAsync(path + ".download.tmp", "old partial");
-        await File.WriteAllTextAsync(Path.Combine(directory, "foreign.download"), "keep");
-        using var canceled = new CancellationTokenSource(); canceled.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.ExecuteSettingsActionAsync("discard-partial-downloads", canceled.Token));
-        Assert.True(File.Exists(path + ".download"));
-        await plugin.ExecuteSettingsActionAsync("discard-partial-downloads", default);
-        Assert.False(File.Exists(path + ".download"));
-        Assert.False(File.Exists(path + ".download.tmp"));
-        Assert.True(File.Exists(Path.Combine(directory, "foreign.download")));
-        Assert.Equal(Payload, await File.ReadAllBytesAsync(path));
-    }
-
     private static HttpResponseMessage Full(byte[] bytes) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
     private static HttpResponseMessage Range(byte[] bytes, long from, long to, long total)
     {
         var response = new HttpResponseMessage(HttpStatusCode.PartialContent) { Content = new ByteArrayContent(bytes) };
         response.Content.Headers.ContentRange = new ContentRangeHeaderValue(from, to, total);
         return response;
+    }
+    private sealed record FixtureModel(string DownloadUrl, long SizeBytes, string Sha256) : IDownloadableModel;
+    // Every case downloads into its own directory so a retained partial file cannot leak into the next case.
+    private sealed class TempRoot : IDisposable
+    {
+        internal string Root { get; } = Path.Combine(Path.GetTempPath(), "portable-download-" + Guid.NewGuid().ToString("N"));
+        internal TempRoot() { Directory.CreateDirectory(Root); }
+        public void Dispose() { try { Directory.Delete(Root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
     private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
     {

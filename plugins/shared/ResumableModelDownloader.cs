@@ -2,11 +2,19 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 
-namespace TypeWhisper.Plugin.LocalLlm;
+namespace TypeWhisper.Plugin.Shared;
+
+// What the downloader needs from a model definition; each plugin's own record implements it.
+internal interface IDownloadableModel
+{
+    string DownloadUrl { get; }
+    long SizeBytes { get; }
+    string Sha256 { get; }
+}
 
 internal static class ResumableModelDownloader
 {
-    internal static async Task DownloadAsync(HttpClient client, LocalLlmModelDefinition model, string destination,
+    internal static async Task DownloadAsync(HttpClient client, IDownloadableModel model, string destination,
         IProgress<double>? progress, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
