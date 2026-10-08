@@ -59,7 +59,7 @@ public sealed partial class MainWindow : Window
                 () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanStartFromShortcut,
                 () => _dictation.RecordingModePreferences.Current,
                 dispatch: action => DispatcherQueue.TryEnqueue(() => action()),
-                reportError: error => System.Diagnostics.Debug.WriteLine("Dictation input failed: " + error.GetType().Name),
+                reportError: error => AppDiagnostics.Write("dictation.input.failed", error),
                 markStop: _dictation.MarkEarlyStop);
             _observeInputMode = () =>
             {
@@ -89,7 +89,7 @@ public sealed partial class MainWindow : Window
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                System.Diagnostics.Trace.TraceError("Cancel shortcut registration failed: {0}", ex);
+                AppDiagnostics.Write("shortcut.cancel.register-failed", ex);
                 cancelError = Loc.T("Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.");
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingShortcut?.Value ?? "";
@@ -151,7 +151,7 @@ public sealed partial class MainWindow : Window
         RequestWorkflowCancellation();
         try { if (_dictation.CanCancelProcessing) await _dictation.CancelAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) ShowNotice(new AppNotice(Loc.T("Could not finish cancellation. Try again."))); }
+        { AppDiagnostics.WriteFailure("dictation.cancel.failed", ex); if (!_closing) ShowNotice(new AppNotice(Loc.T("Could not finish cancellation. Try again."))); }
     }
     internal Func<Task<string?>>? RestartApplicationAsync { get; set; }
     private Task<string?> RestartWhenIdleAsync()
@@ -472,7 +472,7 @@ public sealed partial class MainWindow : Window
         foreach (var name in new[] { "quick-launch-hotkeys.txt", "quick-launch-pins.json", "quick-launch-usage.json", "quick-launch-shortcuts.json", "quick-launch-window.json" })
         {
             try { File.Delete(WinUIProfile.DataPath(name)); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Diagnostics.Trace.TraceWarning("Could not remove {0}: {1}", name, ex.Message); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppDiagnostics.Write("app.quick-launch.cleanup-failed", ex); }
         }
     }
 

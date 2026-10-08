@@ -46,7 +46,7 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceError("Hotkey recovery notification failed: {0}", ex); }
+        { AppDiagnostics.Write("hotkey.recovery.notification-failed", ex); }
         return DefSubclassProc(window, message, reason, data);
     }
 
@@ -70,7 +70,7 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Hotkey recovery failed: {0}", ex);
+            AppDiagnostics.WriteFailure("hotkey.recovery.failed", ex);
             if (!_disposed) _report(Loc.T("Hotkeys could not be restored. Restart TypeWhisper to retry."));
         }
     }

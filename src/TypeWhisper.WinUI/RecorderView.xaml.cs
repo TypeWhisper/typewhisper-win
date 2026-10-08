@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -64,7 +63,7 @@ public sealed partial class RecorderView : UserControl
             {
                 _automaticStop = true; _timer.Stop();
                 try { await _recorder.StopAtLimitAsync(ActiveDuration); }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Automatic recorder save failed: {0}", ex); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.WriteFailure("recorder.auto-stop.failed", ex); }
                 Refresh();
             }
         };
@@ -100,7 +99,7 @@ public sealed partial class RecorderView : UserControl
             else await StartRecordingAsync(_recorderPreferences?.Current ?? new RecorderPreferences());
             return _recorder.Error is null;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder operation failed: {0}", ex); return false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.WriteFailure("recorder.toggle.failed", ex); return false; }
         finally { Refresh(); }
     }
     internal async Task ShutdownAsync()
@@ -186,7 +185,7 @@ public sealed partial class RecorderView : UserControl
                 await StartRecordingAsync(_recorderPreferences?.Current ?? new RecorderPreferences());
             }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder operation failed: {0}", ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.WriteFailure("recorder.action.failed", ex); }
         Refresh();
     }
     private async Task StartRecordingAsync(RecorderPreferences preferences)
@@ -210,9 +209,10 @@ public sealed partial class RecorderView : UserControl
         if (_recorder is null) return;
         _timer.Stop();
         try { await _recorder.StopAndSaveAsync(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder saving failed: {0}", ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.WriteFailure("recorder.save.failed", ex); }
         Refresh();
     }
+    partial void ReportApiFailure(string stage, Exception error) => AppDiagnostics.WriteFailure(stage, error);
     private void RecordingName_Changed(object sender, TextChangedEventArgs e) => SessionTitle = RecordingName.Text;
     private void Source_Changed(object sender, RoutedEventArgs e)
     {
@@ -240,7 +240,7 @@ public sealed partial class RecorderView : UserControl
             else _timer.Stop();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { Trace.TraceError("Recorder pause or resume failed: {0}", ex); }
+        { AppDiagnostics.WriteFailure("recorder.pause.failed", ex); }
         finally { Refresh(); }
     }
     private void SignalCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)

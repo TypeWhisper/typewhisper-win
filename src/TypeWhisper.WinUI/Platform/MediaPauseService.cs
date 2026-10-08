@@ -31,7 +31,7 @@ public sealed partial class MediaPauseService : IMediaPauseService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"MediaPause pause failed: {ex.Message}");
+            AppDiagnostics.Write("media.pause.failed", ex);
         }
     }
 
@@ -48,7 +48,7 @@ public sealed partial class MediaPauseService : IMediaPauseService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"MediaPause resume failed: {ex.Message}");
+            AppDiagnostics.Write("media.resume.failed", ex);
         }
         finally
         {

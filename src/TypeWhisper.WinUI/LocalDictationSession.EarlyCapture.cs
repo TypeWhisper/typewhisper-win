@@ -57,7 +57,7 @@ internal sealed partial class LocalDictationSession
             await SetRecordingAsync(true, workflow, adoptEarlyCapture: true);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceError("Early capture could not be adopted: {0}", ex); }
+        { AppDiagnostics.WriteFailure("dictation.capture.adopt-failed", ex); }
     }
 
     private void BeginRecordingFeedback(DictationAudioPreferences preferences)

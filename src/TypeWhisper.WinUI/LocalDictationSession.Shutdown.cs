@@ -13,7 +13,7 @@ internal sealed partial class LocalDictationSession
         // Adoption begins a fresh cancellation scope, so a capture still waiting for its model is marked instead.
         if (_earlyCapture) _earlyCancelled = true;
         try { _operationCancellation.Cancel(); }
-        catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Operation cancellation callback failed: {0}", ex); }
+        catch (AggregateException ex) { AppDiagnostics.WriteFailure("dictation.cancel.callback-failed", ex); }
         _livePreview.Cancel();
         _cloudStream?.Cancel();
         if (!_disposed && !_fileBusy && _phase == DictationPhase.Processing)
@@ -26,7 +26,7 @@ internal sealed partial class LocalDictationSession
         _lastCompletedDictation.Close();
         CtcVocabulary.RequestCancelActivation();
         try { _operationCancellation.Close(); }
-        catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Shutdown cancellation callback failed: {0}", ex); }
+        catch (AggregateException ex) { AppDiagnostics.WriteFailure("dictation.shutdown.cancel-failed", ex); }
         _livePreview.Cancel();
         _cloudStream?.Cancel();
         _retentionTimer.Stop();
@@ -44,7 +44,7 @@ internal sealed partial class LocalDictationSession
         {
             try { await action(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { failures.Add(ex); System.Diagnostics.Trace.TraceError("Shutdown step failed: {0}", ex); }
+            { failures.Add(ex); AppDiagnostics.WriteFailure("dictation.shutdown.step-failed", ex); }
         }
         try
         {

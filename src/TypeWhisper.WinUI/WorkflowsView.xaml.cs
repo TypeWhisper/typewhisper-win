@@ -36,7 +36,7 @@ public sealed partial class WorkflowsView : UserControl
         IsEnabled = false;
         _run?.Cancel();
         try { _deleteDialog?.Hide(); _defaultsDialog?.Hide(); _testDialog?.Hide(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Workflow dialog close failed: " + ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("workflow.dialog.close-failed", ex); }
         return Task.WhenAll(_defaultsCompletion?.Task ?? Task.CompletedTask, _runCompletion?.Task ?? Task.CompletedTask, _deleteCompletion?.Task ?? Task.CompletedTask);
     }
 

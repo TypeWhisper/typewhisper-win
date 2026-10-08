@@ -31,7 +31,7 @@ public sealed partial class MainWindow
         try { result = await _dictation.PasteLastCompletedAsync(target, activate, blocked, busy); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Paste last transcription failed: {0}", ex);
+            AppDiagnostics.WriteFailure("shortcut.paste-last.failed", ex);
             result = LastDictationPasteResult.NotPasted;
         }
         if (_closing || result == LastDictationPasteResult.Ignored) return;

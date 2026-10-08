@@ -86,7 +86,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
                 using (device) choices.Add(new(device.ID, device.FriendlyName, Loc.T("Audio output")));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Debug.WriteLine("Output enumeration failed: " + ex.Message); }
+        { AppDiagnostics.Write("audio.outputs.failed", ex); }
         return choices;
     }
 }

@@ -32,7 +32,7 @@ public sealed partial class MainWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Notice could not be shown: {0}; {1}", ex, notice.Text);
+            AppDiagnostics.Write("notice.show.failed", ex);
         }
     }
 
@@ -71,7 +71,7 @@ public sealed partial class MainWindow
 
     internal void ShowActivationFailure(Exception error)
     {
-        System.Diagnostics.Trace.TraceError("Activation request failed: {0}", error);
+        AppDiagnostics.Write("activation.failed", error);
         if (_closing || _profileRestoreClosing) return;
         ShowActivationNotice(Loc.T("An activation request could not be opened. Retry that request; other queued requests will continue."));
     }

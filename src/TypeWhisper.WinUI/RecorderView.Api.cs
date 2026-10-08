@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json.Serialization;
 using TypeWhisper.Presentation;
 
@@ -6,6 +5,8 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class RecorderView
 {
+    // The app view implements this; the headless test host leaves it out, which drops the calls.
+    partial void ReportApiFailure(string stage, Exception error);
     private sealed class ApiRecorderSession
     {
         public required string Id { get; init; }
@@ -63,7 +64,7 @@ public sealed partial class RecorderView
             {
                 started.Status = "failed";
                 started.Error = "Could not start recording. Check the audio sources and active operations.";
-                Trace.TraceError("API recorder start failed: {0}", ex);
+                ReportApiFailure("recorder.api.start-failed", ex);
                 return RecorderApiError(ex is InvalidOperationException ? 409 : 500, started.Error);
             }
         }

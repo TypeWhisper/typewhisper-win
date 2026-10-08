@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -50,6 +49,7 @@ public sealed class LicenseService
     };
 
     private readonly HttpClient _http;
+    private readonly Action<string, Exception>? _reportFailure;
     private readonly string _credentialPath;
     private readonly string _legacyCredentialPath;
     private readonly AppDistributionKind _distributionKind;
@@ -174,9 +174,11 @@ public sealed class LicenseService
         HttpClient http,
         string dataPath,
         AppDistributionKind? distributionKind = null,
-        string? appVersion = null)
+        string? appVersion = null,
+        Action<string, Exception>? reportFailure = null)
     {
         _http = http;
+        _reportFailure = reportFailure;
         _credentialPath = ResolveDataFilePath(dataPath, CredentialStoreFileName);
         _legacyCredentialPath = ResolveDataFilePath(dataPath, LegacyCredentialFileName);
         _distributionKind = distributionKind ?? AppDistribution.Current;
@@ -697,7 +699,7 @@ public sealed class LicenseService
                 return;
             }
 
-            Debug.WriteLine($"Commercial license validation failed: {ex.Message}");
+            _reportFailure?.Invoke("license.commercial.validate-failed", ex);
             if (reportErrors)
                 throw;
         }
@@ -735,7 +737,7 @@ public sealed class LicenseService
                 return;
             }
 
-            Debug.WriteLine($"Supporter validation failed: {ex.Message}");
+            _reportFailure?.Invoke("license.supporter.validate-failed", ex);
             if (reportErrors)
                 throw;
         }
@@ -959,7 +961,7 @@ public sealed class LicenseService
         }
         catch (Exception ex) when (IsLicenseOperationException(ex))
         {
-            Debug.WriteLine($"Best-effort license deactivation failed: {ex.Message}");
+            _reportFailure?.Invoke("license.deactivate.failed", ex);
         }
     }
 
@@ -1141,7 +1143,7 @@ public sealed class LicenseService
         catch (Exception ex)
         {
             StorageError = global::TypeWhisper.Core.Loc.T("License changes could not be saved on this device. Keep your key and retry before closing the app.");
-            Debug.WriteLine($"Persisting license store failed: {ex.Message}");
+            _reportFailure?.Invoke("license.store.save-failed", ex);
         }
     }
 
@@ -1202,7 +1204,7 @@ public sealed class LicenseService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Loading encrypted license store failed: {ex.Message}");
+            _reportFailure?.Invoke("license.store.load-failed", ex);
             return false;
         }
     }
@@ -1235,7 +1237,7 @@ public sealed class LicenseService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Migrating legacy license store failed: {ex.Message}");
+            _reportFailure?.Invoke("license.store.migrate-failed", ex);
         }
     }
 

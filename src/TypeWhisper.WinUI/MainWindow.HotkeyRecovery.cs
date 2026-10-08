@@ -30,7 +30,7 @@ public sealed partial class MainWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Hotkey resume monitoring failed: {0}", ex);
+            AppDiagnostics.Write("hotkey.recovery.start-failed", ex);
             ReportHotkeyRecovery(Loc.T("Hotkey recovery after sleep could not start. Restart TypeWhisper if dictation shortcuts stop responding."));
         }
     }
@@ -39,7 +39,7 @@ public sealed partial class MainWindow
     {
         if (_closing || _profileRestoreClosing) return;
         _hotkeyRecoveryError = error;
-        if (error is not null) System.Diagnostics.Trace.TraceError(error);
+        if (error is not null) AppDiagnostics.Write("hotkey.recovery.reported");
         if (error is not null) ShowNotice(new AppNotice(error));
         TrayActionsChanged?.Invoke();
     }
