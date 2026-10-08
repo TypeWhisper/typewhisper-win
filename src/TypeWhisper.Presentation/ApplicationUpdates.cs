@@ -20,14 +20,17 @@ public sealed class AppUpdatePreferences
     private readonly string _path;
     /// <summary>The loaded or last saved update track.</summary>
     public AppUpdateChannel Channel { get; private set; }
+    /// <summary>The track the installed build was published on, inferred from its version.</summary>
+    public AppUpdateChannel InstalledChannel { get; }
     /// <summary>A readable persistence failure.</summary>
     public string? Error { get; private set; }
     /// <summary>Loads an explicit preference or infers the installed track without writing.</summary>
     public AppUpdatePreferences(string path, string version)
     {
         _path = path;
-        Channel = version.Contains("-daily.", StringComparison.OrdinalIgnoreCase) ? AppUpdateChannel.Daily
+        InstalledChannel = version.Contains("-daily.", StringComparison.OrdinalIgnoreCase) ? AppUpdateChannel.Daily
             : version.Contains("-rc", StringComparison.OrdinalIgnoreCase) ? AppUpdateChannel.ReleaseCandidate : AppUpdateChannel.Stable;
+        Channel = InstalledChannel;
         try
         {
             if (!File.Exists(path)) return;
@@ -69,8 +72,8 @@ public interface IAppUpdateBackend
 {
     /// <summary>Explains why this host cannot install application updates.</summary>
     string? UnavailableReason { get; }
-    /// <summary>Checks only the selected compatible track.</summary>
-    Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel);
+    /// <summary>Checks only the selected compatible track. Older versions are offered only while <paramref name="allowDowngrade"/> is set.</summary>
+    Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel, bool allowDowngrade);
     /// <summary>Downloads and verifies the previously offered package.</summary>
     Task DownloadAsync(AppUpdateOffer offer);
     /// <summary>Applies the verified package after the host has drained its work.</summary>
@@ -91,6 +94,12 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
     public string Status { get; private set; } = preferences.Error ?? backend.UnavailableReason ?? Loc.T("Choose a channel and check for updates.");
     /// <summary>Whether this host can begin another check.</summary>
     public bool CanCheck => !Busy && backend.UnavailableReason is null;
+    /// <summary>
+    /// Downgrades are offered only while the selected channel differs from the installed build's track,
+    /// that is after an explicit channel switch. A feed that moves backwards on the installed track never
+    /// offers an older version.
+    /// </summary>
+    public bool AllowsDowngrade => preferences.Channel != preferences.InstalledChannel;
     /// <summary>Notifies UI subscribers after state changes.</summary>
     public event Action? Changed;
     /// <summary>Saves a selection while idle and discards any earlier package offer.</summary>
@@ -108,7 +117,7 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
         Busy = true; Offer = null; Status = Loc.T("Checking for updates…"); Changed?.Invoke();
         try
         {
-            var result = await backend.CheckAsync(preferences.Channel);
+            var result = await backend.CheckAsync(preferences.Channel, AllowsDowngrade);
             Offer = result.Offer;
             Status = !result.ChannelPublished ? Loc.T("No compatible WinUI release is available on this channel yet.")
                 : Offer is null ? Loc.T("You are up to date on this channel.")

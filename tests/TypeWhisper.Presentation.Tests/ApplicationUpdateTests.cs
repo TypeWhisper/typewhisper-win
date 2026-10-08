@@ -115,6 +115,51 @@ public sealed class ApplicationUpdateTests : IDisposable
         Assert.Contains("older than your installed version", controller.Status);
         Assert.Equal(new[] { "check" }, backend.Calls);
     }
+    [Theory]
+    [InlineData("1.1.0", AppUpdateChannel.Stable)]
+    [InlineData("1.1.0-rc.1", AppUpdateChannel.ReleaseCandidate)]
+    [InlineData("1.1.0-daily.20260910.6", AppUpdateChannel.Daily)]
+    public void InstalledTrackSurvivesAnExplicitChannelChoice(string version, AppUpdateChannel installed)
+    {
+        var preferences = Preferences(version);
+        Assert.Equal(installed, preferences.InstalledChannel);
+        var other = installed == AppUpdateChannel.Stable ? AppUpdateChannel.Daily : AppUpdateChannel.Stable;
+        Assert.True(preferences.Save(other));
+        Assert.Equal(installed, preferences.InstalledChannel);
+        var reloaded = Preferences(version);
+        Assert.Equal(other, reloaded.Channel);
+        Assert.Equal(installed, reloaded.InstalledChannel);
+    }
+    [Fact]
+    public async Task DowngradesAreAllowedOnlyAfterLeavingTheInstalledChannel()
+    {
+        var backend = new Backend();
+        var controller = new AppUpdateController(Preferences("1.1.0-daily.20260910.6"), backend, _ => Task.FromResult<string?>(null));
+        Assert.False(controller.AllowsDowngrade);
+        await controller.CheckAsync();
+        Assert.False(backend.AllowDowngrade);
+        Assert.True(controller.Select(AppUpdateChannel.Stable));
+        Assert.True(controller.AllowsDowngrade);
+        await controller.CheckAsync();
+        Assert.True(backend.AllowDowngrade);
+        Assert.True(controller.Select(AppUpdateChannel.Daily));
+        Assert.False(controller.AllowsDowngrade);
+        await controller.CheckAsync();
+        Assert.False(backend.AllowDowngrade);
+    }
+    [Fact]
+    public async Task SavedChannelSwitchKeepsAllowingDowngradesAfterRestart()
+    {
+        var backend = new Backend();
+        Assert.True(Preferences("1.1.0-daily.20260910.6").Save(AppUpdateChannel.Stable));
+        var controller = new AppUpdateController(Preferences("1.1.0-daily.20260910.6"), backend, _ => Task.FromResult<string?>(null));
+        await controller.CheckAsync();
+        Assert.Equal(AppUpdateChannel.Stable, backend.Channel);
+        Assert.True(backend.AllowDowngrade);
+        var afterDowngrade = new AppUpdateController(Preferences("1.0.9"), backend, _ => Task.FromResult<string?>(null));
+        await afterDowngrade.CheckAsync();
+        Assert.False(backend.AllowDowngrade);
+    }
     [Fact]
     public async Task UnavailableHostCanSaveChannelsButCannotInstallOrCheck()
     {
@@ -139,9 +184,10 @@ public sealed class ApplicationUpdateTests : IDisposable
         public string? UnavailableReason { get; init; }
         public List<string> Calls { get; } = [];
         public AppUpdateChannel Channel;
+        public bool AllowDowngrade;
         public bool FailDownload;
         public Func<Task<AppUpdateCheck>> Check = () => Task.FromResult(new AppUpdateCheck(true, new("1.2.0", false)));
-        public Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel) { Calls.Add("check"); Channel = channel; return Check(); }
+        public Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel, bool allowDowngrade) { Calls.Add("check"); Channel = channel; AllowDowngrade = allowDowngrade; return Check(); }
         public Task DownloadAsync(AppUpdateOffer offer) { Calls.Add("download"); return FailDownload ? Task.FromException(new IOException("download failed")) : Task.CompletedTask; }
         public void Apply(AppUpdateOffer offer) => Calls.Add("apply");
     }
