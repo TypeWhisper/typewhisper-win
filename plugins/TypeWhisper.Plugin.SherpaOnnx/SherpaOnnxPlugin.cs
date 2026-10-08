@@ -28,10 +28,20 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     internal const int CanarySilenceWindowMilliseconds = 100;
     private const int MinimumTranscriptOverlapWords = 2;
     private const int MaximumTranscriptOverlapWords = 40;
-    private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main";
+    // The NVIDIA models are csukuangfj's sherpa-onnx exports on Hugging Face. The URLs name a commit
+    // instead of the main branch because the files are parsed by native code and main can serve
+    // different bytes under the same address; each file is pinned to the SHA-256 it had in that
+    // commit as well. Pinned on 2026-10-08 to the newest commit of each repository: the SHA-256 values
+    // are the LFS object ids from https://huggingface.co/api/models/<repo>/tree/<commit>, and
+    // tokens.txt, which is not stored in LFS, was hashed from a download of that commit.
+    // Commit 2bda32ec of 2025-08-16.
+    private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78";
     // Our own export of moondream/parakeet-ultra with the sherpa-onnx v3 script; the files are pinned by hash.
     private const string ParakeetUltraRepo = "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-parakeet-ultra-int8-v1";
-    private const string CanaryRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main";
+    // Commit 9077164e of 2025-07-07.
+    private const string CanaryRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/9077164e0d3dd1d5353743e89ceaa1d3a770838c";
+    // A download is verified under this suffix and only renamed to its final name once its hash matches.
+    private const string UnverifiedSuffix = ".unverified";
 
     private static readonly IReadOnlyList<string> CanarySupportedLanguages = ["en", "de", "fr", "es"];
     // NVIDIA model card: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
@@ -41,7 +51,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         @"[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly IReadOnlyList<ModelDefinition> Models =
+    internal static readonly IReadOnlyList<ModelDefinition> DefaultModels =
     [
         new("parakeet-ultra-0.6b", "Parakeet Ultra 0.6B", "Moondream", "~670 MB", 670, 25, true, false,
         [
@@ -52,21 +62,22 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         ]),
         new("parakeet-tdt-0.6b", "Parakeet TDT 0.6B", "NVIDIA", "~670 MB", 670, 25, false, false,
         [
-            new("encoder.int8.onnx", $"{ParakeetRepo}/encoder.int8.onnx", 652),
-            new("decoder.int8.onnx", $"{ParakeetRepo}/decoder.int8.onnx", 12),
-            new("joiner.int8.onnx", $"{ParakeetRepo}/joiner.int8.onnx", 6),
-            new("tokens.txt", $"{ParakeetRepo}/tokens.txt", 1)
+            new("encoder.int8.onnx", $"{ParakeetRepo}/encoder.int8.onnx", 652, "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
+            new("decoder.int8.onnx", $"{ParakeetRepo}/decoder.int8.onnx", 12, "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e"),
+            new("joiner.int8.onnx", $"{ParakeetRepo}/joiner.int8.onnx", 6, "3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3"),
+            new("tokens.txt", $"{ParakeetRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
         ]),
         new("canary-180m-flash", "Canary 180M Flash", "NVIDIA", "~198 MB", 198, 4, false, true,
         [
-            new("encoder.int8.onnx", $"{CanaryRepo}/encoder.int8.onnx", 127),
-            new("decoder.int8.onnx", $"{CanaryRepo}/decoder.int8.onnx", 71),
-            new("tokens.txt", $"{CanaryRepo}/tokens.txt", 1)
+            new("encoder.int8.onnx", $"{CanaryRepo}/encoder.int8.onnx", 127, "7a75b4e2a5857a6dcc0819503bbe3fad66943db4a3ccf21d3f27c633667d303f"),
+            new("decoder.int8.onnx", $"{CanaryRepo}/decoder.int8.onnx", 71, "e41a2ab9c0c2fe81a1e8ade5a45fb02a74bc4db7d1f91b89a54a25e2cf79cba2"),
+            new("tokens.txt", $"{CanaryRepo}/tokens.txt", 1, "2dae6fc7815f9640645e0c765522b278ee0cef49b482d91f6913e334628d3e77")
         ])
     ];
 
     private readonly object _sync = new();
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient;
+    private readonly IReadOnlyList<ModelDefinition> _models;
     internal Func<string, long?> AvailableBytes { get; set; } = ModelStorageSpace.GetAvailableBytes;
     private readonly Func<string, string, string, OfflineRecognizer>? _recognizerFactory;
     private ISherpaCudaRuntimeInstaller? _cudaRuntimeInstaller;
@@ -86,6 +97,13 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// Initializes a new instance of the SherpaOnnxPlugin class.
     /// </summary>
     public SherpaOnnxPlugin()
+        : this(cudaRuntimeInstaller: null, recognizerFactory: null, cudaRuntimeProbe: null)
+    {
+    }
+
+    // Tests download through a fake handler and a small catalog whose hashes they control.
+    internal SherpaOnnxPlugin(HttpClient httpClient, IReadOnlyList<ModelDefinition>? models = null)
+        : this(cudaRuntimeInstaller: null, recognizerFactory: null, cudaRuntimeProbe: null, httpClient, models)
     {
     }
 
@@ -102,13 +120,27 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     }
 
     internal SherpaOnnxPlugin(
-        ISherpaCudaRuntimeInstaller cudaRuntimeInstaller,
+        ISherpaCudaRuntimeInstaller? cudaRuntimeInstaller,
         Func<string, string, string, OfflineRecognizer>? recognizerFactory,
-        ISherpaCudaRuntimeProbe? cudaRuntimeProbe)
+        ISherpaCudaRuntimeProbe? cudaRuntimeProbe,
+        HttpClient? httpClient = null,
+        IReadOnlyList<ModelDefinition>? models = null)
     {
         _cudaRuntimeInstaller = cudaRuntimeInstaller;
         _recognizerFactory = recognizerFactory;
         _cudaRuntimeProbe = cudaRuntimeProbe;
+        _httpClient = httpClient ?? new HttpClient();
+        _models = models ?? DefaultModels;
+        TranscriptionModels = _models.Select(m =>
+            new PluginModelInfo(m.Id, m.DisplayName)
+            {
+                Publisher = m.Publisher,
+                SizeDescription = m.SizeDescription,
+                EstimatedSizeMB = m.EstimatedSizeMB,
+                IsRecommended = m.IsRecommended,
+                LanguageCount = m.LanguageCount,
+                LanguageCodes = m.Id == "canary-180m-flash" ? CanarySupportedLanguages : ParakeetSupportedLanguages,
+            }).ToList();
     }
 
     // Canary-specific state
@@ -127,7 +159,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.1";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -179,16 +211,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the transcription models.
     /// </summary>
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = Models.Select(m =>
-          new PluginModelInfo(m.Id, m.DisplayName)
-          {
-              Publisher = m.Publisher,
-            SizeDescription = m.SizeDescription,
-            EstimatedSizeMB = m.EstimatedSizeMB,
-            IsRecommended = m.IsRecommended,
-            LanguageCount = m.LanguageCount,
-            LanguageCodes = m.Id == "canary-180m-flash" ? CanarySupportedLanguages : ParakeetSupportedLanguages,
-        }).ToList();
+    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
 
     /// <summary>
     /// Gets the language codes accepted by the provider.
@@ -271,7 +294,13 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
         var missing = model.Files.Where(f => !File.Exists(Path.Join(dir, f.FileName)) || new FileInfo(Path.Join(dir, f.FileName)).Length == 0).ToList();
         foreach (var file in missing)
-            ModelStorageSpace.TryRemoveAbandonedFile(Path.Join(dir, file.FileName) + ".tmp");
+        {
+            // ".tmp" is the downloader's partial file (also what plugin 1.2.0 left behind), ".unverified"
+            // a complete download that was never checked; neither counts as the model file.
+            var path = Path.Join(dir, file.FileName);
+            foreach (var abandoned in new[] { path + ".tmp", path + UnverifiedSuffix + ".tmp", path + UnverifiedSuffix })
+                ModelStorageSpace.TryRemoveAbandonedFile(abandoned);
+        }
         ModelStorageSpace.EnsureAvailable(dir, missing.Sum(f => f.EstimatedSizeMB * 1024L * 1024), model.DisplayName, AvailableBytes);
 
         var total = model.Files.Sum(f => f.EstimatedSizeMB);
@@ -283,20 +312,24 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             var start = completed;
             if (!File.Exists(destination) || new FileInfo(destination).Length == 0)
             {
-                await TypeWhisper.PluginSDK.Helpers.ModelFileDownloader.DownloadAsync(_httpClient, file.DownloadUrl, destination,
+                // Files already at the destination are kept as they are, whichever plugin version
+                // downloaded them; only what is downloaded now is verified. The download lands next
+                // to the destination and is renamed only after its hash matched, so that
+                // IsModelDownloaded and LoadModelAsync, which accept anything at the final name,
+                // never see a file that failed or skipped the check.
+                var unverified = destination + UnverifiedSuffix;
+                await TypeWhisper.PluginSDK.Helpers.ModelFileDownloader.DownloadAsync(_httpClient, file.DownloadUrl, unverified,
                     new DownloadProgress(value => progress?.Report((start + value * file.EstimatedSizeMB) / total)), ct);
-                await VerifyChecksumAsync(file.FileName, file.Sha256, destination, ct);
+                await VerifyChecksumAsync(file.FileName, file.Sha256, unverified, ct);
+                File.Move(unverified, destination, overwrite: true);
             }
             completed += file.EstimatedSizeMB;
             progress?.Report(completed / total);
         }
     }
 
-    internal static async Task VerifyChecksumAsync(string fileName, string? sha256, string path, CancellationToken ct)
+    internal static async Task VerifyChecksumAsync(string fileName, string sha256, string path, CancellationToken ct)
     {
-        if (sha256 is null)
-            return;
-
         string actual;
         await using (var stream = File.OpenRead(path))
             actual = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
@@ -835,8 +868,8 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         return Path.Join(_host?.PluginAssetDirectory ?? ".", "Models", safeModelId);
     }
 
-    private static ModelDefinition GetModelDefinition(string modelId) =>
-        Models.FirstOrDefault(m => m.Id == modelId)
+    private ModelDefinition GetModelDefinition(string modelId) =>
+        _models.FirstOrDefault(m => m.Id == modelId)
         ?? throw new ArgumentException($"Unknown model: {modelId}");
 
     private void UnloadRecognizer()
@@ -1015,7 +1048,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
         if (!Directory.Exists(oldModelsDir)) return;
 
-        foreach (var model in Models)
+        foreach (var model in _models)
         {
             var oldDir = Path.Combine(oldModelsDir, model.Id);
             if (!Directory.Exists(oldDir)) continue;
@@ -1055,7 +1088,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         }
     }
 
-    private sealed record ModelDefinition(
+    /// <summary>
+    /// A downloadable model and the files that make it up.
+    /// </summary>
+    internal sealed record ModelDefinition(
         string Id,
         string DisplayName,
         string Publisher,
@@ -1066,5 +1102,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         bool SupportsTranslation,
         IReadOnlyList<ModelFileDefinition> Files);
 
-    private sealed record ModelFileDefinition(string FileName, string DownloadUrl, int EstimatedSizeMB, string? Sha256 = null);
+    /// <summary>
+    /// One model file, pinned to an immutable URL and the SHA-256 it must have. The hash is not
+    /// optional so that no entry can be added without one.
+    /// </summary>
+    internal sealed record ModelFileDefinition(string FileName, string DownloadUrl, int EstimatedSizeMB, string Sha256);
 }

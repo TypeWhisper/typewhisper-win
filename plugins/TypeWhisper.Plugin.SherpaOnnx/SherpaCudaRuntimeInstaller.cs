@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -18,12 +19,33 @@ internal interface ISherpaCudaRuntimeInstaller
     Task EnsureInstalledAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// The pinned sherpa-onnx CUDA runtime archive and the CUDA wheels that complete it.
+/// </summary>
+internal sealed record SherpaCudaRuntimePackage(
+    string RuntimeVersion,
+    string ArchiveUrl,
+    string ArchiveSha256,
+    IReadOnlyList<CudaDependencyPackage> Dependencies);
+
+/// <summary>
+/// A PyPI wheel whose DLLs are copied into the runtime directory, pinned to one file and its SHA-256.
+/// </summary>
+internal sealed record CudaDependencyPackage(
+    string PackageName,
+    string Version,
+    string WheelUrl,
+    string Sha256,
+    IReadOnlyList<string> RequiredDlls);
+
 internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 {
     internal const string RuntimeVersion = "v1.13.0";
     internal const string AssetFileName = "sherpa-onnx-v1.13.0-cuda-12.x-cudnn-9.x-win-x64-cuda.tar.bz2";
     internal const string DownloadUrl =
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.0/" + AssetFileName;
+    // SHA-256 of AssetFileName (310,691,085 bytes); matches checksum.txt of the v1.13.0 release.
+    internal const string ArchiveSha256 = "5653f993b9a1f5980a9c376caf3b6a8d56912a3657a9cfd0e30a58fc3e6d12d6";
     private const string SherpaNativeLibraryFileName = "sherpa-onnx-c-api.dll";
     private const string OnnxRuntimeFileName = "onnxruntime.dll";
     private const string SherpaOnnxRuntimeDependencyFileName = "sherpaort.dll";
@@ -56,41 +78,81 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         "cudnn_ext64_9.dll"
     ];
 
-    private static readonly CudaDependencyPackage[] CudaDependencyPackages =
+    // Each wheel is the single win_amd64 bdist_wheel of its release on PyPI. URL and SHA-256 were
+    // taken from https://pypi.org/pypi/<package>/<version>/json (digests.sha256) and are pinned so
+    // that nothing is resolved at runtime and every file is verified before it is extracted.
+    private static readonly CudaDependencyPackage[] DefaultDependencies =
     [
+        // nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl (3,591,604 bytes)
         new(
             "nvidia-cuda-runtime-cu12",
             "12.9.79",
+            "https://files.pythonhosted.org/packages/59/df/e7c3a360be4f7b93cee39271b792669baeb3846c58a4df6dfcf187a7ffab/nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl",
+            "8e018af8fa02363876860388bd10ccb89eb9ab8fb0aa749aaf58430a9f7c4891",
             ["cudart64_12.dll"]),
+        // nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl (553,162,896 bytes)
         new(
             "nvidia-cublas-cu12",
             "12.9.2.10",
+            "https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl",
+            "623f43027d40d44ceadf0043f002bd25cf353e8f13ce90b9a87057019f560661",
             ["cublas64_12.dll", "cublasLt64_12.dll"]),
+        // nvidia_cufft_cu12-11.4.1.4-py3-none-win_amd64.whl (200,067,309 bytes)
         new(
             "nvidia-cufft-cu12",
             "11.4.1.4",
+            "https://files.pythonhosted.org/packages/20/ee/29955203338515b940bd4f60ffdbc073428f25ef9bfbce44c9a066aedc5c/nvidia_cufft_cu12-11.4.1.4-py3-none-win_amd64.whl",
+            "8e5bfaac795e93f80611f807d42844e8e27e340e0cde270dcb6c65386d795b80",
             ["cufft64_11.dll"]),
+        // nvidia_cudnn_cu12-9.22.0.52-py3-none-win_amd64.whl (687,235,974 bytes)
         new(
             "nvidia-cudnn-cu12",
             "9.22.0.52",
+            "https://files.pythonhosted.org/packages/f2/a4/045f8d0ce6b99726d88e76bbb8ee147123f55e80111d89262762d8149abb/nvidia_cudnn_cu12-9.22.0.52-py3-none-win_amd64.whl",
+            "5d10117314c861245992dbcf8a6f8ae1f54852137a7c9f80cc9de9fa596f7d62",
             CudnnRuntimeFileNames)
     ];
 
-    private static readonly string[] RequiredFiles =
-        CoreRuntimeFiles.Concat(CudaDependencyPackages.SelectMany(package => package.RequiredDlls)).ToArray();
+    private static readonly SherpaCudaRuntimePackage DefaultPackage = new(
+        RuntimeVersion,
+        DownloadUrl,
+        ArchiveSha256,
+        DefaultDependencies);
 
     private readonly string _runtimeRoot;
     private readonly HttpClient _httpClient;
+    private readonly SherpaCudaRuntimePackage _package;
+    private readonly string[] _requiredFiles;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    // Records which verified downloads produced the files in the runtime directory. Only
+    // installations performed by a verifying build write it; see IsVerified for how its
+    // absence is treated.
+    private sealed record RuntimeReceipt(
+        string Version,
+        string? ArchiveSha256,
+        Dictionary<string, string> WheelSha256);
 
     /// <summary>
     /// Performs sherpa cuda runtime installer.
     /// </summary>
     public SherpaCudaRuntimeInstaller(string pluginDataDirectory, HttpClient httpClient)
+        : this(pluginDataDirectory, httpClient, DefaultPackage)
+    {
+    }
+
+    internal SherpaCudaRuntimeInstaller(
+        string pluginDataDirectory,
+        HttpClient httpClient,
+        SherpaCudaRuntimePackage package)
     {
         var pluginDataRoot = Path.GetFullPath(pluginDataDirectory);
-        _runtimeRoot = Path.Join(pluginDataRoot, "Runtimes", "sherpa-onnx-cuda", RuntimeVersion);
+        _runtimeRoot = Path.Join(pluginDataRoot, "Runtimes", "sherpa-onnx-cuda", package.RuntimeVersion);
         _httpClient = httpClient;
+        _package = package;
+        _requiredFiles = CoreRuntimeFiles
+            .Concat(package.Dependencies.SelectMany(dependency => dependency.RequiredDlls))
+            .ToArray();
     }
 
     /// <summary>
@@ -98,12 +160,15 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
     /// </summary>
     public string RuntimeDirectory => Path.Join(_runtimeRoot, "native");
 
+    private string ReceiptPath => Path.Join(_runtimeRoot, "installed.json");
+
     /// <summary>
     /// Returns whether installed.
     /// </summary>
     public bool IsInstalled =>
-        RequiredFiles.All(file => File.Exists(GetRuntimeFilePath(file)))
-        && IsRuntimeImportPatched(GetRuntimeFilePath(SherpaNativeLibraryFileName));
+        HasRequiredFiles(_requiredFiles)
+        && IsRuntimeImportPatched(GetRuntimeFilePath(SherpaNativeLibraryFileName))
+        && IsVerified(ReadReceipt());
 
     /// <summary>
     /// Ensures installed asynchronously..
@@ -122,11 +187,19 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             Directory.CreateDirectory(_runtimeRoot);
             Directory.CreateDirectory(RuntimeDirectory);
 
-            if (!HasRequiredFiles(DownloadedRuntimeFiles))
+            // Reaching this point means the files are incomplete or a receipt disagrees with the
+            // pins, so anything the receipt does not vouch for is downloaded and verified again.
+            var receipt = ReadReceipt() ?? CreateEmptyReceipt();
+            if (!HasRequiredFiles(DownloadedRuntimeFiles)
+                || !HashMatches(receipt.ArchiveSha256, _package.ArchiveSha256))
+            {
                 await InstallSherpaRuntimeAsync(cancellationToken);
+                receipt = receipt with { ArchiveSha256 = _package.ArchiveSha256 };
+                WriteReceipt(receipt);
+            }
 
             EnsureSherpaRuntimeImportAlias(RuntimeDirectory);
-            await InstallCudaProviderDependenciesAsync(cancellationToken);
+            await InstallCudaProviderDependenciesAsync(receipt, cancellationToken);
             ValidateInstalledRuntime();
         }
         finally
@@ -143,7 +216,12 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 
         try
         {
-            await DownloadArchiveAsync(archivePath, cancellationToken);
+            await DownloadVerifiedAsync(
+                _package.ArchiveUrl,
+                _package.ArchiveSha256,
+                archivePath,
+                "sherpa-onnx CUDA runtime",
+                cancellationToken);
             Directory.CreateDirectory(tempRoot);
             ExtractArchive(archivePath, tempRoot);
 
@@ -164,18 +242,34 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         }
     }
 
-    private async Task InstallCudaProviderDependenciesAsync(CancellationToken cancellationToken)
+    private async Task InstallCudaProviderDependenciesAsync(
+        RuntimeReceipt receipt,
+        CancellationToken cancellationToken)
     {
-        foreach (var package in CudaDependencyPackages.Where(package => !HasRequiredFiles(package.RequiredDlls)))
+        foreach (var package in _package.Dependencies)
         {
-            var wheelUrl = await ResolveWheelUrlAsync(package, cancellationToken);
+            // A wheel is skipped only when its DLLs exist and the receipt shows they came from
+            // the pinned file; the receipt is updated per wheel so an interrupted installation
+            // resumes with the remaining wheels instead of downloading everything again.
+            if (HasRequiredFiles(package.RequiredDlls)
+                && receipt.WheelSha256.TryGetValue(package.PackageName, out var installedSha256)
+                && HashMatches(installedSha256, package.Sha256))
+            {
+                continue;
+            }
+
             var wheelPath = Path.Join(
                 _runtimeRoot,
                 $"{package.PackageName}-{package.Version}.{Guid.NewGuid():N}.whl.tmp");
 
             try
             {
-                await DownloadFileAsync(wheelUrl, wheelPath, cancellationToken);
+                await DownloadVerifiedAsync(
+                    package.WheelUrl,
+                    package.Sha256,
+                    wheelPath,
+                    $"CUDA dependency package {package.PackageName} {package.Version}",
+                    cancellationToken);
                 ExtractDllsFromWheel(wheelPath, RuntimeDirectory);
             }
             finally
@@ -192,17 +286,17 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
                     $"The CUDA dependency package {package.PackageName} {package.Version} is incomplete. Missing: "
                     + string.Join(", ", missing));
             }
+
+            receipt.WheelSha256[package.PackageName] = package.Sha256;
+            WriteReceipt(receipt);
         }
     }
 
-    private async Task DownloadArchiveAsync(string archivePath, CancellationToken cancellationToken)
-    {
-        await DownloadFileAsync(DownloadUrl, archivePath, cancellationToken);
-    }
-
-    private async Task DownloadFileAsync(
+    private async Task DownloadVerifiedAsync(
         string url,
+        string expectedSha256,
         string destinationPath,
+        string description,
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -212,48 +306,37 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var output = new FileStream(
+        string actualSha256;
+        await using (var input = await response.Content.ReadAsStreamAsync(cancellationToken))
+        await using (var output = new FileStream(
             destinationPath,
             FileMode.CreateNew,
             FileAccess.Write,
             FileShare.None,
             81920,
-            useAsync: true);
-        await input.CopyToAsync(output, cancellationToken);
-    }
-
-    private async Task<string> ResolveWheelUrlAsync(
-        CudaDependencyPackage package,
-        CancellationToken cancellationToken)
-    {
-        var metadataUrl = $"https://pypi.org/pypi/{package.PackageName}/{package.Version}/json";
-        using var request = new HttpRequestMessage(HttpMethod.Get, metadataUrl);
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-        foreach (var file in document.RootElement.GetProperty("urls").EnumerateArray())
+            useAsync: true))
         {
-            var filename = file.GetProperty("filename").GetString();
-            if (filename is null || !filename.EndsWith("win_amd64.whl", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (file.TryGetProperty("packagetype", out var packageType)
-                && !string.Equals(packageType.GetString(), "bdist_wheel", StringComparison.OrdinalIgnoreCase))
+            // Hash while writing: the archives are hundreds of megabytes each, so reading them
+            // back from disk only to hash them would double the I/O of every installation.
+            using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await input.ReadAsync(buffer, cancellationToken)) > 0)
             {
-                continue;
+                hasher.AppendData(buffer, 0, read);
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             }
 
-            var url = file.GetProperty("url").GetString();
-            if (!string.IsNullOrWhiteSpace(url))
-                return url;
+            actualSha256 = Convert.ToHexString(hasher.GetHashAndReset());
         }
 
+        if (HashMatches(actualSha256, expectedSha256))
+            return;
+
+        // Nothing is extracted from an unverified download, and it must not linger for a retry to pick up.
+        TryDeleteFile(destinationPath);
         throw new InvalidOperationException(
-            $"Could not find a Windows x64 wheel for {package.PackageName} {package.Version}.");
+            $"The downloaded {description} did not match the expected checksum.");
     }
 
     private static void ExtractArchive(string archivePath, string destinationDirectory)
@@ -372,12 +455,61 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         }
     }
 
+    // Returns null when there is no usable receipt. An unreadable one is treated the same way: it
+    // can only come from an interrupted write by a verifying build, which never leaves unverified
+    // files behind, so reading it as a mismatch would only force a needless re-download.
+    private RuntimeReceipt? ReadReceipt()
+    {
+        if (!File.Exists(ReceiptPath))
+            return null;
+
+        try
+        {
+            var receipt = JsonSerializer.Deserialize<RuntimeReceipt>(File.ReadAllText(ReceiptPath));
+            if (receipt is { WheelSha256: not null } && receipt.Version == _package.RuntimeVersion)
+                return receipt;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            Debug.WriteLine($"Ignoring unreadable sherpa-onnx CUDA runtime receipt '{ReceiptPath}': {ex.Message}");
+        }
+
+        return null;
+    }
+
+    private RuntimeReceipt CreateEmptyReceipt() =>
+        new(_package.RuntimeVersion, null, new Dictionary<string, string>(StringComparer.Ordinal));
+
+    private void WriteReceipt(RuntimeReceipt receipt) =>
+        File.WriteAllText(ReceiptPath, JsonSerializer.Serialize(receipt));
+
+    private bool IsVerified(RuntimeReceipt? receipt)
+    {
+        // A complete installation without a receipt predates download verification. Its files came
+        // from the same pinned URLs, but the archives are gone and sherpa-onnx-c-api.dll is patched
+        // in place, so they cannot be checked after the fact. They are kept as they are and nothing
+        // is written: re-downloading 1.75 GB on the explicit CUDA preference, or silently falling
+        // back to the CPU on Auto where the installer never runs, would be worse than trusting a
+        // working GPU setup. Only a receipt that exists and disagrees with the pins, which means a
+        // real version change, sends the installation back through the installer.
+        if (receipt is null)
+            return true;
+
+        return HashMatches(receipt.ArchiveSha256, _package.ArchiveSha256)
+            && _package.Dependencies.All(dependency =>
+                receipt.WheelSha256.TryGetValue(dependency.PackageName, out var sha256)
+                && HashMatches(sha256, dependency.Sha256));
+    }
+
+    private static bool HashMatches(string? actualSha256, string expectedSha256) =>
+        string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase);
+
     private bool HasRequiredFiles(IEnumerable<string> files) =>
         files.All(file => File.Exists(GetRuntimeFilePath(file)));
 
     private void ValidateInstalledRuntime()
     {
-        var missing = RequiredFiles
+        var missing = _requiredFiles
             .Where(file => !File.Exists(GetRuntimeFilePath(file)))
             .ToList();
 
@@ -424,9 +556,4 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             Debug.WriteLine($"Failed to delete temporary directory '{path}': {ex.Message}");
         }
     }
-
-    private sealed record CudaDependencyPackage(
-        string PackageName,
-        string Version,
-        IReadOnlyList<string> RequiredDlls);
 }
