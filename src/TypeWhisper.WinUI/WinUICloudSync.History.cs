@@ -9,6 +9,8 @@ internal static partial class WinUICloudSync
 {
     private static string HistoryStatePath => WinUIProfile.DataPath("history-sync.json");
     private static HistorySyncState _history = LoadHistoryState();
+    private static TranscriptionRecord[]? _historySnapshot;
+    private static long _historySnapshotVersion = -1;
     internal static TypeWhisper.Core.Services.HistoryService? History { get; set; }
     internal static bool HistoryEnabled => _history.Enabled;
     internal static bool HistoryAudioEnabled => _history.AudioEnabled;
@@ -76,7 +78,10 @@ internal static partial class WinUICloudSync
         if (!_history.Enabled || History is not { } history || Preferences.Folder is not { } folder || Preferences.State?.DeviceId is not { } transport)
             return null;
         await history.EnsureLoadedAsync();
-        var snapshot = history.Records.ToArray();
+        // Passes run every 15 seconds; copy History only after it changed. Remote changes still need the folder scan.
+        var version = history.Version;
+        if (_historySnapshot is null || version != _historySnapshotVersion) { _historySnapshot = history.Records.ToArray(); _historySnapshotVersion = version; }
+        var snapshot = _historySnapshot;
         var state = CloneHistoryState();
         var audio = state.AudioEnabled
             ? new HistorySyncAudioAccess(record => history.ResolveAudioPath(record.AudioFileName),
@@ -106,12 +111,16 @@ internal static partial class WinUICloudSync
         next.ExportedVersions = state.ExportedVersions;
         next.AppliedOperationIds = state.AppliedOperationIds;
         next.Devices = state.Devices;
-        next.LastSyncAt = state.LastSyncAt;
         foreach (var expired in deletionsBefore.Where(id => !state.ExplicitDeletions.ContainsKey(id))) next.ExplicitDeletions.Remove(expired);
-        var devicesChanged = !next.Devices.OrderBy(pair => pair.Key).SequenceEqual(_history.Devices.OrderBy(pair => pair.Key));
-        SaveHistoryState(next);
-        _history = next;
-        if (devicesChanged) HistoryDevicesChanged?.Invoke();
+        // Sync stamps LastSyncAt on every pass; compare before taking it, so a pass that advanced nothing costs no flushed write.
+        if (CloudFolderSyncJson.Serialize(next) != CloudFolderSyncJson.Serialize(_history))
+        {
+            var devicesChanged = !next.Devices.OrderBy(pair => pair.Key).SequenceEqual(_history.Devices.OrderBy(pair => pair.Key));
+            next.LastSyncAt = state.LastSyncAt;
+            SaveHistoryState(next);
+            _history = next;
+            if (devicesChanged) HistoryDevicesChanged?.Invoke();
+        }
         return Loc.T("History: {0} sent · {1} applied", result.OperationsWritten, result.ChangesApplied);
     }
 
