@@ -116,7 +116,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         ct.ThrowIfCancellationRequested();
         // Give foreground workflows priority over cancellable settings downloads.
         await LocalLlmDownload.CancelAndDrainAsync();
-        return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
+        // A chat completion has no side effects, so a rate limit or server error is retried before the workflow fails.
+        return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) =>
+            PluginRequestRetry.RunAsync(provider.PluginId, attempt => provider.ProcessAsync(systemPrompt, text, model, attempt), token), ct);
     }
     private string _providerId = "local";
     internal bool UsesRegistryProvider => _providerId != "local";
