@@ -11,7 +11,17 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
     internal void Render(StackPanel content, List<ChoicePicker> pickers)
     {
         content.Children.Clear();
-        content.Children.Add(SettingsCard.PageTitle(Loc.T("Audio"), Loc.T("Audio preferences are saved automatically and used by dictation.")));
+        var title = SettingsCard.PageTitle(Loc.T("Audio"), Loc.T("Audio preferences are saved automatically and used by dictation."));
+        content.Children.Add(title);
+        // The HTTP API can change these settings while the page is open; show the saved values again.
+        void Rerender() => title.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!title.IsLoaded) return;
+            pickers.Clear();
+            Render(content, pickers);
+        });
+        title.Loaded += (_, _) => session.AudioSettingsChanged += Rerender;
+        title.Unloaded += (_, _) => session.AudioSettingsChanged -= Rerender;
         var input = new SettingsCard();
         var microphones = new MicrophonePriorityEditor(session);
         input.Add(microphones);
@@ -29,9 +39,11 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             value => session.AudioPreferences with { SoundFeedbackEnabled = value });
         AddToggle(Loc.T("Lower audio while recording"), Loc.T("Reduce the selected output's volume, then restore it after recording. This includes TypeWhisper sounds on that output."), preferences.AudioDuckingEnabled,
             value => session.AudioPreferences with { AudioDuckingEnabled = value });
-        var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Select(level => new Choice(level.ToString(), level == 0 ? Loc.T("Muted") : $"{level}%", Loc.T("Of the current output volume"))).ToArray();
+        var level = (int)Math.Round(preferences.AudioDuckingLevel * 100);
+        // An API-set level outside the presets is listed instead of being shown as unavailable.
+        var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Append(level).Distinct().Order().Select(percent => new Choice(percent.ToString(), percent == 0 ? Loc.T("Muted") : $"{percent}%", Loc.T("Of the current output volume"))).ToArray();
         AddPicker(Loc.T("Recording volume"), Loc.T("0% silences the output. Your own volume changes during recording are preserved."), levels,
-            ((int)Math.Round(preferences.AudioDuckingLevel * 100)).ToString(), id => session.AudioPreferences with { AudioDuckingLevel = int.Parse(id) / 100f });
+            level.ToString(), id => session.AudioPreferences with { AudioDuckingLevel = int.Parse(id) / 100f });
         AddToggle(Loc.T("Pause media during recording"), Loc.T("Send the media Play/Pause key at start and stop, as in the previous app. Use while media is playing; paused media may start."), preferences.PauseMediaDuringRecording,
             value => session.AudioPreferences with { PauseMediaDuringRecording = value });
         AddToggle(Loc.T("Stop after silence"), Loc.T("Finish and transcribe after a quiet pause, including silence at the start. Waits while shortcut modifiers are held. Background noise may delay stopping."), preferences.SilenceAutoStopEnabled,

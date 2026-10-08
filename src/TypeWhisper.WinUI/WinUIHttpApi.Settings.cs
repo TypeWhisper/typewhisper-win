@@ -1,4 +1,5 @@
 using System.Text;
+using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
 
@@ -11,6 +12,13 @@ internal sealed partial class WinUIHttpApi
     private bool _importReserved;
     private async Task<LocalApiResponse?> HandleSettingsAsync(LocalApiRequest request, CancellationToken ct)
     {
+        if (request.Path == LocalApiAudioSettings.Path)
+        {
+            if (request.Method == "PATCH" && _importReserved) return Error(409, "A settings import is in progress.");
+            var response = new LocalApiAudioSettings(new SessionAudioTarget(session)).Handle(request, ct);
+            if (request.Method == "PATCH" && response is { StatusCode: 200 }) session.NotifyAudioSettingsChanged();
+            return response;
+        }
         if (request.Path is not ("/v1/settings/export" or "/v1/settings/import")) return null;
         if (request.Query.Count != 0) return Error(400, "Settings endpoints accept no query parameters.");
         var store = new PersistedProfileBackup(WinUIProfile.Root);
@@ -53,5 +61,18 @@ internal sealed partial class WinUIHttpApi
         };
         }
         finally { if (!handedOff) _importReserved = false; }
+    }
+
+    // Uses the same session calls as the Audio settings page, so changes apply at once and persist.
+    private sealed class SessionAudioTarget(LocalDictationSession session) : ILocalApiAudioTarget
+    {
+        public bool CanChange => session.CanChangeAudioSettings;
+        public IReadOnlyList<LocalApiAudioInput> InputDevices =>
+            session.GetMicrophones().Select(device => new LocalApiAudioInput(device.Id, device.Name, device.IsDefault)).ToArray();
+        public IReadOnlyList<MicrophonePriorityItem> InputPriority => session.MicrophonePriority;
+        public MicrophonePriorityItem? ActiveInput => session.ActiveMicrophone;
+        public DictationAudioPreferences Preferences => session.AudioPreferences;
+        public string? SetInputPriority(IReadOnlyList<MicrophonePriorityItem> priority) => session.SetMicrophonePriority(priority);
+        public string? SavePreferences(DictationAudioPreferences preferences) => session.SaveAudioPreferences(preferences);
     }
 }

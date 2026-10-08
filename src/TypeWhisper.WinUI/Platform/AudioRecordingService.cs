@@ -413,6 +413,14 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         TryGetDeviceInfos(refresh: true);
 
     /// <summary>
+    /// Returns the device the next recording would open, resolved like warm-up; null when none is available.
+    /// </summary>
+    internal AudioInputDeviceSelection? PreferredInputDevice
+    {
+        get { lock (_captureLifecycleLock) return ResolvePreferredDeviceSelection(); }
+    }
+
+    /// <summary>
     /// Starts recording.
     /// </summary>
     public void StartRecording()

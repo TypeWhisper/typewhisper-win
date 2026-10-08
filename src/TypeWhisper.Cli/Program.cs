@@ -71,6 +71,7 @@ static class Program
             "transcribe" => await TranscribeAsync(baseUrl, options, connection.ApiToken),
             "export" => await ExportSettingsAsync(baseUrl, options, connection.ApiToken),
             "import" => await ImportSettingsAsync(baseUrl, options, connection.ApiToken),
+            "audio" => await AudioSettingsAsync(baseUrl, options, connection.ApiToken),
             _ => Error($"Unknown command: {options.Command}")
         };
     }
@@ -83,6 +84,7 @@ static class Program
         {
             "status" or "last" => p.Count == 0,
             "export" or "import" => p.Count == 1,
+            "audio" => p.Count == 0 || p.Count == 1 && action == "show" || p.Count == 2 && action == "set" && !string.IsNullOrWhiteSpace(p[1]),
             "transcribe" => p.Count <= 1,
             "models" => p.Count == 0 || p.Count == 1 && action is "list" or "load" or "unload" or "delete",
             "dictation" => p.Count == 1 && action is "start" or "stop" or "status" || p.Count == 2 && action == "result" && Guid.TryParse(p[1], out _),
@@ -156,6 +158,37 @@ static class Program
         if (o.Command == "dictation" && action == "result" && Prop(root, "status") == "failed")
             return Error(Prop(root, "error") is { Length: > 0 } error ? error : "Dictation failed.", 3);
         return 0;
+    }
+
+    static async Task<int> AudioSettingsAsync(string baseUrl, CliOptions options, string? apiToken)
+    {
+        HttpRequestMessage request;
+        if (options.Positionals.FirstOrDefault() == "set")
+        {
+            var source = options.Positionals[1];
+            string json;
+            try
+            {
+                json = source == "-" ? await Console.In.ReadToEndAsync(Cancellation.Token) : await File.ReadAllTextAsync(Path.GetFullPath(source), Cancellation.Token);
+                json = CliAudioSettings.PatchBody(json);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { return Error($"Could not read audio settings: {ex.Message}"); }
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or ArgumentException)
+            { return Error($"Invalid audio settings JSON: {ex.Message}"); }
+            request = CliRequestBuilder.BuildAudioSettingsPatch(baseUrl, json, apiToken);
+        }
+        else request = CliRequestBuilder.BuildGet(baseUrl, "/v1/settings/audio", apiToken);
+        using (request)
+        {
+            using var response = await Http.SendAsync(request, Cancellation.Token);
+            var body = await response.Content.ReadAsStringAsync(Cancellation.Token);
+            if (!response.IsSuccessStatusCode) return Error($"Request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}", 3);
+            using var document = JsonDocument.Parse(body);
+            if (options.Json) Console.WriteLine(PrettyJson(body));
+            else Console.Write(CliAudioSettings.Format(document.RootElement));
+            return 0;
+        }
     }
 
     static async Task<int> ExportSettingsAsync(string baseUrl, CliOptions options, string? apiToken)
@@ -486,6 +519,8 @@ static class Program
               transcribe [file|-]       Transcribe a file; omit it or use - for stdin
               export <path>             Export a portable settings backup
               import <path>             Restore a portable settings backup
+              audio [show]              Show microphones and audio settings
+              audio set <file|->        Apply audio settings JSON, such as saved audio --json output
 
             Global options:
               --port <N>                API server port (default: auto-discover, fallback 8978)
@@ -520,6 +555,8 @@ static class Program
               typewhisper export typewhisper-backup.json
               typewhisper import typewhisper-backup.json
               typewhisper import typewhisper-backup.json --json
+              typewhisper audio --json > audio-settings.json
+              typewhisper audio set audio-settings.json
             """);
     }
 

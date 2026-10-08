@@ -2,7 +2,7 @@
 
 Enable the server under **Settings > Advanced > HTTP API**, choose a port (default 8978), and select **Apply**. The server is off by default. Settings persist across restarts. A port collision leaves it stopped with a visible error. Select **Open documentation** to read the built-in reference at `/docs` in your browser while the server is running. Use **Copy address** and **Copy API token** for clients.
 
-The Windows host exposes all 29 method/path pairs registered by the Mac API, plus `/docs` and `/v1/capabilities`. The existing Raycast extension works without an update when **Require API token** is off (the application default). Use port 8978, or set Raycast's API Port Override; its existing discovery implementation reads only Mac paths.
+The Windows host exposes all 31 method/path pairs registered by the Mac API, plus `/docs` and `/v1/capabilities`. The existing Raycast extension works without an update when **Require API token** is off (the application default). Use port 8978, or set Raycast's API Port Override; its existing discovery implementation reads only Mac paths.
 
 Advanced also offers the Raycast extension link: an installed `raycast:` handler opens `raycast://extensions/SeoFood/typewhisper`; otherwise it opens the extension's Store page.
 
@@ -51,10 +51,40 @@ Send Authorization: Bearer <token> or X-TypeWhisper-API-Token: <token>. When Req
 | DELETE /v1/dictionary/corrections | JSON original |
 | GET /v1/settings/export | Windows portable profile backup JSON |
 | POST /v1/settings/import | Validate and merge backup; changed import returns 202, then drains and restarts the app |
+| GET /v1/settings/audio | Connected input devices, saved microphone priority, the active input and the audio preferences below |
+| PATCH /v1/settings/audio | JSON subset of the writable audio settings; applies and saves immediately and returns the full GET state |
 
 All errors use `error.code` and `error.message`. Unknown routes return 404 and incorrect methods return 405. Local OPTIONS returns 204; browser Origin restrictions still apply. The complete route inventory is `LocalApiRouteCatalog`.
 
 Endpoint parity does not make platform-specific assets or all Mac transcription options interchangeable. Engine identifiers come from installed Windows plugins. Explicit model operations return 409 when unsupported or busy; selected model deletion remains protected. Windows backup archives cover dictionary, snippets, workflows and History, excluding credentials/device settings; invalid or unsupported archives return 400. Changed imports are asynchronous (202/restoring/restart_required) because live profile writers must stop before applying the merge. Unchanged imports return 200. Concurrent imports are rejected. Recorder sessions save WAV files; they do not automatically transcribe them.
+
+## Audio settings
+
+`GET /v1/settings/audio` returns:
+
+```json
+{
+  "input_devices": [{"id": "{0.0.1.00000000}.{…}", "name": "SteelSeries Sonar - Microphone (SteelSeries Sonar Virtual Audio Device)", "is_system_default": true}],
+  "input_priority": [{"id": "…", "name": "Microphone (HyperX QuadCast 2)"}],
+  "active_input": {"id": "…", "name": "Microphone (HyperX QuadCast 2)"},
+  "audio_ducking_enabled": true,
+  "audio_ducking_level": 0.1,
+  "pause_media_during_recording": false,
+  "sound_feedback_enabled": true
+}
+```
+
+- `input_devices`: the input devices connected now.
+- `input_priority`: the saved microphone priority (`microphone.json`), including microphones that are not connected. The first connected entry is recorded from, matched by ID and then by name. An empty list uses the Windows default input.
+- `active_input`: the microphone the next recording would open, or `null` when no listed microphone or default input is available.
+
+`PATCH /v1/settings/audio` takes a JSON object (`Content-Type: application/json`) with any subset of `input_priority`, `audio_ducking_enabled`, `audio_ducking_level` (number from 0 to 1), `pause_media_during_recording` and `sound_feedback_enabled`. Priority entries need a non-empty `id` and a `name` and are stored exactly as sent. Changes take effect immediately through the same session calls as the Audio settings page and are saved to `microphone.json` and `audio.json`; no restart or backup restore is involved. An open Audio page is redrawn with the new values. The response is the full GET state.
+
+The whole body is validated before anything changes. Unknown fields, the read-only `input_devices` and `active_input`, duplicate fields, duplicate device IDs and invalid values return 400. A PATCH during recording, processing or another session operation returns 409. If saving the preferences fails after the priority was applied, the previous priority is put back and the request returns 500.
+
+Windows supports every field above. A field that exists only on another platform is omitted from the Windows GET response and rejected by PATCH with 400.
+
+To change settings temporarily, keep the GET response, PATCH the temporary values, and afterwards PATCH the saved `input_priority`, `audio_ducking_enabled`, `audio_ducking_level`, `pause_media_during_recording` and `sound_feedback_enabled` back. This restores both files exactly; `audio_ducking_level` round-trips without rounding.
 
 
 ## Transcription options
