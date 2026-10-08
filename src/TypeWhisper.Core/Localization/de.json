@@ -1,4 +1,5 @@
 {
+  "The dictionary changed elsewhere. Your edit was not saved. The list has been reloaded; review it and try again.": "Das Wörterbuch wurde an anderer Stelle geändert. Deine Änderung wurde nicht gespeichert. Die Liste wurde neu geladen; prüfe sie und versuche es erneut.",
   "Microphone pre-roll": "Mikrofon-Vorlauf",
   "Keeps the microphone on between dictations and holds the last half-second in memory to preserve the first word. Off while locked, asleep, or using Remote Desktop.": "Lässt das Mikrofon zwischen Diktaten eingeschaltet und hält die letzte halbe Sekunde im Arbeitsspeicher, damit das erste Wort erhalten bleibt. Bei gesperrtem Bildschirm, im Standby und bei Remote Desktop ausgeschaltet.",
   "(optional)": "(optional)",

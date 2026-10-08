@@ -1,4 +1,5 @@
 {
+  "The dictionary changed elsewhere. Your edit was not saved. The list has been reloaded; review it and try again.": "辞書が別の場所で変更されました。変更は保存されていません。一覧を再読み込みしました。内容を確認してから、もう一度お試しください。",
   "Microphone pre-roll": "マイクのプリロール",
   "Keeps the microphone on between dictations and holds the last half-second in memory to preserve the first word. Off while locked, asleep, or using Remote Desktop.": "音声入力の合間もマイクをオンにし、直前の0.5秒をメモリに保持して最初の言葉を逃さないようにします。画面ロック中、スリープ中、リモートデスクトップ使用中は無効になります。",
   "(optional)": "（任意）",

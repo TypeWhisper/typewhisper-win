@@ -17,6 +17,7 @@ public sealed partial class SnippetService : ISnippetService
     private readonly string _filePath;
     private List<Snippet> _cache = [];
     private bool _cacheLoaded;
+    private string? _fileBaseline;
 
     /// <summary>
     /// Gets the configured snippets in display order.
@@ -435,7 +436,8 @@ public sealed partial class SnippetService : ISnippetService
         LoadError = null;
         try
         {
-            var json = File.ReadAllText(_filePath);
+            var json = ReviewedCatalogTransaction.Read(_filePath);
+            _fileBaseline = json;
             // A zero-length file holds nothing to protect, so it counts as an empty catalog like a missing one.
             _cache = string.IsNullOrWhiteSpace(json)
                 ? []
@@ -472,7 +474,7 @@ public sealed partial class SnippetService : ISnippetService
         return false;
     }
 
-    // A failed write restores the previous list and raises no event, so the cache keeps matching the file on disk.
+    // A failed write restores the previous cache and raises no event. A stale catalog needs an explicit reload.
     private bool TryCommitMutation(List<Snippet> rollback)
     {
         if (SaveToDisk(_cache))
@@ -502,7 +504,12 @@ public sealed partial class SnippetService : ISnippetService
     private bool SaveToDisk(IReadOnlyList<Snippet> snippets)
     {
         var json = JsonSerializer.Serialize(snippets, new JsonSerializerOptions { WriteIndented = true });
-        if (!AtomicFileWriter.TryWriteAllText(_filePath, json, out var error))
+        try
+        {
+            ReviewedCatalogTransaction.Commit(_filePath, _fileBaseline, json);
+            _fileBaseline = json;
+        }
+        catch (Exception error)
         {
             LastSaveError = error;
             return false;

@@ -20,6 +20,7 @@ public sealed class WorkflowService : IWorkflowService
     private readonly string _filePath;
     private List<Workflow> _cache = [];
     private bool _cacheLoaded;
+    private string? _fileBaseline;
 
     /// <summary>
     /// Initializes a new instance of the WorkflowService class.
@@ -331,7 +332,8 @@ public sealed class WorkflowService : IWorkflowService
         LoadError = null;
         try
         {
-            var json = File.ReadAllText(_filePath);
+            var json = ReviewedCatalogTransaction.Read(_filePath);
+            _fileBaseline = json;
             // A zero-length file holds nothing to protect, so it counts as an empty catalog like a missing one.
             _cache = string.IsNullOrWhiteSpace(json)
                 ? []
@@ -368,7 +370,7 @@ public sealed class WorkflowService : IWorkflowService
         return false;
     }
 
-    // A failed write restores the previous list and raises no event, so the cache keeps matching the file on disk.
+    // A failed write restores the previous cache and raises no event. A stale catalog needs an explicit reload.
     private bool TryCommitMutation(List<Workflow> rollback)
     {
         if (SaveToDisk(_cache))
@@ -401,7 +403,13 @@ public sealed class WorkflowService : IWorkflowService
 
     private bool SaveToDisk(IReadOnlyList<Workflow> workflows)
     {
-        if (!AtomicFileWriter.TryWriteAllText(_filePath, JsonSerializer.Serialize(workflows, JsonOptions), out var error))
+        try
+        {
+            var json = JsonSerializer.Serialize(workflows, JsonOptions);
+            ReviewedCatalogTransaction.Commit(_filePath, _fileBaseline, json);
+            _fileBaseline = json;
+        }
+        catch (Exception error)
         {
             LastSaveError = error;
             return false;

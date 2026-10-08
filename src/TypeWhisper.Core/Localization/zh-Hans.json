@@ -1,4 +1,5 @@
 {
+  "The dictionary changed elsewhere. Your edit was not saved. The list has been reloaded; review it and try again.": "词典已在其他位置更改。你的修改尚未保存。列表已重新加载，请检查后重试。",
   "Microphone pre-roll": "麦克风预录",
   "Keeps the microphone on between dictations and holds the last half-second in memory to preserve the first word. Off while locked, asleep, or using Remote Desktop.": "在听写间隙保持麦克风开启，并在内存中保留最近半秒的音频，以免漏掉第一个词。锁屏、睡眠或使用远程桌面时关闭。",
   "(optional)": "（可选）",

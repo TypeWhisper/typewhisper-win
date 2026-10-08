@@ -33,6 +33,21 @@ public sealed class FileLexiconTests : IDisposable
     }
 
     [Fact]
+    public void SavingAStaleDictionaryPreservesLearnedCorrectionsAndReloadsBeforeRetry()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        var draft = new LexiconEntry(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper");
+        Assert.Single(LearnedCorrectionStore.Save(DictionaryPath, [new("whispr", "Whisper")]));
+        var expected = File.ReadAllBytes(DictionaryPath);
+
+        Assert.NotNull(store.Save(draft));
+        Assert.Equal(expected, File.ReadAllBytes(DictionaryPath));
+        Assert.Equal("whispr", Assert.Single(store.Entries).Key);
+        Assert.Null(store.Save(draft));
+        Assert.Equal(2, new Lexicon(DictionaryPath, SnippetPath).Entries.Count);
+    }
+
+    [Fact]
     public void DeleteCorrectionGroupPersistsAllVariantsAndPreservesOtherEntries()
     {
         var store = new Lexicon(DictionaryPath, SnippetPath);
