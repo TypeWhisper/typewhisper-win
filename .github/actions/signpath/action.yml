@@ -1,0 +1,40 @@
+name: Run packaging with SignPath
+description: Provide the official artifact upload and SignPath actions to Velopack's signing callback.
+inputs:
+  policy:
+    description: none, test-signing, or release-signing
+    required: true
+  api-token:
+    description: SignPath CI user token
+    required: false
+  certificate-thumbprint:
+    description: Expected production certificate SHA-1 thumbprint
+    required: false
+  script:
+    description: PowerShell packaging script
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Get official GitHub artifact uploader
+      if: inputs.policy != 'none'
+      uses: actions/checkout@v7
+      with:
+        repository: actions/upload-artifact
+        ref: cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        path: .signpath-tools/upload
+        persist-credentials: false
+    - name: Get official SignPath client
+      if: inputs.policy != 'none'
+      uses: actions/checkout@v7
+      with:
+        repository: signpath/github-action-submit-signing-request
+        ref: f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        path: .signpath-tools/submit
+        persist-credentials: false
+    - uses: ./.github/actions/signpath-run
+      with:
+        policy: ${{ inputs.policy }}
+        api-token: ${{ inputs.api-token }}
+        certificate-thumbprint: ${{ inputs.certificate-thumbprint }}
+        script: ${{ inputs.script }}

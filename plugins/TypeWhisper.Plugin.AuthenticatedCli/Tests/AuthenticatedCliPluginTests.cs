@@ -65,7 +65,37 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Contains("--no-session-persistence", arguments, StringComparison.Ordinal);
         Assert.Contains("--disallowedTools", arguments, StringComparison.Ordinal);
         Assert.Contains("--system-prompt", arguments, StringComparison.Ordinal);
+        AssertClaudeToolRestrictions(capture.RootElement.GetProperty("arguments")
+            .EnumerateArray().Select(argument => argument.GetString()!).ToArray());
         await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public void ClaudeInvocation_AllowsStructuredOutputWhileDisablingExternalTools()
+    {
+        var arguments = Descriptor(CliProviderKind.Claude)
+            .CreateInvocationArguments("isolated", "schema.json", "opus");
+
+        AssertClaudeToolRestrictions(arguments);
+        Assert.Contains("--json-schema", arguments);
+        Assert.Contains(CliProviderDescriptor.ResultSchema, arguments);
+    }
+
+    private static void AssertClaudeToolRestrictions(IReadOnlyList<string> arguments)
+    {
+        var toolsIndex = arguments.ToList().IndexOf("--tools");
+        Assert.True(toolsIndex >= 0);
+        Assert.Equal("", arguments[toolsIndex + 1]);
+        var disallowedIndex = arguments.ToList().IndexOf("--disallowedTools");
+        Assert.True(disallowedIndex >= 0);
+        Assert.Equal(new[] { "mcp__*" }, arguments.Skip(disallowedIndex + 1)
+            .TakeWhile(argument => !argument.StartsWith("--", StringComparison.Ordinal)));
+        Assert.DoesNotContain("*", arguments);
+        Assert.Contains("--safe-mode", arguments);
+        Assert.Contains("--strict-mcp-config", arguments);
+        Assert.Contains("--disable-slash-commands", arguments);
+        Assert.Contains("--no-chrome", arguments);
+        Assert.Contains("--no-session-persistence", arguments);
     }
 
     [WindowsFact]

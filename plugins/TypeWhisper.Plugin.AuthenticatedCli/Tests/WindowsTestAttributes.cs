@@ -17,3 +17,14 @@ public sealed class WindowsTheoryAttribute : TheoryAttribute
         if (!OperatingSystem.IsWindows()) Skip = "Requires native Windows CLI fixtures or directory junctions.";
     }
 }
+
+public sealed class LiveClaudeFactAttribute : FactAttribute
+{
+    public LiveClaudeFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+            Skip = "CLI process isolation requires Windows.";
+        else if (Environment.GetEnvironmentVariable("TYPEWHISPER_LIVE_CLAUDE_TEST") != "1")
+            Skip = "Set TYPEWHISPER_LIVE_CLAUDE_TEST=1 to run the authenticated Claude package test.";
+    }
+}

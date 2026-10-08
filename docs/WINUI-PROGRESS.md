@@ -82,8 +82,23 @@ The six affected Release test suites passed: Core 812, PluginHost 391,
 Presentation 2,690, Audio 63 (5 existing opt-in skips), Reson8 92 and Smallest AI 58.
 TRX evidence is in `artifacts/checkup/review-fixes`. The package-version check
 also passed, including an MSBuild evaluation of a simulated tray update.
-No app build, restart, native UI automation, live provider request or GitHub run
-was performed for this follow-up. The manual acceptance below predates these fixes.
+The WinUI Debug host at `fabde65b` was subsequently built and started through the
+development helper at 18:16 UTC, with zero warnings or errors and both workflow
+compatibility checks passing. The development process remained responsive with
+an open window and a new `app.start` diagnostic event. Marco also reported that
+the restarted build felt responsive. No native UI automation or live provider
+test was performed by the validation process. The detailed manual acceptance
+below predates these fixes.
+
+Before publication, the branch incorporates `main` through `6b96a451`, retaining
+its Claude CLI structured-output fix and SignPath packaging. The merge preserves
+central Velopack versions, dynamic Windows minimum-version metadata and the
+signing policy. It does not change the application sources from the started build.
+Post-merge checks passed: Authenticated CLI 84 tests (2 opt-in skips), SignPath
+11 Node tests, 20 candidate rejection checks, 4 upgrade-package checks, central
+package-version bindings and runtime dependency notices.
+Certificate fixtures are restricted by their own guard to disposable GitHub
+Actions runners; their result must come from CI.
 
 ### Manual check reported on 2026-10-08
 
