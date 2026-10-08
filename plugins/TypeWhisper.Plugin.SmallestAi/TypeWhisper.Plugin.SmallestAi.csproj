@@ -1,11 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <Version>1.2.1</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Version>1.2.2</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <Compile Include="../shared/PortableLocalization.cs" Link="Shared/PortableLocalization.cs" />
+    <Compile Include="../shared/TranscriptionHttpErrors.cs" Link="Shared/TranscriptionHttpErrors.cs" />
     <Using Include="TypeWhisper.Plugin.Shared" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.SmallestAi.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />

@@ -58,6 +58,33 @@ The runner writes `summary.json`, individual TRX files and Core/Presentation
 coverage reports. Build/launch evidence comes from the current checkout through
 the development helper described in the [test guide](../TESTING_GUIDE.md).
 
+### Review follow-up, 2026-10-08
+
+The review of `6ec9c3b8` led to four local corrections:
+
+- Delayed registered shortcuts carry their age to the action owner. Workflow stop
+  and processing cancel remain available; delayed starts are still discarded.
+- H.NotifyIcon's package, bridge download and assembly path share one version.
+  Packaging reads the Velopack CLI version from the central NuGet manifest.
+- Reson8 `1.2.10` and Smallest AI `1.2.2` expose structured batch-request errors,
+  allowing host retries and HTTP 413 splitting while preserving cancellation.
+- Invalid or unsupported sync manifests stay intact and produce localized
+  recovery instructions instead of a file-already-exists error.
+
+Worker cold loads now have a separate deadline from transcription, including
+after worker restarts and model changes. The inactivity watchdog measures awake
+time on Windows, matching [timer behavior during sleep](https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/11/environment-tickcount-windows-behavior). Delayed hotkey recovery
+also rechecks the interactive desktop before resuming microphone pre-roll.
+The hypothetical silent WASAPI stall without a stop notification remains
+unreproduced; no speculative stream-restart behavior was added.
+
+The six affected Release test suites passed: Core 812, PluginHost 391,
+Presentation 2,690, Audio 63 (5 existing opt-in skips), Reson8 92 and Smallest AI 58.
+TRX evidence is in `artifacts/checkup/review-fixes`. The package-version check
+also passed, including an MSBuild evaluation of a simulated tray update.
+No app build, restart, native UI automation, live provider request or GitHub run
+was performed for this follow-up. The manual acceptance below predates these fixes.
+
 ### Manual check reported on 2026-10-08
 
 Marco tested development build `58b7b025` and reported the following results.

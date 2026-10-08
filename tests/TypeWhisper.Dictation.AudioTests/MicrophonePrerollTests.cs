@@ -97,6 +97,23 @@ public sealed class MicrophonePrerollTests
     }
 
     [Fact]
+    public void DelayedDesktopSwitchResumesPrerollWithoutAnotherUnlockNotification()
+    {
+        var state = new MicrophonePrerollSuspension();
+        var input = new Input();
+        using var audio = Create(input);
+        audio.MicrophonePrerollEnabled = true;
+        audio.SuspendMicrophonePreroll(state.Observe(0x2B1, 7, true));
+        audio.SuspendMicrophonePreroll(state.Observe(0x2B1, 8, false));
+        Assert.False(input.Running);
+        audio.SuspendMicrophonePreroll(state.Observe(0, 0, true));
+        Assert.True(input.Running);
+        audio.SuspendMicrophonePreroll(state.Observe(0x2B1, 7, true));
+        audio.SuspendMicrophonePreroll(state.Observe(0, 0, true));
+        Assert.False(input.Running); // Rechecking the desktop cannot undo an explicit lock.
+    }
+
+    [Fact]
     public void BoundedPreviewCopiesOnlyTheTailAndLeavesTheFullRecordingIntact()
     {
         var input = new Input();

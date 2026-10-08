@@ -255,11 +255,12 @@ public partial class Reson8PluginTests
 
         var wav = BuildPcm16Wav([0x00, 0x00]);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
-        await Assert.ThrowsAsync<HttpRequestException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
-        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
+        foreach (var expected in new[] { "Invalid Reson8 API key", "custom model not found", "file too large", "rate limit exceeded" })
+        {
+            var error = await Assert.ThrowsAsync<PluginRequestException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
+            Assert.Contains(expected, error.Message);
+        }
+        var ex = await Assert.ThrowsAsync<PluginRequestException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
         Assert.Contains("Reson8 server error", ex.Message);
     }
 

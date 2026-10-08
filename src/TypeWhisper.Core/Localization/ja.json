@@ -2263,6 +2263,8 @@
   "Sync audio for new entries": "新しい項目の音声を同期",
   "Sync canceled.": "同期をキャンセルしました。",
   "Sync could not finish: {0}": "同期を完了できませんでした: {0}",
+  "The sync manifest at {0} uses an unsupported format. Update TypeWhisper on all devices or choose another sync folder. Existing data was kept.": "{0} の同期マニフェストは未対応の形式です。すべてのデバイスで TypeWhisper を更新するか、別の同期フォルダーを選択してください。既存のデータは保持されています。",
+  "The sync manifest at {0} could not be read. Restore this file from a backup or choose another sync folder. Existing data was kept.": "{0} の同期マニフェストを読み取れませんでした。このファイルをバックアップから復元するか、別の同期フォルダーを選択してください。既存のデータは保持されています。",
   "Sync now": "今すぐ同期",
   "Sync paused. Local and cloud files are kept.": "同期を一時停止しました。ローカルとクラウドのファイルは保持されます。",
   "Sync storage is unavailable.": "同期ストレージを利用できません。",

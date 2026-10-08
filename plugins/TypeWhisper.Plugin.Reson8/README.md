@@ -2,12 +2,16 @@
 
 Batch and realtime transcription, model refresh and portable server/model/header settings.
 
-Version `1.2.9`; plugin ID `com.typewhisper.reson8`; minimum host `1.1.2`.
+Version `1.2.10`; plugin ID `com.typewhisper.reson8`; minimum host `1.1.2`.
 Independent branch: `seofood/reson8-portable`, based on `4db8f6ac`.
 
 ## Setup
 
 Enter the API key and choose a model. Keep the default server settings unless using a compatible deployment.
+
+Batch requests expose HTTP status, retry delay and failure kind to the host. Hosts with
+request resilience can retry transient failures and split uploads rejected with HTTP 413;
+authentication failures and caller cancellation are not retried.
 
 This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
 

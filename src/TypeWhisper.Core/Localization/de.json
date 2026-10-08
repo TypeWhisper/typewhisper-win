@@ -2263,6 +2263,8 @@
   "Sync audio for new entries": "Audio für neue Einträge synchronisieren",
   "Sync canceled.": "Synchronisierung abgebrochen.",
   "Sync could not finish: {0}": "Synchronisierung konnte nicht abgeschlossen werden: {0}",
+  "The sync manifest at {0} uses an unsupported format. Update TypeWhisper on all devices or choose another sync folder. Existing data was kept.": "Das Sync-Manifest unter {0} verwendet ein nicht unterstütztes Format. Aktualisiere TypeWhisper auf allen Geräten oder wähle einen anderen Sync-Ordner. Vorhandene Daten wurden beibehalten.",
+  "The sync manifest at {0} could not be read. Restore this file from a backup or choose another sync folder. Existing data was kept.": "Das Sync-Manifest unter {0} konnte nicht gelesen werden. Stelle diese Datei aus einer Sicherung wieder her oder wähle einen anderen Sync-Ordner. Vorhandene Daten wurden beibehalten.",
   "Sync now": "Jetzt synchronisieren",
   "Sync paused. Local and cloud files are kept.": "Synchronisierung pausiert. Lokale und Cloud-Dateien bleiben erhalten.",
   "Sync storage is unavailable.": "Der Sync-Speicher ist nicht verfügbar.",

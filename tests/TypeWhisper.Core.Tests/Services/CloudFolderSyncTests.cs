@@ -269,19 +269,23 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Theory]
-    [InlineData("{\"schemaVersion\":2,\"createdBy\":\"TypeWhisper\"}")]
-    [InlineData("not json")]
-    public async Task IncompatibleOrUnreadableManifestIsNeverOverwritten(string original)
+    [InlineData("{\"schemaVersion\":2,\"createdBy\":\"TypeWhisper\"}", true)]
+    [InlineData("{\"schemaVersion\":1,\"createdBy\":\"AnotherApp\"}", true)]
+    [InlineData("not json", false)]
+    public async Task IncompatibleOrUnreadableManifestIsNeverOverwritten(string original, bool unsupportedFormat)
     {
         var package = CloudFolderSyncEngine.PackagePath(_tempDir);
         Directory.CreateDirectory(package);
         var path = Path.Combine(package, "manifest.json");
         File.WriteAllText(path, original);
 
-        await Assert.ThrowsAnyAsync<IOException>(() => CloudFolderSyncEngine.SyncAsync(_tempDir,
+        var error = await Assert.ThrowsAsync<CloudFolderSyncManifestException>(() => CloudFolderSyncEngine.SyncAsync(_tempDir,
             new InMemoryUserDataSyncStore(), new CloudFolderSyncState { DeviceId = "win-a" },
             new PaidEntitlements(CanUseCloudFolderSync: true), now: Date(20)));
 
+        Assert.Equal(unsupportedFormat, error.UnsupportedFormat);
+        Assert.Contains(path, error.Message);
+        Assert.Contains("choose another sync folder", error.Message);
         Assert.Equal(original, File.ReadAllText(path));
         Assert.Empty(Directory.EnumerateFiles(package, "*.tmp", SearchOption.AllDirectories));
     }

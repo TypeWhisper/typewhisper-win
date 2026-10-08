@@ -14,7 +14,7 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     private readonly nuint SubclassId;
 
     private readonly IntPtr _hwnd;
-    private readonly Action<string> _callback;
+    private readonly RegisteredShortcutDispatch _dispatch;
     private readonly NativeMethods.SubclassProc _subclassProc;
     private bool _registered;
     private readonly Dictionary<string, int> _bindings = new();
@@ -23,14 +23,14 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     public string Value => string.Join(",", _bindings.Keys);
 
     internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase)
-        : this(window, _ => callback(), idBase) { }
+        : this(window, (_, stale) => { if (!stale) callback(); }, idBase) { }
 
-    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string> callback, int idBase)
+    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string, bool> callback, int idBase)
     {
         _nextId = idBase;
         SubclassId = (nuint)idBase;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        _callback = callback;
+        _dispatch = new(callback);
         _subclassProc = WindowSubclassProc;
 
         if (!NativeMethods.SetWindowSubclass(_hwnd, _subclassProc, SubclassId, IntPtr.Zero))
@@ -81,8 +81,8 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     {
         if (message == WmHotkey && _bindings.FirstOrDefault(binding => binding.Value == wParam.ToInt32()).Key is { } chord)
         {
-            if (!InputEventTiming.IsStale(unchecked((uint)NativeMethods.GetMessageTime()), Environment.TickCount64)
-                && !ShortcutRecorder.CaptureRegisteredShortcut(chord)) _callback(chord);
+            _dispatch.Invoke(chord, unchecked((uint)NativeMethods.GetMessageTime()), Environment.TickCount64,
+                ShortcutRecorder.CaptureRegisteredShortcut);
         }
 
         return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);

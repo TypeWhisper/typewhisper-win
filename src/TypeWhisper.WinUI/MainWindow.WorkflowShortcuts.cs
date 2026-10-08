@@ -31,7 +31,7 @@ public sealed partial class MainWindow
         if (_workflowShortcuts.Initialize() is { } error) ShowNotice(new AppNotice(error));
     }
 
-    private void RunWorkflowShortcut(string chord)
+    private void RunWorkflowShortcut(string chord, bool stale)
     {
         var workflow = _workflowShortcuts?.Resolve(chord);
         if (workflow is null) return;
@@ -41,6 +41,7 @@ public sealed partial class MainWindow
             _ = _dictationInput.SubmitAsync(DictationInputAction.Stop);
             return;
         }
+        if (stale) return;
         if (_closing || _profileRestoreClosing || _workflowShortcutsStopping || _workflowTask is { IsCompleted: false }
             || ShortcutRecorder.AnyEditing || WorkflowsView.IsBusy || !_dictation.CanStartWorkflowShortcut
             || _dictationInitialization is not { IsCompleted: true } || _dictationInput?.IsRecordingOrStarting == true) return;

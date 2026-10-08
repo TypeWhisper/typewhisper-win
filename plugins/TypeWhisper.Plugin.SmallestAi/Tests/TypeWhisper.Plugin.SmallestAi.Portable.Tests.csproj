@@ -4,6 +4,7 @@
     <IsTestProject>true</IsTestProject><IsPackable>false</IsPackable><GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../shared/tests/TranscriptionResilienceTests.cs" Link="TranscriptionResilienceTests.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" /><PackageReference Include="xunit.runner.visualstudio" />
     <Using Include="Xunit" /><PackageReference Include="Moq" />

@@ -18,6 +18,9 @@ public sealed partial class MainWindow
             }, () =>
             {
                 if (_closing || _profileRestoreClosing) return null;
+                // Unlock may arrive before Windows switches back to the interactive desktop.
+                // Re-evaluate here without clearing any lock, sleep or disconnect reason.
+                _dictation?.ObservePrerollSession(0, 0, _hotkeyRecovery?.SessionNotificationsAvailable == true);
                 // A prepared microphone client can go stale across sleep or a session switch.
                 _dictation?.RefreshMicrophoneAfterResume();
                 var errors = new List<string>();

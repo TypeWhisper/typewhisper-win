@@ -65,6 +65,26 @@ public sealed class DelayedInputTests
         Assert.Equal(1, starts);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RegisteredHotkeyPreservesAgeForTheActionOwner(bool stale)
+    {
+        var events = new List<(string Chord, bool Stale)>();
+        var captures = 0;
+        var dispatch = new RegisteredShortcutDispatch((chord, delayed) => events.Add((chord, delayed)));
+        dispatch.Invoke("CTRL+K", 100, stale ? 2000 : 200, _ => { captures++; return false; });
+        Assert.Equal(("CTRL+K", stale), Assert.Single(events));
+        Assert.Equal(stale ? 0 : 1, captures);
+    }
+
+    [Fact]
+    public void ShortcutEditorConsumesAFreshRegisteredHotkey()
+    {
+        var dispatch = new RegisteredShortcutDispatch((_, _) => Assert.Fail("Editing must not invoke an app action."));
+        dispatch.Invoke("CTRL+K", 100, 200, chord => { Assert.Equal("CTRL+K", chord); return true; });
+    }
+
     private sealed class Clock : TimeProvider
     {
         internal long Milliseconds;

@@ -617,14 +617,15 @@ public static class CloudFolderSyncEngine
     {
         var manifestPath = Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName)));
         // The manifest identifies the package format. Device records carry sync liveness on both platforms.
-        if (!HasCompatibleManifest(manifestPath))
+        if (!ValidateManifestIfPresent(manifestPath))
         {
             try
             {
                 AtomicFileWriter.CreateAllText(manifestPath, CloudFolderSyncJson.Serialize(new CloudFolderSyncManifest(1, "TypeWhisper", now)));
             }
-            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && HasCompatibleManifest(manifestPath))
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
+                if (!ValidateManifestIfPresent(manifestPath)) throw;
                 // Another device published the complete manifest first. Keep its timestamp and unknown fields.
                 // Never replace incompatible/unreadable metadata or contend on this shared file on every pass.
             }
@@ -642,17 +643,22 @@ public static class CloudFolderSyncEngine
         WriteJson(device, devicePath);
     }
 
-    private static bool HasCompatibleManifest(string path)
+    private static bool ValidateManifestIfPresent(string path)
     {
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var manifest = JsonSerializer.Deserialize<CloudFolderSyncManifest>(stream, CloudFolderSyncJson.Options);
-            return manifest is { SchemaVersion: 1, CreatedBy: "TypeWhisper" };
+            if (manifest is not { SchemaVersion: 1, CreatedBy: "TypeWhisper" })
+                throw new CloudFolderSyncManifestException(path, unsupportedFormat: true);
+            return true;
         }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        catch (CloudFolderSyncManifestException) { throw; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            return false;
+            throw new CloudFolderSyncManifestException(path, unsupportedFormat: false, ex);
         }
     }
 

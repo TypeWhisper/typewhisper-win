@@ -89,7 +89,8 @@ jobs:
       - name: Build side-by-side Daily installer
         shell: pwsh
         run: |
-          dotnet tool install vpk --version 0.0.1298 --tool-path tools
+          $version = ./eng/Get-CentralPackageVersion.ps1 -PackageId Velopack
+          dotnet tool install vpk --version $version --tool-path tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./tools/vpk.exe pack --packId TypeWhisperDaily --packTitle 'TypeWhisper' `
             --packVersion $env:CANDIDATE_VERSION --packDir candidate `

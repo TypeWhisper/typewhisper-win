@@ -7,14 +7,14 @@
          enable central versions there when its branch does not contain this file yet. -->
     <_TypeWhisperNearestBuildProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildProjectDirectory)'))</_TypeWhisperNearestBuildProps>
     <ManagePackageVersionsCentrally Condition="'$(_TypeWhisperNearestBuildProps)' == '$(MSBuildThisFileDirectory)Directory.Build.props'">true</ManagePackageVersionsCentrally>
+    <!-- Shared by the tray package, its WinUI bridge download and the assembly reference. -->
+    <HNotifyIconVersion>2.4.1</HNotifyIconVersion>
   </PropertyGroup>
 
   <ItemGroup Label="Application">
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.13" />
-    <!-- TypeWhisper.WinUI also downloads H.NotifyIcon.WinUI with a PackageDownload and a
-         HintPath that name this version explicitly; bump the three together. -->
-    <PackageVersion Include="H.NotifyIcon" Version="2.4.1" />
+    <PackageVersion Include="H.NotifyIcon" Version="$(HNotifyIconVersion)" />
     <PackageVersion Include="Interop.UIAutomationClient" Version="10.19041.0" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
@@ -23,7 +23,7 @@
     <PackageVersion Include="NAudio.WinMM" Version="2.2.1" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageVersion Include="System.Speech" Version="10.0.0" />
-    <!-- Keep equal to the vpk tool version the packaging workflows install. -->
+    <!-- Packaging workflows read this version when installing the vpk tool. -->
     <PackageVersion Include="Velopack" Version="0.0.1298" />
     <PackageVersion Include="WinUIEx" Version="2.9.3" />
   </ItemGroup>

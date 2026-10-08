@@ -2263,6 +2263,8 @@
   "Sync audio for new entries": "同步新条目的音频",
   "Sync canceled.": "同步已取消。",
   "Sync could not finish: {0}": "同步未能完成：{0}",
+  "The sync manifest at {0} uses an unsupported format. Update TypeWhisper on all devices or choose another sync folder. Existing data was kept.": "{0} 中的同步清单使用了不受支持的格式。请在所有设备上更新 TypeWhisper，或选择其他同步文件夹。现有数据已保留。",
+  "The sync manifest at {0} could not be read. Restore this file from a backup or choose another sync folder. Existing data was kept.": "无法读取 {0} 中的同步清单。请从备份恢复此文件，或选择其他同步文件夹。现有数据已保留。",
   "Sync now": "立即同步",
   "Sync paused. Local and cloud files are kept.": "同步已暂停。本地和云端文件均会保留。",
   "Sync storage is unavailable.": "同步存储不可用。",

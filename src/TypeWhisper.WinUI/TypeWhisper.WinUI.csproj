@@ -42,10 +42,10 @@
     <PackageReference Include="Interop.UIAutomationClient" />
     <!-- The tray bridge references the old AppSDK metapackage. Restore the bridge
          without that dependency graph; WinUI and its foundation are provided above. -->
-    <PackageDownload Include="H.NotifyIcon.WinUI" Version="[2.4.1]" />
+    <PackageDownload Include="H.NotifyIcon.WinUI" Version="[$(HNotifyIconVersion)]" />
     <PackageReference Include="H.NotifyIcon" />
     <Reference Include="H.NotifyIcon.WinUI">
-      <HintPath>$(NuGetPackageRoot)h.notifyicon.winui/2.4.1/lib/net10.0-windows10.0.17763/H.NotifyIcon.WinUI.dll</HintPath>
+      <HintPath>$(NuGetPackageRoot)h.notifyicon.winui/$(HNotifyIconVersion)/lib/net10.0-windows10.0.17763/H.NotifyIcon.WinUI.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />

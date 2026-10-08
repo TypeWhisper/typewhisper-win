@@ -354,10 +354,23 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
     // The answer and the time of the last frame the worker sent for this request.
     private sealed class PendingRequest
     {
-        private long _lastFrame = Environment.TickCount64;
+        private long _lastFrame = ActiveMilliseconds();
         internal TaskCompletionSource<TranscriptionWorkerMessage> Answer { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal TimeSpan Silence => TimeSpan.FromMilliseconds(Environment.TickCount64 - Volatile.Read(ref _lastFrame));
-        internal void Touch() => Volatile.Write(ref _lastFrame, Environment.TickCount64);
+        internal TimeSpan Silence => TimeSpan.FromMilliseconds(ActiveMilliseconds() - Volatile.Read(ref _lastFrame));
+        internal void Touch() => Volatile.Write(ref _lastFrame, ActiveMilliseconds());
+
+        // .NET 10 TickCount64 includes Windows sleep time, while WaitAsync's timer excludes it.
+        // Use the same awake-time basis so resume does not turn a live worker into a crash.
+        private static long ActiveMilliseconds()
+        {
+            if (!OperatingSystem.IsWindows()) return Environment.TickCount64;
+            QueryUnbiasedInterruptTime(out var ticks);
+            return (long)(ticks / TimeSpan.TicksPerMillisecond);
+        }
+
+        [DllImport("kernel32.dll", ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool QueryUnbiasedInterruptTime(out ulong unbiasedTime);
     }
 }
 

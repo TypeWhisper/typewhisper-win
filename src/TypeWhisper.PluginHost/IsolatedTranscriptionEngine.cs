@@ -168,7 +168,13 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
                 try
                 {
                     var worker = await EnsureWorkerAsync(token).ConfigureAwait(false);
-                    response = await worker.SendAsync(request, payload, token).ConfigureAwait(false);
+                    // File/API/recovery requests may arrive without PrepareAsync; crash retries also
+                    // start cold. Loading gets its own budget before the audio deadline starts.
+                    TranscriptionWorkerMessage? load = null;
+                    if (request.Command == TranscriptionWorkerCommands.Transcribe && request.ModelId is { } modelId
+                        && worker.State?.LoadedModelId != modelId)
+                        load = await worker.SendAsync(new() { Command = TranscriptionWorkerCommands.Load, ModelId = modelId }, default, token).ConfigureAwait(false);
+                    response = load?.Error is not null ? load : await worker.SendAsync(request, payload, token).ConfigureAwait(false);
                 }
                 catch (TranscriptionWorkerRequestTimeoutException)
                 {
