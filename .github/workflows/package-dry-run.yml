@@ -22,7 +22,8 @@ permissions:
 
 concurrency:
   group: package-dry-run-${{ github.event.pull_request.number || github.ref }}-${{ inputs.channel || 'stable' }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled; every push to main keeps its run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   package:
