@@ -68,7 +68,7 @@ jobs:
         run: |
           ./eng/Get-StorePackageVersion.Tests.ps1
           ./eng/New-StorePackageManifest.Tests.ps1
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Verify Store beta submission guards without credentials
