@@ -31,6 +31,9 @@ jobs:
       - uses: actions/dependency-review-action@v5
 
   dotnet-package-audit:
+    # Pull requests and pushes already fail their restores on vulnerable packages
+    # (NuGetAudit in Directory.Build.props); this full report runs weekly or on demand.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
 
     steps:
