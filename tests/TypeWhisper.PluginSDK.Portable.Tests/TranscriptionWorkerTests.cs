@@ -45,6 +45,39 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     // Short enough for tests, long enough that a loaded machine does not miss ten beats in a row.
     private static readonly TimeSpan InactivityWindow = TimeSpan.FromSeconds(2);
 
+    [Fact]
+    public async Task NativeHangWithWorkingHeartbeatExpiresWithoutRetryOrCpuFallback()
+    {
+        var isolation = new TranscriptionIsolation(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5))
+        { HeartbeatInterval = TimeSpan.FromMilliseconds(100), RequestTimeout = TimeSpan.FromSeconds(2) };
+        await using var engine = isolation.TryIsolate(_inner, PackageDirectory, _host)!;
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var firstId = engine.WorkerProcessId;
+        using var process = Process.GetProcessById(firstId!.Value);
+        var elapsed = Stopwatch.StartNew();
+        await Assert.ThrowsAsync<TranscriptionWorkerRequestTimeoutException>(() =>
+            engine.TranscribePcmAsync(new float[] { 0 }, "hang-hard", false, default));
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(15));
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(engine.WorkerProcessId);
+        Assert.False(engine.UsesCpuFallback);
+        Assert.Single(_logs, line => line.Contains("exceeded the transcribe deadline"));
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        Assert.NotEqual(firstId, engine.WorkerProcessId);
+    }
+
+    [Fact]
+    public void DecodeBudgetScalesWithAudioAndHasIndependentLoadingAllowance()
+    {
+        var launch = new TranscriptionWorkerLaunch("unused", [], "package", "data", "assets", "model", new(1, 1, 6));
+        var request = new TranscriptionWorkerMessage { Command = TranscriptionWorkerCommands.Transcribe, AudioFormat = TranscriptionWorkerAudioFormats.Pcm };
+        Assert.Equal(TimeSpan.FromSeconds(120), launch.TimeoutFor(request, 0));
+        Assert.Equal(TimeSpan.FromSeconds(720), launch.TimeoutFor(request, 60 * 16000 * 4));
+        Assert.Equal(TimeSpan.FromSeconds(720), launch.TimeoutFor(request with { AudioFormat = TranscriptionWorkerAudioFormats.Wav }, 60 * 16000 * 2));
+        Assert.Equal(TimeSpan.FromMinutes(10), launch.TimeoutFor(request with { Command = TranscriptionWorkerCommands.Load }, 0));
+        Assert.Equal(Timeout.InfiniteTimeSpan, (launch with { RequestTimeout = Timeout.InfiniteTimeSpan }).TimeoutFor(request, 0));
+    }
+
     private IsolatedTranscriptionEngine WatchedEngine()
     {
         var isolation = new TranscriptionIsolation(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5))

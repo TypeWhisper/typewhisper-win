@@ -170,6 +170,13 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
                     var worker = await EnsureWorkerAsync(token).ConfigureAwait(false);
                     response = await worker.SendAsync(request, payload, token).ConfigureAwait(false);
                 }
+                catch (TranscriptionWorkerRequestTimeoutException)
+                {
+                    // A deadline is not evidence of a bad GPU. Do not repeat an expensive request
+                    // or change acceleration; the next explicit attempt gets a fresh worker.
+                    await DiscardWorkerAsync().ConfigureAwait(false);
+                    throw;
+                }
                 catch (TranscriptionWorkerCrashedException crash)
                 {
                     await DiscardWorkerAsync().ConfigureAwait(false);

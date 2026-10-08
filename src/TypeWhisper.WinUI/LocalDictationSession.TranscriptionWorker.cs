@@ -20,8 +20,19 @@ internal sealed partial class LocalDictationSession
         var executable = Path.Combine(AppContext.BaseDirectory, "TypeWhisper.exe");
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_TRANSCRIPTION_WORKER") == "0" || !File.Exists(executable)) return null;
         var isolation = new TranscriptionIsolation(executable, [TranscriptionWorkerServer.Argument], IsolatedTranscriptionPlugins, LocalCtcVocabulary.HostVersion)
-            { IdleUnloadPolicy = ModelIdlePolicy };
+            { IdleUnloadPolicy = ModelIdlePolicy, RequestTimeout = WorkerRequestTimeout() };
         isolation.Notice += (_, message) => EngineNotice?.Invoke(message);
         return isolation;
+    }
+
+    private static TimeSpan? WorkerRequestTimeout()
+    {
+        var value = Environment.GetEnvironmentVariable("TYPEWHISPER_TRANSCRIPTION_TIMEOUT_SECONDS");
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (value == "-1") return Timeout.InfiniteTimeSpan;
+        if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var seconds)
+            && double.IsFinite(seconds) && seconds is > 0 and <= 86400) return TimeSpan.FromSeconds(seconds);
+        AppDiagnostics.Write("worker.timeout.invalid-setting");
+        return null;
     }
 }

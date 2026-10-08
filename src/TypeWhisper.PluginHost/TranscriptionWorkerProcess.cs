@@ -24,6 +24,9 @@ public class TranscriptionWorkerCrashedException(string message, int? exitCode, 
 public sealed class TranscriptionWorkerUnresponsiveException(string message, string diagnostics)
     : TranscriptionWorkerCrashedException(message, null, diagnostics);
 
+/// <summary>A worker exceeded its total request budget, even if its heartbeat still ran.</summary>
+public sealed class TranscriptionWorkerRequestTimeoutException(string message) : TimeoutException(message);
+
 /// <summary>One running worker. Requests are answered in order; the owner sends one at a time.</summary>
 internal interface ITranscriptionWorkerConnection : IAsyncDisposable
 {
@@ -52,7 +55,24 @@ internal sealed record TranscriptionWorkerLaunch(string ExecutablePath, IReadOnl
     internal TimeSpan HeartbeatInterval { get; init; } = DefaultHeartbeatInterval;
     /// <summary>How long a worker may stay silent during a request before it is ended; <see cref="Timeout.InfiniteTimeSpan"/> disables the watchdog.</summary>
     internal TimeSpan RequestInactivityTimeout { get; init; } = DefaultRequestInactivityTimeout;
+    internal TimeSpan? RequestTimeout { get; init; }
     internal bool WatchesInactivity => RequestInactivityTimeout != Timeout.InfiniteTimeSpan;
+
+    internal TimeSpan TimeoutFor(TranscriptionWorkerMessage request, int payloadBytes)
+    {
+        if (RequestTimeout is { } configured)
+        {
+            if (configured != Timeout.InfiniteTimeSpan && configured <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(RequestTimeout));
+            return configured;
+        }
+        if (request.Command == TranscriptionWorkerCommands.Load) return TimeSpan.FromMinutes(10);
+        if (request.Command != TranscriptionWorkerCommands.Transcribe) return TimeSpan.FromMinutes(1);
+        // PCM transport is 16 kHz mono float32; the WAV path normally uses PCM16.
+        // Counting WAV headers as audio only increases the budget slightly.
+        var bytesPerSecond = request.AudioFormat == TranscriptionWorkerAudioFormats.Pcm ? 16000 * 4d : 16000 * 2d;
+        return TimeSpan.FromSeconds(120 + 10 * payloadBytes / bytesPerSecond);
+    }
 }
 
 internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnection
@@ -174,18 +194,36 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
     public async Task<TranscriptionWorkerMessage> SendAsync(TranscriptionWorkerMessage request, ReadOnlyMemory<byte> payload, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        var timeout = _launch.TimeoutFor(request, payload.Length);
+        using var deadline = new CancellationTokenSource(timeout);
+        using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
+        var token = requestCancellation.Token;
         var id = Interlocked.Increment(ref _nextId);
         var pending = new PendingRequest();
         _pending[id] = pending;
         try
         {
             if (_ended.Task.IsCompleted) throw await CrashAsync("The local transcription engine stopped unexpectedly.").ConfigureAwait(false);
-            try { await WriteAsync(request with { Type = TranscriptionWorkerMessageTypes.Request, Id = id }, payload).ConfigureAwait(false); }
+            try { await WriteAsync(request with { Type = TranscriptionWorkerMessageTypes.Request, Id = id }, payload, token).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                // A partially written frame cannot be reused. Ending the worker also releases
+                // a blocked pipe write, so a frozen reader cannot hold the engine's gate forever.
+                _pending.TryRemove(id, out _); Kill(); throw;
+            }
             catch (Exception ex) when (ex is IOException or ObjectDisposedException)
             { throw await CrashAsync("The local transcription engine stopped unexpectedly.", ex).ConfigureAwait(false); }
-            var response = await WaitAsync(pending, id, request.Command, ct).ConfigureAwait(false);
+            var response = await WaitAsync(pending, id, request.Command, token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
             if (response.State is { } state) State = state;
             return response;
+        }
+        catch (Exception ex) when ((ex is OperationCanceledException or TranscriptionWorkerCrashedException)
+            && deadline.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            _pending.TryRemove(id, out _); Kill();
+            _log(PluginLogLevel.Warning, $"The transcription worker exceeded the {request.Command} deadline of {timeout.TotalSeconds:0} s and was ended.");
+            throw new TranscriptionWorkerRequestTimeoutException("The local transcription engine took too long and was stopped. Try again or choose another model.");
         }
         finally { _pending.TryRemove(id, out _); }
     }
@@ -198,8 +236,9 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
         try { return await WatchAsync(pending, id, command, ct).ConfigureAwait(false); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested && !answer.IsCompleted)
         {
-            try { await WriteAsync(new() { Type = TranscriptionWorkerMessageTypes.Cancel, Id = id }, default).ConfigureAwait(false); }
-            catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }
+            using var cancelWrite = new CancellationTokenSource(_launch.CancellationGrace);
+            try { await WriteAsync(new() { Type = TranscriptionWorkerMessageTypes.Cancel, Id = id }, default, cancelWrite.Token).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException) { Kill(); }
             try { await answer.WaitAsync(_launch.CancellationGrace, CancellationToken.None).ConfigureAwait(false); }
             catch (Exception ex) when (ex is TimeoutException or TranscriptionWorkerCrashedException)
             {
@@ -210,8 +249,8 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
         }
     }
 
-    // A request may take as long as it needs while the worker keeps beating; one that falls silent for
-    // the whole window is ended, because the caller otherwise waits on a frozen worker until it gives up.
+    // Heartbeats distinguish a frozen process from slow inference. The request token also carries
+    // the total deadline, because native inference can hang while the heartbeat remains responsive.
     private async Task<TranscriptionWorkerMessage> WatchAsync(PendingRequest pending, long id, string? command, CancellationToken ct)
     {
         var answer = pending.Answer.Task;
@@ -231,10 +270,10 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
         throw new TranscriptionWorkerUnresponsiveException("The local transcription engine stopped answering and was ended.", Diagnostics);
     }
 
-    private async Task WriteAsync(TranscriptionWorkerMessage message, ReadOnlyMemory<byte> payload)
+    private async Task WriteAsync(TranscriptionWorkerMessage message, ReadOnlyMemory<byte> payload, CancellationToken ct = default)
     {
-        await _write.WaitAsync().ConfigureAwait(false);
-        try { await TranscriptionWorkerProtocol.WriteAsync(_pipe, message, payload, CancellationToken.None).ConfigureAwait(false); }
+        await _write.WaitAsync(ct).ConfigureAwait(false);
+        try { await TranscriptionWorkerProtocol.WriteAsync(_pipe, message, payload, ct).ConfigureAwait(false); }
         finally { _write.Release(); }
     }
 

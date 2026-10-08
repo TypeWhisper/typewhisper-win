@@ -25,6 +25,13 @@ public sealed class TranscriptionIsolation(string executablePath, IReadOnlyList<
     /// </summary>
     public TimeSpan RequestInactivityTimeout { get; init; } = TranscriptionWorkerLaunch.DefaultRequestInactivityTimeout;
 
+    /// <summary>
+    /// Overrides the total request deadline. Null allows two minutes plus ten times the estimated
+    /// audio duration for transcription, and ten minutes for loading. Infinite disables the deadline.
+    /// Heartbeats do not extend this limit; timeout failures are not automatically retried.
+    /// </summary>
+    public TimeSpan? RequestTimeout { get; init; }
+
     /// <summary>Returns an isolated adapter, or null when the engine stays in process.</summary>
     public IsolatedTranscriptionEngine? TryIsolate(ITranscriptionEnginePlugin engine, string packageDirectory, IPluginHostServices services)
     {
@@ -32,7 +39,7 @@ public sealed class TranscriptionIsolation(string executablePath, IReadOnlyList<
         if (!pluginIds.Contains(engine.PluginId) || engine is not IPcmTranscriptionEnginePlugin || engine.SupportsStreaming) return null;
         var launch = new TranscriptionWorkerLaunch(executablePath, prefixArguments, Path.GetFullPath(packageDirectory),
             services.PluginDataDirectory, services.PluginAssetDirectory, engine.GetTranscriptionSelectionId(), hostVersion)
-            { HeartbeatInterval = HeartbeatInterval, RequestInactivityTimeout = RequestInactivityTimeout };
+            { HeartbeatInterval = HeartbeatInterval, RequestInactivityTimeout = RequestInactivityTimeout, RequestTimeout = RequestTimeout };
         var logPath = Path.Combine(services.PluginDataDirectory, "transcription-worker.log");
         void Log(PluginLogLevel level, string message)
         {
