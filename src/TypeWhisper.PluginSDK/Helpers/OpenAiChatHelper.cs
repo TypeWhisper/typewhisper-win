@@ -123,9 +123,14 @@ public static class OpenAiChatHelper
     }
 
     /// <summary>
-    /// Parses an OpenAI chat completion JSON response and returns the content of the first choice.
+    /// Parses an OpenAI chat completion JSON response and returns the trimmed content of the first choice.
+    /// Throws <see cref="PluginRequestException"/> for an empty body or empty content and when the provider cut
+    /// the answer off at its output limit, so plugins that build their own request body get the same contract as
+    /// <see cref="SendChatCompletionAsync(HttpClient, string, string, string, string, string, CancellationToken)"/>.
     /// </summary>
-    internal static string ParseChatCompletionResponse(string json)
+    /// <param name="json">Response body returned by the provider.</param>
+    /// <returns>The assistant's response content text.</returns>
+    public static string ParseChatCompletionResponse(string json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
