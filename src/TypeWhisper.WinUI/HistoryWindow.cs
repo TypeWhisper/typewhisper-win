@@ -22,7 +22,11 @@ public sealed partial class HistoryWindow : Window
     private readonly HistoryActions _actions;
     private readonly IHistoryAudioService? _audio;
     private readonly StackPanel _sidebar = new() { Spacing = 2, Padding = new Thickness(10, 4, 10, 16) };
-    private readonly StackPanel _list = new() { Padding = new Thickness(10, 0, 10, 16) };
+    private readonly ItemsRepeater _list = new()
+    {
+        Layout = new StackLayout(), Margin = new Thickness(10, 0, 10, 16),
+        ItemTemplate = new HistoryElementFactory()
+    };
     private readonly ScrollViewer _listScroll;
     private readonly TextBlock _listTitle = Text(Loc.T("All History"), 15, bold: true);
     private readonly TextBlock _listCount = Text("", 12, muted: true);
@@ -361,10 +365,12 @@ public sealed partial class HistoryWindow : Window
 
     private void RenderList()
     {
-        _list.Children.Clear();
-        if (_loadError is not null) { _list.Children.Add(EmptyState("info", Loc.T("History unavailable"), _loadError)); return; }
-        if (_loading) { _list.Children.Add(EmptyState("history", Loc.T("Loading history…"), "")); return; }
-        if (_visible.Count == 0) { _list.Children.Add(EmptyList()); return; }
+        // Keep lightweight factories as the data source. WinUI creates controls only for the
+        // viewport and its cache, including after loading many pages or changing selection.
+        var rows = new List<Func<UIElement>>();
+        if (_loadError is not null) { rows.Add(() => EmptyState("info", Loc.T("History unavailable"), _loadError)); _list.ItemsSource = rows; return; }
+        if (_loading) { rows.Add(() => EmptyState("history", Loc.T("Loading history…"), "")); _list.ItemsSource = rows; return; }
+        if (_visible.Count == 0) { rows.Add(EmptyList); _list.ItemsSource = rows; return; }
         var now = DateTimeOffset.Now;
         var rendered = 0;
         // Group sections only make sense for date ordering.
@@ -373,17 +379,30 @@ public sealed partial class HistoryWindow : Window
         {
             if (rendered >= _shown) break;
             var collapsed = grouped && _collapsed.Contains(section.Key);
-            if (grouped) _list.Children.Add(GroupHeader(section.Key, section.Count(), collapsed));
+            if (grouped)
+            {
+                var group = section.Key;
+                var count = section.Count();
+                rows.Add(() => GroupHeader(group, count, collapsed));
+            }
             if (collapsed) continue;
             var first = true;
             foreach (var record in section)
             {
                 if (rendered++ >= _shown) break;
-                if (!first) _list.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(12, 0, 12, 0) });
+                if (!first) rows.Add(() => new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(12, 0, 12, 0) });
                 first = false;
-                _list.Children.Add(ListRow(record, now));
+                rows.Add(() => ListRow(record, now));
             }
         }
+        _list.ItemsSource = rows;
+    }
+
+    private sealed class HistoryElementFactory : IElementFactory
+    {
+        public UIElement GetElement(ElementFactoryGetArgs args) => ((Func<UIElement>)args.Data)();
+        // Rows own their handlers and immutable record snapshot; discarded rows can be collected.
+        public void RecycleElement(ElementFactoryRecycleArgs args) { }
     }
 
     private UIElement EmptyList()
