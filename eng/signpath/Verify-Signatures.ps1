@@ -14,9 +14,13 @@ foreach ($file in $files) {
     if ($null -eq $signature.SignerCertificate -or $signature.SignerCertificate.Thumbprint -ne $Thumbprint) {
         throw "Unexpected signing certificate: $file"
     }
-    $acceptedStatus = @('Valid')
-    if ($Policy -eq 'test-signing') { $acceptedStatus += 'NotTrusted' }
-    if ([string]$signature.Status -notin $acceptedStatus) {
+    # PowerShell maps CERT_E_UNTRUSTEDROOT (0x800B0109) to UnknownError and
+    # formats its message through Win32Exception. Compare that exact localized
+    # message; NotTrusted instead means explicit distrust and must be rejected.
+    $expectedTestRoot = $Policy -eq 'test-signing' -and
+        [string]$signature.Status -eq 'UnknownError' -and
+        $signature.StatusMessage -eq [ComponentModel.Win32Exception]::new(-2146762487).Message
+    if ([string]$signature.Status -ne 'Valid' -and -not $expectedTestRoot) {
         throw "Invalid signature for ${file}: $($signature.Status) - $($signature.StatusMessage)"
     }
     if ($Policy -eq 'release-signing' -and $null -eq $signature.TimeStamperCertificate) {

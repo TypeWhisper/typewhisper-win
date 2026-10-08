@@ -90,6 +90,12 @@ jobs:
             framework: net10.0-arm64-runtime
     steps:
       - uses: actions/checkout@v7
+      - name: Test signing integration safeguards
+        shell: pwsh
+        run: |
+          node --test eng/signpath/sign.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./eng/signpath/Verify-Signatures.Tests.ps1
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
@@ -115,9 +121,6 @@ jobs:
         run: |
           ./eng/Test-WinUIDailyCandidate.ps1 -PublishDirectory candidate `
             -ExpectedVersion $env:CANDIDATE_VERSION -RuntimeIdentifier '${{ matrix.rid }}'
-      - name: Test signing integration safeguards
-        shell: pwsh
-        run: node --test eng/signpath/sign.test.cjs
       - name: Install Velopack
         shell: pwsh
         run: |
