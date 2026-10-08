@@ -8,10 +8,11 @@
 
 ## Test Plan
 
-- [ ] `dotnet test`
+- [ ] `./eng/Test-WinUIHeadless.ps1 -Configuration Release`
 - [ ] Built and ran locally
 - [ ] Tested the changed functionality manually
 - [ ] No regressions in existing features
+- [ ] Docs/release notes updated if user-visible
 
 ## Notes
 

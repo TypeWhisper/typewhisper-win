@@ -1,1 +1,5 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Releases and release notes
+    url: https://github.com/TypeWhisper/typewhisper-win/releases
+    about: Check the latest stable release or Daily prerelease before reporting a problem that may already be fixed.
