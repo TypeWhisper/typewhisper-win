@@ -493,7 +493,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Recovery = new(_recoveryAudio, DecodeRecoveryAudioAsync);
         var isolation = CreateTranscriptionIsolation();
         _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), isolation: isolation);
-        CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
+        CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId),
+            idlePolicy: ModelIdlePolicy);
+        CtcVocabulary.LoadFailed += ex => AppDiagnostics.Write("dictation.vocabulary-load.failed", ex);
         PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
             id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId)) { TranscriptionIsolation = isolation, IdleUnloadPolicy = ModelIdlePolicy };
         _speechBackend = new(PluginRuntime, new WindowsSystemVoiceBackend());
@@ -904,7 +906,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
-                _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && TypeWhisper.Core.Models.ParakeetModels.IsParakeetTdt(Models.ActiveModelId) && CtcVocabulary.Enabled;
+                _ctcAtStart = RescoresWithCtc && CtcVocabulary.Enabled;
                 if (_cloudStream is null && _earlyStopSamples is null && LivePreviewEnabled && SupportsLiveTranscription &&
                     (!UsesRegistryProvider || ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)))
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,

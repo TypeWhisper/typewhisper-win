@@ -15,6 +15,27 @@ public sealed class LocalCtcStateTests : IDisposable
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
+    // The rescoring model follows the idle policy of the transcription model; a recording loads it again.
+    [Fact]
+    public async Task AReleasedModelLoadsAgainWhenADictationStarts()
+    {
+        var time = new ManualTimeProvider();
+        var loads = 0;
+        Task<IVocabularyPluginLease> Load(IPluginHostServices _) { loads++; return Task.FromResult<IVocabularyPluginLease>(new Lease()); }
+        await using var runtime = new LocalCtcVocabulary(_root, Load, idlePolicy: new ModelIdleUnloadPolicy(60, time));
+        Assert.Null(await runtime.SetEnabledAsync(true));
+        Assert.True(runtime.Loaded);
+        time.Advance(TimeSpan.FromSeconds(60));
+        Assert.True(runtime.Enabled);
+        Assert.False(runtime.Loaded);
+        runtime.PrepareForDictation();
+        await ManualTimeProvider.WaitUntilAsync(() => runtime.Loaded);
+        Assert.Equal(2, loads);
+        // A loaded model is not prepared again.
+        runtime.PrepareForDictation();
+        Assert.Equal(2, loads);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

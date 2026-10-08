@@ -1,3 +1,5 @@
+using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginHost;
 using TypeWhisper.Presentation;
 
@@ -20,11 +22,17 @@ internal sealed partial class LocalDictationSession
         return error;
     }
 
+    // Parakeet TDT dictations are rescored against the dictionary right after the decode (#577).
+    private bool RescoresWithCtc => _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider
+        && ParakeetModels.IsParakeetTdt(Models.ActiveModelId);
+
     // A model released after inactivity loads while the user speaks instead of at the final transcription.
+    // The rescoring model follows the same policy and is needed right after the decode.
     private void PrepareTranscriptionModel()
     {
         if (UsesRegistryProvider) _ = PrepareRegistryTranscriptionAsync(RegistrySelectionId(_providerId));
         else Models.PrepareForDictation();
+        if (RescoresWithCtc) CtcVocabulary.PrepareForDictation();
     }
 
     // Failures surface on the transcription itself.
