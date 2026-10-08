@@ -27,6 +27,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/UserDataDeletion.cs" Link="UserDataDeletion.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/InputEventTiming.cs" Link="InputEventTiming.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HotkeyRecoveryState.cs" Link="HotkeyRecoveryState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/OwnKeyboardInput.cs" Link="OwnKeyboardInput.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />

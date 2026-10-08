@@ -22,6 +22,7 @@ public sealed class DictationInputCoordinator : IDisposable
     private readonly Func<Action, bool> _dispatch;
     private readonly Action<Exception>? _reportError;
     private readonly Action? _markStop;
+    private readonly TimeProvider _clock;
     private bool _busy, _starting, _disposed;
     private DictationInputAction? _terminal;
     private RecordingMode _observedMode;
@@ -31,10 +32,11 @@ public sealed class DictationInputCoordinator : IDisposable
     /// markStop records where the user stopped speaking when a stop arrives while a start is still running.</summary>
     public DictationInputCoordinator(Func<Task> start, Func<Task> stop, Func<Task> cancel,
         Func<bool> recording, Func<bool> canStart, Func<RecordingMode> mode,
-        Func<Action, bool>? dispatch = null, Action<Exception>? reportError = null, Action? markStop = null)
+        Func<Action, bool>? dispatch = null, Action<Exception>? reportError = null, Action? markStop = null, TimeProvider? timeProvider = null)
     {
         _start = start; _stop = stop; _cancel = cancel; _recording = recording; _canStart = canStart; _mode = mode;
         _dispatch = dispatch ?? (action => { action(); return true; }); _reportError = reportError; _markStop = markStop;
+        _clock = timeProvider ?? TimeProvider.System;
         _observedMode = mode();
     }
 
@@ -78,7 +80,8 @@ public sealed class DictationInputCoordinator : IDisposable
         _busy = true; _terminal = null;
         _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var completion = _completion;
-        if (!_dispatch(() => _ = RunAsync(action, completion, startOverride, canStartOverride ?? _canStart))) Finish(completion);
+        var acceptedAt = _clock.GetTimestamp();
+        if (!_dispatch(() => _ = RunAsync(action, completion, startOverride, canStartOverride ?? _canStart, acceptedAt))) Finish(completion);
         return completion.Task;
     }
 
@@ -90,14 +93,17 @@ public sealed class DictationInputCoordinator : IDisposable
         _observedMode = mode;
     }
 
-    private async Task RunAsync(DictationInputAction action, TaskCompletionSource completion, Func<Task>? startOverride, Func<bool> canStart)
+    private async Task RunAsync(DictationInputAction action, TaskCompletionSource completion, Func<Task>? startOverride, Func<bool> canStart, long acceptedAt)
     {
         try
         {
             if (action == DictationInputAction.Start)
             {
                 ObserveMode();
-                if (_disposed || _terminal == DictationInputAction.Cancel || !canStart()) return;
+                // Expiry applies only before capture begins. Slow model startup must still honor
+                // a pending stop/cancel, and a delayed stop must never leave the microphone on.
+                if (_disposed || _terminal == DictationInputAction.Cancel || !canStart()
+                    || _clock.GetElapsedTime(acceptedAt) > TimeSpan.FromMilliseconds(500)) return;
                 await (startOverride ?? _start)();
                 ObserveMode();
                 _starting = false;

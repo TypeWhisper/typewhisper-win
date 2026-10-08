@@ -31,7 +31,7 @@ internal sealed class HybridHotkeyState
     }
 
     internal HybridHotkeyAction? Key(int key, bool down, long now, IReadOnlySet<string> bindings, bool recording = false,
-        RecordingMode mode = RecordingMode.Hybrid, bool paused = false, Func<int, bool>? held = null)
+        RecordingMode mode = RecordingMode.Hybrid, bool paused = false, Func<int, bool>? held = null, bool stale = false)
     {
         HybridHotkeyAction? action = null;
         // Windows skips a low-level hook that misses its timeout, e.g. while capture starts on
@@ -56,7 +56,9 @@ internal sealed class HybridHotkeyState
         _mode = mode;
         if (down && !_down.Add(key)) return action;
         if (!down) _down.Remove(key);
-        if (paused) { Suspend(); return null; }
+        // Delayed input cannot start capture, including the remaining keys of that gesture.
+        // Terminal actions still stop an existing recording after the UI recovers.
+        if (paused || stale && !recording) { Suspend(); return null; }
         var chord = Chord();
         if (_armed is not null && chord != _armed)
         {

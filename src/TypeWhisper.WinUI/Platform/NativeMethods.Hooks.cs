@@ -15,6 +15,9 @@ internal static partial class NativeMethods
     [StructLayout(LayoutKind.Sequential)]
     public struct KeyboardHookData { public uint Key, Scan, Flags, Time; public UIntPtr Extra; }
 
+    [LibraryImport("user32.dll")]
+    public static partial int GetMessageTime();
+
     // Delegates are not supported by source-generated marshalling.
     [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint thread);

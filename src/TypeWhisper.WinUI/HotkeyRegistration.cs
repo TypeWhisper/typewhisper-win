@@ -81,7 +81,8 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     {
         if (message == WmHotkey && _bindings.FirstOrDefault(binding => binding.Value == wParam.ToInt32()).Key is { } chord)
         {
-            if (!ShortcutRecorder.CaptureRegisteredShortcut(chord)) _callback(chord);
+            if (!InputEventTiming.IsStale(unchecked((uint)NativeMethods.GetMessageTime()), Environment.TickCount64)
+                && !ShortcutRecorder.CaptureRegisteredShortcut(chord)) _callback(chord);
         }
 
         return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);

@@ -48,8 +48,10 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                     else if (down || up)
                     {
                         var mode = recordingMode();
-                        Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true,
-                            held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0));
+                        var now = Environment.TickCount64;
+                        Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, now - InputEventTiming.Age(key.Time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
+                            held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0,
+                            stale: InputEventTiming.IsStale(key.Time, now)));
                     }
                 }
             }
