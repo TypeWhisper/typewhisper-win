@@ -15,7 +15,7 @@ internal static class AdvancedSettingsPage
         content.Children.Add(SettingsCard.PageTitle(Loc.T("Advanced")));
         var recording = Section(content, Loc.T("Recording"),
             Row("ModelAutoUnloadSeconds"), Row("TranscribeShortQuietClipsAggressively"), Row("CancellationBehavior"),
-            WhisperModeRow(session));
+            WhisperModeRow(session), PrerollRow(session));
         LiveModelMemorySettings.Configure(recording, pickers, session);
         LiveShortClipSettings.Configure(recording, session);
         LiveCancellationBehaviorSettings.Configure(recording, pickers, session);
@@ -37,6 +37,25 @@ internal static class AdvancedSettingsPage
     }
 
     private static SettingsRow Row(string key) => new(key);
+
+    private static SettingsRow PrerollRow(LocalDictationSession session)
+    {
+        var row = Row("MicrophonePrerollEnabled");
+        var title = Loc.T("Microphone pre-roll");
+        var help = Loc.T("Keeps the microphone on between dictations and holds the last half-second in memory to preserve the first word. Off while locked, asleep, or using Remote Desktop.");
+        var toggle = AppToggleSwitch.Create(session.AudioPreferences.MicrophonePrerollEnabled);
+        AutomationProperties.SetName(toggle, title); AutomationProperties.SetHelpText(toggle, help);
+        row.Set(title, help, toggle);
+        var restoring = false;
+        toggle.Toggled += (_, _) =>
+        {
+            if (restoring) return;
+            var error = session.SaveAudioPreferences(session.AudioPreferences with { MicrophonePrerollEnabled = toggle.IsOn });
+            row.Status = error ?? "";
+            if (error is not null) { restoring = true; toggle.IsOn = !toggle.IsOn; restoring = false; }
+        };
+        return row;
+    }
 
     // Whisper mode is the macOS microphone boost; it is saved with the other audio preferences.
     private static SettingsRow WhisperModeRow(LocalDictationSession session)

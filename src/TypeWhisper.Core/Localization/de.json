@@ -1,4 +1,6 @@
 {
+  "Microphone pre-roll": "Mikrofon-Vorlauf",
+  "Keeps the microphone on between dictations and holds the last half-second in memory to preserve the first word. Off while locked, asleep, or using Remote Desktop.": "Lässt das Mikrofon zwischen Diktaten eingeschaltet und hält die letzte halbe Sekunde im Arbeitsspeicher, damit das erste Wort erhalten bleibt. Bei gesperrtem Bildschirm, im Standby und bei Remote Desktop ausgeschaltet.",
   "(optional)": "(optional)",
   "+  New workflow": "+  Neuer Workflow",
   "+ Add correction": "+ Korrektur hinzufügen",

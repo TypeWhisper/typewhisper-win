@@ -1,4 +1,6 @@
 {
+  "Microphone pre-roll": "マイクのプリロール",
+  "Keeps the microphone on between dictations and holds the last half-second in memory to preserve the first word. Off while locked, asleep, or using Remote Desktop.": "音声入力の合間もマイクをオンにし、直前の0.5秒をメモリに保持して最初の言葉を逃さないようにします。画面ロック中、スリープ中、リモートデスクトップ使用中は無効になります。",
   "(optional)": "（任意）",
   "+  New workflow": "+  新規ワークフロー",
   "+ Add correction": "+ 修正を追加",

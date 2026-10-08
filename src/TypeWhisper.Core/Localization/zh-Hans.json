@@ -1,4 +1,6 @@
 {
+  "Microphone pre-roll": "麦克风预录",
+  "Keeps the microphone on between dictations and holds the last half-second in memory to preserve the first word. Off while locked, asleep, or using Remote Desktop.": "在听写间隙保持麦克风开启，并在内存中保留最近半秒的音频，以免漏掉第一个词。锁屏、睡眠或使用远程桌面时关闭。",
   "(optional)": "（可选）",
   "+  New workflow": "+  新建工作流",
   "+ Add correction": "+ 添加修正",

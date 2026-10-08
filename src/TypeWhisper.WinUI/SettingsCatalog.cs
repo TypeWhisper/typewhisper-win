@@ -66,6 +66,7 @@ internal static partial class SettingsCatalog
         Choice("Audio", "SelectedMicrophoneDevice", Loc.T("Microphone"), "System default", [Loc.Mark("System default"), Loc.Mark("Sample USB microphone"), Loc.Mark("Sample headset")], Loc.T("Device choices are samples.")),
         Text("Audio", "MicrophonePriorityList", Loc.T("Microphone fallback order"), "", Loc.T("Preferred device names in order; sample configuration only.")),
         Toggle("Advanced", "WhisperModeEnabled", Loc.T("Whisper mode")),
+        Toggle("Advanced", "MicrophonePrerollEnabled", Loc.T("Microphone pre-roll")),
         Toggle("Audio", "AudioDuckingEnabled", Loc.T("Lower other audio while recording")),
         Choice("Audio", "AudioDuckingLevel", Loc.T("Other audio volume"), "20%", ["0%", "10%", "20%", "30%", "50%", "75%"]),
         Toggle("Audio", "PauseMediaDuringRecording", Loc.T("Pause media during recording")),
