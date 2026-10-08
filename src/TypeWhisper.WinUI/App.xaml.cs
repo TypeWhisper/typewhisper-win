@@ -181,6 +181,8 @@ public partial class App : Application
     private async Task StartWithProfileAsync(TypeWhisper.Presentation.ApplicationActivationRequest request, Task initialShare)
     {
         AppDiagnostics.Start();
+        // Retries and splits of cloud requests are decided in the plugin host, which has no log of its own.
+        TypeWhisper.PluginHost.PluginHostDiagnostics.Sink = (stage, error) => AppDiagnostics.Write(stage, error);
         var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);

@@ -101,8 +101,10 @@ public sealed partial class DiagnosticLogFile
         ["targetProcess"] = Flag, ["targetWindow"] = Flag, ["writable"] = Flag,
         // UI Automation control type ids and settings values.
         ["control"] = Number, ["retentionDays"] = Number,
+        // Cloud request retries and upload splits: counters, waits and HTTP statuses.
+        ["attempt"] = Number, ["chunks"] = Number, ["delayMs"] = Number, ["status"] = Number,
         // Setting and plugin identifiers, capture decisions, and app and OS versions.
-        ["arch"] = Token, ["build"] = Token, ["decision"] = Token, ["engine"] = Token, ["model"] = Token,
+        ["arch"] = Token, ["build"] = Token, ["decision"] = Token, ["engine"] = Token, ["kind"] = Token, ["model"] = Token,
         ["os"] = Token, ["plugin"] = Token, ["task"] = Token, ["version"] = Token,
         ["inner"] = value => TypeName().IsMatch(value),
     }.ToFrozenDictionary(StringComparer.Ordinal);

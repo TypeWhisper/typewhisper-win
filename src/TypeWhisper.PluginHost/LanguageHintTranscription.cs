@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Services;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -7,20 +8,31 @@ namespace TypeWhisper.PluginHost;
 public static class LanguageHintTranscription
 {
     /// <summary>Preserves explicit language and PCM precedence, and forwards actual SDK results unchanged.</summary>
+    /// <remarks>
+    /// WAV uploads go through the host's transient retry policy; the PCM path of local engines does not,
+    /// because an isolated engine already restarts its worker and a local failure is not transient.
+    /// </remarks>
+    /// <param name="retry">Overrides the default policy for the engine's plugin; tests pass one without delays.</param>
     public static Task<PluginTranscriptionResult> DecodeAsync(ITranscriptionEnginePlugin engine,
         ReadOnlyMemory<float> samples, Func<byte[]> encodeWav, string? language,
-        IReadOnlyList<string> preferredLanguages, bool translate, CancellationToken ct, IReadOnlyList<string>? dictionaryTerms = null)
+        IReadOnlyList<string> preferredLanguages, bool translate, CancellationToken ct, IReadOnlyList<string>? dictionaryTerms = null,
+        TransientRequestRetry? retry = null)
     {
         var prompt = CreateDictionaryPrompt(engine, dictionaryTerms);
         if (translate && !engine.SupportsTranslation)
             throw new NotSupportedException("This provider cannot translate audio to English.");
         if (language is not null || preferredLanguages.Count == 0 || !engine.SupportsLanguageHints)
-            return engine is IPcmTranscriptionEnginePlugin pcm
-                ? pcm.TranscribePcmAsync(samples, language, translate, ct)
-                : engine.TranscribeAsync(encodeWav(), language, translate, prompt, ct);
+        {
+            if (engine is IPcmTranscriptionEnginePlugin pcm) return pcm.TranscribePcmAsync(samples, language, translate, ct);
+            // Encoded once: every attempt uploads the same bytes.
+            var wav = encodeWav();
+            return PluginRequestRetry.RunAsync(engine.PluginId, token => engine.TranscribeAsync(wav, language, translate, prompt, token), ct, retry);
+        }
         if (engine.SupportedLanguages.Count > 0 && preferredLanguages.Any(code => !engine.SupportedLanguages.Contains(code)))
             throw new InvalidOperationException("The selected provider does not support your preferred languages. Update Preferred languages or choose an explicit spoken language.");
-        return engine.TranscribeWithLanguageHintsAsync(encodeWav(), preferredLanguages, translate, prompt, ct);
+        var hintedWav = encodeWav();
+        return PluginRequestRetry.RunAsync(engine.PluginId,
+            token => engine.TranscribeWithLanguageHintsAsync(hintedWav, preferredLanguages, translate, prompt, token), ct, retry);
     }
     /// <summary>Applies the selected provider's dictionary budget before batch or streaming routing.</summary>
     public static string? CreateDictionaryPrompt(ITranscriptionEnginePlugin engine, IReadOnlyList<string>? terms) =>
