@@ -113,7 +113,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.Equal("0.25", fields["detail"]);
         Assert.Equal("en", result.DetectedLanguage);
         Assert.Equal(new VocabularyTokenTiming("probe", 0.25, 0.5), Assert.Single(result.TokenTimings));
-        Assert.Equal(new PluginTranscriptionSegment("probe", 0, 1), Assert.Single(result.Segments));
+        Assert.Equal(new PluginTranscriptionSegment("probe", 0, 1) { NoSpeechProbability = 0.25f }, Assert.Single(result.Segments));
 
         var wav = await _engine.TranscribeWithLanguageHintsAsync([1, 2, 3, 4], ["de", "en"], false, "terms", default);
         Assert.Equal("4", Fields(wav)["length"]);

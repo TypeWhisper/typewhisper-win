@@ -18,7 +18,7 @@ public sealed class ChunkedTranscriptionTests
                 uploads.Add(wav);
                 return Task.FromResult(new PluginTranscriptionResult($" Part {uploads.Count} ", "de", 0, 0.8f)
                 {
-                    Segments = [new("segment", 0, 1)],
+                    Segments = [new("segment", 0, 1) { NoSpeechProbability = uploads.Count == 2 ? null : uploads.Count / 10f }],
                     TokenTimings = [new("token", 0, 1)]
                 });
             });
@@ -34,6 +34,7 @@ public sealed class ChunkedTranscriptionTests
         Assert.Equal(result.Segments.Select(segment => segment.Start), result.TokenTimings.Select(token => token.StartSeconds));
         Assert.Equal("de", result.DetectedLanguage);
         Assert.Equal(0.8f, result.NoSpeechProbability);
+        Assert.Equal([0.1f, null, 0.3f], result.Segments.Select(segment => segment.NoSpeechProbability));
     }
 
     [Fact]

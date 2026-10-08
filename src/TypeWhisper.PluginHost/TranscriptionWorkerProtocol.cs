@@ -84,13 +84,14 @@ internal static class TranscriptionWorkerProtocol
 
     internal static TranscriptionWorkerResult ToResult(PluginTranscriptionResult result) => new(result.Text, result.DetectedLanguage,
         result.DurationSeconds, result.NoSpeechProbability,
-        result.Segments.Select(segment => new TranscriptionWorkerSegment(segment.Text, segment.Start, segment.End)).ToArray(),
+        result.Segments.Select(segment => new TranscriptionWorkerSegment(segment.Text, segment.Start, segment.End, segment.NoSpeechProbability)).ToArray(),
         result.TokenTimings.Select(timing => new TranscriptionWorkerTiming(timing.Text, timing.StartSeconds, timing.EndSeconds)).ToArray());
 
     internal static PluginTranscriptionResult FromResult(TranscriptionWorkerResult result) =>
         new(result.Text, result.DetectedLanguage, result.DurationSeconds, result.NoSpeechProbability)
         {
-            Segments = Array.AsReadOnly((result.Segments ?? []).Select(segment => new PluginTranscriptionSegment(segment.Text, segment.Start, segment.End)).ToArray()),
+            Segments = Array.AsReadOnly((result.Segments ?? []).Select(segment => new PluginTranscriptionSegment(segment.Text, segment.Start, segment.End)
+                { NoSpeechProbability = segment.NoSpeechProbability }).ToArray()),
             TokenTimings = Array.AsReadOnly((result.TokenTimings ?? []).Select(timing => new VocabularyTokenTiming(timing.Text, timing.Start, timing.End)).ToArray())
         };
 }
@@ -152,6 +153,6 @@ internal sealed record TranscriptionWorkerState(string? SelectedModelId, string?
 internal sealed record TranscriptionWorkerResult(string Text, string? DetectedLanguage, double DurationSeconds,
     float? NoSpeechProbability, TranscriptionWorkerSegment[]? Segments, TranscriptionWorkerTiming[]? TokenTimings);
 
-internal sealed record TranscriptionWorkerSegment(string Text, double Start, double End);
+internal sealed record TranscriptionWorkerSegment(string Text, double Start, double End, float? NoSpeechProbability = null);
 
 internal sealed record TranscriptionWorkerTiming(string Text, double Start, double End);
