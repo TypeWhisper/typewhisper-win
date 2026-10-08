@@ -43,9 +43,9 @@ Daily or a claim of native release acceptance.
 | Build and tests | Central NuGet versions, worktree isolation, analyzer checks, changed-whitespace checks, caches and a shared plugin-test build reduce duplication. Audio tests are included in CI; Core/Presentation coverage is available. Published app output includes runtime dependency notices and license files. |
 
 Local live preview now shows a rolling window of at most 30 seconds. The final
-transcript still uses the complete recording. Native acceptance must include a
-recording longer than that window, stopping while preview inference is active,
-and verifying the full final result.
+transcript still uses the complete recording. Marco reported a successful longer
+dictation with live text in the manual check below. Exact recording duration and
+stopping during an active preview decode were not recorded separately.
 
 The checkup's automated evidence is recorded locally under `artifacts/checkup`.
 The full runner command is:
@@ -57,6 +57,30 @@ The full runner command is:
 The runner writes `summary.json`, individual TRX files and Core/Presentation
 coverage reports. Build/launch evidence comes from the current checkout through
 the development helper described in the [test guide](../TESTING_GUIDE.md).
+
+### Manual check reported on 2026-10-08
+
+Marco tested development build `58b7b025` and reported the following results.
+The development build metadata still identifies that revision after the restart
+at 15:40 UTC. These are user-observed results, not automated UI measurements.
+
+| Scenario | Reported result |
+| --- | --- |
+| First dictation after restarting | Passed. |
+| Dictation with a window switch | Passed. |
+| Longer dictation with live text and middle/end markers | Passed. Exact duration was not recorded. |
+| Repeated recording starts and stops | Passed. |
+| Canceling a recording | Passed. |
+| Microphone pre-roll | Passed for normal dictation. Lock/resume was not reported. |
+| History and search | Passed; search was reported as fast. Large-list scrolling, editing and filters were not reported separately. |
+| Model unloading | Unloading was observed. The configured interval and reload after inactivity were not confirmed separately. |
+| Workflow using another model | Passed. Restoration to the global model afterward was not reported separately. |
+
+No failure was reported in these checks. Remaining items from the manual plan
+include dictionary/snippet/workflow persistence across restart, repeated Settings
+navigation with shortcut/language/theme changes, and the unconfirmed subcases
+above. Target applications and model/package versions were not recorded, so this
+does not establish the full application or provider compatibility matrix.
 
 ### Work that remains open
 
@@ -74,9 +98,10 @@ the development helper described in the [test guide](../TESTING_GUIDE.md).
   LocalLlm retain their different native runtime pins until real model acceptance
   supports convergence. Changed packages need release version selection and
   catalog publication before installed users receive them.
-- Native checks still need first-dictation/focus/paste acceptance, start/stop and
-  lock/resume with pre-roll, large-History scrolling and selection, provider
-  execution and installed upgrades. Automated fixtures do not establish these.
+- Basic dictation, window switching, cancellation, pre-roll, History search and a
+  workflow model switch have the manual evidence above. Remaining native checks
+  include lock/resume with pre-roll, large-History scrolling and selection, the
+  application/provider matrix and installed upgrades.
 - Generated notices cover restored runtime packages. In particular, the old
   Win2D binary-license URL still needs distribution review; the included upstream
   source license is identified as such in `eng/licenses/sources.json`.
@@ -85,10 +110,10 @@ the development helper described in the [test guide](../TESTING_GUIDE.md).
 
 | Topic | Required evidence or decision |
 | --- | --- |
-| First dictation | [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513) is fixed and closed (2026-09-24). Re-check on the selected candidate: first dictation after a fresh start into a Chromium/Electron field with the field lock enabled. |
+| First dictation | [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513) is fixed and closed (2026-09-24). Marco reported first dictation and window switching as successful on local build `58b7b025`. Re-check the selected release candidate with the target app and field-lock setting recorded. |
 | Licensing on 1.0 | The Polar version pin exists only in 1.1; installed 1.0 builds send unversioned requests. No 1.0.x hotfix is planned (decided 2026-09-24): 1.0 users receive the pin by moving to 1.1 ([#471](https://github.com/TypeWhisper/typewhisper-win/issues/471), closed 2026-10-04). |
 | Settings and theme | Exercise the card-based pages, the Dictionary, Snippets and Workflow dialogs and the light theme in the History window, overlay, review window, workflow palette and setup wizard ([#583](https://github.com/TypeWhisper/typewhisper-win/pull/583)). Statistics, File transcription and the overlay editor keep the previous layout. |
-| Recent dictation changes | Re-test on the candidate: recording start with the cached microphone list ([#586](https://github.com/TypeWhisper/typewhisper-win/pull/586)) and per-workflow spoken language and transcription model ([#599](https://github.com/TypeWhisper/typewhisper-win/pull/599), [#600](https://github.com/TypeWhisper/typewhisper-win/pull/600)), including the model restore after device loss and API-started recordings. The merged build has not been retested natively. |
+| Recent dictation changes | Basic start/stop, cancellation and a workflow with another model passed the local manual check on `58b7b025`. Candidate acceptance still needs per-workflow language, restoration of the global model, device loss and API-started recordings ([#586](https://github.com/TypeWhisper/typewhisper-win/pull/586), [#599](https://github.com/TypeWhisper/typewhisper-win/pull/599), [#600](https://github.com/TypeWhisper/typewhisper-win/pull/600)). |
 | 1.0 upgrades | Complete the installed 1.0 → 1.1 → next-1.1 sequence, migration, interrupted import and rollback checks in the [upgrade guide](DAILY-1.1-CANDIDATE.md). Earlier updates between 1.1 Dailys do not cover this. |
 | Published plugins | Verify install, configuration, actual use and update through the published catalog for release-critical providers. Preserve the legacy feed. |
 | Display behavior | Complete the outstanding primary-display, mixed-DPI, overlay-layout and live-text positioning checks from the earlier handoff. |
