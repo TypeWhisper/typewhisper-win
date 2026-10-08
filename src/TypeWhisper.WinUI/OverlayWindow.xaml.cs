@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Numerics;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Windowing;
@@ -401,7 +402,8 @@ public sealed partial class OverlayWindow : Window
         iconHost.Visibility = widget == OverlayWidget.AppName ? Visibility.Visible : Visibility.Collapsed;
         text.Text = widget switch
         {
-            OverlayWidget.Clock => DateTime.Now.ToString("HH:mm"),
+            // The regional short time, so 12-hour regions read "10:05 PM". The host trims at 122/172 px, which holds it at 12 px.
+            OverlayWidget.Clock => DateTime.Now.ToString("t", CultureInfo.CurrentCulture),
             OverlayWidget.Profile => _runtimeState is null ? Loc.T("Default profile") : "Parakeet",
             OverlayWidget.HotkeyMode => _runtimeState?.Invoke().RecordingModeLabel ?? Loc.T("Toggle"),
             OverlayWidget.AppName => (_runtimeState?.Invoke().TargetApp is { } app ? Loc.T(app) : null) ?? "Notepad",
