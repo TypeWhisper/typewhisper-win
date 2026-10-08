@@ -1029,7 +1029,7 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal(PluginModelDownloadRequirementKind.Credential, initial.Kind);
         Assert.False(initial.IsRequired);
         Assert.False(initial.IsSatisfied);
-        Assert.False(sut.GetType().GetMethods().Any(m => m.Name == "CreateSettingsView"));
+        Assert.DoesNotContain(sut.GetType().GetMethods(), m => m.Name == "CreateSettingsView");
 
         var result = await sut.SaveModelDownloadCredentialAsync(
             CohereModelCatalog.DefaultModelId,

@@ -23,11 +23,7 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     internal HttpClient Http => http;
     internal bool Configured => Host is not null && Key is not null;
     internal string Get(string id, string fallback = "") => _configuration.Values.GetValueOrDefault(id, fallback);
-    internal string L(string en, string de)
-    {
-        try { return Host?.Localization.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en; }
-        catch (NotSupportedException) { return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de" ? de : en; }
-    }
+    internal string L(string en, string de) => PluginLocalization.Get(Host, en, de);
 
     internal async Task ActivateAsync(IPluginHostServices host)
     {

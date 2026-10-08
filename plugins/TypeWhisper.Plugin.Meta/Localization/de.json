@@ -26,5 +26,22 @@
   "Settings.ReasoningMedium": "Mittel",
   "Settings.ReasoningHigh": "Hoch",
   "Settings.ReasoningXHigh": "X Hoch",
-  "Settings.Error": "Fehler: {0}"
+  "Settings.Error": "Fehler: {0}",
+  "Save an API key first.": "Speichere zuerst einen API-Schlüssel.",
+  "Speaker labels": "Sprecherkennzeichnung",
+  "Identify speakers in live and recorded transcription.": "Kennzeichnet Sprecher bei Live-Transkription und aufgenommenem Audio.",
+  "Off": "Aus",
+  "On": "Ein",
+  "Text model": "Textmodell",
+  "Default model for text processing. Refresh models to load the catalog available to your account.": "Standardmodell für die Textverarbeitung. Aktualisiere die Modelle, um den Katalog deines Kontos zu laden.",
+  "Reasoning effort": "Denkaufwand",
+  "Higher effort can improve complex tasks but increases response time.": "Ein höherer Denkaufwand kann komplexe Aufgaben verbessern, erhöht aber die Antwortzeit.",
+  "Minimal": "Minimal",
+  "Low": "Niedrig",
+  "Medium": "Mittel",
+  "High": "Hoch",
+  "Very high": "Sehr hoch",
+  "Refresh models": "Modelle aktualisieren",
+  "Load transcription and text models using the saved API key.": "Lädt Transkriptions- und Textmodelle mit dem gespeicherten API-Schlüssel.",
+  "Could not refresh models. The previous catalog was retained.": "Die Modelle konnten nicht aktualisiert werden. Der bisherige Katalog bleibt erhalten."
 }

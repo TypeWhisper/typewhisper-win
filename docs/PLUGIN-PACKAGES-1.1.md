@@ -58,6 +58,20 @@ does not by itself implement an application UI for every possible SDK capability
 
 ## Host-rendered settings and models
 
+The host supplies `IPluginHostServices.Localization` from each package's
+`Localization/<language-tag>.json` files. Lookup follows the selected UI culture and
+its parents (`zh-CN` includes `zh-Hans`), then English, then the requested key.
+Files may use literal English keys or symbolic keys with an `en.json` mapping.
+Adding a language does not require changing provider code. Missing or malformed
+optional translations retain the English fallback.
+
+Settings with inline English/German fallbacks use the source-linked
+`plugins/shared/PluginLocalization.cs` helper. It consumes package translations on
+the current host and preserves those fallbacks on older hosts without requiring a
+new SDK contract. Include the JSON files in both build output and the staged ZIP.
+The resource path supports Japanese and Simplified Chinese; each package still
+needs its own reviewed translations before it can claim complete coverage.
+
 `IPluginTextSettings` supplies bounded text fields. A `PluginTextSetting` is single-line
 by default; set `IsMultiline = true` for word lists or other multiline input. Credentials
 belong in the plugin's credential settings rather than a text field.

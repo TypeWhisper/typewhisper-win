@@ -24,5 +24,22 @@
   "Settings.VoicesFetched": "{0} xAI-Stimme(n) geladen.",
   "Settings.VoicesFetchedHint": "{0} xAI-Stimme(n) aus der API geladen.",
   "Settings.VoicesRefreshFailed": "xAI-Stimmen konnten nicht geladen werden. Die gespeicherte oder Standardliste bleibt aktiv.",
-  "Settings.Error": "Fehler: {0}"
+  "Settings.Error": "Fehler: {0}",
+  "Text model": "Textmodell",
+  "Refresh models to load the models available to your account.": "Aktualisiere die Modelle, um die verfügbaren Modelle deines Kontos zu laden.",
+  "Voice": "Stimme",
+  "Default voice for spoken feedback.": "Standardstimme für die Sprachausgabe.",
+  "Custom voice ID (optional)": "Eigene Stimmen-ID (optional)",
+  "Overrides the selected voice. Leave empty to use a voice from the list.": "Ersetzt die ausgewählte Stimme. Leer lassen, um eine Stimme aus der Liste zu verwenden.",
+  "Low-latency speech": "Sprachausgabe mit niedriger Latenz",
+  "Requests latency optimization from xAI, with a possible quality trade-off.": "Fordert bei xAI eine Latenzoptimierung an, gegebenenfalls auf Kosten der Qualität.",
+  "Normalize spoken text": "Gesprochenen Text normalisieren",
+  "Expands numbers, abbreviations and symbols before speech synthesis.": "Wandelt Zahlen, Abkürzungen und Symbole vor der Sprachausgabe in gesprochene Formen um.",
+  "Off": "Aus",
+  "On": "Ein",
+  "Refresh text models": "Textmodelle aktualisieren",
+  "Load text models available to your account.": "Lädt die verfügbaren Textmodelle deines Kontos.",
+  "Refresh voices": "Stimmen aktualisieren",
+  "Load available voices.": "Lädt die verfügbaren Stimmen.",
+  "Updated.": "Aktualisiert."
 }

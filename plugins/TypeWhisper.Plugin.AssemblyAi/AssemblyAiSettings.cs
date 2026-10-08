@@ -17,11 +17,7 @@ public sealed partial class AssemblyAiPlugin
     /// <inheritdoc />
     public string ConnectionIdentity => ProviderId;
 
-    private string L(string en, string de)
-    {
-        try { return _host?.Localization.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en; }
-        catch (NotSupportedException) { return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de" ? de : en; }
-    }
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>

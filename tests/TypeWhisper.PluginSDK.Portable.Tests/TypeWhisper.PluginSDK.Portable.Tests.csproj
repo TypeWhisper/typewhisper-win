@@ -8,6 +8,8 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../plugins/shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

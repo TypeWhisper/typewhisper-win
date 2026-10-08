@@ -7,9 +7,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.Cerebras.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <Content Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="manifest.json;Localization/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">
     <PropertyGroup>
@@ -20,5 +22,7 @@
     </ItemGroup>
     <MakeDir Directories="$(PackageDirectory)" />
     <Copy SourceFiles="@(PackageFile)" DestinationFolder="$(PackageDirectory)" />
+    <ItemGroup><PackageLocalization Include="$(ProjectDir)Localization/*.json" /></ItemGroup>
+    <Copy SourceFiles="@(PackageLocalization)" DestinationFolder="$(PackageDirectory)Localization" />
   </Target>
 </Project>

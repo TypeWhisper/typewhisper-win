@@ -1352,7 +1352,7 @@ public partial class OpenAiPluginTests
 
     private sealed class TestPluginLocalization : IPluginLocalization
     {
-        public string CurrentLanguage => "en";
+        public string CurrentLanguage => System.Globalization.CultureInfo.CurrentUICulture.Name;
         public IReadOnlyList<string> AvailableLanguages => ["en"];
         public string GetString(string key) => key;
         public string GetString(string key, params object[] args) => string.Format(key, args);

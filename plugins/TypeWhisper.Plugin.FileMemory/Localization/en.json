@@ -1,0 +1,19 @@
+{
+  "Remember in File Memory": "Remember in File Memory",
+  "Memory stored locally.": "Memory stored locally.",
+  "Memories": "Memories",
+  "Memory file unavailable": "Memory file unavailable",
+  "Read-only": "Read-only",
+  "New memory": "New memory",
+  "Keep useful facts on this device. For example: ‘Project Aurora uses British English.’ Save text with the ‘Remember in File Memory’ workflow action. To reuse matching facts, choose File Memory under ‘Memory context’ in a text-processing workflow. Only that workflow sends matches to its LLM provider.": "Keep useful facts on this device. For example: ‘Project Aurora uses British English.’ Save text with the ‘Remember in File Memory’ workflow action. To reuse matching facts, choose File Memory under ‘Memory context’ in a text-processing workflow. Only that workflow sends matches to its LLM provider.",
+  "Memory": "Memory",
+  "Search memories": "Search memories",
+  "Search the saved entries without saving your draft.": "Search the saved entries without saving your draft.",
+  "This memory already exists.": "This memory already exists.",
+  "Add memory": "Add memory",
+  "Search": "Search",
+  "Remove memory…": "Remove memory…",
+  "Enter a memory, then save it.": "Enter a memory, then save it.",
+  "Memory removed.": "Memory removed.",
+  "No memories found.": "No memories found."
+}

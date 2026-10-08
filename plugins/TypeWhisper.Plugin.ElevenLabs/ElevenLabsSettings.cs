@@ -4,15 +4,7 @@ namespace TypeWhisper.Plugin.ElevenLabs;
 
 public sealed partial class ElevenLabsPlugin
 {
-    private bool German
-    {
-        get
-        {
-            try { return _host?.Localization.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true; }
-            catch (NotSupportedException) { return System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de"; }
-        }
-    }
-    private string L(string en, string de) => German ? de : en;
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>

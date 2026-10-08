@@ -1,0 +1,11 @@
+{
+  "Transcription model": "Transkriptionsmodell",
+  "Universal-3.5 Pro supports 18 languages. Universal-2 offers wider recorded-audio language support.": "Universal-3.5 Pro unterstützt 18 Sprachen. Universal-2 bietet bei Aufnahmen eine größere Sprachauswahl.",
+  "Speaker diarization": "Sprechertrennung",
+  "Label speakers and preserve utterance timestamps. Uses recorded-audio transcription instead of live text.": "Sprecher kennzeichnen und Zeitstempel der Äußerungen erhalten. Verwendet Transkription nach der Aufnahme statt Live-Text.",
+  "Off": "Aus",
+  "On": "An",
+  "Check connection": "Verbindung prüfen",
+  "Verify the entered key without uploading audio or saving changes.": "Den eingegebenen Key ohne Audio-Upload oder Speichern prüfen.",
+  "Connection verified. No changes saved.": "Verbindung geprüft. Keine Änderungen gespeichert."
+}

@@ -2,7 +2,7 @@ using TypeWhisper.PluginSDK;
 namespace TypeWhisper.Plugin.GemmaLocal;
 public sealed partial class GemmaLocalPlugin : IPluginTextSettings, IPluginSettingsActions
 {
-    private string L(string en, string de) => Loc?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
     /// <inheritdoc />
     public IReadOnlyList<PluginSettingsAction> SettingsActions => _host is null ? [] :

@@ -1,0 +1,8 @@
+{
+  "Refresh models": "Modelle aktualisieren",
+  "Load transcription and text models using the saved API key.": "Transkriptions- und Textmodelle mit dem gespeicherten API-Schlüssel laden.",
+  "Live transcription; the language is detected automatically.": "Live-Transkription; die Sprache wird automatisch erkannt.",
+  "Transcribes after recording stops.": "Transkribiert nach dem Ende der Aufnahme.",
+  "Provider default": "Anbieterstandard",
+  "Custom": "Benutzerdefiniert"
+}

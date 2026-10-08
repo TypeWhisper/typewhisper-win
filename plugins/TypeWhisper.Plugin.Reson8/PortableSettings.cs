@@ -3,7 +3,7 @@ namespace TypeWhisper.Plugin.Reson8;
 public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, IPluginSettingsActions
 {
     Task IApiKeyPlugin.SetApiKeyAsync(string apiKey) => SetApiKeyAsync(apiKey);
-    private string L(string en, string de) => Loc?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
     /// <inheritdoc />
     public async Task ValidateConfigurationAsync(CancellationToken ct)
     {

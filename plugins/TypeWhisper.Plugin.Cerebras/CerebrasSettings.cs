@@ -18,11 +18,7 @@ public sealed partial class CerebrasPlugin
     /// <inheritdoc />
     public string ConnectionIdentity => ProfileId;
 
-    private string L(string en, string de)
-    {
-        try { return _host?.Localization.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en; }
-        catch (NotSupportedException) { return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de" ? de : en; }
-    }
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>

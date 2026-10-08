@@ -1,0 +1,15 @@
+{
+  "Default text model": "Standard-Textmodell",
+  "Used when a workflow does not specify a model. Refresh to load models available to your account.": "Wird verwendet, wenn ein Workflow kein Modell vorgibt. Aktualisiere die Liste, um verfügbare Modelle für dein Konto zu laden.",
+  "Temperature mode": "Temperaturmodus",
+  "Use the provider default or set a custom sampling temperature.": "Anbietervorgabe oder eigene Temperatur verwenden.",
+  "Provider default": "Anbietervorgabe",
+  "Custom": "Benutzerdefiniert",
+  "Temperature": "Temperatur",
+  "A value between 0 and 1 for older models. Newer models always use the provider default.": "Ein Wert zwischen 0 und 1 für ältere Modelle. Neuere Modelle verwenden immer die Anbietervorgabe.",
+  "Check connection": "Verbindung prüfen",
+  "Test the entered key before saving.": "Den eingegebenen Key vor dem Speichern prüfen.",
+  "Refresh models": "Modelle aktualisieren",
+  "Fetch available text models. Save settings to keep the list.": "Verfügbare Textmodelle laden. Zum Übernehmen die Einstellungen speichern.",
+  "Connection verified. No changes saved.": "Verbindung geprüft. Keine Änderungen gespeichert."
+}

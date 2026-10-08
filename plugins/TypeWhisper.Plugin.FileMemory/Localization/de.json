@@ -1,0 +1,19 @@
+{
+  "Remember in File Memory": "In File Memory merken",
+  "Memory stored locally.": "Erinnerung lokal gespeichert.",
+  "Memories": "Erinnerungen",
+  "Memory file unavailable": "Erinnerungsdatei nicht verfügbar",
+  "Read-only": "Schreibgeschützt",
+  "New memory": "Neue Erinnerung",
+  "Keep useful facts on this device. For example: ‘Project Aurora uses British English.’ Save text with the ‘Remember in File Memory’ workflow action. To reuse matching facts, choose File Memory under ‘Memory context’ in a text-processing workflow. Only that workflow sends matches to its LLM provider.": "Nützliche Fakten auf diesem Gerät merken, zum Beispiel: ‚Projekt Aurora verwendet britisches Englisch.‘ Texte per Workflow-Aktion ‚In File Memory merken‘ speichern. Zum Wiederverwenden in einem Workflow mit Textverarbeitung unter ‚Memory context‘ File Memory auswählen. Nur dieser Workflow sendet passende Einträge an seinen LLM-Anbieter.",
+  "Memory": "Erinnerung",
+  "Search memories": "Erinnerungen suchen",
+  "Search the saved entries without saving your draft.": "Gespeicherte Einträge durchsuchen, ohne den Entwurf zu speichern.",
+  "This memory already exists.": "Diese Erinnerung ist bereits vorhanden.",
+  "Add memory": "Erinnerung hinzufügen",
+  "Search": "Suchen",
+  "Remove memory…": "Erinnerung entfernen…",
+  "Enter a memory, then save it.": "Erinnerung eingeben und speichern.",
+  "Memory removed.": "Erinnerung entfernt.",
+  "No memories found.": "Keine Erinnerungen gefunden."
+}

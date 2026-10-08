@@ -24,5 +24,22 @@
   "Settings.VoicesFetched": "Fetched {0} xAI voice(s).",
   "Settings.VoicesFetchedHint": "Showing {0} xAI voice(s) fetched from the API.",
   "Settings.VoicesRefreshFailed": "Could not fetch xAI voices. Keeping the saved/default list.",
-  "Settings.Error": "Error: {0}"
+  "Settings.Error": "Error: {0}",
+  "Text model": "Text model",
+  "Refresh models to load the models available to your account.": "Refresh models to load the models available to your account.",
+  "Voice": "Voice",
+  "Default voice for spoken feedback.": "Default voice for spoken feedback.",
+  "Custom voice ID (optional)": "Custom voice ID (optional)",
+  "Overrides the selected voice. Leave empty to use a voice from the list.": "Overrides the selected voice. Leave empty to use a voice from the list.",
+  "Low-latency speech": "Low-latency speech",
+  "Requests latency optimization from xAI, with a possible quality trade-off.": "Requests latency optimization from xAI, with a possible quality trade-off.",
+  "Normalize spoken text": "Normalize spoken text",
+  "Expands numbers, abbreviations and symbols before speech synthesis.": "Expands numbers, abbreviations and symbols before speech synthesis.",
+  "Off": "Off",
+  "On": "On",
+  "Refresh text models": "Refresh text models",
+  "Load text models available to your account.": "Load text models available to your account.",
+  "Refresh voices": "Refresh voices",
+  "Load available voices.": "Load available voices.",
+  "Updated.": "Updated."
 }

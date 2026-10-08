@@ -6,6 +6,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="TypeWhisper.PluginSDK.Portable.Tests" />
     <ProjectReference Include="../TypeWhisper.Core/TypeWhisper.Core.csproj" />
     <ProjectReference Include="../TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>

@@ -14,6 +14,11 @@ Link a file from a plugin project like this:
 
 Test projects link test sources the same way (`../../shared/tests/<file>`).
 
+`PluginLocalization.Get(host, english, german)` reads the package's translations through
+the host, with the supplied bilingual strings as a fallback on older hosts. Link this
+helper into settings providers; it needs no new SDK entry point. Resources belong to
+each plugin's `Localization` folder and must be copied to the staged package.
+
 ## Rules
 
 - A shared file must not depend on any plugin: no plugin types, no plugin namespaces, no

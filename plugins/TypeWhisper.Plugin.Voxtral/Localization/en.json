@@ -1,0 +1,8 @@
+{
+  "Refresh models": "Refresh models",
+  "Load transcription and text models using the saved API key.": "Load transcription and text models using the saved API key.",
+  "Live transcription; the language is detected automatically.": "Live transcription; the language is detected automatically.",
+  "Transcribes after recording stops.": "Transcribes after recording stops.",
+  "Provider default": "Provider default",
+  "Custom": "Custom"
+}

@@ -1,0 +1,9 @@
+{
+  "Processing device": "Processing device",
+  "CUDA support was installed successfully. Restart TypeWhisper, then select this model again.": "CUDA support was installed successfully. Restart TypeWhisper, then select this model again.",
+  "Local transcription with whisper.cpp. Choose the processor used for transcription. Changing a loaded runtime may require an app restart.": "Local transcription with whisper.cpp. Choose the processor used for transcription. Changing a loaded runtime may require an app restart.",
+  "In use: ": "In use: ",
+  "Automatic": "Automatic",
+  " (integrated graphics)": " (integrated graphics)",
+  "Whisper (Local)": "Whisper (Local)"
+}

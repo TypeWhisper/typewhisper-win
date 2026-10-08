@@ -3,6 +3,7 @@ namespace TypeWhisper.PluginSDK.PortableFixture;
 /// <summary>Configuration fixture that has actions without text settings.</summary>
 public sealed class SettingsActionsProbePlugin : ITypeWhisperPlugin, IPluginSettingsActions
 {
+    private IPluginHostServices? _host;
     /// <inheritdoc />
     public string PluginId => "test.typewhisper.runtime";
     /// <inheritdoc />
@@ -10,13 +11,13 @@ public sealed class SettingsActionsProbePlugin : ITypeWhisperPlugin, IPluginSett
     /// <inheritdoc />
     public string PluginVersion => "1.0.0";
     /// <inheritdoc />
-    public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+    public Task ActivateAsync(IPluginHostServices host) { _host = host; return Task.CompletedTask; }
     /// <inheritdoc />
     public Task DeactivateAsync() => Task.CompletedTask;
     /// <inheritdoc />
     public void Dispose() { }
     /// <inheritdoc />
-    public IReadOnlyList<PluginSettingsAction> SettingsActions => [new("connect", "Connect", "Connect the fixture")];
+    public IReadOnlyList<PluginSettingsAction> SettingsActions => [new("connect", _host?.Localization?.GetString("Connect") ?? "Connect", "Connect the fixture")];
     /// <inheritdoc />
     public Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
     {

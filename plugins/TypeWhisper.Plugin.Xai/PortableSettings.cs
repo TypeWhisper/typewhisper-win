@@ -33,7 +33,7 @@ public sealed partial class XaiPlugin : IApiKeyPlugin, IPluginTextSettings, IPlu
             L("Expands numbers, abbreviations and symbols before speech synthesis.", "Wandelt Zahlen, Abkürzungen und Symbole vor der Sprachausgabe in gesprochene Formen um."), _ttsTextNormalization.ToString().ToLowerInvariant())
         { Section = PluginSettingsSection.Speech, Choices = BooleanChoices }
     ];
-    private string L(string en, string de) => Loc?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
     private IReadOnlyList<PluginSettingChoice> BooleanChoices => [new("false", L("Off", "Aus")), new("true", L("On", "Ein"))];
     /// <inheritdoc />
     public Task SaveTextSettingAsync(string id, string value, CancellationToken ct)

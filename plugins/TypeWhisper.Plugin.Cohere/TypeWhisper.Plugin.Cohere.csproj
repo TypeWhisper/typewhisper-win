@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
     <Compile Include="../shared/ProviderConnection.cs" Link="Shared/ProviderConnection.cs" />
     <Using Include="TypeWhisper.Plugin.Shared" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.Cohere.Portable.Tests" />

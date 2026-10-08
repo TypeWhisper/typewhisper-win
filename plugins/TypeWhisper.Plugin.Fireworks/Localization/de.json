@@ -1,0 +1,6 @@
+{
+  "Fireworks deprecated its audio API. Turbo currently works; Whisper V3 may reject valid keys. Live transcription is unavailable.": "Fireworks hat seine Audio-API abgekündigt. Turbo funktioniert derzeit; Whisper V3 kann gültige Schlüssel ablehnen. Live-Transkription ist nicht verfügbar.",
+  "Refresh models": "Modelle aktualisieren",
+  "Save the model catalog using the stored key.": "Modellkatalog mit dem gespeicherten Key abrufen.",
+  "Models updated.": "Modelle aktualisiert."
+}

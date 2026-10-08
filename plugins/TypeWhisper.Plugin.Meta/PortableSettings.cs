@@ -4,7 +4,7 @@ namespace TypeWhisper.Plugin.Meta;
 
 public sealed partial class MetaPlugin : IApiKeyPlugin, IPluginTextSettings, IPluginSettingsActions
 {
-    private string L(string en, string de) => Loc?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
     Task IApiKeyPlugin.SetApiKeyAsync(string apiKey) => SetApiKeyAsync(apiKey);
 

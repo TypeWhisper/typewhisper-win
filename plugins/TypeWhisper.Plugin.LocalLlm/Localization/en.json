@@ -12,5 +12,8 @@
   "Settings.DownloadComplete": "Download complete! Click Load to start using the model.",
   "Settings.DownloadCancelled": "Download cancelled",
   "Settings.ModelReady": "Model loaded and ready to use!",
-  "Settings.Error": "Error: {0}"
+  "Settings.Error": "Error: {0}",
+  "Discard incomplete downloads": "Discard incomplete downloads",
+  "Interrupted downloads resume on the next Download click. This removes their saved data; completed models are kept.": "Interrupted downloads resume on the next Download click. This removes their saved data; completed models are kept.",
+  "Incomplete downloads removed.": "Incomplete downloads removed."
 }

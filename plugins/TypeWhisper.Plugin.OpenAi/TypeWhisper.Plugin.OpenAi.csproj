@@ -6,6 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="NAudio.Wasapi" />
     <PackageReference Include="NAudio.WinMM" />

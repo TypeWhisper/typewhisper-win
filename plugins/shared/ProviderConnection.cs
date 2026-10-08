@@ -21,11 +21,7 @@ internal sealed partial class ProviderConnection(HttpClient http) : IDisposable
     internal HttpClient Http => http;
     internal bool Configured => Host is not null && Key is not null;
     internal string Get(string id, string fallback = "") => _configuration.Values.GetValueOrDefault(id, fallback);
-    internal string L(string en, string de)
-    {
-        try { return Host?.Localization.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en; }
-        catch (NotSupportedException) { return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de" ? de : en; }
-    }
+    internal string L(string en, string de) => PluginLocalization.Get(Host, en, de);
 
     // Variation points. Every linking plugin implements the two static ones in its own partial file;
     // the hook is optional and lets a plugin drop values that were only valid for the previous key.

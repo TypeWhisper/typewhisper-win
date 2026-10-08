@@ -189,8 +189,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
         try { return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)) ?? []; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return new Dictionary<string, string>(); }
     });
-    private static string L(string text) => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de"
-        && GermanStrings.Value.TryGetValue(text, out var translated) ? translated : text;
+    private string L(string text) => PluginLocalization.Get(_host, text, GermanStrings.Value.GetValueOrDefault(text, text));
     /// <inheritdoc />
     public void Dispose()
     {
