@@ -18,5 +18,6 @@
     <Project Path="tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj" />
     <Project Path="tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj" />
     <Project Path="tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj" />
+    <Project Path="tests/TypeWhisper.Dictation.AudioTests/TypeWhisper.Dictation.AudioTests.csproj" />
   </Folder>
 </Solution>

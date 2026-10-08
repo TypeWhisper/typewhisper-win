@@ -9,6 +9,7 @@
 | Package lifecycle or portable contracts | `tests/TypeWhisper.PluginSDK.Portable.Tests` |
 | A provider | Its `plugins/<provider>/Tests` suites |
 | Windows platform services | `tests/TypeWhisper.Platform.Tests` on Windows |
+| Microphone capture and audio devices | `tests/TypeWhisper.Dictation.AudioTests` on Windows |
 | CLI or HTTP API | CLI/Presentation tests, then applicable `tests/native` probes |
 | UI | Native build and focused visual/keyboard acceptance in the development host |
 | Installer/update | Package checks and an isolated installed-upgrade VM |
@@ -24,7 +25,10 @@ opt-in validation.
 ```
 
 This runs Core, plugin host/SDK, CLI and Presentation suites, Windows platform
-tests on Windows, and discovered plugin-owned .NET tests. Results are written to
+and dictation audio tests on Windows, and discovered plugin-owned .NET tests. The
+audio suite replays PCM through the capture service without opening a microphone;
+its Parakeet and provider-startup cases skip unless their `TYPEWHISPER_TEST_PARAKEET_*`
+or `TYPEWHISPER_STARTUP_*` variables are set. Results are written to
 `artifacts/test-results/winui-headless`, including `summary.json`. It does not run
 provider Python tests or the browser experiment automatically.
 

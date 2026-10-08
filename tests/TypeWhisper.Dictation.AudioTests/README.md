@@ -15,7 +15,7 @@ $env:TYPEWHISPER_TEST_PARAKEET_MODEL = 'C:\path\to\parakeet-tdt-0.6b'
 dotnet test tests/TypeWhisper.Dictation.AudioTests/TypeWhisper.Dictation.AudioTests.csproj --logger 'console;verbosity=detailed'
 ```
 
-The model directory must contain encoder.int8.onnx, decoder.int8.onnx, joiner.int8.onnx and tokens.txt. Models are never downloaded. The opt-in model test fails explicitly when its prerequisites are missing.
+The model directory must contain encoder.int8.onnx, decoder.int8.onnx, joiner.int8.onnx and tokens.txt. Models are never downloaded. The opt-in model tests are skipped with a reason when their variables are missing, so the headless suite stays green without local models.
 
 Speech is synthesized in memory, with leading silence removed to place speech at the key-down boundary. The same PCM is replayed with immediate capture and with a simulated 300-ms start delay. The tests assert complete sample preservation in the immediate path and exactly 4,800 missing samples in the delayed path. Real Parakeet decoding checks the opening word and final phrase; the delayed transcript is diagnostic, since its exact recognition may vary by voice/model.
 
