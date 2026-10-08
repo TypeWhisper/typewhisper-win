@@ -38,7 +38,16 @@ After SignPath has activated `release-signing`:
    certificate identifier, not a private key.
 2. Run Candidate on `main` with `signing_policy=release-signing`, publishing
    disabled, and inspect both architectures.
-3. Set repository variable `SIGNPATH_SIGNING_POLICY=release-signing` to enable
+   The Foundation-provided release policy currently requires one approval by
+   Marco for each signing request. Each architecture submits five batches:
+   the candidate executables, each package's generated helpers and each final
+   installer. Each batch waits up to 30 minutes for completion. Approve requests
+   in SignPath as they arrive during this production test.
+3. Before enabling unattended Daily builds, agree the production approval process
+   with SignPath. The current policy needs interactive approvals and will time
+   out if nobody approves the requests; do not disable those safeguards as part
+   of onboarding.
+4. Set repository variable `SIGNPATH_SIGNING_POLICY=release-signing` to enable
    signing for scheduled Daily releases. Explicit publication then also requires
    selecting `release-signing`.
 
