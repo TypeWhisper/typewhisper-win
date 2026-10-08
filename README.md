@@ -58,16 +58,8 @@ dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r win-
 Use `win-arm64` for ARM64 packages. Published output includes the application
 resources and bundled CLI. Cross-building is not hardware execution evidence.
 
-On Marco's development machine, always build and launch the current checkout
-through the external helper:
-
-```powershell
-& F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run <checkout-path>
-```
-
-The helper launches the stable development output with a separate development
-profile. Do not launch temporary worktree output or the installed production app
-for development validation.
+The maintainer's build-and-launch helper is described in the test guide under
+[Maintainer's local setup](TESTING_GUIDE.md#maintainers-local-setup).
 
 ## Test and contribute
 

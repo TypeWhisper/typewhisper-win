@@ -63,24 +63,19 @@ Use Windows with .NET 10 SDK and Windows SDK 26100 or newer for development.
 Build prerequisites differ from the configured minimum OS and the validated OS
 matrix. See [installation and migration](docs/DAILY-1.1-CANDIDATE.md).
 
-On Marco's machine, always pass the current checkout/worktree to:
-
-```powershell
-& F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run <checkout-path>
-```
-
-The helper publishes to the stable development output and starts that host.
-Do not launch a transient worktree binary or the installed production app.
-General contributor instructions are in the [README](README.md#build).
+Build the application project from your checkout as described in the
+[README](README.md#build) and launch the resulting `TypeWhisper.exe`. Do not use
+the installed production app for development validation. The maintainer's helper
+script is described in [Maintainer's local setup](#maintainers-local-setup).
 
 Normal Debug data is in `%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData`.
 For isolated first-run or fixture checks, set `TYPEWHISPER_WINUI_TEST_PROFILE` to a
 name containing only ASCII letters, digits, hyphens and underscores (1–64 characters)
-before using the helper. The profile lives under
+before launching. The profile lives under
 `%TEMP%/TypeWhisper-WinUI-TestProfiles/<name>`. Release ignores this override.
 
-Clear the test environment variables and run the helper again to return to the
-normal development profile. Do not modify the production profile to make a test pass.
+Clear the test environment variables and launch again to return to the normal
+development profile. Do not modify the production profile to make a test pass.
 
 ## Result-window smoke check
 
@@ -100,16 +95,11 @@ A native first-dictation test remains necessary for target capture/paste behavio
 ## Tray-menu layout regression check
 
 The Debug-only native probe uses the real tray menu in a named test profile,
-without initializing recording, providers or the normal application profile:
-
-```powershell
-$env:TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE = '1'
-try {
-    & F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run --profile tray-layout-probe <checkout-path>
-} finally {
-    Remove-Item Env:TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE -ErrorAction SilentlyContinue
-}
-```
+without initializing recording, providers or the normal application profile.
+Set `TYPEWHISPER_WINUI_TEST_PROFILE` to `tray-layout-probe` and
+`TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE` to `1`, launch a Debug build, and clear
+both variables afterwards. The maintainer's helper invocation is listed in
+[Maintainer's local setup](#maintainers-local-setup).
 
 The probe briefly opens and closes the menu, then exits. It writes
 `%TEMP%/TypeWhisper-WinUI-TestProfiles/tray-layout-probe/tray-layout-probe.json`;
@@ -118,8 +108,8 @@ is empty. It checks repeated opens, recovery from a constrained window,
 content changes while open, anchor stability and dismissal during a queued
 layout update. Run with enough desktop work area to fit the complete menu.
 Mixed-DPI monitor transitions and keyboard interaction still need manual checks.
-Run the development helper again without the probe flag or `--profile` to
-return to the normal development profile.
+Launch again without the probe flag or test profile to return to the normal
+development profile.
 
 ## Focused native acceptance
 
@@ -145,3 +135,33 @@ fixtures and their limits.
 Record the exact source/build, environment, scenario, outcome and unresolved
 limits with validation evidence. Historical tests are preserved under
 [docs/archive](docs/archive/README.md) and [docs/releases](docs/releases/README.md).
+
+## Maintainer's local setup
+
+These steps apply to the maintainer's development machine, where a helper script
+outside this repository publishes the current checkout to a stable development
+output and starts that host with a separate development profile. Always pass the
+current checkout/worktree:
+
+```powershell
+& F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run <checkout-path>
+```
+
+Do not launch a transient worktree binary or the installed production app.
+For isolated profiles, set `TYPEWHISPER_WINUI_TEST_PROFILE` before running the
+helper. Clear the test environment variables and run the helper again to return
+to the normal development profile.
+
+For the tray-menu layout regression check, the helper selects the test profile:
+
+```powershell
+$env:TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE = '1'
+try {
+    & F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run --profile tray-layout-probe <checkout-path>
+} finally {
+    Remove-Item Env:TYPEWHISPER_WINUI_TRAY_LAYOUT_PROBE -ErrorAction SilentlyContinue
+}
+```
+
+Run the helper again without the probe flag or `--profile` to return to the
+normal development profile.
