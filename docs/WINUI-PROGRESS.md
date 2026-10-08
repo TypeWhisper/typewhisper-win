@@ -1,6 +1,6 @@
 # Windows 1.1 release readiness
 
-Reviewed against the source on 2026-09-23. This is the current release entry point;
+Reviewed against the source on 2026-10-08. This is the current release entry point;
 old session checklists and test journals are [historical evidence](archive/README.md).
 An open issue may already have implementation work, and a merged change may not
 be in the latest published Daily. Check the exact candidate revision before release.
@@ -12,6 +12,16 @@ extended legacy-profile importer are implemented. The application and executable
 are named TypeWhisper and `TypeWhisper.exe`. The package identity of an existing
 installation is retained during updates.
 
+Since the previous review, Settings follow the macOS structure as card pages with a
+System/Light/Dark theme ([#562](https://github.com/TypeWhisper/typewhisper-win/pull/562),
+[#583](https://github.com/TypeWhisper/typewhisper-win/pull/583)), the UI is translated
+into German, Japanese and Simplified Chinese ([#572](https://github.com/TypeWhisper/typewhisper-win/pull/572)),
+local speech engines run in a restartable worker process ([#555](https://github.com/TypeWhisper/typewhisper-win/pull/555)),
+Settings > Advanced exports a JSON support report ([#590](https://github.com/TypeWhisper/typewhisper-win/pull/590)),
+recording starts from a cached microphone list ([#586](https://github.com/TypeWhisper/typewhisper-win/pull/586)),
+and workflows can set their own spoken language and transcription model
+([#599](https://github.com/TypeWhisper/typewhisper-win/pull/599), [#600](https://github.com/TypeWhisper/typewhisper-win/pull/600)).
+
 See the [capability map](WINUI-FUNCTIONAL-STATUS.md) for feature scope. The old
 September 10 inventory of unported plugins is not the current catalog status.
 Use [plugin release tooling](PLUGIN-RELEASES.md) to verify selected package versions.
@@ -20,8 +30,10 @@ Use [plugin release tooling](PLUGIN-RELEASES.md) to verify selected package vers
 
 | Topic | Required evidence or decision |
 | --- | --- |
-| First dictation | Verify the [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513) capture retry on the selected candidate: first dictation after a fresh start into a Chromium/Electron field with the field lock enabled. |
-| Licensing on 1.0 | The Polar version pin exists only in 1.1; installed 1.0 builds send unversioned requests. No 1.0.x hotfix is planned (decided 2026-09-24): 1.0 users receive the pin by moving to 1.1 ([#471](https://github.com/TypeWhisper/typewhisper-win/issues/471)). |
+| First dictation | [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513) is fixed and closed (2026-09-24). Re-check on the selected candidate: first dictation after a fresh start into a Chromium/Electron field with the field lock enabled. |
+| Licensing on 1.0 | The Polar version pin exists only in 1.1; installed 1.0 builds send unversioned requests. No 1.0.x hotfix is planned (decided 2026-09-24): 1.0 users receive the pin by moving to 1.1 ([#471](https://github.com/TypeWhisper/typewhisper-win/issues/471), closed 2026-10-04). |
+| Settings and theme | Exercise the card-based pages, the Dictionary, Snippets and Workflow dialogs and the light theme in the History window, overlay, review window, workflow palette and setup wizard ([#583](https://github.com/TypeWhisper/typewhisper-win/pull/583)). Statistics, File transcription and the overlay editor keep the previous layout. |
+| Recent dictation changes | Re-test on the candidate: recording start with the cached microphone list ([#586](https://github.com/TypeWhisper/typewhisper-win/pull/586)) and per-workflow spoken language and transcription model ([#599](https://github.com/TypeWhisper/typewhisper-win/pull/599), [#600](https://github.com/TypeWhisper/typewhisper-win/pull/600)), including the model restore after device loss and API-started recordings. The merged build has not been retested natively. |
 | 1.0 upgrades | Complete the installed 1.0 → 1.1 → next-1.1 sequence, migration, interrupted import and rollback checks in the [upgrade guide](DAILY-1.1-CANDIDATE.md). Earlier updates between 1.1 Dailys do not cover this. |
 | Published plugins | Verify install, configuration, actual use and update through the published catalog for release-critical providers. Preserve the legacy feed. |
 | Display behavior | Complete the outstanding primary-display, mixed-DPI, overlay-layout and live-text positioning checks from the earlier handoff. |
@@ -53,4 +65,6 @@ need a separate scope decision.
 
 The mechanics and exact gate variables live in [Daily delivery](DAILY-1.1-CANDIDATE.md)
 and [plugin releases](PLUGIN-RELEASES.md). Store delivery follows its
-[own guide](STORE_SUBMISSION.md).
+[own guide](STORE_SUBMISSION.md): Store beta updates can follow a published Daily
+automatically ([#591](https://github.com/TypeWhisper/typewhisper-win/pull/591));
+the stable Store submission remains a manual step.
