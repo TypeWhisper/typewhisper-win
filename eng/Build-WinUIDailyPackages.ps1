@@ -10,7 +10,9 @@ $signing = $env:SIGNPATH_POLICY -in @('test-signing', 'release-signing')
 if ($signing) {
     # Sign the raw candidate too. Its CLI manifest hashes shared DLLs, which this
     # executable-only configuration does not modify.
-    & $env:SIGNPATH_NODE $env:SIGNPATH_HELPER 'candidate/TypeWhisper.exe' 'candidate/Cli/typewhisper.exe'
+    $candidateExecutables = @(Get-ChildItem -LiteralPath candidate -Filter 'TypeWhisper*.exe' -Recurse -File |
+        Select-Object -ExpandProperty FullName)
+    & $env:SIGNPATH_NODE $env:SIGNPATH_HELPER @candidateExecutables
     if ($LASTEXITCODE -ne 0) { throw 'Candidate signing failed.' }
 }
 
