@@ -26,6 +26,61 @@ See the [capability map](WINUI-FUNCTIONAL-STATUS.md) for feature scope. The old
 September 10 inventory of unported plugins is not the current catalog status.
 Use [plugin release tooling](PLUGIN-RELEASES.md) to verify selected package versions.
 
+## Local checkup integration, 2026-10-08
+
+The checkup changes are assembled on the local `seofood/checkup-integration`
+branch. Topic branches retain their individual changes. This is not a published
+Daily or a claim of native release acceptance.
+
+| Area | Integrated changes |
+| --- | --- |
+| Data integrity | Catalog load failures no longer become empty writable catalogs. Baseline checks reject stale edits; dictionary conflicts reload explicitly. Settings and sync use durable writes, preserve unknown legacy settings and skip unchanged data. Profile notifications run after the write lock is released. |
+| Dictation responsiveness | Hook diagnostics leave the input thread; stale shortcuts cannot start recording after a UI stall. Stop processing and field automation leave the UI thread. Paste no longer waits for History persistence. Preview inference is canceled on stop and uses a bounded snapshot; isolated native requests have deadlines even while heartbeats continue. |
+| Audio and providers | Opt-in microphone pre-roll respects lock/suspend state. Long cloud uploads split into contiguous chunks with corrected timestamps; retry handling consumes provider retry metadata. Model selection is asynchronous, idle CTC models can unload, and worker results retain per-segment confidence. |
+| Application structure | `ApplicationServices` owns application construction and `DictationPluginServices` owns plugin construction/disposal. Settings subscriptions and shortcut callbacks share common paths; native declarations are consolidated. History rows are virtualized. The obsolete select-control prototype is removed. |
+| Plugins | Shared source helpers replace drifting provider/download implementations. Package localization resources are read by the host, with culture-parent and English fallback. SDK parsing, provider error tests and missing package documentation are extended. |
+| Security and diagnostics | Sherpa downloads have pinned hashes; silent release errors reach diagnostics. The local API checks the peer user where supported and uses Windows loopback IP prefixes. Package downgrade behavior and privacy disclosures are tightened. These IP prefixes alone are not the API's security boundary. |
+| Build and tests | Central NuGet versions, worktree isolation, analyzer checks, changed-whitespace checks, caches and a shared plugin-test build reduce duplication. Audio tests are included in CI; Core/Presentation coverage is available. Published app output includes runtime dependency notices and license files. |
+
+Local live preview now shows a rolling window of at most 30 seconds. The final
+transcript still uses the complete recording. Native acceptance must include a
+recording longer than that window, stopping while preview inference is active,
+and verifying the full final result.
+
+The checkup's automated evidence is recorded locally under `artifacts/checkup`.
+The full runner command is:
+
+```powershell
+./eng/Test-WinUIHeadless.ps1 -Suite All -CollectCoverage -Configuration Release -ResultsDirectory artifacts/checkup/final
+```
+
+The runner writes `summary.json`, individual TRX files and Core/Presentation
+coverage reports. Build/launch evidence comes from the current checkout through
+the development helper described in the [test guide](../TESTING_GUIDE.md).
+
+### Work that remains open
+
+- Catalog/package signatures and trusted publisher keys are not implemented.
+  HTTPS, pinned hashes and safe ZIP extraction do not authenticate the publisher
+  independently of the feed. A coordinated follow-up must define the signed
+  payload, key custody/rotation, rollback policy, legacy-feed migration and
+  publisher/verifier rollout before enforcing signatures.
+- The session's capture/output orchestration and broad `Changed` event still
+  need gradual decomposition. The new composition boundaries are an initial
+  extraction, not the end of that work. History still persists snapshots; moving
+  its save after paste and virtualizing rows do not make storage append-only.
+- Resource-based plugin localization is available, but Japanese and Simplified
+  Chinese translations are not complete across every provider. GemmaLocal and
+  LocalLlm retain their different native runtime pins until real model acceptance
+  supports convergence. Changed packages need release version selection and
+  catalog publication before installed users receive them.
+- Native checks still need first-dictation/focus/paste acceptance, start/stop and
+  lock/resume with pre-roll, large-History scrolling and selection, provider
+  execution and installed upgrades. Automated fixtures do not establish these.
+- Generated notices cover restored runtime packages. In particular, the old
+  Win2D binary-license URL still needs distribution review; the included upstream
+  source license is identified as such in `eng/licenses/sources.json`.
+
 ## Acceptance still needed or requiring a current check
 
 | Topic | Required evidence or decision |
