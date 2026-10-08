@@ -19,7 +19,7 @@ Dictation and speech require an OpenAI API key even when ChatGPT login is select
 - An additional 120 legacy OpenAI/TTS regression tests passed in Debug. The Release legacy test build was blocked before execution by the existing WhisperCpp ARM64 MSVC-runtime packaging requirement on this machine.
 - The portable tests cover fake HTTP/WebSocket requests, completion and cancellation, protected-session persistence, classified errors, TTS playback selection, settings ordering and German labels. Isolated package tests cover install, configuration, execution, restart and uninstall/reinstall; a same-version replacement is correctly rejected.
 - The development package and WinUI build were installed locally. Native inspection confirmed the connection controls precede the transcription selectbox, and text models use a selectbox as well.
-- Real provider acceptance is recorded in [the live-test notes](../../docs/releases/1.1-openai-validation.md). An OpenAI package version-to-version update and side-by-side installed-generation acceptance remain open. No package or catalog publication is implied by this development staging.
+- Real provider acceptance is recorded in [the live-test notes](../../docs/archive/releases/1.1-openai-validation.md). An OpenAI package version-to-version update and side-by-side installed-generation acceptance remain open. No package or catalog publication is implied by this development staging.
 
 Run the provider tests with `dotnet test plugins/TypeWhisper.Plugin.OpenAi/Tests/TypeWhisper.Plugin.OpenAi.Portable.Tests.csproj -c Release`. `portable.proj` supplies the standard package build/copy contract; package the staged plugin directory, excluding host SDK assemblies and credentials.
 
