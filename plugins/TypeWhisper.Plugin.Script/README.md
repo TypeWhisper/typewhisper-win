@@ -1,6 +1,6 @@
 # Script Runner
 
-Local text post-processing with an ordered list of scripts. Version `1.3.7`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
+Local text post-processing with an ordered list of scripts. Version `1.3.8`, plugin ID `com.typewhisper.script`, minimum host `1.1.2`.
 
 ## Setup
 
@@ -30,7 +30,7 @@ Choose a template and click **Add selected template** to create an editable, dis
 
 The templates only transform stdin into stdout. They do not access files or the network. PowerShell and pwsh use UTF-8 input/output so characters such as ä, ö and ü survive. cmd commands may need to set their own code page when invoking native utilities.
 
-Scripts can read `TYPEWHISPER_APP_NAME`, `TYPEWHISPER_LANGUAGE` and `TYPEWHISPER_PROFILE` from their environment. Windows supports cmd, PowerShell and pwsh; the latter must be installed separately.
+Scripts can read `TYPEWHISPER_APP_NAME`, `TYPEWHISPER_LANGUAGE` and `TYPEWHISPER_PROFILE` from their environment. Windows supports cmd, PowerShell and pwsh; the latter must be installed separately. Shells are started by absolute path: cmd and Windows PowerShell from the Windows system directory, pwsh from the first PATH entry that is neither relative nor the app or working directory. The started image is verified before any script text is sent.
 
 ## Build and verification
 
