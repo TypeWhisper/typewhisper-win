@@ -61,8 +61,9 @@ the development helper described in the [test guide](../TESTING_GUIDE.md).
 ### Manual check reported on 2026-10-08
 
 Marco tested development build `58b7b025` and reported the following results.
-The development build metadata still identifies that revision after the restart
-at 15:40 UTC. These are user-observed results, not automated UI measurements.
+The follow-up checks used build `4bf0ebf8`, restarted at 15:49 UTC; only the
+acceptance documentation changed between those revisions. These are
+user-observed results, not automated UI measurements.
 
 | Scenario | Reported result |
 | --- | --- |
@@ -71,16 +72,19 @@ at 15:40 UTC. These are user-observed results, not automated UI measurements.
 | Longer dictation with live text and middle/end markers | Passed. Exact duration was not recorded. |
 | Repeated recording starts and stops | Passed. |
 | Canceling a recording | Passed. |
-| Microphone pre-roll | Passed for normal dictation. Lock/resume was not reported. |
+| Microphone pre-roll and lock/resume | Passed. The follow-up confirmed the remaining lock/unlock scenario; capture suspension during the lock was not independently instrumented. |
 | History and search | Passed; search was reported as fast. Large-list scrolling, editing and filters were not reported separately. |
-| Model unloading | Unloading was observed. The configured interval and reload after inactivity were not confirmed separately. |
+| Model unloading and automatic reload | Passed. Unloading was observed in the first check; automatic reload was confirmed in the follow-up. The configured interval was not recorded. |
 | Workflow using another model | Passed. Restoration to the global model afterward was not reported separately. |
+| Dictionary, snippets and workflows after restarting | Passed; entries remained available after restarting. |
+| Settings, shortcuts, language and theme changes | Passed; manual-plan item 8 was confirmed in the follow-up. |
 
-No failure was reported in these checks. Remaining items from the manual plan
-include dictionary/snippet/workflow persistence across restart, repeated Settings
-navigation with shortcut/language/theme changes, and the unconfirmed subcases
-above. Target applications and model/package versions were not recorded, so this
-does not establish the full application or provider compatibility matrix.
+No failure was reported in these checks. The follow-up confirmed all three
+remaining groups highlighted after the first report: persistence across restart,
+Settings changes, and lock/unlock plus automatic model reload. The specifically
+unrecorded subcases above still limit that evidence. Target applications and
+model/package versions were not recorded, so this does not establish the full
+application or provider compatibility matrix.
 
 ### Work that remains open
 
@@ -98,9 +102,10 @@ does not establish the full application or provider compatibility matrix.
   LocalLlm retain their different native runtime pins until real model acceptance
   supports convergence. Changed packages need release version selection and
   catalog publication before installed users receive them.
-- Basic dictation, window switching, cancellation, pre-roll, History search and a
-  workflow model switch have the manual evidence above. Remaining native checks
-  include lock/resume with pre-roll, large-History scrolling and selection, the
+- Basic dictation, window switching, cancellation, pre-roll with lock/resume,
+  automatic model reload, History search, a workflow model switch, persistence
+  across restart and Settings changes have the manual evidence above. Remaining
+  native checks include large-History scrolling and selection, the
   application/provider matrix and installed upgrades.
 - Generated notices cover restored runtime packages. In particular, the old
   Win2D binary-license URL still needs distribution review; the included upstream
