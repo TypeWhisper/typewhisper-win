@@ -84,7 +84,7 @@ public sealed partial class SnippetService : ISnippetService
         EnsureCacheLoaded();
         if (LoadError is not null) return false;
 
-        SnippetsChanged?.Invoke();
+        ProfileMutationCoordinator.Notify(SnippetsChanged);
         return true;
     }
 
@@ -479,7 +479,7 @@ public sealed partial class SnippetService : ISnippetService
     {
         if (SaveToDisk(_cache))
         {
-            SnippetsChanged?.Invoke();
+            ProfileMutationCoordinator.Notify(SnippetsChanged);
             return true;
         }
 
@@ -497,7 +497,7 @@ public sealed partial class SnippetService : ISnippetService
             return false;
 
         _cache = replacement;
-        SnippetsChanged?.Invoke();
+        ProfileMutationCoordinator.Notify(SnippetsChanged);
         return true;
     }
 

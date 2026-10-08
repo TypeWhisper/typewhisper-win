@@ -558,13 +558,7 @@ public sealed class HistoryService : IHistoryAudioService
 
     private void RaiseRecordsChanged()
     {
-        if (RecordsChanged is not { } handlers)
-            return;
-
-        foreach (Action handler in handlers.GetInvocationList())
-        {
-            try { handler(); } catch { }
-        }
+        ProfileMutationCoordinator.Notify(RecordsChanged);
     }
 
     private List<string> DistinctApps() => _cache

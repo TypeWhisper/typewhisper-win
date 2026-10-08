@@ -546,22 +546,7 @@ public sealed class DictionaryService : IDictionaryService
 
     private void NotifyEntriesChanged()
     {
-        var handlers = EntriesChanged;
-        if (handlers is null)
-            return;
-
-        foreach (var handler in handlers.GetInvocationList())
-        {
-            try
-            {
-                ((Action)handler).Invoke();
-            }
-            catch (Exception ex) when (IsNonFatalException(ex))
-            {
-                // Subscriber failures must not break dictionary persistence or automatic learning.
-                LogDictionaryFailure("Dictionary entries changed subscriber failed", ex);
-            }
-        }
+        ProfileMutationCoordinator.Notify(EntriesChanged);
     }
 
     private static bool IsSafeAutomaticallyLearnedToken(string token)

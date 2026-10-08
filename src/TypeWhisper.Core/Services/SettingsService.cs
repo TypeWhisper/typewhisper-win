@@ -97,7 +97,7 @@ public sealed class SettingsService : ISettingsService
         var json = JsonSerializer.Serialize(settings, JsonOptions);
         AtomicFileWriter.WriteAllText(_filePath, json);
 
-        SettingsChanged?.Invoke(settings);
+        ProfileMutationCoordinator.Notify(SettingsChanged, settings);
     }
 
     private static AppSettings? TryLoadFrom(string path)

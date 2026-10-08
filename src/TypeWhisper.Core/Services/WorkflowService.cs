@@ -54,7 +54,7 @@ public sealed class WorkflowService : IWorkflowService
         EnsureCacheLoaded();
         if (LoadError is not null) return false;
 
-        WorkflowsChanged?.Invoke();
+        ProfileMutationCoordinator.Notify(WorkflowsChanged);
         return true;
     }
 
@@ -375,7 +375,7 @@ public sealed class WorkflowService : IWorkflowService
     {
         if (SaveToDisk(_cache))
         {
-            WorkflowsChanged?.Invoke();
+            ProfileMutationCoordinator.Notify(WorkflowsChanged);
             return true;
         }
 
@@ -397,7 +397,7 @@ public sealed class WorkflowService : IWorkflowService
             return false;
 
         _cache = replacement;
-        WorkflowsChanged?.Invoke();
+        ProfileMutationCoordinator.Notify(WorkflowsChanged);
         return true;
     }
 
