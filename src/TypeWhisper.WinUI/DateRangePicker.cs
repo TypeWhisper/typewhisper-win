@@ -26,7 +26,7 @@ public sealed class DateRangePicker : UserControl
     internal DateRangePicker(DateOnly start, DateOnly end, bool active)
     {
         _start = start; _end = end; _month = new(start.Year, start.Month, 1);
-        _button = Button(active ? $"{start:dd.MM.yy} – {end:dd.MM.yy}" : Loc.T("Custom…"), () => _flyout!.ShowAt(_button!), active);
+        _button = Button(active ? $"{Render(start)} – {Render(end)}" : Loc.T("Custom…"), () => _flyout!.ShowAt(_button!), active);
         AutomationProperties.SetName(_button, Loc.T("Choose custom date range"));
         ToolTipService.SetToolTip(_button, Loc.T("Choose an inclusive start and end date"));
         _flyout = new Flyout { Content = new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _panel, MaxHeight = 540, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
@@ -41,14 +41,26 @@ public sealed class DateRangePicker : UserControl
         Unloaded += (_, _) => Close(); Content = _button;
     }
     internal void Close() => _flyout.Hide();
-    private static bool Parse(string text, out DateOnly date) => DateOnly.TryParseExact(text.Trim(), ["dd.MM.yyyy", "yyyy-MM-dd"], CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+    // Dates follow the Windows regional format: Loc.Use switches only the UI culture, so CurrentCulture stays the user's own.
+    private static CultureInfo Culture => CultureInfo.CurrentCulture;
+    private static string Render(DateOnly date) => date.ToString("d", Culture);
+    // Typed dates may also use ISO yyyy-MM-dd, which reads the same in every region.
+    private static bool Parse(string text, out DateOnly date) =>
+        DateOnly.TryParse(text.Trim(), Culture, DateTimeStyles.None, out date)
+        || DateOnly.TryParseExact(text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+    // The regional pattern as users read it, such as DD.MM.YYYY; German spells the letters TT.MM.JJJJ.
+    private static string Pattern()
+    {
+        var letters = Loc.T("DMY") is { Length: 3 } translated ? translated : "DMY";
+        return string.Concat(Culture.DateTimeFormat.ShortDatePattern.Replace("'", "").Select(c => c switch { 'd' => letters[0], 'M' => letters[1], 'y' => letters[2], _ => c }));
+    }
     private void Build()
     {
         _panel.Children.Clear(); _editingStart = true; _month = new(_start.Year, _start.Month, 1);
         _panel.Children.Add(Label(Loc.T("Custom date range"), 16));
         var fields = new Grid { ColumnSpacing = 12 }; fields.ColumnDefinitions.Add(new()); fields.ColumnDefinitions.Add(new());
         _from = Field(Loc.T("From"), _start, fields, 0); _to = Field(Loc.T("To"), _end, fields, 1); _panel.Children.Add(fields);
-        _panel.Children.Add(Label(Loc.T("DD.MM.YYYY · both dates are included"), 11));
+        _panel.Children.Add(Label(Loc.T("{0} · both dates are included", Pattern()), 11));
         _panel.Children.Add(_calendar); _panel.Children.Add(_message);
         AutomationProperties.SetLiveSetting(_message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
@@ -60,8 +72,9 @@ public sealed class DateRangePicker : UserControl
     private TextBox Field(string name, DateOnly date, Grid grid, int column)
     {
         var field = new StackPanel { Spacing = 6 }; field.Children.Add(Label(name, 12));
-        var input = new TextBox { Text = date.ToString("dd.MM.yyyy"), MaxLength = 10, Height = 38, Padding = new Thickness(8), Style = (Style)Application.Current.Resources["SearchTextBoxStyle"], IsSpellCheckEnabled = false };
-        AutomationProperties.SetName(input, Loc.T("{0} date, day month year", name));
+        // Room for the widest regional date, which some regions follow with a suffix, and for ISO yyyy-MM-dd.
+        var input = new TextBox { Text = Render(date), MaxLength = Math.Max(10, Render(new DateOnly(2000, 12, 28)).Length), Height = 38, Padding = new Thickness(8), Style = (Style)Application.Current.Resources["SearchTextBoxStyle"], IsSpellCheckEnabled = false };
+        AutomationProperties.SetName(input, Loc.T("{0} date as {1}", name, Pattern()));
         var border = new Border { Child = input, BorderThickness = new Thickness(1), BorderBrush = Brush("HairlineBrush"), CornerRadius = new CornerRadius(7), Background = Brush("InkBrush") };
         input.GotFocus += (_, _) => border.BorderBrush = Brush("FocusBrush"); input.LostFocus += (_, _) => border.BorderBrush = Brush("HairlineBrush");
         field.Children.Add(border); Grid.SetColumn(field, column); grid.Children.Add(field); return input;
@@ -74,8 +87,8 @@ public sealed class DateRangePicker : UserControl
     }
     private void Validate()
     {
-        var valid = Parse(_from.Text, out var from) && Parse(_to.Text, out _);
-        var error = valid ? UsageData.ValidateRange(from, DateOnly.ParseExact(_to.Text.Trim(), ["dd.MM.yyyy", "yyyy-MM-dd"], CultureInfo.InvariantCulture)) : Loc.T("Enter valid dates as DD.MM.YYYY or YYYY-MM-DD.");
+        var valid = Parse(_from.Text, out var from) & Parse(_to.Text, out var to);
+        var error = valid ? UsageData.ValidateRange(from, to) : Loc.T("Enter valid dates as {0} or YYYY-MM-DD.", Pattern());
         _message.Text = error ?? Loc.T("Select a date below or type it above."); _apply.IsEnabled = error is null;
     }
     private void Apply()
@@ -88,7 +101,7 @@ public sealed class DateRangePicker : UserControl
         _calendar.Children.Clear();
         var heading = new Grid(); heading.ColumnDefinitions.Add(new() { Width = new GridLength(38) }); heading.ColumnDefinitions.Add(new()); heading.ColumnDefinitions.Add(new() { Width = new GridLength(38) });
         var previous = Button("‹", () => { _month = _month.AddMonths(-1); RenderCalendar(); }); previous.IsEnabled = _month > new DateOnly(1900, 1, 1); AutomationProperties.SetName(previous, Loc.T("Previous month")); heading.Children.Add(previous);
-        var title = Label(_month.ToString("MMMM yyyy", CultureInfo.CurrentCulture), 13); title.VerticalAlignment = VerticalAlignment.Center; title.HorizontalAlignment = HorizontalAlignment.Center; Grid.SetColumn(title, 1); heading.Children.Add(title);
+        var title = Label(_month.ToString("Y", Culture), 13); title.VerticalAlignment = VerticalAlignment.Center; title.HorizontalAlignment = HorizontalAlignment.Center; Grid.SetColumn(title, 1); heading.Children.Add(title);
         var next = Button("›", () => { _month = _month.AddMonths(1); RenderCalendar(); }); next.IsEnabled = _month < new DateOnly(2100, 12, 1); AutomationProperties.SetName(next, Loc.T("Next month")); Grid.SetColumn(next, 2); heading.Children.Add(next); _calendar.Children.Add(heading);
         _calendar.Children.Add(Label(_editingStart ? Loc.T("Selecting start date") : Loc.T("Selecting end date"), 11));
         var days = new Grid { ColumnSpacing = 3, RowSpacing = 3 };
@@ -103,7 +116,7 @@ public sealed class DateRangePicker : UserControl
             var date = new DateOnly(_month.Year, _month.Month, day);
             var button = Button(day.ToString(), () =>
             {
-                (_editingStart ? _from : _to).Text = date.ToString("dd.MM.yyyy");
+                (_editingStart ? _from : _to).Text = Render(date);
                 if (_editingStart) { _to.Focus(FocusState.Programmatic); _to.SelectAll(); } else RenderCalendar();
             }, date == start || date == end);
             button.Padding = new Thickness(0); button.MinHeight = 28; button.MinWidth = 0; button.HorizontalAlignment = HorizontalAlignment.Stretch;
