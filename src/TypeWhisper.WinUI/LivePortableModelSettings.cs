@@ -314,17 +314,8 @@ internal sealed class LivePortableModelSettings : UserControl
         _working = true; UpdateButtons();
         try
         {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                RequestedTheme = ActualTheme,
-                Title = Loc.T("Remove {0}?", expected.DisplayName),
-                Content = Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."),
-                PrimaryButtonText = Loc.T("Remove model"),
-                CloseButtonText = Loc.T("Cancel"),
-                DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary || !Current(lifetime)) return;
+            if (!await Dialogs.ConfirmAsync(this, Loc.T("Remove {0}?", expected.DisplayName),
+                Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."), Loc.T("Remove model"), destructive: true) || !Current(lifetime)) return;
             var error = await _session.RemoveRegistryModelAsync(expected);
             if (Current(lifetime)) _status.Text = error ?? Loc.T("Model removed. Download it again to use it.");
         }

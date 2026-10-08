@@ -37,7 +37,7 @@ public sealed partial class LexiconView
             AutomationProperties.SetName(exampleLanguage, Loc.T("Example sentence language"));
             var dialog = _trainingDialog = new ContentDialog
             {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Train a word"),
+                Title = Loc.T("Train a word"),
                 Content = new ScrollViewer { Content = body, MaxHeight = 420, Padding = new Thickness(0, 0, 16, 0),
                     HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
                 PrimaryButtonText = Loc.T("Continue"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
@@ -181,7 +181,7 @@ public sealed partial class LexiconView
                 Render();
             };
             Render();
-            var result = await dialog.ShowAsync();
+            var result = await Dialogs.ShowAsync(this, dialog);
             ended = true;
             if (!_closing)
             {

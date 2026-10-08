@@ -135,18 +135,16 @@ public sealed partial class HistoryWindow
     {
         var ids = SelectedRecords().Select(record => record.Id).ToArray();
         if (ids.Length == 0 || _dialogOpen) return;
-        var dialog = new ContentDialog
-        {
-            XamlRoot = Content.XamlRoot,
-            Title = ids.Length == 1 ? Loc.T("Delete this entry?") : Loc.T("Delete {0} entries?", ids.Length),
-            Content = Loc.T("The transcript and any saved audio are removed from this PC. This cannot be undone."),
-            PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-        };
         _dialogOpen = true;
-        ContentDialogResult result;
-        try { result = await dialog.ShowAsync(); }
+        bool confirmed;
+        try
+        {
+            confirmed = await Dialogs.ConfirmAsync((FrameworkElement)Content,
+                ids.Length == 1 ? Loc.T("Delete this entry?") : Loc.T("Delete {0} entries?", ids.Length),
+                Loc.T("The transcript and any saved audio are removed from this PC. This cannot be undone."), Loc.T("Delete"), destructive: true);
+        }
         finally { _dialogOpen = false; }
-        if (result != ContentDialogResult.Primary) return;
+        if (!confirmed) return;
         StopAudioPlayback();
         try
         {

@@ -83,10 +83,9 @@ internal sealed partial class PremiumView
             _confirmingDeactivation = true; RefreshLicenseSection();
             try
             {
-                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Deactivate {0}?", title),
-                    Content = Loc.T("This releases this device's activation. Your subscription or purchase is not cancelled."),
-                    PrimaryButtonText = Loc.T("Deactivate"), CloseButtonText = Loc.T("Keep active"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
-                if (await dialog.ShowAsync() == ContentDialogResult.Primary) await WinUILicensing.DeactivateAsync(commercial);
+                if (await Dialogs.ConfirmAsync(this, Loc.T("Deactivate {0}?", title),
+                    Loc.T("This releases this device's activation. Your subscription or purchase is not cancelled."),
+                    Loc.T("Deactivate"), destructive: true, closeText: Loc.T("Keep active"))) await WinUILicensing.DeactivateAsync(commercial);
             }
             finally { _confirmingDeactivation = false; RefreshLicenseSection(); }
         };
