@@ -24,7 +24,11 @@ if ($Suite -in @('All', 'App')) {
         @{ Name = 'Presentation'; Project = 'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj' }
     )
     if ($IsWindows) {
-        $checks += @{ Name = 'Platform'; Project = 'tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj' }
+        # Both compile WinUI/Win32 sources; the audio suite replays PCM and opens no microphone.
+        $checks += @(
+            @{ Name = 'Platform'; Project = 'tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj' },
+            @{ Name = 'Audio'; Project = 'tests/TypeWhisper.Dictation.AudioTests/TypeWhisper.Dictation.AudioTests.csproj' }
+        )
     }
 }
 if ($Suite -in @('All', 'Plugins')) {

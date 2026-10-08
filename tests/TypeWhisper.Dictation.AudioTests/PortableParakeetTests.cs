@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 
 public sealed class PortableParakeetTests(ITestOutputHelper output)
 {
-    [Theory]
+    [LocalParakeetTheory]
     [InlineData("parakeet-tdt-0.6b")]
     [InlineData("parakeet-ultra-0.6b")]
     [InlineData("canary-180m-flash")]
@@ -17,8 +17,6 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
     {
         var packageDirectory = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_PACKAGE");
         var modelDirectory = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL");
-        Assert.False(string.IsNullOrWhiteSpace(packageDirectory), "Set TYPEWHISPER_TEST_PARAKEET_PACKAGE to a published portable sherpa-onnx plugin.");
-        Assert.False(string.IsNullOrWhiteSpace(modelDirectory), "Set TYPEWHISPER_TEST_PARAKEET_MODEL to an existing Parakeet model directory.");
         var data = Path.Join(Path.GetTempPath(), "typewhisper-portable-parakeet-" + Guid.NewGuid());
         try
         {
@@ -59,7 +57,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
     }
 
     // Canary dropped most speech after roughly 30 seconds when decoded in one pass (#542).
-    [Theory]
+    [LocalParakeetTheory]
     [InlineData("parakeet-tdt-0.6b")]
     [InlineData("parakeet-ultra-0.6b")]
     [InlineData("canary-180m-flash")]
@@ -68,8 +66,6 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
     {
         var packageDirectory = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_PACKAGE");
         var modelDirectory = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL");
-        Assert.False(string.IsNullOrWhiteSpace(packageDirectory), "Set TYPEWHISPER_TEST_PARAKEET_PACKAGE to a published portable sherpa-onnx plugin.");
-        Assert.False(string.IsNullOrWhiteSpace(modelDirectory), "Set TYPEWHISPER_TEST_PARAKEET_MODEL to an existing Parakeet model directory.");
         var data = Path.Join(Path.GetTempPath(), "typewhisper-portable-parakeet-" + Guid.NewGuid());
         try
         {
@@ -109,5 +105,15 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
             await engine.UnloadModelAsync();
         }
         finally { if (Directory.Exists(data)) Directory.Delete(data, true); }
+    }
+}
+
+public sealed class LocalParakeetTheoryAttribute : TheoryAttribute
+{
+    public LocalParakeetTheoryAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_PACKAGE")) ||
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL")))
+            Skip = "Opt-in test: set TYPEWHISPER_TEST_PARAKEET_PACKAGE to a published portable sherpa-onnx plugin and TYPEWHISPER_TEST_PARAKEET_MODEL to an existing Parakeet model directory.";
     }
 }

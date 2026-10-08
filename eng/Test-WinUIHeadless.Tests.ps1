@@ -8,13 +8,16 @@ $appProjects = @(
     'tests/TypeWhisper.Cli.Tests/TypeWhisper.Cli.Tests.csproj',
     'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj'
 )
-$platformProject = 'tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj'
+$windowsProjects = @(
+    'tests/TypeWhisper.Platform.Tests/TypeWhisper.Platform.Tests.csproj',
+    'tests/TypeWhisper.Dictation.AudioTests/TypeWhisper.Dictation.AudioTests.csproj'
+)
 $pluginProjects = @(
     'plugins/Fixture.Alpha/Tests/Fixture.Alpha.Tests.csproj',
     'plugins/Fixture.Beta/Tests/Fixture.Beta.Tests.csproj'
 )
 $expectedAppProjects = @($appProjects)
-if ($IsWindows) { $expectedAppProjects += $platformProject }
+if ($IsWindows) { $expectedAppProjects += $windowsProjects }
 $checks = 0
 
 function dotnet {
@@ -59,7 +62,7 @@ function Expect-Run([string]$Suite, [string[]]$Expected, [string[]]$Failures = @
 try {
     New-Item -ItemType Directory -Path (Join-Path $fixture 'eng') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Test-WinUIHeadless.ps1') -Destination (Join-Path $fixture 'eng')
-    foreach ($project in @($appProjects) + @($platformProject) + $pluginProjects + @('plugins/Fixture.Alpha/Fixture.Alpha.csproj')) {
+    foreach ($project in @($appProjects) + @($windowsProjects) + $pluginProjects + @('plugins/Fixture.Alpha/Fixture.Alpha.csproj')) {
         $path = Join-Path $fixture $project
         New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
         Set-Content -LiteralPath $path -Value '<Project />'

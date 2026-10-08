@@ -24,12 +24,11 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
         output.WriteLine($"Mode={(hold ? "hold" : "toggle")}: immediate={immediate.Length} samples; delayed={delayed.Length}; lost=4800 samples (300 ms).");
     }
 
-    [Fact]
+    [LocalParakeetFact]
     [Trait("Category", "LocalParakeet")]
     public void GeneratedSpeechThroughCaptureAndParakeet()
     {
         var model = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL");
-        Assert.False(string.IsNullOrWhiteSpace(model), "Set TYPEWHISPER_TEST_PARAKEET_MODEL to an existing model directory; this test never downloads models.");
         using var synth = new SpeechSynthesizer();
         var voice = synth.GetInstalledVoices().First(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en");
         synth.SelectVoice(voice.VoiceInfo.Name);
@@ -131,5 +130,14 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
             Buffer.BlockCopy(samples, 0, data, 0, data.Length);
             DataAvailable?.Invoke(this, new(data, data.Length));
         }
+    }
+}
+
+public sealed class LocalParakeetFactAttribute : FactAttribute
+{
+    public LocalParakeetFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL")))
+            Skip = "Opt-in test: set TYPEWHISPER_TEST_PARAKEET_MODEL to an existing model directory; this test never downloads models.";
     }
 }
