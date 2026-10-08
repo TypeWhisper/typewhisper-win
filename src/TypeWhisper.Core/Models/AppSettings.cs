@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Models;
@@ -7,6 +9,13 @@ namespace TypeWhisper.Core.Models;
 /// </summary>
 public record AppSettings
 {
+    /// <summary>
+    /// Preserves retired or newer settings when this legacy settings file is saved.
+    /// These values are not active WinUI preferences.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? UnmappedSettings { get; init; }
+
     /// <summary>
     /// Defines the default spoken feedback provider id constant.
     /// </summary>
@@ -175,18 +184,11 @@ public record AppSettings
     public string? LocalModelStoragePath { get; init; }
 
     // Manual file transcription
-    /// <summary>
-    /// Gets or sets the file transcription engine override value.
-    /// </summary>
-    public string? FileTranscriptionEngineOverride { get; init; }
-    /// <summary>
-    /// Gets or sets the file transcription model override value.
-    /// </summary>
-    public string? FileTranscriptionModelOverride { get; init; }
 
     // Dictation recovery
     /// <summary>
-    /// Gets or sets recovery audio retention in days. -1 means immediately and 0 means never.
+    /// Retains the legacy backup recovery retention. WinUI uses recovery.json instead.
+    /// -1 means immediately and 0 means never in the legacy format.
     /// </summary>
     public int DictationRecoveryRetentionDays { get; init; } = 30;
     /// <summary>
@@ -251,14 +253,6 @@ public record AppSettings
     /// Gets or sets the recorder translation target language value.
     /// </summary>
     public string? RecorderTranslationTargetLanguage { get; init; }
-    /// <summary>
-    /// Gets or sets the recorder transcription engine override value.
-    /// </summary>
-    public string? RecorderTranscriptionEngineOverride { get; init; }
-    /// <summary>
-    /// Gets or sets the recorder transcription model override value.
-    /// </summary>
-    public string? RecorderTranscriptionModelOverride { get; init; }
 
     // Cloud Provider API Keys
     /// <summary>
@@ -345,14 +339,6 @@ public record AppSettings
     public int SilenceAutoStopSeconds { get; init; } = 10;
 
     // Internal diagnostics / experimental hardening
-    /// <summary>
-    /// Gets or sets the internal parakeet tail diagnostics enabled value.
-    /// </summary>
-    public bool InternalParakeetTailDiagnosticsEnabled { get; init; }
-    /// <summary>
-    /// Gets or sets the internal parakeet tail hardening enabled value.
-    /// </summary>
-    public bool InternalParakeetTailHardeningEnabled { get; init; }
 
     // Overlay
     /// <summary>
@@ -404,10 +390,6 @@ public record AppSettings
     /// </summary>
     public string WatchFolderOutputFormat { get; init; } = "md";
     /// <summary>
-    /// Gets or sets the watch folder auto start value.
-    /// </summary>
-    public bool WatchFolderAutoStart { get; init; }
-    /// <summary>
     /// Gets or sets the watch folder delete source value.
     /// </summary>
     public bool WatchFolderDeleteSource { get; init; }
@@ -415,14 +397,6 @@ public record AppSettings
     /// Gets or sets the watch folder language value.
     /// </summary>
     public string WatchFolderLanguage { get; init; } = "auto";
-    /// <summary>
-    /// Gets or sets the watch folder engine override value.
-    /// </summary>
-    public string? WatchFolderEngineOverride { get; init; }
-    /// <summary>
-    /// Gets or sets the watch folder model override value.
-    /// </summary>
-    public string? WatchFolderModelOverride { get; init; }
 
     // API Server
     /// <summary>
@@ -458,10 +432,6 @@ public record AppSettings
     /// </summary>
     public bool HasCompletedOnboarding { get; init; }
 
-    /// <summary>
-    /// Gets or sets the default llm provider value.
-    /// </summary>
-    public string? DefaultLlmProvider { get; init; }
 
     // Plugin state
     /// <summary>
