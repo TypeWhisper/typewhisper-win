@@ -64,6 +64,117 @@ public sealed class DictationOutputTests
         history.Verify(h => h.TryAddRecord(It.IsAny<TranscriptionRecord>()), Times.Never());
     }
 
+    [Fact]
+    public async Task PasteIsSentWhileTheHistoryCommitIsStillPending()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        var record = Record();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        history.Setup(h => h.TryAddRecord(record)).Returns(() =>
+        {
+            entered.SetResult();
+            if (!release.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            return true;
+        });
+        var pasted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(record, new(), () => new(),
+            () => { pasted.SetResult(); return Task.FromResult(true); });
+        // The paste goes out while the worker is still inside TryAddRecord; only the result waits for the commit.
+        try { await pasted.Task; await entered.Task; Assert.False(delivery.IsCompleted); }
+        finally { release.TrySetResult(); }
+        var result = await delivery;
+        Assert.True(result.Saved); Assert.True(result.Inserted); Assert.False(result.Failed); Assert.Null(result.StorageWarning);
+        Assert.Equal("Paste sent. Saved to History.", result.Message);
+    }
+
+    [Fact]
+    public async Task CanceledPasteDrainsThePendingCommitBeforeItSurfaces()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        var record = Record();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        history.Setup(h => h.TryAddRecord(record)).Returns(() =>
+        {
+            entered.SetResult();
+            if (!release.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            return true;
+        });
+        using var cancellation = new CancellationTokenSource();
+        // The paste cancels once the worker is inside the commit, so the commit outlives the cancellation.
+        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(record, new(), () => new(), () =>
+        {
+            if (!entered.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            cancellation.Cancel();
+            return Task.FromCanceled<bool>(cancellation.Token);
+        }, cancellation.Token);
+        // Not even the cancellation may surface until the commit has been observed.
+        try { Assert.False(delivery.IsCompleted); }
+        finally { release.TrySetResult(); }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => delivery);
+        history.Verify(h => h.TryAddRecord(record), Times.Once());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedCommitStillWarnsAfterThePasteWentOut(bool throws)
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        var record = Record();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        history.Setup(h => h.TryAddRecord(record)).Returns(() =>
+        {
+            if (!release.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            return throws ? throw new IOException() : false;
+        });
+        var pasted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(record, new(), () => new(),
+            () => { pasted.SetResult(); return Task.FromResult(true); });
+        try { await pasted.Task; Assert.False(delivery.IsCompleted); }
+        finally { release.TrySetResult(); }
+        var result = await delivery;
+        Assert.True(result.Inserted); Assert.False(result.Saved); Assert.True(result.Failed); Assert.False(result.NeedsReview);
+        Assert.Equal("This dictation could not be saved to History.", result.StorageWarning);
+        Assert.Equal("Paste sent. Not saved to History. This dictation could not be saved to History.", result.Message);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CancelDuringTheCommitOnlyHidesWhatNeverLeft(bool pasteSucceeds)
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        var record = Record();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        history.Setup(h => h.TryAddRecord(record)).Returns(() =>
+        {
+            entered.SetResult();
+            if (!release.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            return true;
+        });
+        using var cancellation = new CancellationTokenSource();
+        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(record, new(), () => new(), () =>
+        {
+            if (!entered.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            cancellation.Cancel();
+            return Task.FromResult(pasteSucceeds);
+        }, cancellation.Token);
+        try { Assert.False(delivery.IsCompleted); }
+        finally { release.TrySetResult(); }
+        if (!pasteSucceeds) { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => delivery); return; }
+        // Text that left TypeWhisper is reported together with the commit that finished behind it.
+        var result = await delivery;
+        Assert.True(result.Committed); Assert.True(result.Saved); Assert.False(result.Failed);
+        Assert.Equal("Paste sent. Saved to History.", result.Message);
+    }
+
     private static TranscriptionRecord Record() => new() { Id = "output-test", Timestamp = DateTime.UtcNow, RawText = "raw", FinalText = "Reviewed text" };
 
     [Theory]

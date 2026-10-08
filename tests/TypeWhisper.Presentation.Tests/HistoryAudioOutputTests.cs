@@ -47,7 +47,7 @@ public sealed class HistoryAudioOutputTests
     }
 
     [Fact]
-    public async Task CanceledWorkerMustDrainAndCannotPasteItsLateResult()
+    public async Task CanceledWorkerMustDrainBeforeTheCanceledPasteSurfaces()
     {
         var history = new Mock<IHistoryAudioService>(MockBehavior.Strict);
         history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
@@ -63,13 +63,74 @@ public sealed class HistoryAudioOutputTests
                 Assert.True(ct.IsCancellationRequested); Assert.False(audio()); Assert.False(saveHistory());
                 return new HistoryAudioSaveResult(record, false, null) { Suppressed = true };
             });
-        var pasted = false;
-        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(Record(), Enabled, () => Enabled,
-            () => { pasted = true; return Task.FromResult(true); }, cancellation.Token, samples: [0.1f]);
-        try { await entered.Task; cancellation.Cancel(); Assert.False(delivery.IsCompleted); }
+        // Like the host's paste, this one honours a cancel that arrives while the worker is inside the commit.
+        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(Record(), Enabled, () => Enabled, () =>
+        {
+            if (!entered.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            cancellation.Cancel();
+            return Task.FromCanceled<bool>(cancellation.Token);
+        }, cancellation.Token, samples: [0.1f]);
+        try { Assert.True(cancellation.IsCancellationRequested); Assert.False(delivery.IsCompleted); }
         finally { release.Set(); }
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => delivery);
-        Assert.False(pasted);
+    }
+
+    [Fact]
+    public async Task CancelAfterThePasteWentOutReportsTheInsertionOnceTheWorkerDrains()
+    {
+        var history = new Mock<IHistoryAudioService>(MockBehavior.Strict);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        using var cancellation = new CancellationTokenSource();
+        history.Setup(h => h.TryAddRecordWithAudio(It.IsAny<TranscriptionRecord>(), It.IsAny<float[]>(), 16000,
+            It.IsAny<Func<bool>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<bool>>()))
+            .Returns((TranscriptionRecord record, float[] samples, int rate, Func<bool> audio, CancellationToken ct, Func<bool> saveHistory) =>
+            {
+                entered.SetResult();
+                if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+                Assert.True(ct.IsCancellationRequested); Assert.False(saveHistory());
+                return new HistoryAudioSaveResult(record, false, null) { Suppressed = true };
+            });
+        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(Record(), Enabled, () => Enabled, () =>
+        {
+            if (!entered.Task.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+            cancellation.Cancel();
+            return Task.FromResult(true);
+        }, cancellation.Token, samples: [0.1f]);
+        try { Assert.False(delivery.IsCompleted); }
+        finally { release.Set(); }
+        // The text already left, so the late cancel reports it as inserted and the worker's opt-out as not saved.
+        var result = await delivery;
+        Assert.True(result.Inserted); Assert.True(result.Committed); Assert.False(result.Saved);
+        Assert.False(result.Failed); Assert.Null(result.StorageWarning);
+        Assert.Equal("Paste sent. Not saved to History.", result.Message);
+    }
+
+    [Fact]
+    public async Task PasteIsSentWhileTheAudioCommitIsStillPendingAndTheResultKeepsItsRecord()
+    {
+        var history = new Mock<IHistoryAudioService>(MockBehavior.Strict);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var actual = Record() with { AudioFileName = "owned.wav" };
+        history.Setup(h => h.TryAddRecordWithAudio(It.IsAny<TranscriptionRecord>(), It.IsAny<float[]>(), 16000,
+            It.IsAny<Func<bool>>(), default, It.IsAny<Func<bool>>()))
+            .Returns(() =>
+            {
+                entered.SetResult();
+                if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test barrier timed out.");
+                return new HistoryAudioSaveResult(actual, true, null);
+            });
+        var pasted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delivery = new DictationOutputDelivery(history.Object).DeliverAsync(Record(), Enabled, () => Enabled,
+            () => { pasted.SetResult(); return Task.FromResult(true); }, samples: [0.1f]);
+        try { await pasted.Task; await entered.Task; Assert.False(delivery.IsCompleted); }
+        finally { release.Set(); }
+        var result = await delivery;
+        Assert.Same(actual, result.Record); Assert.True(result.Saved); Assert.True(result.Inserted);
+        Assert.False(result.Failed); Assert.False(result.NeedsReview);
     }
 
     [Fact]
