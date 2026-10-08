@@ -55,6 +55,9 @@ During onboarding the variable is unset and existing scheduled releases remain
 unsigned. A signing failure never falls back to unsigned output. Production
 signatures must be trusted, match the configured certificate and have a timestamp.
 Production signing is limited to `main`; signing is never performed for PR runs.
+The workflow passes the SignPath token only to manual or scheduled signing runs.
+Pull-request and unsigned runs receive an empty token input, independently of the
+local action's policy checks.
 
 ## Packaging integration
 

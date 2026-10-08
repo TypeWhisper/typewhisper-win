@@ -132,7 +132,8 @@ jobs:
           SIGNPATH_GITHUB_TOKEN: ${{ github.token }}
         with:
           policy: ${{ needs.version.outputs.signing_policy }}
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          # PR-controlled code must never receive the signing credential.
+          api-token: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && (needs.version.outputs.signing_policy == 'test-signing' || needs.version.outputs.signing_policy == 'release-signing') && secrets.SIGNPATH_API_TOKEN || '' }}
           certificate-thumbprint: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
           script: |
             ./eng/Build-WinUIDailyPackages.ps1 -Version $env:CANDIDATE_VERSION `

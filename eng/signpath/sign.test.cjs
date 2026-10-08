@@ -4,7 +4,36 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const childProcess = require('node:child_process');
+const vm = require('node:vm');
 const { actionOutput, allowedExecutable } = require('./sign.cjs');
+
+test('workflow withholds the signing token from PR code and unsigned runs', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/winui-daily-candidate.yml'), 'utf8');
+  const inputs = [...workflow.matchAll(/^\s*api-token:\s*\$\{\{ (.+) \}\}\s*$/gm)];
+  assert.equal(inputs.length, 1, 'Expected one conditional signing-token input');
+  // This expression uses only property access, equality and boolean operators,
+  // which have the same result in Actions and JavaScript for these string inputs.
+  const expression = new vm.Script(inputs[0][1]);
+  for (const [event, allowedPolicies] of [
+    ['pull_request', []],
+    ['pull_request_target', []],
+    ['push', []],
+    ['workflow_dispatch', ['test-signing', 'release-signing']],
+    ['schedule', ['test-signing', 'release-signing']],
+  ]) {
+    // A PR must not receive the secret even if its version job requests signing.
+    for (const policy of ['none', 'test-signing', 'release-signing', 'unknown', '']) {
+      for (const token of ['signing-token-fixture', '']) {
+        const actual = expression.runInNewContext({
+          github: { event_name: event },
+          needs: { version: { outputs: { signing_policy: policy } } },
+          secrets: { SIGNPATH_API_TOKEN: token },
+        }, { timeout: 1000 });
+        assert.equal(actual, allowedPolicies.includes(policy) ? token : '', `${event}: ${policy}`);
+      }
+    }
+  }
+});
 
 test('read GitHub action output delimiters and reject incomplete outputs', () => {
   assert.equal(actionOutput('artifact-id<<unique\r\n123\r\nunique\r\n', 'artifact-id'), '123');
