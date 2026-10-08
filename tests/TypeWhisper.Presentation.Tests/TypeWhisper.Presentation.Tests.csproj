@@ -45,6 +45,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/Lexicon.cs" Link="Lexicon.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalApiDataHandler.cs" Link="LocalApiDataHandler.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/CatalogSnapshotCache.cs" Link="CatalogSnapshotCache.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalApiAudioSettings.cs" Link="LocalApiAudioSettings.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs" Link="DictationDictionarySnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationLexiconSnapshot.cs" Link="DictationLexiconSnapshot.cs" />
