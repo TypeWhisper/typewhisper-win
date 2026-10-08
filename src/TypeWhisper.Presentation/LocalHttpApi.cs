@@ -177,6 +177,9 @@ public sealed class LocalHttpApi : IAsyncDisposable
         try
         {
             var request = context.Request;
+            // Verify credentials independently of client-selected routes. Public endpoints affect
+            // authorization below, not whether credential verification runs.
+            var authenticated = !_requireAuthentication || Authenticated(request);
             var publicStatus = request.HttpMethod == "GET" && request.Url?.AbsolutePath == "/v1/status";
             var publicDocs = request.HttpMethod == "GET" && request.Url?.AbsolutePath is "/docs" or "/docs/";
             if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) || request.Headers["Origin"] is not null)
@@ -186,7 +189,7 @@ public sealed class LocalHttpApi : IAsyncDisposable
             // It also covers the public routes, which would otherwise tell other users which model is loaded.
             else if (_peerVerifier is not null && !_peerVerifier.IsOwnUser(request.RemoteEndPoint, Port))
                 response = Error(403, "Only processes of the signed-in user may use this API.");
-            else if (_requireAuthentication && !publicStatus && !publicDocs && !Authenticated(request))
+            else if (!authenticated && !publicStatus && !publicDocs)
                 response = Error(401, "Authentication required.");
             else if (!admitted)
                 response = Error(429, "Too many requests.");
@@ -283,6 +286,8 @@ public sealed class LocalHttpApi : IAsyncDisposable
         context.Response.Headers["Cache-Control"] = "no-store";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+        // HEAD carries the same response metadata, but HttpListener must not receive a body.
+        if (context.Request.HttpMethod == "HEAD") return;
         await context.Response.OutputStream.WriteAsync(response.Body, cancellationToken)
             .AsTask().WaitAsync(cancellationToken).ConfigureAwait(false);
     }

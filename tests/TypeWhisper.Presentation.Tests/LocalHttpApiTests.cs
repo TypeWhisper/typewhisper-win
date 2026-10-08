@@ -245,6 +245,93 @@ public sealed class LocalHttpApiTests
         Assert.Equal(2, calls);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("incorrect")]
+    public async Task EveryProtectedRouteRequiresValidCredentials(string? credential)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        });
+        await server.StartAsync();
+        using var client = Client(server);
+        if (credential is not null)
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credential);
+            client.DefaultRequestHeaders.Add("X-TypeWhisper-API-Token", credential);
+        }
+
+        var publicRoutes = new HashSet<LocalApiRoute>
+        {
+            new("GET", "/v1/status"), new("GET", "/docs"), new("GET", "/docs/")
+        };
+        foreach (var route in LocalApiRouteCatalog.Routes.Where(route => !publicRoutes.Contains(route)))
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(route.Method), route.Path);
+            using var response = await client.SendAsync(request);
+            Assert.True(response.StatusCode == HttpStatusCode.Unauthorized,
+                $"{route.Method} {route.Path} returned {response.StatusCode} without valid credentials.");
+        }
+        Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData("GET", "/v1/status/", false)]
+    [InlineData("GET", "/v1/status/private", false)]
+    [InlineData("GET", "/v1/Status", false)]
+    [InlineData("GET", "/docs/private", false)]
+    [InlineData("GET", "/Docs", false)]
+    [InlineData("GET", "/v1/settings/export?public=true&path=/docs", false)]
+    [InlineData("POST", "/v1/status", false)]
+    [InlineData("POST", "/docs", false)]
+    [InlineData("POST", "/docs/", false)]
+    [InlineData("HEAD", "/v1/status", false)]
+    [InlineData("OPTIONS", "/docs", false)]
+    [InlineData("GET", "/v1/status?path=/v1/settings/export", true)]
+    [InlineData("GET", "/docs?path=/v1/settings/export", true)]
+    [InlineData("GET", "/docs/", true)]
+    public async Task PublicRouteExceptionsNeverDispatchProtectedWork(string method, string path, bool isPublic)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        });
+        await server.StartAsync();
+        using var client = Client(server);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "incorrect");
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        using var response = await client.SendAsync(request);
+        Assert.Equal(isPublic ? HttpStatusCode.OK : HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.DoesNotContain("private", await response.Content.ReadAsStringAsync());
+        Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HeadPreservesAuthorizationAndResponseMetadataWithoutWritingABody(bool authenticated)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        });
+        await server.StartAsync();
+        using var client = Client(server, authenticated);
+        using var request = new HttpRequestMessage(HttpMethod.Head, "/v1/models");
+        using var response = await client.SendAsync(request);
+        Assert.Equal(authenticated ? HttpStatusCode.OK : HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.True(response.Content.Headers.ContentLength > 0);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal(authenticated ? 1 : 0, calls);
+    }
+
     [Fact]
     public async Task RoutesMethodBodyContentTypeAndQueryWithoutChangingBackendResponse()
     {
