@@ -51,7 +51,7 @@ The checkup's automated evidence is recorded locally under `artifacts/checkup`.
 The full runner command is:
 
 ```powershell
-./eng/Test-WinUIHeadless.ps1 -Suite All -CollectCoverage -Configuration Release -ResultsDirectory artifacts/checkup/final
+./eng/Test-WinUIHeadless.ps1 -Suite All -CollectCoverage -Configuration Release -ResultsDirectory artifacts/checkup/verified
 ```
 
 The runner writes `summary.json`, individual TRX files and Core/Presentation
