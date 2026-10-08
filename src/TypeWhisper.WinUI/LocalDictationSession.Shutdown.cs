@@ -60,7 +60,7 @@ internal sealed partial class LocalDictationSession
             await Release(() => { _effects.End(); _audio.Dispose(); return Task.CompletedTask; });
             await Release(() => _recoveryAudio.DisposeAsync().AsTask());
             await Release(() => _inserter.Restored);
-            await Release(() => { _originalField?.Dispose(); _originalField = null; _inserter.Dispose(); _operationCancellation.Dispose(); return Task.CompletedTask; });
+            await Release(async () => { if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null; _inserter.Dispose(); _operationCancellation.Dispose(); });
         }
         finally { _gate.Release(); }
         if (failures.Count > 0) throw new AggregateException("Some resources could not be shut down cleanly.", failures);

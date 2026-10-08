@@ -3,6 +3,7 @@ namespace TypeWhisper.WinUI;
 internal interface IClipboardPastePlatform
 {
     bool CanPaste { get; }
+    Task<bool> VerifyFieldAsync() => Task.FromResult(true);
     Task<IDisposable> BeginAsync(string text);
     bool ClipboardIsOwned { get; }
     uint SendPaste();
@@ -21,12 +22,14 @@ internal static class ClipboardPasteOperation
     /// </summary>
     internal static async Task<ClipboardPasteResult> RunAsync(IClipboardPastePlatform platform, string text)
     {
-        if (!platform.CanPaste) return new(false, Task.CompletedTask);
+        if (!await platform.VerifyFieldAsync() || !platform.CanPaste)
+            return new(false, Task.CompletedTask);
         var lease = await platform.BeginAsync(text);
         uint sent = 0;
         try
         {
-            if (platform.CanPaste && platform.ClipboardIsOwned) sent = platform.SendPaste();
+            if (await platform.VerifyFieldAsync() && platform.CanPaste && platform.ClipboardIsOwned)
+                sent = platform.SendPaste();
         }
         catch
         {

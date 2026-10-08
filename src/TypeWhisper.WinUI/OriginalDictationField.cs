@@ -1,12 +1,16 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Interop.UIAutomationClient;
 using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
 // Capture identity only: never read the user's field contents or select its text.
-internal sealed class OriginalDictationField : IDisposable
+internal sealed class OriginalDictationField : IAsyncDisposable
 {
+    private readonly SerializedBackgroundWork _work = new();
+    private bool _disposed;
+    private long _verifiedAt;
     private readonly IUIAutomation2 _automation = (IUIAutomation2)new CUIAutomation8();
     private IUIAutomationElement? _element;
     private readonly IntPtr _window;
@@ -20,7 +24,10 @@ internal sealed class OriginalDictationField : IDisposable
         _automation.ConnectionTimeout = 2000; _automation.TransactionTimeout = 2000;
     }
 
-    internal static async Task<OriginalDictationField?> CaptureAsync(IntPtr window, uint process, CancellationToken cancellation)
+    internal static Task<OriginalDictationField?> CaptureAsync(IntPtr window, uint process, CancellationToken cancellation) =>
+        Task.Run(() => CaptureCoreAsync(window, process, cancellation), cancellation);
+
+    private static async Task<OriginalDictationField?> CaptureCoreAsync(IntPtr window, uint process, CancellationToken cancellation)
     {
         OriginalDictationField? target = null;
         try
@@ -36,10 +43,11 @@ internal sealed class OriginalDictationField : IDisposable
                 return target;
             }
         }
-        catch (OperationCanceledException) { target?.Dispose(); throw; }
+        catch (OperationCanceledException) { if (target is not null) await target.DisposeAsync(); throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.exception", ex); }
         AppDiagnostics.Write("field.capture.failed");
-        target?.Dispose(); return null;
+        if (target is not null) await target.DisposeAsync();
+        return null;
     }
 
     private bool CaptureFocused()
@@ -105,7 +113,18 @@ internal sealed class OriginalDictationField : IDisposable
         return _windowHostProcess.Value;
     }
 
-    internal bool IsCurrent()
+    // A dispatcher stall must not turn an old background check into permission to paste.
+    internal bool RecentlyVerified => !_disposed && Volatile.Read(ref _verifiedAt) is var verified && verified != 0 &&
+        Stopwatch.GetElapsedTime(verified) < TimeSpan.FromMilliseconds(100) && NativeMethods.GetForegroundWindow() == _window;
+
+    internal Task<bool> IsCurrentAsync(CancellationToken cancellation) => _work.RunAsync(() =>
+    {
+        var current = !_disposed && !cancellation.IsCancellationRequested && IsCurrent();
+        Volatile.Write(ref _verifiedAt, current ? Stopwatch.GetTimestamp() : 0);
+        return Task.FromResult(current);
+    }, cancellation);
+
+    private bool IsCurrent()
     {
         try
         {
@@ -143,7 +162,10 @@ internal sealed class OriginalDictationField : IDisposable
         finally { Release(range); Release(pattern); }
     }
 
-    internal async Task<bool> RestoreAsync(CancellationToken cancellation)
+    internal Task<bool> RestoreAsync(CancellationToken cancellation) =>
+        _work.RunAsync(() => _disposed ? Task.FromResult(false) : RestoreCoreAsync(cancellation), cancellation);
+
+    private async Task<bool> RestoreCoreAsync(CancellationToken cancellation)
     {
         try
         {
@@ -225,7 +247,17 @@ internal sealed class OriginalDictationField : IDisposable
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("user32.dll", SetLastError = true)] private static extern bool AttachThreadInput(uint source, uint target, bool attach);
 
-    public void Dispose() { Release(_element); _element = null; Release(_automation); }
+    public async ValueTask DisposeAsync()
+    {
+        await _work.RunAsync(() =>
+        {
+            if (_disposed) return Task.FromResult(false);
+            _disposed = true;
+            Volatile.Write(ref _verifiedAt, 0);
+            Release(_element); _element = null; Release(_automation);
+            return Task.FromResult(true);
+        });
+    }
     private static void Release(object? value) { if (value is not null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr window, int command);
 }

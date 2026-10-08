@@ -767,7 +767,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     || RejectLanguage(workflow?.InputLanguage, rejected))) return;
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
-                _originalField?.Dispose(); _originalField = null;
+                if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null;
                 _target = adoptEarlyCapture ? _earlyTarget : NativeMethods.GetForegroundWindow();
                 NativeMethods.GetWindowThreadProcessId(_target, out var processId);
                 _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
@@ -1042,7 +1042,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         if (_originalField is null) { AppDiagnostics.Write("delivery.no-captured-field"); return false; }
                         if (OutputPreferences.Current.LockPasteToFocusedField &&
                             !await _originalField.RestoreAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.restore-failed"); return false; }
-                        if (!_originalField.IsCurrent()) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
+                        if (!await _originalField.IsCurrentAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
                     if (NativeMethods.GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
                     // Spacing and casing for the cursor position only reach the target field; history, API and
@@ -1060,7 +1060,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     var inserted = await _inserter.InsertAsync(pasted, _target, () =>
                         !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
-                        (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.IsCurrent() == true));
+                        (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
+                        async () => !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
+                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)));
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
                         _ = ObserveCorrectionsAfterPasteAsync(pasted, _target, _operationCancellation.Token);
                     return inserted;
@@ -1133,7 +1135,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     if (!_disposed) Changed?.Invoke();
                 }
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-                if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
+                if (!_audio.IsRecording) { if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
                 if (finishingRecording) PublishMicrophoneNoticeAfterDictation();
                 if (!_audio.IsRecording) AppDiagnostics.EndDictation();
             }

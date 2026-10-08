@@ -11,14 +11,14 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     /// <summary>Completes once the latest paste restored the previous clipboard. Never faults.</summary>
     internal Task Restored => _restored;
     /// <summary>Returns once Ctrl+V was sent. The clipboard stays gated until <see cref="Restored"/> completes.</summary>
-    internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null)
+    internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null, Func<Task<bool>>? verifyFieldAsync = null)
     {
         var dictation = AppDiagnostics.CurrentDictation;
         await TransactionGate.WaitAsync();
         var releaseNow = true;
         try
         {
-            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text);
+            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync), text);
             AppDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
             _restored = ReleaseAfterRestoreAsync(result.Restored, dictation);
             releaseNow = false;
@@ -41,9 +41,10 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     }
     public void Dispose() => _clipboard.Dispose();
 
-    private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField) : IClipboardPastePlatform
+    private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField, Func<Task<bool>>? verifyFieldAsync) : IClipboardPastePlatform
     {
         private IClipboardLease? _lease;
+        public Task<bool> VerifyFieldAsync() => verifyFieldAsync?.Invoke() ?? Task.FromResult(true);
         public bool CanPaste => target != IntPtr.Zero && NativeMethods.GetForegroundWindow() == target && (verifyField?.Invoke() ?? true)
             && !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
         public bool ClipboardIsOwned => _lease is not null && clipboard.IsCurrent(_lease);
