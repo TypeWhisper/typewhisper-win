@@ -1,8 +1,13 @@
 using System.IO;
+using System.IO.Compression;
+using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using SharpCompress.Common;
+using SharpCompress.Writers;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.SherpaOnnx;
 using TypeWhisper.PluginSDK.Models;
@@ -22,7 +27,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.0", manifest.Version);
+        Assert.Equal("1.2.1", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -485,6 +490,145 @@ public class SherpaOnnxPluginTests
     }
 
     [Fact]
+    public async Task CudaRuntimeInstaller_InstallsDownloadsThatMatchThePinnedHashes()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
+        try
+        {
+            var archive = CreateSherpaCudaArchive();
+            var wheel = CreateCublasWheel();
+            var handler = new PinnedDownloadHandler(archive, wheel);
+            using var client = new HttpClient(handler);
+            var installer = new SherpaCudaRuntimeInstaller(tempDir, client, CreateCudaRuntimePackage(archive, wheel));
+
+            Assert.False(installer.IsInstalled);
+            await installer.EnsureInstalledAsync(CancellationToken.None);
+
+            Assert.True(installer.IsInstalled);
+            Assert.Equal([TestArchiveUrl, TestWheelUrl], handler.RequestedUrls);
+            Assert.Equal("cublas", File.ReadAllText(Path.Join(installer.RuntimeDirectory, "cublas64_12.dll")));
+            Assert.Equal("onnxruntime", File.ReadAllText(Path.Join(installer.RuntimeDirectory, "sherpaort.dll")));
+            Assert.False(File.Exists(Path.Join(installer.RuntimeDirectory, "RECORD")));
+            Assert.Equal(["installed.json", "native"], ListRuntimeRootEntries(tempDir));
+
+            // A verified installation is not downloaded again.
+            await installer.EnsureInstalledAsync(CancellationToken.None);
+            Assert.Equal(2, handler.RequestedUrls.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CudaRuntimeInstaller_RejectsArchiveThatDoesNotMatchThePinnedHash()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
+        try
+        {
+            var archive = CreateSherpaCudaArchive();
+            var wheel = CreateCublasWheel();
+            var handler = new PinnedDownloadHandler(archive, wheel);
+            using var client = new HttpClient(handler);
+            var package = CreateCudaRuntimePackage(archive, wheel) with { ArchiveSha256 = new string('0', 64) };
+            var installer = new SherpaCudaRuntimeInstaller(tempDir, client, package);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => installer.EnsureInstalledAsync(CancellationToken.None));
+
+            Assert.Equal("The downloaded sherpa-onnx CUDA runtime did not match the expected checksum.", error.Message);
+            Assert.False(installer.IsInstalled);
+            // Nothing was extracted, the wheel was never requested and the rejected download is gone.
+            Assert.Equal([TestArchiveUrl], handler.RequestedUrls);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(installer.RuntimeDirectory));
+            Assert.Equal(["native"], ListRuntimeRootEntries(tempDir));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CudaRuntimeInstaller_RejectsWheelThatDoesNotMatchThePinnedHash()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
+        try
+        {
+            var archive = CreateSherpaCudaArchive();
+            var wheel = CreateCublasWheel();
+            var handler = new PinnedDownloadHandler(archive, wheel);
+            using var client = new HttpClient(handler);
+            var package = CreateCudaRuntimePackage(archive, wheel);
+            var tampered = package with { Dependencies = [package.Dependencies[0] with { Sha256 = new string('0', 64) }] };
+            var installer = new SherpaCudaRuntimeInstaller(tempDir, client, tampered);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => installer.EnsureInstalledAsync(CancellationToken.None));
+
+            Assert.Equal(
+                "The downloaded CUDA dependency package nvidia-cublas-cu12 1.0.0 did not match the expected checksum.",
+                error.Message);
+            Assert.False(installer.IsInstalled);
+            // Only the verified archive reached the runtime directory; the rejected wheel left no DLL behind.
+            Assert.Equal(
+                ["onnxruntime.dll", "onnxruntime_providers_cuda.dll", "sherpa-onnx-c-api.dll", "sherpaort.dll"],
+                Directory.GetFiles(installer.RuntimeDirectory).Select(path => Path.GetFileName(path)).Order(StringComparer.Ordinal));
+            Assert.Equal(["installed.json", "native"], ListRuntimeRootEntries(tempDir));
+
+            // The verified archive stays installed, so a retry with the correct pin resumes with the wheel alone.
+            var repaired = new SherpaCudaRuntimeInstaller(tempDir, client, package);
+            await repaired.EnsureInstalledAsync(CancellationToken.None);
+            Assert.True(repaired.IsInstalled);
+            Assert.Equal([TestArchiveUrl, TestWheelUrl, TestWheelUrl], handler.RequestedUrls);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CudaRuntimeInstaller_ReinstallsRuntimeFilesThatHaveNoVerifiedReceipt()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
+        try
+        {
+            // An installation made before downloads were verified: every file is present and patched,
+            // but no receipt says where the files came from.
+            var nativeDir = Path.Join(tempDir, "Runtimes", "sherpa-onnx-cuda", "test-v1", "native");
+            Directory.CreateDirectory(nativeDir);
+            foreach (var fileName in new[] { "onnxruntime.dll", "onnxruntime_providers_cuda.dll", "sherpaort.dll", "cublas64_12.dll" })
+                File.WriteAllText(Path.Join(nativeDir, fileName), "unverified");
+            File.WriteAllBytes(
+                Path.Join(nativeDir, "sherpa-onnx-c-api.dll"),
+                Encoding.ASCII.GetBytes("prefix sherpaort.dll\0\0\0 suffix"));
+            var archive = CreateSherpaCudaArchive();
+            var wheel = CreateCublasWheel();
+            var handler = new PinnedDownloadHandler(archive, wheel);
+            using var client = new HttpClient(handler);
+            var installer = new SherpaCudaRuntimeInstaller(tempDir, client, CreateCudaRuntimePackage(archive, wheel));
+
+            Assert.False(installer.IsInstalled);
+            await installer.EnsureInstalledAsync(CancellationToken.None);
+
+            Assert.True(installer.IsInstalled);
+            Assert.Equal([TestArchiveUrl, TestWheelUrl], handler.RequestedUrls);
+            Assert.Equal("cublas", File.ReadAllText(Path.Join(nativeDir, "cublas64_12.dll")));
+            Assert.Equal("onnxruntime", File.ReadAllText(Path.Join(nativeDir, "onnxruntime.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void NativeRuntime_ResolvesCpuRuntimeFromPluginAssemblyDirectory()
     {
         var pluginAssembly = Path.Join("C:", "TypeWhisper", "Plugins", "com.typewhisper.sherpa-onnx", "TypeWhisper.Plugin.SherpaOnnx.dll");
@@ -650,6 +794,84 @@ public class SherpaOnnxPluginTests
 
     private static string GetRepoRoot() =>
         Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
+
+    private const string TestArchiveUrl = "https://example.test/sherpa-onnx-cuda.tar.bz2";
+    private const string TestWheelUrl = "https://example.test/nvidia_cublas_cu12-1.0.0-py3-none-win_amd64.whl";
+
+    private static SherpaCudaRuntimePackage CreateCudaRuntimePackage(byte[] archive, byte[] wheel) => new(
+        "test-v1",
+        TestArchiveUrl,
+        Sha256Hex(archive),
+        [new CudaDependencyPackage("nvidia-cublas-cu12", "1.0.0", TestWheelUrl, Sha256Hex(wheel), ["cublas64_12.dll"])]);
+
+    // The real asset is a tar.bz2 whose native directory is found by sherpa-onnx-c-api.dll.
+    private static byte[] CreateSherpaCudaArchive() => CreateTarBz2(
+        ("sherpa-onnx-test/lib/sherpa-onnx-c-api.dll", "prefix onnxruntime.dll\0 suffix"),
+        ("sherpa-onnx-test/lib/onnxruntime.dll", "onnxruntime"),
+        ("sherpa-onnx-test/lib/onnxruntime_providers_cuda.dll", "cuda-provider"));
+
+    private static byte[] CreateCublasWheel() => CreateZipArchive(
+        ("nvidia/cublas/bin/cublas64_12.dll", "cublas"),
+        ("nvidia_cublas_cu12-1.0.0.dist-info/RECORD", "ignore"));
+
+    private static byte[] CreateTarBz2(params (string Path, string Content)[] entries)
+    {
+        using var output = new MemoryStream();
+        using (var writer = WriterFactory.OpenWriter(output, ArchiveType.Tar, new WriterOptions(CompressionType.BZip2)))
+        {
+            foreach (var (path, content) in entries)
+            {
+                using var source = new MemoryStream(Encoding.ASCII.GetBytes(content));
+                writer.Write(path, source, null);
+            }
+        }
+
+        return output.ToArray();
+    }
+
+    private static byte[] CreateZipArchive(params (string Path, string Content)[] entries)
+    {
+        using var output = new MemoryStream();
+        using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (path, content) in entries)
+            {
+                using var stream = archive.CreateEntry(path).Open();
+                stream.Write(Encoding.ASCII.GetBytes(content));
+            }
+        }
+
+        return output.ToArray();
+    }
+
+    private static string Sha256Hex(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static IEnumerable<string> ListRuntimeRootEntries(string pluginDataDirectory) =>
+        Directory.EnumerateFileSystemEntries(Path.Join(pluginDataDirectory, "Runtimes", "sherpa-onnx-cuda", "test-v1"))
+            .Select(path => Path.GetFileName(path))
+            .Order(StringComparer.Ordinal);
+
+    private sealed class PinnedDownloadHandler(byte[] archive, byte[] wheel) : HttpMessageHandler
+    {
+        public List<string> RequestedUrls { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri!.ToString();
+            RequestedUrls.Add(url);
+            var body = url switch
+            {
+                TestArchiveUrl => archive,
+                TestWheelUrl => wheel,
+                _ => null
+            };
+            return Task.FromResult(body is null
+                ? new HttpResponseMessage(HttpStatusCode.NotFound)
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
+        }
+    }
 
     private sealed class FakeCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
     {
