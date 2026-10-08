@@ -4,11 +4,13 @@
     <Version>1.2.1</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio" />
     <Compile Remove="Tests/**/*.cs" />
+    <Compile Include="../shared/PortableLocalization.cs" Link="Shared/PortableLocalization.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.SupertonicTts.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <Content Include="manifest.json;Localization/*.json;Scripts/**/*;THIRD-PARTY-NOTICES.md;Licenses/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">

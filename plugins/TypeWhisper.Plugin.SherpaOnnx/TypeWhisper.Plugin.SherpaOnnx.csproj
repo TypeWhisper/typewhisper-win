@@ -14,8 +14,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
     <ProjectReference Include="../TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" ReferenceOutputAssembly="false" GlobalPropertiesToRemove="RuntimeIdentifier;RuntimeIdentifiers;TargetFramework" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
-    <PackageReference Include="SharpCompress" Version="0.48.0" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" />
+    <PackageReference Include="SharpCompress" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="manifest.json">

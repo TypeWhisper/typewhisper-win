@@ -16,13 +16,19 @@ Each descriptor builds and supplies its own folder. `eng/PortablePlugin.targets`
 to the development bundle. Independently distributed plugins do not need a descriptor
 in the application repository; they only need to provide the package described below.
 
+NuGet package versions are not declared in plugin projects. `Directory.Packages.props` at the
+repository root manages every version centrally, and a `PackageReference` in a plugin or test
+project names the package only. A plugin that has to stay on another version sets
+`VersionOverride` on its reference and says why, as `TypeWhisper.Plugin.GemmaLocal` does for LLamaSharp.
+
 Providers have independent `Tests/*.csproj` suites where supplied. Run one suite directly
 with `dotnet test`, or use `eng/Test-WinUIHeadless.ps1`, which discovers plugin-owned
 test projects alongside the SDK/host and presentation checks. Tests do not require
 Computer Use, a desktop, downloaded models, or live API credentials.
 
 The Plugins workflow builds only packages with changes under their own directory
-on pull requests and pushes to `main`.
+on pull requests and pushes to `main`. A changed source under `plugins/shared/`
+counts for every package whose project links it (see `plugins/shared/README.md`).
 Shared SDK, host and workflow edits do not expand that build matrix. For a full
 cross-plugin compatibility sweep, start Plugins manually with **Run workflow**.
 Manifest validation and the separate headless test suites still run normally.

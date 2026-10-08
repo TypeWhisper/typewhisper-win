@@ -7,7 +7,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="System.Speech" Version="10.0.0" />
+    <PackageReference Include="NAudio" />
+    <PackageReference Include="System.Speech" />
   </ItemGroup>
 </Project>

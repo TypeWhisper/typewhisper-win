@@ -468,4 +468,4 @@ internal sealed record GemmaModelDefinition(
     string DownloadUrl,
     string FileName,
     long SizeBytes,
-    string Sha256);
+    string Sha256) : IDownloadableModel;

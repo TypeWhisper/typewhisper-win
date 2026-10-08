@@ -6,10 +6,12 @@ using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
-namespace TypeWhisper.Plugin.Voxtral;
+namespace TypeWhisper.Plugin.Shared;
 
-// Plugin-local connection and persistence support. No runtime dependency on another provider.
-internal sealed class ProviderConnection(HttpClient http) : IDisposable
+// Plugin-local connection and persistence support. No runtime dependency on another provider:
+// this file is linked into each provider plugin and compiles into that plugin's own assembly.
+// The plugin's partial file implements the variation points below and adds its provider calls.
+internal sealed partial class ProviderConnection(HttpClient http) : IDisposable
 {
     internal sealed record Configuration(string? SecretName, Dictionary<string, string> Values);
     private Configuration _configuration = new(null, []);
@@ -24,6 +26,12 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         try { return Host?.Localization.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en; }
         catch (NotSupportedException) { return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de" ? de : en; }
     }
+
+    // Variation points. Every linking plugin implements the two static ones in its own partial file;
+    // the hook is optional and lets a plugin drop values that were only valid for the previous key.
+    private static partial string NormalizeLanguage(string language);
+    private static partial IEnumerable<string> ParseTerms(string? prompt);
+    partial void OnKeyReplacing(ref Configuration next, string? key);
 
     internal async Task ActivateAsync(IPluginHostServices host)
     {
@@ -44,9 +52,8 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
             try
             {
                 if (staged is not null) await host.StoreSecretAsync(staged, key!).ConfigureAwait(false);
-                var values = new Dictionary<string, string>(previous.Values);
-                if (!string.Equals(key, Key, StringComparison.Ordinal)) values.Remove("modelCatalog");
-                var next = previous with { SecretName = staged, Values = values };
+                var next = previous with { SecretName = staged };
+                OnKeyReplacing(ref next, key);
                 host.SetSetting("configuration", next);
                 _configuration = next; Key = key;
             }
@@ -66,6 +73,7 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         { host.Log(PluginLogLevel.Warning, "An inactive encrypted provider key could not be removed."); }
     }
+    // expectedKey rejects a value derived from a key the user replaced meanwhile, e.g. a model catalog.
     internal async Task SaveAsync(string id, string value, CancellationToken ct, string? expectedKey = null)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
@@ -116,40 +124,14 @@ internal sealed class ProviderConnection(HttpClient http) : IDisposable
     internal static double Number(JsonElement element, string name, double fallback = 0) =>
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value)
         && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number) && number >= 0 ? number : fallback;
-    internal static string? Language(string? language) => string.IsNullOrWhiteSpace(language) || language.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : language.Trim();
+    internal static string? Language(string? language) => string.IsNullOrWhiteSpace(language) || language.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : NormalizeLanguage(language.Trim());
     internal static string[] Terms(string? prompt) => PluginDictionaryTerms.Clip(
-        prompt?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [], new(MaxTerms: 100, MaxTotalChars: 4000)).ToArray();
+        ParseTerms(prompt), new(MaxTerms: 100, MaxTotalChars: 4000)).ToArray();
     internal static void Audio(byte[] audio, bool translate, bool supportsTranslation, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         if (translate && !supportsTranslation) throw new NotSupportedException("This provider does not support translation.");
         if (audio.Length == 0) throw new ArgumentException("Audio is empty.", nameof(audio));
-    }
-    internal async Task<PluginTranscriptionResult> MultipartAsync(string url, string model, byte[] audio, string? language,
-        string? prompt, CancellationToken ct, string? key = null, string fileField = "file", string? responseFormat = null)
-    {
-        using var request = Request(HttpMethod.Post, url, key);
-        using var form = new MultipartFormDataContent();
-        var file = new ByteArrayContent(audio); file.Headers.ContentType = new("audio/wav"); form.Add(file, fileField, "audio.wav");
-        form.Add(new StringContent(model), "model");
-        if (responseFormat is not null) form.Add(new StringContent(responseFormat), "response_format");
-        if (Language(language) is { } lang) form.Add(new StringContent(lang), "language");
-        if (!string.IsNullOrWhiteSpace(prompt)) form.Add(new StringContent(prompt), "prompt");
-        request.Content = form;
-        using var document = await ReadAsync(request, ct).ConfigureAwait(false); var root = document.RootElement;
-        var text = Text(root, "text") ?? throw InvalidResponse();
-        var segments = new List<PluginTranscriptionSegment>(); float? noSpeech = null;
-        if (root.TryGetProperty("segments", out var rawSegments) && rawSegments.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var segment in rawSegments.EnumerateArray())
-            {
-                var start = Number(segment, "start"); var end = Number(segment, "end");
-                if (end >= start && Text(segment, "text") is { } segmentText) segments.Add(new(segmentText, start, end));
-                var probability = Number(segment, "no_speech_prob", -1);
-                if (probability is >= 0 and <= 1) noSpeech = noSpeech is null ? (float)probability : Math.Min(noSpeech.Value, (float)probability);
-            }
-        }
-        return new(text.Trim(), Text(root, "language") ?? Language(language), Number(root, "duration"), noSpeech) { Segments = segments };
     }
     public void Dispose() { http.Dispose(); _gate.Dispose(); }
 }

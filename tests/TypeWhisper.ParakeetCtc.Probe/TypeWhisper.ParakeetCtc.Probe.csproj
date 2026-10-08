@@ -3,7 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="Moq" Version="4.*" />
+    <PackageReference Include="NAudio" />
+    <PackageReference Include="Moq" />
   </ItemGroup>
 </Project>
