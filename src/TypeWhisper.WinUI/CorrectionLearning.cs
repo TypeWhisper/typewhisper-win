@@ -97,6 +97,7 @@ internal static class CorrectionLearning
         var learned = LearnedCorrectionStore.Save(DictationDictionarySnapshot.StoragePath, suggestions);
         if (learned.Count > 0)
         {
+            DictationDictionarySnapshot.Invalidate();
             DictionaryChanged?.Invoke();
             try { CorrectionsLearned?.Invoke(learned); }
             catch (Exception e) when (e is not OutOfMemoryException)

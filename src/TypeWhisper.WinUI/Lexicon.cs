@@ -31,7 +31,7 @@ internal sealed class Lexicon
             try
             {
                 if (File.Exists(snippetPath)) _ = LexiconTransfer.ReadSnippets(File.ReadAllText(snippetPath));
-                _snippets = new(snippetPath);
+                _snippets = OpenSnippets(snippetPath);
                 RefreshSnippets();
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -45,11 +45,26 @@ internal sealed class Lexicon
             {
                 _ = LexiconTransfer.ReadDictionary(File.ReadAllText(dictionaryPath), allowPackEntries: true);
             }
-            _dictionary = new(dictionaryPath);
+            _dictionary = OpenDictionary(dictionaryPath);
             RefreshDictionary();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         { LastError = _loadError = Loc.T("Dictionary could not be loaded: {0}", ex.Message); }
+    }
+
+    // The services raise their event only after a successful write, so a dictation started after an edit saved
+    // here never reuses the recording snapshot built before it.
+    private static DictionaryService OpenDictionary(string path)
+    {
+        var dictionary = new DictionaryService(path);
+        dictionary.EntriesChanged += DictationDictionarySnapshot.Invalidate;
+        return dictionary;
+    }
+    private static SnippetService OpenSnippets(string path)
+    {
+        var snippets = new SnippetService(path);
+        snippets.SnippetsChanged += DictationSnippetSnapshot.Invalidate;
+        return snippets;
     }
 
     internal void ReloadDictionary()
@@ -58,7 +73,7 @@ internal sealed class Lexicon
         try
         {
             if (File.Exists(_dictionaryPath)) _ = LexiconTransfer.ReadDictionary(File.ReadAllText(_dictionaryPath), allowPackEntries: true);
-            _dictionary = new(_dictionaryPath); RefreshDictionary(); _loadError = null;
+            _dictionary = OpenDictionary(_dictionaryPath); RefreshDictionary(); _loadError = null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         { LastError = _loadError = Loc.T("Dictionary could not be loaded."); }
@@ -78,7 +93,7 @@ internal sealed class Lexicon
         try
         {
             if (File.Exists(_snippetPath)) _ = LexiconTransfer.ReadSnippets(File.ReadAllText(_snippetPath));
-            _snippets = new(_snippetPath); RefreshSnippets();
+            _snippets = OpenSnippets(_snippetPath); RefreshSnippets();
             if (LastError == _snippetLoadError) LastError = null;
             _snippetLoadError = null;
         }

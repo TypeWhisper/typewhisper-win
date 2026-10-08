@@ -8,6 +8,8 @@ namespace TypeWhisper.WinUI;
 internal sealed class DictationDictionarySnapshot
 {
     internal static string StoragePath => WinUIProfile.DataPath("dictionary.json");
+    // One compiled snapshot serves every dictation until dictionary.json changes.
+    private static readonly CatalogSnapshotCache<DictationDictionarySnapshot> Cache = new(Read, snapshot => snapshot.Error is null);
     private readonly DictionaryEntry[] _entries;
     private readonly TypeWhisper.Core.Interfaces.IVocabularyBoostingService _boosting;
     private readonly DictionaryService.CorrectionSet _corrections;
@@ -23,7 +25,12 @@ internal sealed class DictationDictionarySnapshot
     internal IReadOnlyList<string> EnabledTerms => _entries.Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Term)
         .Select(e => e.Original).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-    internal static DictationDictionarySnapshot Load(string path)
+    internal static DictationDictionarySnapshot Load(string path) => Cache.Get(path);
+
+    // Writers inside the app announce their edits; the file stamp alone covers sync clients and other processes.
+    internal static void Invalidate() => Cache.Invalidate();
+
+    private static DictationDictionarySnapshot Read(string path)
     {
         try
         {

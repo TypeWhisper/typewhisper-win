@@ -8,6 +8,8 @@ namespace TypeWhisper.WinUI;
 internal sealed class DictationSnippetSnapshot
 {
     internal static string StoragePath => Path.Combine(Path.GetDirectoryName(DictationDictionarySnapshot.StoragePath)!, "snippets.json");
+    // One parsed catalog serves every dictation until snippets.json changes, including a usage count written after a recording.
+    private static readonly CatalogSnapshotCache<DictationSnippetSnapshot> Cache = new(Read, snapshot => snapshot.Error is null);
     private readonly Snippet[] _entries;
     internal string? Error { get; }
     private DictationSnippetSnapshot(Snippet[] entries, string? error = null) { _entries = entries; Error = error; }
@@ -23,7 +25,12 @@ internal sealed class DictationSnippetSnapshot
         return entries;
     }
 
-    internal static DictationSnippetSnapshot Load(string path)
+    internal static DictationSnippetSnapshot Load(string path) => Cache.Get(path);
+
+    // Writers inside the app announce their edits; the file stamp alone covers sync clients and other processes.
+    internal static void Invalidate() => Cache.Invalidate();
+
+    private static DictationSnippetSnapshot Read(string path)
     {
         try { return new(ReadEntries(path)); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
