@@ -243,6 +243,27 @@ public sealed class HistoryFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public void OperationCacheStaysWithinItsBoundAndFollowsTheFolder()
+    {
+        for (var i = 0; i < 12; i++)
+            WriteMacOperation("historyContent", MacContent(Now.AddMinutes(i)), Now.AddMinutes(i), $"000000{i:00}-0000-4000-8000-000000000000");
+        var cache = new HistorySyncOperationCache(capacity: 8);
+        var state = new HistorySyncState { Enabled = true };
+
+        var result = HistoryFolderSync.Sync(_folder, "windows-transport", state, [], "PC", "1", Now, default, null, cache);
+
+        Assert.Equal(1, result.ChangesApplied);
+        Assert.Equal(12, state.AppliedOperationIds.Count);
+        Assert.Equal(8, cache.Count);
+        // Files beyond the bound are read again instead of evicting the remembered ones.
+        HistoryFolderSync.Sync(_folder, "windows-transport", state, result.Records!, "PC", "1", Now.AddMinutes(1), default, null, cache);
+        Assert.Equal(8, cache.Count);
+        // Another folder has nothing in common with the remembered paths.
+        HistoryFolderSync.Sync(Path.Combine(_folder, "other"), "windows-transport", new HistorySyncState { Enabled = true }, [], "PC", "1", Now, default, null, cache);
+        Assert.Equal(0, cache.Count);
+    }
+
+    [Fact]
     public void RecordsDevicesForHistoryOriginNames()
     {
         Directory.CreateDirectory(Path.Combine(Package, "devices"));

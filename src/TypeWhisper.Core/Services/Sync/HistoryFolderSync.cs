@@ -65,7 +65,6 @@ public static class HistoryFolderSync
     public const string Generation = "history-v1";
     private const int PayloadVersion = 1;
     private static readonly TimeSpan DeletionRetention = TimeSpan.FromDays(90);
-    private static readonly Dictionary<string, ((long, DateTime) Stamp, HistorySyncOperation? Operation)> Cache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions Json = new(CloudFolderSyncJson.Options)
     {
         // macOS omits missing optional keys instead of writing null.
@@ -86,10 +85,11 @@ public static class HistoryFolderSync
     /// <summary>
     /// Publishes local History changes, reads every History operation in the folder and merges the winners.
     /// Mutates <paramref name="state"/>; persist it only after the returned records were committed.
+    /// A <paramref name="cache"/> owned by the caller spares re-reading unchanged operation files on later passes.
     /// </summary>
     public static HistorySyncResult Sync(string folderPath, string transportDeviceId, HistorySyncState state,
         IReadOnlyList<TranscriptionRecord> records, string deviceName, string appVersion, DateTime now, CancellationToken cancellationToken = default,
-        HistorySyncAudioAccess? audio = null)
+        HistorySyncAudioAccess? audio = null, HistorySyncOperationCache? cache = null)
     {
         now = Utc(now);
         var package = CloudFolderSyncEngine.PackagePath(folderPath);
@@ -105,7 +105,7 @@ public static class HistoryFolderSync
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         cancellationToken.ThrowIfCancellationRequested();
         ReadDevices(package, state);
-        var operations = ReadOperations(Path.Combine(package, "ops"), cancellationToken);
+        var operations = ReadOperations(Path.Combine(package, "ops"), cancellationToken, cache);
         var (merged, applied, deferred) = Merge(package, records, operations, transportDeviceId, state, audio);
         // Audio still downloading from the cloud provider is retried on the next pass.
         state.AppliedOperationIds.UnionWith(operations.Select(operation => operation.OperationId).Where(id => !deferred.Contains(id)));
@@ -246,10 +246,11 @@ public static class HistoryFolderSync
 
     // Reading and merging -------------------------------------------------------------------------
 
-    private static List<HistorySyncOperation> ReadOperations(string operationsPath, CancellationToken cancellationToken)
+    private static List<HistorySyncOperation> ReadOperations(string operationsPath, CancellationToken cancellationToken, HistorySyncOperationCache? cache)
     {
         var operations = new List<HistorySyncOperation>();
         if (!Directory.Exists(operationsPath)) return operations;
+        cache?.BeginPass(operationsPath);
         foreach (var device in Directory.EnumerateDirectories(operationsPath))
             foreach (var file in Directory.EnumerateFiles(device, "*.json"))
             {
@@ -260,14 +261,12 @@ public static class HistoryFolderSync
                     // Operation files are write-once, so an unchanged size and time means an unchanged file.
                     var info = new FileInfo(file);
                     var stamp = (info.Length, info.LastWriteTimeUtc);
-                    HistorySyncOperation? operation;
-                    lock (Cache)
-                        if (Cache.TryGetValue(file, out var cached) && cached.Stamp == stamp) { if (cached.Operation is { } hit) operations.Add(hit); continue; }
+                    if (cache is not null && cache.TryGet(file, stamp, out var cached)) { if (cached is { } hit) operations.Add(hit); continue; }
                     // Dictionary and snippet operations share the folder; only History operations matter here.
                     var text = File.ReadAllText(file);
-                    operation = text.Contains("\"history\"", StringComparison.Ordinal) ? JsonSerializer.Deserialize<HistorySyncOperation>(text, Json) : null;
+                    var operation = text.Contains("\"history\"", StringComparison.Ordinal) ? JsonSerializer.Deserialize<HistorySyncOperation>(text, Json) : null;
                     if (operation is not null && !IsValid(operation)) operation = null;
-                    lock (Cache) Cache[file] = (stamp, operation);
+                    cache?.Set(file, stamp, operation);
                     if (operation is not null) operations.Add(operation);
                 }
                 catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or NotSupportedException)

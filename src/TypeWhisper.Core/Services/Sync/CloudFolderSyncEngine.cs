@@ -615,9 +615,16 @@ public static class CloudFolderSyncEngine
 
     private static void WritePackageMetadata(string packagePath, string devicesPath, string deviceId, DateTime now)
     {
-        WriteJson(
-            new CloudFolderSyncManifest(1, "TypeWhisper", now),
-            Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName))));
+        var manifestPath = Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName)));
+        try
+        {
+            WriteJson(new CloudFolderSyncManifest(1, "TypeWhisper", now), manifestPath);
+        }
+        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && HasCompatibleManifest(manifestPath))
+        {
+            // Every device writes the same manifest. When another device replaces it at this very moment, Windows
+            // refuses the second replacement; the pass goes on with the manifest that device just wrote.
+        }
 
         var devicePath = Path.Combine(devicesPath, $"{EnsureRelativePathSegment(deviceId, nameof(deviceId))}.json");
         var existing = ReadDevice(devicePath);
@@ -629,6 +636,19 @@ public static class CloudFolderSyncEngine
             foreach (var (key, value) in existing)
                 if (!device.ContainsKey(key)) device[key] = value?.DeepClone();
         WriteJson(device, devicePath);
+    }
+
+    private static bool HasCompatibleManifest(string path)
+    {
+        try
+        {
+            var manifest = JsonSerializer.Deserialize<CloudFolderSyncManifest>(File.ReadAllText(path), CloudFolderSyncJson.Options);
+            return manifest is { SchemaVersion: 1, CreatedBy: "TypeWhisper" };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
     }
 
     private static JsonObject? ReadDevice(string path)
