@@ -193,7 +193,7 @@ public sealed partial class HistoryWindow : Window
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("History window load failed: {0}", ex);
+            AppDiagnostics.WriteFailure("history.load.failed", ex);
             _loadError = Loc.T("History could not be loaded. Your files were not changed.");
         }
         finally { _loading = false; }

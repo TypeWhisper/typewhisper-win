@@ -20,7 +20,6 @@ public partial class App : Application
         AppTheme.Apply(this);
         UnhandledException += (_, args) =>
         {
-            System.Diagnostics.Debug.WriteLine(args.Exception);
             AppDiagnostics.WriteFailure("app.unhandled-exception", args.Exception);
             args.Handled = true;
         };
@@ -517,7 +516,7 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Application shutdown failed: {0}", ex);
+            AppDiagnostics.WriteFailure("app.shutdown.failed", ex);
             _tray?.SetShutdownState(Loc.T("Shutdown failed. Work is stopped."));
             _window?.ShowShutdownFailure();
             if (_window?.CanRetryRecorderShutdown == true)

@@ -910,7 +910,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
-                        error => { LivePreviewText = Loc.T("Live preview unavailable · final transcription will continue."); LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
+                        _ => { LivePreviewText = Loc.T("Live preview unavailable · final transcription will continue."); LivePreviewChanged?.Invoke(); AppDiagnostics.Write("dictation.live-preview.failed"); });
                 AppDiagnostics.Write("dictation.startup.complete");
                 preparingRecording = false;
                 return;
@@ -1104,7 +1104,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _livePreview.Cancel();
             try { await StopRecoveryCaptureAsync(preserve: preserveRecovery); }
             catch (Exception stopError) when (stopError is not OutOfMemoryException)
-            { System.Diagnostics.Debug.WriteLine(stopError); }
+            { AppDiagnostics.Write("dictation.recovery-stop.failed", stopError); }
             finally { _effects.End(); await _livePreview.StopAsync(); }
             _sounds.PlayErrorSound();
             SetStatus(Loc.T("Dictation failed: {0}", ex.Message), DictationPhase.Error);
@@ -1120,7 +1120,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     await StopRecoveryCaptureAsync(preserve: false);
                     _effects.End();
                     try { await previousRecordingWork; }
-                    catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { if (ex is not OperationCanceledException) AppDiagnostics.Write("dictation.previous-work.failed", ex); }
                     // Status may have been published while early capture was still active.
                     // Refresh the tray and overlay after discarding an aborted startup.
                     if (!_disposed) Changed?.Invoke();
@@ -1143,7 +1143,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (_disposed || _operationCancellation.Token != operation || operation.IsCancellationRequested) return;
         try { CorrectionLearning.Observe(text, target); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceWarning("Correction learning could not start: {0}", ex.GetType().Name); }
+        { AppDiagnostics.Write("correction.observe.start-failed", ex); }
     }
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>

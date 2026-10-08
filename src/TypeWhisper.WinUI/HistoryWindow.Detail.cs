@@ -225,7 +225,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("History save failed: {0}", ex);
+            AppDiagnostics.Write("history.save.failed", ex);
             _notice.Text = Loc.T("The entry could not be saved. Your text is still here; try again.");
         }
         finally

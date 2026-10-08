@@ -27,7 +27,7 @@ internal static partial class WinUICloudSync
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // An unreadable state only costs a full republish; it never deletes History.
-            System.Diagnostics.Trace.TraceError("History sync state could not be read: {0}", ex);
+            AppDiagnostics.Write("sync.history.state.read-failed", ex);
             return new();
         }
     }
@@ -68,7 +68,7 @@ internal static partial class WinUICloudSync
         var next = CloneHistoryState();
         foreach (var id in ids) next.ExplicitDeletions[HistoryFolderSync.SyncId(id).ToString()] = deletedAt;
         try { SaveHistoryState(next); _history = next; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Trace.TraceError("History deletion was not journaled: {0}", ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("sync.history.deletions.save-failed", ex); }
     }
 
     private static async Task<string?> SyncHistoryAsync()
@@ -123,7 +123,7 @@ internal static partial class WinUICloudSync
         var next = CloneHistoryState();
         foreach (var (key, version) in result.Published) next.ExportedVersions[key] = version;
         try { SaveHistoryState(next); _history = next; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Trace.TraceError("Published History versions were not saved: {0}", ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("sync.history.published.save-failed", ex); }
         return status;
     }
 }

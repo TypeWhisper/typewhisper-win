@@ -84,7 +84,7 @@ public sealed class SoundService
         catch (Exception ex)
         {
             Cleanup();
-            System.Diagnostics.Debug.WriteLine($"Sound playback failed: {ex.Message}");
+            AppDiagnostics.Write("sound.playback.failed", ex);
         }
     }
 

@@ -109,7 +109,10 @@ public sealed partial class LexiconView
                 recording = false; busy = true; timer.Stop(); status.Text = ""; Render();
                 try { transcripts[index] = await capture.StopAsync(); }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { if (!ended) status.Text = Loc.T("Could not transcribe this sample. Check the microphone and provider, then try again."); System.Diagnostics.Debug.WriteLine(ex); }
+                {
+                    if (!ended) status.Text = Loc.T("Could not transcribe this sample. Check the microphone and provider, then try again.");
+                    if (ex is not OperationCanceledException) AppDiagnostics.Write("lexicon.training.sample-failed", ex);
+                }
                 finally { busy = false; Render(); }
             }
             void Review()

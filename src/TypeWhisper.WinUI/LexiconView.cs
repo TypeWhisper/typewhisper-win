@@ -23,7 +23,7 @@ public sealed partial class LexiconView : UserControl
         _editorDialog?.Hide();
         _appImportFlow?.Cancel();
         try { _cancelPicker?.Invoke(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("lexicon.picker.cancel-failed", ex); }
         return Task.WhenAll(_transferCompletion?.Task ?? Task.CompletedTask, _trainingTask ?? Task.CompletedTask,
             _aliasTask ?? Task.CompletedTask);
     }

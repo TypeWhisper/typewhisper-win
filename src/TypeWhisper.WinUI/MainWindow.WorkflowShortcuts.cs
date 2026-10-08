@@ -137,7 +137,7 @@ public sealed partial class MainWindow
     {
         try { await callbacks; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceError("Workflow cancellation callback failed: {0}", ex.GetType().Name); }
+        { AppDiagnostics.WriteFailure("workflow.cancel.callback-failed", ex); }
     }
     private void RequestProcessingCancellation() { RequestWorkflowCancellation(); _dictation.RequestCancel(); }
     private async Task StopWorkflowShortcutsAsync()

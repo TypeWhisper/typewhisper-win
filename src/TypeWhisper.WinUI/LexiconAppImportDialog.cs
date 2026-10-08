@@ -21,7 +21,7 @@ internal sealed class LexiconAppImportDialog(Control owner, Action<string> repor
         _cancellation.Cancel();
         _dialog?.Hide();
         try { _cancelPicker?.Invoke(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Import picker cancellation failed: " + ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("lexicon.import.cancel-failed", ex); }
     }
 
     private ContentDialog ImportDialog(string title, object content, string primary)

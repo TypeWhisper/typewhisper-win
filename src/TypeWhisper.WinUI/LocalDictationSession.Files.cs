@@ -193,6 +193,12 @@ internal sealed partial class LocalDictationSession
             return clipboard.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)
                 ? await clipboard.GetTextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2), ct) : "";
         }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            // Snippet expansion continues without the clipboard; it is compiled into tests without the app log.
+            AppDiagnostics.Write("snippet.clipboard.failed", ex);
+            throw;
+        }
         finally { ClipboardTextInserter.TransactionGate.Release(); }
     }
 }

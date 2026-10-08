@@ -83,7 +83,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History copy failed: {0}", ex);
+            AppDiagnostics.Write("history.copy.failed", ex);
             _notice.Text = Loc.T("The clipboard is busy. Try copying again.");
         }
     }
@@ -101,7 +101,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History Inbox change failed: {0}", ex);
+            AppDiagnostics.Write("history.inbox.failed", ex);
             _notice.Text = Loc.T("The Inbox change could not be saved. Try again.");
         }
         await RefreshAsync();
@@ -126,7 +126,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History export failed: {0}", ex);
+            AppDiagnostics.Write("history.export.failed", ex);
             _notice.Text = Loc.T("Export failed. Choose a writable location and try again.");
         }
     }
@@ -161,7 +161,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History delete failed: {0}", ex);
+            AppDiagnostics.Write("history.delete.failed", ex);
             _notice.Text = Loc.T("The entries could not be deleted. Your history was not changed.");
         }
         await RefreshAsync();
@@ -246,7 +246,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History playback failed: {0}", ex);
+            AppDiagnostics.Write("history.playback.failed", ex);
             StopAudioPlayback();
             _notice.Text = Loc.T("The saved audio could not be played. Check the file and audio output.");
         }
@@ -284,7 +284,7 @@ public sealed partial class HistoryWindow
         _player = null;
         _playerId = null;
         try { player?.Dispose(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Debug.WriteLine(ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("history.playback.stop-failed", ex); }
         if (_closing || _playButton is null) return;
         _playButton.Content = Glyph("play", 16);
         if (_timeline is not null) { _updatingTimeline = true; _timeline.Value = 0; _timeline.IsEnabled = false; _updatingTimeline = false; }
@@ -301,7 +301,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History audio folder failed: {0}", ex);
+            AppDiagnostics.Write("history.audio-folder.failed", ex);
             _notice.Text = Loc.T("The audio folder could not be opened.");
         }
     }

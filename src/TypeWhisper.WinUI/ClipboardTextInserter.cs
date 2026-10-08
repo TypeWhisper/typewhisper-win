@@ -36,7 +36,6 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
             // The paste was already sent; a failed restore must not turn it into a delivery failure.
             // The restore usually ends after the dictation, so log it under the dictation that pasted.
             AppDiagnostics.Write(dictation, "clipboard.restore.exception", ex);
-            System.Diagnostics.Trace.TraceWarning("Clipboard restore after paste failed: {0}", ex.GetType().Name);
         }
         finally { TransactionGate.Release(); }
     }

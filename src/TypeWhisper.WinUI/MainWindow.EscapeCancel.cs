@@ -28,7 +28,7 @@ public sealed partial class MainWindow
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
-            System.Diagnostics.Trace.TraceError("Escape cancel hook failed: {0}", ex);
+            AppDiagnostics.Write("escape.hook.failed", ex);
             ShowActivationNotice(Loc.T("Esc cannot cancel dictation in this session. Use the dictation shortcut or restart TypeWhisper."));
         }
     }
@@ -68,7 +68,7 @@ public sealed partial class MainWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Escape cancellation failed: {0}", ex);
+            AppDiagnostics.WriteFailure("escape.cancel.failed", ex);
             if (!_closing) ShowNotice(new AppNotice(Loc.T("Could not finish cancellation. Try again.")));
             return;
         }

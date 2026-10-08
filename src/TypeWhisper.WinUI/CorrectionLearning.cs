@@ -73,6 +73,8 @@ internal static class CorrectionLearning
                     }, observer, commit);
                     return await engine.TrackInsertionAsync(text, baseline, cancellation.Token);
                 });
+                // The engine swallows observation failures into this outcome; tests compile it without the app log.
+                if (result.Outcome == TargetAppCorrectionLearningOutcomeKind.Failed) AppDiagnostics.Write("correction.observe.failed");
                 Status = result.Outcome switch
                 {
                     TargetAppCorrectionLearningOutcomeKind.Learned => Loc.T("Learned {0} correction(s). Manage them in Dictionary > Corrections.", result.Count),
@@ -101,7 +103,7 @@ internal static class CorrectionLearning
             DictionaryChanged?.Invoke();
             try { CorrectionsLearned?.Invoke(learned); }
             catch (Exception e) when (e is not OutOfMemoryException)
-            { System.Diagnostics.Debug.WriteLine("Correction feedback unavailable: " + e.GetType().Name); }
+            { AppDiagnostics.Write("correction.feedback.failed", e); }
         }
         return learned;
     }

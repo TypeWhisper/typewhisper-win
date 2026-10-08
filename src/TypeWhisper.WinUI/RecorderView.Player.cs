@@ -22,11 +22,11 @@ public sealed partial class RecorderView
         _libraryPlayer = null; _librarySource = null;
         _libraryPlayingPath = null;
         try { LibraryPlayerElement.SetMediaPlayer(null); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("recorder.playback.stop-failed", ex); }
         try { player?.Dispose(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("recorder.playback.stop-failed", ex); }
         try { source?.Dispose(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("recorder.playback.stop-failed", ex); }
         LibraryPlaybackPanel.Visibility = Visibility.Collapsed;
         if (_initialized) RefreshLibraryActions();
     }

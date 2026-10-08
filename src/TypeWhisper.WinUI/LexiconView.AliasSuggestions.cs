@@ -124,7 +124,7 @@ public sealed partial class LexiconView
             {
                 if (!ended && !_closing) status.Text = ex is FormatException or InvalidOperationException or ArgumentException
                     ? ex.Message : Loc.T("Could not generate suggestions. Check the local model in Plugins and try again.");
-                System.Diagnostics.Debug.WriteLine(ex);
+                AppDiagnostics.Write("lexicon.aliases.failed", ex);
             }
             finally { busy = false; if (!ended && !_closing) UpdateButtons(); }
         }
