@@ -54,6 +54,7 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Host(Id).SetSetting("NotReady", false);
         await registry.SelectModelAsync(model);
         Assert.Equal(1, Host(Id).GetSetting<int>("selectCalls"));
+        Assert.Equal(1, Host(Id).GetSetting<int>("asyncSelectCalls"));
         Assert.Equal(0, Host(Id).GetSetting<int>("loadCalls"));
     }
 
@@ -141,6 +142,7 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         await registry.SelectModelAsync(model);
         Assert.Equal(1, Host(Id).GetSetting<int>("loadCalls"));
         Assert.Equal(1, Host(Id).GetSetting<int>("selectCalls"));
+        Assert.Equal(1, Host(Id).GetSetting<int>("asyncSelectCalls"));
         Assert.Equal(0, Host(Id).GetSetting<int>("downloadCalls"));
     }
 

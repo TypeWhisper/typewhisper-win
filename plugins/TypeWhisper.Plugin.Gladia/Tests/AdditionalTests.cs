@@ -114,4 +114,24 @@ public sealed partial class ProviderTests
         await Assert.ThrowsAsync<PluginRequestException>(() => Run(plugin));
         Assert.Equal(2, calls);
     }
+
+    [Fact]
+    public async Task SelectModelAsyncWaitsForAContendedSaveWithoutBlocking()
+    {
+        using var plugin=new GladiaPlugin(); var host=new Host();
+        await plugin.ActivateAsync(host); await Configure(plugin);
+        var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.StoreSecretDelay=release.Task;
+        // The key save holds the connection gate while the secret store is pending.
+        var keySave=plugin.SetApiKeyAsync("replacement-key");
+        var select=plugin.SelectModelAsync("default",default);
+        Assert.False(keySave.IsCompleted); Assert.False(select.IsCompleted);
+        release.TrySetResult();
+        await Task.WhenAll(keySave,select).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("default",plugin.SelectedModelId);
+        Assert.Equal("default",host.Settings["configuration"].GetProperty("Values").GetProperty("model").GetString());
+        await Assert.ThrowsAsync<ArgumentException>(()=>plugin.SelectModelAsync("not-a-model",default));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>plugin.SelectModelAsync("default",new(true)));
+        Assert.Equal("default",plugin.SelectedModelId);
+    }
 }

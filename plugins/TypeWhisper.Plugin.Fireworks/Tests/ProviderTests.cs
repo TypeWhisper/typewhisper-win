@@ -147,7 +147,8 @@ public sealed partial class ProviderTests
     {
         public Dictionary<string,JsonElement> Settings {get;}=[];public Dictionary<string,string> Secrets {get;}=[];
         public bool FailSecret {get;set;} public bool FailSetting {get;set;}
-        public Task StoreSecretAsync(string key,string value){if(FailSecret){FailSecret=false;throw new IOException("secret store failed");}Secrets[key]=value;return Task.CompletedTask;}
+        public Task? StoreSecretDelay { get; set; }
+        public async Task StoreSecretAsync(string key,string value){if(FailSecret){FailSecret=false;throw new IOException("secret store failed");}if(StoreSecretDelay is not null)await StoreSecretDelay.ConfigureAwait(false);Secrets[key]=value;}
         public Task<string?> LoadSecretAsync(string key)=>Task.FromResult(Secrets.GetValueOrDefault(key));
         public Task DeleteSecretAsync(string key){Secrets.Remove(key);return Task.CompletedTask;}
         public T? GetSetting<T>(string key)=>Settings.TryGetValue(key,out var value)?value.Deserialize<T>():default;

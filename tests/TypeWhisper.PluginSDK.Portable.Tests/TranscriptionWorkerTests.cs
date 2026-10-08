@@ -94,11 +94,14 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     {
         await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
         var worker = _engine.WorkerProcessId;
-        _engine.SelectModel("large");
+        await _engine.SelectModelAsync("large", default);
+        Assert.Equal(1, _host.GetSetting<int>("asyncSelectCalls"));
         var fields = Fields(await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
         Assert.Equal(worker.ToString(), fields["pid"]);
         Assert.Equal("large", fields["model"]);
         Assert.Equal("large", _inner.SelectedModelId);
+        // The worker also selects through the asynchronous member.
+        Assert.Equal("1", fields["asyncSelects"]);
     }
 
     [Fact]
@@ -325,6 +328,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.True(provider.SupportsPcm);
         var model = (await registry.GetModelStatesAsync(provider.SelectionId)).Single(state => state.ModelId == "large");
         await registry.SelectModelAsync(model);
+        Assert.Equal(1, host.GetSetting<int>("asyncSelectCalls"));
         Task<(int, PluginTranscriptionResult)> Transcribe() => registry.UseTranscriptionAsync(provider.SelectionId, async (engine, ct) =>
         {
             Assert.IsType<IsolatedTranscriptionEngine>(engine);
