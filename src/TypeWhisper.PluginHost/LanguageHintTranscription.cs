@@ -24,15 +24,15 @@ public static class LanguageHintTranscription
         if (language is not null || preferredLanguages.Count == 0 || !engine.SupportsLanguageHints)
         {
             if (engine is IPcmTranscriptionEnginePlugin pcm) return pcm.TranscribePcmAsync(samples, language, translate, ct);
-            // Encoded once: every attempt uploads the same bytes.
-            var wav = encodeWav();
-            return PluginRequestRetry.RunAsync(engine.PluginId, token => engine.TranscribeAsync(wav, language, translate, prompt, token), ct, retry);
+            return ChunkedTranscription.DecodeAsync(samples, encodeWav, engine.MaximumAudioUploadBytes,
+                (wav, token) => PluginRequestRetry.RunAsync(engine.PluginId,
+                    attempt => engine.TranscribeAsync(wav, language, translate, prompt, attempt), token, retry), ct);
         }
         if (engine.SupportedLanguages.Count > 0 && preferredLanguages.Any(code => !engine.SupportedLanguages.Contains(code)))
             throw new InvalidOperationException("The selected provider does not support your preferred languages. Update Preferred languages or choose an explicit spoken language.");
-        var hintedWav = encodeWav();
-        return PluginRequestRetry.RunAsync(engine.PluginId,
-            token => engine.TranscribeWithLanguageHintsAsync(hintedWav, preferredLanguages, translate, prompt, token), ct, retry);
+        return ChunkedTranscription.DecodeAsync(samples, encodeWav, engine.MaximumAudioUploadBytes,
+            (wav, token) => PluginRequestRetry.RunAsync(engine.PluginId,
+                attempt => engine.TranscribeWithLanguageHintsAsync(wav, preferredLanguages, translate, prompt, attempt), token, retry), ct);
     }
     /// <summary>Applies the selected provider's dictionary budget before batch or streaming routing.</summary>
     public static string? CreateDictionaryPrompt(ITranscriptionEnginePlugin engine, IReadOnlyList<string>? terms) =>
