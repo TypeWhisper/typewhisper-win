@@ -53,8 +53,8 @@ internal sealed class CloudSyncView : UserControl
         };
         _choose.Click += async (_, _) => await ChooseAsync(enable: true);
         _sync.Click += async (_, _) => await WinUICloudSync.SyncAsync();
-        Loaded += (_, _) => { WinUICloudSync.Changed += Refresh; Refresh(); };
-        Unloaded += (_, _) => WinUICloudSync.Changed -= Refresh;
+        ViewSubscriptions.Attach(this, () => { WinUICloudSync.Changed += Refresh; Refresh(); },
+            () => WinUICloudSync.Changed -= Refresh);
         Refresh();
     }
     private async Task ChooseAsync(bool enable)

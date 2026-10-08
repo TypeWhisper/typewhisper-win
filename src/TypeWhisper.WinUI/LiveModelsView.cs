@@ -49,8 +49,8 @@ internal sealed class LiveModelsView : UserControl
         AutomationProperties.SetLiveSetting(_feedback, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _panel.Children.Add(_feedback);
         Content = _panel;
-        Loaded += (_, _) => { _session.Models.Changed += Refresh; _session.CtcVocabulary.Changed += Refresh; _session.Changed += Refresh; Update(); };
-        Unloaded += (_, _) => { _session.Models.Changed -= Refresh; _session.CtcVocabulary.Changed -= Refresh; _session.Changed -= Refresh; };
+        ViewSubscriptions.Attach(this, () => { _session.Models.Changed += Refresh; _session.CtcVocabulary.Changed += Refresh; _session.Changed += Refresh; Update(); },
+            () => { _session.Models.Changed -= Refresh; _session.CtcVocabulary.Changed -= Refresh; _session.Changed -= Refresh; });
         Update();
     }
 

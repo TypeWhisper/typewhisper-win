@@ -43,8 +43,8 @@ internal static class LiveHistoryRetentionSettings
         {
             if (row.IsLoaded && !dirty && !busy) row.Status = controller.Error ?? "";
         });
-        row.Loaded += (_, _) => { controller.Changed += OnChanged; if (!dirty) row.Status = controller.Error ?? ""; };
-        row.Unloaded += (_, _) => controller.Changed -= OnChanged;
+        ViewSubscriptions.Attach(row, () => { controller.Changed += OnChanged; if (!dirty) row.Status = controller.Error ?? ""; },
+            () => controller.Changed -= OnChanged);
         void Arrange()
         {
             durationLine.Visibility = mode == HistoryRetentionMode.Duration ? Visibility.Visible : Visibility.Collapsed;

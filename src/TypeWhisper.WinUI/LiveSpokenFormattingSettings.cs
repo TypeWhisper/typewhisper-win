@@ -99,8 +99,8 @@ internal static class LiveSpokenFormattingSettings
             session.TextPreferences.Save(session.TextPreferences.Current with { StripFinalPeriodFromStandaloneValues = periodToggle.IsOn }); Refresh();
         };
         void OnChanged() => row.DispatcherQueue.TryEnqueue(() => { if (row.IsLoaded) Refresh(); });
-        row.Loaded += (_, _) => { session.Changed += OnChanged; session.Models.Changed += OnChanged; session.PluginRuntime.Changed += OnChanged; Refresh(); };
-        row.Unloaded += (_, _) => { session.Changed -= OnChanged; session.Models.Changed -= OnChanged; session.PluginRuntime.Changed -= OnChanged; };
+        ViewSubscriptions.Attach(row, () => { session.Changed += OnChanged; session.Models.Changed += OnChanged; session.PluginRuntime.Changed += OnChanged; Refresh(); },
+            () => { session.Changed -= OnChanged; session.Models.Changed -= OnChanged; session.PluginRuntime.Changed -= OnChanged; });
         Refresh();
     }
 }

@@ -49,15 +49,14 @@ internal static class LiveTranscriptionTaskSettings
             if (Enum.TryParse<TranscriptionTask>(id, out var task)) selectionError = session.SelectTranscriptionTask(task);
             Refresh();
         };
-        row.Loaded += (_, _) =>
+        ViewSubscriptions.Attach(row, () =>
         {
             session.Changed += OnChanged; session.Models.Changed += OnChanged;
             Refresh();
-        };
-        row.Unloaded += (_, _) =>
+        }, () =>
         {
             session.Changed -= OnChanged; session.Models.Changed -= OnChanged;
-        };
+        });
         Refresh();
     }
 }

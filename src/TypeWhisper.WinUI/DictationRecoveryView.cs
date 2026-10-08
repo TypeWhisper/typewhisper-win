@@ -29,8 +29,8 @@ internal sealed class DictationRecoveryView : UserControl
         // The settings page scrolls.
         Content = _body;
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite);
-        Loaded += (_, _) => { _controller.Changed += Changed; Render(); };
-        Unloaded += (_, _) => _controller.Changed -= Changed;
+        ViewSubscriptions.Attach(this, () => { _controller.Changed += Changed; Render(); },
+            () => _controller.Changed -= Changed);
         Render();
     }
 

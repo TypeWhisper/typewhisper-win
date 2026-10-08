@@ -524,15 +524,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.IntegrationDismissed += PluginsView.CloseSettingsPage;
             _settingsWindow.UpdateIntegrationNavigation(PluginsView.SettingsNavigationItems);
             _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
-            _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeRecentTranscriptionsShortcut;
-            _settingsWindow.CommitCopyLastTranscriptionHotkeys = ChangeCopyLastShortcut;
-            _settingsWindow.CommitPasteLastTranscriptionHotkeys = ChangePasteLastShortcut;
-            _settingsWindow.CommitReadLastTranscriptionHotkeys = ChangeReadLastShortcut;
-            _settingsWindow.CommitWorkflowPaletteHotkeys = ChangeWorkflowPaletteShortcut;
-            _settingsWindow.CommitRecordingShortcut = ChangeRecordingShortcut;
-            _settingsWindow.CommitRecorderHotkeys = ChangeRecorderShortcut;
-            _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
-            _settingsWindow.CommitCancelProcessingHotkeys = value => ChangeActionShortcut(_cancelProcessingShortcut, Loc.T("Cancel"), value);
+            _settingsWindow.CommitShortcut = ChangeGlobalShortcut;
             _settingsWindow.CreateSetupWizard = exit => new SetupWizard(_settingsValues, exit,
                 value => _closing || _profileRestoreClosing ? Loc.T("The app is shutting down.") : ChangeDictationHotkeys(value),
                 _dictation);

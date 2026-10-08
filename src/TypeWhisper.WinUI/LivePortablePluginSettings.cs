@@ -92,8 +92,8 @@ internal sealed class LivePortablePluginSettings : UserControl
         {
             if (_textSettings.Content is LivePluginTextSettings settings) settings.RequestRefresh();
         };
-        Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
-        Unloaded += (_, _) => { session.Changed -= OnChanged; _key.Password = ""; };
+        ViewSubscriptions.Attach(this, () => { session.Changed += OnChanged; Refresh(); },
+            () => { session.Changed -= OnChanged; _key.Password = ""; });
         Refresh();
     }
     private void OnChanged() => DispatcherQueue.TryEnqueue(() => { if (IsLoaded) Refresh(); });

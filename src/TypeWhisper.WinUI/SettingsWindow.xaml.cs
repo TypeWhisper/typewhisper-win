@@ -14,15 +14,7 @@ public sealed partial class SettingsWindow : Window
 {
     private OverlayPreferences _preferences;
     internal Func<Action<bool>, SetupWizard>? CreateSetupWizard { get; set; }
-    internal Func<string, string?>? CommitDictationHotkeys { get; set; }
-    internal Func<string, string?>? CommitCancelProcessingHotkeys { get; set; }
-    internal Func<string, string?>? CommitRecentTranscriptionsHotkeys { get; set; }
-    internal Func<string, string?>? CommitCopyLastTranscriptionHotkeys { get; set; }
-    internal Func<string, string?>? CommitPasteLastTranscriptionHotkeys { get; set; }
-    internal Func<string, string?>? CommitReadLastTranscriptionHotkeys { get; set; }
-    internal Func<string, string?>? CommitWorkflowPaletteHotkeys { get; set; }
-    internal Func<string, string, string?>? CommitRecordingShortcut { get; set; }
-    internal Func<string, string?>? CommitRecorderHotkeys { get; set; }
+    internal Func<string, string, string?>? CommitShortcut { get; set; }
     internal Action<string, StackPanel, List<ChoicePicker>>? ConfigureLiveSettings { get; set; }
     // Pages that host an app view instead of catalog settings. The same view instance
     // moves into whichever settings window is open.
@@ -546,7 +538,7 @@ public sealed partial class SettingsWindow : Window
         if (catalog)
         {
             _catalogPickers.Clear();
-            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitPasteLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
+            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitShortcut);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && CatalogContent.Children.OfType<SettingsCard>().FirstOrDefault() is { } general)
             {

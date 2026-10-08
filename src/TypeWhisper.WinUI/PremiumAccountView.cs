@@ -28,8 +28,8 @@ internal sealed class PremiumAccountView : UserControl
         _link.Click += async (_, _) => await WinUIPremiumAccount.LinkAsync();
         _signOut.Click += async (_, _) => await WinUIPremiumAccount.SignOutAsync();
         _cancel.Click += (_, _) => WinUIPremiumAccount.Cancel();
-        Loaded += (_, _) => { WinUIPremiumAccount.Changed += Refresh; WinUILicensing.Changed += Refresh; Refresh(); };
-        Unloaded += (_, _) => { WinUIPremiumAccount.Changed -= Refresh; WinUILicensing.Changed -= Refresh; };
+        ViewSubscriptions.Attach(this, () => { WinUIPremiumAccount.Changed += Refresh; WinUILicensing.Changed += Refresh; Refresh(); },
+            () => { WinUIPremiumAccount.Changed -= Refresh; WinUILicensing.Changed -= Refresh; });
         Refresh();
     }
     private void Refresh()
