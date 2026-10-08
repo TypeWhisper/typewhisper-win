@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 
@@ -666,6 +667,101 @@ public class DictionaryServiceTests : IDisposable
         _sut.DeleteEntry("1");
 
         Assert.Equal(2, fired);
+    }
+
+    [Fact]
+    public void CorruptFile_ReportsLoadFailureAndRefusesEveryWrite()
+    {
+        File.WriteAllText(_filePath, "{ not a dictionary");
+        var original = File.ReadAllBytes(_filePath);
+        var service = new DictionaryService(_filePath);
+        var changed = 0;
+        service.EntriesChanged += () => changed++;
+
+        Assert.Empty(service.Entries);
+        Assert.IsType<JsonException>(service.LoadError);
+
+        service.AddEntry(new DictionaryEntry { Id = "1", EntryType = DictionaryEntryType.Term, Original = "React" });
+        service.SetTerms(["Vue"], replaceExisting: true);
+        Assert.Empty(service.LearnCorrections([new CorrectionSuggestion("teh", "the")]));
+        Assert.False(service.DeleteTerm("React"));
+        Assert.False(service.TryReplaceAll([new DictionaryEntry { Id = "1", EntryType = DictionaryEntryType.Term, Original = "React" }]));
+
+        Assert.Equal(original, File.ReadAllBytes(_filePath));
+        Assert.Empty(service.Entries);
+        Assert.NotNull(service.LastSaveError);
+        Assert.Equal(0, changed);
+    }
+
+    [Fact]
+    public void CorruptFile_AcceptsWritesAgainOnceRepairedAndReloaded()
+    {
+        File.WriteAllText(_filePath, "{ not a dictionary");
+        var service = new DictionaryService(_filePath);
+        Assert.Empty(service.Entries);
+        Assert.NotNull(service.LoadError);
+        Assert.False(service.Reload());
+
+        File.WriteAllText(_filePath, "[]");
+        Assert.True(service.Reload());
+        Assert.Null(service.LoadError);
+
+        service.AddEntry(new DictionaryEntry { Id = "1", EntryType = DictionaryEntryType.Term, Original = "React" });
+
+        Assert.Null(service.LastSaveError);
+        Assert.Equal("React", Assert.Single(new DictionaryService(_filePath).Entries).Original);
+    }
+
+    [Fact]
+    public void LockedFile_ReportsLoadFailureAndIsNotOverwrittenOnceReleased()
+    {
+        if (!OperatingSystem.IsWindows()) return; // Only Windows enforces an exclusive open.
+        _sut.AddEntry(new DictionaryEntry { Id = "1", EntryType = DictionaryEntryType.Term, Original = "React" });
+        var original = File.ReadAllBytes(_filePath);
+        var service = new DictionaryService(_filePath);
+        var changed = 0;
+        service.EntriesChanged += () => changed++;
+
+        using (new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Empty(service.Entries);
+            Assert.IsAssignableFrom<IOException>(service.LoadError);
+            Assert.False(service.Reload());
+        }
+
+        // The sync client let go, but the catalog was never read: writing now would keep only the new entry.
+        service.AddEntry(new DictionaryEntry { Id = "2", EntryType = DictionaryEntryType.Term, Original = "Vue" });
+        Assert.False(service.TryReplaceAll([]));
+        Assert.Equal(original, File.ReadAllBytes(_filePath));
+        Assert.Empty(service.Entries);
+        Assert.Equal(0, changed);
+
+        Assert.True(service.Reload());
+        Assert.Null(service.LoadError);
+        Assert.Equal(1, changed);
+        Assert.Equal("React", Assert.Single(service.Entries).Original);
+
+        service.AddEntry(new DictionaryEntry { Id = "2", EntryType = DictionaryEntryType.Term, Original = "Vue" });
+        Assert.Null(service.LastSaveError);
+        Assert.Equal(2, changed);
+        Assert.Equal(2, new DictionaryService(_filePath).Entries.Count);
+    }
+
+    [Fact]
+    public void FailedSave_RestoresTheCacheAndRaisesNoEvent()
+    {
+        if (!OperatingSystem.IsWindows()) return; // Only Windows refuses to replace an open file.
+        _sut.AddEntry(new DictionaryEntry { Id = "1", EntryType = DictionaryEntryType.Term, Original = "React" });
+        var changed = 0;
+        _sut.EntriesChanged += () => changed++;
+
+        using (new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            _sut.AddEntry(new DictionaryEntry { Id = "2", EntryType = DictionaryEntryType.Term, Original = "Vue" });
+
+        Assert.NotNull(_sut.LastSaveError);
+        Assert.Equal(0, changed);
+        Assert.Equal("React", Assert.Single(_sut.Entries).Original);
+        Assert.Equal("React", Assert.Single(new DictionaryService(_filePath).Entries).Original);
     }
 
     public void Dispose()

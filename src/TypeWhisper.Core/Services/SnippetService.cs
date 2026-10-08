@@ -60,15 +60,42 @@ public sealed partial class SnippetService : ISnippetService
     }
 
     /// <summary>
+    /// Gets why the snippet file could not be read or parsed, or null when it loaded or does not exist yet.
+    /// </summary>
+    /// <remarks>
+    /// While set, <see cref="Snippets"/> is empty and every mutation is refused, so a locked or corrupt file is
+    /// never replaced by that empty list. <see cref="Reload"/> clears it once the file can be read again.
+    /// </remarks>
+    public Exception? LoadError { get; private set; }
+
+    /// <summary>
+    /// Gets why the most recent mutation was not written to disk, or null when it was persisted.
+    /// </summary>
+    public Exception? LastSaveError { get; private set; }
+
+    /// <summary>
+    /// Reads the snippet file again, for example after a sync client released it, and reports whether it loaded.
+    /// </summary>
+    public bool Reload()
+    {
+        using var mutation = ProfileMutationCoordinator.Enter();
+        _cacheLoaded = false;
+        EnsureCacheLoaded();
+        if (LoadError is not null) return false;
+
+        SnippetsChanged?.Invoke();
+        return true;
+    }
+
+    /// <summary>
     /// Adds snippet.
     /// </summary>
     public void AddSnippet(Snippet snippet)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         _cache.Add(BackfillTimestamps(snippet));
-        SaveToDisk();
-        SnippetsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -77,15 +104,14 @@ public sealed partial class SnippetService : ISnippetService
     public void UpdateSnippet(Snippet snippet)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         var idx = _cache.FindIndex(s => s.Id == snippet.Id);
         if (idx >= 0)
         {
             var existing = _cache[idx];
             _cache[idx] = BackfillTimestamps(snippet) with { UpdatedAt = NextUpdatedAt(existing.UpdatedAt) };
         }
-        SaveToDisk();
-        SnippetsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -94,10 +120,9 @@ public sealed partial class SnippetService : ISnippetService
     public void DeleteSnippet(string id)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         _cache.RemoveAll(s => s.Id == id);
-        SaveToDisk();
-        SnippetsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -257,7 +282,7 @@ public sealed partial class SnippetService : ISnippetService
         var imported = JsonSerializer.Deserialize(json, SnippetJsonContext.Default.ListSnippet);
         if (imported is null or { Count: 0 }) return 0;
 
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return 0;
         var existingTriggers = _cache.Select(s => s.Trigger).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var count = 0;
@@ -271,13 +296,7 @@ public sealed partial class SnippetService : ISnippetService
             count++;
         }
 
-        if (count > 0)
-        {
-            SaveToDisk();
-            SnippetsChanged?.Invoke();
-        }
-
-        return count;
+        return count > 0 && TryCommitMutation(rollback) ? count : 0;
     }
 
     private static string ExpandPlaceholders(string template, Func<string>? clipboardProvider)
@@ -315,7 +334,8 @@ public sealed partial class SnippetService : ISnippetService
         if (idx >= 0)
         {
             _cache[idx] = _cache[idx] with { UsageCount = _cache[idx].UsageCount + 1 };
-            SaveToDisk();
+            // Usage counters are best effort: a failed write is recorded and retried with the next save.
+            _ = SaveToDisk(_cache);
         }
     }
 
@@ -343,7 +363,7 @@ public sealed partial class SnippetService : ISnippetService
     public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
     {
         using var profileMutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
 
         var changed = false;
         foreach (var mutation in mutations)
@@ -362,8 +382,7 @@ public sealed partial class SnippetService : ISnippetService
         if (!changed)
             return;
 
-        SaveToDisk();
-        SnippetsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     private bool UpsertSyncedSnippet(UserDataSyncSnippet synced)
@@ -413,33 +432,64 @@ public sealed partial class SnippetService : ISnippetService
     {
         if (_cacheLoaded) return;
 
+        LoadError = null;
         try
         {
-            if (File.Exists(_filePath))
-            {
-                var json = File.ReadAllText(_filePath);
-                _cache = JsonSerializer.Deserialize<List<Snippet>>(json) ?? [];
-                _cache = _cache.Select(BackfillTimestamps).ToList();
-            }
+            var json = File.ReadAllText(_filePath);
+            // A zero-length file holds nothing to protect, so it counts as an empty catalog like a missing one.
+            _cache = string.IsNullOrWhiteSpace(json)
+                ? []
+                : JsonSerializer.Deserialize<List<Snippet>>(json) ?? [];
+            _cache = _cache.Select(BackfillTimestamps).ToList();
         }
-        catch
+        catch (FileNotFoundException) { _cache = []; }
+        catch (DirectoryNotFoundException) { _cache = []; }
+        catch (Exception ex)
         {
+            // The file exists but cannot be trusted; keep it off limits instead of treating it as empty.
+            LoadError = ex;
             _cache = [];
         }
 
         _cacheLoaded = true;
     }
 
-    private void SaveToDisk()
+    // Mutations are refused rather than thrown while the file is unreadable: dictation and sync reach them, and an
+    // exception there would abort the dictation or the sync cycle. The cache is empty in that state, so writing it
+    // would replace the user's snippets with an almost empty list. Callers can inspect LoadError and LastSaveError.
+    private bool TryBeginMutation(out List<Snippet> rollback)
     {
-        _ = SaveToDisk(_cache);
+        EnsureCacheLoaded();
+        if (LoadError is null)
+        {
+            rollback = _cache.ToList();
+            return true;
+        }
+
+        LastSaveError = new InvalidOperationException(
+            "The snippet file could not be loaded, so changes are not saved until it loads again.", LoadError);
+        rollback = [];
+        return false;
+    }
+
+    // A failed write restores the previous list and raises no event, so the cache keeps matching the file on disk.
+    private bool TryCommitMutation(List<Snippet> rollback)
+    {
+        if (SaveToDisk(_cache))
+        {
+            SnippetsChanged?.Invoke();
+            return true;
+        }
+
+        _cache = rollback;
+        return false;
     }
 
     /// <inheritdoc />
     public bool TryReplaceAll(IReadOnlyList<Snippet> snippets)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out _)) return false;
         var replacement = snippets.Select(BackfillTimestamps).ToList();
         if (!SaveToDisk(replacement))
             return false;
@@ -449,10 +499,18 @@ public sealed partial class SnippetService : ISnippetService
         return true;
     }
 
-    private bool SaveToDisk(IReadOnlyList<Snippet> snippets) =>
-        AtomicFileWriter.TryWriteAllText(
-            _filePath,
-            JsonSerializer.Serialize(snippets, new JsonSerializerOptions { WriteIndented = true }));
+    private bool SaveToDisk(IReadOnlyList<Snippet> snippets)
+    {
+        var json = JsonSerializer.Serialize(snippets, new JsonSerializerOptions { WriteIndented = true });
+        if (!AtomicFileWriter.TryWriteAllText(_filePath, json, out var error))
+        {
+            LastSaveError = error;
+            return false;
+        }
+
+        LastSaveError = null;
+        return true;
+    }
 
     private static Snippet BackfillTimestamps(Snippet snippet)
     {

@@ -64,17 +64,35 @@ public static class AtomicFileWriter
     }
 
     internal static bool TryWriteAllText(string filePath, string contents) =>
-        TryWriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
+        TryWriteAllText(filePath, contents, out _);
 
-    internal static bool TryWriteAllBytes(string filePath, byte[] contents)
+    /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/> as UTF-8 without a byte order mark and reports why a write failed.</summary>
+    /// <param name="filePath">The file to create or replace.</param>
+    /// <param name="contents">The new text of the file.</param>
+    /// <param name="error">The exception that stopped the write, or null when the file was replaced.</param>
+    /// <returns>True when the file was replaced.</returns>
+    public static bool TryWriteAllText(string filePath, string contents, out Exception? error) =>
+        TryWriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents), out error);
+
+    internal static bool TryWriteAllBytes(string filePath, byte[] contents) =>
+        TryWriteAllBytes(filePath, contents, out _);
+
+    /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/> and reports why a write failed.</summary>
+    /// <param name="filePath">The file to create or replace.</param>
+    /// <param name="contents">The new bytes of the file.</param>
+    /// <param name="error">The exception that stopped the write, or null when the file was replaced. Callers use it to tell a locked file from a full disk.</param>
+    /// <returns>True when the file was replaced.</returns>
+    public static bool TryWriteAllBytes(string filePath, byte[] contents, out Exception? error)
     {
         try
         {
             WriteAllBytes(filePath, contents);
+            error = null;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            error = ex;
             return false;
         }
     }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
@@ -519,6 +520,99 @@ public sealed class WorkflowServiceTests : IDisposable
         Assert.Contains("German", prompt);
         Assert.Contains("Keep product names unchanged.", prompt);
         Assert.Contains("plain text", prompt);
+    }
+
+    [Fact]
+    public void CorruptFile_ReportsLoadFailureAndRefusesEveryWrite()
+    {
+        File.WriteAllText(_filePath, "{ not a workflow list");
+        var original = File.ReadAllBytes(_filePath);
+        var service = new WorkflowService(_filePath);
+        var changed = 0;
+        service.WorkflowsChanged += () => changed++;
+
+        Assert.Empty(service.Workflows);
+        Assert.IsType<JsonException>(service.LoadError);
+
+        service.AddWorkflow(NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK")));
+        service.Reorder([]);
+        Assert.False(service.TryReplaceAll([NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK"))]));
+
+        Assert.Equal(original, File.ReadAllBytes(_filePath));
+        Assert.Empty(service.Workflows);
+        Assert.NotNull(service.LastSaveError);
+        Assert.Equal(0, changed);
+    }
+
+    [Fact]
+    public void CorruptFile_AcceptsWritesAgainOnceRepairedAndReloaded()
+    {
+        File.WriteAllText(_filePath, "{ not a workflow list");
+        var service = new WorkflowService(_filePath);
+        Assert.Empty(service.Workflows);
+        Assert.NotNull(service.LoadError);
+        Assert.False(service.Reload());
+
+        File.WriteAllText(_filePath, "[]");
+        Assert.True(service.Reload());
+        Assert.Null(service.LoadError);
+
+        service.AddWorkflow(NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK")));
+
+        Assert.Null(service.LastSaveError);
+        Assert.Equal("Mail", Assert.Single(new WorkflowService(_filePath).Workflows).Name);
+    }
+
+    [Fact]
+    public void LockedFile_ReportsLoadFailureAndIsNotOverwrittenOnceReleased()
+    {
+        if (!OperatingSystem.IsWindows()) return; // Only Windows enforces an exclusive open.
+        _sut.AddWorkflow(NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK")));
+        var original = File.ReadAllBytes(_filePath);
+        var service = new WorkflowService(_filePath);
+        var changed = 0;
+        service.WorkflowsChanged += () => changed++;
+
+        using (new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Empty(service.Workflows);
+            Assert.IsAssignableFrom<IOException>(service.LoadError);
+            Assert.False(service.Reload());
+        }
+
+        // The sync client let go, but the catalog was never read: writing now would keep only the new workflow.
+        service.AddWorkflow(NewWorkflow("Slack", WorkflowTrigger.App("slack")));
+        Assert.False(service.TryReplaceAll([]));
+        Assert.Equal(original, File.ReadAllBytes(_filePath));
+        Assert.Empty(service.Workflows);
+        Assert.Equal(0, changed);
+
+        Assert.True(service.Reload());
+        Assert.Null(service.LoadError);
+        Assert.Equal(1, changed);
+        Assert.Equal("Mail", Assert.Single(service.Workflows).Name);
+
+        service.AddWorkflow(NewWorkflow("Slack", WorkflowTrigger.App("slack")));
+        Assert.Null(service.LastSaveError);
+        Assert.Equal(2, changed);
+        Assert.Equal(2, new WorkflowService(_filePath).Workflows.Count);
+    }
+
+    [Fact]
+    public void FailedSave_RestoresTheCacheAndRaisesNoEvent()
+    {
+        if (!OperatingSystem.IsWindows()) return; // Only Windows refuses to replace an open file.
+        _sut.AddWorkflow(NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK")));
+        var changed = 0;
+        _sut.WorkflowsChanged += () => changed++;
+
+        using (new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            _sut.AddWorkflow(NewWorkflow("Slack", WorkflowTrigger.App("slack")));
+
+        Assert.NotNull(_sut.LastSaveError);
+        Assert.Equal(0, changed);
+        Assert.Equal("Mail", Assert.Single(_sut.Workflows).Name);
+        Assert.Equal("Mail", Assert.Single(new WorkflowService(_filePath).Workflows).Name);
     }
 
     private static Workflow NewWorkflow(
