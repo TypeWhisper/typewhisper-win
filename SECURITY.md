@@ -39,6 +39,8 @@ Issues in these areas are especially relevant.
 
 - The local HTTP API uses a `localhost` listener and is intended for local tools
   and scripts.
+- The API accepts requests only from processes running as the same Windows user
+  as TypeWhisper, so other sessions on a shared machine cannot use it.
 - The API server is disabled by default and must be enabled explicitly in
   Settings.
 - API keys and plugin secrets are stored with Windows DPAPI, scoped to the

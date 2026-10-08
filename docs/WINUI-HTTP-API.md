@@ -19,6 +19,8 @@ The discovery token is plaintext for local client compatibility, protected by a 
 
 Send Authorization: Bearer <token> or X-TypeWhisper-API-Token: <token>. When Require API token is enabled, authentication is mandatory except for GET /v1/status and the static documentation at GET /docs (also /docs/). The discovery requires_authentication field reports the active mode. Documentation contains no credentials and makes no API calls. Only loopback connections are accepted. Browser Origin headers are rejected; no CORS access is enabled.
 
+Loopback alone does not identify the caller, so every request, including GET /v1/status and /docs and regardless of the token mode, is also checked against the process that owns the client socket: the server looks it up in the Windows TCP connection table and admits it only when that process runs under the same Windows user as TypeWhisper. The Windows session is not compared, because another session of the same account can already read the discovery token. Requests from another user's session on a shared PC or RDP host, from WSL2 in mirrored networking mode, from host-network containers, and from any peer whose process cannot be resolved get 403 with a generic error. The CLI and the Raycast extension are unaffected because they run as the signed-in user.
+
 ## Endpoints
 
 | Method and path | Result |
