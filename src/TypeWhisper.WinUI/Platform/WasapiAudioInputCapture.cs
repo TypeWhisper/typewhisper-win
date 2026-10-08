@@ -200,6 +200,10 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
         }
     }
 
+    // No thread affinity: the caller only flips the state, signals the capture thread and waits for
+    // it to exit. The audio client is stopped and reset by the capture thread itself, and Dispose
+    // releases the COM objects from whichever thread calls it, as the device-change path already
+    // does from pool threads. The stop may therefore run on a worker thread instead of the UI thread.
     public void StopRecording()
     {
         Thread? captureThread;

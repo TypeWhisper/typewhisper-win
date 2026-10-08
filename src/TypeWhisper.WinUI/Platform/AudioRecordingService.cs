@@ -503,7 +503,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     public float[]? GetCurrentBuffer()
     {
         if (!_isRecording || _sampleBuffer is null) return null;
-        lock (_bufferLock) { return [.. _sampleBuffer]; }
+        // The live preview calls this on the UI thread while the stop clears the buffer on a worker
+        // thread, so the buffer is read once under the lock instead of trusting the check above.
+        lock (_bufferLock) { return _sampleBuffer?.ToArray(); }
     }
 
     /// <summary>
@@ -603,14 +605,28 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
         try
         {
-            await Task.Delay(StopDrainDuration, cancellationToken);
+            // The drain keeps capturing what is still buffered after the key release. Without
+            // ConfigureAwait(false) its continuation would be posted back to the caller's
+            // synchronization context, which for dictation is the UI thread.
+            await Task.Delay(StopDrainDuration, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             // Still stop and return the samples captured so far.
         }
 
-        var samples = StopRecordingCore(out var recoveryRecordingId, out var preserveImmediately);
+        // The stop copies the whole recording, waits for the capture thread to exit (up to two
+        // seconds for a stalled WASAPI capture) and normalizes the samples. On the UI thread that
+        // stalled the keyboard hook living there, so it runs on a worker thread. That is safe:
+        // neither capture has thread affinity (see WasapiAudioInputCapture.StopRecording and
+        // WaveInAudioInputCapture), the capture's events are unsubscribed before it is stopped, and
+        // the stop raises none of this service's events. The device-change path already stops and
+        // disposes captures on pool threads.
+        var (samples, recoveryRecordingId, preserveImmediately) = await Task.Run(() =>
+        {
+            var stopped = StopRecordingCore(out var stoppedRecordingId, out var preserveStopped);
+            return (stopped, stoppedRecordingId, preserveStopped);
+        }).ConfigureAwait(false);
         RecoveryRecordingLease? lease = null;
         if (recoveryRecordingId is { } recordingId && _recoveryStore is not null)
         {
@@ -2290,6 +2306,11 @@ internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
     }
 }
 
+// WaveInEvent opens the device with an event callback and reads it on its own thread, so unlike
+// NAudio's window-callback WaveIn it has no thread affinity: StopRecording and Dispose may run on
+// any thread (NAudio.WinMM 2.2.1: callbackEvent + RecordThread, no window handle). The only thread
+// it remembers is the synchronization context captured at construction, used solely to post
+// RecordingStopped, which the service unsubscribes before it stops the capture.
 internal sealed class WaveInAudioInputCapture : IAudioInputCapture
 {
     private readonly WaveInEvent _waveIn;
