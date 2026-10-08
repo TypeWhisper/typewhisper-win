@@ -675,14 +675,20 @@ public sealed class LocalHttpApiTests
         Assert.Equal(0, calls);
         Assert.Equal(0, statusCalls);
 
-        // Literal local names, including case-insensitive localhost, still reach the backend.
+        // HTTP.sys routes localhost Host aliases on either loopback IP. The managed Linux
+        // listener may bind localhost to a different address and return 404 before dispatch.
         foreach (var address in addresses)
-        foreach (var authority in new[] { $"{(address.Equals(IPAddress.IPv6Loopback) ? "[::1]" : "127.0.0.1")}:{server.Port}",
-            $"localhost:{server.Port}", $"LOCALHOST:{server.Port}" })
         {
-            var response = await RawGet(server, address, authority, "/v1/history", requireAuthentication);
-            Assert.True(response.StartsWith("HTTP/1.1 200", StringComparison.Ordinal), $"{address} / {authority}: {response}");
-            Assert.Contains("private", response);
+            var localHost = address.Equals(IPAddress.IPv6Loopback) ? "[::1]" : "127.0.0.1";
+            var authorities = OperatingSystem.IsWindows()
+                ? new[] { $"{localHost}:{server.Port}", $"localhost:{server.Port}", $"LOCALHOST:{server.Port}" }
+                : new[] { $"{localHost}:{server.Port}" };
+            foreach (var authority in authorities)
+            {
+                var response = await RawGet(server, address, authority, "/v1/history", requireAuthentication);
+                Assert.True(response.StartsWith("HTTP/1.1 200", StringComparison.Ordinal), $"{address} / {authority}: {response}");
+                Assert.Contains("private", response);
+            }
         }
     }
 
