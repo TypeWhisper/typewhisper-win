@@ -26,7 +26,8 @@ public partial class App : Application
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
-            if (args.ExceptionObject is Exception error) AppDiagnostics.WriteFailure("app.crash", error);
+            // The process ends after this handler; the line must reach the file before that.
+            if (args.ExceptionObject is Exception error) AppDiagnostics.WriteFailureNow("app.crash", error);
         };
         // The scheduler wraps the fault; its type and stack are on the inner exception.
         TaskScheduler.UnobservedTaskException += (_, args) => AppDiagnostics.WriteFailure("task.unobserved-exception",
@@ -268,6 +269,7 @@ public partial class App : Application
     private void ExitAfterProfileOperation()
     {
         _mainInstance?.UnregisterKey();
+        AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
         Exit();
     }
 
@@ -493,6 +495,8 @@ public partial class App : Application
             _tray = null;
             if (restart)
             {
+                // Both restart paths end this process; queued diagnostics would be lost.
+                AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
                 if (applyUpdate is not null)
                 {
                     applyUpdate();
@@ -507,6 +511,7 @@ public partial class App : Application
                 return message;
             }
             _mainInstance?.UnregisterKey();
+            AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
             Exit();
             return null;
         }
