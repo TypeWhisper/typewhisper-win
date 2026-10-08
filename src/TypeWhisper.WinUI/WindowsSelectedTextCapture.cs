@@ -67,12 +67,12 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
         public uint SendCopy()
         {
             if (!TargetStillCurrent) return 0;
-            Input[] inputs = [Key(0x11, false), Key(0x43, false), Key(0x43, true), Key(0x11, true)];
-            var sent = SendInput(4, inputs, Marshal.SizeOf<Input>());
+            NativeMethods.Input[] inputs = [Key(0x11, false), Key(0x43, false), Key(0x43, true), Key(0x11, true)];
+            var sent = NativeMethods.SendInput(4, inputs, Marshal.SizeOf<NativeMethods.Input>());
             if (sent is > 0 and < 4)
             {
-                Input[] release = [Key(0x43, true), Key(0x11, true)];
-                SendInput(2, release, Marshal.SizeOf<Input>());
+                NativeMethods.Input[] release = [Key(0x43, true), Key(0x11, true)];
+                NativeMethods.SendInput(2, release, Marshal.SizeOf<NativeMethods.Input>());
             }
             return sent;
         }
@@ -98,14 +98,9 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
         public Task DelayAsync(TimeSpan delay, CancellationToken ct) => Task.Delay(delay, ct);
     }
 
-    private static Input Key(ushort key, bool up) => new() { Type = 1, Data = new InputUnion { Keyboard = new KeyboardInput { Key = key, Flags = up ? 2u : 0u, Extra = OwnKeyboardInput.Marker } } };
-    [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputUnion Data; }
-    [StructLayout(LayoutKind.Explicit)] private struct InputUnion
+    private static NativeMethods.Input Key(ushort key, bool up) => new()
     {
-        [FieldOffset(0)] public KeyboardInput Keyboard;
-        [FieldOffset(0)] public MouseInput Mouse;
-    }
-    [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public UIntPtr Extra; }
-    [StructLayout(LayoutKind.Sequential)] private struct MouseInput { public int X, Y; public uint Data, Flags, Time; public UIntPtr Extra; }
-    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
+        Type = NativeMethods.INPUT_KEYBOARD,
+        Data = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Key = key, Flags = up ? NativeMethods.KEYEVENTF_KEYUP : 0u, Extra = OwnKeyboardInput.Marker } }
+    };
 }

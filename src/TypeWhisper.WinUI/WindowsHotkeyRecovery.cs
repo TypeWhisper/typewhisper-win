@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -8,7 +9,7 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
 {
     private const nuint SubclassId = 0x545752;
     private readonly IntPtr _window;
-    private readonly SubclassProc _callback;
+    private readonly NativeMethods.SubclassProc _callback;
     private readonly HotkeyRecoveryState _state = new();
     private readonly Action _interrupt;
     private readonly Func<string?> _recover;
@@ -21,7 +22,7 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
         _window = WinRT.Interop.WindowNative.GetWindowHandle(window);
         _interrupt = interrupt; _recover = recover; _report = report;
         _callback = ProcessMessage;
-        if (!SetWindowSubclass(_window, _callback, SubclassId, IntPtr.Zero))
+        if (!NativeMethods.SetWindowSubclass(_window, _callback, SubclassId, IntPtr.Zero))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not watch hotkey resume events.");
         RegisterSession();
     }
@@ -47,7 +48,7 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { AppDiagnostics.Write("hotkey.recovery.notification-failed", ex); }
-        return DefSubclassProc(window, message, reason, data);
+        return NativeMethods.DefSubclassProc(window, message, reason, data);
     }
 
     private async Task RecoverAsync(int revision)
@@ -80,13 +81,9 @@ internal sealed class WindowsHotkeyRecovery : IDisposable
         if (_disposed) return;
         _disposed = true; _state.Dispose();
         if (_sessionRegistered) WTSUnRegisterSessionNotification(_window);
-        RemoveWindowSubclass(_window, _callback, SubclassId);
+        NativeMethods.RemoveWindowSubclass(_window, _callback, SubclassId);
     }
 
-    private delegate IntPtr SubclassProc(IntPtr window, uint message, IntPtr reason, IntPtr data, nuint id, IntPtr reference);
-    [DllImport("comctl32.dll", SetLastError = true)] private static extern bool SetWindowSubclass(IntPtr window, SubclassProc callback, nuint id, IntPtr reference);
-    [DllImport("comctl32.dll")] private static extern bool RemoveWindowSubclass(IntPtr window, SubclassProc callback, nuint id);
-    [DllImport("comctl32.dll")] private static extern IntPtr DefSubclassProc(IntPtr window, uint message, IntPtr reason, IntPtr data);
     [DllImport("wtsapi32.dll", SetLastError = true)] private static extern bool WTSRegisterSessionNotification(IntPtr window, uint flags);
     [DllImport("wtsapi32.dll")] private static extern bool WTSUnRegisterSessionNotification(IntPtr window);
 }
