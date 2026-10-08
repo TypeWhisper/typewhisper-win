@@ -95,6 +95,7 @@ internal static class TranscriptionWorkerProtocol
         };
 }
 
+// Both readers ignore frame types they do not know, so a type added here needs no protocol version.
 internal static class TranscriptionWorkerMessageTypes
 {
     internal const string Hello = "hello";
@@ -102,6 +103,8 @@ internal static class TranscriptionWorkerMessageTypes
     internal const string Cancel = "cancel";
     internal const string Response = "response";
     internal const string Log = "log";
+    /// <summary>Sent by the worker with the request id while that request runs; carries nothing else.</summary>
+    internal const string Heartbeat = "heartbeat";
 }
 
 internal static class TranscriptionWorkerCommands
@@ -136,6 +139,8 @@ internal sealed record TranscriptionWorkerMessage
     public TranscriptionWorkerState? State { get; init; }
     public PluginLogLevel? LogLevel { get; init; }
     public string? LogMessage { get; init; }
+    /// <summary>In <see cref="TranscriptionWorkerMessageTypes.Hello"/>: how often the worker will beat while a request runs; null when it never does.</summary>
+    public TimeSpan? HeartbeatInterval { get; init; }
 }
 
 internal sealed record TranscriptionWorkerError(string Kind, string Message);
