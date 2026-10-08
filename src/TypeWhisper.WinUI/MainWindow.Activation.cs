@@ -102,7 +102,6 @@ public sealed partial class MainWindow
                 OpenFileTranscription(request.Files.Count == 0 ? null : () => _fileTranscription?.AddActivatedFiles(request.Files));
                 break;
             case "--setup": OpenSetup(); break;
-            case "--compare-selects": OpenSelectComparison(); break;
             // Starting TypeWhisper again while it runs opens Settings, as on macOS.
             default: OpenSettings(); break;
         }

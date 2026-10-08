@@ -624,12 +624,6 @@ public sealed partial class MainWindow : Window
         OpenSettings(); _settingsWindow!.ShowAccount();
     }
 
-    internal void OpenSelectComparison()
-    {
-        OpenSettings();
-        _settingsWindow!.ShowSelectComparison();
-    }
-
     private void OpenProviderSettings(string pluginId)
     {
         OpenSettings();

@@ -132,9 +132,6 @@
         </ScrollViewer>
         <Border x:Name="IntegrationsHost" Grid.Column="1" Margin="16,16,16,0" Visibility="Collapsed" />
         <Border x:Name="WorkspaceHost" Grid.Column="1" Margin="12,12,12,0" Visibility="Collapsed" />
-        <ScrollViewer x:Name="ComparisonScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <local:SelectComparison x:Name="SelectComparison" Margin="24,16,24,20" />
-        </ScrollViewer>
         </Grid>
         <Border x:Name="SettingsFooter" Grid.Row="2" Visibility="Collapsed" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="18,0">
             <Grid MinHeight="58" ColumnSpacing="10">
