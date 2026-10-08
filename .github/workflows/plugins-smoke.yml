@@ -72,7 +72,7 @@ jobs:
         run: python -m unittest discover -s plugins/TypeWhisper.Plugin.GraniteSpeech/Tests -p 'test_*.py' -v
 
   discover-plugins:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     outputs:
       projects: ${{ steps.discover.outputs.projects }}
       has_projects: ${{ steps.discover.outputs.has_projects }}
@@ -103,7 +103,7 @@ jobs:
           "scan_mode=$($selection.scan_mode)" >> $env:GITHUB_OUTPUT
 
   validate-metadata:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7
