@@ -708,13 +708,10 @@ public sealed partial class WorkflowsView : UserControl
         DeleteWorkflowButton.IsEnabled = false;
         try
         {
-            var dialog = _deleteDialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete this workflow?"),
-                Content = Loc.T("Delete \"{0}\" and its saved instructions? This cannot be undone. Unsaved edits and this workflow's source-text draft will also be discarded.", workflow.Title),
-                PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
+            var dialog = _deleteDialog = Dialogs.Confirmation(Loc.T("Delete this workflow?"),
+                Loc.T("Delete \"{0}\" and its saved instructions? This cannot be undone. Unsaved edits and this workflow's source-text draft will also be discarded.", workflow.Title),
+                Loc.T("Delete"), destructive: true);
+            if (await Dialogs.ShowAsync(this, dialog) != ContentDialogResult.Primary || _closing) return;
             RequireUnchangedApiWorkflow(workflow);
             if (Shortcuts is { } shortcuts) shortcuts.Delete(workflow.Id);
             else _store.Delete(workflow.Id, allowAutomatic: true);
@@ -759,7 +756,7 @@ public sealed partial class WorkflowsView : UserControl
         var run = _session.PluginRuntime.Actions.FirstOrDefault(a => a.PluginId == workflow.TargetActionPluginId)?.Name ?? Loc.T("Run workflow");
         var dialog = _testDialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = workflow.Title, Content = content,
+            Title = workflow.Title, Content = content,
             PrimaryButtonText = run, SecondaryButtonText = Loc.T("Copy result"), CloseButtonText = Loc.T("Close"),
             DefaultButton = ContentDialogButton.Primary, IsSecondaryButtonEnabled = false
         };
@@ -836,7 +833,7 @@ public sealed partial class WorkflowsView : UserControl
         dialog.Opened += (_, _) => source.Focus(FocusState.Programmatic);
         _workflowRunFailure = null;
         Refresh();
-        try { await dialog.ShowAsync(); }
+        try { await Dialogs.ShowAsync(this, dialog); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowSummary.Text = ex.Message; }
         finally { _run?.Cancel(); _testDialog = null; _workflowRunFailure = null; }
         // An update that arrived through the API during a run could not refresh the list.

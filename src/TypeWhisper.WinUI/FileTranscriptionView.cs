@@ -252,13 +252,10 @@ public sealed partial class FileTranscriptionView : UserControl
         _picking = true;
         try
         {
-            var dialog = _recoveryDialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Discard saved queue data?"),
-                Content = Loc.T("Remove the saved recovery queue and turn recovery off? Original media files and this session’s results are kept."),
-                PrimaryButtonText = Loc.T("Discard saved data"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-            };
-            if (await dialog.ShowAsync() == ContentDialogResult.Primary && !_queue.IsShutdown)
+            var dialog = _recoveryDialog = Dialogs.Confirmation(Loc.T("Discard saved queue data?"),
+                Loc.T("Remove the saved recovery queue and turn recovery off? Original media files and this session’s results are kept."),
+                Loc.T("Discard saved data"), destructive: true);
+            if (await Dialogs.ShowAsync(this, dialog) == ContentDialogResult.Primary && !_queue.IsShutdown)
                 _notice.Text = _queue.DiscardRecoveryData() ? Loc.T("Saved queue recovery data was removed.") : _queue.RecoveryError ?? Loc.T("Recovery data could not be removed.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

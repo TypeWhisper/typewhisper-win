@@ -104,13 +104,9 @@ public sealed partial class RecorderView
         {
             if (IsQueuedSource?.Invoke(entry.FilePath) == true)
             { LibraryStatus.Text = Loc.T("Remove this recording from the file queue before deleting it."); return; }
-            var confirmation = _libraryConfirmation = new ContentDialog
-            {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete recording?"),
-                Content = Loc.T("Permanently delete {0}? This cannot be undone.", entry.Name),
-                PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-            };
-            if (await confirmation.ShowAsync() != ContentDialogResult.Primary || _libraryClosing) return;
+            var confirmation = _libraryConfirmation = Dialogs.Confirmation(Loc.T("Delete recording?"),
+                Loc.T("Permanently delete {0}? This cannot be undone.", entry.Name), Loc.T("Delete"), destructive: true);
+            if (await Dialogs.ShowAsync(this, confirmation) != ContentDialogResult.Primary || _libraryClosing) return;
             if (IsQueuedSource?.Invoke(entry.FilePath) == true)
             { LibraryStatus.Text = Loc.T("Remove this recording from the file queue before deleting it."); return; }
             StopAudioPlayback();

@@ -6,8 +6,7 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class CorrectionCommitObserver(DispatcherQueue dispatcher, IntPtr target) : ITargetAppCorrectionCommitObserver
 {
-    private delegate IntPtr Hook(int code, IntPtr message, IntPtr data);
-    private Hook? _callback;
+    private NativeMethods.HookProc? _callback;
     private IntPtr _handle;
     private int _signal;
     public void Start() => OnUI(() =>
@@ -17,15 +16,15 @@ internal sealed class CorrectionCommitObserver(DispatcherQueue dispatcher, IntPt
         {
             if (code >= 0 && (message == 0x100 || message == 0x104) && NativeMethods.GetForegroundWindow() == target)
             {
-                var key = Marshal.PtrToStructure<Key>(data);
-                if ((key.Flags & 0x10) == 0 && key.Code is 13 or 9) Interlocked.Exchange(ref _signal, 1);
+                var key = Marshal.PtrToStructure<NativeMethods.KeyboardHookData>(data);
+                if ((key.Flags & 0x10) == 0 && key.Key is 13 or 9) Interlocked.Exchange(ref _signal, 1);
             }
-            return CallNextHookEx(_handle, code, message, data);
+            return NativeMethods.CallNextHookEx(_handle, code, message, data);
         };
-        _handle = SetWindowsHookExW(13, _callback, GetModuleHandleW(null), 0);
+        _handle = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (_handle == IntPtr.Zero) throw new InvalidOperationException("Correction commit observation unavailable.");
     });
-    public void Stop() => OnUI(() => { if (_handle != IntPtr.Zero) UnhookWindowsHookEx(_handle); _handle = IntPtr.Zero; _callback = null; });
+    public void Stop() => OnUI(() => { if (_handle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(_handle); _handle = IntPtr.Zero; _callback = null; });
     public bool ConsumeCommitSignal() => Interlocked.Exchange(ref _signal, 0) != 0;
     public void Dispose() => Stop();
     private void OnUI(Action action)
@@ -36,9 +35,4 @@ internal sealed class CorrectionCommitObserver(DispatcherQueue dispatcher, IntPt
             throw new InvalidOperationException("App is closing.");
         completion.Task.GetAwaiter().GetResult();
     }
-    [StructLayout(LayoutKind.Sequential)] private struct Key { public uint Code, Scan, Flags, Time; public UIntPtr Extra; }
-    [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookExW(int hook, Hook callback, IntPtr module, uint thread);
-    [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
-    [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandleW(string? name);
 }

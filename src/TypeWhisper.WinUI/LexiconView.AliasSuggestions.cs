@@ -64,7 +64,7 @@ public sealed partial class LexiconView
         body.Children.Add(progress); body.Children.Add(results); body.Children.Add(status);
         var dialog = _aliasDialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Suggest misheard variants"),
+            Title = Loc.T("Suggest misheard variants"),
             Content = new ScrollViewer { Content = body, MaxHeight = 460, Padding = new Thickness(0, 0, 16, 0),
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
             PrimaryButtonText = Loc.T("Generate suggestions"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
@@ -145,7 +145,7 @@ public sealed partial class LexiconView
         dialog.SecondaryButtonClick += (_, args) => { args.Cancel = true; if (!busy && !ended) request = GenerateAsync(); };
         dialog.Closed += (_, _) => { ended = true; cancellation.Cancel(); };
         UpdateButtons();
-        try { await dialog.ShowAsync(); }
+        try { await Dialogs.ShowAsync(this, dialog); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { if (!_closing) _notice.Text = Loc.T("Alias suggestions could not open: {0}", ex.Message); }
         finally

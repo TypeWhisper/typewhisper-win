@@ -153,14 +153,11 @@ internal sealed class SyncBackupView : UserControl
     {
         var preview = _preview;
         if (preview is null || _restore is null) return;
-        _dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot, Title = Loc.T("Restore and close TypeWhisper?"),
-            Content = preview.ChangedFileCount == 1 ? Loc.T("Apply the reviewed merge to {0} profile file. Active work will stop. Reopen TypeWhisper after it closes.", preview.ChangedFileCount) : Loc.T("Apply the reviewed merge to {0} profile files. Active work will stop. Reopen TypeWhisper after it closes.", preview.ChangedFileCount),
-            PrimaryButtonText = Loc.T("Restore and close app"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
-        };
+        var dialog = _dialog = Dialogs.Confirmation(Loc.T("Restore and close TypeWhisper?"),
+            preview.ChangedFileCount == 1 ? Loc.T("Apply the reviewed merge to {0} profile file. Active work will stop. Reopen TypeWhisper after it closes.", preview.ChangedFileCount) : Loc.T("Apply the reviewed merge to {0} profile files. Active work will stop. Reopen TypeWhisper after it closes.", preview.ChangedFileCount),
+            Loc.T("Restore and close app"));
         ContentDialogResult choice;
-        try { choice = await _dialog.ShowAsync(); }
+        try { choice = await Dialogs.ShowAsync(this, dialog); }
         finally { _dialog = null; }
         if (_unloaded || choice != ContentDialogResult.Primary) return;
         await _restore(_store, preview);
@@ -200,17 +197,13 @@ internal sealed class SyncBackupView : UserControl
         content.Children.Add(Copy(Loc.T("Use Export all data first if you want to keep a copy. Files in your cloud sync folder, your TypeWhisper account and your license activations are not changed; to move a license to another PC, use Deactivate this device under Premium first."), 13, true));
         content.Children.Add(Copy(Loc.T("Active work stops, Start with Windows is turned off and the command line tool installed from this profile is removed, then TypeWhisper restarts and opens setup like a new installation."), 13, true));
         content.Children.Add(understood);
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete all TypeWhisper data?"), Content = content,
-            PrimaryButtonText = Loc.T("Delete everything and restart"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close,
-            IsPrimaryButtonEnabled = false, PrimaryButtonStyle = (Style)Application.Current.Resources["DestructiveConfirmButtonStyle"]
-        };
+        var dialog = Dialogs.Confirmation(Loc.T("Delete all TypeWhisper data?"), content, Loc.T("Delete everything and restart"), destructive: true);
+        dialog.IsPrimaryButtonEnabled = false;
         understood.Checked += (_, _) => dialog.IsPrimaryButtonEnabled = true;
         understood.Unchecked += (_, _) => dialog.IsPrimaryButtonEnabled = false;
         _dialog = dialog;
         ContentDialogResult choice;
-        try { choice = await dialog.ShowAsync(); }
+        try { choice = await Dialogs.ShowAsync(this, dialog); }
         finally { _dialog = null; }
         if (_unloaded) return;
         if (choice != ContentDialogResult.Primary || understood.IsChecked != true) { _dataNotice.Text = Loc.T("Nothing was deleted."); return; }
