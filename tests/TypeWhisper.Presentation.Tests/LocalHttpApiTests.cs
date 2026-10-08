@@ -11,6 +11,21 @@ public sealed class LocalHttpApiTests
 {
     private const string Token = "a7d18284e6504fe2a1cc070c62850709";
 
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("localhost")]
+    public async Task LoopbackPrefixesAcceptBothLocalClientAddressForms(string host)
+    {
+        await using var server = new LocalHttpApi(FreePort(), Token,
+            (_, _) => Task.FromResult(LocalApiResponse.Json(200, new { accepted = true })));
+        await server.StartAsync();
+        using var client = new HttpClient(new HttpClientHandler { UseProxy = false })
+        { BaseAddress = new Uri($"http://{host}:{server.Port}/"), Timeout = TimeSpan.FromSeconds(5) };
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        using var response = await client.GetAsync("v1/models");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task CustomStatusIsPublicButCannotBypassOriginOrProtectedEndpointChecks()
     {

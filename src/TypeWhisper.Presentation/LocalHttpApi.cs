@@ -105,7 +105,11 @@ public sealed class LocalHttpApi : IAsyncDisposable
             if (IsRunning) return;
             var listener = new HttpListener();
             listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
-            listener.Prefixes.Add($"http://localhost:{Port}/");
+            // HTTP.sys hostname prefixes select the Host header across interfaces. IP prefixes
+            // route localhost requests on the loopback interface without that extra registration.
+            // The request's peer/host/origin checks remain the security boundary.
+            if (OperatingSystem.IsWindows()) listener.Prefixes.Add($"http://[::1]:{Port}/");
+            else listener.Prefixes.Add($"http://localhost:{Port}/");
             try { listener.Start(); }
             catch { listener.Close(); throw; }
             _listener = listener;
