@@ -217,7 +217,8 @@ public sealed partial class PortablePluginRuntimeRegistry
             token.ThrowIfCancellationRequested();
             // The package lease remains held. SDK code may notify or wait for a worker that reads registry state;
             // never call it under _sync. UseAsync drains and rejects results superseded by concurrent disable.
-            engine.SelectModel(expected.ModelId);
+            // Engines that persist the selection asynchronously no longer block a thread here.
+            await engine.SelectModelAsync(expected.ModelId, token).ConfigureAwait(false);
             return true;
         }, cancellationToken);
     }

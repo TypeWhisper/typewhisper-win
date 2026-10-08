@@ -191,7 +191,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             {
                 await _lease!.Engine.UnloadModelAsync();
                 ActiveModelId = null;
-                if (selectedModel is not null) _lease.Engine.SelectModel(selectedModel);
+                if (selectedModel is not null) await _lease.Engine.SelectModelAsync(selectedModel, CancellationToken.None);
                 else if (_lease.Engine.SelectedModelId is not null)
                 {
                     // SDK SelectModel cannot clear selection; a fresh package

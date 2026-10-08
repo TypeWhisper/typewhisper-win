@@ -58,6 +58,13 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
     /// <inheritdoc />
     public void SelectModel(string modelId) => _host!.SetSetting("selectedModel", modelId);
     /// <inheritdoc />
+    public Task SelectModelAsync(string modelId, CancellationToken ct)
+    {
+        _host!.SetSetting("asyncSelectCalls", _host.GetSetting<int>("asyncSelectCalls") + 1);
+        SelectModel(modelId);
+        return Task.CompletedTask;
+    }
+    /// <inheritdoc />
     public bool IsModelDownloaded(string modelId) => true;
     /// <inheritdoc />
     public Task LoadModelAsync(string modelId, CancellationToken ct)
@@ -88,7 +95,7 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
             case "hang": await Task.Delay(Timeout.Infinite, ct); break;
             case "hang-hard": Thread.Sleep(Timeout.Infinite); break;
         }
-        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};accel={_acceleration};length={length};detail={detail}", language, 1)
+        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};asyncSelects={_host!.GetSetting<int>("asyncSelectCalls")};accel={_acceleration};length={length};detail={detail}", language, 1)
         {
             TokenTimings = [new VocabularyTokenTiming("probe", 0.25, 0.5)],
             Segments = [new PluginTranscriptionSegment("probe", 0, 1)]

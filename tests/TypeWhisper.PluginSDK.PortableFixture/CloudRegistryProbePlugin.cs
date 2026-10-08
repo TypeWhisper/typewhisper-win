@@ -80,6 +80,13 @@ public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmP
         _host.NotifyCapabilitiesChanged();
     }
     /// <inheritdoc />
+    public Task SelectModelAsync(string modelId, CancellationToken ct)
+    {
+        _host!.SetSetting("asyncSelectCalls", _host.GetSetting<int>("asyncSelectCalls") + 1);
+        SelectModel(modelId);
+        return Task.CompletedTask;
+    }
+    /// <inheritdoc />
     public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("No fixture key.");

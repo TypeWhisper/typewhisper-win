@@ -89,8 +89,8 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
 
     internal Task SelectModelAsync(string id) => RunAsync(async () =>
     {
-        if (_registry is null) RequireLease().Engine.SelectModel(id);
-        else await _registry.UseTranscriptionAsync(PluginId, (engine, _) => { engine.SelectModel(id); return Task.FromResult(true); });
+        if (_registry is null) await RequireLease().Engine.SelectModelAsync(id, CancellationToken.None);
+        else await _registry.UseTranscriptionAsync(PluginId, async (engine, ct) => { await engine.SelectModelAsync(id, ct); return true; });
     });
 
     internal void SelectLanguage(string language)

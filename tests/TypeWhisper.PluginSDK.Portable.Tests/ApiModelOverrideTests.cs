@@ -54,7 +54,9 @@ public sealed class ApiModelOverrideTests : IAsyncLifetime
         _engine.Setup(engine => engine.IsModelDownloaded(It.IsAny<string>())).Returns((string model) => _downloaded.Contains(model));
         _engine.Setup(engine => engine.LoadModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns((string model, CancellationToken ct) => { ct.ThrowIfCancellationRequested(); _selected = model; return Task.CompletedTask; });
-        _engine.Setup(engine => engine.SelectModel(It.IsAny<string>())).Callback((string model) => _selected = model);
+        // Only the asynchronous member records a selection, so a host that still calls SelectModel fails the restore tests.
+        _engine.Setup(engine => engine.SelectModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string model, CancellationToken _) => { _selected = model; return Task.CompletedTask; });
         _engine.Setup(engine => engine.UnloadModelAsync()).Returns(Task.CompletedTask);
         _engine.Setup(engine => engine.DownloadModelAsync(It.IsAny<string>(), It.IsAny<IProgress<double>>(), It.IsAny<CancellationToken>()))
             .Returns((string model, IProgress<double> progress, CancellationToken ct) =>
@@ -139,5 +141,7 @@ public sealed class ApiModelOverrideTests : IAsyncLifetime
         Assert.Null(_models.ActiveModelId);
         Assert.Equal(expected, _models.SelectedModelId);
         Assert.Equal("original", new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+        _engine.Verify(engine => engine.SelectModelAsync("original", It.IsAny<CancellationToken>()), initiallyUnselected ? Times.Never() : Times.Once());
+        _engine.Verify(engine => engine.SelectModel(It.IsAny<string>()), Times.Never());
     }
 }

@@ -83,6 +83,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
     public async Task DeactivateAsync() => await StopWorkerAsync().ConfigureAwait(false);
     public void SelectModel(string modelId) => _inner.SelectModel(modelId);
+    public Task SelectModelAsync(string modelId, CancellationToken ct) => _inner.SelectModelAsync(modelId, ct);
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) => _inner.SetAccelerationPreference(preference);
     public bool IsModelDownloaded(string modelId) => _inner.IsModelDownloaded(modelId);
     public Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct) => _inner.DownloadModelAsync(modelId, progress, ct);
@@ -100,7 +101,8 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
         var response = await RunAsync(new() { Command = TranscriptionWorkerCommands.Load, ModelId = modelId }, default, ct, explicitLoad: true).ConfigureAwait(false);
         // Some engines select the model they load. Mirror that on the in-process instance, whose
         // selection drives metadata such as translation support and the next request's model.
-        if (response.State?.SelectedModelId == modelId && _inner.SelectedModelId != modelId) _inner.SelectModel(modelId);
+        if (response.State?.SelectedModelId == modelId && _inner.SelectedModelId != modelId)
+            await _inner.SelectModelAsync(modelId, ct).ConfigureAwait(false);
     }
 
     /// <summary>Ends the worker, which releases the model and all native memory.</summary>

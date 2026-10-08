@@ -226,7 +226,7 @@ public static class TranscriptionWorkerServer
                 await engine.LoadModelAsync(modelId, ct).ConfigureAwait(false);
                 _loadedModelId = modelId;
             }
-            if (engine.SelectedModelId != modelId) engine.SelectModel(modelId);
+            if (engine.SelectedModelId != modelId) await engine.SelectModelAsync(modelId, ct).ConfigureAwait(false);
         }
 
         private static float[] ToSamples(byte[] payload)
