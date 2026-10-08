@@ -14,14 +14,14 @@ try {
     if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' && env.GITHUB_EVENT_NAME !== 'schedule') {
       throw new Error('Signing is limited to explicit or scheduled workflows, never pull requests.');
     }
-    if (policy === 'release-signing' && env.GITHUB_REF !== 'refs/heads/main') {
-      throw new Error('Production signing is restricted to main.');
+    if (env.GITHUB_REF !== 'refs/heads/main') {
+      throw new Error('Signing is restricted to main through the signpath environment.');
     }
     for (const key of ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_RESULTS_URL', 'SIGNPATH_GITHUB_TOKEN']) {
       if (!env[key]) throw new Error(`Missing ${key}.`);
     }
     env.SIGNPATH_API_TOKEN = env['INPUT_API-TOKEN'];
-    if (!env.SIGNPATH_API_TOKEN) throw new Error('Configure the SIGNPATH_API_TOKEN repository secret.');
+    if (!env.SIGNPATH_API_TOKEN) throw new Error('Configure SIGNPATH_API_TOKEN in the protected signpath environment.');
     env.SIGNPATH_CERTIFICATE_THUMBPRINT = policy === 'test-signing'
       ? '7E9AEA1B2BD953BCBD6C5241E45C3210D86137B1'
       : env['INPUT_CERTIFICATE-THUMBPRINT'];

@@ -63,8 +63,8 @@ jobs:
           if [ "$policy" = test-signing ] && { [ "$EVENT_NAME" != workflow_dispatch ] || [ "$PUBLISH_REQUESTED" = true ]; }; then
             echo 'Test-signed artifacts must not be published.'; exit 1
           fi
-          if [ "$policy" = release-signing ] && [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo 'Production signing is restricted to main.'; exit 1
+          if [ "$policy" != none ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo 'Signing is restricted to main through the signpath environment.'; exit 1
           fi
           if [ "$RELEASE_POLICY" = release-signing ] && [ "$PUBLISH_REQUESTED" = true ] && [ "$policy" != release-signing ]; then
             echo 'Public releases require production signing once enabled.'; exit 1
@@ -72,6 +72,9 @@ jobs:
           echo "policy=$policy" >> "$GITHUB_OUTPUT"
   candidate:
     needs: version
+    # The signpath environment holds the only token copy and permits only main.
+    # GitHub enforces that branch rule even if a PR changes this workflow.
+    environment: ${{ needs.version.outputs.signing_policy == 'none' && 'unsigned-candidate' || 'signpath' }}
     env:
       CANDIDATE_VERSION: ${{ needs.version.outputs.value }}
     runs-on: windows-latest
@@ -132,7 +135,8 @@ jobs:
           SIGNPATH_GITHUB_TOKEN: ${{ github.token }}
         with:
           policy: ${{ needs.version.outputs.signing_policy }}
-          # PR-controlled code must never receive the signing credential.
+          # Avoid passing credentials to unsigned runs; the environment provides
+          # the trust boundary, not this PR-editable expression.
           api-token: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && (needs.version.outputs.signing_policy == 'test-signing' || needs.version.outputs.signing_policy == 'release-signing') && secrets.SIGNPATH_API_TOKEN || '' }}
           certificate-thumbprint: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
           script: |

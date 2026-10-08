@@ -7,13 +7,16 @@ const childProcess = require('node:child_process');
 const vm = require('node:vm');
 const { actionOutput, allowedExecutable } = require('./sign.cjs');
 
-test('workflow withholds the signing token from PR code and unsigned runs', () => {
+test('workflow selects the signing environment and omits unused token inputs', () => {
   const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/winui-daily-candidate.yml'), 'utf8');
   const inputs = [...workflow.matchAll(/^\s*api-token:\s*\$\{\{ (.+) \}\}\s*$/gm)];
   assert.equal(inputs.length, 1, 'Expected one conditional signing-token input');
+  const environments = [...workflow.matchAll(/^    environment:\s*\$\{\{ (.+) \}\}\s*$/gm)];
+  assert.equal(environments.length, 1, 'Expected one environment on the packaging job');
   // This expression uses only property access, equality and boolean operators,
   // which have the same result in Actions and JavaScript for these string inputs.
   const expression = new vm.Script(inputs[0][1]);
+  const environmentExpression = new vm.Script(environments[0][1]);
   for (const [event, allowedPolicies] of [
     ['pull_request', []],
     ['pull_request_target', []],
@@ -21,15 +24,19 @@ test('workflow withholds the signing token from PR code and unsigned runs', () =
     ['workflow_dispatch', ['test-signing', 'release-signing']],
     ['schedule', ['test-signing', 'release-signing']],
   ]) {
-    // A PR must not receive the secret even if its version job requests signing.
+    // These routing checks are defense in depth. The actual trust boundary is
+    // GitHub's environment branch policy and the absence of a repository token.
     for (const policy of ['none', 'test-signing', 'release-signing', 'unknown', '']) {
       for (const token of ['signing-token-fixture', '']) {
-        const actual = expression.runInNewContext({
+        const context = {
           github: { event_name: event },
           needs: { version: { outputs: { signing_policy: policy } } },
           secrets: { SIGNPATH_API_TOKEN: token },
-        }, { timeout: 1000 });
+        };
+        const actual = expression.runInNewContext(context, { timeout: 1000 });
         assert.equal(actual, allowedPolicies.includes(policy) ? token : '', `${event}: ${policy}`);
+        const environment = environmentExpression.runInNewContext(context, { timeout: 1000 });
+        assert.equal(environment, policy === 'none' ? 'unsigned-candidate' : 'signpath', `${event}: ${policy}`);
       }
     }
   }
@@ -101,6 +108,7 @@ for (const failure of ['upload', 'sign', 'verify', null]) {
 for (const [event, ref, policy, expected] of [
   ['pull_request', 'refs/pull/1/merge', 'test-signing', /never pull requests/],
   ['workflow_dispatch', 'refs/heads/feature', 'release-signing', /restricted to main/],
+  ['workflow_dispatch', 'refs/heads/feature', 'test-signing', /restricted to main/],
   ['schedule', 'refs/heads/main', 'unknown', /Invalid signing policy/],
 ]) {
   test(`reject ${policy} from ${event} on ${ref}`, () => {

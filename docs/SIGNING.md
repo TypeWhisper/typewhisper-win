@@ -15,10 +15,11 @@ original signatures and the shared CLI runtime hashes remain unchanged.
    for `TypeWhisper/typewhisper-win`. Select only this repository and review the
    app's repository and organization administration permissions before installing.
    The current connector rejects requests when the app is missing or suspended.
-2. Confirm the SignPath CI user's notification address and store that user's API
-   token in the repository Actions secret `SIGNPATH_API_TOKEN`.
-3. Run **Candidate** manually with `signing_policy=test-signing` and both
-   publication options disabled. A repository branch can be used for this test.
+2. Confirm the SignPath CI user's notification address and configure the protected
+   `signpath` environment as described below. Store `SIGNPATH_API_TOKEN` only as
+   an environment secret, never as a repository or organization Actions secret.
+3. After merging the workflow, run **Candidate** manually on `main` with
+   `signing_policy=test-signing` and both publication options disabled.
 4. Check the SignPath request links in each packaging job's summary and the
    signature verification results for the candidate, setup, portable archive
    and update package. Both architectures must pass.
@@ -28,6 +29,26 @@ The test certificate thumbprint is pinned in `eng/signpath/run.cjs`. The test
 certificate is not installed in the runner's trust store. Test signatures must
 match that certificate and pass integrity checks, allowing only its expected
 untrusted-root status. Test-signed packages cannot enter the release job.
+
+## Protect the signing credential
+
+Create the repository environment `signpath`. Under **Deployment branches and
+tags**, choose **Selected branches and tags** and add exactly one **Branch** rule:
+`main`. Do not add tags, feature branches or `refs/pull/*/merge` patterns.
+GitHub enforces this restriction before starting a job or releasing its secrets,
+even when a pull request modifies the workflow or its tests.
+
+Store the CI token as the environment secret `SIGNPATH_API_TOKEN`. When migrating
+from the repository secret, save it in the environment first, then delete the
+repository copy. There must be no repository or organization copy available to
+this repository: a PR could read that copy regardless of workflow conditions.
+GitHub cannot return an existing secret's value; use the original token or rotate
+it in SignPath if it is no longer available.
+
+Unsigned jobs use the separate `unsigned-candidate` environment, which must
+contain no signing credentials. Both test and production signing require `main`.
+The environment restriction adds no manual approval step; SignPath's own release
+approval policy still applies.
 
 ## Enable production signing
 
@@ -54,10 +75,9 @@ After SignPath has activated `release-signing`:
 During onboarding the variable is unset and existing scheduled releases remain
 unsigned. A signing failure never falls back to unsigned output. Production
 signatures must be trusted, match the configured certificate and have a timestamp.
-Production signing is limited to `main`; signing is never performed for PR runs.
-The workflow passes the SignPath token only to manual or scheduled signing runs.
-Pull-request and unsigned runs receive an empty token input, independently of the
-local action's policy checks.
+Signing is limited to `main`; signing is never performed for PR runs. The workflow
+also omits the token input on PR and unsigned runs, as a secondary safeguard.
+The protected environment and secret scope provide the trust boundary.
 
 ## Packaging integration
 
@@ -80,5 +100,6 @@ Code signing identifies the publisher and supports SmartScreen reputation. It
 does not guarantee that a newly published file immediately avoids SmartScreen.
 
 References: [SignPath GitHub integration](https://docs.signpath.io/trusted-build-systems/github),
+[GitHub environment protection](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments),
 [Velopack signing](https://docs.velopack.io/packaging/signing),
 [Microsoft SmartScreen reputation](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
