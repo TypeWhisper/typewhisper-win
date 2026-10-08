@@ -14,7 +14,8 @@ permissions:
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled; every push to main keeps its run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   dependency-review:
@@ -31,6 +32,9 @@ jobs:
       - uses: actions/dependency-review-action@v5
 
   dotnet-package-audit:
+    # Pull requests and pushes already fail their restores on vulnerable packages
+    # (NuGetAudit in Directory.Build.props); this full report runs weekly or on demand.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
 
     steps:

@@ -1,0 +1,19 @@
+# Documents the conventions the tree already follows: UTF-8 without BOM, LF
+# (see .gitattributes), spaces, a final newline and no trailing whitespace.
+# Deliberately no C# style or naming rules; CI only verifies whitespace.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{csproj,props,targets,slnx,json,yml,yaml,manifest}]
+indent_size = 2
+
+# Batch files need CRLF for cmd.exe, matching .gitattributes.
+[*.{cmd,bat}]
+end_of_line = crlf

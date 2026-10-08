@@ -23,6 +23,10 @@ on:
 permissions:
   contents: read
 
+# Daily versions and tags share this prefix; the release job uses it to find the previous Daily.
+env:
+  DAILY_VERSION_PREFIX: 1.1.0-daily.
+
 concurrency:
   group: winui-daily-candidate-${{ github.ref }}
   cancel-in-progress: true
@@ -34,7 +38,7 @@ jobs:
       value: ${{ steps.version.outputs.value }}
     steps:
       - id: version
-        run: echo "value=1.1.0-daily.$(date -u +%Y%m%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+        run: echo "value=${DAILY_VERSION_PREFIX}$(date -u +%Y%m%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
   candidate:
     needs: version
     env:
@@ -55,6 +59,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            Directory.Build.props
       - name: Test portable host and application logic
         if: matrix.rid == 'win-x64'
         shell: pwsh
@@ -100,13 +108,25 @@ jobs:
             --icon src/TypeWhisper.WinUI/Assets/app.ico --outputDir legacy-installer
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./eng/Test-DailyUpgradePackage.ps1 -ReleaseDirectory legacy-installer -RuntimeIdentifier '${{ matrix.rid }}' -ExpectedVersion $env:CANDIDATE_VERSION
+      - name: Read the minimum Windows build from the project
+        id: platform
+        shell: pwsh
+        run: |
+          $minimum = (dotnet msbuild src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -nologo -getProperty:TargetPlatformMinVersion).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $minimum) { throw 'Could not resolve TargetPlatformMinVersion.' }
+          $build = ([version]$minimum).Build
+          if ($build -le 0) { throw "Unexpected TargetPlatformMinVersion '$minimum'." }
+          Write-Host "TargetPlatformMinVersion $minimum -> minimum Windows build $build"
+          "minimum_windows_build=$build" >> $env:GITHUB_OUTPUT
       - name: Archive candidate and record provenance
         shell: pwsh
+        env:
+          MINIMUM_WINDOWS_BUILD: ${{ steps.platform.outputs.minimum_windows_build }}
         run: |
           New-Item -ItemType Directory artifacts/candidate -Force | Out-Null
           $name = "TypeWhisper-$env:CANDIDATE_VERSION-${{ matrix.rid }}-candidate"
           @{ version = $env:CANDIDATE_VERSION; commit = '${{ github.sha }}'; runtime = '${{ matrix.rid }}';
-             minimumWindowsBuild = 19041; profile = 'TypeWhisper-WinUI';
+             minimumWindowsBuild = [int]$env:MINIMUM_WINDOWS_BUILD; profile = 'TypeWhisper-WinUI';
              distribution = 'daily-candidate'; automaticUpdates = $false } |
             ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
           Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
@@ -156,8 +176,17 @@ jobs:
             test -f upload/releases.win-x64-daily.json
             test -f upload/releases.win-arm64-daily.json
           fi
+          # Notes: the channel introduction, then GitHub's generated list of changes since the previous Daily.
+          previous_tag="$(gh release list --exclude-drafts --limit 100 --json tagName,publishedAt --jq 'sort_by(.publishedAt) | reverse | .[].tagName' \
+            | awk -v prefix="v${DAILY_VERSION_PREFIX}" -v current="$TAG" \
+                'index($0, prefix) == 1 && $0 != current && !found { print; found = 1 }')"
+          notes_args=(--notes-file docs/releases/1.1-daily.md --generate-notes)
+          if [ -n "$previous_tag" ]; then
+            echo "Generating release notes since $previous_tag"
+            notes_args+=(--notes-start-tag "$previous_tag")
+          fi
           gh release create "$TAG" upload/* --target "$GITHUB_SHA" \
-            --title "TypeWhisper $TAG · Daily" --notes-file docs/releases/1.1-daily.md \
+            --title "TypeWhisper $TAG · Daily" "${notes_args[@]}" \
             --prerelease --latest=false --draft
           gh release edit "$TAG" --draft=false --prerelease --latest=false
 

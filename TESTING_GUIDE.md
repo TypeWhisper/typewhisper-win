@@ -37,7 +37,10 @@ Use `-Suite App` for application, plugin host/SDK and Windows platform tests, or
 complete local and Candidate check. CI runs `App` on Windows and Linux; the
 Plugins workflow runs `Plugins` on both systems, including after shared SDK or
 host changes. These plugin tests use fake providers and local endpoints, not
-live services or provider credentials.
+live services or provider credentials. The runner restores and builds all plugin
+test projects once through a generated `PluginTests.slnx` in the results
+directory and then runs each project with `--no-build`; `summary.json` records
+that shared build under `pluginBuild`.
 
 For a focused iteration:
 

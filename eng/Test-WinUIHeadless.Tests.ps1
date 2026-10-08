@@ -18,19 +18,42 @@ $pluginProjects = @(
 )
 $expectedAppProjects = @($appProjects)
 if ($IsWindows) { $expectedAppProjects += $windowsProjects }
+# Plugin tests are restored and built once through a generated solution before any of them runs.
+$pluginBuild = @("restore $($pluginProjects -join ' ')", "build $($pluginProjects -join ' ')")
 $checks = 0
 
 function dotnet {
-    if ($args[0] -ne 'test' -or -not (Test-Path -LiteralPath $args[1] -PathType Leaf)) {
+    $command = $args[0]
+    $target = $args[1]
+    if ($command -in @('restore', 'build')) {
+        if ((Split-Path -Leaf $target) -ne 'PluginTests.slnx' -or -not (Test-Path -LiteralPath $target -PathType Leaf)) {
+            throw "Unexpected dotnet invocation: $args"
+        }
+        if ($command -eq 'build' -and ($args -notcontains '--no-restore' -or $args -notcontains 'Release' -or
+            $args -notcontains '-p:ShouldUnsetParentConfigurationAndPlatform=false')) {
+            throw "The shared build must reuse the restore and keep the configuration for referenced plugin projects: $args"
+        }
+        $solutionDirectory = Split-Path -Parent $target
+        $projects = @(([xml](Get-Content -LiteralPath $target -Raw)).Solution.Project | ForEach-Object {
+            [IO.Path]::GetRelativePath($fixture, [IO.Path]::GetFullPath((Join-Path $solutionDirectory $_.Path))).Replace('\', '/')
+        })
+        $headlessFixtureState.calls.Add("$command $($projects -join ' ')")
+        $global:LASTEXITCODE = if ($headlessFixtureState.buildFailure -eq $command) { 1 } else { 0 }
+        return
+    }
+    if ($command -ne 'test' -or -not (Test-Path -LiteralPath $target -PathType Leaf)) {
         throw "Unexpected dotnet invocation: $args"
     }
-    $project = [IO.Path]::GetRelativePath($fixture, $args[1]).Replace('\', '/')
+    $project = [IO.Path]::GetRelativePath($fixture, $target).Replace('\', '/')
+    if (($args -contains '--no-build') -ne $project.StartsWith('plugins/')) {
+        throw "Plugin tests must reuse the shared build and app tests must build themselves: $args"
+    }
     $headlessFixtureState.calls.Add($project)
     $global:LASTEXITCODE = if ($project -in $headlessFixtureState.failures) { 1 } else { 0 }
 }
 
-function Expect-Run([string]$Suite, [string[]]$Expected, [string[]]$Failures = @()) {
-    $headlessFixtureState = @{ calls = [Collections.Generic.List[string]]::new(); failures = $Failures }
+function Expect-Run([string]$Suite, [string[]]$Expected, [string[]]$Failures = @(), [string]$BuildFailure = '') {
+    $headlessFixtureState = @{ calls = [Collections.Generic.List[string]]::new(); failures = $Failures; buildFailure = $BuildFailure }
     $resultsDirectory = Join-Path $fixture ('results-' + [guid]::NewGuid().ToString('N'))
     $arguments = @{ Configuration = 'Release'; ResultsDirectory = $resultsDirectory }
     if ($Suite) { $arguments.Suite = $Suite }
@@ -39,17 +62,28 @@ function Expect-Run([string]$Suite, [string[]]$Expected, [string[]]$Failures = @
     catch { $failure = $_.Exception.Message }
 
     if (($headlessFixtureState.calls -join '|') -cne ($Expected -join '|')) {
-        throw "Wrong projects for '$Suite': $($headlessFixtureState.calls -join ', ')"
+        throw "Wrong dotnet calls for '$Suite': $($headlessFixtureState.calls -join ', ')"
     }
-    if ($Failures.Count -eq 0 -and $null -ne $failure) { throw $failure }
-    if ($Failures.Count -gt 0 -and $failure -notlike 'Headless checks failed:*') {
+    $expectsFailure = $Failures.Count -gt 0 -or $BuildFailure -ne ''
+    if (-not $expectsFailure -and $null -ne $failure) { throw $failure }
+    if ($BuildFailure -and $failure -notlike 'Plugin test build failed*') {
+        throw "The runner must report a failed plugin build without running plugin tests; got '$failure'."
+    }
+    if (-not $BuildFailure -and $Failures.Count -gt 0 -and $failure -notlike 'Headless checks failed:*') {
         throw "The runner must report failed suites after running every project; got '$failure'."
     }
     $summary = Get-Content -LiteralPath (Join-Path $resultsDirectory 'summary.json') -Raw | ConvertFrom-Json
     $expectedSuite = if ($Suite) { $Suite } else { 'All' }
+    $expectedChecks = @($Expected | Where-Object { $_ -notmatch '^(restore|build) ' }).Count
     if ($summary.suite -ne $expectedSuite -or $summary.configuration -ne 'Release' -or
-        $summary.passed -ne ($Failures.Count -eq 0) -or $summary.checks.Count -ne $Expected.Count) {
+        $summary.passed -ne (-not $expectsFailure) -or $summary.checks.Count -ne $expectedChecks) {
         throw "Incorrect summary for '$Suite'."
+    }
+    $sharedBuild = @($Expected | Where-Object { $_ -like 'restore *' }).Count -gt 0
+    if ($sharedBuild -ne ($null -ne $summary.pluginBuild)) { throw "The summary must record the plugin build only when plugins ran ('$Suite')." }
+    if ($sharedBuild -and ($summary.pluginBuild.exitCode -ne [int][bool]$BuildFailure -or
+        -not $summary.pluginBuild.solution.EndsWith('PluginTests.slnx'))) {
+        throw "Incorrect plugin build summary for '$Suite'."
     }
     $failedChecks = @($summary.checks | Where-Object exitCode -ne 0)
     if ($failedChecks.Count -ne $Failures.Count) { throw 'The summary lost a failed project.' }
@@ -67,12 +101,14 @@ try {
         New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
         Set-Content -LiteralPath $path -Value '<Project />'
     }
-    Expect-Run '' ($expectedAppProjects + $pluginProjects)
-    Expect-Run 'All' ($expectedAppProjects + $pluginProjects)
+    Expect-Run '' ($expectedAppProjects + $pluginBuild + $pluginProjects)
+    Expect-Run 'All' ($expectedAppProjects + $pluginBuild + $pluginProjects)
     Expect-Run 'App' $expectedAppProjects
-    Expect-Run 'Plugins' $pluginProjects
-    Expect-Run 'All' ($expectedAppProjects + $pluginProjects) @($appProjects[0], $pluginProjects[0])
-    Expect-Run 'Plugins' $pluginProjects @($pluginProjects[0])
+    Expect-Run 'Plugins' ($pluginBuild + $pluginProjects)
+    Expect-Run 'All' ($expectedAppProjects + $pluginBuild + $pluginProjects) @($appProjects[0], $pluginProjects[0])
+    Expect-Run 'Plugins' ($pluginBuild + $pluginProjects) @($pluginProjects[0])
+    Expect-Run 'Plugins' @($pluginBuild[0]) -BuildFailure 'restore'
+    Expect-Run 'All' ($expectedAppProjects + $pluginBuild) @($appProjects[0]) -BuildFailure 'build'
     Write-Host "$checks headless suite selection and failure-reporting checks passed."
 } finally {
     $global:LASTEXITCODE = 0

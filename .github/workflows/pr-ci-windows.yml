@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: pr-ci-windows-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled; every push to main keeps its run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
@@ -60,6 +61,12 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          # Hash only the projects this job restores so it keeps its own cache entry.
+          cache-dependency-path: |
+            src/**/*.csproj
+            tests/**/*.csproj
+            Directory.Build.props
       - name: Verify headless suite selection and failure reporting
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.Tests.ps1
@@ -68,7 +75,7 @@ jobs:
         run: |
           ./eng/Get-StorePackageVersion.Tests.ps1
           ./eng/New-StorePackageManifest.Tests.ps1
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Verify Store beta submission guards without credentials
