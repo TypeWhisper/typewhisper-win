@@ -91,6 +91,9 @@ public sealed class MicrophonePrerollTests
         Assert.True(state.Observe(0x2B1, 4, true)); // remote disconnect
         Assert.True(state.Observe(0x218, 7, true));
         Assert.False(state.Observe(0x2B1, 1, true)); // console reconnect
+        Assert.True(state.Observe(0x2B1, 7, true)); // lock arrives before the desktop switch
+        Assert.True(state.Observe(0x218, 18, true)); // a power event does not unlock the session
+        Assert.False(state.Observe(0x2B1, 8, true));
     }
 
     private static AudioRecordingService Create(Input input) =>

@@ -22,6 +22,7 @@ Besides the cloud providers and integrations you configure, the Windows app make
 - **History**: on by default and kept until you delete entries or choose a retention period in Settings; stored in `history.json`.
 - **History audio**: off by default. When on, the audio of eligible dictations is kept in `history-audio` next to the history.
 - **Recovery audio**: off by default. When on, recordings are kept in `dictation-recovery` for 30 days by default.
+- **Microphone pre-roll**: off by default. When enabled, the microphone stays active between dictations and the newest half-second is held in memory. Idle audio is not saved or uploaded. Starting a dictation includes that prefix in the recording; locking the screen, sleeping, disconnecting the session, or using Remote Desktop releases the idle microphone and clears the buffer.
 - **License keys, the Premium account session and plugin API keys** are stored encrypted with Windows Data Protection for your Windows user account.
 
 Settings > Advanced > Support diagnostics can export a local JSON support report.
