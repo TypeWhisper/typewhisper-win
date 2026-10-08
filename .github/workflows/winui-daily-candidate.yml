@@ -55,6 +55,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            Directory.Build.props
       - name: Test portable host and application logic
         if: matrix.rid == 'win-x64'
         shell: pwsh

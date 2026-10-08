@@ -28,6 +28,12 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          # Hash only the projects this job restores so it keeps its own cache entry.
+          cache-dependency-path: |
+            plugins/**/*.csproj
+            src/**/*.csproj
+            Directory.Build.props
       - name: Test plugins without models or provider credentials
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite Plugins -ResultsDirectory artifacts/test-results/plugins
