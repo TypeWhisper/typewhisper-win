@@ -10,8 +10,8 @@
     <Using Include="TypeWhisper.Plugin.Shared" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.LocalLlm.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="LLamaSharp" Version="0.27.0" />
-    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" />
     <Content Include="manifest.json;Localization/*.json;Scripts/**/*;Licenses/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">

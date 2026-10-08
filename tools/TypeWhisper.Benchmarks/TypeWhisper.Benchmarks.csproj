@@ -7,8 +7,8 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Speech" Version="10.0.0" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
+    <PackageReference Include="System.Speech" />
+    <PackageReference Include="NAudio" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" />
   </ItemGroup>
 </Project>

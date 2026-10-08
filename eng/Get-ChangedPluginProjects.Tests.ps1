@@ -70,9 +70,14 @@ try {
     Expect-Selection 'pull_request' $feature $shared @() 'none'
     Expect-Selection 'workflow_dispatch' '' $shared @($legacy, $portable, $other) 'all'
 
+    Write-Fixture 'Directory.Packages.props' '<Project />'
+    $packages = Commit-Fixture
+    Expect-Selection 'push' $shared $packages @($legacy, $portable, $other) 'all'
+    Expect-Selection 'pull_request' $shared $packages @($legacy, $portable, $other) 'all'
+
     Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj' '<Project><!-- test edit --></Project>'
     $testEdit = Commit-Fixture
-    Expect-Selection 'push' $shared $testEdit @($portable) 'changed'
+    Expect-Selection 'push' $packages $testEdit @($portable) 'changed'
 
     # A moved source affects both surviving packages, even when Git detects a rename.
     Invoke-FixtureGit @('mv', 'plugins/Plugin.A/Code.cs', 'plugins/Plugin.B/Moved.cs') | Out-Null

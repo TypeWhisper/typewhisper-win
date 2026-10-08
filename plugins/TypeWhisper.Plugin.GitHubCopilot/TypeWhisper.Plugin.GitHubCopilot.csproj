@@ -8,7 +8,7 @@
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="GitHub.Copilot.SDK" Version="1.0.13" />
+    <PackageReference Include="GitHub.Copilot.SDK" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.GitHubCopilot.Portable.Tests" />
     <Content Include="manifest.json;Localization/*.json;Licenses/*;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

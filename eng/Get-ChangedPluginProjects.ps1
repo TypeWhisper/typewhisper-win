@@ -69,6 +69,8 @@ if (-not $runAll) {
     }
 }
 
+$runAll = $runAll -or $changedFiles -ccontains 'Directory.Packages.props'
+
 $selectedDirs = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $changedShared = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($file in $changedFiles) {

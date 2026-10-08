@@ -10,11 +10,17 @@ updates:
         patterns:
           - "*"
 
+  # Directory.Packages.props at the root is the single NuGet manifest (Central Package
+  # Management). Minor and patch updates arrive as one grouped PR; majors stay separate.
   - package-ecosystem: "nuget"
-    directories:
-      - "/src/*"
-      - "/tests/*"
-      - "/plugins/*"
+    directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 3
+    groups:
+      nuget-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

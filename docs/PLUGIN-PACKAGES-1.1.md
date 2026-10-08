@@ -16,6 +16,11 @@ Each descriptor builds and supplies its own folder. `eng/PortablePlugin.targets`
 to the development bundle. Independently distributed plugins do not need a descriptor
 in the application repository; they only need to provide the package described below.
 
+NuGet package versions are not declared in plugin projects. `Directory.Packages.props` at the
+repository root manages every version centrally, and a `PackageReference` in a plugin or test
+project names the package only. A plugin that has to stay on another version sets
+`VersionOverride` on its reference and says why, as `TypeWhisper.Plugin.GemmaLocal` does for LLamaSharp.
+
 Providers have independent `Tests/*.csproj` suites where supplied. Run one suite directly
 with `dotnet test`, or use `eng/Test-WinUIHeadless.ps1`, which discovers plugin-owned
 test projects alongside the SDK/host and presentation checks. Tests do not require

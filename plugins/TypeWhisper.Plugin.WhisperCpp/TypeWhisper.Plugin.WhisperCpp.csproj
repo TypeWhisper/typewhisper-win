@@ -9,10 +9,10 @@
     <Using Include="TypeWhisper.Plugin.Shared" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.WhisperCpp.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="Whisper.net" Version="1.9.0" />
-    <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
-    <PackageReference Include="Whisper.net.Runtime.Cuda.Windows" Version="1.9.0" />
-    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.0" />
+    <PackageReference Include="Whisper.net" />
+    <PackageReference Include="Whisper.net.Runtime" />
+    <PackageReference Include="Whisper.net.Runtime.Cuda.Windows" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" />
     <Content Include="manifest.json;Localization/*.json;Scripts/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">

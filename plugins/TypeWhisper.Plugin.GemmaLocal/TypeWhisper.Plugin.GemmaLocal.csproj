@@ -10,8 +10,10 @@
     <Using Include="TypeWhisper.Plugin.Shared" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.GemmaLocal.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="LLamaSharp" Version="0.26.0" />
-    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.26.0" />
+    <!-- Stays on the LLamaSharp release this plugin shipped with; moving it to the central
+         version (LocalLlm's) changes the bundled llama.cpp CPU backend and needs its own test. -->
+    <PackageReference Include="LLamaSharp" VersionOverride="0.26.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" VersionOverride="0.26.0" />
     <Content Include="manifest.json;Localization/*.json;Scripts/**/*;Licenses/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">
