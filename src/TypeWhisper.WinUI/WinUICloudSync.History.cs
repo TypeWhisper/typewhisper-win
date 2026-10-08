@@ -11,6 +11,8 @@ internal static partial class WinUICloudSync
     private static HistorySyncState _history = LoadHistoryState();
     private static TranscriptionRecord[]? _historySnapshot;
     private static long _historySnapshotVersion = -1;
+    // Parsed operation files survive between passes; the cache bounds itself and follows a folder change.
+    private static readonly HistorySyncOperationCache _historyOperations = new();
     internal static TypeWhisper.Core.Services.HistoryService? History { get; set; }
     internal static bool HistoryEnabled => _history.Enabled;
     internal static bool HistoryAudioEnabled => _history.AudioEnabled;
@@ -89,7 +91,7 @@ internal static partial class WinUICloudSync
             : null;
         var deletionsBefore = state.ExplicitDeletions.Keys.ToArray();
         var result = await Task.Run(() => HistoryFolderSync.Sync(folder, transport, state, snapshot, Environment.MachineName,
-            typeof(WinUICloudSync).Assembly.GetName().Version?.ToString() ?? "unknown", DateTime.UtcNow, Lifetime.Token, audio), Lifetime.Token);
+            typeof(WinUICloudSync).Assembly.GetName().Version?.ToString() ?? "unknown", DateTime.UtcNow, Lifetime.Token, audio, _historyOperations), Lifetime.Token);
         if (result.Records is { } merged)
         {
             // Local History changed meanwhile: keep it, and merge again on the next pass.

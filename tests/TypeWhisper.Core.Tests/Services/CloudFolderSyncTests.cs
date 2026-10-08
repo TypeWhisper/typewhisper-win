@@ -234,6 +234,43 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task PassSucceedsWhileAnotherDeviceStillWritesItsTemporaryManifest()
+    {
+        var package = CloudFolderSyncEngine.PackagePath(_tempDir);
+        Directory.CreateDirectory(package);
+        // Another device is mid-write: the obvious temporary name exists and is locked.
+        using var foreign = new FileStream(Path.Combine(package, "manifest.json.tmp"), FileMode.CreateNew, FileAccess.Write, FileShare.None);
+
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, new InMemoryUserDataSyncStore(), new CloudFolderSyncState { DeviceId = "win-a" },
+            new PaidEntitlements(CanUseCloudFolderSync: true), now: Date(20));
+
+        var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(package, "manifest.json"))).RootElement;
+        Assert.Equal(1, manifest.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(["manifest.json.tmp"], Directory.GetFiles(package, "*.tmp").Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task ConcurrentPassesOfTwoDevicesOnOneFolderNeverCollide()
+    {
+        var entitlements = new PaidEntitlements(CanUseCloudFolderSync: true);
+        var deviceAStore = new InMemoryUserDataSyncStore(dictionaryEntries: [DictionaryEntry(original: "TypeWhisper", updatedAt: Date(10))]);
+        var deviceBStore = new InMemoryUserDataSyncStore();
+        var deviceAState = new CloudFolderSyncState { DeviceId = "win-a" };
+        var deviceBState = new CloudFolderSyncState { DeviceId = "win-b" };
+
+        for (var round = 0; round < 10; round++)
+        {
+            var now = Date(20 + round);
+            await Task.WhenAll(
+                Task.Run(() => CloudFolderSyncEngine.SyncAsync(_tempDir, deviceAStore, deviceAState, entitlements, now)),
+                Task.Run(() => CloudFolderSyncEngine.SyncAsync(_tempDir, deviceBStore, deviceBState, entitlements, now)));
+        }
+
+        Assert.Equal("TypeWhisper", Assert.Single(deviceBStore.DictionaryEntries).Original);
+        Assert.Empty(Directory.EnumerateFiles(CloudFolderSyncEngine.PackagePath(_tempDir), "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task DeleteTombstoneWinsOverOlderLocalItem()
     {
         var snippet = Snippet(trigger: ";sig", replacement: "Regards", updatedAt: Date(10));

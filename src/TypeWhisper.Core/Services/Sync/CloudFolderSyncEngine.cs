@@ -615,9 +615,16 @@ public static class CloudFolderSyncEngine
 
     private static void WritePackageMetadata(string packagePath, string devicesPath, string deviceId, DateTime now)
     {
-        WriteJson(
-            new CloudFolderSyncManifest(1, "TypeWhisper", now),
-            Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName))));
+        var manifestPath = Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName)));
+        try
+        {
+            WriteJson(new CloudFolderSyncManifest(1, "TypeWhisper", now), manifestPath);
+        }
+        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && HasCompatibleManifest(manifestPath))
+        {
+            // Every device writes the same manifest. When another device replaces it at this very moment, Windows
+            // refuses the second replacement; the pass goes on with the manifest that device just wrote.
+        }
 
         var devicePath = Path.Combine(devicesPath, $"{EnsureRelativePathSegment(deviceId, nameof(deviceId))}.json");
         var existing = ReadDevice(devicePath);
@@ -629,6 +636,19 @@ public static class CloudFolderSyncEngine
             foreach (var (key, value) in existing)
                 if (!device.ContainsKey(key)) device[key] = value?.DeepClone();
         WriteJson(device, devicePath);
+    }
+
+    private static bool HasCompatibleManifest(string path)
+    {
+        try
+        {
+            var manifest = JsonSerializer.Deserialize<CloudFolderSyncManifest>(File.ReadAllText(path), CloudFolderSyncJson.Options);
+            return manifest is { SchemaVersion: 1, CreatedBy: "TypeWhisper" };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
     }
 
     private static JsonObject? ReadDevice(string path)
@@ -674,16 +694,11 @@ public static class CloudFolderSyncEngine
         return operations;
     }
 
-    private static void WriteJson<T>(T value, string path)
-    {
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory))
-            Directory.CreateDirectory(directory);
-
-        var tempPath = $"{path}.tmp";
-        File.WriteAllText(tempPath, CloudFolderSyncJson.Serialize(value));
-        File.Move(tempPath, path, overwrite: true);
-    }
+    // A Mac and a PC can write the same manifest at the same moment on a shared folder. A uniquely named
+    // temporary file keeps their passes from colliding, and the flushed move shows readers a whole file.
+    // macOS skips hidden files and reads only the .json extension, so the temporary file is invisible to it.
+    private static void WriteJson<T>(T value, string path) =>
+        AtomicFileWriter.WriteAllText(path, CloudFolderSyncJson.Serialize(value));
 
     private static string OperationTimestamp(DateTime date) =>
         new DateTimeOffset(NormalizeUtc(date)).ToUnixTimeMilliseconds().ToString();
