@@ -27,7 +27,7 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
     /// <inheritdoc />
     public string PluginName => "Webhook";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.2";
+    public string PluginVersion => "1.3.3";
     /// <inheritdoc />
     public string ProcessorName => "Webhook delivery";
     /// <inheritdoc />

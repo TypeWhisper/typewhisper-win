@@ -61,7 +61,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.6";
+    public string PluginVersion => "1.2.7";
 
     // ITranscriptionEnginePlugin
     /// <summary>

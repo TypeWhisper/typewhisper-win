@@ -22,7 +22,7 @@ public sealed partial class FileMemoryPlugin : IMemoryStoragePlugin
     /// <inheritdoc />
     public string PluginName => "File Memory";
     /// <inheritdoc />
-    public string PluginVersion => "1.4.0";
+    public string PluginVersion => "1.4.1";
 
     /// <inheritdoc />
     public async Task ActivateAsync(IPluginHostServices host)

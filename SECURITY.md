@@ -39,7 +39,10 @@ Issues in these areas are especially relevant.
 
 - The local HTTP API is off by default and must be enabled explicitly in
   Settings. It is intended for local tools and scripts, accepts loopback
-  connections only, and rejects browser `Origin` headers.
+  connections only, allows only literal local Host authorities (`127.0.0.1`,
+  `[::1]`, or `localhost`, with the configured port), and rejects browser
+  `Origin` headers. The Host allowlist also covers same-origin browser GETs
+  without an Origin header after DNS rebinding.
 - The API issues a token, but requests need it only when **Require API token**
   is enabled in Settings; see the [API reference](docs/WINUI-HTTP-API.md).
 - The API accepts requests only from processes running as the same Windows user

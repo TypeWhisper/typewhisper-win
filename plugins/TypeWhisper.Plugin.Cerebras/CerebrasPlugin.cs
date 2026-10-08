@@ -46,7 +46,7 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     /// <inheritdoc />
     public string ProviderName => PluginName;
     /// <inheritdoc />
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.1.2";
     /// <inheritdoc />
     public bool IsAvailable => _host is not null && _apiKey is not null;
     /// <inheritdoc />

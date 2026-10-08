@@ -642,6 +642,62 @@ public sealed class LocalHttpApiTests
         Assert.All(verifier.LocalPorts, port => Assert.Equal(server.Port, port));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ForeignHostAuthoritiesCannotReachPublicOrProtectedRoutes(bool requireAuthentication)
+    {
+        var calls = 0;
+        var statusCalls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        }, requireAuthentication: requireAuthentication, statusHandler: _ =>
+        {
+            Interlocked.Increment(ref statusCalls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { status = "ready" }));
+        }, peerVerifier: new FakePeerVerifier(true));
+        await server.StartAsync();
+        var addresses = OperatingSystem.IsWindows()
+            ? new[] { IPAddress.Loopback, IPAddress.IPv6Loopback } : new[] { IPAddress.Loopback };
+        foreach (var address in addresses)
+        foreach (var authority in new[] { $"rebind.example:{server.Port}", $"localhost.evil.example:{server.Port}",
+            $"127.0.0.1.evil.example:{server.Port}", "localhost:1" })
+        foreach (var path in new[] { "/v1/history", "/v1/settings/export", "/v1/status", "/docs", "/docs/" })
+        {
+            var response = await RawGet(server, address, authority, path, requireAuthentication);
+            // Some HttpListener implementations reject an unmatched host before dispatch (404).
+            Assert.True(response.StartsWith("HTTP/1.1 403", StringComparison.Ordinal)
+                || response.StartsWith("HTTP/1.1 404", StringComparison.Ordinal), response);
+            Assert.DoesNotContain("private", response);
+        }
+        Assert.Equal(0, calls);
+        Assert.Equal(0, statusCalls);
+
+        // Literal local names, including case-insensitive localhost, still reach the backend.
+        foreach (var address in addresses)
+        foreach (var authority in new[] { $"{(address.Equals(IPAddress.IPv6Loopback) ? "[::1]" : "127.0.0.1")}:{server.Port}",
+            $"localhost:{server.Port}", $"LOCALHOST:{server.Port}" })
+        {
+            var response = await RawGet(server, address, authority, "/v1/history", requireAuthentication);
+            Assert.True(response.StartsWith("HTTP/1.1 200", StringComparison.Ordinal), $"{address} / {authority}: {response}");
+            Assert.Contains("private", response);
+        }
+    }
+
+    private static async Task<string> RawGet(LocalHttpApi server, IPAddress address, string authority, string path, bool authenticated)
+    {
+        using var tcp = new TcpClient(address.AddressFamily);
+        await tcp.ConnectAsync(address, server.Port);
+        // No Origin: same-origin GETs need the Host check, even for the owning Windows user.
+        var authorization = authenticated ? $"Authorization: Bearer {Token}\r\n" : "";
+        var bytes = Encoding.ASCII.GetBytes($"GET {path} HTTP/1.1\r\nHost: {authority}\r\n{authorization}Connection: close\r\n\r\n");
+        await tcp.GetStream().WriteAsync(bytes);
+        using var reader = new StreamReader(tcp.GetStream());
+        return await reader.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     private sealed class FakePeerVerifier(bool ownUser) : ILocalPeerVerifier
     {
         public int Calls;

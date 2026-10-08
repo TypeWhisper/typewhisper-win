@@ -1,6 +1,6 @@
 # Mistral for the portable host
 
-Independent .NET 10 package `com.typewhisper.voxtral`, version `1.3.2`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename. Developed on `seofood/voxtral-portable`; no other migration branch is required.
+Independent .NET 10 package `com.typewhisper.voxtral`, version `1.3.3`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename. Developed on `seofood/voxtral-portable`; no other migration branch is required.
 
 ## Behavior and macOS comparison
 

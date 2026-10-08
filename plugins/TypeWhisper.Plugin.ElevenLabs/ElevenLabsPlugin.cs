@@ -94,7 +94,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.1.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.

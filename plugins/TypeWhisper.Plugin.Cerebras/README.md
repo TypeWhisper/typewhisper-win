@@ -1,6 +1,6 @@
 # Cerebras for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.cerebras`, version `1.1.1`, requiring host `1.1.2` or later. The package has no WPF references and does not import legacy settings or credentials. Protocol behavior was compared with the Windows provider at `21dc546a` and the [macOS Cerebras plugin](https://github.com/TypeWhisper/typewhisper-mac/tree/main/TypeWhisperPluginSDK/Plugins/CerebrasPlugin) on September 14, 2026.
+Independent .NET 10 implementation of `com.typewhisper.cerebras`, version `1.1.2`, requiring host `1.1.2` or later. The package has no WPF references and does not import legacy settings or credentials. Protocol behavior was compared with the Windows provider at `21dc546a` and the [macOS Cerebras plugin](https://github.com/TypeWhisper/typewhisper-mac/tree/main/TypeWhisperPluginSDK/Plugins/CerebrasPlugin) on September 14, 2026.
 
 ## Features
 

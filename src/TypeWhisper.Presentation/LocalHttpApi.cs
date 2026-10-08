@@ -182,7 +182,8 @@ public sealed class LocalHttpApi : IAsyncDisposable
             var authenticated = !_requireAuthentication || Authenticated(request);
             var publicStatus = request.HttpMethod == "GET" && request.Url?.AbsolutePath == "/v1/status";
             var publicDocs = request.HttpMethod == "GET" && request.Url?.AbsolutePath is "/docs" or "/docs/";
-            if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) || request.Headers["Origin"] is not null)
+            if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) ||
+                !AllowedHost(request.UserHostName) || request.Headers["Origin"] is not null)
                 response = Error(403, "Request origin is not allowed.");
             // The peer check guards the token-free mode and backs up the token: the discovery file is readable
             // only by the owning user, so a token presented by another user's process was leaked, not granted.
@@ -254,6 +255,19 @@ public sealed class LocalHttpApi : IAsyncDisposable
             try { context.Response.Close(); } catch { /* Client disconnected or listener stopped. */ }
             if (admitted) _slots.Release();
         }
+    }
+
+    private bool AllowedHost(string? host)
+    {
+        // IP listener prefixes also admit other Host values on HTTP.sys. Only literal local
+        // authorities are trusted: a same-origin browser GET can omit Origin after DNS rebinding.
+        var port = Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return string.Equals(host, "127.0.0.1:" + port, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, "[::1]:" + port, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, "localhost:" + port, StringComparison.OrdinalIgnoreCase)
+            || Port == 80 && (string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(host, "[::1]", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase));
     }
 
     private bool Authenticated(HttpListenerRequest request)

@@ -19,7 +19,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 {
     private const string BaseUrl = "https://api.openai.com";
     private const string ChatGptModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
-    private const string PluginVersionValue = "1.1.5";
+    private const string PluginVersionValue = "1.1.6";
     private const int TranscriptionUploadBitRate = 48_000;
     private const string ApiKeySecretName = "api-key";
     private const string SelectedModelSettingName = "selectedModel";

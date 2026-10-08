@@ -220,7 +220,7 @@ public sealed class ElevenLabsTests : IDisposable
         { Content = new ByteArrayContent(payload), RequestMessage = request })));
         var entry = new PortableCatalogEntry
         {
-            Id = id, Name = "ElevenLabs", Version = "1.1.1", MinHostVersion = "1.1.5",
+            Id = id, Name = "ElevenLabs", Version = "1.1.2", MinHostVersion = "1.1.5",
             DownloadUrl = "https://packages.test/elevenlabs.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]

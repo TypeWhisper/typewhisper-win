@@ -1,6 +1,6 @@
 # AssemblyAI for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.1`, requiring host `1.1.5` or later. The package has no WPF dependency and does not import legacy settings or credentials. Legacy source and packages are unchanged.
+Independent .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.2`, requiring host `1.1.5` or later. The package has no WPF dependency and does not import legacy settings or credentials. Legacy source and packages are unchanged.
 
 ## Features and macOS comparison
 

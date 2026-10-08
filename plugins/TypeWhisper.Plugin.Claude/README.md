@@ -1,6 +1,6 @@
 # Claude for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.claude`, version `1.1.0`, requiring host `1.1.2` or later. Protocol behavior was compared with the Windows provider at `8631b9a0`, the macOS Claude plugin, and the official Anthropic API documentation on September 15, 2026.
+Independent .NET 10 implementation of `com.typewhisper.claude`, version `1.1.1`, requiring host `1.1.2` or later. Protocol behavior was compared with the Windows provider at `8631b9a0`, the macOS Claude plugin, and the official Anthropic API documentation on September 15, 2026.
 
 ## Features
 

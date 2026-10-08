@@ -300,7 +300,7 @@ public sealed partial class AudioRecordingService : IStreamingAudioSource, IDisp
     /// <summary>
     /// Performs warm up.
     /// </summary>
-    public bool WarmUp() => WarmUp(openCapture: !ReleaseCaptureBetweenRecordings() && !_prerollSuspended);
+    public bool WarmUp() => WarmUp(openCapture: !ReleaseCaptureBetweenRecordings() && !(_prerollEnabled && _prerollSuspended));
 
     private bool WarmUp(bool openCapture)
     {

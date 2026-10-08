@@ -66,6 +66,31 @@ public sealed class MicrophonePrerollTests
     }
 
     [Fact]
+    public void SuspensionWithoutPrerollKeepsCapturePreparedButStopped()
+    {
+        var input = new Input();
+        using var audio = Create(input);
+        audio.SuspendMicrophonePreroll(true); // Session notifications may be unavailable.
+        Assert.True(audio.WarmUp());
+        Assert.Equal(1, input.Created);
+        Assert.Equal(0, input.Starts);
+        audio.RefreshAfterDisplayOrPowerChange();
+        Assert.Equal(2, input.Created);
+        Assert.Equal(1, input.Disposed);
+        Assert.False(input.Running);
+        audio.StartRecording(false);
+        Assert.Equal(2, input.Created); // Dictation can use the already prepared client.
+        input.Feed([2000]);
+        Assert.Single(audio.StopRecording()!);
+
+        audio.MicrophonePrerollEnabled = true; // Enabling pre-roll must still honor the suspension.
+        Assert.Equal(input.Created, input.Disposed);
+        Assert.False(input.Running);
+        audio.WarmUp();
+        Assert.Equal(input.Created, input.Disposed);
+    }
+
+    [Fact]
     public void RemoteDesktopNeverArmsTheIdleMicrophone()
     {
         var input = new Input();
