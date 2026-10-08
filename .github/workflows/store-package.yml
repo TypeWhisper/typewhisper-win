@@ -71,6 +71,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
 
       - name: Restore solution
         run: dotnet restore TypeWhisper.slnx

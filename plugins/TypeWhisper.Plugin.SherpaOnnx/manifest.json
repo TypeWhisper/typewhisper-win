@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.sherpa-onnx",
   "name": "NVIDIA Parakeet",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "TypeWhisper",
   "description": "Offline transcription with NVIDIA Parakeet, Parakeet Ultra and Canary. Audio is processed on your device.",
   "assemblyName": "TypeWhisper.Plugin.SherpaOnnx.dll",

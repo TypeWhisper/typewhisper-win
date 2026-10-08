@@ -117,7 +117,7 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.1";
+    public string PluginVersion => "1.2.2";
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
     /// </summary>

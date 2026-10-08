@@ -26,5 +26,22 @@
   "Settings.ReasoningMedium": "Medium",
   "Settings.ReasoningHigh": "High",
   "Settings.ReasoningXHigh": "X High",
-  "Settings.Error": "Error: {0}"
+  "Settings.Error": "Error: {0}",
+  "Save an API key first.": "Save an API key first.",
+  "Speaker labels": "Speaker labels",
+  "Identify speakers in live and recorded transcription.": "Identify speakers in live and recorded transcription.",
+  "Off": "Off",
+  "On": "On",
+  "Text model": "Text model",
+  "Default model for text processing. Refresh models to load the catalog available to your account.": "Default model for text processing. Refresh models to load the catalog available to your account.",
+  "Reasoning effort": "Reasoning effort",
+  "Higher effort can improve complex tasks but increases response time.": "Higher effort can improve complex tasks but increases response time.",
+  "Minimal": "Minimal",
+  "Low": "Low",
+  "Medium": "Medium",
+  "High": "High",
+  "Very high": "Very high",
+  "Refresh models": "Refresh models",
+  "Load transcription and text models using the saved API key.": "Load transcription and text models using the saved API key.",
+  "Could not refresh models. The previous catalog was retained.": "Could not refresh models. The previous catalog was retained."
 }

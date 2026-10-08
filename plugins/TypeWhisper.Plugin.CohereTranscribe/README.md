@@ -2,7 +2,7 @@
 
 Local CrispASR transcription with managed runtime/model downloads and download requirements.
 
-Version `1.2.3`; plugin ID `com.typewhisper.cohere-transcribe`; minimum host `1.1.6`.
+Version `1.2.4`; plugin ID `com.typewhisper.cohere-transcribe`; minimum host `1.1.6`.
 Independent branch: `seofood/coheretranscribe-portable`, based on `4db8f6ac`.
 
 ## Setup

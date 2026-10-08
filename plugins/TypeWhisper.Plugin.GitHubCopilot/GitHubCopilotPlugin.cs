@@ -32,7 +32,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
     /// <inheritdoc />
     public string PluginName => "GitHub Copilot";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.1.3";
     /// <inheritdoc />
     public string ProviderName => RequireProfile(DefaultProfileId).Name;
     /// <inheritdoc />
@@ -189,8 +189,7 @@ public sealed partial class GitHubCopilotPlugin : ILlmProviderPlugin, IAdditiona
         try { return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)) ?? []; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return new Dictionary<string, string>(); }
     });
-    private static string L(string text) => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de"
-        && GermanStrings.Value.TryGetValue(text, out var translated) ? translated : text;
+    private string L(string text) => PluginLocalization.Get(_host, text, GermanStrings.Value.GetValueOrDefault(text, text));
     /// <inheritdoc />
     public void Dispose()
     {

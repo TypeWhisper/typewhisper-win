@@ -8,7 +8,7 @@ public sealed class DeviceChangeRaceTests
     private static readonly AudioInputDeviceInfo Headset = new(1, "headset", "Microphone (Headset)", false);
 
     [Fact]
-    public void DeviceCheckDoesNotStopARecordingThatMovedToTheFallbackMeanwhile()
+    public async Task DeviceCheckDoesNotStopARecordingThatMovedToTheFallbackMeanwhile()
     {
         var devices = new Devices { List = [QuadCast, Headset] };
         var captures = new Captures();
@@ -33,7 +33,7 @@ public sealed class DeviceChangeRaceTests
         };
 
         audio.StartRecording(enableRecovery: false);
-        Assert.True(check!.Wait(TimeSpan.FromSeconds(5)));
+        await check!.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(Headset.Id, captures.Created[^1].DeviceId);
         Assert.True(audio.IsRecording);

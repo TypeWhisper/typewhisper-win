@@ -49,8 +49,8 @@ internal sealed partial class PremiumView : UserControl
             development.Children.Add(_scenario);
             _accessDetails.Children.Add(Card(development));
         }
-        Loaded += (_, _) => { Access.Changed += Refresh; CorrectionLearning.Changed += RefreshLearning; Refresh(); };
-        Unloaded += (_, _) => { Access.Changed -= Refresh; CorrectionLearning.Changed -= RefreshLearning; };
+        ViewSubscriptions.Attach(this, () => { Access.Changed += Refresh; CorrectionLearning.Changed += RefreshLearning; Refresh(); },
+            () => { Access.Changed -= Refresh; CorrectionLearning.Changed -= RefreshLearning; });
         Refresh();
     }
 

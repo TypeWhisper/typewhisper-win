@@ -1,6 +1,6 @@
 # Cloudflare Workers AI for the portable host
 
-Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.10`, requiring host `1.1.2`. Provides original Whisper and language-aware Whisper Large V3 Turbo, with manual API tokens or browser sign-in.
+Independent .NET 10 package `com.typewhisper.cloudflare-asr`, version `1.1.11`, requiring host `1.1.2`. Provides original Whisper and language-aware Whisper Large V3 Turbo, with manual API tokens or browser sign-in.
 
 ## Behavior and macOS comparison
 

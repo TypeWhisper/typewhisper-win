@@ -1,0 +1,18 @@
+{
+  "Transcription model": "Transkriptionsmodell",
+  "Use Refresh models to load the account's current catalog.": "Mit Modelle aktualisieren den aktuellen Katalog des Kontos laden.",
+  "Transcription mode": "Transkriptionsmodus",
+  "Smart cleans up speech; Verbatim preserves the spoken wording.": "Smart bereinigt den Text; Wortgetreu erhält den gesprochenen Wortlaut.",
+  "Verbatim": "Wortgetreu",
+  "Text model": "Textmodell",
+  "Default for text processing. A workflow can choose another model.": "Standard für die Nachbearbeitung. Ein Workflow kann ein anderes Modell wählen.",
+  "Temperature": "Temperatur",
+  "Use the provider default or set a custom temperature.": "Den Anbieterstandard oder eine eigene Temperatur verwenden.",
+  "Provider default": "Anbieterstandard",
+  "Custom": "Benutzerdefiniert",
+  "Custom temperature": "Eigene Temperatur",
+  "A number from 0 to 2. Used only with Custom temperature.": "Eine Zahl von 0 bis 2. Wird nur bei benutzerdefinierter Temperatur verwendet.",
+  "Refresh models": "Modelle aktualisieren",
+  "Fetch and save transcription and text models using the stored API key.": "Transkriptions- und Textmodelle mit dem gespeicherten API-Key abrufen und speichern.",
+  "Models updated.": "Modelle aktualisiert."
+}

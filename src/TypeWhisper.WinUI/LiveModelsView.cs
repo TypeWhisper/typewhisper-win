@@ -49,8 +49,8 @@ internal sealed class LiveModelsView : UserControl
         AutomationProperties.SetLiveSetting(_feedback, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _panel.Children.Add(_feedback);
         Content = _panel;
-        Loaded += (_, _) => { _session.Models.Changed += Refresh; _session.CtcVocabulary.Changed += Refresh; _session.Changed += Refresh; Update(); };
-        Unloaded += (_, _) => { _session.Models.Changed -= Refresh; _session.CtcVocabulary.Changed -= Refresh; _session.Changed -= Refresh; };
+        ViewSubscriptions.Attach(this, () => { _session.Models.Changed += Refresh; _session.CtcVocabulary.Changed += Refresh; _session.Changed += Refresh; Update(); },
+            () => { _session.Models.Changed -= Refresh; _session.CtcVocabulary.Changed -= Refresh; _session.Changed -= Refresh; });
         Update();
     }
 
@@ -196,14 +196,8 @@ internal sealed class LiveModelsView : UserControl
             _confirmingRemoval = true; Update();
             try
             {
-                var dialog = new ContentDialog
-                {
-                    XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
-                    Title = Loc.T("Remove {0}?", model.DisplayName),
-                    Content = Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."),
-                    PrimaryButtonText = Loc.T("Remove model"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-                };
-                if (await dialog.ShowAsync() != ContentDialogResult.Primary || !IsLoaded) return;
+                if (!await Dialogs.ConfirmAsync(this, Loc.T("Remove {0}?", model.DisplayName),
+                    Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."), Loc.T("Remove model"), destructive: true) || !IsLoaded) return;
                 _message = await _session.RemoveLocalModelAsync(model.Id, expectedGeneration);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { _message = ex.Message; }

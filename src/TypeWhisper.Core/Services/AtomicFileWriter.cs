@@ -21,12 +21,19 @@ public static class AtomicFileWriter
     public static void WriteAllText(string filePath, string contents) =>
         WriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
 
+    // Publish immutable shared metadata without replacing a file another writer just created.
+    internal static void CreateAllText(string filePath, string contents) =>
+        WriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents), overwrite: false);
+
     /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/>.</summary>
     /// <param name="filePath">The file to create or replace.</param>
     /// <param name="contents">The new bytes of the file.</param>
     /// <exception cref="IOException">The file could not be written or replaced.</exception>
     /// <exception cref="UnauthorizedAccessException">Access to the file or its directory was denied.</exception>
-    public static void WriteAllBytes(string filePath, byte[] contents)
+    public static void WriteAllBytes(string filePath, byte[] contents) =>
+        WriteAllBytes(filePath, contents, overwrite: true);
+
+    private static void WriteAllBytes(string filePath, byte[] contents, bool overwrite)
     {
         string? temporaryPath = null;
         try
@@ -51,7 +58,7 @@ public static class AtomicFileWriter
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporaryPath, filePath, overwrite: true);
+            File.Move(temporaryPath, filePath, overwrite);
             temporaryPath = null;
         }
         finally
@@ -64,17 +71,35 @@ public static class AtomicFileWriter
     }
 
     internal static bool TryWriteAllText(string filePath, string contents) =>
-        TryWriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents));
+        TryWriteAllText(filePath, contents, out _);
 
-    internal static bool TryWriteAllBytes(string filePath, byte[] contents)
+    /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/> as UTF-8 without a byte order mark and reports why a write failed.</summary>
+    /// <param name="filePath">The file to create or replace.</param>
+    /// <param name="contents">The new text of the file.</param>
+    /// <param name="error">The exception that stopped the write, or null when the file was replaced.</param>
+    /// <returns>True when the file was replaced.</returns>
+    public static bool TryWriteAllText(string filePath, string contents, out Exception? error) =>
+        TryWriteAllBytes(filePath, Utf8WithoutBom.GetBytes(contents), out error);
+
+    internal static bool TryWriteAllBytes(string filePath, byte[] contents) =>
+        TryWriteAllBytes(filePath, contents, out _);
+
+    /// <summary>Replaces <paramref name="filePath"/> with <paramref name="contents"/> and reports why a write failed.</summary>
+    /// <param name="filePath">The file to create or replace.</param>
+    /// <param name="contents">The new bytes of the file.</param>
+    /// <param name="error">The exception that stopped the write, or null when the file was replaced. Callers use it to tell a locked file from a full disk.</param>
+    /// <returns>True when the file was replaced.</returns>
+    public static bool TryWriteAllBytes(string filePath, byte[] contents, out Exception? error)
     {
         try
         {
             WriteAllBytes(filePath, contents);
+            error = null;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            error = ex;
             return false;
         }
     }

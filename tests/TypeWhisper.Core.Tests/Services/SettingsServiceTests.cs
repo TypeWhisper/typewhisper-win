@@ -32,6 +32,50 @@ public class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void UpdatingSettingsPreservesRetiredAndUnknownValuesWithoutActivatingThem()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "de",
+          "fileTranscriptionEngineOverride": "old-provider",
+          "fileTranscriptionModelOverride": "old-model",
+          "internalParakeetTailDiagnosticsEnabled": true,
+          "watchFolderPath": "C:\\Legacy",
+          "selectedMicrophoneDevice": 7,
+          "futureSetting": { "enabled": true, "items": [1, 2] }
+        }
+        """);
+        var settings = new SettingsService(_filePath);
+        settings.Save(settings.Current with { Language = "en", LanguageHints = ["en"] });
+        using var saved = JsonDocument.Parse(File.ReadAllText(_filePath));
+        Assert.Equal("en", saved.RootElement.GetProperty("language").GetString());
+        Assert.Equal("old-provider", saved.RootElement.GetProperty("fileTranscriptionEngineOverride").GetString());
+        Assert.Equal("old-model", saved.RootElement.GetProperty("fileTranscriptionModelOverride").GetString());
+        Assert.True(saved.RootElement.GetProperty("internalParakeetTailDiagnosticsEnabled").GetBoolean());
+        Assert.Equal("C:\\Legacy", saved.RootElement.GetProperty("watchFolderPath").GetString());
+        Assert.Equal(7, saved.RootElement.GetProperty("selectedMicrophoneDevice").GetInt32());
+        Assert.Equal(2, saved.RootElement.GetProperty("futureSetting").GetProperty("items").GetArrayLength());
+        Assert.Equal(4, new SettingsService(_filePath).Current.UnmappedSettings!.Count);
+    }
+
+    [Fact]
+    public void FailedSaveKeepsPreviousInMemorySettingsAndDoesNotPublish()
+    {
+        var settings = new SettingsService(_filePath);
+        settings.Save(settings.Current with { Language = "de" });
+        var changes = 0;
+        settings.SettingsChanged += _ => changes++;
+        // A colliding directory prevents atomic replacement on every supported platform.
+        File.Delete(_filePath);
+        Directory.CreateDirectory(_filePath);
+        var error = Record.Exception(() => settings.Save(settings.Current with { HasCompletedOnboarding = true }));
+        Assert.True(error is IOException or UnauthorizedAccessException);
+        Assert.Equal("de", settings.Current.Language);
+        Assert.False(settings.Current.HasCompletedOnboarding);
+        Assert.Equal(0, changes);
+    }
+
+    [Fact]
     public void Load_LegacySettingsWithoutSpokenFormattingProfiles_UsesEmptyProfiles()
     {
         File.WriteAllText(_filePath, """
@@ -56,20 +100,13 @@ public class SettingsServiceTests : IDisposable
             Language = "de",
             HasCompletedOnboarding = true,
             VocabularyBoostingEnabled = true,
-            FileTranscriptionEngineOverride = "groq",
-            FileTranscriptionModelOverride = "whisper-large-v3",
-            RecorderTranscriptionEngineOverride = "com.typewhisper.openai",
-            RecorderTranscriptionModelOverride = "gpt-4o-transcribe",
             LocalModelAcceleration = AppSettings.LocalModelAccelerationAmdRocm,
             LocalModelStoragePath = @"D:\TypeWhisperModels",
             WatchFolderPath = @"C:\Watch",
             WatchFolderOutputPath = @"C:\Output",
             WatchFolderOutputFormat = "srt",
-            WatchFolderAutoStart = true,
             WatchFolderDeleteSource = true,
             WatchFolderLanguage = "en",
-            WatchFolderEngineOverride = "mock",
-            WatchFolderModelOverride = "tiny",
             RecentTranscriptionsHotkey = "Ctrl+Alt+H",
             CopyLastTranscriptionHotkey = "Ctrl+Alt+C",
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
@@ -85,7 +122,7 @@ public class SettingsServiceTests : IDisposable
             LiveTranscriptionFontSize = 15.5,
             PreviewBubbleAutoHideMilliseconds = 3750,
             SelectedIndustryPresetId = "architecture",
-            CloudFolderSyncFolderPath = @"C:\Users\Marco\OneDrive\TypeWhisper",
+            CloudFolderSyncFolderPath = @"C:\Sync\TypeWhisper",
             CloudFolderSyncState = new CloudFolderSyncState
             {
                 DeviceId = "win-a",
@@ -112,20 +149,13 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("de", sut2.Current.Language);
         Assert.True(sut2.Current.HasCompletedOnboarding);
         Assert.True(sut2.Current.VocabularyBoostingEnabled);
-        Assert.Equal("groq", sut2.Current.FileTranscriptionEngineOverride);
-        Assert.Equal("whisper-large-v3", sut2.Current.FileTranscriptionModelOverride);
-        Assert.Equal("com.typewhisper.openai", sut2.Current.RecorderTranscriptionEngineOverride);
-        Assert.Equal("gpt-4o-transcribe", sut2.Current.RecorderTranscriptionModelOverride);
         Assert.Equal(AppSettings.LocalModelAccelerationAmdRocm, sut2.Current.LocalModelAcceleration);
         Assert.Equal(@"D:\TypeWhisperModels", sut2.Current.LocalModelStoragePath);
         Assert.Equal(@"C:\Watch", sut2.Current.WatchFolderPath);
         Assert.Equal(@"C:\Output", sut2.Current.WatchFolderOutputPath);
         Assert.Equal("srt", sut2.Current.WatchFolderOutputFormat);
-        Assert.True(sut2.Current.WatchFolderAutoStart);
         Assert.True(sut2.Current.WatchFolderDeleteSource);
         Assert.Equal("en", sut2.Current.WatchFolderLanguage);
-        Assert.Equal("mock", sut2.Current.WatchFolderEngineOverride);
-        Assert.Equal("tiny", sut2.Current.WatchFolderModelOverride);
         Assert.Equal("Ctrl+Alt+H", sut2.Current.RecentTranscriptionsHotkey);
         Assert.Equal("Ctrl+Alt+C", sut2.Current.CopyLastTranscriptionHotkey);
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
@@ -141,7 +171,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal(15.5, sut2.Current.LiveTranscriptionFontSize);
         Assert.Equal(3750, sut2.Current.PreviewBubbleAutoHideMilliseconds);
         Assert.Equal("architecture", sut2.Current.SelectedIndustryPresetId);
-        Assert.Equal(@"C:\Users\Marco\OneDrive\TypeWhisper", sut2.Current.CloudFolderSyncFolderPath);
+        Assert.Equal(@"C:\Sync\TypeWhisper", sut2.Current.CloudFolderSyncFolderPath);
         Assert.NotNull(sut2.Current.CloudFolderSyncState);
         Assert.Equal("win-a", sut2.Current.CloudFolderSyncState.DeviceId);
         Assert.Contains("dictionary:term:dHlwZXdoaXNwZXI", sut2.Current.CloudFolderSyncState.KnownLocalItemIds);

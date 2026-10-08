@@ -1,0 +1,9 @@
+{
+  "Local (Granite Speech)": "Lokal (Granite Speech)",
+  "Processing device": "Verarbeitungsgerät",
+  "Choose the processor for the next model load. Switching a CPU-only runtime to CUDA requires downloading the updated runtime; cached model files are reused.": "Wähle den Prozessor für das nächste Laden. Beim Wechsel einer reinen CPU-Laufzeit zu CUDA muss die Laufzeit erneut heruntergeladen werden; vorhandene Modelldateien werden weiterverwendet.",
+  "Automatic": "Automatisch",
+  "Remove model and runtime": "Modell und Laufzeit entfernen",
+  "Unloads the model and deletes its local model files and managed runtime. Settings are preserved.": "Entlädt das Modell und löscht seine lokalen Modelldateien und die verwaltete Laufzeit. Einstellungen bleiben erhalten.",
+  "Model and runtime removed.": "Modell und Laufzeit entfernt."
+}

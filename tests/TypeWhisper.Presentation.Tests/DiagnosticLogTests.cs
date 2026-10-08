@@ -80,6 +80,22 @@ public sealed class DiagnosticLogTests : IDisposable
     }
 
     [Fact]
+    public void AdmitsCloudRetryAndSplitCounters()
+    {
+        var line = DiagnosticLogFile.Admit(new(_now, "cloud.retry", Data: new Dictionary<string, string>
+        {
+            ["plugin"] = "com.typewhisper.groq", ["attempt"] = "1", ["delayMs"] = "2000", ["status"] = "503",
+            ["kind"] = "ServerError", ["chunks"] = "3", ["delayMs2"] = "1", ["kind2"] = "Rate limit reached",
+        }));
+
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["plugin"] = "com.typewhisper.groq", ["attempt"] = "1", ["delayMs"] = "2000", ["status"] = "503",
+            ["kind"] = "ServerError", ["chunks"] = "3",
+        }, line.Data);
+    }
+
+    [Fact]
     public void KeepsExceptionTypesAndHResults()
     {
         var line = DiagnosticLogFile.Admit(new(_now, "field.capture.exception",

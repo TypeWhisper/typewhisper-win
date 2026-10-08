@@ -1,0 +1,9 @@
+{
+  "Connect with Cloudflare": "Mit Cloudflare verbinden",
+  "Sign in in your browser and grant TypeWhisper access to Workers AI.": "Im Browser anmelden und TypeWhisper Zugriff auf Workers AI gewähren.",
+  "Disconnect Cloudflare": "Cloudflare trennen",
+  "Remove the saved sign-in from this device. You can also revoke access in Cloudflare Connected Applications.": "Die gespeicherte Anmeldung von diesem Gerät entfernen. Du kannst den Zugriff auch in Cloudflare unter Connected Applications widerrufen.",
+  "Cloudflare disconnected on this device.": "Cloudflare auf diesem Gerät getrennt.",
+  "Connected to Cloudflare.": "Mit Cloudflare verbunden.",
+  "Signed in. Choose a Cloudflare account and save settings.": "Angemeldet. Wähle ein Cloudflare-Konto und speichere die Einstellungen."
+}

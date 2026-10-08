@@ -23,6 +23,11 @@ public interface ILlmProviderPlugin : ITypeWhisperPlugin
 /// <summary>
 /// Optional capability implemented by concurrency-safe cloud LLM providers.
 /// </summary>
+/// <remarks>
+/// The host never read this flag: transient failures are retried one after another instead of sending a
+/// duplicate request. The interface stays so that packages built against earlier SDKs keep loading;
+/// removing it would change every package that implements it.
+/// </remarks>
 public interface ILlmRequestHedgingSupport
 {
     /// <summary>Gets whether the provider supports one concurrent duplicate request.</summary>

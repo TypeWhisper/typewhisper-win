@@ -21,16 +21,12 @@ internal sealed class LexiconAppImportDialog(Control owner, Action<string> repor
         _cancellation.Cancel();
         _dialog?.Hide();
         try { _cancelPicker?.Invoke(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Import picker cancellation failed: " + ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("lexicon.import.cancel-failed", ex); }
     }
 
     private ContentDialog ImportDialog(string title, object content, string primary)
     {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = owner.XamlRoot, RequestedTheme = owner.ActualTheme, Title = title, Content = content,
-            PrimaryButtonText = primary, CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close
-        };
+        var dialog = Dialogs.Confirmation(title, content, primary);
         dialog.Resources["ContentDialogBackground"] = Brush("InkBrush");
         dialog.Resources["ContentDialogTopOverlay"] = Brush("InkBrush");
         return _dialog = dialog;
@@ -73,7 +69,7 @@ internal sealed class LexiconAppImportDialog(Control owner, Action<string> repor
             body.Children.Add(Text(snippets && !chooseDestination ? Loc.T("Handy word import is available in Words. Snippets containing TypeWhisper placeholders are excluded to preserve their original meaning.")
                 : Loc.T("Wispr Flow: flow.sqlite · Handy: settings_store.json. Handy imports words only."), 12, true));
             var choose = ImportDialog(Loc.T("Import from another app"), body, Loc.T("Review entries"));
-            if (await choose.ShowAsync() != ContentDialogResult.Primary || IsCanceled) return null;
+            if (await Dialogs.ShowAsync(owner, choose) != ContentDialogResult.Primary || IsCanceled) return null;
             if (chooseDestination) snippets = destination.SelectedIndex == 1;
             var selectedApp = apps[source.SelectedIndex];
             var path = LexiconAppImport.DefaultPath(selectedApp);
@@ -125,7 +121,7 @@ internal sealed class LexiconAppImportDialog(Control owner, Action<string> repor
                 new ScrollViewer { Content = reviewBody, MaxHeight = 520, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
                 Loc.T("Add {0} entries", review.Additions));
             confirm.IsPrimaryButtonEnabled = review.Additions > 0;
-            if (await confirm.ShowAsync() != ContentDialogResult.Primary || IsCanceled) return null;
+            if (await Dialogs.ShowAsync(owner, confirm) != ContentDialogResult.Primary || IsCanceled) return null;
             var error = store.CommitAppImport(review);
             return error ?? Loc.T("Added {0} entries from {1}. Saved for the next dictation.", review.Additions, LexiconAppImport.Name(selectedApp));
         }

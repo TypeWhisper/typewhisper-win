@@ -20,7 +20,10 @@ internal sealed class ActionShortcut : IDisposable
         string displayName, string name, Func<string, string, string?> conflict)
     {
         Key = key; _displayName = displayName; _name = name; _conflict = conflict;
-        _native = new(window, () => { if (!_disposed) callback(); }, idBase);
+        _native = new(window, (_, stale) =>
+        {
+            if (!_disposed && (!stale || Key == GlobalShortcuts.CancelProcessing)) callback();
+        }, idBase);
         _settings = new(WinUIProfile.DataPath(fileName), _native, Validate, displayName);
     }
     internal string? Initialize() => _disposed ? Unavailable : _settings.Initialize();

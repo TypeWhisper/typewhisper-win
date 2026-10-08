@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -195,7 +196,7 @@ public sealed class ActivityView : UserControl
             var plotCell = new Grid { Height = 160 }; plotCell.Children.Add(bar);
             var button = Button("", () => { }); button.Content = plotCell; button.Style = (Style)Application.Current.Resources["IconButtonStyle"];
             button.Padding = new Thickness(0); button.MinWidth = 0; button.MinHeight = 0; button.VerticalContentAlignment = VerticalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.HorizontalAlignment = HorizontalAlignment.Stretch;
-            var dates = day.End == day.Date ? $"{day.Date:MMM d, yyyy}" : $"{day.Date:MMM d, yyyy} – {day.End:MMM d, yyyy}";
+            var dates = day.End == day.Date ? Short(day.Date) : $"{Short(day.Date)} – {Short(day.End)}";
             var value = day.Words == 1 ? Loc.T("1 word") : Loc.T("{0:N0} words", day.Words);
             var tooltipContent = new StackPanel { Spacing = 5 };
             tooltipContent.Children.Add(Text(dates, 11, true)); tooltipContent.Children.Add(Text(value, 14));
@@ -222,7 +223,7 @@ public sealed class ActivityView : UserControl
         }
         panel.Children.Add(chart);
         var labels = new Grid(); labels.ColumnDefinitions.Add(new()); labels.ColumnDefinitions.Add(new()); labels.ColumnDefinitions.Add(new());
-        for (var i = 0; i < 3; i++) { var label = Text(summary.Days[(summary.Days.Length - 1) * i / 2].Date.ToString("MMM d"), 10, true); label.HorizontalAlignment = i == 0 ? HorizontalAlignment.Left : i == 1 ? HorizontalAlignment.Center : HorizontalAlignment.Right; Grid.SetColumn(label, i); labels.Children.Add(label); }
+        for (var i = 0; i < 3; i++) { var label = Text(summary.Days[(summary.Days.Length - 1) * i / 2].Date.ToString(MonthDay, CultureInfo.CurrentCulture), 10, true); label.HorizontalAlignment = i == 0 ? HorizontalAlignment.Left : i == 1 ? HorizontalAlignment.Center : HorizontalAlignment.Right; Grid.SetColumn(label, i); labels.Children.Add(label); }
         panel.Children.Add(labels); return Card(panel);
     }
     private Border Ranking(string title, UsageRank[] ranks, int total)
@@ -314,5 +315,9 @@ public sealed class ActivityView : UserControl
         button.Click += (_, _) => click(); return button;
     }
     private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
+    // Dates follow the Windows regional format: Loc.Use switches only the UI culture, so CurrentCulture stays the user's own.
+    private static string Short(DateOnly date) => date.ToString("d", CultureInfo.CurrentCulture);
+    // The regional month-day order with a short month name, such as "Oct 5", "5. Okt." or "10月5日".
+    private static string MonthDay => CultureInfo.CurrentCulture.DateTimeFormat.MonthDayPattern.Replace("MMMM", "MMM");
     private static TextBlock Text(string text, double size, bool muted = false) => new() { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Foreground = Brush(muted ? "MutedBrush" : "TextBrush") };
 }

@@ -1,6 +1,6 @@
 # Gladia for the portable host
 
-Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.3`, requiring host `1.1.5`. Implemented on its own `seofood/gladia-portable` branch, originally based on Windows `4db8f6ac` and updated with current main before review. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.gladia`, version `1.2.4`, requiring host `1.1.5`. Implemented on its own `seofood/gladia-portable` branch, originally based on Windows `4db8f6ac` and updated with current main before review. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 

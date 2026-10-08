@@ -16,13 +16,19 @@ Each descriptor builds and supplies its own folder. `eng/PortablePlugin.targets`
 to the development bundle. Independently distributed plugins do not need a descriptor
 in the application repository; they only need to provide the package described below.
 
+NuGet package versions are not declared in plugin projects. `Directory.Packages.props` at the
+repository root manages every version centrally, and a `PackageReference` in a plugin or test
+project names the package only. A plugin that has to stay on another version sets
+`VersionOverride` on its reference and says why, as `TypeWhisper.Plugin.GemmaLocal` does for LLamaSharp.
+
 Providers have independent `Tests/*.csproj` suites where supplied. Run one suite directly
 with `dotnet test`, or use `eng/Test-WinUIHeadless.ps1`, which discovers plugin-owned
 test projects alongside the SDK/host and presentation checks. Tests do not require
 Computer Use, a desktop, downloaded models, or live API credentials.
 
 The Plugins workflow builds only packages with changes under their own directory
-on pull requests and pushes to `main`.
+on pull requests and pushes to `main`. A changed source under `plugins/shared/`
+counts for every package whose project links it (see `plugins/shared/README.md`).
 Shared SDK, host and workflow edits do not expand that build matrix. For a full
 cross-plugin compatibility sweep, start Plugins manually with **Run workflow**.
 Manifest validation and the separate headless test suites still run normally.
@@ -51,6 +57,20 @@ NVIDIA Parakeet retains its dedicated local-model adapter. Installing a package
 does not by itself implement an application UI for every possible SDK capability.
 
 ## Host-rendered settings and models
+
+The host supplies `IPluginHostServices.Localization` from each package's
+`Localization/<language-tag>.json` files. Lookup follows the selected UI culture and
+its parents (`zh-CN` includes `zh-Hans`), then English, then the requested key.
+Files may use literal English keys or symbolic keys with an `en.json` mapping.
+Adding a language does not require changing provider code. Missing or malformed
+optional translations retain the English fallback.
+
+Settings with inline English/German fallbacks use the source-linked
+`plugins/shared/PluginLocalization.cs` helper. It consumes package translations on
+the current host and preserves those fallbacks on older hosts without requiring a
+new SDK contract. Include the JSON files in both build output and the staged ZIP.
+The resource path supports Japanese and Simplified Chinese; each package still
+needs its own reviewed translations before it can claim complete coverage.
 
 `IPluginTextSettings` supplies bounded text fields. A `PluginTextSetting` is single-line
 by default; set `IsMultiline = true` for word lists or other multiline input. Credentials

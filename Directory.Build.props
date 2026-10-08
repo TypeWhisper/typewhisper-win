@@ -4,7 +4,17 @@
     <Version Condition="'$(Version)' == ''">0.0.1-dev</Version>
     <Company>TypeWhisper</Company>
     <Product>TypeWhisper</Product>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>10.0</AnalysisLevel>
     <Copyright>Copyright © 2026 TypeWhisper</Copyright>
+  </PropertyGroup>
+
+  <!-- Every restore fails on known-vulnerable direct or transitive packages (NU1901-NU1904). -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(MSBuildProjectName)' != 'TypeWhisper.Core.Tests'">

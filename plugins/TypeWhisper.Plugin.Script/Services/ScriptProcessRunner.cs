@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using TypeWhisper.PluginSDK.Models;
 
@@ -24,9 +25,11 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             return new(ScriptExecutionStatus.Failed, "", "Enter a command before running the script.", null, TimeSpan.Zero);
         if (UsesCommandPrompt(ScriptShells.Normalize(script.Shell)) && script.Command.Length > ScriptDefaults.MaximumCmdCommandLength)
             return new(ScriptExecutionStatus.Failed, "", "cmd commands are limited to 7900 characters. Use PowerShell for longer scripts.", null, TimeSpan.Zero);
+        if (ScriptShellLocator.Resolve(ScriptShells.Normalize(script.Shell)) is not { } shellPath)
+            return new(ScriptExecutionStatus.StartFailed, "", "PowerShell 7 (pwsh.exe) was not found on PATH. Install PowerShell 7 or choose Windows PowerShell.", null, TimeSpan.Zero);
         var stopwatch = Stopwatch.StartNew();
         var readyMarker = "TypeWhisperReady" + Guid.NewGuid().ToString("N");
-        using var process = new Process { StartInfo = CreateStartInfo(script, context, readyMarker) };
+        using var process = new Process { StartInfo = CreateStartInfo(script, context, readyMarker, shellPath) };
 
         WindowsProcessJob? job = null;
         try
@@ -36,6 +39,8 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             // The shell waits for a stdin handshake before executing user code.
             // Assign containment first so even an immediately exiting parent cannot orphan children.
             job = WindowsProcessJob.CreateAndAssign(process);
+            // Nothing has been sent yet, so a shell that is not the resolved image never runs user code.
+            VerifyStartedImage(process, shellPath);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
@@ -115,17 +120,12 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
     internal static bool UsesCommandPrompt(string shell) =>
         shell is not (ScriptShells.WindowsPowerShell or ScriptShells.PowerShell);
 
-    private static ProcessStartInfo CreateStartInfo(ScriptEntry script, PostProcessingContext context, string readyMarker)
+    internal static ProcessStartInfo CreateStartInfo(ScriptEntry script, PostProcessingContext context, string readyMarker, string shellPath)
     {
         var shell = ScriptShells.Normalize(script.Shell);
         var startInfo = new ProcessStartInfo
         {
-            FileName = shell switch
-            {
-                ScriptShells.WindowsPowerShell => "powershell.exe",
-                ScriptShells.PowerShell => "pwsh.exe",
-                _ => "cmd.exe"
-            },
+            FileName = shellPath,
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -152,7 +152,7 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         }
 
         var command = UsesCommandPrompt(shell)
-            ? ">nul set /p \"__TYPEWHISPER_START=\" & chcp 65001 >nul & cmd.exe /d /a /s /v:off /c !__TYPEWHISPER_COMMAND!"
+            ? ">nul set /p \"__TYPEWHISPER_START=\" & chcp 65001 >nul & %__TYPEWHISPER_SHELL% /d /a /s /v:off /c !__TYPEWHISPER_COMMAND!"
             : "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; " +
               "$encodedScript = [Console]::In.ReadLine(); [Console]::Error.WriteLine('" + readyMarker + "'); & ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedScript))))";
         if (UsesCommandPrompt(shell))
@@ -160,6 +160,9 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             // cmd caches its output code page at startup. Start the contained child after
             // selecting UTF-8; delayed expansion transports its command without the outer
             // shell reinterpreting quotes, operators or literal exclamation marks.
+            // The child is also started by absolute path: cmd would otherwise look in the
+            // working directory before PATH.
+            startInfo.Environment["__TYPEWHISPER_SHELL"] = shellPath;
             startInfo.Environment["__TYPEWHISPER_COMMAND"] = ">&2 echo " + readyMarker + " & " + script.Command;
         }
         startInfo.ArgumentList.Add(command);
@@ -282,6 +285,26 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
             // Do not let process cleanup hide the original outcome.
         }
     }
+
+    private static void VerifyStartedImage(Process process, string expectedPath)
+    {
+        var buffer = new StringBuilder(32_768);
+        var length = buffer.Capacity;
+        if (!QueryFullProcessImageNameW(process.Handle, 0, buffer, ref length))
+            throw new InvalidOperationException("The started script shell could not be verified.", new Win32Exception(Marshal.GetLastWin32Error()));
+        var actualPath = buffer.ToString(0, length);
+        if (string.IsNullOrWhiteSpace(actualPath)
+            || (!string.Equals(NormalizeComparisonPath(actualPath), NormalizeComparisonPath(expectedPath), StringComparison.OrdinalIgnoreCase)
+                && !PackagedPowerShellAlias.Matches(process.Handle, expectedPath, actualPath)))
+            throw new InvalidOperationException("The started script shell did not match the resolved shell path.");
+    }
+
+    private static string NormalizeComparisonPath(string path) =>
+        Path.GetFullPath(path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path[4..] : path).TrimEnd(Path.DirectorySeparatorChar);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder executablePath, ref int executablePathLength);
 
     private sealed class OutputLimitExceededException(string message) : IOException(message);
 }

@@ -248,6 +248,26 @@ public class HistoryServiceTests : IDisposable
     }
 
     [Fact]
+    public void VersionAdvancesOnLoadAndSavedChangesOnly()
+    {
+        Assert.Equal(0L, _sut.Version);
+        _ = _sut.Records;
+        Assert.Equal(1L, _sut.Version);
+        _ = _sut.Records; _ = _sut.Search("test"); _ = _sut.TotalWords; _ = _sut.GetDistinctApps(); _ = _sut.TotalRecords;
+        Assert.Equal(1L, _sut.Version);
+
+        Assert.True(_sut.TryAddRecord(CreateRecord("first", DateTime.UtcNow)));
+        Assert.Equal(2L, _sut.Version);
+        _sut.UpdateRecord("first", "edited");
+        Assert.Equal(3L, _sut.Version);
+        _sut.UpdateRecord("missing", "ignored");
+        _sut.DeleteRecord("missing");
+        Assert.Equal(3L, _sut.Version);
+        _sut.DeleteRecord("first");
+        Assert.Equal(4L, _sut.Version);
+    }
+
+    [Fact]
     public void FailedAtomicWrite_DoesNotMutateCacheOrStatistics()
     {
         var blockingParent = Path.Combine(_tempDir, "not-a-directory");

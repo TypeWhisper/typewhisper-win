@@ -43,8 +43,8 @@ internal static class LiveHistoryRetentionSettings
         {
             if (row.IsLoaded && !dirty && !busy) row.Status = controller.Error ?? "";
         });
-        row.Loaded += (_, _) => { controller.Changed += OnChanged; if (!dirty) row.Status = controller.Error ?? ""; };
-        row.Unloaded += (_, _) => controller.Changed -= OnChanged;
+        ViewSubscriptions.Attach(row, () => { controller.Changed += OnChanged; if (!dirty) row.Status = controller.Error ?? ""; },
+            () => controller.Changed -= OnChanged);
         void Arrange()
         {
             durationLine.Visibility = mode == HistoryRetentionMode.Duration ? Visibility.Visible : Visibility.Collapsed;
@@ -94,10 +94,9 @@ internal static class LiveHistoryRetentionSettings
                 var confirm = selection.RequiresConfirmationComparedTo(controller.Preferences.Current);
                 if (confirm)
                 {
-                    var dialog = new ContentDialog { XamlRoot = row.XamlRoot, Title = Loc.T("Delete older history automatically?"),
-                        Content = Loc.T("Applying this choice permanently deletes existing entries older than {0:N0} minutes and their saved audio now. It also deletes entries as they reach this age in the future. This cannot be undone.", selection.HistoryRetentionMinutes),
-                        PrimaryButtonText = Loc.T("Apply and delete older entries"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
-                    if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                    if (!await Dialogs.ConfirmAsync(row, Loc.T("Delete older history automatically?"),
+                        Loc.T("Applying this choice permanently deletes existing entries older than {0:N0} minutes and their saved audio now. It also deletes entries as they reach this age in the future. This cannot be undone.", selection.HistoryRetentionMinutes),
+                        Loc.T("Apply and delete older entries"), destructive: true))
                     {
                         Refresh();
                         row.Status = Loc.T("Canceled. Your saved retention choice is unchanged.");

@@ -15,10 +15,11 @@
     <Compile Include="../../src/TypeWhisper.WinUI/LiveTextPlacement.cs" Link="LiveTextPlacement.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/TranscriptScrollFollow.cs" Link="TranscriptScrollFollow.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
-    <PackageReference Include="xunit" Version="2.*" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
-    <PackageReference Include="Moq" Version="4.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Moq" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/LearnedCorrectionStore.cs" Link="LearnedCorrectionStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/TargetAppCorrectionLearningService.cs" Link="TargetAppCorrectionLearningService.cs" />
@@ -26,6 +27,8 @@
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/UserDataDeletion.cs" Link="UserDataDeletion.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/InputEventTiming.cs" Link="InputEventTiming.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/RegisteredShortcutDispatch.cs" Link="RegisteredShortcutDispatch.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HotkeyRecoveryState.cs" Link="HotkeyRecoveryState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/OwnKeyboardInput.cs" Link="OwnKeyboardInput.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />
@@ -37,9 +40,11 @@
     <Compile Include="../../src/TypeWhisper.WinUI/RecordingAudioEffects.cs" Link="RecordingAudioEffects.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/SilenceAutoStop.cs" Link="SilenceAutoStop.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/SerializedBackgroundWork.cs" Link="SerializedBackgroundWork.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictionaryTrainingPlan.cs" Link="DictionaryTrainingPlan.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Lexicon.cs" Link="Lexicon.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalApiDataHandler.cs" Link="LocalApiDataHandler.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/CatalogSnapshotCache.cs" Link="CatalogSnapshotCache.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalApiAudioSettings.cs" Link="LocalApiAudioSettings.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs" Link="DictationDictionarySnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />

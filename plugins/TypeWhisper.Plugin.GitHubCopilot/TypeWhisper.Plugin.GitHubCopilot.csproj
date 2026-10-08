@@ -2,13 +2,15 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <Version>1.1.2</Version>
+    <Version>1.1.3</Version>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="GitHub.Copilot.SDK" Version="1.0.13" />
+    <PackageReference Include="GitHub.Copilot.SDK" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.GitHubCopilot.Portable.Tests" />
     <Content Include="manifest.json;Localization/*.json;Licenses/*;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

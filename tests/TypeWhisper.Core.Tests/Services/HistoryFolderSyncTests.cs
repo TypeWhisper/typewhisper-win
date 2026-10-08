@@ -227,6 +227,43 @@ public sealed class HistoryFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public void PassSucceedsWhileAnotherWriterStillHoldsTheObviousTemporaryName()
+    {
+        var devices = Path.Combine(Package, "devices");
+        Directory.CreateDirectory(devices);
+        // A second writer of this device file is mid-write: the obvious temporary name exists and is locked.
+        using var foreign = new FileStream(Path.Combine(devices, "windows-transport.json.tmp"), FileMode.CreateNew, FileAccess.Write, FileShare.None);
+
+        Assert.Equal(2, Sync(_folder, "windows-transport", new HistorySyncState { Enabled = true }, [Local()]).OperationsWritten);
+
+        var device = JsonDocument.Parse(File.ReadAllText(Path.Combine(devices, "windows-transport.json"))).RootElement;
+        Assert.Equal("windows-transport", device.GetProperty("deviceId").GetString());
+        Assert.Equal(["windows-transport.json.tmp"], Directory.GetFiles(devices, "*.tmp").Select(Path.GetFileName));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(Package, "ops"), "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void OperationCacheStaysWithinItsBoundAndFollowsTheFolder()
+    {
+        for (var i = 0; i < 12; i++)
+            WriteMacOperation("historyContent", MacContent(Now.AddMinutes(i)), Now.AddMinutes(i), $"000000{i:00}-0000-4000-8000-000000000000");
+        var cache = new HistorySyncOperationCache(capacity: 8);
+        var state = new HistorySyncState { Enabled = true };
+
+        var result = HistoryFolderSync.Sync(_folder, "windows-transport", state, [], "PC", "1", Now, default, null, cache);
+
+        Assert.Equal(1, result.ChangesApplied);
+        Assert.Equal(12, state.AppliedOperationIds.Count);
+        Assert.Equal(8, cache.Count);
+        // Files beyond the bound are read again instead of evicting the remembered ones.
+        HistoryFolderSync.Sync(_folder, "windows-transport", state, result.Records!, "PC", "1", Now.AddMinutes(1), default, null, cache);
+        Assert.Equal(8, cache.Count);
+        // Another folder has nothing in common with the remembered paths.
+        HistoryFolderSync.Sync(Path.Combine(_folder, "other"), "windows-transport", new HistorySyncState { Enabled = true }, [], "PC", "1", Now, default, null, cache);
+        Assert.Equal(0, cache.Count);
+    }
+
+    [Fact]
     public void RecordsDevicesForHistoryOriginNames()
     {
         Directory.CreateDirectory(Path.Combine(Package, "devices"));

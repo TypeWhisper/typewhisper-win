@@ -1,0 +1,15 @@
+{
+  "Select a valid team or project.": "Wähle ein gültiges Team oder Projekt.",
+  "Create Linear issue": "Linear-Issue erstellen",
+  "Save an API key and select a team first.": "Speichere zuerst einen API-Schlüssel und wähle ein Team.",
+  "Issue text is empty.": "Der Issue-Text ist leer.",
+  "Linear issue created.": "Linear-Issue erstellt.",
+  "Team": "Team",
+  "Load teams and projects, then choose where workflow issues are created.": "Lade Teams und Projekte und wähle, wo Workflow-Issues erstellt werden.",
+  "Select a team…": "Team auswählen…",
+  "Project (optional)": "Projekt (optional)",
+  "Choose a project belonging to the selected team, or leave issues without a project.": "Wähle ein Projekt des ausgewählten Teams oder erstelle Issues ohne Projekt.",
+  "No project": "Kein Projekt",
+  "Load teams and projects": "Teams und Projekte laden",
+  "Uses the saved API key. This does not create an issue.": "Verwendet den gespeicherten API-Schlüssel. Dabei wird kein Issue erstellt."
+}

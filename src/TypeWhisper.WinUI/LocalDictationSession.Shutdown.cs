@@ -13,7 +13,7 @@ internal sealed partial class LocalDictationSession
         // Adoption begins a fresh cancellation scope, so a capture still waiting for its model is marked instead.
         if (_earlyCapture) _earlyCancelled = true;
         try { _operationCancellation.Cancel(); }
-        catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Operation cancellation callback failed: {0}", ex); }
+        catch (AggregateException ex) { AppDiagnostics.WriteFailure("dictation.cancel.callback-failed", ex); }
         _livePreview.Cancel();
         _cloudStream?.Cancel();
         if (!_disposed && !_fileBusy && _phase == DictationPhase.Processing)
@@ -23,10 +23,11 @@ internal sealed partial class LocalDictationSession
     internal Task ShutdownAsync() => _shutdown.Run(() =>
     {
         _disposed = true;
+        _audio.SuspendMicrophonePreroll(true);
         _lastCompletedDictation.Close();
         CtcVocabulary.RequestCancelActivation();
         try { _operationCancellation.Close(); }
-        catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Shutdown cancellation callback failed: {0}", ex); }
+        catch (AggregateException ex) { AppDiagnostics.WriteFailure("dictation.shutdown.cancel-failed", ex); }
         _livePreview.Cancel();
         _cloudStream?.Cancel();
         _retentionTimer.Stop();
@@ -44,7 +45,7 @@ internal sealed partial class LocalDictationSession
         {
             try { await action(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { failures.Add(ex); System.Diagnostics.Trace.TraceError("Shutdown step failed: {0}", ex); }
+            { failures.Add(ex); AppDiagnostics.WriteFailure("dictation.shutdown.step-failed", ex); }
         }
         try
         {
@@ -53,13 +54,11 @@ internal sealed partial class LocalDictationSession
             await Release(StopCloudStreamAsync);
             // A recording still open at exit has not restored the model its workflow replaced.
             await Release(RestoreWorkflowModelAsync);
-            await Release(() => CtcVocabulary.DisposeAsync().AsTask());
-            await Release(() => PluginRuntime.DisposeAsync().AsTask());
-            await Release(() => _transcriptionPlugin.DisposeAsync().AsTask());
+            await Release(() => _plugins.DisposeAsync().AsTask());
             await Release(() => { _effects.End(); _audio.Dispose(); return Task.CompletedTask; });
             await Release(() => _recoveryAudio.DisposeAsync().AsTask());
             await Release(() => _inserter.Restored);
-            await Release(() => { _originalField?.Dispose(); _originalField = null; _inserter.Dispose(); _operationCancellation.Dispose(); return Task.CompletedTask; });
+            await Release(async () => { if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null; _inserter.Dispose(); _operationCancellation.Dispose(); });
         }
         finally { _gate.Release(); }
         if (failures.Count > 0) throw new AggregateException("Some resources could not be shut down cleanly.", failures);

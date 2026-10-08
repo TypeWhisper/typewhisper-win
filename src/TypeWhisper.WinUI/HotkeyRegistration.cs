@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -13,8 +14,8 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     private readonly nuint SubclassId;
 
     private readonly IntPtr _hwnd;
-    private readonly Action<string> _callback;
-    private readonly SubclassProc _subclassProc;
+    private readonly RegisteredShortcutDispatch _dispatch;
+    private readonly NativeMethods.SubclassProc _subclassProc;
     private bool _registered;
     private readonly Dictionary<string, int> _bindings = new();
     private int _nextId;
@@ -22,17 +23,17 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     public string Value => string.Join(",", _bindings.Keys);
 
     internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase)
-        : this(window, _ => callback(), idBase) { }
+        : this(window, (_, stale) => { if (!stale) callback(); }, idBase) { }
 
-    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string> callback, int idBase)
+    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string, bool> callback, int idBase)
     {
         _nextId = idBase;
         SubclassId = (nuint)idBase;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        _callback = callback;
+        _dispatch = new(callback);
         _subclassProc = WindowSubclassProc;
 
-        if (!SetWindowSubclass(_hwnd, _subclassProc, SubclassId, IntPtr.Zero))
+        if (!NativeMethods.SetWindowSubclass(_hwnd, _subclassProc, SubclassId, IntPtr.Zero))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to receive global shortcuts for this window.");
 
         _registered = true;
@@ -80,10 +81,11 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     {
         if (message == WmHotkey && _bindings.FirstOrDefault(binding => binding.Value == wParam.ToInt32()).Key is { } chord)
         {
-            if (!ShortcutRecorder.CaptureRegisteredShortcut(chord)) _callback(chord);
+            _dispatch.Invoke(chord, unchecked((uint)NativeMethods.GetMessageTime()), Environment.TickCount64,
+                ShortcutRecorder.CaptureRegisteredShortcut);
         }
 
-        return DefSubclassProc(hwnd, message, wParam, lParam);
+        return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);
     }
 
     public void Dispose()
@@ -94,16 +96,8 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
         _registered = false;
         foreach (var id in _bindings.Values) UnregisterHotKey(_hwnd, id);
         _bindings.Clear();
-        RemoveWindowSubclass(_hwnd, _subclassProc, SubclassId);
+        NativeMethods.RemoveWindowSubclass(_hwnd, _subclassProc, SubclassId);
     }
-
-    private delegate IntPtr SubclassProc(
-        IntPtr hwnd,
-        uint message,
-        IntPtr wParam,
-        IntPtr lParam,
-        nuint subclassId,
-        IntPtr referenceData);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -112,19 +106,4 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UnregisterHotKey(IntPtr hwnd, int id);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        IntPtr hwnd,
-        SubclassProc callback,
-        nuint subclassId,
-        IntPtr referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(IntPtr hwnd, SubclassProc callback, nuint subclassId);
-
-    [DllImport("comctl32.dll")]
-    private static extern IntPtr DefSubclassProc(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
 }

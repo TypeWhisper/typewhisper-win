@@ -22,7 +22,7 @@ public sealed record PluginTranscriptionResult(
     /// <summary>
     /// Backward-compatible constructor for plugins compiled against SDK &lt; 1.1.
     /// </summary>
-    public PluginTranscriptionResult(string text, string detectedLanguage, double durationSeconds)
+    public PluginTranscriptionResult(string text, string? detectedLanguage, double durationSeconds)
         : this(text, detectedLanguage, durationSeconds, null) { }
 }
 
@@ -32,4 +32,12 @@ public sealed record PluginTranscriptionResult(
 /// <param name="Text">Text supplied to the member.</param>
 /// <param name="Start">Start supplied to the member.</param>
 /// <param name="End">End supplied to the member.</param>
-public sealed record PluginTranscriptionSegment(string Text, double Start, double End);
+public sealed record PluginTranscriptionSegment(string Text, double Start, double End)
+{
+    /// <summary>
+    /// Provider-reported probability that this segment contains no speech, or null when the response did not
+    /// include one. The result-level value is the minimum across segments; the per-segment value lets plugins
+    /// judge a single trailing segment, such as a hallucinated "Thank you." after silence.
+    /// </summary>
+    public float? NoSpeechProbability { get; init; }
+}

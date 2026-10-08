@@ -2,7 +2,7 @@
 
 Local GGUF text processing through LLamaSharp and the bundled llama.cpp CPU runtime. It is the Windows counterpart of the macOS Local LLM (MLX) plugin and offers the same model families: Gemma 4, Qwen3.5 and LFM2.5. Host-rendered model cards show download progress, cancellation, download completion and loaded state. Local LLM is a workflow text provider, not a speech recognition engine.
 
-Version `1.0.0`; plugin ID `com.typewhisper.local-llm-llamacpp`; minimum host `1.1.3`.
+Version `1.0.1`; plugin ID `com.typewhisper.local-llm-llamacpp`; minimum host `1.1.3`.
 Host 1.1.3 adds `ILocalLlmModelManagement`; older hosts reject this package before loading its types.
 
 ## Relationship to Gemma 3 (Local)

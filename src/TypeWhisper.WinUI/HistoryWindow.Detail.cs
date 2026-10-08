@@ -225,7 +225,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("History save failed: {0}", ex);
+            AppDiagnostics.Write("history.save.failed", ex);
             _notice.Text = Loc.T("The entry could not be saved. Your text is still here; try again.");
         }
         finally
@@ -242,13 +242,13 @@ public sealed partial class HistoryWindow
         if (_dialogOpen) return false;
         var dialog = new ContentDialog
         {
-            XamlRoot = Content.XamlRoot, Title = Loc.T("Save Changes?"), Content = Loc.T("You edited this entry. Save your changes before leaving it?"),
+            Title = Loc.T("Save Changes?"), Content = Loc.T("You edited this entry. Save your changes before leaving it?"),
             PrimaryButtonText = Loc.T("Save"), SecondaryButtonText = Loc.T("Discard"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary,
             SecondaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
         };
         _dialogOpen = true;
         ContentDialogResult result;
-        try { result = await dialog.ShowAsync(); }
+        try { result = await Dialogs.ShowAsync((FrameworkElement)Content, dialog); }
         finally { _dialogOpen = false; }
         if (result == ContentDialogResult.None) return false;
         if (result == ContentDialogResult.Primary)

@@ -11,7 +11,7 @@ namespace TypeWhisper.WinUI.Platform;
 /// <summary>
 /// Provides audio recording service behavior.
 /// </summary>
-public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
+public sealed partial class AudioRecordingService : IStreamingAudioSource, IDisposable
 {
     private enum CaptureDisposalClassification
     {
@@ -300,7 +300,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// <summary>
     /// Performs warm up.
     /// </summary>
-    public bool WarmUp() => WarmUp(openCapture: !ReleaseCaptureBetweenRecordings());
+    public bool WarmUp() => WarmUp(openCapture: !ReleaseCaptureBetweenRecordings() && !(_prerollEnabled && _prerollSuspended));
 
     private bool WarmUp(bool openCapture)
     {
@@ -309,7 +309,11 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             AudioCaptureDiagnostics.Log(
                 $"WarmUp enter warmed={_isWarmedUp} openCapture={openCapture} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
             if (_disposed) return false;
-            if (_isWarmedUp && (_waveIn is not null || !openCapture)) return true;
+            if (_isWarmedUp && (_waveIn is not null || !openCapture))
+            {
+                TryArmPreroll();
+                return true;
+            }
 
             if (_deviceProvider.DeviceCount == 0)
             {
@@ -360,6 +364,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _isWarmedUp = true;
                 _lastCaptureFailure = null;
                 _activeCaptureGeneration = ++_captureGeneration;
+                TryArmPreroll();
                 AudioCaptureDiagnostics.Log(
                     $"WarmUp prepared captureGeneration={_activeCaptureGeneration} reusable={_waveIn.CanRestartAfterStop} active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
             }
@@ -473,7 +478,6 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             _recordingStartTime = DateTime.UtcNow;
             _recordingStartTimestamp = startTimestamp;
             _activeRecordingSequence = ++_recordingSequence;
-            _isRecording = true;
             Interlocked.Exchange(ref _diagnosticDataAvailableCount, 0);
 
             try
@@ -481,7 +485,12 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _activeRecoveryRecordingId = enableRecovery
                     ? _recoveryStore?.BeginRecording()
                     : null;
-                _waveIn.StartRecording();
+                lock (_bufferLock)
+                {
+                    AppendPrerollToRecording();
+                    _isRecording = true;
+                }
+                if (!_prerollArmed) _waveIn.StartRecording();
                 _lastCaptureFailure = null;
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording active sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
@@ -508,10 +517,23 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// <summary>
     /// Returns current buffer.
     /// </summary>
-    public float[]? GetCurrentBuffer()
+    public float[]? GetCurrentBuffer() => GetCurrentBuffer(int.MaxValue);
+
+    /// <summary>Copies only the newest samples for a bounded live preview; the recording remains complete.</summary>
+    public float[]? GetCurrentBuffer(int maximumSamples)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumSamples);
         if (!_isRecording || _sampleBuffer is null) return null;
-        lock (_bufferLock) { return [.. _sampleBuffer]; }
+        // The live preview calls this on the UI thread while the stop clears the buffer on a worker
+        // thread, so the buffer is read once under the lock instead of trusting the check above.
+        lock (_bufferLock)
+        {
+            if (_sampleBuffer is null) return null;
+            var count = Math.Min(_sampleBuffer.Count, maximumSamples);
+            var samples = new float[count];
+            _sampleBuffer.CopyTo(_sampleBuffer.Count - count, samples, 0, count);
+            return samples;
+        }
     }
 
     /// <summary>
@@ -563,8 +585,17 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _sampleBuffer = null;
             }
 
-            if (_waveIn.CanRestartAfterStop && !ReleaseCaptureBetweenRecordings())
+            if (CanArmPreroll)
+            {
+                // The same running stream supplies the next bounded prefix; no idle audio goes to disk.
+                _prerollArmed = true;
+                ClearPreroll();
+            }
+            else if (_waveIn.CanRestartAfterStop && !ReleaseCaptureBetweenRecordings())
+            {
+                _prerollArmed = false;
                 StopAndRetainWaveIn(_waveIn);
+            }
             else if (_waveIn.CanRestartAfterStop)
                 DisposeWaveIn(resetWarmUp: false, reason: "released between recordings");
             else
@@ -611,14 +642,28 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
         try
         {
-            await Task.Delay(StopDrainDuration, cancellationToken);
+            // The drain keeps capturing what is still buffered after the key release. Without
+            // ConfigureAwait(false) its continuation would be posted back to the caller's
+            // synchronization context, which for dictation is the UI thread.
+            await Task.Delay(StopDrainDuration, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             // Still stop and return the samples captured so far.
         }
 
-        var samples = StopRecordingCore(out var recoveryRecordingId, out var preserveImmediately);
+        // The stop copies the whole recording, waits for the capture thread to exit (up to two
+        // seconds for a stalled WASAPI capture) and normalizes the samples. On the UI thread that
+        // stalled the keyboard hook living there, so it runs on a worker thread. That is safe:
+        // neither capture has thread affinity (see WasapiAudioInputCapture.StopRecording and
+        // WaveInAudioInputCapture), the capture's events are unsubscribed before it is stopped, and
+        // the stop raises none of this service's events. The device-change path already stops and
+        // disposes captures on pool threads.
+        var (samples, recoveryRecordingId, preserveImmediately) = await Task.Run(() =>
+        {
+            var stopped = StopRecordingCore(out var stoppedRecordingId, out var preserveStopped);
+            return (stopped, stoppedRecordingId, preserveStopped);
+        }).ConfigureAwait(false);
         RecoveryRecordingLease? lease = null;
         if (recoveryRecordingId is { } recordingId && _recoveryStore is not null)
         {
@@ -652,7 +697,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private void OnDataAvailable(object? sender, AudioInputDataAvailableEventArgs e)
     {
         var capture = _waveIn;
-        if (!_isRecording || capture is null || !ReferenceEquals(sender, capture))
+        if ((!_isRecording && !_prerollArmed) || capture is null || !ReferenceEquals(sender, capture))
             return;
 
         var decodedSamples = SystemAudioCaptureService.ConvertToTranscriptionSamples(
@@ -660,6 +705,15 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             e.BytesRecorded,
             capture.WaveFormat);
         var sampleCount = decodedSamples.Length;
+        lock (_bufferLock)
+        {
+            if (!ReferenceEquals(sender, _waveIn)) return;
+            if (!_isRecording)
+            {
+                if (_prerollArmed) BufferPreroll(decodedSamples);
+                return;
+            }
+        }
         var dataAvailableCount = Interlocked.Increment(ref _diagnosticDataAvailableCount);
         if (dataAvailableCount == 1)
         {
@@ -1556,6 +1610,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             StopPreview();
             _previewDiagnostics = null;
             if (_isRecording || _disposed) return;
+            if (_prerollArmed) DisposeWaveIn(reason: "microphone test");
             if (_deviceProvider.DeviceCount == 0)
             {
                 _previewDiagnostics = new(Loc.T("No microphone"), false);
@@ -1630,6 +1685,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 capture.RecordingStopped -= OnPreviewRecordingStopped;
                 StopRecordingForCleanup(capture);
                 capture.Dispose();
+                if (CanArmPreroll && !_isRecording) WarmUp();
             }
         }
     }
@@ -1792,6 +1848,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         lock (_captureLifecycleLock)
         {
+            _prerollArmed = false;
+            ClearPreroll();
             if (_waveIn is not null)
             {
                 var waveIn = _waveIn;
@@ -2298,6 +2356,11 @@ internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
     }
 }
 
+// WaveInEvent opens the device with an event callback and reads it on its own thread, so unlike
+// NAudio's window-callback WaveIn it has no thread affinity: StopRecording and Dispose may run on
+// any thread (NAudio.WinMM 2.2.1: callbackEvent + RecordThread, no window handle). The only thread
+// it remembers is the synchronization context captured at construction, used solely to post
+// RecordingStopped, which the service unsubscribes before it stops the capture.
 internal sealed class WaveInAudioInputCapture : IAudioInputCapture
 {
     private readonly WaveInEvent _waveIn;

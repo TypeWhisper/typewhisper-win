@@ -1,6 +1,6 @@
 # Cohere for the portable host
 
-Independent .NET 10 package `com.typewhisper.cohere`, version `1.1.3`, requiring host `1.1.2`. Implemented on its own `seofood/cohere-portable` branch, originally based on Windows `4db8f6ac` and updated with current main. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
+Independent .NET 10 package `com.typewhisper.cohere`, version `1.1.4`, requiring host `1.1.2`. Implemented on its own `seofood/cohere-portable` branch, originally based on Windows `4db8f6ac` and updated with current main. No other migration branch is required. Legacy code, projects, manifests and published catalogs remain unchanged.
 
 ## Behavior and macOS comparison
 

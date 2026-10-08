@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.linear",
   "name": "Linear",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "minHostVersion": "1.1.5",
   "author": "TypeWhisper",
   "description": "Create Linear issues from workflow text. Select a team and optional project using your Linear API key.",

@@ -47,7 +47,10 @@ public sealed class PersistedCloudFolderSync
         finally { _gate.Release(); }
     }
 
-    /// <summary>Exchanges operations and commits only if local catalogs still match the captured snapshot.</summary>
+    /// <summary>
+    /// Exchanges operations and commits only if local catalogs still match the captured snapshot. A pass that
+    /// changed nothing leaves the catalogs and the preferences file alone.
+    /// </summary>
     /// <param name="canUseSync">Rechecked before publication so access loss cannot commit remote changes.</param>
     /// <param name="publish">Optional host dispatcher; run the action and refresh live consumers before returning.</param>
     /// <param name="ct">Cancellation prevents local publication and advances no sync state.</param>
@@ -61,6 +64,8 @@ public sealed class PersistedCloudFolderSync
             if (!canUseSync()) throw new CloudFolderSyncNotEntitledException();
             if (preferences.Folder is null || !Directory.Exists(preferences.Folder)) throw new IOException(Loc.T("The sync folder is unavailable. Check your cloud provider."));
             var state = CloudFolderSyncJson.Deserialize<CloudFolderSyncState>(CloudFolderSyncJson.Serialize(preferences.State ?? new()))!;
+            // The engine stamps LastSyncAt on every pass; compare without it so a pass that changed nothing is recognized.
+            var savedState = preferences.State is { } saved ? CloudFolderSyncJson.Serialize(saved with { LastSyncAt = null }) : null;
             var dictionaryPath = Path.Combine(_root, "dictionary.json");
             var snippetsPath = Path.Combine(_root, "snippets.json");
             byte[]? dictionaryBytes, snippetBytes;
@@ -75,6 +80,8 @@ public sealed class PersistedCloudFolderSync
             }
             var result = await Task.Run(() => CloudFolderSyncEngine.SyncAsync(preferences.Folder, buffer, state,
                 new PaidEntitlements(true), cancellationToken: ct), ct).ConfigureAwait(false);
+            var stateUnchanged = !buffer.DictionaryChanged && !buffer.SnippetsChanged
+                && savedState == CloudFolderSyncJson.Serialize(state with { LastSyncAt = null });
             void Commit()
             {
                 ct.ThrowIfCancellationRequested();
@@ -85,6 +92,8 @@ public sealed class PersistedCloudFolderSync
                 // Atomic per catalog. If a later write fails, leave progress unchanged; replay is idempotent.
                 if (buffer.DictionaryChanged) AtomicFileWriter.WriteAllText(dictionaryPath, JsonSerializer.Serialize(buffer.Dictionary, Json));
                 if (buffer.SnippetsChanged) AtomicFileWriter.WriteAllText(snippetsPath, JsonSerializer.Serialize(buffer.Snippets, Json));
+                // Save flushes to disk on the publishing thread, usually the UI thread; a pass that changed nothing skips it.
+                if (stateUnchanged) return;
                 var next = preferences with { State = state };
                 Save(next); Preferences = next;
             }

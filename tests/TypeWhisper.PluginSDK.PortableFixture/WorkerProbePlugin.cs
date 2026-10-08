@@ -58,6 +58,13 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
     /// <inheritdoc />
     public void SelectModel(string modelId) => _host!.SetSetting("selectedModel", modelId);
     /// <inheritdoc />
+    public Task SelectModelAsync(string modelId, CancellationToken ct)
+    {
+        _host!.SetSetting("asyncSelectCalls", _host.GetSetting<int>("asyncSelectCalls") + 1);
+        SelectModel(modelId);
+        return Task.CompletedTask;
+    }
+    /// <inheritdoc />
     public bool IsModelDownloaded(string modelId) => true;
     /// <inheritdoc />
     public Task LoadModelAsync(string modelId, CancellationToken ct)
@@ -87,11 +94,28 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
             case "throw": throw new NotSupportedException("Fixture engine rejected the request.");
             case "hang": await Task.Delay(Timeout.Infinite, ct); break;
             case "hang-hard": Thread.Sleep(Timeout.Infinite); break;
+            case "slow": await Task.Delay(SlowDecode, ct); break;
+            case "freeze-once":
+                var frozen = Path.Combine(_host!.PluginDataDirectory, "frozen-once");
+                if (!File.Exists(frozen)) { File.WriteAllText(frozen, ""); await Task.Run(Freeze); }
+                break;
         }
-        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};accel={_acceleration};length={length};detail={detail}", language, 1)
+        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};asyncSelects={_host!.GetSetting<int>("asyncSelectCalls")};accel={_acceleration};length={length};detail={detail}", language, 1)
         {
             TokenTimings = [new VocabularyTokenTiming("probe", 0.25, 0.5)],
-            Segments = [new PluginTranscriptionSegment("probe", 0, 1)]
+            Segments = [new PluginTranscriptionSegment("probe", 0, 1) { NoSpeechProbability = 0.25f }]
         };
+    }
+
+    /// <summary>How long a "slow" request decodes before it answers; longer than the inactivity window tests use.</summary>
+    public static readonly TimeSpan SlowDecode = TimeSpan.FromSeconds(3);
+
+    // Stops the worker's runtime from scheduling anything, including the heartbeat the host waits for:
+    // the thread pool shrinks to the one thread that then blocks. Only the host can end such a worker.
+    private static void Freeze()
+    {
+        ThreadPool.SetMinThreads(1, 1);
+        ThreadPool.SetMaxThreads(1, 1);
+        Thread.Sleep(Timeout.Infinite);
     }
 }

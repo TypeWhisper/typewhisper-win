@@ -42,6 +42,62 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     private static TranscriptionIsolation Isolation() =>
         new(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5));
 
+    // Short enough for tests, long enough that a loaded machine does not miss ten beats in a row.
+    private static readonly TimeSpan InactivityWindow = TimeSpan.FromSeconds(2);
+
+    [Fact]
+    public async Task NativeHangWithWorkingHeartbeatExpiresWithoutRetryOrCpuFallback()
+    {
+        var isolation = new TranscriptionIsolation(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5))
+        { HeartbeatInterval = TimeSpan.FromMilliseconds(100), RequestTimeout = TimeSpan.FromSeconds(2) };
+        await using var engine = isolation.TryIsolate(_inner, PackageDirectory, _host)!;
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var firstId = engine.WorkerProcessId;
+        using var process = Process.GetProcessById(firstId!.Value);
+        var elapsed = Stopwatch.StartNew();
+        await Assert.ThrowsAsync<TranscriptionWorkerRequestTimeoutException>(() =>
+            engine.TranscribePcmAsync(new float[] { 0 }, "hang-hard", false, default));
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(15));
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(engine.WorkerProcessId);
+        Assert.False(engine.UsesCpuFallback);
+        Assert.Single(_logs, line => line.Contains("exceeded the transcribe deadline"));
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        Assert.NotEqual(firstId, engine.WorkerProcessId);
+    }
+
+    [Fact]
+    public void DecodeBudgetScalesWithAudioAndHasIndependentLoadingAllowance()
+    {
+        var launch = new TranscriptionWorkerLaunch("unused", [], "package", "data", "assets", "model", new(1, 1, 6));
+        var request = new TranscriptionWorkerMessage { Command = TranscriptionWorkerCommands.Transcribe, AudioFormat = TranscriptionWorkerAudioFormats.Pcm };
+        Assert.Equal(TimeSpan.FromSeconds(120), launch.TimeoutFor(request, 0));
+        Assert.Equal(TimeSpan.FromSeconds(720), launch.TimeoutFor(request, 60 * 16000 * 4));
+        Assert.Equal(TimeSpan.FromSeconds(720), launch.TimeoutFor(request with { AudioFormat = TranscriptionWorkerAudioFormats.Wav }, 60 * 16000 * 2));
+        Assert.Equal(TimeSpan.FromMinutes(10), launch.TimeoutFor(request with { Command = TranscriptionWorkerCommands.Load }, 0));
+        Assert.Equal(Timeout.InfiniteTimeSpan, (launch with { RequestTimeout = Timeout.InfiniteTimeSpan }).TimeoutFor(request, 0));
+    }
+
+    [Theory]
+    [InlineData(TranscriptionWorkerAudioFormats.Pcm, 230400000, 10)] // One hour of float32 audio.
+    [InlineData(TranscriptionWorkerAudioFormats.Wav, 230400000, 20)] // Two hours of PCM16 audio.
+    public void LargeAudioBudgetsDoNotOverflowBeforeConversion(string format, int payloadBytes, int budgetHours)
+    {
+        var launch = new TranscriptionWorkerLaunch("unused", [], "package", "data", "assets", "model", new(1, 1, 6));
+        var request = new TranscriptionWorkerMessage { Command = TranscriptionWorkerCommands.Transcribe, AudioFormat = format };
+        Assert.Equal(TimeSpan.FromHours(budgetHours) + TimeSpan.FromMinutes(2), launch.TimeoutFor(request, payloadBytes));
+        Assert.True(launch.TimeoutFor(request, int.MaxValue) > launch.TimeoutFor(request, payloadBytes));
+    }
+
+    private IsolatedTranscriptionEngine WatchedEngine()
+    {
+        var isolation = new TranscriptionIsolation(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5))
+            { HeartbeatInterval = TimeSpan.FromMilliseconds(200), RequestInactivityTimeout = InactivityWindow };
+        var engine = isolation.TryIsolate(_inner, PackageDirectory, _host)!;
+        engine.Notice += message => { lock (_notices) _notices.Add(message); };
+        return engine;
+    }
+
     private static void WritePackage(string folder, Type type)
     {
         Directory.CreateDirectory(folder);
@@ -68,7 +124,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.Equal("0.25", fields["detail"]);
         Assert.Equal("en", result.DetectedLanguage);
         Assert.Equal(new VocabularyTokenTiming("probe", 0.25, 0.5), Assert.Single(result.TokenTimings));
-        Assert.Equal(new PluginTranscriptionSegment("probe", 0, 1), Assert.Single(result.Segments));
+        Assert.Equal(new PluginTranscriptionSegment("probe", 0, 1) { NoSpeechProbability = 0.25f }, Assert.Single(result.Segments));
 
         var wav = await _engine.TranscribeWithLanguageHintsAsync([1, 2, 3, 4], ["de", "en"], false, "terms", default);
         Assert.Equal("4", Fields(wav)["length"]);
@@ -82,11 +138,14 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     {
         await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
         var worker = _engine.WorkerProcessId;
-        _engine.SelectModel("large");
+        await _engine.SelectModelAsync("large", default);
+        Assert.Equal(1, _host.GetSetting<int>("asyncSelectCalls"));
         var fields = Fields(await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
         Assert.Equal(worker.ToString(), fields["pid"]);
         Assert.Equal("large", fields["model"]);
         Assert.Equal("large", _inner.SelectedModelId);
+        // The worker also selects through the asynchronous member.
+        Assert.Equal("1", fields["asyncSelects"]);
     }
 
     [Fact]
@@ -179,6 +238,58 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AWorkerThatStopsBeatingIsEndedAfterTheInactivityWindowAndTheRequestRetried()
+    {
+        await using var engine = WatchedEngine();
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var frozen = Process.GetProcessById(engine.WorkerProcessId!.Value);
+        var timer = Stopwatch.StartNew();
+        var result = await engine.TranscribePcmAsync(new float[] { 0 }, "freeze-once", false, default);
+        Assert.True(timer.Elapsed >= InactivityWindow - TimeSpan.FromMilliseconds(50), "The worker was ended before the window had passed.");
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(20), "Ending the frozen worker took too long.");
+        Assert.Equal(engine.WorkerProcessId.ToString(), Fields(result)["pid"]);
+        Assert.NotEqual(frozen.Id, engine.WorkerProcessId);
+        await frozen.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Contains(_logs, line => line.Contains("did not answer the transcribe request", StringComparison.Ordinal));
+        Assert.Contains(_logs, line => line.Contains("worker stopped answering (1 in a row", StringComparison.Ordinal));
+        Assert.DoesNotContain(_logs, line => line.Contains("worker crashed", StringComparison.Ordinal));
+        Assert.False(engine.UsesCpuFallback);
+        Assert.Empty(_notices);
+    }
+
+    [Fact]
+    public async Task ASlowRequestThatKeepsBeatingIsNotEnded()
+    {
+        await using var engine = WatchedEngine();
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var worker = engine.WorkerProcessId;
+        Assert.True(WorkerProbePlugin.SlowDecode > InactivityWindow, "The slow decode must outlast the window to prove anything.");
+        var result = await engine.TranscribePcmAsync(new float[] { 0 }, "slow", false, default);
+        Assert.Equal(worker.ToString(), Fields(result)["pid"]);
+        Assert.DoesNotContain(_logs, line => line.Contains("did not answer", StringComparison.Ordinal) || line.Contains("stopped answering", StringComparison.Ordinal));
+        Assert.Empty(_notices);
+    }
+
+    [Fact]
+    public async Task DisposingDuringAHungRequestEndsTheWorkerWithinTheCancellationGrace()
+    {
+        await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var worker = Process.GetProcessById(_engine.WorkerProcessId!.Value);
+        // The request ignores cancellation and keeps beating, so only the stop can end it.
+        var hung = _engine.TranscribePcmAsync(new float[] { 0 }, "hang-hard", false, default);
+        await Task.Delay(300);
+        var timer = Stopwatch.StartNew();
+        await _engine.DisposeAsync();
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), "Disposing waited behind the hung request.");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => hung);
+        Assert.Contains("was stopped", error.Message);
+        await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(_engine.WorkerProcessId);
+        Assert.DoesNotContain(_logs, line => line.Contains("worker crashed", StringComparison.Ordinal) || line.Contains("stopped answering", StringComparison.Ordinal));
+        Assert.Empty(_notices);
+    }
+
+    [Fact]
     public async Task ACrashWhileLoadingIsReportedWithoutEndingTheHost()
     {
         _host.SetSetting("CrashOnLoad", true);
@@ -261,6 +372,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.True(provider.SupportsPcm);
         var model = (await registry.GetModelStatesAsync(provider.SelectionId)).Single(state => state.ModelId == "large");
         await registry.SelectModelAsync(model);
+        Assert.Equal(1, host.GetSetting<int>("asyncSelectCalls"));
         Task<(int, PluginTranscriptionResult)> Transcribe() => registry.UseTranscriptionAsync(provider.SelectionId, async (engine, ct) =>
         {
             Assert.IsType<IsolatedTranscriptionEngine>(engine);

@@ -27,14 +27,13 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
     /// <inheritdoc />
     public string PluginName => "Webhook";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.2";
+    public string PluginVersion => "1.3.3";
     /// <inheritdoc />
     public string ProcessorName => "Webhook delivery";
     /// <inheritdoc />
     public int Priority => 900;
     private IPluginHostServices Host => _host ?? throw new InvalidOperationException("Plugin is not active.");
-    private string L(string english, string german) => (PortableLocalization.TryGet(_host)?.CurrentLanguage ?? CultureInfo.CurrentUICulture.Name)
-        .StartsWith("de", StringComparison.OrdinalIgnoreCase) ? german : english;
+    private string L(string english, string german) => PluginLocalization.Get(_host, english, german);
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host)
     {

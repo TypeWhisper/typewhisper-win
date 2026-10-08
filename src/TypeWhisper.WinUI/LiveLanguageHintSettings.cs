@@ -50,8 +50,8 @@ internal static class LiveLanguageHintSettings
         first.SelectionChanged += code => Save(true, code);
         second.SelectionChanged += code => Save(false, code);
         void Changed() { if (row.DispatcherQueue.HasThreadAccess) Refresh(); else row.DispatcherQueue.TryEnqueue(Refresh); }
-        row.Loaded += (_, _) => { session.Changed += Changed; Refresh(); };
-        row.Unloaded += (_, _) => session.Changed -= Changed;
+        ViewSubscriptions.Attach(row, () => { session.Changed += Changed; Refresh(); },
+            () => session.Changed -= Changed);
         Refresh();
     }
 

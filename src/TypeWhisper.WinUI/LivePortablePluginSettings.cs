@@ -46,10 +46,9 @@ internal sealed class LivePortablePluginSettings : UserControl
     private async Task<bool> CanLeaveConnectionAsync()
     {
         if (string.IsNullOrEmpty(_key.Password)) return true;
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Loc.T("Unsaved API key"),
-            Content = Loc.T("The key entered for “{0}” has not been saved. Use Save profile before switching, or discard the entered key.", _connectionTitle),
-            PrimaryButtonText = Loc.T("Discard entered key"), CloseButtonText = Loc.T("Keep editing"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
+        if (!await Dialogs.ConfirmAsync(this, Loc.T("Unsaved API key"),
+            Loc.T("The key entered for “{0}” has not been saved. Use Save profile before switching, or discard the entered key.", _connectionTitle),
+            Loc.T("Discard entered key"), destructive: true, closeText: Loc.T("Keep editing"))) return false;
         _key.Password = "";
         return true;
     }
@@ -93,8 +92,8 @@ internal sealed class LivePortablePluginSettings : UserControl
         {
             if (_textSettings.Content is LivePluginTextSettings settings) settings.RequestRefresh();
         };
-        Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
-        Unloaded += (_, _) => { session.Changed -= OnChanged; _key.Password = ""; };
+        ViewSubscriptions.Attach(this, () => { session.Changed += OnChanged; Refresh(); },
+            () => { session.Changed -= OnChanged; _key.Password = ""; });
         Refresh();
     }
     private void OnChanged() => DispatcherQueue.TryEnqueue(() => { if (IsLoaded) Refresh(); });

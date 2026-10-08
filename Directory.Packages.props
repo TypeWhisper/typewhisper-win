@@ -1,0 +1,49 @@
+<Project>
+  <!-- NuGet Central Package Management: every PackageReference in this repository takes its
+       version from here. A project that has to stay on another version sets VersionOverride on
+       its own PackageReference and says why (see TypeWhisper.Plugin.GemmaLocal for LLamaSharp). -->
+  <PropertyGroup>
+    <!-- A nested worktree with its own Directory.Build.props is a separate checkout. Do not
+         enable central versions there when its branch does not contain this file yet. -->
+    <_TypeWhisperNearestBuildProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildProjectDirectory)'))</_TypeWhisperNearestBuildProps>
+    <ManagePackageVersionsCentrally Condition="'$(_TypeWhisperNearestBuildProps)' == '$(MSBuildThisFileDirectory)Directory.Build.props'">true</ManagePackageVersionsCentrally>
+    <!-- Shared by the tray package, its WinUI bridge download and the assembly reference. -->
+    <HNotifyIconVersion>2.4.1</HNotifyIconVersion>
+  </PropertyGroup>
+
+  <ItemGroup Label="Application">
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.13" />
+    <PackageVersion Include="H.NotifyIcon" Version="$(HNotifyIconVersion)" />
+    <PackageVersion Include="Interop.UIAutomationClient" Version="10.19041.0" />
+    <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
+    <PackageVersion Include="NAudio" Version="2.2.1" />
+    <PackageVersion Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageVersion Include="NAudio.WinMM" Version="2.2.1" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageVersion Include="System.Speech" Version="10.0.0" />
+    <!-- Packaging workflows read this version when installing the vpk tool. -->
+    <PackageVersion Include="Velopack" Version="0.0.1298" />
+    <PackageVersion Include="WinUIEx" Version="2.9.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Local model runtimes">
+    <PackageVersion Include="LLamaSharp" Version="0.27.0" />
+    <PackageVersion Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.1" />
+    <PackageVersion Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
+    <PackageVersion Include="SharpCompress" Version="0.48.0" />
+    <PackageVersion Include="Whisper.net" Version="1.9.0" />
+    <PackageVersion Include="Whisper.net.Runtime" Version="1.9.0" />
+    <PackageVersion Include="Whisper.net.Runtime.Cuda.Windows" Version="1.9.0" />
+    <PackageVersion Include="Whisper.net.Runtime.Vulkan" Version="1.9.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Moq" Version="4.21.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>

@@ -28,8 +28,8 @@ public class SonioxPluginTests
         var manifest = LoadManifest();
         var sut = new SonioxPlugin();
 
-        Assert.Equal("1.3.2", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.3.2", sut.PluginVersion);
+        Assert.Equal("1.3.3", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.3.3", sut.PluginVersion);
     }
 
     [WindowsMediaFoundationFact]

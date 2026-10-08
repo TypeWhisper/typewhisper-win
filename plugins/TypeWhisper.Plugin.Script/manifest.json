@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.script",
   "name": "Script Runner",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "author": "TypeWhisper",
   "description": "Process transcriptions through custom shell scripts",
   "isLocal": true,

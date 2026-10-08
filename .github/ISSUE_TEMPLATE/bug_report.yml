@@ -2,6 +2,15 @@ name: Bug Report
 description: Report a bug or unexpected behavior
 labels: ["bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Check whether the latest release already fixes the problem. A support report from
+        **Settings > Advanced > Support diagnostics > Export support report** helps a lot.
+        It contains app, device, plugin and workflow metadata, but no audio, transcripts,
+        prompts or credentials; see the
+        [privacy policy](https://github.com/TypeWhisper/typewhisper-win/blob/main/docs/PRIVACY.md)
+        for what it includes.
   - type: textarea
     id: description
     attributes:
@@ -39,12 +48,37 @@ body:
     id: app-version
     attributes:
       label: TypeWhisper Version
-      placeholder: "e.g. 0.6.1"
+      placeholder: "e.g. 1.0.9 or 1.1.0-daily.20261007.70"
     validations:
       required: true
+  - type: dropdown
+    id: install-channel
+    attributes:
+      label: Install Channel
+      description: How did you install this build?
+      options:
+        - Setup installer
+        - Portable ZIP
+        - Microsoft Store
+        - Daily prerelease
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture
+      description: x64 on most PCs; ARM64 on Snapdragon and other Arm devices.
+      options:
+        - x64
+        - ARM64
+  - type: input
+    id: transcription-plugin
+    attributes:
+      label: Transcription Plugin and Model
+      placeholder: "e.g. NVIDIA Parakeet, parakeet-tdt-0.6b-v3"
   - type: textarea
     id: logs
     attributes:
       label: Logs
-      description: Paste any relevant log output or error details.
+      description: Paste relevant log output or error details, or attach the exported support report.
       render: shell

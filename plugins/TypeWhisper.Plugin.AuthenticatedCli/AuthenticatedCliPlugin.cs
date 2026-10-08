@@ -77,7 +77,7 @@ public sealed partial class AuthenticatedCliPlugin :
     public string PluginName => "Authenticated Provider CLIs";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.3.4";
+    public string PluginVersion => "1.3.5";
 
     /// <inheritdoc />
     public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders { get { lock (_stateLock) return _roles; } }

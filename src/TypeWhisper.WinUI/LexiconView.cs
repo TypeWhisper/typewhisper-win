@@ -23,7 +23,7 @@ public sealed partial class LexiconView : UserControl
         _editorDialog?.Hide();
         _appImportFlow?.Cancel();
         try { _cancelPicker?.Invoke(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("lexicon.picker.cancel-failed", ex); }
         return Task.WhenAll(_transferCompletion?.Task ?? Task.CompletedTask, _trainingTask ?? Task.CompletedTask,
             _aliasTask ?? Task.CompletedTask);
     }
@@ -207,14 +207,7 @@ public sealed partial class LexiconView : UserControl
     private async void DeleteEntry(LexiconEntry entry)
     {
         if (_closing) return;
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Delete this entry?"), Content = entry.Key,
-            PrimaryButtonText = Loc.T("Delete entry"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-        };
-        try { if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return; }
-        // Another dialog is still open.
-        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException) { return; }
+        if (!await Dialogs.ConfirmAsync(this, Loc.T("Delete this entry?"), entry.Key, Loc.T("Delete entry"), destructive: true) || _closing) return;
         if (!_store.Remove(entry.Id)) { _notice.Text = _store.LastError ?? Loc.T("Could not delete entry."); return; }
         Render();
     }
@@ -346,15 +339,8 @@ public sealed partial class LexiconView : UserControl
                 delete.Click += async (_, _) =>
                 {
                     if (_closing) return;
-                    var dialog = new ContentDialog
-                    {
-                        XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
-                        Title = Loc.T("Delete corrections for {0}?", group.Key),
-                        Content = Loc.T("This deletes all {0} variants in this group. This cannot be undone.", group.Count()),
-                        PrimaryButtonText = Loc.T("Delete group"), CloseButtonText = Loc.T("Cancel"),
-                        DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-                    };
-                    if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
+                    if (!await Dialogs.ConfirmAsync(this, Loc.T("Delete corrections for {0}?", group.Key),
+                        Loc.T("This deletes all {0} variants in this group. This cannot be undone.", group.Count()), Loc.T("Delete group"), destructive: true) || _closing) return;
                     if (!_store.RemoveCorrectionGroup(group.Key))
                     { _notice.Text = _store.LastError ?? Loc.T("Could not delete correction group."); return; }
                     _expandedCorrections.Remove(group.Key);
@@ -401,7 +387,7 @@ public sealed partial class LexiconView : UserControl
         _editor.Children.Add(error);
         var dialog = _editorDialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Content = _editor,
+            Content = _editor,
             Title = _apiEditorBaseline is not null
                 ? _kind switch { LexiconKind.Word => Loc.T("Edit word"), LexiconKind.Correction => Loc.T("Edit correction"), _ => Loc.T("Edit snippet") }
                 : _kind switch { LexiconKind.Word => Loc.T("New word"), LexiconKind.Correction => Loc.T("New correction"), _ => Loc.T("New snippet") },
@@ -416,11 +402,7 @@ public sealed partial class LexiconView : UserControl
             error.Text = message; error.Visibility = Visibility.Visible;
         };
         dialog.Opened += (_, _) => _firstInput?.Focus(FocusState.Programmatic);
-        try { await dialog.ShowAsync(); }
-        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
-        {
-            // Another dialog is still open; this one did not show.
-        }
+        try { await Dialogs.ShowAsync(this, dialog); }
         finally { _editorDialog = null; _draft = _original = null; }
         if (!_closing) Render();
     }

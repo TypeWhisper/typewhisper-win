@@ -8,9 +8,17 @@ internal static class LearnedCorrectionStore
 {
     internal static IReadOnlyList<LearnedDictionaryCorrection> Save(string path, IReadOnlyList<CorrectionSuggestion> suggestions)
     {
-        if (File.Exists(path)) _ = LexiconTransfer.ReadDictionary(File.ReadAllText(path), allowPackEntries: true);
-        var dictionary = new DictionaryService(path);
-        var entries = dictionary.Entries.ToList();
+        try { return SaveCore(path, suggestions); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
+        { throw new IOException("Could not save learned corrections.", ex); }
+    }
+
+    private static IReadOnlyList<LearnedDictionaryCorrection> SaveCore(string path, IReadOnlyList<CorrectionSuggestion> suggestions)
+    {
+        // One strict read decides what the dictionary holds. A file that cannot be read or parsed learns nothing;
+        // a second, lenient read could see a locked file as empty and replace the dictionary with only these corrections.
+        var baseline = ReviewedCatalogTransaction.Read(path);
+        var entries = baseline is null ? [] : LexiconTransfer.ReadDictionary(baseline, allowPackEntries: true).ToList();
         var originals = entries.Where(e => e.EntryType == DictionaryEntryType.Correction).Select(e => e.Original).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var learned = new List<LearnedDictionaryCorrection>();
         foreach (var suggestion in suggestions)
@@ -22,7 +30,8 @@ internal static class LearnedCorrectionStore
         }
         if (learned.Count > 0)
         {
-            if (!dictionary.TryReplaceAll(entries)) throw new IOException("Could not save learned corrections.");
+            // The commit writes only while the file still matches what was read, so a concurrent change is never lost.
+            ReviewedCatalogTransaction.Commit(path, baseline, LexiconTransfer.WriteDictionary(entries));
         }
         return learned;
     }

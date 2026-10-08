@@ -8,17 +8,18 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
-    <PackageReference Include="xunit" Version="2.*" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="System.Speech" Version="10.0.0" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="NAudio" />
+    <PackageReference Include="System.Speech" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" />
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioRecordingService.cs" Link="AudioRecordingService.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioRecordingService.Preroll.cs" Link="AudioRecordingService.Preroll.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/WasapiAudioInputCapture.cs" Link="WasapiAudioInputCapture.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AudioRecordingResult.cs" Link="AudioRecordingResult.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/RecorderCaptureModels.cs" Link="RecorderCaptureModels.cs" />
@@ -28,6 +29,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/MicrophoneFailure.cs" Link="MicrophoneFailure.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/MicrophoneTestDiagnostics.cs" Link="MicrophoneTestDiagnostics.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/MicrophonePrerollSuspension.cs" Link="MicrophonePrerollSuspension.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutKeys.cs" Link="ShortcutKeys.cs" />

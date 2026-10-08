@@ -1,6 +1,6 @@
 # OpenRouter for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.openrouter`, version `1.1.2`, requiring host `1.1.2` or later. The protocol was ported from the Windows provider at `ce38c355` and compared with the macOS OpenRouter provider on September 14, 2026. The package has no WPF dependency and does not read or migrate legacy profiles.
+Independent .NET 10 implementation of `com.typewhisper.openrouter`, version `1.1.3`, requiring host `1.1.2` or later. The protocol was ported from the Windows provider at `ce38c355` and compared with the macOS OpenRouter provider on September 14, 2026. The package has no WPF dependency and does not read or migrate legacy profiles.
 
 The plugin provides text processing through `/api/v1/chat/completions` and recorded-audio transcription through `/api/v1/audio/transcriptions`. Audio is sent as base64 WAV in JSON. Translation, streaming and dictionary prompts are not advertised. Following the macOS provider, requests to OpenAI, Groq and Together models request verbose JSON with segment timestamps. Returned valid segments are preserved; unavailable timestamps are not synthesized.
 

@@ -11,6 +11,21 @@ public sealed class LocalHttpApiTests
 {
     private const string Token = "a7d18284e6504fe2a1cc070c62850709";
 
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("localhost")]
+    public async Task LoopbackPrefixesAcceptBothLocalClientAddressForms(string host)
+    {
+        await using var server = new LocalHttpApi(FreePort(), Token,
+            (_, _) => Task.FromResult(LocalApiResponse.Json(200, new { accepted = true })));
+        await server.StartAsync();
+        using var client = new HttpClient(new HttpClientHandler { UseProxy = false })
+        { BaseAddress = new Uri($"http://{host}:{server.Port}/"), Timeout = TimeSpan.FromSeconds(5) };
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        using var response = await client.GetAsync("v1/models");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task CustomStatusIsPublicButCannotBypassOriginOrProtectedEndpointChecks()
     {
@@ -228,6 +243,93 @@ public sealed class LocalHttpApiTests
         client.DefaultRequestHeaders.Add("Origin", "http://localhost:9999");
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/status")).StatusCode);
         Assert.Equal(2, calls);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("incorrect")]
+    public async Task EveryProtectedRouteRequiresValidCredentials(string? credential)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        });
+        await server.StartAsync();
+        using var client = Client(server);
+        if (credential is not null)
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credential);
+            client.DefaultRequestHeaders.Add("X-TypeWhisper-API-Token", credential);
+        }
+
+        var publicRoutes = new HashSet<LocalApiRoute>
+        {
+            new("GET", "/v1/status"), new("GET", "/docs"), new("GET", "/docs/")
+        };
+        foreach (var route in LocalApiRouteCatalog.Routes.Where(route => !publicRoutes.Contains(route)))
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(route.Method), route.Path);
+            using var response = await client.SendAsync(request);
+            Assert.True(response.StatusCode == HttpStatusCode.Unauthorized,
+                $"{route.Method} {route.Path} returned {response.StatusCode} without valid credentials.");
+        }
+        Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData("GET", "/v1/status/", false)]
+    [InlineData("GET", "/v1/status/private", false)]
+    [InlineData("GET", "/v1/Status", false)]
+    [InlineData("GET", "/docs/private", false)]
+    [InlineData("GET", "/Docs", false)]
+    [InlineData("GET", "/v1/settings/export?public=true&path=/docs", false)]
+    [InlineData("POST", "/v1/status", false)]
+    [InlineData("POST", "/docs", false)]
+    [InlineData("POST", "/docs/", false)]
+    [InlineData("HEAD", "/v1/status", false)]
+    [InlineData("OPTIONS", "/docs", false)]
+    [InlineData("GET", "/v1/status?path=/v1/settings/export", true)]
+    [InlineData("GET", "/docs?path=/v1/settings/export", true)]
+    [InlineData("GET", "/docs/", true)]
+    public async Task PublicRouteExceptionsNeverDispatchProtectedWork(string method, string path, bool isPublic)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        });
+        await server.StartAsync();
+        using var client = Client(server);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "incorrect");
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        using var response = await client.SendAsync(request);
+        Assert.Equal(isPublic ? HttpStatusCode.OK : HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.DoesNotContain("private", await response.Content.ReadAsStringAsync());
+        Assert.Equal(0, calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HeadPreservesAuthorizationAndResponseMetadataWithoutWritingABody(bool authenticated)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        });
+        await server.StartAsync();
+        using var client = Client(server, authenticated);
+        using var request = new HttpRequestMessage(HttpMethod.Head, "/v1/models");
+        using var response = await client.SendAsync(request);
+        Assert.Equal(authenticated ? HttpStatusCode.OK : HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.True(response.Content.Headers.ContentLength > 0);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal(authenticated ? 1 : 0, calls);
     }
 
     [Fact]
@@ -472,6 +574,153 @@ public sealed class LocalHttpApiTests
     [InlineData("                                ")]
     public void WeakTokensAreRejected(string token) => Assert.Throws<ArgumentException>(() =>
         new LocalHttpApi(8978, token, (_, _) => Task.FromResult(LocalApiResponse.Json(200, new { }))));
+
+    // Another user's process is refused on every route, even the public ones and even with a valid token:
+    // the token file is readable only by the owning user, so a token from elsewhere was leaked.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OtherUsersPeersAreRejectedOnEveryRouteBeforeAuthenticationAndBody(bool requireAuthentication)
+    {
+        var backendCalls = 0;
+        var statusCalls = 0;
+        var verifier = new FakePeerVerifier(false);
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref backendCalls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        }, requireAuthentication: requireAuthentication, statusHandler: _ =>
+        {
+            Interlocked.Increment(ref statusCalls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { status = "ready" }));
+        }, peerVerifier: verifier);
+        await server.StartAsync();
+        using var client = Client(server, true);
+        foreach (var path in new[] { "v1/status", "docs", "v1/models", "v1/history" })
+        {
+            using var response = await client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.Contains("forbidden", body);
+            Assert.DoesNotContain("private", body);
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("v1/dictation/start", new StringContent("{}"))).StatusCode);
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, server.Port);
+        await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"POST /v1/transcribe HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nAuthorization: Bearer {Token}\r\nContent-Length: 999999999\r\n\r\n"));
+        using var reader = new StreamReader(tcp.GetStream());
+        Assert.Contains("403", await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(0, backendCalls);
+        Assert.Equal(0, statusCalls);
+        Assert.Equal(6, verifier.Calls);
+        Assert.All(verifier.Peers, peer => Assert.True(IPAddress.IsLoopback(peer.Address)));
+        Assert.All(verifier.LocalPorts, port => Assert.Equal(server.Port, port));
+    }
+
+    [Fact]
+    public async Task OwnUsersPeersKeepTokenAndPublicRouteBehaviour()
+    {
+        var calls = 0;
+        var verifier = new FakePeerVerifier(true);
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { }));
+        }, peerVerifier: verifier);
+        await server.StartAsync();
+        using var client = Client(server);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/status")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("docs")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("v1/models")).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/models")).StatusCode);
+        client.DefaultRequestHeaders.Add("Origin", "http://localhost:8978");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/models")).StatusCode);
+        Assert.Equal(1, calls);
+        // The browser check runs first, so the verifier never sees the Origin request.
+        Assert.Equal(4, verifier.Calls);
+        Assert.All(verifier.LocalPorts, port => Assert.Equal(server.Port, port));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ForeignHostAuthoritiesCannotReachPublicOrProtectedRoutes(bool requireAuthentication)
+    {
+        var calls = 0;
+        var statusCalls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        }, requireAuthentication: requireAuthentication, statusHandler: _ =>
+        {
+            Interlocked.Increment(ref statusCalls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { status = "ready" }));
+        }, peerVerifier: new FakePeerVerifier(true));
+        await server.StartAsync();
+        var addresses = OperatingSystem.IsWindows()
+            ? new[] { IPAddress.Loopback, IPAddress.IPv6Loopback } : new[] { IPAddress.Loopback };
+        foreach (var address in addresses)
+        foreach (var authority in new[] { $"rebind.example:{server.Port}", $"localhost.evil.example:{server.Port}",
+            $"127.0.0.1.evil.example:{server.Port}", "localhost:1" })
+        foreach (var path in new[] { "/v1/history", "/v1/settings/export", "/v1/status", "/docs", "/docs/" })
+        {
+            var response = await RawGet(server, address, authority, path, requireAuthentication);
+            // Some HttpListener implementations reject an unmatched host before dispatch (404).
+            Assert.True(response.StartsWith("HTTP/1.1 403", StringComparison.Ordinal)
+                || response.StartsWith("HTTP/1.1 404", StringComparison.Ordinal), response);
+            Assert.DoesNotContain("private", response);
+        }
+        Assert.Equal(0, calls);
+        Assert.Equal(0, statusCalls);
+
+        // HTTP.sys routes localhost Host aliases on either loopback IP. The managed Linux
+        // listener may bind localhost to a different address and return 404 before dispatch.
+        foreach (var address in addresses)
+        {
+            var localHost = address.Equals(IPAddress.IPv6Loopback) ? "[::1]" : "127.0.0.1";
+            var authorities = OperatingSystem.IsWindows()
+                ? new[] { $"{localHost}:{server.Port}", $"localhost:{server.Port}", $"LOCALHOST:{server.Port}" }
+                : new[] { $"{localHost}:{server.Port}" };
+            foreach (var authority in authorities)
+            {
+                var response = await RawGet(server, address, authority, "/v1/history", requireAuthentication);
+                Assert.True(response.StartsWith("HTTP/1.1 200", StringComparison.Ordinal), $"{address} / {authority}: {response}");
+                Assert.Contains("private", response);
+            }
+        }
+    }
+
+    private static async Task<string> RawGet(LocalHttpApi server, IPAddress address, string authority, string path, bool authenticated)
+    {
+        using var tcp = new TcpClient(address.AddressFamily);
+        await tcp.ConnectAsync(address, server.Port);
+        // No Origin: same-origin GETs need the Host check, even for the owning Windows user.
+        var authorization = authenticated ? $"Authorization: Bearer {Token}\r\n" : "";
+        var bytes = Encoding.ASCII.GetBytes($"GET {path} HTTP/1.1\r\nHost: {authority}\r\n{authorization}Connection: close\r\n\r\n");
+        await tcp.GetStream().WriteAsync(bytes);
+        using var reader = new StreamReader(tcp.GetStream());
+        return await reader.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    private sealed class FakePeerVerifier(bool ownUser) : ILocalPeerVerifier
+    {
+        public int Calls;
+        public List<IPEndPoint> Peers { get; } = [];
+        public List<int> LocalPorts { get; } = [];
+
+        public bool IsOwnUser(IPEndPoint peer, int localPort)
+        {
+            lock (Peers)
+            {
+                Calls++;
+                Peers.Add(peer);
+                LocalPorts.Add(localPort);
+            }
+            return ownUser;
+        }
+    }
 
     private static int FreePort()
     {

@@ -39,7 +39,7 @@ public sealed class PortablePluginPackage : IAsyncDisposable
     {
         await using var package = await OpenAsync(directory, services, hostVersion, activate: false, ct);
         if (package.Plugin is not IPluginInstallationLifecycle lifecycle) return;
-        var context = new PluginInstallationContext(services, previousVersion, progress);
+        var context = new PluginInstallationContext(PackageServices(directory, services), previousVersion, progress);
         if (uninstall) await lifecycle.OnUninstallAsync(context, ct);
         else await lifecycle.OnInstallAsync(context, ct);
     }
@@ -66,7 +66,7 @@ public sealed class PortablePluginPackage : IAsyncDisposable
             plugin = (ITypeWhisperPlugin)Activator.CreateInstance(type)!;
             if (plugin.PluginId != manifest.Id || plugin.PluginVersion != manifest.Version)
                 throw new InvalidDataException("Plugin identity does not match its manifest.");
-            if (activate) await plugin.ActivateAsync(services, ct);
+            if (activate) await plugin.ActivateAsync(PackageServices(directory, services), ct);
             ct.ThrowIfCancellationRequested();
             return new(context, plugin) { _activated = activate };
         }
@@ -80,6 +80,15 @@ public sealed class PortablePluginPackage : IAsyncDisposable
             context.Unload();
             throw;
         }
+    }
+
+    private static IPluginHostServices PackageServices(string directory, IPluginHostServices services)
+    {
+        IPluginLocalization? hostLocalization = null;
+        try { hostLocalization = services.Localization; }
+        catch (NotSupportedException) { }
+        return new RuntimePluginHostServices(services, () => { }, new PackagePluginLocalization(directory,
+            hostLocalization is null ? null : () => hostLocalization.CurrentLanguage));
     }
 
     // Owner must drain all plugin requests before disposal.

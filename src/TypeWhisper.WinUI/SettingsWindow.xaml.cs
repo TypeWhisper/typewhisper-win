@@ -14,15 +14,7 @@ public sealed partial class SettingsWindow : Window
 {
     private OverlayPreferences _preferences;
     internal Func<Action<bool>, SetupWizard>? CreateSetupWizard { get; set; }
-    internal Func<string, string?>? CommitDictationHotkeys { get; set; }
-    internal Func<string, string?>? CommitCancelProcessingHotkeys { get; set; }
-    internal Func<string, string?>? CommitRecentTranscriptionsHotkeys { get; set; }
-    internal Func<string, string?>? CommitCopyLastTranscriptionHotkeys { get; set; }
-    internal Func<string, string?>? CommitPasteLastTranscriptionHotkeys { get; set; }
-    internal Func<string, string?>? CommitReadLastTranscriptionHotkeys { get; set; }
-    internal Func<string, string?>? CommitWorkflowPaletteHotkeys { get; set; }
-    internal Func<string, string, string?>? CommitRecordingShortcut { get; set; }
-    internal Func<string, string?>? CommitRecorderHotkeys { get; set; }
+    internal Func<string, string, string?>? CommitShortcut { get; set; }
     internal Action<string, StackPanel, List<ChoicePicker>>? ConfigureLiveSettings { get; set; }
     // Pages that host an app view instead of catalog settings. The same view instance
     // moves into whichever settings window is open.
@@ -430,14 +422,6 @@ public sealed partial class SettingsWindow : Window
     }
     private void CustomizeLayout_Click(object sender, RoutedEventArgs e) => ShowCategory("Overlay editor");
     private void BackToAppearance_Click(object sender, RoutedEventArgs e) => ShowCategory("Appearance");
-    internal void ShowSelectComparison()
-    {
-        ShowCategory("Appearance");
-        PreviewDismissed?.Invoke();
-        SettingsScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
-        ComparisonScroll.Visibility = Visibility.Visible;
-        SessionHint.Text = "Design comparison only · tell me 1–4";
-    }
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         // Only one recorder edits at a time. Without one, skip walking the page on every key press.
@@ -488,12 +472,6 @@ public sealed partial class SettingsWindow : Window
                 e.Handled = true;
                 return;
             }
-            if (ComparisonScroll.Visibility == Visibility.Visible)
-            {
-                if (!SelectComparison.CloseOpenPicker()) ShowCategory("Appearance");
-                e.Handled = true;
-                return;
-            }
             var picker = _catalogPickers.Concat(_appearancePickers).FirstOrDefault(p => p.IsPopupOpen);
             if (picker is not null) picker.ClosePopup();
             else if (Descendants(CatalogContent).OfType<SyncBackupView>().FirstOrDefault()?.ClosePreview() == true) { }
@@ -536,7 +514,6 @@ public sealed partial class SettingsWindow : Window
         SearchPlaceholder.Visibility = Visibility.Visible;
         ClearSettingsSearch.Visibility = Visibility.Collapsed;
         _searchButtons.Clear();
-        ComparisonScroll.Visibility = Visibility.Collapsed;
         // Status notes belong to the page that set them.
         SessionHint.Text = "";
         foreach (var button in _navigationButtons)
@@ -561,7 +538,7 @@ public sealed partial class SettingsWindow : Window
         if (catalog)
         {
             _catalogPickers.Clear();
-            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitDictationHotkeys, CommitCancelProcessingHotkeys, CommitRecentTranscriptionsHotkeys, CommitCopyLastTranscriptionHotkeys, CommitPasteLastTranscriptionHotkeys, CommitReadLastTranscriptionHotkeys, CommitWorkflowPaletteHotkeys, CommitRecordingShortcut, CommitRecorderHotkeys);
+            SettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitShortcut);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && CatalogContent.Children.OfType<SettingsCard>().FirstOrDefault() is { } general)
             {
@@ -704,7 +681,7 @@ public sealed partial class SettingsWindow : Window
         WorkspaceHost.Child = null;
         WorkspaceHost.Visibility = Visibility.Collapsed;
         WorkspaceChanged?.Invoke(null);
-        SettingsScroll.Visibility = EditorScroll.Visibility = ComparisonScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
+        SettingsScroll.Visibility = EditorScroll.Visibility = EditorPreviewButton.Visibility = Visibility.Collapsed;
         CatalogScroll.Visibility = Visibility.Visible;
         _catalogPickers.Clear();
         _searchButtons.Clear();

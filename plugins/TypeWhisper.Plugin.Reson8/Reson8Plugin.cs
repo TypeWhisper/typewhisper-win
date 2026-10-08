@@ -69,7 +69,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.9";
+    public string PluginVersion => "1.2.10";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -175,11 +175,11 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         request.Content = new ByteArrayContent(pcm16);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-        using var response = await _httpClient.SendAsync(request, ct);
+        using var response = await TranscriptionHttpErrors.SendAsync(_httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            ThrowForApiError(response.StatusCode, json);
+            ThrowForApiError(response, json);
 
         return ParseTranscriptionResponse(json, NormalizeLanguage(language), pcm16.Length);
     }
@@ -551,24 +551,19 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             ? property.GetString()
             : null;
 
-    private static void ThrowForApiError(HttpStatusCode statusCode, string json)
+    private static void ThrowForApiError(HttpResponseMessage response, string json)
     {
-        var message = ExtractApiError(json);
-        switch (statusCode)
+        var detail = ExtractApiError(json);
+        var message = response.StatusCode switch
         {
-            case HttpStatusCode.Unauthorized:
-                throw new UnauthorizedAccessException("Invalid Reson8 API key.");
-            case HttpStatusCode.NotFound:
-                throw new KeyNotFoundException($"Reson8 custom model not found: {message}");
-            case HttpStatusCode.RequestEntityTooLarge:
-                throw new InvalidOperationException($"Reson8 file too large: {message}");
-            case HttpStatusCode.TooManyRequests:
-                throw new HttpRequestException($"Reson8 rate limit exceeded: {message}");
-            case HttpStatusCode.InternalServerError:
-                throw new HttpRequestException($"Reson8 server error: {message}");
-            default:
-                throw new HttpRequestException($"Reson8 API error {(int)statusCode}: {message}");
-        }
+            HttpStatusCode.Unauthorized => "Invalid Reson8 API key.",
+            HttpStatusCode.NotFound => $"Reson8 custom model not found: {detail}",
+            HttpStatusCode.RequestEntityTooLarge => $"Reson8 file too large: {detail}",
+            HttpStatusCode.TooManyRequests => $"Reson8 rate limit exceeded: {detail}",
+            HttpStatusCode.InternalServerError => $"Reson8 server error: {detail}",
+            _ => $"Reson8 API error {(int)response.StatusCode}: {detail}"
+        };
+        throw TranscriptionHttpErrors.Create(response, message);
     }
 
     private static double PcmDurationSeconds(int pcm16ByteLength) =>

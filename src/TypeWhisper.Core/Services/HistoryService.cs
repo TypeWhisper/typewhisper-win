@@ -23,6 +23,7 @@ public sealed class HistoryService : IHistoryAudioService
     private bool _cacheLoaded;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
 
+    private long _version;
     private int _totalRecords;
     private int? _totalWords;
     private double _totalDuration;
@@ -47,6 +48,12 @@ public sealed class HistoryService : IHistoryAudioService
     /// Raised when records changes.
     /// </summary>
     public event Action? RecordsChanged;
+
+    /// <summary>
+    /// Advances when History is loaded and after every saved change; reads leave it alone. Periodic readers
+    /// such as cloud folder sync compare it to skip copying an unchanged History.
+    /// </summary>
+    public long Version { get { lock (_gate) return _version; } }
 
     /// <summary>
     /// Gets the number of persisted transcription history records.
@@ -541,6 +548,8 @@ public sealed class HistoryService : IHistoryAudioService
 
     private void RebuildStats()
     {
+        // Every replacement of the cache passes through here under the gate, so this is where the version advances.
+        _version++;
         _totalRecords = _cache.Count;
         _totalWords = null;
         _totalDuration = _cache.Sum(r => r.DurationSeconds);
@@ -549,13 +558,7 @@ public sealed class HistoryService : IHistoryAudioService
 
     private void RaiseRecordsChanged()
     {
-        if (RecordsChanged is not { } handlers)
-            return;
-
-        foreach (Action handler in handlers.GetInvocationList())
-        {
-            try { handler(); } catch { }
-        }
+        ProfileMutationCoordinator.Notify(RecordsChanged);
     }
 
     private List<string> DistinctApps() => _cache

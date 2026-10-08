@@ -299,6 +299,5 @@ public sealed partial class OpenAiCompatiblePlugin
         if (notify) _host?.NotifyCapabilitiesChanged();
     }
 
-    private static string L(string english, string german) =>
-        CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de" ? german : english;
+    private string L(string english, string german) => PluginLocalization.Get(_host, english, german);
 }

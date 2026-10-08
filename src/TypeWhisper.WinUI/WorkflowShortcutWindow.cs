@@ -123,7 +123,7 @@ internal sealed class WorkflowShortcutWindow : Window
     {
         try { await callbacks; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceError("Workflow window cancellation callback failed: {0}", ex.GetType().Name); }
+        { AppDiagnostics.WriteFailure("workflow.window.cancel-failed", ex); }
     }
     internal Task ShutdownAsync()
     {

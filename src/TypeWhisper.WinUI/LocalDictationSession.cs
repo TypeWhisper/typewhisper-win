@@ -19,8 +19,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private readonly RecordingAudioEffects _effects;
     private readonly LocalLivePreview _livePreview = new();
     private StreamingDictation? _cloudStream;
-    internal WinUIPluginPackages Packages { get; } = new();
-    internal LocalCtcVocabulary CtcVocabulary { get; }
+    private readonly DictationPluginServices _plugins;
+    internal WinUIPluginPackages Packages => _plugins.Packages;
+    internal LocalCtcVocabulary CtcVocabulary => _plugins.Vocabulary;
+    internal event Action<string> EngineNotice
+    {
+        add => _plugins.EngineNotice += value;
+        remove => _plugins.EngineNotice -= value;
+    }
     private bool _ctcAtStart;
     private Task<DictationDictionarySnapshot>? _dictionarySnapshot;
     private Task<DictationSnippetSnapshot>? _snippetSnapshot;
@@ -82,6 +88,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             preferences = preferences.Validated();
             AtomicFileWriter.WriteAllText(AudioPreferencesPath, System.Text.Json.JsonSerializer.Serialize(preferences));
             AudioPreferences = preferences;
+            _audio.MicrophonePrerollEnabled = preferences.MicrophonePrerollEnabled;
             AudioPreferencesError = null;
             return null;
         }
@@ -107,16 +114,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal HistoryActions HistoryActions => new(_history);
     private readonly ClipboardTextInserter _inserter;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly LocalTranscriptionPlugin _transcriptionPlugin;
+    private LocalTranscriptionPlugin _transcriptionPlugin => _plugins.Models;
     internal LocalTranscriptionPlugin Models => _transcriptionPlugin;
-    internal PortablePluginRuntimeRegistry PluginRuntime { get; }
+    internal PortablePluginRuntimeRegistry PluginRuntime => _plugins.Runtime;
     internal IReadOnlyList<PortableLlmProvider> LlmProviders => PluginRuntime.LlmProviders;
     internal async Task<string> ProcessLlmAsync(string selectionId, string systemPrompt, string text, string model, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         // Give foreground workflows priority over cancellable settings downloads.
         await LocalLlmDownload.CancelAndDrainAsync();
-        return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) => provider.ProcessAsync(systemPrompt, text, model, token), ct);
+        // A chat completion has no side effects, so a rate limit or server error is retried before the workflow fails.
+        return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) =>
+            PluginRequestRetry.RunAsync(provider.PluginId, attempt => provider.ProcessAsync(systemPrompt, text, model, attempt), token), ct);
     }
     private string _providerId = "local";
     internal bool UsesRegistryProvider => _providerId != "local";
@@ -353,7 +362,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         finally { _gate.Release(); Changed?.Invoke(); }
     }
-    private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples)
+    private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples, CancellationToken cancellation)
     {
         var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
         var language = _languageAtStart == "auto" ? null : _languageAtStart;
@@ -363,7 +372,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             return LanguageHintTranscription.DecodeAsync(engine, samples,
                 () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes), language,
                 _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct, dictionary?.EnabledTerms);
-        }, _operationCancellation.Token);
+        }, cancellation);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }
     internal event Action? Changed;
@@ -498,14 +507,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         _audio = new(_recoveryAudio) { ReleaseCaptureBetweenRecordings = Platform.RemoteSession.IsActive };
         Recovery = new(_recoveryAudio, DecodeRecoveryAudioAsync);
-        var isolation = CreateTranscriptionIsolation();
-        _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), isolation: isolation);
-        CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
-        PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
-            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId)) { TranscriptionIsolation = isolation, IdleUnloadPolicy = ModelIdlePolicy };
-        _speechBackend = new(PluginRuntime, new WindowsSystemVoiceBackend());
-        SpokenFeedback = new(_speechBackend);
-        PluginRuntime.Changed += () => Changed?.Invoke();
+        _plugins = new(() => CanStartSessionOperation);
+        _plugins.Changed += () => Changed?.Invoke();
         _history = history;
         HistoryRetention = new(history, new HistoryRetentionPreferencesStore(WinUIProfile.DataPath("history-retention.json")));
         _inserter = new(owner);
@@ -546,6 +549,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         { AudioPreferencesError = Loc.T("Audio preferences could not be loaded. Defaults are in use: {0}", ex.Message); }
+        _audio.SuspendMicrophonePreroll(!PrerollDesktop.IsInteractive());
+        _audio.MicrophonePrerollEnabled = AudioPreferences.MicrophonePrerollEnabled;
     }
 
     internal async Task InitializeAsync()
@@ -767,7 +772,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     || RejectLanguage(workflow?.InputLanguage, rejected))) return;
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
-                _originalField?.Dispose(); _originalField = null;
+                if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null;
                 _target = adoptEarlyCapture ? _earlyTarget : NativeMethods.GetForegroundWindow();
                 NativeMethods.GetWindowThreadProcessId(_target, out var processId);
                 _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
@@ -911,13 +916,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
-                _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && TypeWhisper.Core.Models.ParakeetModels.IsParakeetTdt(Models.ActiveModelId) && CtcVocabulary.Enabled;
+                _ctcAtStart = RescoresWithCtc && CtcVocabulary.Enabled;
                 if (_cloudStream is null && _earlyStopSamples is null && LivePreviewEnabled && SupportsLiveTranscription &&
                     (!UsesRegistryProvider || ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)))
-                    _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
-                        DecodeAsync,
+                    _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer(LocalLivePreview.MaximumPreviewSamples) : null,
+                        DecodePreviewAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
-                        error => { LivePreviewText = Loc.T("Live preview unavailable · final transcription will continue."); LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
+                        _ => { LivePreviewText = Loc.T("Live preview unavailable · final transcription will continue."); LivePreviewChanged?.Invoke(); AppDiagnostics.Write("dictation.live-preview.failed"); });
                 AppDiagnostics.Write("dictation.startup.complete");
                 preparingRecording = false;
                 return;
@@ -947,8 +952,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             }
             _effects.End();
             _sounds.PlayStopSound();
-            // Native decoding cannot be interrupted; drain the cancelled preview
-            // before the final decode uses the same recognizer.
+            // Cancel and drain the preview before the final decode uses the same recognizer.
+            // Isolated native engines have a bounded cancellation grace period.
             await _livePreview.StopAsync();
             // Use captured samples for the policy and history, never decoder padding or elapsed stop time.
             _operationCancellation.Token.ThrowIfCancellationRequested();
@@ -1042,7 +1047,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         if (_originalField is null) { AppDiagnostics.Write("delivery.no-captured-field"); return false; }
                         if (OutputPreferences.Current.LockPasteToFocusedField &&
                             !await _originalField.RestoreAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.restore-failed"); return false; }
-                        if (!_originalField.IsCurrent()) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
+                        if (!await _originalField.IsCurrentAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
                     if (NativeMethods.GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
                     // Spacing and casing for the cursor position only reach the target field; history, API and
@@ -1060,7 +1065,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     var inserted = await _inserter.InsertAsync(pasted, _target, () =>
                         !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
-                        (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.IsCurrent() == true));
+                        (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
+                        async () => !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
+                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)));
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
                         _ = ObserveCorrectionsAfterPasteAsync(pasted, _target, _operationCancellation.Token);
                     return inserted;
@@ -1111,7 +1118,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _livePreview.Cancel();
             try { await StopRecoveryCaptureAsync(preserve: preserveRecovery); }
             catch (Exception stopError) when (stopError is not OutOfMemoryException)
-            { System.Diagnostics.Debug.WriteLine(stopError); }
+            { AppDiagnostics.Write("dictation.recovery-stop.failed", stopError); }
             finally { _effects.End(); await _livePreview.StopAsync(); }
             _sounds.PlayErrorSound();
             SetStatus(Loc.T("Dictation failed: {0}", ex.Message), DictationPhase.Error);
@@ -1127,13 +1134,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     await StopRecoveryCaptureAsync(preserve: false);
                     _effects.End();
                     try { await previousRecordingWork; }
-                    catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine(ex); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { if (ex is not OperationCanceledException) AppDiagnostics.Write("dictation.previous-work.failed", ex); }
                     // Status may have been published while early capture was still active.
                     // Refresh the tray and overlay after discarding an aborted startup.
                     if (!_disposed) Changed?.Invoke();
                 }
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-                if (!_audio.IsRecording) { _originalField?.Dispose(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
+                if (!_audio.IsRecording) { if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
                 if (finishingRecording) PublishMicrophoneNoticeAfterDictation();
                 if (!_audio.IsRecording) AppDiagnostics.EndDictation();
             }
@@ -1150,11 +1157,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (_disposed || _operationCancellation.Token != operation || operation.IsCancellationRequested) return;
         try { CorrectionLearning.Observe(text, target); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { System.Diagnostics.Trace.TraceWarning("Correction learning could not start: {0}", ex.GetType().Name); }
+        { AppDiagnostics.Write("correction.observe.start-failed", ex); }
     }
-    private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
+    private async Task<string> DecodePreviewAsync(float[] samples, CancellationToken cancellation)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _operationCancellation.Token);
+        return (UsesRegistryProvider ? await DecodeRegistryAsync(samples, linked.Token)
+            : await _transcriptionPlugin.DecodeAsync(samples, false, _taskAtStart == TranscriptionTask.Translate, linked.Token, _languageAtStart)).Text;
+    }
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
-        UsesRegistryProvider ? DecodeRegistryAsync(samples)
+        UsesRegistryProvider ? DecodeRegistryAsync(samples, _operationCancellation.Token)
             : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
     private void StopSilenceMonitoring()
     {

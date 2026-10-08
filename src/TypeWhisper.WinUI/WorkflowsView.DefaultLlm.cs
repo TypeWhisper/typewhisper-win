@@ -77,7 +77,7 @@ public sealed partial class WorkflowsView
         content.Children.Add(help); content.Children.Add(provider); content.Children.Add(model); content.Children.Add(message);
         var dialog = _defaultsDialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Default workflow LLM"), Content = content,
+            Title = Loc.T("Default workflow LLM"), Content = content,
             PrimaryButtonText = Loc.T("Save"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
         };
         dialog.PrimaryButtonClick += (_, args) =>
@@ -91,7 +91,7 @@ public sealed partial class WorkflowsView
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { args.Cancel = true; message.Text = ex.Message; message.Visibility = Visibility.Visible; }
         };
-        try { await dialog.ShowAsync(); }
+        try { await Dialogs.ShowAsync(this, dialog); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowSummary.Text = Loc.T("Default LLM settings could not open: {0}", ex.Message); }
         finally
         {

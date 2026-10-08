@@ -5,9 +5,10 @@ namespace TypeWhisper.WinUI;
 internal sealed class LocalLivePreview(TimeSpan? interval = null) : IDisposable
 {
     internal static readonly TimeSpan DefaultInterval = TimeSpan.FromMilliseconds(1500);
+    internal const int MaximumPreviewSamples = 30 * 16000;
     private CancellationTokenSource? _cancellation;
     private Task _pending = Task.CompletedTask;
-    internal void Start(Func<float[]?> snapshot, Func<float[], Task<string>> decode, Action<string> publish, Action<string> failed)
+    internal void Start(Func<float[]?> snapshot, Func<float[], CancellationToken, Task<string>> decode, Action<string> publish, Action<string> failed)
     {
         if (!_pending.IsCompleted) throw new InvalidOperationException("Drain the previous preview before starting another recording.");
         Cancel();
@@ -17,7 +18,7 @@ internal sealed class LocalLivePreview(TimeSpan? interval = null) : IDisposable
     }
 
     private async Task RunAsync(CancellationTokenSource cancellation, Func<float[]?> snapshot,
-        Func<float[], Task<string>> decode, Action<string> publish, Action<string> failed)
+        Func<float[], CancellationToken, Task<string>> decode, Action<string> publish, Action<string> failed)
     {
         var token = cancellation.Token;
         var delay = interval ?? DefaultInterval;
@@ -29,7 +30,7 @@ internal sealed class LocalLivePreview(TimeSpan? interval = null) : IDisposable
                 var samples = snapshot();
                 if (samples is null || samples.Length < 8000) continue;
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
-                var text = await decode(samples);
+                var text = await decode(samples, token);
                 delay = NextDelay(interval ?? DefaultInterval, System.Diagnostics.Stopwatch.GetElapsedTime(started));
                 if (token.IsCancellationRequested) return;
                 if (!string.IsNullOrWhiteSpace(text)) publish(text);
@@ -41,9 +42,8 @@ internal sealed class LocalLivePreview(TimeSpan? interval = null) : IDisposable
         finally { cancellation.Dispose(); }
     }
 
-    // Each preview decodes the whole recording so far. Resting at least as long as the last decode
-    // took keeps a slow model below half the CPU and makes it less likely that Stop has to wait
-    // for an uninterruptible preview decode.
+    // Resting at least as long as the last decode took keeps slow models below half the CPU.
+    // Stop cancels inference, then drains it before the final decode can use the same recognizer.
     internal static TimeSpan NextDelay(TimeSpan interval, TimeSpan lastDecode) => lastDecode > interval ? lastDecode : interval;
 
     internal void Cancel()

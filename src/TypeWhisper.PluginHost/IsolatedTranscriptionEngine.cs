@@ -29,6 +29,10 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     private readonly ModelIdleTimer? _idle;
     private ITranscriptionWorkerConnection? _worker;
     private TranscriptionWorkerState? _state;
+    // Cancels the request that holds the gate, so a stop does not wait behind a hung worker.
+    private CancellationTokenSource? _running;
+    // How the last worker failure is described to the user: the process ended, or the host ended it for silence.
+    private string _failure = "stopped unexpectedly";
     private int _consecutiveCrashes;
     private bool _cpuFallback;
     private TranscriptionAccelerationPreference _fallbackFrom;
@@ -76,13 +80,14 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     public TranscriptionAccelerationPreference AccelerationPreference => _inner.AccelerationPreference;
     public TranscriptionAccelerationStatus AccelerationStatus => FallbackActive()
         ? new(TranscriptionAccelerationBackend.Cpu, "Using CPU",
-            "The graphics card engine stopped unexpectedly, so TypeWhisper switched to the CPU. Change the acceleration setting to try the graphics card again.")
+            $"The graphics card engine {_failure}, so TypeWhisper switched to the CPU. Change the acceleration setting to try the graphics card again.")
         : _state?.Status ?? _inner.AccelerationStatus;
 
     // The wrapper is created for an already activated package; activation belongs to the package.
     public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
     public async Task DeactivateAsync() => await StopWorkerAsync().ConfigureAwait(false);
     public void SelectModel(string modelId) => _inner.SelectModel(modelId);
+    public Task SelectModelAsync(string modelId, CancellationToken ct) => _inner.SelectModelAsync(modelId, ct);
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) => _inner.SetAccelerationPreference(preference);
     public bool IsModelDownloaded(string modelId) => _inner.IsModelDownloaded(modelId);
     public Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct) => _inner.DownloadModelAsync(modelId, progress, ct);
@@ -100,7 +105,8 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
         var response = await RunAsync(new() { Command = TranscriptionWorkerCommands.Load, ModelId = modelId }, default, ct, explicitLoad: true).ConfigureAwait(false);
         // Some engines select the model they load. Mirror that on the in-process instance, whose
         // selection drives metadata such as translation support and the next request's model.
-        if (response.State?.SelectedModelId == modelId && _inner.SelectedModelId != modelId) _inner.SelectModel(modelId);
+        if (response.State?.SelectedModelId == modelId && _inner.SelectedModelId != modelId)
+            await _inner.SelectModelAsync(modelId, ct).ConfigureAwait(false);
     }
 
     /// <summary>Ends the worker, which releases the model and all native memory.</summary>
@@ -143,6 +149,9 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
         bool explicitLoad = false, bool onlyIfStopped = false)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
+        using var running = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var token = running.Token;
+        Volatile.Write(ref _running, running);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -153,22 +162,35 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
             var runtimeRestarted = false;
             for (var attempt = 1; ; attempt++)
             {
-                ct.ThrowIfCancellationRequested();
+                token.ThrowIfCancellationRequested();
                 var acceleration = EffectivePreference();
                 TranscriptionWorkerMessage response;
                 try
                 {
-                    var worker = await EnsureWorkerAsync(ct).ConfigureAwait(false);
-                    response = await worker.SendAsync(request, payload, ct).ConfigureAwait(false);
+                    var worker = await EnsureWorkerAsync(token).ConfigureAwait(false);
+                    // File/API/recovery requests may arrive without PrepareAsync; crash retries also
+                    // start cold. Loading gets its own budget before the audio deadline starts.
+                    TranscriptionWorkerMessage? load = null;
+                    if (request.Command == TranscriptionWorkerCommands.Transcribe && request.ModelId is { } modelId
+                        && worker.State?.LoadedModelId != modelId)
+                        load = await worker.SendAsync(new() { Command = TranscriptionWorkerCommands.Load, ModelId = modelId }, default, token).ConfigureAwait(false);
+                    response = load?.Error is not null ? load : await worker.SendAsync(request, payload, token).ConfigureAwait(false);
+                }
+                catch (TranscriptionWorkerRequestTimeoutException)
+                {
+                    // A deadline is not evidence of a bad GPU. Do not repeat an expensive request
+                    // or change acceleration; the next explicit attempt gets a fresh worker.
+                    await DiscardWorkerAsync().ConfigureAwait(false);
+                    throw;
                 }
                 catch (TranscriptionWorkerCrashedException crash)
                 {
                     await DiscardWorkerAsync().ConfigureAwait(false);
                     RecordCrash(crash, acceleration);
-                    ct.ThrowIfCancellationRequested();
+                    token.ThrowIfCancellationRequested();
                     if (_time.GetUtcNow() < _pausedUntil) throw new TranscriptionWorkerFaultedException(PausedMessage(), crash);
                     if (attempt >= MaximumAttempts)
-                        throw new InvalidOperationException(ProviderDisplayName + " stopped unexpectedly again. Your recording is kept; try again in a moment or choose another model.", crash);
+                        throw new InvalidOperationException($"{ProviderDisplayName} {_failure} again. Your recording is kept; try again in a moment or choose another model.", crash);
                     continue;
                 }
                 if (response.State is { } state) _state = state;
@@ -189,8 +211,14 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
                 return response;
             }
         }
+        catch (OperationCanceledException ex) when (token.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            // Ended by a stop, not by the caller, who should not take this for its own cancellation.
+            throw new InvalidOperationException(ProviderDisplayName + " was stopped before it finished. Your recording is kept; try again.", ex);
+        }
         finally
         {
+            Volatile.Write(ref _running, null);
             if (_worker is not null && !_disposed) _idle?.Touch();
             _gate.Release();
         }
@@ -212,8 +240,10 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
 
     private void RecordCrash(TranscriptionWorkerCrashedException crash, TranscriptionAccelerationPreference acceleration)
     {
+        var hung = crash is TranscriptionWorkerUnresponsiveException;
+        _failure = hung ? "stopped answering" : "stopped unexpectedly";
         _consecutiveCrashes++;
-        _log(PluginLogLevel.Error, $"{ProviderDisplayName} worker crashed ({_consecutiveCrashes} in a row, acceleration {acceleration}): {crash.Message}"
+        _log(PluginLogLevel.Error, $"{ProviderDisplayName} worker {(hung ? "stopped answering" : "crashed")} ({_consecutiveCrashes} in a row, acceleration {acceleration}): {crash.Message}"
             + (string.IsNullOrWhiteSpace(crash.Diagnostics) ? "" : Environment.NewLine + crash.Diagnostics));
         if (!FallbackActive() && CanFallBackToCpu() && _consecutiveCrashes >= CrashesBeforeCpuFallback)
         {
@@ -221,7 +251,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
             _fallbackFrom = _inner.AccelerationPreference;
             _consecutiveCrashes = 0;
             _log(PluginLogLevel.Warning, $"{ProviderDisplayName} switched to the CPU after repeated crashes with {_fallbackFrom} acceleration.");
-            RaiseNotice(ProviderDisplayName + " stopped unexpectedly on the graphics card, so TypeWhisper switched it to the CPU. Transcription may be slower.");
+            RaiseNotice($"{ProviderDisplayName} {_failure} on the graphics card, so TypeWhisper switched it to the CPU. Transcription may be slower.");
         }
         else if (_consecutiveCrashes >= CrashesBeforePause)
         {
@@ -231,7 +261,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
         }
     }
 
-    private string PausedMessage() => ProviderDisplayName + " stopped unexpectedly several times, so TypeWhisper paused it briefly. " +
+    private string PausedMessage() => $"{ProviderDisplayName} {_failure} several times, so TypeWhisper paused it briefly. " +
         $"Your recording is kept. Try again in {PauseAfterRepeatedCrashes.TotalSeconds:0} seconds, select the model again, or choose another model.";
 
     private void RaiseNotice(string message)
@@ -275,9 +305,19 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
 
     private async Task StopWorkerAsync()
     {
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await EnterGateToStopAsync().ConfigureAwait(false);
         try { _idle?.Cancel(); await DiscardWorkerAsync().ConfigureAwait(false); _state = null; }
         finally { _gate.Release(); }
+    }
+
+    // A request whose worker hangs holds the gate until the worker is ended, and the watchdog may be far
+    // away. A stop is a decision against the worker, so it cancels the running request instead of queueing
+    // behind it: the worker gets its cancellation grace, is ended if it stays silent, and the gate opens.
+    private async Task EnterGateToStopAsync()
+    {
+        if (_gate.Wait(0)) return;
+        try { Volatile.Read(ref _running)?.Cancel(); } catch (ObjectDisposedException) { }
+        await _gate.WaitAsync().ConfigureAwait(false);
     }
 
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -285,7 +325,7 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     /// <summary>Ends the worker. The in-process plugin belongs to its package and is not disposed here.</summary>
     public async ValueTask DisposeAsync()
     {
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await EnterGateToStopAsync().ConfigureAwait(false);
         try
         {
             if (_disposed) return;

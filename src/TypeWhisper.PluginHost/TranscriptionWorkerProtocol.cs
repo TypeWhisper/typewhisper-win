@@ -84,17 +84,19 @@ internal static class TranscriptionWorkerProtocol
 
     internal static TranscriptionWorkerResult ToResult(PluginTranscriptionResult result) => new(result.Text, result.DetectedLanguage,
         result.DurationSeconds, result.NoSpeechProbability,
-        result.Segments.Select(segment => new TranscriptionWorkerSegment(segment.Text, segment.Start, segment.End)).ToArray(),
+        result.Segments.Select(segment => new TranscriptionWorkerSegment(segment.Text, segment.Start, segment.End, segment.NoSpeechProbability)).ToArray(),
         result.TokenTimings.Select(timing => new TranscriptionWorkerTiming(timing.Text, timing.StartSeconds, timing.EndSeconds)).ToArray());
 
     internal static PluginTranscriptionResult FromResult(TranscriptionWorkerResult result) =>
         new(result.Text, result.DetectedLanguage, result.DurationSeconds, result.NoSpeechProbability)
         {
-            Segments = Array.AsReadOnly((result.Segments ?? []).Select(segment => new PluginTranscriptionSegment(segment.Text, segment.Start, segment.End)).ToArray()),
+            Segments = Array.AsReadOnly((result.Segments ?? []).Select(segment => new PluginTranscriptionSegment(segment.Text, segment.Start, segment.End)
+                { NoSpeechProbability = segment.NoSpeechProbability }).ToArray()),
             TokenTimings = Array.AsReadOnly((result.TokenTimings ?? []).Select(timing => new VocabularyTokenTiming(timing.Text, timing.Start, timing.End)).ToArray())
         };
 }
 
+// Both readers ignore frame types they do not know, so a type added here needs no protocol version.
 internal static class TranscriptionWorkerMessageTypes
 {
     internal const string Hello = "hello";
@@ -102,6 +104,8 @@ internal static class TranscriptionWorkerMessageTypes
     internal const string Cancel = "cancel";
     internal const string Response = "response";
     internal const string Log = "log";
+    /// <summary>Sent by the worker with the request id while that request runs; carries nothing else.</summary>
+    internal const string Heartbeat = "heartbeat";
 }
 
 internal static class TranscriptionWorkerCommands
@@ -136,6 +140,8 @@ internal sealed record TranscriptionWorkerMessage
     public TranscriptionWorkerState? State { get; init; }
     public PluginLogLevel? LogLevel { get; init; }
     public string? LogMessage { get; init; }
+    /// <summary>In <see cref="TranscriptionWorkerMessageTypes.Hello"/>: how often the worker will beat while a request runs; null when it never does.</summary>
+    public TimeSpan? HeartbeatInterval { get; init; }
 }
 
 internal sealed record TranscriptionWorkerError(string Kind, string Message);
@@ -147,6 +153,6 @@ internal sealed record TranscriptionWorkerState(string? SelectedModelId, string?
 internal sealed record TranscriptionWorkerResult(string Text, string? DetectedLanguage, double DurationSeconds,
     float? NoSpeechProbability, TranscriptionWorkerSegment[]? Segments, TranscriptionWorkerTiming[]? TokenTimings);
 
-internal sealed record TranscriptionWorkerSegment(string Text, double Start, double End);
+internal sealed record TranscriptionWorkerSegment(string Text, double Start, double End, float? NoSpeechProbability = null);
 
 internal sealed record TranscriptionWorkerTiming(string Text, double Start, double End);

@@ -1,0 +1,15 @@
+{
+  "Select a valid team or project.": "Select a valid team or project.",
+  "Create Linear issue": "Create Linear issue",
+  "Save an API key and select a team first.": "Save an API key and select a team first.",
+  "Issue text is empty.": "Issue text is empty.",
+  "Linear issue created.": "Linear issue created.",
+  "Team": "Team",
+  "Load teams and projects, then choose where workflow issues are created.": "Load teams and projects, then choose where workflow issues are created.",
+  "Select a team…": "Select a team…",
+  "Project (optional)": "Project (optional)",
+  "Choose a project belonging to the selected team, or leave issues without a project.": "Choose a project belonging to the selected team, or leave issues without a project.",
+  "No project": "No project",
+  "Load teams and projects": "Load teams and projects",
+  "Uses the saved API key. This does not create an issue.": "Uses the saved API key. This does not create an issue."
+}

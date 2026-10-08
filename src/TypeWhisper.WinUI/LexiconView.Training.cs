@@ -37,7 +37,7 @@ public sealed partial class LexiconView
             AutomationProperties.SetName(exampleLanguage, Loc.T("Example sentence language"));
             var dialog = _trainingDialog = new ContentDialog
             {
-                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = Loc.T("Train a word"),
+                Title = Loc.T("Train a word"),
                 Content = new ScrollViewer { Content = body, MaxHeight = 420, Padding = new Thickness(0, 0, 16, 0),
                     HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
                 PrimaryButtonText = Loc.T("Continue"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
@@ -109,7 +109,10 @@ public sealed partial class LexiconView
                 recording = false; busy = true; timer.Stop(); status.Text = ""; Render();
                 try { transcripts[index] = await capture.StopAsync(); }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
-                { if (!ended) status.Text = Loc.T("Could not transcribe this sample. Check the microphone and provider, then try again."); System.Diagnostics.Debug.WriteLine(ex); }
+                {
+                    if (!ended) status.Text = Loc.T("Could not transcribe this sample. Check the microphone and provider, then try again.");
+                    if (ex is not OperationCanceledException) AppDiagnostics.Write("lexicon.training.sample-failed", ex);
+                }
                 finally { busy = false; Render(); }
             }
             void Review()
@@ -178,7 +181,7 @@ public sealed partial class LexiconView
                 Render();
             };
             Render();
-            var result = await dialog.ShowAsync();
+            var result = await Dialogs.ShowAsync(this, dialog);
             ended = true;
             if (!_closing)
             {

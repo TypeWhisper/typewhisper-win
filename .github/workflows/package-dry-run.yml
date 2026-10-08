@@ -22,7 +22,8 @@ permissions:
 
 concurrency:
   group: package-dry-run-${{ github.event.pull_request.number || github.ref }}-${{ inputs.channel || 'stable' }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled; every push to main keeps its run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   package:
@@ -75,6 +76,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
 
       - name: Create artifact directories
         shell: pwsh
@@ -82,17 +84,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
           New-Item -ItemType Directory -Force -Path "releases/${{ steps.meta.outputs.velopack_channel }}" | Out-Null
 
-      - name: Restore solution
-        run: dotnet restore TypeWhisper.slnx
-
-      - name: Build solution
-        run: dotnet build TypeWhisper.slnx -c Release --no-restore -p:Version=${{ steps.meta.outputs.version }} -bl:artifacts/logs/typewhisper-package.binlog
-
       - name: Publish app
-        run: dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.platform }} -p:Version=${{ steps.meta.outputs.version }} --self-contained false -o publish/${{ matrix.rid }}
+        run: dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.platform }} -p:Version=${{ steps.meta.outputs.version }} --self-contained false -o publish/${{ matrix.rid }} -bl:artifacts/logs/typewhisper-package.binlog
 
       - name: Install Velopack CLI
-        run: dotnet tool install -g vpk --version 0.0.1298
+        shell: pwsh
+        run: |
+          $version = ./eng/Get-CentralPackageVersion.ps1 -PackageId Velopack
+          dotnet tool install -g vpk --version $version
 
       - name: Pack Velopack dry run
         shell: pwsh

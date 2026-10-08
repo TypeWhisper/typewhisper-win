@@ -28,7 +28,7 @@ internal sealed partial class LocalDictationSession
         catch (OperationCanceledException) when (_operationCancellation.Token.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Debug.WriteLine("Automatic workflow catalog could not be read: " + ex.GetType().Name);
+            AppDiagnostics.Write("workflow.catalog.failed", ex);
             _workflowAtStart = AutomaticWorkflowSnapshot.Unavailable();
         }
     }

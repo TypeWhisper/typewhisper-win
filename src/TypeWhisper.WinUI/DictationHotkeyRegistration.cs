@@ -8,7 +8,7 @@ namespace TypeWhisper.WinUI;
 internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend, IDisposable
 {
     private readonly HotkeyRegistration _regular;
-    private readonly HookProc _callback;
+    private readonly NativeMethods.HookProc _callback;
     private IntPtr _hook;
     private bool _interrupted;
     private HashSet<string> _bindings = [];
@@ -34,7 +34,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         {
             if (code >= 0 && !_interrupted && !_disposed)
             {
-                var key = Marshal.PtrToStructure<KeyData>(data);
+                var key = Marshal.PtrToStructure<NativeMethods.KeyboardHookData>(data);
                 var altGr = ShortcutKeys.IsAltGrControl(key.Key, key.Scan);
                 var pressed = message.ToInt64() is 0x100 or 0x104;
                 // A real left Ctrl or the right Alt release also ends AltGr, in case its Ctrl release was missed.
@@ -48,14 +48,16 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                     else if (down || up)
                     {
                         var mode = recordingMode();
-                        Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true,
-                            held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0));
+                        var now = Environment.TickCount64;
+                        Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, now - InputEventTiming.Age(key.Time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
+                            held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0,
+                            stale: InputEventTiming.IsStale(key.Time, now)));
                     }
                 }
             }
-            return CallNextHookEx(IntPtr.Zero, code, message, data);
+            return NativeMethods.CallNextHookEx(IntPtr.Zero, code, message, data);
         };
-        _hook = SetWindowsHookEx(13, _callback, GetModuleHandle(null), 0);
+        _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
     internal void ObservePause() => _state.Suspend();
@@ -70,12 +72,12 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     internal string? Recover()
     {
         if (_disposed) return null;
-        var replacement = SetWindowsHookEx(13, _callback, GetModuleHandle(null), 0);
+        var replacement = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (replacement == IntPtr.Zero)
             return Loc.T("Could not restore dictation keyboard hook (Windows error {0}). Retry after unlocking, or restart TypeWhisper.", Marshal.GetLastWin32Error());
         var previous = _hook;
         _hook = replacement;
-        if (previous != IntPtr.Zero) UnhookWindowsHookEx(previous);
+        if (previous != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(previous);
         // Generic modifier VKs alias the physical left/right keys. Seeding both
         // would leave a phantom generic key down after the physical key-up.
         _state.ResetAfterInterruption(Enumerable.Range(8, 247)
@@ -97,11 +99,5 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         Value = string.Join(",", chords);
         return null;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero; _regular.Dispose(); }
-    private delegate IntPtr HookProc(int code, IntPtr message, IntPtr data);
-    [StructLayout(LayoutKind.Sequential)] private struct KeyData { public uint Key, Scan, Flags, Time; public UIntPtr Extra; }
-    [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint thread);
-    [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
-    [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
+    public void Dispose() { if (_disposed) return; _disposed = true; NativeMethods.UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero; _regular.Dispose(); }
 }

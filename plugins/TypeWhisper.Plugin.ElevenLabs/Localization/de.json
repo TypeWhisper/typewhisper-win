@@ -1,0 +1,16 @@
+{
+  "Transcription mode": "Transkriptionsmodus",
+  "Automatic shows live text. Audio events, multiple speakers or dictionary terms use the complete recording.": "Automatisch zeigt Live-Text. Audioereignisse, mehrere Sprecher oder Wörterbuchbegriffe verwenden die vollständige Aufnahme.",
+  "Automatic": "Automatisch",
+  "After recording": "Nach der Aufnahme",
+  "Clean transcript": "Bereinigtes Transkript",
+  "Remove filler words and false starts.": "Füllwörter und Satzabbrüche entfernen.",
+  "Audio events": "Audioereignisse",
+  "Include events such as laughter in recorded-audio transcription.": "Ereignisse wie Lachen in die Transkription aufnehmen.",
+  "Speaker count": "Sprecherzahl",
+  "Expected speakers in the recording.": "Erwartete Anzahl der Sprecher in der Aufnahme.",
+  "Dictionary terms": "Wörterbuchbegriffe",
+  "Use active TypeWhisper dictionary terms to improve recognition.": "Aktive TypeWhisper-Wörterbuchbegriffe zur Erkennung verwenden.",
+  "On": "Ein",
+  "Off": "Aus"
+}

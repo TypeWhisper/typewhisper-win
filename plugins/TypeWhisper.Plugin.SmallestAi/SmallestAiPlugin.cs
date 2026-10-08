@@ -62,7 +62,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.1";
+    public string PluginVersion => "1.2.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -157,12 +157,12 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         request.Content = CreateWavContent(wavAudio);
 
-        using var response = await _httpClient.SendAsync(request, ct);
+        using var response = await TranscriptionHttpErrors.SendAsync(_httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new HttpRequestException(
+            throw TranscriptionHttpErrors.Create(response,
                 $"Smallest AI Pulse API error {(int)response.StatusCode}: {ExtractApiError(json)}");
         }
 

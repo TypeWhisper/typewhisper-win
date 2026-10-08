@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -17,7 +18,7 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
 
     private readonly IDictionaryService? _dictionary;
     private readonly object _sync = new();
-    private IReadOnlyList<NormalizedTerm> _terms = [];
+    private TermCatalog _catalog = TermCatalog.Empty;
 
     /// <summary>
     /// Initializes a new instance of the VocabularyBoostingService class.
@@ -47,13 +48,13 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
         if (string.IsNullOrWhiteSpace(rawText))
             return rawText;
 
-        IReadOnlyList<NormalizedTerm> terms;
+        TermCatalog catalog;
         lock (_sync)
         {
-            terms = _terms;
+            catalog = _catalog;
         }
 
-        if (terms.Count == 0)
+        if (catalog.Count == 0)
         {
             Debug.WriteLine("VocabularyBoosting: candidates=0 replacements=0");
             return rawText;
@@ -64,14 +65,14 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
             var tokens = Tokenize(rawText);
             if (tokens.Count == 0)
             {
-                Debug.WriteLine($"VocabularyBoosting: candidates={terms.Count} replacements=0");
+                Debug.WriteLine($"VocabularyBoosting: candidates={catalog.Count} replacements=0");
                 return rawText;
             }
 
-            var proposals = FindProposals(rawText, tokens, terms);
+            var proposals = FindProposals(rawText, tokens, catalog);
             if (proposals.Count == 0)
             {
-                Debug.WriteLine($"VocabularyBoosting: candidates={terms.Count} replacements=0");
+                Debug.WriteLine($"VocabularyBoosting: candidates={catalog.Count} replacements=0");
                 return rawText;
             }
 
@@ -106,12 +107,12 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
 
             if (accepted.Count == 0)
             {
-                Debug.WriteLine($"VocabularyBoosting: candidates={terms.Count} replacements=0");
+                Debug.WriteLine($"VocabularyBoosting: candidates={catalog.Count} replacements=0");
                 return rawText;
             }
 
             var rewritten = ApplyReplacements(rawText, accepted);
-            Debug.WriteLine($"VocabularyBoosting: candidates={terms.Count} replacements={accepted.Count}");
+            Debug.WriteLine($"VocabularyBoosting: candidates={catalog.Count} replacements={accepted.Count}");
             return rewritten;
         }
         catch (Exception ex)
@@ -127,7 +128,7 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
         catch (Exception ex)
         {
             Debug.WriteLine($"VocabularyBoosting catalog read failed: {ex.Message}");
-            lock (_sync) { _terms = []; }
+            lock (_sync) { _catalog = TermCatalog.Empty; }
         }
     }
 
@@ -151,10 +152,11 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
                 .ThenByDescending(term => term.Normalized.Length)
                 .ThenBy(term => term.IsPack)
                 .ToArray();
+            var catalog = new TermCatalog(terms);
 
             lock (_sync)
             {
-                _terms = terms;
+                _catalog = catalog;
             }
         }
         catch (Exception ex)
@@ -162,7 +164,7 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
             Debug.WriteLine($"VocabularyBoosting catalog rebuild failed: {ex.Message}");
             lock (_sync)
             {
-                _terms = [];
+                _catalog = TermCatalog.Empty;
             }
         }
     }
@@ -170,9 +172,10 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
     private static List<Replacement> FindProposals(
         string rawText,
         IReadOnlyList<TokenSpan> tokens,
-        IReadOnlyList<NormalizedTerm> terms)
+        TermCatalog catalog)
     {
         var proposals = new List<Replacement>();
+        var rows = new LevenshteinRows();
 
         for (var startIndex = 0; startIndex < tokens.Count; startIndex++)
         {
@@ -192,54 +195,60 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
                 if (string.IsNullOrEmpty(normalizedWindow))
                     continue;
 
-                var scoredCandidates = new List<ScoredCandidate>();
-                foreach (var term in terms)
+                var window = new Window(
+                    coreText,
+                    normalizedWindow,
+                    windowLength,
+                    GetFirstAlphaNumeric(normalizedWindow),
+                    GetLastAlphaNumeric(normalizedWindow),
+                    CharacterPresence(normalizedWindow));
+
+                // Only terms the catalog groups as possible matches are scored; every skipped term would have
+                // failed the compatibility or edge-character checks inside Score anyway.
+                var ranking = new CandidateRanking();
+                if (windowLength <= 2)
                 {
-                    if (!IsCompatibleWindow(term, normalizedWindow, windowLength))
-                        continue;
-
-                    if (string.Equals(coreText, term.OutputText, StringComparison.Ordinal))
-                        continue;
-
-                    var score = Score(term, normalizedWindow, windowLength);
-                    if (score is null)
-                        continue;
-
-                    scoredCandidates.Add(new ScoredCandidate(term, score.Value));
+                    foreach (var term in catalog.SingleWords(window.FirstAlphaNumeric, window.LastAlphaNumeric))
+                        Consider(term, window, rows, ref ranking);
                 }
 
-                if (scoredCandidates.Count == 0)
+                for (var tokenCount = windowLength - 1; tokenCount <= windowLength + 1; tokenCount++)
+                {
+                    foreach (var term in catalog.Phrases(tokenCount, normalizedWindow.Length))
+                        Consider(term, window, rows, ref ranking);
+                }
+
+                if (ranking.Best is not { } best)
                     continue;
 
-                scoredCandidates.Sort(static (left, right) =>
-                {
-                    var byScore = right.Score.CompareTo(left.Score);
-                    if (byScore != 0) return byScore;
-
-                    var byTokenCount = right.Term.TokenCount.CompareTo(left.Term.TokenCount);
-                    if (byTokenCount != 0) return byTokenCount;
-
-                    var byLength = right.Term.Normalized.Length.CompareTo(left.Term.Normalized.Length);
-                    if (byLength != 0) return byLength;
-
-                    return left.Term.IsPack.CompareTo(right.Term.IsPack);
-                });
-
-                var best = scoredCandidates[0];
-                var secondScore = scoredCandidates.Count > 1 ? scoredCandidates[1].Score : double.NegativeInfinity;
-                if (scoredCandidates.Count > 1 && best.Score - secondScore < AmbiguityMargin)
+                if (ranking.Count > 1 && ranking.BestScore - ranking.SecondScore < AmbiguityMargin)
                     continue;
 
                 proposals.Add(new Replacement(
                     spanStart + trimmed.CoreStartOffset,
                     spanStart + trimmed.CoreStartOffset + trimmed.CoreLength,
-                    best.Term.OutputText,
-                    best.Score,
-                    best.Term));
+                    best.OutputText,
+                    ranking.BestScore,
+                    best));
             }
         }
 
         return proposals;
+    }
+
+    private static void Consider(NormalizedTerm term, in Window window, LevenshteinRows rows, ref CandidateRanking ranking)
+    {
+        if (!IsCompatibleWindow(term, window.Normalized, window.TokenCount))
+            return;
+
+        if (string.Equals(window.CoreText, term.OutputText, StringComparison.Ordinal))
+            return;
+
+        var score = Score(term, window, rows);
+        if (score is null)
+            return;
+
+        ranking.Add(term, score.Value);
     }
 
     private static bool IsCompatibleWindow(NormalizedTerm term, string normalizedWindow, int windowTokenCount)
@@ -258,29 +267,40 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
         return lengthDifference <= maxAllowedDifference;
     }
 
-    private static double? Score(NormalizedTerm term, string normalizedWindow, int windowTokenCount)
+    private static double? Score(NormalizedTerm term, in Window window, LevenshteinRows rows)
     {
-        var maxLength = Math.Max(term.Normalized.Length, normalizedWindow.Length);
+        var maxLength = Math.Max(term.Normalized.Length, window.Normalized.Length);
         if (maxLength == 0)
             return null;
 
-        var lengthDifference = Math.Abs(term.Normalized.Length - normalizedWindow.Length);
-        var distance = LevenshteinDistance(term.Normalized, normalizedWindow);
+        var lengthDifference = Math.Abs(term.Normalized.Length - window.Normalized.Length);
+        var sameFirst = term.FirstAlphaNumeric == window.FirstAlphaNumeric;
+        var sameLast = term.LastAlphaNumeric == window.LastAlphaNumeric;
+
+        // A single word is rejected on its edge characters before the distance is computed, which does not change
+        // the outcome because the distance is not used for that decision.
+        if (term.TokenCount == 1 && (!sameFirst || !sameLast))
+            return null;
+
+        // The edit distance is at least the length difference and at least half the number of characters that occur
+        // in only one of the two strings. Evaluating the similarity with that lower bound can only overstate it, so a
+        // value below the threshold proves the real similarity fails the same check further down.
+        var presenceBound = (BitOperations.PopCount(term.Characters ^ window.Characters) + 1) / 2;
+        var lowerBound = Math.Max(lengthDifference, presenceBound);
+        if (1d - (double)lowerBound / maxLength < (term.TokenCount == 1 ? 0.86d : 0.80d))
+            return null;
+
+        var distance = rows.Distance(term.Normalized, window.Normalized);
         var charSimilarity = 1d - (double)distance / maxLength;
-        var sameFirst = term.FirstAlphaNumeric == GetFirstAlphaNumeric(normalizedWindow);
-        var sameLast = term.LastAlphaNumeric == GetLastAlphaNumeric(normalizedWindow);
 
         if (term.TokenCount == 1)
         {
-            if (!sameFirst || !sameLast)
-                return null;
-
             if (lengthDifference > 2 || charSimilarity < 0.86d)
                 return null;
         }
         else
         {
-            if (Math.Abs(term.TokenCount - windowTokenCount) > 1 || charSimilarity < 0.80d)
+            if (Math.Abs(term.TokenCount - window.TokenCount) > 1 || charSimilarity < 0.80d)
                 return null;
         }
 
@@ -289,7 +309,7 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
             score += 0.02d;
         if (sameLast)
             score += 0.02d;
-        if (term.TokenCount == windowTokenCount)
+        if (term.TokenCount == window.TokenCount)
             score += 0.03d;
         if (lengthDifference >= 3)
             score -= 0.03d;
@@ -345,8 +365,18 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
                 tokenCount,
                 isPack,
                 GetFirstAlphaNumeric(normalized),
-                GetLastAlphaNumeric(normalized));
+                GetLastAlphaNumeric(normalized),
+                CharacterPresence(normalized));
         }
+    }
+
+    // One bit per character class (code unit modulo 64); merging classes keeps the distance bound valid.
+    private static ulong CharacterPresence(string text)
+    {
+        var presence = 0UL;
+        foreach (var ch in text)
+            presence |= 1UL << (ch & 63);
+        return presence;
     }
 
     private static List<TokenSpan> Tokenize(string text)
@@ -482,34 +512,141 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
     private static char? GetLastAlphaNumeric(string text) =>
         text.LastOrDefault(char.IsLetterOrDigit) is var ch && ch != default ? ch : null;
 
-    private static int LevenshteinDistance(string source, string target)
+    // Groups the normalized terms by what a window can match at all. Single words only score when their first and
+    // last alphanumeric characters equal the window's, and phrases only when their token count is within one of the
+    // window's and their length is close to its length, so the groups let a window skip every term that would fail
+    // those checks. Terms with more tokens than a window can hold never match and only contribute to the count.
+    private sealed class TermCatalog
     {
-        if (source.Length == 0)
-            return target.Length;
-        if (target.Length == 0)
-            return source.Length;
+        internal static readonly TermCatalog Empty = new([]);
+        private readonly Dictionary<(char First, char Last), NormalizedTerm[]> _singleWords;
+        private readonly NormalizedTerm[][] _phrasesByTokenCount;
+        private readonly int[][] _phraseLengthsByTokenCount;
 
-        var previous = new int[target.Length + 1];
-        var current = new int[target.Length + 1];
-
-        for (var j = 0; j <= target.Length; j++)
-            previous[j] = j;
-
-        for (var i = 1; i <= source.Length; i++)
+        internal TermCatalog(NormalizedTerm[] terms)
         {
-            current[0] = i;
-            for (var j = 1; j <= target.Length; j++)
+            Count = terms.Length;
+            _singleWords = terms
+                .Where(term => term.TokenCount == 1 && term.FirstAlphaNumeric is not null && term.LastAlphaNumeric is not null)
+                .GroupBy(term => (First: term.FirstAlphaNumeric!.Value, Last: term.LastAlphaNumeric!.Value))
+                .ToDictionary(group => group.Key, group => group.ToArray());
+            _phrasesByTokenCount = new NormalizedTerm[MaxWindowTokens + 1][];
+            _phraseLengthsByTokenCount = new int[MaxWindowTokens + 1][];
+            for (var tokenCount = 0; tokenCount <= MaxWindowTokens; tokenCount++)
             {
-                var substitutionCost = source[i - 1] == target[j - 1] ? 0 : 1;
-                current[j] = Math.Min(
-                    Math.Min(current[j - 1] + 1, previous[j] + 1),
-                    previous[j - 1] + substitutionCost);
+                var phrases = tokenCount < 2
+                    ? []
+                    : terms.Where(term => term.TokenCount == tokenCount).OrderBy(term => term.Normalized.Length).ToArray();
+                _phrasesByTokenCount[tokenCount] = phrases;
+                _phraseLengthsByTokenCount[tokenCount] = phrases.Select(term => term.Normalized.Length).ToArray();
             }
-
-            (previous, current) = (current, previous);
         }
 
-        return previous[target.Length];
+        internal int Count { get; }
+
+        internal NormalizedTerm[] SingleWords(char? first, char? last) =>
+            first is { } firstCharacter && last is { } lastCharacter &&
+            _singleWords.TryGetValue((firstCharacter, lastCharacter), out var words)
+                ? words
+                : [];
+
+        internal ReadOnlySpan<NormalizedTerm> Phrases(int tokenCount, int windowCharacters)
+        {
+            if (tokenCount is < 2 or > MaxWindowTokens)
+                return [];
+
+            // Score rejects a phrase whose length differs from the window's by more than a fifth of the longer one.
+            // The band is one wider on each side than that bound, so rounding in the exact check cannot exclude a
+            // phrase the band skips.
+            var lengths = _phraseLengthsByTokenCount[tokenCount];
+            var start = FirstIndexAtLeast(lengths, windowCharacters * 4 / 5 - 1);
+            var end = FirstIndexAtLeast(lengths, (windowCharacters * 5 + 3) / 4 + 2);
+            return _phrasesByTokenCount[tokenCount].AsSpan(start, end - start);
+        }
+
+        private static int FirstIndexAtLeast(int[] sorted, int value)
+        {
+            var low = 0;
+            var high = sorted.Length;
+            while (low < high)
+            {
+                var middle = (low + high) >> 1;
+                if (sorted[middle] < value)
+                    low = middle + 1;
+                else
+                    high = middle;
+            }
+
+            return low;
+        }
+    }
+
+    // Tracks the best candidate and the runner-up score of one window. A proposal is only made when the best score
+    // leads by the ambiguity margin, so the best term is then the unique maximum and the scan order is irrelevant.
+    private struct CandidateRanking
+    {
+        internal NormalizedTerm? Best;
+        internal double BestScore;
+        internal double SecondScore;
+        internal int Count;
+
+        internal void Add(NormalizedTerm term, double score)
+        {
+            Count++;
+            if (Best is null || score > BestScore)
+            {
+                SecondScore = Best is null ? double.NegativeInfinity : BestScore;
+                Best = term;
+                BestScore = score;
+            }
+            else if (score > SecondScore)
+            {
+                SecondScore = score;
+            }
+        }
+    }
+
+    // Two rows suffice for the distance; reusing one pair for every candidate avoids two allocations per comparison.
+    private sealed class LevenshteinRows
+    {
+        private int[] _previous = new int[32];
+        private int[] _current = new int[32];
+
+        internal int Distance(string source, string target)
+        {
+            if (source.Length == 0)
+                return target.Length;
+            if (target.Length == 0)
+                return source.Length;
+
+            if (_previous.Length <= target.Length)
+            {
+                _previous = new int[target.Length + 1];
+                _current = new int[target.Length + 1];
+            }
+
+            var previous = _previous;
+            var current = _current;
+
+            for (var j = 0; j <= target.Length; j++)
+                previous[j] = j;
+
+            for (var i = 1; i <= source.Length; i++)
+            {
+                current[0] = i;
+                for (var j = 1; j <= target.Length; j++)
+                {
+                    var substitutionCost = source[i - 1] == target[j - 1] ? 0 : 1;
+                    current[j] = Math.Min(
+                        Math.Min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + substitutionCost);
+                }
+
+                (previous, current) = (current, previous);
+            }
+
+            return previous[target.Length];
+        }
     }
 
     private sealed record NormalizedTerm(
@@ -518,9 +655,8 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
         int TokenCount,
         bool IsPack,
         char? FirstAlphaNumeric,
-        char? LastAlphaNumeric);
-
-    private sealed record ScoredCandidate(NormalizedTerm Term, double Score);
+        char? LastAlphaNumeric,
+        ulong Characters);
 
     private sealed record Replacement(
         int Start,
@@ -532,4 +668,12 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
     private readonly record struct TokenSpan(int Start, int End);
 
     private readonly record struct WindowTrim(int CoreStartOffset, int CoreLength);
+
+    private readonly record struct Window(
+        string CoreText,
+        string Normalized,
+        int TokenCount,
+        char? FirstAlphaNumeric,
+        char? LastAlphaNumeric,
+        ulong Characters);
 }

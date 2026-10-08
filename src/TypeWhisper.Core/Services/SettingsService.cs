@@ -80,7 +80,6 @@ public sealed class SettingsService : ISettingsService
     {
         using var mutation = ProfileMutationCoordinator.Enter();
         settings = NormalizeSettings(settings);
-        _current = settings;
 
         var directory = Path.GetDirectoryName(_filePath);
         if (!string.IsNullOrEmpty(directory))
@@ -97,7 +96,8 @@ public sealed class SettingsService : ISettingsService
         var json = JsonSerializer.Serialize(settings, JsonOptions);
         AtomicFileWriter.WriteAllText(_filePath, json);
 
-        SettingsChanged?.Invoke(settings);
+        _current = settings;
+        ProfileMutationCoordinator.Notify(SettingsChanged, settings);
     }
 
     private static AppSettings? TryLoadFrom(string path)

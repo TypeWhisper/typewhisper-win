@@ -2,7 +2,7 @@
 
 Configurable POST/PUT post-processing webhooks with workflow filters, secret headers and a sanitized recent-delivery log.
 
-Version `1.3.2`; plugin ID `com.typewhisper.webhook`; minimum host `1.1.2`.
+Version `1.3.3`; plugin ID `com.typewhisper.webhook`; minimum host `1.1.2`.
 Independent branch: `seofood/webhook-portable`, updated to the current WinUI-only host.
 
 ## Setup

@@ -20,7 +20,7 @@ public sealed partial class CloudflareAsrPlugin : ITranscriptionEnginePlugin, IA
     /// <inheritdoc />
     public string PluginName => "Cloudflare Workers AI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.10";
+    public string PluginVersion => "1.1.11";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
@@ -76,7 +76,15 @@ public sealed partial class CloudflareAsrPlugin : ITranscriptionEnginePlugin, IA
     /// <inheritdoc />
     public void SelectModel(string modelId)
     {
+        // Hosts that predate SelectModelAsync call this member and still block on the save.
         if (!TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException("Unknown transcription model.");
         Connection.SaveAsync("model", modelId, default).GetAwaiter().GetResult();
+    }
+    // Implemented implicitly: an explicit interface implementation would reference a member older SDKs lack and fail to load there.
+    /// <inheritdoc />
+    public Task SelectModelAsync(string modelId, CancellationToken ct)
+    {
+        if (!TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException("Unknown transcription model.");
+        return Connection.SaveAsync("model", modelId, ct);
     }
 }

@@ -164,7 +164,7 @@ public sealed partial class SetupWizard
 
     private Action<string>? CaptureTestTarget(IntPtr window)
     {
-        if (_closing || _state.Step != 4 || _testBox is null || FocusManager.GetFocusedElement(XamlRoot) != _testBox) return null;
+        if (_closing || _state.Step != 4 || _testBox is null || !ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), _testBox)) return null;
         if (Microsoft.UI.Win32Interop.GetWindowIdFromWindow(window).Value != XamlRoot.ContentIslandEnvironment.AppWindowId.Value) return null;
         var target = _testBox;
         return text => DispatcherQueue.TryEnqueue(() =>

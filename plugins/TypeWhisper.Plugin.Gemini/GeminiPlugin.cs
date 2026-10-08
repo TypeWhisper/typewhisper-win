@@ -27,7 +27,7 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.9";
+    private const string PluginVersionValue = "1.3.10";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
@@ -222,7 +222,17 @@ public sealed partial class GeminiPlugin :
     /// <inheritdoc />
     public void SelectModel(string modelId)
     {
+        // Hosts that predate SelectModelAsync call this member and still block on the gate.
         _configurationGate.Wait();
+        try { SelectModelCore(modelId); }
+        finally { _configurationGate.Release(); }
+    }
+
+    // Implemented implicitly: an explicit interface implementation would reference a member older SDKs lack and fail to load there.
+    /// <inheritdoc />
+    public async Task SelectModelAsync(string modelId, CancellationToken ct)
+    {
+        await _configurationGate.WaitAsync(ct);
         try { SelectModelCore(modelId); }
         finally { _configurationGate.Release(); }
     }

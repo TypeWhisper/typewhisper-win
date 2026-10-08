@@ -31,7 +31,7 @@ internal sealed class Lexicon
             try
             {
                 if (File.Exists(snippetPath)) _ = LexiconTransfer.ReadSnippets(File.ReadAllText(snippetPath));
-                _snippets = new(snippetPath);
+                _snippets = OpenSnippets(snippetPath);
                 RefreshSnippets();
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -45,11 +45,26 @@ internal sealed class Lexicon
             {
                 _ = LexiconTransfer.ReadDictionary(File.ReadAllText(dictionaryPath), allowPackEntries: true);
             }
-            _dictionary = new(dictionaryPath);
+            _dictionary = OpenDictionary(dictionaryPath);
             RefreshDictionary();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         { LastError = _loadError = Loc.T("Dictionary could not be loaded: {0}", ex.Message); }
+    }
+
+    // The services raise their event only after a successful write, so a dictation started after an edit saved
+    // here never reuses the recording snapshot built before it.
+    private static DictionaryService OpenDictionary(string path)
+    {
+        var dictionary = new DictionaryService(path);
+        dictionary.EntriesChanged += DictationDictionarySnapshot.Invalidate;
+        return dictionary;
+    }
+    private static SnippetService OpenSnippets(string path)
+    {
+        var snippets = new SnippetService(path);
+        snippets.SnippetsChanged += DictationSnippetSnapshot.Invalidate;
+        return snippets;
     }
 
     internal void ReloadDictionary()
@@ -58,7 +73,7 @@ internal sealed class Lexicon
         try
         {
             if (File.Exists(_dictionaryPath)) _ = LexiconTransfer.ReadDictionary(File.ReadAllText(_dictionaryPath), allowPackEntries: true);
-            _dictionary = new(_dictionaryPath); RefreshDictionary(); _loadError = null;
+            _dictionary = OpenDictionary(_dictionaryPath); RefreshDictionary(); _loadError = null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         { LastError = _loadError = Loc.T("Dictionary could not be loaded."); }
@@ -78,7 +93,7 @@ internal sealed class Lexicon
         try
         {
             if (File.Exists(_snippetPath)) _ = LexiconTransfer.ReadSnippets(File.ReadAllText(_snippetPath));
-            _snippets = new(_snippetPath); RefreshSnippets();
+            _snippets = OpenSnippets(_snippetPath); RefreshSnippets();
             if (LastError == _snippetLoadError) LastError = null;
             _snippetLoadError = null;
         }
@@ -96,6 +111,13 @@ internal sealed class Lexicon
     }
 
     internal bool PackEnabled(string id) => _dictionary?.Entries.Any(e => e.Id.StartsWith($"pack:{id}:", StringComparison.Ordinal)) == true;
+    private string DictionarySaveError(string fallback)
+    {
+        if (_dictionary?.LastSaveError is not CatalogChangedException) return fallback;
+        ReloadDictionary();
+        return _loadError ?? Loc.T("The dictionary changed elsewhere. Your edit was not saved. The list has been reloaded; review it and try again.");
+    }
+
     internal string? SetPackEnabled(TermPack pack, bool enabled)
     {
         if (_loadError is not null) return LastError = _loadError;
@@ -107,7 +129,7 @@ internal sealed class Lexicon
         // Removing one pack must not remove a personal term or another pack's term.
         if (enabled) updated.AddRange(pack.Terms.Distinct(StringComparer.OrdinalIgnoreCase).Select(term => new DictionaryEntry
         { Id = prefix + term, EntryType = DictionaryEntryType.Term, Original = term }));
-        if (!_dictionary.TryReplaceAll(updated)) return LastError = Loc.T("Could not save term pack selection.");
+        if (!_dictionary.TryReplaceAll(updated)) return LastError = DictionarySaveError(Loc.T("Could not save term pack selection."));
         RefreshDictionary(); LastError = null; return null;
     }
     internal IReadOnlyList<LexiconEntry> Entries => _entries.AsReadOnly();
@@ -151,7 +173,7 @@ internal sealed class Lexicon
             {
                 if (_dictionary is null) return LastError = Loc.T("Persistent dictionary is unavailable.");
                 var next = LexiconTransfer.MergeDictionary(_dictionary.Entries, LexiconTransfer.ReadDictionary(json), replace);
-                if (!_dictionary.TryReplaceAll(next)) return LastError = Loc.T("Could not save imported dictionary. Existing entries are unchanged.");
+                if (!_dictionary.TryReplaceAll(next)) return LastError = DictionarySaveError(Loc.T("Could not save imported dictionary. Existing entries are unchanged."));
                 RefreshDictionary();
             }
             return LastError = null;
@@ -227,7 +249,7 @@ internal sealed class Lexicon
             var existing = _dictionary.Entries.FirstOrDefault(e => UiId(e.Id) == draft.Id);
             var entry = (existing ?? new DictionaryEntry { Id = draft.Id.ToString(), EntryType = draft.Kind == LexiconKind.Word ? DictionaryEntryType.Term : DictionaryEntryType.Correction, Original = key })
                 with { Original = key, Replacement = draft.Kind == LexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, CtcMinSimilarity = draft.CtcMinSimilarity, UpdatedAt = DateTime.UtcNow };
-            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = Loc.T("Could not save dictionary entry.");
+            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = DictionarySaveError(Loc.T("Could not save dictionary entry."));
             RefreshDictionary(); LastError = null; return null;
         }
         var index = _entries.FindIndex(entry => entry.Id == draft.Id);
@@ -270,7 +292,7 @@ internal sealed class Lexicon
         if (_dictionary is not null)
         {
             if (additions.Count > 0 && !_dictionary.TryReplaceAll(_dictionary.Entries.Concat(additions).ToArray()))
-                return Loc.T("Could not save variants. Your dictionary was kept unchanged.");
+                return DictionarySaveError(Loc.T("Could not save variants. Your dictionary was kept unchanged."));
             RefreshDictionary();
         }
         else foreach (var entry in additions)
@@ -288,7 +310,7 @@ internal sealed class Lexicon
         if (_dictionary is not null)
         {
             if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(entry => !ids.Contains(UiId(entry.Id))).ToArray()))
-            { LastError = Loc.T("Could not delete correction group."); return false; }
+            { LastError = DictionarySaveError(Loc.T("Could not delete correction group.")); return false; }
             RefreshDictionary();
         }
         else _entries.RemoveAll(entry => ids.Contains(entry.Id));
@@ -312,7 +334,7 @@ internal sealed class Lexicon
         }
         if (entry.Kind != LexiconKind.Snippet && _dictionary is not null)
         {
-            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => UiId(e.Id) != id).ToArray())) { LastError = Loc.T("Could not delete entry."); return false; }
+            if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => UiId(e.Id) != id).ToArray())) { LastError = DictionarySaveError(Loc.T("Could not delete entry.")); return false; }
             RefreshDictionary(); LastError = null; return true;
         }
         return _entries.RemoveAll(e => e.Id == id) == 1;

@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: pr-ci-windows-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled; every push to main keeps its run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
@@ -21,6 +22,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Check changed whitespace
+        shell: pwsh
+        run: git diff --check HEAD^ HEAD
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -29,6 +36,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
 
       - name: Create build log directory
         shell: pwsh
@@ -60,15 +68,28 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          # Hash only the projects this job restores so it keeps its own cache entry.
+          cache-dependency-path: |
+            src/**/*.csproj
+            tests/**/*.csproj
+            Directory.Build.props
+            Directory.Packages.props
       - name: Verify headless suite selection and failure reporting
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.Tests.ps1
+      - name: Verify dependency notice packaging
+        shell: pwsh
+        run: ./eng/Write-RuntimeNotices.Tests.ps1
+      - name: Verify central package version bindings
+        shell: pwsh
+        run: ./eng/Get-CentralPackageVersion.Tests.ps1
       - name: Verify Store package version rules
         shell: pwsh
         run: |
           ./eng/Get-StorePackageVersion.Tests.ps1
           ./eng/New-StorePackageManifest.Tests.ps1
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Verify Store beta submission guards without credentials
@@ -78,7 +99,7 @@ jobs:
         run: dotnet test tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj -c Release -p:DefineConstants=TYPEWHISPER_STORE_BETA --filter 'FullyQualifiedName~WinUIProfileTests|FullyQualifiedName~StoreProfileIsolationTests|FullyQualifiedName~AppImportTests'
       - name: Test application and plugin host without desktop or provider credentials
         shell: pwsh
-        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite App
+        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite App -CollectCoverage
       - name: Verify audio test orchestration with fake endpoints
         shell: pwsh
         run: ./eng/Test-WinUILocalAudio.Tests.ps1

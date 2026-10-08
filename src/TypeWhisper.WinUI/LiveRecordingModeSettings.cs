@@ -33,8 +33,8 @@ internal static class LiveRecordingModeSettings
             if (Enum.TryParse<RecordingMode>(id, out var mode)) selectionError = session.SelectRecordingMode(mode);
             Refresh();
         };
-        row.Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
-        row.Unloaded += (_, _) => session.Changed -= OnChanged;
+        ViewSubscriptions.Attach(row, () => { session.Changed += OnChanged; Refresh(); },
+            () => session.Changed -= OnChanged);
         pickers.Add(picker);
         Refresh();
     }

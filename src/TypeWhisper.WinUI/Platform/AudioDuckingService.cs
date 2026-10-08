@@ -37,7 +37,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"AudioDucking duck failed: {ex.Message}");
+            AppDiagnostics.Write("audio.ducking.failed", ex);
         }
     }
 
@@ -58,7 +58,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"AudioDucking restore failed: {ex.Message}");
+            AppDiagnostics.Write("audio.ducking.restore-failed", ex);
         }
         finally
         {

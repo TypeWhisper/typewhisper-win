@@ -20,7 +20,7 @@ public sealed class LocalLivePreviewTests
     {
         using var preview = new LocalLivePreview(TimeSpan.FromMilliseconds(1));
         var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        preview.Start(() => new float[16000], _ => Task.FromResult("Real words"), text => received.TrySetResult(text), error => received.TrySetException(new Exception(error)));
+        preview.Start(() => new float[16000], (_, _) => Task.FromResult("Real words"), text => received.TrySetResult(text), error => received.TrySetException(new Exception(error)));
         Assert.Equal("Real words", await received.Task.WaitAsync(TimeSpan.FromSeconds(5)));
         await preview.StopAsync();
     }
@@ -32,14 +32,36 @@ public sealed class LocalLivePreviewTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var decode = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var results = new List<string>();
-        preview.Start(() => new float[16000], _ => { entered.TrySetResult(); return decode.Task; }, results.Add, results.Add);
+        preview.Start(() => new float[16000], (_, _) => { entered.TrySetResult(); return decode.Task; }, results.Add, results.Add);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var stopped = preview.StopAsync();
         Assert.False(stopped.IsCompleted);
-        Assert.Throws<InvalidOperationException>(() => preview.Start(() => null, _ => Task.FromResult(""), _ => { }, _ => { }));
+        Assert.Throws<InvalidOperationException>(() => preview.Start(() => null, (_, _) => Task.FromResult(""), _ => { }, _ => { }));
         decode.SetResult("Stale words");
         await stopped.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task StopCancelsInferenceWithoutPublishingAStaleResultOrError()
+    {
+        using var preview = new LocalLivePreview(TimeSpan.FromMilliseconds(1));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken inference = default;
+        var published = new List<string>();
+        preview.Start(() => new float[16000], async (_, ct) =>
+        {
+            inference = ct;
+            entered.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return "unreachable";
+        }, published.Add, published.Add);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await preview.StopAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(inference.IsCancellationRequested);
+        Assert.Empty(published);
     }
 
     [Fact]
@@ -47,7 +69,7 @@ public sealed class LocalLivePreviewTests
     {
         using var preview = new LocalLivePreview(TimeSpan.FromMilliseconds(1));
         var failure = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        preview.Start(() => new float[16000], _ => throw new InvalidOperationException("decode failed"), _ => { }, error => failure.TrySetResult(error));
+        preview.Start(() => new float[16000], (_, _) => throw new InvalidOperationException("decode failed"), _ => { }, error => failure.TrySetResult(error));
         Assert.Equal("decode failed", await failure.Task.WaitAsync(TimeSpan.FromSeconds(5)));
         await preview.StopAsync();
     }

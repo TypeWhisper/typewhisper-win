@@ -215,7 +215,7 @@ public sealed partial class TranscriptPreviewWindow : Window
         if (_floatingPosition is null) return;
         try { LiveTextPlacement.Save(PositionPath, _floatingPosition); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { Debug.WriteLine($"Could not save live-text placement: {ex.GetType().Name}"); }
+        { AppDiagnostics.Write("live-text.placement.save-failed", ex); }
     }
 
     private void InitializeResizeHandles()

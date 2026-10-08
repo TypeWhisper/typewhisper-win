@@ -1,0 +1,18 @@
+{
+  "Transcription model": "Transcription model",
+  "Use Refresh models to load the account's current catalog.": "Use Refresh models to load the account's current catalog.",
+  "Transcription mode": "Transcription mode",
+  "Smart cleans up speech; Verbatim preserves the spoken wording.": "Smart cleans up speech; Verbatim preserves the spoken wording.",
+  "Verbatim": "Verbatim",
+  "Text model": "Text model",
+  "Default for text processing. A workflow can choose another model.": "Default for text processing. A workflow can choose another model.",
+  "Temperature": "Temperature",
+  "Use the provider default or set a custom temperature.": "Use the provider default or set a custom temperature.",
+  "Provider default": "Provider default",
+  "Custom": "Custom",
+  "Custom temperature": "Custom temperature",
+  "A number from 0 to 2. Used only with Custom temperature.": "A number from 0 to 2. Used only with Custom temperature.",
+  "Refresh models": "Refresh models",
+  "Fetch and save transcription and text models using the stored API key.": "Fetch and save transcription and text models using the stored API key.",
+  "Models updated.": "Models updated."
+}

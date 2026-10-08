@@ -31,6 +31,18 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// <summary>Selects a transcription model by ID.</summary>
     void SelectModel(string modelId);
 
+    /// <summary>
+    /// Selects a transcription model by ID without blocking the caller. Engines that persist the
+    /// selection through asynchronous storage or wait for an asynchronous gate override this member
+    /// as a public method; the default forwards to <see cref="SelectModel"/>, which stays the entry
+    /// point for hosts that predate this member.
+    /// </summary>
+    Task SelectModelAsync(string modelId, CancellationToken ct)
+    {
+        SelectModel(modelId);
+        return Task.CompletedTask;
+    }
+
     /// <summary>Transcribes WAV audio data and returns the result.</summary>
     Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct);

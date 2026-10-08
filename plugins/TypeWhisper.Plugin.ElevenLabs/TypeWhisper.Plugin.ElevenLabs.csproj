@@ -1,18 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <RootNamespace>TypeWhisper.Plugin.ElevenLabs</RootNamespace><Version>1.1.1</Version>
+    <RootNamespace>TypeWhisper.Plugin.ElevenLabs</RootNamespace><Version>1.1.2</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.ElevenLabs.Portable.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <Content Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="manifest.json;Localization/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">
     <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.elevenlabs/</PackageDirectory></PropertyGroup>
     <ItemGroup><PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" /></ItemGroup>
     <MakeDir Directories="$(PackageDirectory)" />
     <Copy SourceFiles="@(PackageFile)" DestinationFolder="$(PackageDirectory)" />
+    <ItemGroup><PackageLocalization Include="$(ProjectDir)Localization/*.json" /></ItemGroup>
+    <Copy SourceFiles="@(PackageLocalization)" DestinationFolder="$(PackageDirectory)Localization" />
   </Target>
 </Project>

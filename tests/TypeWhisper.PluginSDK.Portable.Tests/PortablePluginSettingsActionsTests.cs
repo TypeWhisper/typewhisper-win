@@ -4,6 +4,29 @@ using TypeWhisper.PluginSDK.PortableFixture;
 
 public sealed partial class PortablePluginRuntimeRegistryTests
 {
+    [Fact]
+    public async Task PackageActivationSuppliesItsLocalizedSettingsToAHeadlessHost()
+    {
+        var previous = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = new("ja-JP");
+            var bundles = Path.Combine(_root, "localized-bundles");
+            Package(bundles, Id, typeof(SettingsActionsProbePlugin));
+            var resources = Path.Combine(bundles, Id, "Localization");
+            Directory.CreateDirectory(resources);
+            File.WriteAllText(Path.Combine(resources, "ja.json"), "{\"Connect\":\"接続\"}");
+            var store = new PortablePluginStore(Path.Combine(_root, "localized-store"), Version, _http);
+            await store.InitializeAsync(bundles);
+            await using var registry = Registry(store);
+            Assert.Null(await registry.SetEnabledAsync(Id, true));
+            var title = await registry.UseConfigurationAsync(Id, (plugin, _) =>
+                Task.FromResult(Assert.Single(((IPluginSettingsActions)plugin).SettingsActions).Title));
+            Assert.Equal("接続", title);
+        }
+        finally { System.Globalization.CultureInfo.CurrentUICulture = previous; }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -97,7 +97,7 @@ public sealed partial class MarketplaceView : UserControl
             _catalog = []; _entries = [];
             EmptyTitle.Text = Loc.T("Catalog unavailable");
             EmptyDescription.Text = Loc.T("The plugin catalog could not be loaded. Your installed plugins remain available. Try again shortly.");
-            System.Diagnostics.Debug.WriteLine("Plugin catalog: " + ex.GetType().Name);
+            AppDiagnostics.Write("plugin.catalog.failed", ex);
         }
         finally { UpdateCategories(); _fetching = false; ResetFiltersButton.Visibility = Visibility.Visible; Filter(_query); }
     }

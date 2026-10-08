@@ -185,6 +185,35 @@ public sealed partial class GeminiPluginTests
     }
 
     [Fact]
+    public async Task SelectModelAsyncWaitsForTheConfigurationGateWithoutBlocking()
+    {
+        var host = new TestPluginHostServices();
+        using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        var catalog = new GeminiModelCatalog([], [new("gemini-3.5-transcribe", null, null), new("gemini-3.6-transcribe", null, null)], DateTimeOffset.UtcNow);
+        await plugin.SetFetchedModelCatalogAsync(catalog);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        host.BeforeSetSetting = key =>
+        {
+            if (key != "selectedTranscriptionModel") return;
+            entered.TrySetResult();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
+        };
+        // A synchronous selection holds the configuration gate while its settings write is blocked.
+        var holder = Task.Run(() => plugin.SelectModel("gemini-3.6-transcribe"));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var select = plugin.SelectModelAsync("gemini-3.5-transcribe", default);
+        Assert.False(select.IsCompleted);
+        release.Set();
+        await holder; await select.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("gemini-3.5-transcribe", plugin.SelectedModelId);
+        Assert.Equal("gemini-3.5-transcribe", host.GetSetting<string>("selectedTranscriptionModel"));
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SelectModelAsync("bad id", default));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.SelectModelAsync("gemini-3.6-transcribe", new(true)));
+        Assert.Equal("gemini-3.5-transcribe", plugin.SelectedModelId);
+    }
+
+    [Fact]
     public async Task CancellationDuringUploadMetadataStillDeletesCompletedUpload()
     {
         using var cancel = new CancellationTokenSource();

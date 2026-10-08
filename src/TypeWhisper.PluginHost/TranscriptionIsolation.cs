@@ -17,6 +17,20 @@ public sealed class TranscriptionIsolation(string executablePath, IReadOnlyList<
     public event Action<string, string>? Notice;
     /// <summary>Ends idle workers after this policy's delay; null keeps workers running.</summary>
     public ModelIdleUnloadPolicy? IdleUnloadPolicy { get; init; }
+    /// <summary>How often a worker reports that a request is still running.</summary>
+    public TimeSpan HeartbeatInterval { get; init; } = TranscriptionWorkerLaunch.DefaultHeartbeatInterval;
+    /// <summary>
+    /// How long a worker may stay silent during a request before it is ended and the request retried in a new one;
+    /// <see cref="Timeout.InfiniteTimeSpan"/> waits forever. Measured against the heartbeat, so a long decode is not a timeout.
+    /// </summary>
+    public TimeSpan RequestInactivityTimeout { get; init; } = TranscriptionWorkerLaunch.DefaultRequestInactivityTimeout;
+
+    /// <summary>
+    /// Overrides the total request deadline. Null allows two minutes plus ten times the estimated
+    /// audio duration for transcription, and ten minutes for loading. Infinite disables the deadline.
+    /// Heartbeats do not extend this limit; timeout failures are not automatically retried.
+    /// </summary>
+    public TimeSpan? RequestTimeout { get; init; }
 
     /// <summary>Returns an isolated adapter, or null when the engine stays in process.</summary>
     public IsolatedTranscriptionEngine? TryIsolate(ITranscriptionEnginePlugin engine, string packageDirectory, IPluginHostServices services)
@@ -24,7 +38,8 @@ public sealed class TranscriptionIsolation(string executablePath, IReadOnlyList<
         // Streaming sessions are callback objects that cannot cross the process boundary.
         if (!pluginIds.Contains(engine.PluginId) || engine is not IPcmTranscriptionEnginePlugin || engine.SupportsStreaming) return null;
         var launch = new TranscriptionWorkerLaunch(executablePath, prefixArguments, Path.GetFullPath(packageDirectory),
-            services.PluginDataDirectory, services.PluginAssetDirectory, engine.GetTranscriptionSelectionId(), hostVersion);
+            services.PluginDataDirectory, services.PluginAssetDirectory, engine.GetTranscriptionSelectionId(), hostVersion)
+            { HeartbeatInterval = HeartbeatInterval, RequestInactivityTimeout = RequestInactivityTimeout, RequestTimeout = RequestTimeout };
         var logPath = Path.Combine(services.PluginDataDirectory, "transcription-worker.log");
         void Log(PluginLogLevel level, string message)
         {

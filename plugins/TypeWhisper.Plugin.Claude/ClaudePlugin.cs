@@ -45,7 +45,7 @@ public sealed partial class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgin
     /// <inheritdoc />
     public string ProviderName => PluginName;
     /// <inheritdoc />
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
     /// <inheritdoc />
     public bool IsAvailable => _host is not null && _apiKey is not null;
     /// <inheritdoc />

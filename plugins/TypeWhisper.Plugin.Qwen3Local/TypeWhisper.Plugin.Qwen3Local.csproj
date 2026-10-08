@@ -3,15 +3,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.Qwen3Local.Tests" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
-    <PackageReference Include="SharpCompress" Version="0.48.0" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" />
+    <PackageReference Include="SharpCompress" />
     <Content Include="manifest.json;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Licenses/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

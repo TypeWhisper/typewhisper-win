@@ -615,9 +615,21 @@ public static class CloudFolderSyncEngine
 
     private static void WritePackageMetadata(string packagePath, string devicesPath, string deviceId, DateTime now)
     {
-        WriteJson(
-            new CloudFolderSyncManifest(1, "TypeWhisper", now),
-            Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName))));
+        var manifestPath = Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName)));
+        // The manifest identifies the package format. Device records carry sync liveness on both platforms.
+        if (!ValidateManifestIfPresent(manifestPath))
+        {
+            try
+            {
+                AtomicFileWriter.CreateAllText(manifestPath, CloudFolderSyncJson.Serialize(new CloudFolderSyncManifest(1, "TypeWhisper", now)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (!ValidateManifestIfPresent(manifestPath)) throw;
+                // Another device published the complete manifest first. Keep its timestamp and unknown fields.
+                // Never replace incompatible/unreadable metadata or contend on this shared file on every pass.
+            }
+        }
 
         var devicePath = Path.Combine(devicesPath, $"{EnsureRelativePathSegment(deviceId, nameof(deviceId))}.json");
         var existing = ReadDevice(devicePath);
@@ -629,6 +641,25 @@ public static class CloudFolderSyncEngine
             foreach (var (key, value) in existing)
                 if (!device.ContainsKey(key)) device[key] = value?.DeepClone();
         WriteJson(device, devicePath);
+    }
+
+    private static bool ValidateManifestIfPresent(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var manifest = JsonSerializer.Deserialize<CloudFolderSyncManifest>(stream, CloudFolderSyncJson.Options);
+            if (manifest is not { SchemaVersion: 1, CreatedBy: "TypeWhisper" })
+                throw new CloudFolderSyncManifestException(path, unsupportedFormat: true);
+            return true;
+        }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        catch (CloudFolderSyncManifestException) { throw; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new CloudFolderSyncManifestException(path, unsupportedFormat: false, ex);
+        }
     }
 
     private static JsonObject? ReadDevice(string path)
@@ -674,16 +705,11 @@ public static class CloudFolderSyncEngine
         return operations;
     }
 
-    private static void WriteJson<T>(T value, string path)
-    {
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory))
-            Directory.CreateDirectory(directory);
-
-        var tempPath = $"{path}.tmp";
-        File.WriteAllText(tempPath, CloudFolderSyncJson.Serialize(value));
-        File.Move(tempPath, path, overwrite: true);
-    }
+    // A uniquely named temporary file avoids colliding with other writers, and the flushed move shows
+    // readers a whole file. Shared immutable metadata uses create-once publication above.
+    // macOS skips hidden files and reads only the .json extension, so the temporary file is invisible to it.
+    private static void WriteJson<T>(T value, string path) =>
+        AtomicFileWriter.WriteAllText(path, CloudFolderSyncJson.Serialize(value));
 
     private static string OperationTimestamp(DateTime date) =>
         new DateTimeOffset(NormalizeUtc(date)).ToUnixTimeMilliseconds().ToString();

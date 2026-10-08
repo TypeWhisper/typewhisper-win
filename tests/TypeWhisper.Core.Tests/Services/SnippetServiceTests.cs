@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 
@@ -438,6 +439,99 @@ public class SnippetServiceTests : IDisposable
 
         Assert.Equal(1, _sut.Snippets[0].UsageCount);
         Assert.Equal(updatedAt, _sut.Snippets[0].UpdatedAt);
+    }
+
+    [Fact]
+    public void CorruptFile_ReportsLoadFailureAndRefusesEveryWrite()
+    {
+        File.WriteAllText(_filePath, "{ not a snippet list");
+        var original = File.ReadAllBytes(_filePath);
+        var service = new SnippetService(_filePath);
+        var changed = 0;
+        service.SnippetsChanged += () => changed++;
+
+        Assert.Empty(service.Snippets);
+        Assert.IsType<JsonException>(service.LoadError);
+
+        service.AddSnippet(new Snippet { Id = "1", Trigger = "mfg", Replacement = "Mit freundlichen Grüßen" });
+        Assert.Equal(0, service.ImportFromJson("""[{"Id":"2","Trigger":"lg","Replacement":"Liebe Grüße"}]"""));
+        Assert.False(service.TryReplaceAll([new Snippet { Id = "1", Trigger = "mfg", Replacement = "Mit freundlichen Grüßen" }]));
+
+        Assert.Equal(original, File.ReadAllBytes(_filePath));
+        Assert.Empty(service.Snippets);
+        Assert.NotNull(service.LastSaveError);
+        Assert.Equal(0, changed);
+    }
+
+    [Fact]
+    public void CorruptFile_AcceptsWritesAgainOnceRepairedAndReloaded()
+    {
+        File.WriteAllText(_filePath, "{ not a snippet list");
+        var service = new SnippetService(_filePath);
+        Assert.Empty(service.Snippets);
+        Assert.NotNull(service.LoadError);
+        Assert.False(service.Reload());
+
+        File.WriteAllText(_filePath, "[]");
+        Assert.True(service.Reload());
+        Assert.Null(service.LoadError);
+
+        service.AddSnippet(new Snippet { Id = "1", Trigger = "mfg", Replacement = "Mit freundlichen Grüßen" });
+
+        Assert.Null(service.LastSaveError);
+        Assert.Equal("mfg", Assert.Single(new SnippetService(_filePath).Snippets).Trigger);
+    }
+
+    [Fact]
+    public void LockedFile_ReportsLoadFailureAndIsNotOverwrittenOnceReleased()
+    {
+        if (!OperatingSystem.IsWindows()) return; // Only Windows enforces an exclusive open.
+        _sut.AddSnippet(new Snippet { Id = "1", Trigger = "mfg", Replacement = "Mit freundlichen Grüßen" });
+        var original = File.ReadAllBytes(_filePath);
+        var service = new SnippetService(_filePath);
+        var changed = 0;
+        service.SnippetsChanged += () => changed++;
+
+        using (new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Empty(service.Snippets);
+            Assert.IsAssignableFrom<IOException>(service.LoadError);
+            Assert.False(service.Reload());
+        }
+
+        // The sync client let go, but the catalog was never read: writing now would keep only the new snippet.
+        service.AddSnippet(new Snippet { Id = "2", Trigger = "lg", Replacement = "Liebe Grüße" });
+        Assert.False(service.TryReplaceAll([]));
+        Assert.Equal(original, File.ReadAllBytes(_filePath));
+        Assert.Empty(service.Snippets);
+        Assert.Equal(0, changed);
+
+        Assert.True(service.Reload());
+        Assert.Null(service.LoadError);
+        Assert.Equal(1, changed);
+        Assert.Equal("mfg", Assert.Single(service.Snippets).Trigger);
+
+        service.AddSnippet(new Snippet { Id = "2", Trigger = "lg", Replacement = "Liebe Grüße" });
+        Assert.Null(service.LastSaveError);
+        Assert.Equal(2, changed);
+        Assert.Equal(2, new SnippetService(_filePath).Snippets.Count);
+    }
+
+    [Fact]
+    public void FailedSave_RestoresTheCacheAndRaisesNoEvent()
+    {
+        if (!OperatingSystem.IsWindows()) return; // Only Windows refuses to replace an open file.
+        _sut.AddSnippet(new Snippet { Id = "1", Trigger = "mfg", Replacement = "Mit freundlichen Grüßen" });
+        var changed = 0;
+        _sut.SnippetsChanged += () => changed++;
+
+        using (new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            _sut.AddSnippet(new Snippet { Id = "2", Trigger = "lg", Replacement = "Liebe Grüße" });
+
+        Assert.NotNull(_sut.LastSaveError);
+        Assert.Equal(0, changed);
+        Assert.Equal("mfg", Assert.Single(_sut.Snippets).Trigger);
+        Assert.Equal("mfg", Assert.Single(new SnippetService(_filePath).Snippets).Trigger);
     }
 
     public void Dispose()

@@ -16,7 +16,10 @@ public static class ReviewedCatalogTransaction
     {
         using var mutation = ProfileMutationCoordinator.Enter();
         if (!string.Equals(Read(path), baseline, StringComparison.Ordinal))
-            throw new InvalidOperationException(Loc.T("Your list changed while you were reviewing. Nothing was imported. Start the import again to review the updated list."));
+            throw new CatalogChangedException(Loc.T("Your list changed while you were reviewing. Nothing was imported. Start the import again to review the updated list."));
         AtomicFileWriter.WriteAllText(path, next);
     }
 }
+
+/// <summary>The catalog changed after it was read; the attempted write was not committed.</summary>
+public sealed class CatalogChangedException(string message) : InvalidOperationException(message);

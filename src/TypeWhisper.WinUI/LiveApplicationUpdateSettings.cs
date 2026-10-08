@@ -81,8 +81,8 @@ internal static class LiveApplicationUpdateSettings
         };
         // A failed save switches the toggle back on the refresh.
         automatic.Toggled += (_, _) => { if (automatic.IsOn != automaticPreference.Enabled) { automaticPreference.Save(automatic.IsOn); Refresh(); } };
-        row.Loaded += (_, _) => { controller.Changed += Refresh; plugins.Changed += RefreshOnUiThread; Refresh(); _ = plugins.RefreshAsync(); };
-        row.Unloaded += (_, _) => { controller.Changed -= Refresh; plugins.Changed -= RefreshOnUiThread; };
+        ViewSubscriptions.Attach(row, () => { controller.Changed += Refresh; plugins.Changed += RefreshOnUiThread; Refresh(); _ = plugins.RefreshAsync(); },
+            () => { controller.Changed -= Refresh; plugins.Changed -= RefreshOnUiThread; });
         pickers.Add(picker);
         Refresh();
     }

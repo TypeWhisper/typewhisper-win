@@ -1,6 +1,6 @@
 # Speechmatics for the portable host
 
-Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.5`, requiring host `1.1.5`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
+Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.6`, requiring host `1.1.5`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
 
 ## Behavior
 

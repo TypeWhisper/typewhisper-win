@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using SharpCompress.Compressors;
 using SharpCompress.Compressors.BZip2;
 using TypeWhisper.Plugin.Qwen3Local;
+using TypeWhisper.PluginSDK;
 
 public sealed class QwenTests : IDisposable
 {
@@ -357,6 +358,20 @@ public sealed class QwenTests : IDisposable
             finish.Set(); await decode; await unload; Assert.True(decoder.Disposed);
         }
         finally { finish.Set(); }
+    }
+
+    [Fact]
+    public async Task SelectModelAsyncPersistsTheSelectionThroughTheHost()
+    {
+        // The plugin keeps the SDK default, which forwards to the synchronous member.
+        var host = new TestHost(_root);
+        using var plugin = new Qwen3LocalPlugin(); await plugin.ActivateAsync(host);
+        ITranscriptionEnginePlugin engine = plugin;
+        await engine.SelectModelAsync(Qwen3LocalPlugin.LargeModelId, default);
+        Assert.Equal(Qwen3LocalPlugin.LargeModelId, plugin.SelectedModelId);
+        Assert.Equal(Qwen3LocalPlugin.LargeModelId, host.GetSetting<string>("selectedModel"));
+        await Assert.ThrowsAsync<ArgumentException>(() => engine.SelectModelAsync("../other", default));
+        Assert.Equal(Qwen3LocalPlugin.LargeModelId, plugin.SelectedModelId);
     }
 
     [Fact]

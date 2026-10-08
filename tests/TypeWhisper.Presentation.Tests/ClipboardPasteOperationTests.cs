@@ -6,6 +6,8 @@ public class ClipboardPasteOperationTests
     private sealed class Fake : IClipboardPastePlatform, IDisposable
     {
         public bool CanPaste { get; set; } = true;
+        public Func<Task<bool>>? VerifyField;
+        public Task<bool> VerifyFieldAsync() => VerifyField?.Invoke() ?? Task.FromResult(true);
         public bool ClipboardIsOwned { get; set; } = true;
         public bool FailCapture, LoseFocusAfterCapture, ThrowOnSend;
         public uint Sent = 4;
@@ -76,6 +78,39 @@ public class ClipboardPasteOperationTests
         Assert.Equal(1, platform.Calls.Count(c => c == "paste"));
         Assert.Contains("restore", platform.Calls);
     }
+    [Fact]
+    public async Task LosingPermissionWhileFieldVerificationIsPendingRestoresWithoutPasting()
+    {
+        var checking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var verified = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var checks = 0;
+        var platform = new Fake
+        {
+            VerifyField = () =>
+            {
+                if (++checks == 1) return Task.FromResult(true);
+                checking.SetResult();
+                return verified.Task;
+            }
+        };
+        var paste = ClipboardPasteOperation.RunAsync(platform, "text");
+        await checking.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        platform.CanPaste = false;
+        verified.SetResult(true);
+
+        Assert.False((await paste).Inserted);
+        Assert.Equal(new[] { "capture", "restore", "dispose" }, platform.Calls);
+    }
+
+    [Fact]
+    public async Task FailedAsyncFieldCheckAfterClipboardCaptureRestoresIt()
+    {
+        var checks = 0;
+        var platform = new Fake { VerifyField = () => Task.FromResult(++checks == 1) };
+        Assert.False((await ClipboardPasteOperation.RunAsync(platform, "text")).Inserted);
+        Assert.Equal(new[] { "capture", "restore", "dispose" }, platform.Calls);
+    }
+
     [Fact]
     public async Task SendExceptionStillRestores()
     {

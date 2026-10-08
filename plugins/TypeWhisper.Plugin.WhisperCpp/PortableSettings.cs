@@ -5,7 +5,7 @@ namespace TypeWhisper.Plugin.WhisperCpp;
 
 public sealed partial class WhisperCppPlugin
 {
-    private string L(string en, string de) => PortableLocalization.TryGet(_host)?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en;
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>

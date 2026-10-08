@@ -9,11 +9,7 @@ public sealed partial class GeminiPlugin
     private sealed record LlmOptions(string? Model = null, string TemperatureMode = "providerDefault", double Temperature = 0.3);
     private LlmOptions _llmOptions = new();
 
-    private string L(string en, string de)
-    {
-        try { return _host?.Localization.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? de : en; }
-        catch (NotSupportedException) { return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de" ? de : en; }
-    }
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
     private string SelectedLlmModel => SupportedModels.Any(m => m.Id == _llmOptions.Model)
         ? _llmOptions.Model! : SupportedModels.FirstOrDefault()?.Id ?? "";

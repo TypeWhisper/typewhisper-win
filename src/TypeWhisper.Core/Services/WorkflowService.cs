@@ -20,6 +20,7 @@ public sealed class WorkflowService : IWorkflowService
     private readonly string _filePath;
     private List<Workflow> _cache = [];
     private bool _cacheLoaded;
+    private string? _fileBaseline;
 
     /// <summary>
     /// Initializes a new instance of the WorkflowService class.
@@ -27,6 +28,34 @@ public sealed class WorkflowService : IWorkflowService
     public WorkflowService(string filePath)
     {
         _filePath = filePath;
+    }
+
+    /// <summary>
+    /// Gets why the workflow file could not be read or parsed, or null when it loaded or does not exist yet.
+    /// </summary>
+    /// <remarks>
+    /// While set, <see cref="Workflows"/> is empty and every mutation is refused, so a locked or corrupt file is
+    /// never replaced by that empty list. <see cref="Reload"/> clears it once the file can be read again.
+    /// </remarks>
+    public Exception? LoadError { get; private set; }
+
+    /// <summary>
+    /// Gets why the most recent mutation was not written to disk, or null when it was persisted.
+    /// </summary>
+    public Exception? LastSaveError { get; private set; }
+
+    /// <summary>
+    /// Reads the workflow file again, for example after a sync client released it, and reports whether it loaded.
+    /// </summary>
+    public bool Reload()
+    {
+        using var mutation = ProfileMutationCoordinator.Enter();
+        _cacheLoaded = false;
+        EnsureCacheLoaded();
+        if (LoadError is not null) return false;
+
+        ProfileMutationCoordinator.Notify(WorkflowsChanged);
+        return true;
     }
 
     /// <summary>
@@ -55,7 +84,7 @@ public sealed class WorkflowService : IWorkflowService
     public void AddWorkflow(Workflow workflow)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         var created = workflow with
         {
             CreatedAt = workflow.CreatedAt == default ? DateTime.UtcNow : workflow.CreatedAt,
@@ -63,8 +92,7 @@ public sealed class WorkflowService : IWorkflowService
         };
         _cache.Add(created);
         SortCache();
-        SaveToDisk();
-        WorkflowsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -73,13 +101,12 @@ public sealed class WorkflowService : IWorkflowService
     public void UpdateWorkflow(Workflow workflow)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         var updated = workflow with { UpdatedAt = DateTime.UtcNow };
         var idx = _cache.FindIndex(w => w.Id == workflow.Id);
         if (idx >= 0) _cache[idx] = updated;
         SortCache();
-        SaveToDisk();
-        WorkflowsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -88,10 +115,9 @@ public sealed class WorkflowService : IWorkflowService
     public void DeleteWorkflow(string id)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         _cache.RemoveAll(w => w.Id == id);
-        SaveToDisk();
-        WorkflowsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -100,7 +126,7 @@ public sealed class WorkflowService : IWorkflowService
     public void ToggleWorkflow(string id)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         var idx = _cache.FindIndex(w => w.Id == id);
         if (idx < 0) return;
 
@@ -109,8 +135,7 @@ public sealed class WorkflowService : IWorkflowService
             IsEnabled = !_cache[idx].IsEnabled,
             UpdatedAt = DateTime.UtcNow
         };
-        SaveToDisk();
-        WorkflowsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -119,7 +144,7 @@ public sealed class WorkflowService : IWorkflowService
     public void Reorder(IReadOnlyList<string> orderedIds)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         for (var i = 0; i < orderedIds.Count; i++)
         {
             var idx = _cache.FindIndex(w => w.Id == orderedIds[i]);
@@ -134,8 +159,7 @@ public sealed class WorkflowService : IWorkflowService
         }
 
         SortCache();
-        SaveToDisk();
-        WorkflowsChanged?.Invoke();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -305,16 +329,22 @@ public sealed class WorkflowService : IWorkflowService
     {
         if (_cacheLoaded) return;
 
+        LoadError = null;
         try
         {
-            if (File.Exists(_filePath))
-            {
-                var json = File.ReadAllText(_filePath);
-                _cache = JsonSerializer.Deserialize<List<Workflow>>(json, JsonOptions) ?? [];
-            }
+            var json = ReviewedCatalogTransaction.Read(_filePath);
+            _fileBaseline = json;
+            // A zero-length file holds nothing to protect, so it counts as an empty catalog like a missing one.
+            _cache = string.IsNullOrWhiteSpace(json)
+                ? []
+                : JsonSerializer.Deserialize<List<Workflow>>(json, JsonOptions) ?? [];
         }
-        catch
+        catch (FileNotFoundException) { _cache = []; }
+        catch (DirectoryNotFoundException) { _cache = []; }
+        catch (Exception ex)
         {
+            // The file exists but cannot be trusted; keep it off limits instead of treating it as empty.
+            LoadError = ex;
             _cache = [];
         }
 
@@ -322,16 +352,42 @@ public sealed class WorkflowService : IWorkflowService
         _cacheLoaded = true;
     }
 
-    private void SaveToDisk()
+    // Mutations are refused rather than thrown while the file is unreadable: dictation and sync reach them, and an
+    // exception there would abort the dictation or the sync cycle. The cache is empty in that state, so writing it
+    // would replace the user's workflows with an almost empty list. Callers can inspect LoadError and LastSaveError.
+    private bool TryBeginMutation(out List<Workflow> rollback)
     {
-        _ = SaveToDisk(_cache);
+        EnsureCacheLoaded();
+        if (LoadError is null)
+        {
+            rollback = _cache.ToList();
+            return true;
+        }
+
+        LastSaveError = new InvalidOperationException(
+            "The workflow file could not be loaded, so changes are not saved until it loads again.", LoadError);
+        rollback = [];
+        return false;
+    }
+
+    // A failed write restores the previous cache and raises no event. A stale catalog needs an explicit reload.
+    private bool TryCommitMutation(List<Workflow> rollback)
+    {
+        if (SaveToDisk(_cache))
+        {
+            ProfileMutationCoordinator.Notify(WorkflowsChanged);
+            return true;
+        }
+
+        _cache = rollback;
+        return false;
     }
 
     /// <inheritdoc />
     public bool TryReplaceAll(IReadOnlyList<Workflow> workflows)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out _)) return false;
         var replacement = workflows.ToList();
         replacement = replacement
             .OrderBy(workflow => workflow.SortOrder)
@@ -341,10 +397,25 @@ public sealed class WorkflowService : IWorkflowService
             return false;
 
         _cache = replacement;
-        WorkflowsChanged?.Invoke();
+        ProfileMutationCoordinator.Notify(WorkflowsChanged);
         return true;
     }
 
-    private bool SaveToDisk(IReadOnlyList<Workflow> workflows) =>
-        AtomicFileWriter.TryWriteAllText(_filePath, JsonSerializer.Serialize(workflows, JsonOptions));
+    private bool SaveToDisk(IReadOnlyList<Workflow> workflows)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(workflows, JsonOptions);
+            ReviewedCatalogTransaction.Commit(_filePath, _fileBaseline, json);
+            _fileBaseline = json;
+        }
+        catch (Exception error)
+        {
+            LastSaveError = error;
+            return false;
+        }
+
+        LastSaveError = null;
+        return true;
+    }
 }

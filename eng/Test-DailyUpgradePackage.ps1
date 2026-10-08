@@ -22,8 +22,14 @@ try {
     $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
     if (-not ($entries | Where-Object { $_ -match '^lib/[^/]+/TypeWhisper\.exe$' })) { throw 'The original entry point is missing.' }
     if ($entries | Where-Object { $_ -match '(^|/)(TypeWhisper\.WinUI\.exe|TypeWhisper\.Windows\.dll|PresentationFramework\.dll)$' }) { throw 'Unexpected old executable or WPF host.' }
-    $manifest = @($archive.Entries | Where-Object { $_.FullName -like '*.nuspec' })
-    if ($manifest.Count -ne 1) { throw 'Missing package manifest.' }
+    # Dependency notices carry their own nuspec files under lib/app/licenses. Only
+    # the archive-root manifest identifies the Velopack upgrade package.
+    $manifest = @($archive.Entries | Where-Object { $_.FullName.Replace('\', '/') -match '^[^/]+\.nuspec$' })
+    if ($manifest.Count -ne 1) { throw 'Expected exactly one root package manifest.' }
+    # Velopack reads the first nuspec entry, including nested dependency notices.
+    # Root identity alone is insufficient if a notice appears earlier in the ZIP.
+    $firstManifest = $archive.Entries | Where-Object { $_.FullName.EndsWith('.nuspec', [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+    if ($firstManifest.FullName -cne $manifest[0].FullName) { throw 'The root package manifest must precede dependency manifests.' }
     $reader = [IO.StreamReader]::new($manifest[0].Open())
     try { [xml]$metadata = $reader.ReadToEnd() } finally { $reader.Dispose() }
     if ($metadata.package.metadata.id -ne 'TypeWhisper' -or $metadata.package.metadata.mainExe -ne 'TypeWhisper.exe' -or

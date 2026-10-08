@@ -30,7 +30,9 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
 #endif
         }
     }
-    public async Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel)
+    // Downgrades stay off unless the controller reports an explicit channel switch; an older
+    // package on the installed track is then reported as "up to date" instead of being offered.
+    public async Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel, bool allowDowngrade)
     {
         _update = null; _offer = null; _manager = null;
         if (UnavailableReason is { } reason) throw new InvalidOperationException(reason);
@@ -38,7 +40,7 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
         var installation = ApplicationInstallation.Resolve(Velopack.Locators.VelopackLocator.Current.AppId)!;
         var feed = installation.Feed(channel, arch);
         var source = new AppReleaseGithubSource("https://github.com/TypeWhisper/typewhisper-win", feed, channel != AppUpdateChannel.Stable);
-        var manager = new UpdateManager(source, new UpdateOptions { ExplicitChannel = feed, AllowVersionDowngrade = true });
+        var manager = new UpdateManager(source, new UpdateOptions { ExplicitChannel = feed, AllowVersionDowngrade = allowDowngrade });
         try
         {
             var update = await manager.CheckForUpdatesAsync();

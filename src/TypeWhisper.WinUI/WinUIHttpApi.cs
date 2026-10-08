@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -14,6 +15,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     private const string ApiVersion = "1.2";
     private sealed record Preferences(bool Enabled = false, int Port = 8978, bool RequireAuthentication = false);
     private readonly WindowsPluginSecretStore _secrets = new(WinUIProfile.DataPath("HttpApi"));
+    private readonly WindowsLocalPeerVerifier _peerVerifier = new();
     private readonly SemaphoreSlim _changes = new(1, 1);
     private LocalHttpApi? _host;
     private string? _token;
@@ -69,7 +71,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             }
             if (_closed) return;
             _host = new LocalHttpApi(port, _token, DispatchAsync, requireAuthentication: requireAuthentication, statusHandler: token => DispatchAsync(new LocalApiRequest("GET", "/v1/status", [], null, new Dictionary<string, string?>()), token),
-                processingTimeout: TranscriptionTimeout);
+                processingTimeout: TranscriptionTimeout, peerVerifier: _peerVerifier);
             await _host.StartAsync();
             var discovery = new FileInfo(DiscoveryPath + ".tmp");
             using (discovery.Create()) { }
@@ -93,7 +95,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             if (_host is not null) { await _host.StopAsync(); _host = null; }
             RemoveDiscovery();
             Status = Loc.T("HTTP API could not start or save its settings. Check the port and profile access, then retry.");
-            System.Diagnostics.Debug.WriteLine("HTTP API configuration: " + ex.GetType().Name);
+            AppDiagnostics.Write("api.configure.failed", ex);
         }
         finally { _changes.Release(); Changed?.Invoke(); }
     }
@@ -128,7 +130,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     {
         try { File.Delete(DiscoveryPath); File.Delete(PortPath); File.Delete(DiscoveryPath + ".tmp"); File.Delete(PortPath + ".tmp"); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { System.Diagnostics.Debug.WriteLine("API discovery cleanup failed: " + ex.GetType().Name); }
+        { AppDiagnostics.Write("api.discovery.cleanup-failed", ex); }
     }
 
     private Task<LocalApiResponse> DispatchAsync(LocalApiRequest request, CancellationToken ct)
@@ -148,7 +150,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             catch (NotSupportedException) { completion.TrySetResult(Error(422, "This model or file does not support the requested operation.")); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                System.Diagnostics.Debug.WriteLine("API processing failed: " + ex.GetType().Name);
+                AppDiagnostics.WriteFailure("api.request.failed", ex);
                 completion.TrySetResult(Error(500, "Processing failed. Check the model and audio file, then retry."));
             }
         })) completion.TrySetResult(Error(503, "The app is unavailable."));
@@ -233,7 +235,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             {
                 try { File.Delete(temporary); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                { System.Diagnostics.Debug.WriteLine("API upload cleanup failed: " + ex.GetType().Name); }
+                { AppDiagnostics.Write("api.upload.cleanup-failed", ex); }
             }
         }
     }

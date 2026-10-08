@@ -1,6 +1,6 @@
 # Supertonic TTS portable plugin
 
-Local Supertonic 3 speech synthesis with ONNX Runtime, 10 preset voices and 31 supported languages. Version `1.2.1`; plugin ID `com.typewhisper.supertonic-tts`; minimum host `1.1.4`.
+Local Supertonic 3 speech synthesis with ONNX Runtime, 10 preset voices and 31 supported languages. Version `1.2.2`; plugin ID `com.typewhisper.supertonic-tts`; minimum host `1.1.4`.
 
 ## Settings and model setup
 

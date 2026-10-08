@@ -19,5 +19,11 @@
   "Settings.CustomBaseUrl": "Eigene Basis-URL",
   "Settings.CustomAuthHeader": "Eigener Auth-Header",
   "Settings.AdvancedHint": "Für ein LiveKit-Gateway oder einen eigenen Proxy.",
-  "Settings.Error": "Fehler: {0}"
+  "Settings.Error": "Fehler: {0}",
+  "Server URL": "Server-URL",
+  "Keep the default unless using a compatible server.": "Behalte den Standard bei, sofern du keinen kompatiblen Server verwendest.",
+  "Authentication header": "Authentifizierungsheader",
+  "Use Authorization for Reson8.": "Verwende Authorization für Reson8.",
+  "Refresh custom models": "Eigene Modelle aktualisieren",
+  "Fetches custom models available to this API key.": "Lädt die eigenen Modelle, die mit diesem API-Schlüssel verfügbar sind."
 }

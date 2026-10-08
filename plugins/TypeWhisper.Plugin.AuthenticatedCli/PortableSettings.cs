@@ -11,8 +11,7 @@ public sealed partial class AuthenticatedCliPlugin : IPluginProfileSettings, IPl
     private readonly Dictionary<string, CliProfile> _draftProfiles = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CliAvailabilitySnapshot> _draftSnapshots = new(StringComparer.Ordinal);
 
-    private string L(string english, string german) =>
-        Localization?.CurrentLanguage.StartsWith("de", StringComparison.OrdinalIgnoreCase) == true ? german : english;
+    private string L(string english, string german) => PluginLocalization.Get(_host, english, german);
 
     /// <inheritdoc />
     public string ProfileSelectorId => "profile";

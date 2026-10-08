@@ -38,10 +38,12 @@ try {
     $legacy = 'plugins/Plugin.C/Plugin.C.csproj'
     $portable = 'plugins/Plugin.A/Plugin.A.csproj'
     $other = 'plugins/Plugin.B/Plugin.B.csproj'
-    Write-Fixture $legacy
-    Write-Fixture $portable
-    Write-Fixture $other
-    Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj'
+    # Projects must parse as XML once a shared source changes; keep every fixture project well-formed.
+    $emptyProject = '<Project />'
+    Write-Fixture $legacy $emptyProject
+    Write-Fixture $portable $emptyProject
+    Write-Fixture $other $emptyProject
+    Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj' $emptyProject
     $initial = Commit-Fixture
     Expect-Selection 'push' ('0' * 40) $initial @($legacy, $portable, $other) 'changed'
 
@@ -68,9 +70,14 @@ try {
     Expect-Selection 'pull_request' $feature $shared @() 'none'
     Expect-Selection 'workflow_dispatch' '' $shared @($legacy, $portable, $other) 'all'
 
-    Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj' 'test edit'
+    Write-Fixture 'Directory.Packages.props' '<Project />'
+    $packages = Commit-Fixture
+    Expect-Selection 'push' $shared $packages @($legacy, $portable, $other) 'all'
+    Expect-Selection 'pull_request' $shared $packages @($legacy, $portable, $other) 'all'
+
+    Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj' '<Project><!-- test edit --></Project>'
     $testEdit = Commit-Fixture
-    Expect-Selection 'push' $shared $testEdit @($portable) 'changed'
+    Expect-Selection 'push' $packages $testEdit @($portable) 'changed'
 
     # A moved source affects both surviving packages, even when Git detects a rename.
     Invoke-FixtureGit @('mv', 'plugins/Plugin.A/Code.cs', 'plugins/Plugin.B/Moved.cs') | Out-Null
@@ -80,6 +87,43 @@ try {
     Invoke-FixtureGit @('rm', '--', $other, 'plugins/Plugin.B/Moved.cs') | Out-Null
     $deleted = Commit-Fixture
     Expect-Selection 'push' $moved $deleted @() 'none'
+
+    # A source under plugins/shared compiles into every package that links it, also through a test project.
+    $linkedProject = '<Project><ItemGroup><Compile Include="../shared/Helper.cs" Link="Shared/Helper.cs" /></ItemGroup></Project>'
+    $linkedTests = '<Project><ItemGroup><Compile Include="..\..\shared\tests\HelperTests.cs" Link="Shared\HelperTests.cs" /></ItemGroup></Project>'
+    $wildcardProject = '<Project><ItemGroup><Compile Include="../shared/*.cs;Local.cs" /></ItemGroup></Project>'
+    Write-Fixture 'plugins/shared/Helper.cs'
+    Write-Fixture 'plugins/shared/tests/HelperTests.cs'
+    Write-Fixture $portable $linkedProject
+    Write-Fixture 'plugins/Plugin.A/Tests/Plugin.A.Tests.csproj' $linkedTests
+    Write-Fixture $legacy $wildcardProject
+    $linked = Commit-Fixture
+    Expect-Selection 'push' $deleted $linked @($legacy, $portable) 'changed'
+
+    Write-Fixture 'plugins/shared/Helper.cs' 'shared edit'
+    $sharedEdit = Commit-Fixture
+    Expect-Selection 'push' $linked $sharedEdit @($legacy, $portable) 'changed'
+    Expect-Selection 'pull_request' $linked $sharedEdit @($legacy, $portable) 'changed'
+
+    # The wildcard in Plugin.C stays within plugins/shared; only Plugin.A links the shared test.
+    Write-Fixture 'plugins/shared/tests/HelperTests.cs' 'shared test edit'
+    $sharedTestEdit = Commit-Fixture
+    Expect-Selection 'push' $sharedEdit $sharedTestEdit @($portable) 'changed'
+
+    # Shared files nobody links, such as the README, select nothing.
+    Write-Fixture 'plugins/shared/README.md'
+    $sharedDoc = Commit-Fixture
+    Expect-Selection 'push' $sharedTestEdit $sharedDoc @() 'none'
+
+    # An unreadable project must fail instead of silently skipping the packages that link a shared file.
+    Write-Fixture $legacy 'not a project'
+    Write-Fixture 'plugins/shared/Helper.cs' 'edit after project damage'
+    $damaged = Commit-Fixture
+    $rejected = $false
+    try { & "$PSScriptRoot/Get-ChangedPluginProjects.ps1" -Repository $fixture -EventName push -BaseSha $sharedDoc -HeadSha $damaged 2>$null }
+    catch { $rejected = $true }
+    if (-not $rejected) { throw 'Unreadable projects must fail instead of skipping shared-source builds.' }
+    $checks++
 
     $rejected = $false
     try { & "$PSScriptRoot/Get-ChangedPluginProjects.ps1" -Repository $fixture -EventName push -BaseSha ('1' * 40) -HeadSha $deleted 2>$null }

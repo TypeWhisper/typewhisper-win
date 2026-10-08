@@ -17,7 +17,7 @@ public sealed class ParakeetCtcPlugin : IVocabularyRescorerPlugin
     private Task _activationCallbacks = Task.CompletedTask;
     public string PluginId => "com.typewhisper.parakeet-ctc";
     public string PluginName => "Parakeet CTC Vocabulary";
-    public string PluginVersion => "0.1.0";
+    public string PluginVersion => "0.1.1";
     public bool IsReady => !_disposed && _model is not null;
 
     public Task ActivateAsync(IPluginHostServices host) => ActivateAsync(host, CancellationToken.None);

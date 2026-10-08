@@ -6,11 +6,7 @@ namespace TypeWhisper.Plugin.FileMemory;
 
 public sealed partial class FileMemoryPlugin : IActionPlugin, IPluginProfileSettings, IPluginSettingsActions, IPluginConnectionSettings
 {
-    private string L(string english, string german)
-    {
-        var language = PortableLocalization.TryGet(_host)?.CurrentLanguage ?? CultureInfo.CurrentUICulture.Name;
-        return language.StartsWith("de", StringComparison.OrdinalIgnoreCase) ? german : english;
-    }
+    private string L(string english, string german) => PluginLocalization.Get(_host, english, german);
     private string SelectedId
     {
         get

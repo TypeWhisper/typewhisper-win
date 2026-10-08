@@ -123,8 +123,7 @@ public sealed partial class OpenAiPlugin
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         { return new Dictionary<string, string>(); }
     });
-    private static string L(string text) => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "de"
-        && GermanStrings.Value.TryGetValue(text, out var translated) ? translated : text;
+    private string L(string text) => PluginLocalization.Get(_host, text, GermanStrings.Value.GetValueOrDefault(text, text));
 
     internal static string[] DictionaryKeywords(string? prompt) => string.IsNullOrWhiteSpace(prompt) ? [] :
         PluginDictionaryTerms.ParsePrompt(prompt).Distinct(StringComparer.OrdinalIgnoreCase).Take(100).ToArray();

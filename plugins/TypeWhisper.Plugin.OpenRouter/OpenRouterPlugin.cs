@@ -98,7 +98,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.1.3";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.

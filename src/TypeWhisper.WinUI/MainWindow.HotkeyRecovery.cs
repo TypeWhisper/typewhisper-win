@@ -18,6 +18,9 @@ public sealed partial class MainWindow
             }, () =>
             {
                 if (_closing || _profileRestoreClosing) return null;
+                // Unlock may arrive before Windows switches back to the interactive desktop.
+                // Re-evaluate here without clearing any lock, sleep or disconnect reason.
+                _dictation?.ObservePrerollSession(0, 0, _hotkeyRecovery?.SessionNotificationsAvailable == true);
                 // A prepared microphone client can go stale across sleep or a session switch.
                 _dictation?.RefreshMicrophoneAfterResume();
                 var errors = new List<string>();
@@ -27,10 +30,14 @@ public sealed partial class MainWindow
                 if (_escapeCancelHook?.Recover() is { } escapeError) errors.Add(escapeError);
                 return errors.Count == 0 ? null : string.Join(" ", errors.Distinct());
             }, ReportHotkeyRecovery);
+            _hotkeyRecovery.SessionActivity += (message, reason) =>
+                _dictation?.ObservePrerollSession(message, reason, _hotkeyRecovery.SessionNotificationsAvailable);
+            _dictation?.ObservePrerollSession(0, 0, _hotkeyRecovery.SessionNotificationsAvailable);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Hotkey resume monitoring failed: {0}", ex);
+            _dictation?.ObservePrerollSession(0, 0, false);
+            AppDiagnostics.Write("hotkey.recovery.start-failed", ex);
             ReportHotkeyRecovery(Loc.T("Hotkey recovery after sleep could not start. Restart TypeWhisper if dictation shortcuts stop responding."));
         }
     }
@@ -39,7 +46,7 @@ public sealed partial class MainWindow
     {
         if (_closing || _profileRestoreClosing) return;
         _hotkeyRecoveryError = error;
-        if (error is not null) System.Diagnostics.Trace.TraceError(error);
+        if (error is not null) AppDiagnostics.Write("hotkey.recovery.reported");
         if (error is not null) ShowNotice(new AppNotice(error));
         TrayActionsChanged?.Invoke();
     }

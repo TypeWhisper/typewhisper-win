@@ -20,13 +20,13 @@ public partial class App : Application
         AppTheme.Apply(this);
         UnhandledException += (_, args) =>
         {
-            System.Diagnostics.Debug.WriteLine(args.Exception);
             AppDiagnostics.WriteFailure("app.unhandled-exception", args.Exception);
             args.Handled = true;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
-            if (args.ExceptionObject is Exception error) AppDiagnostics.WriteFailure("app.crash", error);
+            // The process ends after this handler; the line must reach the file before that.
+            if (args.ExceptionObject is Exception error) AppDiagnostics.WriteFailureNow("app.crash", error);
         };
         // The scheduler wraps the fault; its type and stack are on the inner exception.
         TaskScheduler.UnobservedTaskException += (_, args) => AppDiagnostics.WriteFailure("task.unobserved-exception",
@@ -181,6 +181,8 @@ public partial class App : Application
     private async Task StartWithProfileAsync(TypeWhisper.Presentation.ApplicationActivationRequest request, Task initialShare)
     {
         AppDiagnostics.Start();
+        // Retries and splits of cloud requests are decided in the plugin host, which has no log of its own.
+        TypeWhisper.PluginHost.PluginHostDiagnostics.Sink = (stage, error) => AppDiagnostics.Write(stage, error);
         var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
@@ -268,6 +270,7 @@ public partial class App : Application
     private void ExitAfterProfileOperation()
     {
         _mainInstance?.UnregisterKey();
+        AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
         Exit();
     }
 
@@ -493,6 +496,8 @@ public partial class App : Application
             _tray = null;
             if (restart)
             {
+                // Both restart paths end this process; queued diagnostics would be lost.
+                AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
                 if (applyUpdate is not null)
                 {
                     applyUpdate();
@@ -507,12 +512,13 @@ public partial class App : Application
                 return message;
             }
             _mainInstance?.UnregisterKey();
+            AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
             Exit();
             return null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            System.Diagnostics.Trace.TraceError("Application shutdown failed: {0}", ex);
+            AppDiagnostics.WriteFailure("app.shutdown.failed", ex);
             _tray?.SetShutdownState(Loc.T("Shutdown failed. Work is stopped."));
             _window?.ShowShutdownFailure();
             if (_window?.CanRetryRecorderShutdown == true)

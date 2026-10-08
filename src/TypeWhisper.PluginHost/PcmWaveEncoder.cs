@@ -8,9 +8,13 @@ public static class PcmWaveEncoder
 {
     /// <summary>Validates the upload size before allocating the encoded WAV.</summary>
     public static byte[] Encode(float[] samples, int maximumBytes = int.MaxValue)
+        => Encode(samples.AsSpan(), maximumBytes);
+
+    /// <summary>Encodes a slice without first copying its floating-point samples.</summary>
+    public static byte[] Encode(ReadOnlySpan<float> samples, int maximumBytes = int.MaxValue)
     {
         if (samples.Length == 0) throw new ArgumentException("No audio captured.");
-        if (samples.LongLength * 2 + 44 > maximumBytes)
+        if ((long)samples.Length * 2 + 44 > maximumBytes)
             throw new PluginRequestException("Recording exceeds the selected provider's upload limit. Use a shorter recording.", PluginRequestFailureKind.RequestTooLarge);
         using var stream = new MemoryStream(44 + samples.Length * 2);
         using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);

@@ -75,7 +75,7 @@ public sealed partial class LocalLlmPlugin : ILlmProviderPlugin, ILocalLlmModelM
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -491,4 +491,4 @@ internal sealed record LocalLlmModelDefinition(
     string FileName,
     long SizeBytes,
     string Sha256,
-    LocalLlmModelFamily Family = LocalLlmModelFamily.Gemma4);
+    LocalLlmModelFamily Family = LocalLlmModelFamily.Gemma4) : IDownloadableModel;

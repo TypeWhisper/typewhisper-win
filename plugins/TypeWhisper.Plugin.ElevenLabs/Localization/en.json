@@ -1,0 +1,16 @@
+{
+  "Transcription mode": "Transcription mode",
+  "Automatic shows live text. Audio events, multiple speakers or dictionary terms use the complete recording.": "Automatic shows live text. Audio events, multiple speakers or dictionary terms use the complete recording.",
+  "Automatic": "Automatic",
+  "After recording": "After recording",
+  "Clean transcript": "Clean transcript",
+  "Remove filler words and false starts.": "Remove filler words and false starts.",
+  "Audio events": "Audio events",
+  "Include events such as laughter in recorded-audio transcription.": "Include events such as laughter in recorded-audio transcription.",
+  "Speaker count": "Speaker count",
+  "Expected speakers in the recording.": "Expected speakers in the recording.",
+  "Dictionary terms": "Dictionary terms",
+  "Use active TypeWhisper dictionary terms to improve recognition.": "Use active TypeWhisper dictionary terms to improve recognition.",
+  "On": "On",
+  "Off": "Off"
+}

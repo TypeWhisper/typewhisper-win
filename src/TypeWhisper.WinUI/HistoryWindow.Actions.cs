@@ -83,7 +83,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History copy failed: {0}", ex);
+            AppDiagnostics.Write("history.copy.failed", ex);
             _notice.Text = Loc.T("The clipboard is busy. Try copying again.");
         }
     }
@@ -101,7 +101,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History Inbox change failed: {0}", ex);
+            AppDiagnostics.Write("history.inbox.failed", ex);
             _notice.Text = Loc.T("The Inbox change could not be saved. Try again.");
         }
         await RefreshAsync();
@@ -126,7 +126,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History export failed: {0}", ex);
+            AppDiagnostics.Write("history.export.failed", ex);
             _notice.Text = Loc.T("Export failed. Choose a writable location and try again.");
         }
     }
@@ -135,18 +135,16 @@ public sealed partial class HistoryWindow
     {
         var ids = SelectedRecords().Select(record => record.Id).ToArray();
         if (ids.Length == 0 || _dialogOpen) return;
-        var dialog = new ContentDialog
-        {
-            XamlRoot = Content.XamlRoot,
-            Title = ids.Length == 1 ? Loc.T("Delete this entry?") : Loc.T("Delete {0} entries?", ids.Length),
-            Content = Loc.T("The transcript and any saved audio are removed from this PC. This cannot be undone."),
-            PrimaryButtonText = Loc.T("Delete"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"]
-        };
         _dialogOpen = true;
-        ContentDialogResult result;
-        try { result = await dialog.ShowAsync(); }
+        bool confirmed;
+        try
+        {
+            confirmed = await Dialogs.ConfirmAsync((FrameworkElement)Content,
+                ids.Length == 1 ? Loc.T("Delete this entry?") : Loc.T("Delete {0} entries?", ids.Length),
+                Loc.T("The transcript and any saved audio are removed from this PC. This cannot be undone."), Loc.T("Delete"), destructive: true);
+        }
         finally { _dialogOpen = false; }
-        if (result != ContentDialogResult.Primary) return;
+        if (!confirmed) return;
         StopAudioPlayback();
         try
         {
@@ -161,7 +159,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History delete failed: {0}", ex);
+            AppDiagnostics.Write("history.delete.failed", ex);
             _notice.Text = Loc.T("The entries could not be deleted. Your history was not changed.");
         }
         await RefreshAsync();
@@ -246,7 +244,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History playback failed: {0}", ex);
+            AppDiagnostics.Write("history.playback.failed", ex);
             StopAudioPlayback();
             _notice.Text = Loc.T("The saved audio could not be played. Check the file and audio output.");
         }
@@ -284,7 +282,7 @@ public sealed partial class HistoryWindow
         _player = null;
         _playerId = null;
         try { player?.Dispose(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Debug.WriteLine(ex); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("history.playback.stop-failed", ex); }
         if (_closing || _playButton is null) return;
         _playButton.Content = Glyph("play", 16);
         if (_timeline is not null) { _updatingTimeline = true; _timeline.Value = 0; _timeline.IsEnabled = false; _updatingTimeline = false; }
@@ -301,7 +299,7 @@ public sealed partial class HistoryWindow
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Trace.TraceError("History audio folder failed: {0}", ex);
+            AppDiagnostics.Write("history.audio-folder.failed", ex);
             _notice.Text = Loc.T("The audio folder could not be opened.");
         }
     }

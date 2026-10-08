@@ -19,6 +19,7 @@ public sealed class DictionaryService : IDictionaryService
     private readonly string _filePath;
     private List<DictionaryEntry> _cache = [];
     private bool _cacheLoaded;
+    private string? _fileBaseline;
 
     /// <summary>
     /// Gets the configured dictionary entries.
@@ -49,15 +50,42 @@ public sealed class DictionaryService : IDictionaryService
     }
 
     /// <summary>
+    /// Gets why the dictionary file could not be read or parsed, or null when it loaded or does not exist yet.
+    /// </summary>
+    /// <remarks>
+    /// While set, <see cref="Entries"/> is empty and every mutation is refused, so a locked or corrupt file is
+    /// never replaced by that empty list. <see cref="Reload"/> clears it once the file can be read again.
+    /// </remarks>
+    public Exception? LoadError { get; private set; }
+
+    /// <summary>
+    /// Gets why the most recent mutation was not written to disk, or null when it was persisted.
+    /// </summary>
+    public Exception? LastSaveError { get; private set; }
+
+    /// <summary>
+    /// Reads the dictionary file again, for example after a sync client released it, and reports whether it loaded.
+    /// </summary>
+    public bool Reload()
+    {
+        using var mutation = ProfileMutationCoordinator.Enter();
+        _cacheLoaded = false;
+        EnsureCacheLoaded();
+        if (LoadError is not null) return false;
+
+        NotifyEntriesChanged();
+        return true;
+    }
+
+    /// <summary>
     /// Adds a dictionary entry and persists the updated dictionary.
     /// </summary>
     public void AddEntry(DictionaryEntry entry)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         _cache.Add(BackfillTimestamps(entry));
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -66,10 +94,9 @@ public sealed class DictionaryService : IDictionaryService
     public void AddEntries(IEnumerable<DictionaryEntry> entries)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         _cache.AddRange(entries.Select(BackfillTimestamps));
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -78,15 +105,14 @@ public sealed class DictionaryService : IDictionaryService
     public void UpdateEntry(DictionaryEntry entry)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         var idx = _cache.FindIndex(e => e.Id == entry.Id);
         if (idx >= 0)
         {
             var existing = _cache[idx];
             _cache[idx] = BackfillTimestamps(entry) with { UpdatedAt = NextUpdatedAt(existing.UpdatedAt) };
         }
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -95,10 +121,9 @@ public sealed class DictionaryService : IDictionaryService
     public void DeleteEntry(string id)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         _cache.RemoveAll(e => e.Id == id);
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -107,11 +132,10 @@ public sealed class DictionaryService : IDictionaryService
     public void DeleteEntries(IEnumerable<string> ids)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         var idSet = ids.ToHashSet();
         _cache.RemoveAll(e => idSet.Contains(e.Id));
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -278,7 +302,7 @@ public sealed class DictionaryService : IDictionaryService
     public void SetTerms(IEnumerable<string> terms, bool replaceExisting)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
 
         var normalized = NormalizeTerms(terms);
         var desiredByKey = normalized.ToDictionary(TermKey, term => term);
@@ -343,8 +367,7 @@ public sealed class DictionaryService : IDictionaryService
             ReorderTerms([.. touchedTerms, .. addedTerms, .. untouchedTerms]);
         }
 
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -353,10 +376,9 @@ public sealed class DictionaryService : IDictionaryService
     public void RemoveAllTerms()
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         _cache.RemoveAll(e => e.EntryType == DictionaryEntryType.Term);
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -365,7 +387,7 @@ public sealed class DictionaryService : IDictionaryService
     public bool DeleteTerm(string term)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return false;
         var key = TermKey(term);
         var removed = _cache.RemoveAll(e =>
             e.EntryType == DictionaryEntryType.Term &&
@@ -374,9 +396,7 @@ public sealed class DictionaryService : IDictionaryService
         if (removed == 0)
             return false;
 
-        SaveToDisk();
-        NotifyEntriesChanged();
-        return true;
+        return TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -385,7 +405,7 @@ public sealed class DictionaryService : IDictionaryService
     public void UpsertCorrection(string original, string replacement, bool caseSensitive)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
         var existing = _cache.FirstOrDefault(e =>
             e.EntryType == DictionaryEntryType.Correction &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
@@ -420,8 +440,7 @@ public sealed class DictionaryService : IDictionaryService
             });
         }
 
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -430,7 +449,7 @@ public sealed class DictionaryService : IDictionaryService
     public bool DeleteCorrection(string original)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return false;
         var removed = _cache.RemoveAll(e =>
             e.EntryType == DictionaryEntryType.Correction &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
@@ -438,9 +457,7 @@ public sealed class DictionaryService : IDictionaryService
         if (removed == 0)
             return false;
 
-        SaveToDisk();
-        NotifyEntriesChanged();
-        return true;
+        return TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -480,7 +497,7 @@ public sealed class DictionaryService : IDictionaryService
     public IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return [];
 
         var learned = new List<LearnedDictionaryCorrection>();
         var existingOriginals = _cache
@@ -520,33 +537,16 @@ public sealed class DictionaryService : IDictionaryService
             learned.Add(new LearnedDictionaryCorrection(entry.Id, entry.Original, entry.Replacement!));
         }
 
-        if (learned.Count > 0)
-        {
-            SaveToDisk();
-            NotifyEntriesChanged();
-        }
+        // Only corrections that reached disk count as learned; the caller offers to undo exactly these.
+        if (learned.Count > 0 && !TryCommitMutation(rollback))
+            return [];
 
         return learned;
     }
 
     private void NotifyEntriesChanged()
     {
-        var handlers = EntriesChanged;
-        if (handlers is null)
-            return;
-
-        foreach (var handler in handlers.GetInvocationList())
-        {
-            try
-            {
-                ((Action)handler).Invoke();
-            }
-            catch (Exception ex) when (IsNonFatalException(ex))
-            {
-                // Subscriber failures must not break dictionary persistence or automatic learning.
-                LogDictionaryFailure("Dictionary entries changed subscriber failed", ex);
-            }
-        }
+        ProfileMutationCoordinator.Notify(EntriesChanged);
     }
 
     private static bool IsSafeAutomaticallyLearnedToken(string token)
@@ -570,7 +570,7 @@ public sealed class DictionaryService : IDictionaryService
     public void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
 
         var learnedIds = learnedCorrections
             .Select(c => c.Id)
@@ -583,10 +583,7 @@ public sealed class DictionaryService : IDictionaryService
             learnedIds.Contains(entry.Id));
 
         if (removed > 0)
-        {
-            SaveToDisk();
-            NotifyEntriesChanged();
-        }
+            TryCommitMutation(rollback);
     }
 
     /// <summary>
@@ -595,7 +592,7 @@ public sealed class DictionaryService : IDictionaryService
     public void ActivatePack(TermPack pack)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
 
         var existingOriginals = _cache
             .Where(e => e.EntryType == DictionaryEntryType.Term)
@@ -621,8 +618,7 @@ public sealed class DictionaryService : IDictionaryService
         if (newEntries.Count > 0)
         {
             _cache.AddRange(newEntries);
-            SaveToDisk();
-            NotifyEntriesChanged();
+            TryCommitMutation(rollback);
         }
     }
 
@@ -632,16 +628,13 @@ public sealed class DictionaryService : IDictionaryService
     public void DeactivatePack(string packId)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
 
         var prefix = $"pack:{packId}:";
         var removed = _cache.RemoveAll(e => e.Id.StartsWith(prefix, StringComparison.Ordinal));
 
         if (removed > 0)
-        {
-            SaveToDisk();
-            NotifyEntriesChanged();
-        }
+            TryCommitMutation(rollback);
     }
 
     private void IncrementUsageCount(string id)
@@ -650,7 +643,8 @@ public sealed class DictionaryService : IDictionaryService
         if (idx >= 0)
         {
             _cache[idx] = _cache[idx] with { UsageCount = _cache[idx].UsageCount + 1 };
-            SaveToDisk();
+            // Usage counters are best effort: a failed write is recorded and retried with the next save.
+            _ = SaveToDisk(_cache);
         }
     }
 
@@ -683,7 +677,7 @@ public sealed class DictionaryService : IDictionaryService
     public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
     {
         using var profileMutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out var rollback)) return;
 
         var changed = false;
         foreach (var mutation in mutations)
@@ -702,8 +696,7 @@ public sealed class DictionaryService : IDictionaryService
         if (!changed)
             return;
 
-        SaveToDisk();
-        NotifyEntriesChanged();
+        TryCommitMutation(rollback);
     }
 
     private bool UpsertSyncedDictionaryEntry(UserDataSyncDictionaryEntry synced)
@@ -765,53 +758,64 @@ public sealed class DictionaryService : IDictionaryService
     {
         if (_cacheLoaded) return;
 
+        LoadError = null;
         try
         {
-            if (File.Exists(_filePath))
-            {
-                var json = File.ReadAllText(_filePath);
-                _cache = JsonSerializer.Deserialize<List<DictionaryEntry>>(json) ?? [];
-                _cache = _cache.Select(BackfillTimestamps).ToList();
-            }
+            var json = ReviewedCatalogTransaction.Read(_filePath);
+            _fileBaseline = json;
+            // A zero-length file holds nothing to protect, so it counts as an empty catalog like a missing one.
+            _cache = string.IsNullOrWhiteSpace(json)
+                ? []
+                : JsonSerializer.Deserialize<List<DictionaryEntry>>(json) ?? [];
+            _cache = _cache.Select(BackfillTimestamps).ToList();
         }
-        catch (IOException ex)
+        catch (FileNotFoundException) { _cache = []; }
+        catch (DirectoryNotFoundException) { _cache = []; }
+        catch (Exception ex) when (IsNonFatalException(ex))
         {
-            ResetCacheAfterLoadFailure(ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            ResetCacheAfterLoadFailure(ex);
-        }
-        catch (NotSupportedException ex)
-        {
-            ResetCacheAfterLoadFailure(ex);
-        }
-        catch (JsonException ex)
-        {
-            ResetCacheAfterLoadFailure(ex);
-        }
-        catch (ArgumentException ex)
-        {
-            ResetCacheAfterLoadFailure(ex);
-        }
-        catch (System.Security.SecurityException ex)
-        {
-            ResetCacheAfterLoadFailure(ex);
+            RecordLoadFailure(ex);
         }
 
         _cacheLoaded = true;
     }
 
-    private void SaveToDisk()
+    // Mutations are refused rather than thrown while the file is unreadable: dictation, automatic learning and sync
+    // reach them, and an exception there would abort the dictation or the sync cycle. The cache is empty in that
+    // state, so writing it would replace the user's dictionary with an almost empty list. Callers can inspect
+    // LoadError and LastSaveError.
+    private bool TryBeginMutation(out List<DictionaryEntry> rollback)
     {
-        _ = SaveToDisk(_cache);
+        EnsureCacheLoaded();
+        if (LoadError is null)
+        {
+            rollback = _cache.ToList();
+            return true;
+        }
+
+        LastSaveError = new InvalidOperationException(
+            "The dictionary file could not be loaded, so changes are not saved until it loads again.", LoadError);
+        rollback = [];
+        return false;
+    }
+
+    // A failed write restores the previous cache and raises no event. A stale catalog needs an explicit reload.
+    private bool TryCommitMutation(List<DictionaryEntry> rollback)
+    {
+        if (SaveToDisk(_cache))
+        {
+            NotifyEntriesChanged();
+            return true;
+        }
+
+        _cache = rollback;
+        return false;
     }
 
     /// <inheritdoc />
     public bool TryReplaceAll(IReadOnlyList<DictionaryEntry> entries)
     {
         using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
+        if (!TryBeginMutation(out _)) return false;
         var replacement = entries.Select(BackfillTimestamps).ToList();
         if (!SaveToDisk(replacement))
             return false;
@@ -823,44 +827,30 @@ public sealed class DictionaryService : IDictionaryService
 
     private bool SaveToDisk(IReadOnlyList<DictionaryEntry> entries)
     {
+        Exception? error;
         try
         {
             var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
-            if (!AtomicFileWriter.TryWriteAllText(_filePath, json))
-                throw new IOException("The dictionary file could not be replaced atomically.");
+            ReviewedCatalogTransaction.Commit(_filePath, _fileBaseline, json);
+            _fileBaseline = json;
+            LastSaveError = null;
             return true;
         }
-        catch (IOException ex)
+        catch (Exception ex) when (IsNonFatalException(ex))
         {
-            LogDictionaryFailure("Saving dictionary failed", ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            LogDictionaryFailure("Saving dictionary failed", ex);
-        }
-        catch (NotSupportedException ex)
-        {
-            LogDictionaryFailure("Saving dictionary failed", ex);
-        }
-        catch (JsonException ex)
-        {
-            LogDictionaryFailure("Saving dictionary failed", ex);
-        }
-        catch (ArgumentException ex)
-        {
-            LogDictionaryFailure("Saving dictionary failed", ex);
-        }
-        catch (System.Security.SecurityException ex)
-        {
-            LogDictionaryFailure("Saving dictionary failed", ex);
+            error = ex;
         }
 
+        LastSaveError = error ?? new IOException("The dictionary file could not be replaced atomically.");
+        LogDictionaryFailure("Saving dictionary failed", LastSaveError);
         return false;
     }
 
-    private void ResetCacheAfterLoadFailure(Exception ex)
+    private void RecordLoadFailure(Exception ex)
     {
+        // The file exists but cannot be trusted; keep it off limits instead of treating it as empty.
         LogDictionaryFailure("Loading dictionary failed", ex);
+        LoadError = ex;
         _cache = [];
     }
 

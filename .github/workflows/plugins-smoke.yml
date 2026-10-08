@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: plugins-smoke-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled; every push to main keeps its run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   plugin-tests:
@@ -28,6 +29,13 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          # Hash only the projects this job restores so it keeps its own cache entry.
+          cache-dependency-path: |
+            plugins/**/*.csproj
+            src/**/*.csproj
+            Directory.Build.props
+            Directory.Packages.props
       - name: Test plugins without models or provider credentials
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite Plugins -ResultsDirectory artifacts/test-results/plugins
@@ -66,7 +74,7 @@ jobs:
         run: python -m unittest discover -s plugins/TypeWhisper.Plugin.GraniteSpeech/Tests -p 'test_*.py' -v
 
   discover-plugins:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     outputs:
       projects: ${{ steps.discover.outputs.projects }}
       has_projects: ${{ steps.discover.outputs.has_projects }}
@@ -97,7 +105,7 @@ jobs:
           "scan_mode=$($selection.scan_mode)" >> $env:GITHUB_OUTPUT
 
   validate-metadata:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7
@@ -170,6 +178,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
 
       - name: Create artifact directory
         shell: pwsh

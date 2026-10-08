@@ -42,5 +42,15 @@ public sealed class LearnedCorrectionStoreTests : IDisposable
         Directory.CreateDirectory(Store);
         Assert.Throws<IOException>(() => LearnedCorrectionStore.Save(Store, [new("teh", "the")]));
     }
+    [WindowsFileSharingFact]
+    public void LockedDictionaryIsPreserved()
+    {
+        new DictionaryService(Store).AddEntry(new() { Id = "manual", EntryType = DictionaryEntryType.Correction, Original = "colour", Replacement = "color" });
+        var original = File.ReadAllBytes(Store);
+        using (new FileStream(Store, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.Throws<IOException>(() => LearnedCorrectionStore.Save(Store, [new("teh", "the")]));
+        Assert.Equal(original, File.ReadAllBytes(Store));
+        Assert.Equal("colour", Assert.Single(new DictionaryService(Store).Entries).Original);
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

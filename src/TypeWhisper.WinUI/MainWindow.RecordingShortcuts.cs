@@ -8,9 +8,12 @@ public sealed partial class MainWindow
 
     private void DispatchRecordingShortcut(HybridHotkeyAction action)
     {
+        // Runs inside the keyboard hook callback: the coordinator takes the action right away, and
+        // everything that refreshes the UI waits for the next dispatcher turn. Windows drops a hook
+        // whose callback takes too long, without telling the app.
         AppDiagnostics.Write("shortcut." + action.ToString().ToLowerInvariant());
         if (action is HybridHotkeyAction.Start or HybridHotkeyAction.Toggle)
-            _dictation.ShowLoadingForDictationAttempt();
+            DispatcherQueue.TryEnqueue(_dictation.ShowLoadingForDictationAttempt);
         // A modifier chord such as Ctrl+Shift+Left emits Cancel after a rejected Start. Only
         // interrupt capture that this gesture owns, never processing, files or model work.
         if (action == HybridHotkeyAction.Cancel && _dictationInput?.IsRecordingOrStarting == true) _dictation.RequestCancel();

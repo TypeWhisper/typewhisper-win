@@ -194,6 +194,69 @@ public sealed class ScriptBehaviorTests
         Assert.Equal(new[] { "\"Äpfel & Öl\"", "!literal!" }, result.Output.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim()));
     }
 
+    [WindowsTheory]
+    [InlineData("cmd", "cmd.exe")]
+    [InlineData("legacy-unknown-shell", "cmd.exe")]
+    [InlineData("powershell", "powershell.exe")]
+    public void SystemShellsStartFromAbsolutePathsInsideTheSystemDirectory(string shell, string fileName)
+    {
+        var path = ScriptShellLocator.Resolve(shell);
+        Assert.NotNull(path);
+        Assert.True(Path.IsPathFullyQualified(path));
+        Assert.Equal(fileName, Path.GetFileName(path));
+        Assert.StartsWith(Environment.SystemDirectory + Path.DirectorySeparatorChar, path, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(path), path);
+        var startInfo = ScriptProcessRunner.CreateStartInfo(new() { Shell = shell, Command = "echo test" }, new(), "marker", path);
+        Assert.Equal(path, startInfo.FileName);
+        if (ScriptProcessRunner.UsesCommandPrompt(ScriptShells.Normalize(shell)))
+            Assert.Equal(path, startInfo.Environment["__TYPEWHISPER_SHELL"]);
+    }
+
+    [Fact]
+    public void PowerShellCoreLookupSkipsRelativeApplicationAndWorkingDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pwsh-lookup-" + Guid.NewGuid().ToString("N"));
+        string Dir(string name) => Path.Combine(root, name);
+        var path = string.Join(Path.PathSeparator, ".", "tools", Dir("app"), Dir("cwd"), "\"" + Dir("installed") + "\"", Dir("later"));
+        var excluded = new[] { Dir("app"), Dir("cwd") + Path.DirectorySeparatorChar, null, "" };
+        Assert.Equal(Path.Combine(Dir("installed"), "pwsh.exe"), ScriptShellLocator.FindPowerShellCore(path, excluded, _ => true));
+        Assert.Null(ScriptShellLocator.FindPowerShellCore(path, excluded,
+            candidate => candidate.StartsWith(Dir("app"), StringComparison.OrdinalIgnoreCase) || candidate.StartsWith(Dir("cwd"), StringComparison.OrdinalIgnoreCase)));
+        Assert.Null(ScriptShellLocator.FindPowerShellCore(null, excluded, _ => true));
+    }
+
+    [WindowsFact]
+    public async Task PowerShellCoreIsAbsoluteOutsideTheApplicationDirectoryOrReportedMissing()
+    {
+        if (ScriptShellLocator.PowerShellCore is { } pwsh)
+        {
+            Assert.True(Path.IsPathFullyQualified(pwsh));
+            Assert.Equal("pwsh.exe", Path.GetFileName(pwsh));
+            Assert.NotEqual(Path.GetFullPath(AppContext.BaseDirectory).TrimEnd('\\'), Path.GetDirectoryName(pwsh), StringComparer.OrdinalIgnoreCase);
+            Assert.NotEqual(Path.GetFullPath(Environment.CurrentDirectory).TrimEnd('\\'), Path.GetDirectoryName(pwsh), StringComparer.OrdinalIgnoreCase);
+            var result = await new ScriptProcessRunner().RunAsync(new() { Shell="pwsh", Command="[Console]::Out.Write($PSVersionTable.PSVersion.Major)", TimeoutSeconds=30 }, "", new(), default);
+            Assert.True(result.IsSuccess, result.Error);
+            Assert.True(int.Parse(result.Output.Trim()) >= 7);
+        }
+        else
+        {
+            var result = await new ScriptProcessRunner().RunAsync(new() { Shell="pwsh", Command="exit 0", TimeoutSeconds=30 }, "", new(), default);
+            Assert.Equal(ScriptExecutionStatus.StartFailed, result.Status);
+            Assert.Contains("pwsh.exe", result.Error);
+        }
+    }
+
+    [Fact]
+    public void StoreAliasExceptionDoesNotApplyToArbitraryShellsOrDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "alias-root");
+        Assert.True(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, "pwsh.exe"), root));
+        Assert.True(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, PackagedPowerShellAlias.Family, "pwsh.exe"), root));
+        Assert.False(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, "cmd.exe"), root));
+        Assert.False(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root, "other-package", "pwsh.exe"), root));
+        Assert.False(PackagedPowerShellAlias.IsExpectedAlias(Path.Combine(root + "-other", "pwsh.exe"), root));
+    }
+
     [Fact]
     public async Task RecognizedPersistedShellNamesAreCanonicalized()
     {

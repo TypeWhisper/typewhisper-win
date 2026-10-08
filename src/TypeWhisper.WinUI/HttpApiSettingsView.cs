@@ -81,8 +81,8 @@ internal sealed class HttpApiSettingsView : UserControl
         }
         copyAddress.Click += (_, _) => Copy($"http://127.0.0.1:{api.Port}");
         copyToken.Click += (_, _) => Copy(api.TokenForCopy);
-        Loaded += (_, _) => { api.Changed += Refresh; Refresh(); };
-        Unloaded += (_, _) => api.Changed -= Refresh;
+        ViewSubscriptions.Attach(this, () => { api.Changed += Refresh; Refresh(); },
+            () => api.Changed -= Refresh);
         Refresh();
         Content = body;
     }

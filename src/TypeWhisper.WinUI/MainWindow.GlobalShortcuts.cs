@@ -12,6 +12,21 @@ public sealed partial class MainWindow
     private ActionShortcut? _workflowPaletteShortcut;
     private ActionShortcut? _recorderShortcut;
 
+    // One settings contract covers every shortcut; SettingsWindow does not know their owners.
+    private string? ChangeGlobalShortcut(string key, string value) => key switch
+    {
+        GlobalShortcuts.MainDictation => ChangeDictationHotkeys(value),
+        GlobalShortcuts.CancelProcessing => ChangeActionShortcut(_cancelProcessingShortcut, Loc.T("Cancel"), value),
+        GlobalShortcuts.RecentTranscriptions => ChangeRecentTranscriptionsShortcut(value),
+        GlobalShortcuts.CopyLastTranscription => ChangeCopyLastShortcut(value),
+        GlobalShortcuts.PasteLastTranscription => ChangePasteLastShortcut(value),
+        GlobalShortcuts.ReadLastTranscription => ChangeReadLastShortcut(value),
+        GlobalShortcuts.WorkflowPalette => ChangeWorkflowPaletteShortcut(value),
+        GlobalShortcuts.Recorder => ChangeRecorderShortcut(value),
+        GlobalShortcuts.PushToTalk or GlobalShortcuts.ToggleOnly or GlobalShortcuts.HoldOnly => ChangeRecordingShortcut(key, value),
+        _ => throw new ArgumentException("Unknown global shortcut.", nameof(key))
+    };
+
     // The chords each global shortcut has registered right now; unregistered shortcuts have none.
     private string RegisteredShortcut(string key) => key switch
     {

@@ -1,6 +1,6 @@
 # File Memory
 
-File Memory keeps explicitly saved facts in a local JSON file. Version `1.4.0`, plugin ID `com.typewhisper.file-memory`, minimum host `1.1.5`.
+File Memory keeps explicitly saved facts in a local JSON file. Version `1.4.1`, plugin ID `com.typewhisper.file-memory`, minimum host `1.1.5`.
 
 ## Remember and reuse
 

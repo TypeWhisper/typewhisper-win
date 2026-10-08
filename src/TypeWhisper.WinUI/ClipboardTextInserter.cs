@@ -11,14 +11,14 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     /// <summary>Completes once the latest paste restored the previous clipboard. Never faults.</summary>
     internal Task Restored => _restored;
     /// <summary>Returns once Ctrl+V was sent. The clipboard stays gated until <see cref="Restored"/> completes.</summary>
-    internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null)
+    internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null, Func<Task<bool>>? verifyFieldAsync = null)
     {
         var dictation = AppDiagnostics.CurrentDictation;
         await TransactionGate.WaitAsync();
         var releaseNow = true;
         try
         {
-            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField), text);
+            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync), text);
             AppDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
             _restored = ReleaseAfterRestoreAsync(result.Restored, dictation);
             releaseNow = false;
@@ -36,15 +36,15 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
             // The paste was already sent; a failed restore must not turn it into a delivery failure.
             // The restore usually ends after the dictation, so log it under the dictation that pasted.
             AppDiagnostics.Write(dictation, "clipboard.restore.exception", ex);
-            System.Diagnostics.Trace.TraceWarning("Clipboard restore after paste failed: {0}", ex.GetType().Name);
         }
         finally { TransactionGate.Release(); }
     }
     public void Dispose() => _clipboard.Dispose();
 
-    private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField) : IClipboardPastePlatform
+    private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField, Func<Task<bool>>? verifyFieldAsync) : IClipboardPastePlatform
     {
         private IClipboardLease? _lease;
+        public Task<bool> VerifyFieldAsync() => verifyFieldAsync?.Invoke() ?? Task.FromResult(true);
         public bool CanPaste => target != IntPtr.Zero && NativeMethods.GetForegroundWindow() == target && (verifyField?.Invoke() ?? true)
             && !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
         public bool ClipboardIsOwned => _lease is not null && clipboard.IsCurrent(_lease);
@@ -58,24 +58,19 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         public Task WaitForPasteAsync() => Task.Delay(500);
         public uint SendPaste()
         {
-            Input[] inputs = [Key(0x11, false), Key(0x56, false), Key(0x56, true), Key(0x11, true)];
-            var sent = SendInput(4, inputs, Marshal.SizeOf<Input>());
+            NativeMethods.Input[] inputs = [Key(0x11, false), Key(0x56, false), Key(0x56, true), Key(0x11, true)];
+            var sent = NativeMethods.SendInput(4, inputs, Marshal.SizeOf<NativeMethods.Input>());
             if (sent is > 0 and < 4)
             {
-                Input[] release = [Key(0x56, true), Key(0x11, true)];
-                SendInput(2, release, Marshal.SizeOf<Input>());
+                NativeMethods.Input[] release = [Key(0x56, true), Key(0x11, true)];
+                NativeMethods.SendInput(2, release, Marshal.SizeOf<NativeMethods.Input>());
             }
             return sent;
         }
     }
-    private static Input Key(ushort key, bool up) => new() { Type = 1, Data = new InputUnion { Keyboard = new KeyboardInput { Key = key, Flags = up ? 2u : 0u, Extra = OwnKeyboardInput.Marker } } };
-    [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputUnion Data; }
-    [StructLayout(LayoutKind.Explicit)] private struct InputUnion
+    private static NativeMethods.Input Key(ushort key, bool up) => new()
     {
-        [FieldOffset(0)] public KeyboardInput Keyboard;
-        [FieldOffset(0)] public MouseInput Mouse;
-    }
-    [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public UIntPtr Extra; }
-    [StructLayout(LayoutKind.Sequential)] private struct MouseInput { public int X, Y; public uint Data, Flags, Time; public UIntPtr Extra; }
-    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
+        Type = NativeMethods.INPUT_KEYBOARD,
+        Data = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Key = key, Flags = up ? NativeMethods.KEYEVENTF_KEYUP : 0u, Extra = OwnKeyboardInput.Marker } }
+    };
 }

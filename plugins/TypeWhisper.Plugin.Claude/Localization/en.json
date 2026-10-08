@@ -1,0 +1,15 @@
+{
+  "Default text model": "Default text model",
+  "Used when a workflow does not specify a model. Refresh to load models available to your account.": "Used when a workflow does not specify a model. Refresh to load models available to your account.",
+  "Temperature mode": "Temperature mode",
+  "Use the provider default or set a custom sampling temperature.": "Use the provider default or set a custom sampling temperature.",
+  "Provider default": "Provider default",
+  "Custom": "Custom",
+  "Temperature": "Temperature",
+  "A value between 0 and 1 for older models. Newer models always use the provider default.": "A value between 0 and 1 for older models. Newer models always use the provider default.",
+  "Check connection": "Check connection",
+  "Test the entered key before saving.": "Test the entered key before saving.",
+  "Refresh models": "Refresh models",
+  "Fetch available text models. Save settings to keep the list.": "Fetch available text models. Save settings to keep the list.",
+  "Connection verified. No changes saved.": "Connection verified. No changes saved."
+}

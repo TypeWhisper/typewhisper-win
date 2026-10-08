@@ -29,8 +29,8 @@ internal sealed class DictationRecoveryView : UserControl
         // The settings page scrolls.
         Content = _body;
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite);
-        Loaded += (_, _) => { _controller.Changed += Changed; Render(); };
-        Unloaded += (_, _) => _controller.Changed -= Changed;
+        ViewSubscriptions.Attach(this, () => { _controller.Changed += Changed; Render(); },
+            () => _controller.Changed -= Changed);
         Render();
     }
 
@@ -133,9 +133,8 @@ internal sealed class DictationRecoveryView : UserControl
     private async Task<bool> Confirm(string title, string message, string primary)
     {
         if (_closing || XamlRoot is null) return false;
-        _dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = message,
-            PrimaryButtonText = primary, CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Close, PrimaryButtonStyle = (Microsoft.UI.Xaml.Style)Microsoft.UI.Xaml.Application.Current.Resources["DestructiveConfirmButtonStyle"] };
-        try { return await _dialog.ShowAsync() == ContentDialogResult.Primary && !_closing; }
+        var dialog = _dialog = Dialogs.Confirmation(title, message, primary, destructive: true);
+        try { return await Dialogs.ShowAsync(this, dialog) == ContentDialogResult.Primary && !_closing; }
         finally { _dialog = null; }
     }
     private void Start(Func<Task> action)

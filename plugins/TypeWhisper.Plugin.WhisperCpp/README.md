@@ -2,7 +2,7 @@
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.22`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.6`.
+Version `1.2.23`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.6`.
 Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup

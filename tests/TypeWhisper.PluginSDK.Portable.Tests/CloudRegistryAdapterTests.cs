@@ -66,6 +66,7 @@ public sealed class CloudRegistryAdapterTests : IDisposable
             Assert.True(cloud.Enabled); Assert.True(cloud.Ready);
             Assert.Equal(1, _host.GetSetting<int>("activations"));
             await cloud.SelectModelAsync("second"); cloud.SelectLanguage("de");
+            Assert.Equal(1, _host.GetSetting<int>("asyncSelectCalls"));
             await cloud.ValidateAsync();
             Assert.Equal(1, _host.GetSetting<int>("validations"));
             Assert.Equal("second", cloud.ModelId); Assert.True(cloud.SupportsTranslation);

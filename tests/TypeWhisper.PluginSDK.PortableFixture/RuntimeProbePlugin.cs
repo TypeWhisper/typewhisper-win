@@ -130,6 +130,13 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         else _host.NotifyCapabilitiesChanged();
     }
     /// <inheritdoc />
+    public Task SelectModelAsync(string modelId, CancellationToken ct)
+    {
+        _host!.SetSetting("asyncSelectCalls", _host.GetSetting<int>("asyncSelectCalls") + 1);
+        SelectModel(modelId);
+        return Task.CompletedTask;
+    }
+    /// <inheritdoc />
     public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] audio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
         var text = await ProcessAsync("", "transcribed", "llm", ct);

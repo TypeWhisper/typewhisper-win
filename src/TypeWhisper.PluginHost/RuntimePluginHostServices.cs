@@ -4,7 +4,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginHost;
 
 // Retains the existing profile's settings/secrets and forwards capability changes to its owner.
-internal sealed class RuntimePluginHostServices(IPluginHostServices inner, Action changed) : IPluginHostServices
+internal sealed class RuntimePluginHostServices(IPluginHostServices inner, Action changed, IPluginLocalization? localization = null) : IPluginHostServices
 {
     public Task StoreSecretAsync(string key, string value) => inner.StoreSecretAsync(key, value);
     public Task<string?> LoadSecretAsync(string key) => inner.LoadSecretAsync(key);
@@ -21,6 +21,6 @@ internal sealed class RuntimePluginHostServices(IPluginHostServices inner, Actio
     public IReadOnlyList<string> AvailableProfileNames => inner.AvailableProfileNames;
     public void Log(PluginLogLevel level, string message) => inner.Log(level, message);
     public void NotifyCapabilitiesChanged() { try { inner.NotifyCapabilitiesChanged(); } finally { changed(); } }
-    public IPluginLocalization Localization => inner.Localization;
+    public IPluginLocalization Localization => localization ?? inner.Localization;
     public void SetStreamingDisplayActive(bool active) => inner.SetStreamingDisplayActive(active);
 }
