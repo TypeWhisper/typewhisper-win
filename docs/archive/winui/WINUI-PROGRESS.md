@@ -377,7 +377,7 @@ At `2d672c5`, [headless CI](https://github.com/TypeWhisper/typewhisper-win/actio
 
 Historical local suites passed Core 522, Host 162, Presentation 601, Groq 32 and NVIDIA 25 with one skip; Filler Words passed 59 after its unload-cleanup test fix. Subsequent focused runs passed Bootstrap 21, Action Registry 16, Action Controller 4, Obsidian 18 and Recovery/Delivery 45. These are separate runs, not additive full-suite totals.
 
-Earlier local build/launch, native inference, owner feedback and focused UI checks are scoped in [testing](../../WINUI-TESTING.md). The last live v2 Discover check returned HTTP 404. Package operations have fixture coverage, not published-feed acceptance. No full real Groq dictation acceptance is recorded. This documentation audit does not rerun native tests.
+Earlier local build/launch, native inference, owner feedback and focused UI checks are scoped in [testing](WINUI-TESTING.md). The last live v2 Discover check returned HTTP 404. Package operations have fixture coverage, not published-feed acceptance. No full real Groq dictation acceptance is recorded. This documentation audit does not rerun native tests.
 
 Version 1.1 is greenfield: no legacy plugin binary compatibility promise, no required old-history import and no automatic production-data migration. The current WinUI host uses isolated development storage and targets Windows build 26100; it is not replacement-ready.
 

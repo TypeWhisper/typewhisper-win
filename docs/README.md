@@ -8,6 +8,7 @@ Use the release notes for the package you installed when they differ from this b
 
 - [Getting started](GETTING-STARTED.md): installation, first dictation and main workspaces.
 - [Dictation results and troubleshooting](DICTATION-RESULTS.md): insertion, copying and storage warnings.
+- [Import from other apps](IMPORT-FROM-OTHER-APPS.md): words and snippets from Wispr Flow or Handy.
 - [Windows CLI](WINDOWS-CLI.md) and [HTTP API](WINUI-HTTP-API.md): supported automation contracts.
 - [Privacy policy](PRIVACY.md): data handling overview.
 
@@ -42,7 +43,7 @@ on one provider, machine or commit does not establish general release readiness.
 | Dictation | [Standby recovery](HOTKEY-RESUME-VALIDATION.md), [immediate capture](testing/immediate-capture.md), [dictionary boundaries](testing/dictionary-term-boundaries.md) |
 | Windows integration | [Calendar and meeting automation](windows-meeting-automation.md), [Premium and cloud compatibility](windows-premium-cloud-parity.md) |
 | Research | [Browser microphone integration](BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md), [Parakeet Realtime EOU evaluation](PARAKEET_REALTIME_EOU_WINDOWS.md), [acceleration investigation](AMD_ACCELERATION.md) |
-| Historical WinUI implementation | [Archived progress and test journals](archive/README.md) |
+| Historical evidence | [Archived WinUI journals and dated 1.1 session records](archive/README.md) |
 
 ## Keep these guides current
 

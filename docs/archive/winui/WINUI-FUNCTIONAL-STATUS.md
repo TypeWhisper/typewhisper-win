@@ -281,7 +281,7 @@ Recording settings, ordered built-in and portable plugin text processing, native
 
 New WinUI profiles bootstrap NVIDIA/Groq only; other packages require explicit installation and enablement. Filler Words has portable processing, persistent settings and minimal History provenance. Obsidian's portable new-note writer and the generic action registry/controller are implemented. Review action UI is wired, with early shutdown drain and no hidden raw-text context; native Obsidian new-note acceptance passed; other action providers remain unverified. Dictation recovery Core/session/settings are connected. The missing-style Retry crash is fixed; native Canary Retry and exact Review copy passed. Native Delete Cancel, Settings reopen and a second Canary Retry passed. Confirmed deletion removed only the synthetic audio and preserved the copyable Review result.
 
-These current rows supersede the historical baseline's implementation status. Reference source snapshots remain pinned below. See [testing](../../WINUI-TESTING.md) for scoped CI, local and native evidence.
+These current rows supersede the historical baseline's implementation status. Reference source snapshots remain pinned below. See [testing](WINUI-TESTING.md) for scoped CI, local and native evidence.
 
 Previously recorded complete local headless run passed **1,432 tests with one skip**: Core 522, Host 171, Presentation 605, Filler Words 59, Groq 32, Obsidian 18 and NVIDIA 25 with one skip. [Headless CI at `0e2c4fc`](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34126461982) passed **1,432 with one skip on Windows** and **1,423 with five skips on Ubuntu**. Historical [CodeQL run 34125334102 at `2d672c5`](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34125334102) also passed.
 
@@ -536,7 +536,7 @@ At audited implementation SHA `ff77f43a`:
 - [WinUI headless CI](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34060774341): Windows **262 passed, 1 skipped**; Ubuntu **257 passed, 5 skipped**, verified from job logs. Windows includes the DPAPI case; Linux omits it. CUDA-specific behavior is Windows-x64-only, with the complementary unsupported-platform case on other platforms.
 - [CodeQL](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34060775205): C#, JavaScript/TypeScript and Python checks succeeded.
 - CodeRabbit status is successful **because review was skipped on the draft**. No completed review is claimed.
-- Earlier local prescribed build/launch, isolated native inference, owner dictation/hotkey feedback and focused UI checks remain bounded evidence; see [testing](../../WINUI-TESTING.md). This audit did not rerun those checks or touch personal settings, keys, audio or model files.
+- Earlier local prescribed build/launch, isolated native inference, owner dictation/hotkey feedback and focused UI checks remain bounded evidence; see [testing](WINUI-TESTING.md). This audit did not rerun those checks or touch personal settings, keys, audio or model files.
 - Package lifecycle tests use isolated fixtures. The last live Discover check returned HTTP 404 for the planned v2 catalog; no remote publication/install acceptance has been established. A ready Groq configuration is not proof of a successful live transcription.
 - This documentation audit verifies source paths, inventories and current GitHub checks. It does not establish full legacy-Windows/Mac runtime correctness or release parity.
 
