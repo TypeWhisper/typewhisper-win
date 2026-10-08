@@ -42,6 +42,10 @@ public class CommandTests
     [InlineData("status --workflow test")]
     [InlineData("transcribe one.wav two.wav")]
     [InlineData("transcribe one.wav --task invalid")]
+    [InlineData("audio set")]
+    [InlineData("audio reset")]
+    [InlineData("audio show extra")]
+    [InlineData("audio --engine whisper")]
     public async Task InvalidArgumentsFailBeforeConnecting(string arguments)
     {
         var result = await RunAsync(arguments.Split(' '));
@@ -67,6 +71,8 @@ public class CommandTests
     [InlineData("status", "GET", "/v1/status", "")]
     [InlineData("status --dev", "GET", "/v1/status", "")]
     [InlineData("models", "GET", "/v1/models", "")]
+    [InlineData("audio", "GET", "/v1/settings/audio", "")]
+    [InlineData("audio show", "GET", "/v1/settings/audio", "")]
     public async Task SendsApiContractWithTokenAndJsonStdout(string args, string method, string path, string expectedBody)
     {
         using var server = Listen(out var port);
@@ -156,6 +162,58 @@ public class CommandTests
             var result = await run;
             Assert.Equal(0, result.Exit);
             Assert.Equal("Guten Tag", result.Output.Trim());
+        }
+        finally { File.Delete(file); }
+    }
+
+    [Fact]
+    public async Task AudioSetPatchesSavedStateWithoutReadOnlyFields()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(file, """
+                {"input_devices":[{"id":"sonar","name":"Sonar","is_system_default":true}],
+                 "input_priority":[{"id":"quadcast","name":"QuadCast"}],"active_input":{"id":"quadcast","name":"QuadCast"},
+                 "audio_ducking_enabled":true,"audio_ducking_level":0.1,"pause_media_during_recording":false,"sound_feedback_enabled":true}
+                """);
+            using var server = Listen(out var port);
+            var run = RunAsync("audio", "set", file, "--port", port.ToString());
+            var context = await server.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal("PATCH", context.Request.HttpMethod);
+            Assert.Equal("/v1/settings/audio", context.Request.RawUrl);
+            Assert.StartsWith("application/json", context.Request.ContentType);
+            using var reader = new StreamReader(context.Request.InputStream);
+            using var payload = JsonDocument.Parse(await reader.ReadToEndAsync());
+            Assert.Equal(new[] { "input_priority", "audio_ducking_enabled", "audio_ducking_level", "pause_media_during_recording", "sound_feedback_enabled" },
+                payload.RootElement.EnumerateObject().Select(property => property.Name));
+            Assert.Equal("0.1", payload.RootElement.GetProperty("audio_ducking_level").GetRawText());
+            await Reply(context, 200, """
+                {"input_devices":[{"id":"sonar","name":"Sonar","is_system_default":true},{"id":"new-cloud-id","name":"Cloud"}],
+                 "input_priority":[{"id":"quadcast","name":"QuadCast"},{"id":"old-cloud-id","name":"Cloud"}],
+                 "active_input":null,"audio_ducking_enabled":true,"audio_ducking_level":0.1,"pause_media_during_recording":false,"sound_feedback_enabled":true}
+                """);
+            var result = await run;
+            Assert.Equal(0, result.Exit);
+            Assert.Contains("Active input: none", result.Output);
+            Assert.Contains("1. QuadCast (not connected)", result.Output);
+            Assert.Contains("2. Cloud" + Environment.NewLine, result.Output);
+            Assert.Contains("Sonar (Windows default)", result.Output);
+            Assert.Contains("Lower audio while recording: on, 10%", result.Output);
+        }
+        finally { File.Delete(file); }
+    }
+
+    [Fact]
+    public async Task AudioSetRejectsNonObjectJsonBeforeConnecting()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(file, "[]");
+            var result = await RunAsync("audio", "set", file, "--port", "1");
+            Assert.Equal(1, result.Exit);
+            Assert.StartsWith("Error: Invalid audio settings JSON", result.Error);
         }
         finally { File.Delete(file); }
     }

@@ -39,9 +39,20 @@ typewhisper history --query "meeting notes" --json
 typewhisper last
 typewhisper export typewhisper-backup.json
 typewhisper import typewhisper-backup.json
+typewhisper audio
 ```
 
 `history last` is an alias for `last`. History defaults to 50 entries, accepts `--limit` from 0 to 200, and accepts a nonnegative `--offset`.
+
+`audio` (or `audio show`) lists the connected microphones, the saved microphone priority, the microphone the next recording uses, and the ducking, media-pause and sound-feedback settings. `audio set <file|->` sends a JSON object to `PATCH /v1/settings/audio`; the read-only `input_devices` and `active_input` fields are dropped first, so saved `audio --json` output restores the previous settings:
+
+```powershell
+typewhisper audio --json > audio-settings.json
+'{"audio_ducking_enabled":false}' | typewhisper audio set -
+typewhisper audio set audio-settings.json
+```
+
+Audio changes apply immediately and are rejected while TypeWhisper is recording or processing. See the [API reference](WINUI-HTTP-API.md#audio-settings) for the fields.
 
 Model operations use engine and model IDs returned by `typewhisper models`. Replace the example variables with those IDs:
 
@@ -92,7 +103,7 @@ Compared with the Mac source at commit [`357fe6f`](https://github.com/TypeWhispe
 
 | Area | Windows and Mac behavior | Sources |
 | --- | --- | --- |
-| Core commands | Both provide `status`, `models`, `transcribe`, `export`, and `import`. Windows additionally exposes model load/unload/delete, dictation sessions, history, and `last`. | [Windows commands](../src/TypeWhisper.Cli/Program.cs), [Mac commands](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/main.swift) |
+| Core commands | Both provide `status`, `models`, `transcribe`, `export`, and `import`. Windows additionally exposes model load/unload/delete, dictation sessions, history, `last` and `audio`. | [Windows commands](../src/TypeWhisper.Cli/Program.cs), [Mac commands](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/main.swift) |
 | Stdin and JSON | Both accept an omitted transcription file or `-` for stdin, print transcription text by default, and provide `--json`. Export JSON uses `file` and `bytes` on both platforms. Windows intentionally limits stdin to 32 MiB. | [Windows commands](../src/TypeWhisper.Cli/Program.cs), [Mac formatter](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/OutputFormatter.swift) |
 | Transcription options | Both accept ordered language hints, engine/model overrides, model-download waiting, target-language translation, and `--no-corrections`. Windows requires registry-declared hint support and a ready default workflow LLM for target translation; temporary model selection is restored afterward. Available engines and models remain platform-specific. | [Windows requests](../src/TypeWhisper.Cli/CliSupport.cs), [Windows API](WINUI-HTTP-API.md), [Mac client](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/CLIClient.swift) |
 | Errors | Both use input/connection/server exit codes `1`/`2`/`3`. Windows times out all API requests after five minutes; Mac uses ten seconds for ordinary status/model requests and five minutes for transcription and backups. | [Windows commands](../src/TypeWhisper.Cli/Program.cs), [Mac client](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/CLIClient.swift) |

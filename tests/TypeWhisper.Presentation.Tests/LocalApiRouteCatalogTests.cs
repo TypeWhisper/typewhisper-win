@@ -22,12 +22,13 @@ public sealed class LocalApiRouteCatalogTests
             ["/v1/recorder/status"] = ["GET"], ["/v1/recorder/session"] = ["GET"],
             ["/v1/dictionary/terms"] = ["GET", "PUT", "DELETE"],
             ["/v1/dictionary/corrections"] = ["GET", "PUT", "DELETE"],
-            ["/v1/settings/export"] = ["GET"], ["/v1/settings/import"] = ["POST"]
+            ["/v1/settings/export"] = ["GET"], ["/v1/settings/import"] = ["POST"],
+            ["/v1/settings/audio"] = ["GET", "PATCH"]
         }.SelectMany(pair => pair.Value.Select(method => new LocalApiRoute(method, pair.Key))).ToHashSet();
-        Assert.Equal(29, expected.Count);
+        Assert.Equal(31, expected.Count);
         Assert.True(expected.SetEquals(LocalApiRouteCatalog.MacRoutes));
-        Assert.Equal(32, LocalApiRouteCatalog.Routes.Count);
-        Assert.Equal(32, LocalApiRouteCatalog.Routes.Distinct().Count());
+        Assert.Equal(34, LocalApiRouteCatalog.Routes.Count);
+        Assert.Equal(34, LocalApiRouteCatalog.Routes.Distinct().Count());
         Assert.True(LocalApiRouteCatalog.Contains("GET", "/v1/capabilities"));
         Assert.True(LocalApiRouteCatalog.Contains("GET", "/docs"));
         Assert.True(LocalApiRouteCatalog.Contains("GET", "/docs/"));

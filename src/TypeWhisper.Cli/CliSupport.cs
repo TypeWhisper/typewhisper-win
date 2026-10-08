@@ -197,6 +197,17 @@ public static class CliRequestBuilder
     }
 
     /// <summary>
+    /// Builds an audio-settings change request.
+    /// </summary>
+    public static HttpRequestMessage BuildAudioSettingsPatch(string baseUrl, string json, string? apiToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Patch, BuildUri(baseUrl, "/v1/settings/audio"));
+        ApplyApiToken(request, apiToken);
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        return request;
+    }
+
+    /// <summary>
     /// Builds transcribe local file.
     /// </summary>
     public static HttpRequestMessage BuildTranscribeLocalFile(
@@ -409,4 +420,65 @@ public static class CliBackupFile
                 File.Delete(tempPath);
         }
     }
+}
+
+/// <summary>
+/// Request and output helpers for GET and PATCH /v1/settings/audio.
+/// </summary>
+public static class CliAudioSettings
+{
+    private static readonly string[] ReadOnlyFields = ["input_devices", "active_input"];
+
+    /// <summary>
+    /// Returns the PATCH body for a JSON object, dropping the read-only fields of a saved GET response.
+    /// </summary>
+    public static string PatchBody(string json)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json) as System.Text.Json.Nodes.JsonObject
+            ?? throw new InvalidDataException("Expected a JSON object.");
+        foreach (var field in ReadOnlyFields) root.Remove(field);
+        return root.ToJsonString();
+    }
+
+    /// <summary>
+    /// Formats a GET /v1/settings/audio response for the terminal.
+    /// </summary>
+    public static string Format(JsonElement root)
+    {
+        var text = new StringBuilder();
+        text.AppendLine("Active input: " + (root.TryGetProperty("active_input", out var active) && active.ValueKind == JsonValueKind.Object
+            ? Name(active) : "none"));
+        var connected = root.TryGetProperty("input_devices", out var devices) && devices.ValueKind == JsonValueKind.Array
+            ? devices.EnumerateArray().ToArray() : [];
+        var priority = root.TryGetProperty("input_priority", out var items) && items.ValueKind == JsonValueKind.Array
+            ? items.EnumerateArray().ToArray() : [];
+        text.AppendLine(priority.Length == 0 ? "Microphone priority: Windows default" : "Microphone priority:");
+        for (var i = 0; i < priority.Length; i++)
+        {
+            // The app matches a saved microphone by ID, then by name, since Windows can assign a new endpoint ID.
+            var available = connected.Any(device => string.Equals(Text(device, "id"), Text(priority[i], "id"), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Text(device, "name"), Text(priority[i], "name"), StringComparison.OrdinalIgnoreCase));
+            text.AppendLine($"  {i + 1}. {Name(priority[i])}{(available ? "" : " (not connected)")}");
+        }
+        text.AppendLine("Input devices:");
+        foreach (var device in connected)
+            text.AppendLine($"  {Name(device)}{(device.TryGetProperty("is_system_default", out var isDefault) && isDefault.ValueKind == JsonValueKind.True ? " (Windows default)" : "")}");
+        if (root.TryGetProperty("audio_ducking_enabled", out var ducking))
+            text.AppendLine("Lower audio while recording: " + (ducking.ValueKind == JsonValueKind.True
+                ? "on, " + (root.TryGetProperty("audio_ducking_level", out var level) && level.TryGetDouble(out var value)
+                    ? Math.Round(value * 100).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%" : "?")
+                : "off"));
+        Toggle("pause_media_during_recording", "Pause media during recording");
+        Toggle("sound_feedback_enabled", "Sound feedback");
+        return text.ToString();
+
+        void Toggle(string field, string label)
+        {
+            if (root.TryGetProperty(field, out var value)) text.AppendLine($"{label}: {(value.ValueKind == JsonValueKind.True ? "on" : "off")}");
+        }
+    }
+
+    private static string Text(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString()! : "";
+    private static string Name(JsonElement element) => Text(element, "name") is { Length: > 0 } name ? name : Text(element, "id");
 }

@@ -373,6 +373,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal string SelectedMicrophoneId => _microphones.FirstOrDefault()?.Id ?? "default";
     internal string SelectedMicrophoneName => _microphones.FirstOrDefault()?.Name ?? Loc.T("System default");
     internal IReadOnlyList<AudioInputDeviceInfo> GetMicrophones() => _audio.GetAvailableInputDeviceInfos();
+    // The microphone the next recording would open; null when no listed or default microphone is connected.
+    internal MicrophonePriorityItem? ActiveMicrophone => _audio.PreferredInputDevice is { } device ? new(device.Id, device.Name) : null;
+    // A held gate means a recording start, paste or other session operation is in progress.
+    internal bool CanChangeAudioSettings => CanStartSessionOperation && _gate.CurrentCount > 0;
+    // Raised after the HTTP API changes audio settings, so an open Audio page shows the saved values.
+    internal event Action? AudioSettingsChanged;
+    internal void NotifyAudioSettingsChanged() => AudioSettingsChanged?.Invoke();
     internal MicrophoneTestSnapshot? MicrophoneTest => _audio.MicrophoneTest;
     internal string? StartMicrophoneTest()
     {

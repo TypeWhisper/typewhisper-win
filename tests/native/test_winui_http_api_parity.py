@@ -37,6 +37,7 @@ ROUTES = [
     ("GET", "/v1/dictionary/terms"), ("PUT", "/v1/dictionary/terms"), ("DELETE", "/v1/dictionary/terms"),
     ("GET", "/v1/dictionary/corrections"), ("PUT", "/v1/dictionary/corrections"), ("DELETE", "/v1/dictionary/corrections"),
     ("GET", "/v1/settings/export"), ("POST", "/v1/settings/import"),
+    ("GET", "/v1/settings/audio"), ("PATCH", "/v1/settings/audio"),
 ]
 
 
@@ -124,19 +125,20 @@ class Acceptance:
         raise AssertionError("Session polling timed out")
 
     def matrix(self):
-        self.check(len(ROUTES) == 29, "29 Mac method/path pairs")
+        self.check(len(ROUTES) == 31, "31 Mac method/path pairs")
         for method, path in ROUTES:
             query, payload = None, None
             if path == "/v1/dictation/start":
                 payload = {"unexpected": True}
             elif path == "/v1/recorder/start":
                 query = {"mic": "false", "system_audio": "false"}
-            elif method in ("PUT", "POST", "DELETE") and path not in ("/v1/history", "/v1/models"):
+            elif method in ("PUT", "POST", "DELETE", "PATCH") and path not in ("/v1/history", "/v1/models"):
                 payload = {}
             status, _, _ = self.request(path, method, payload, query)
             self.check(status in (200, 400, 409, 415, 422), method + " " + path + " implemented")
-        for path in sorted({path for _, path in ROUTES}):
+        for path in sorted({path for _, path in ROUTES} - {path for method, path in ROUTES if method == "PATCH"}):
             self.request(path, "PATCH", expected=(405,))
+        self.request("/v1/settings/audio", "PUT", expected=(405,))
         self.request("/v1/parity-unknown-route", expected=(404,))
 
     def history(self):
@@ -280,7 +282,7 @@ def main():
         return 0
     evidence = args.evidence or profile / "api-parity-evidence.json"
     acceptance = None
-    result = {"passed": False, "mac_route_count": 29, "checks": [], "http": []}
+    result = {"passed": False, "mac_route_count": 31, "checks": [], "http": []}
     try:
         acceptance = Acceptance(profile, evidence)
         acceptance.run()
