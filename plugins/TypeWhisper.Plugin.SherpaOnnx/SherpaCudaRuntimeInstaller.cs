@@ -125,8 +125,9 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
     private readonly string[] _requiredFiles;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    // Records which verified downloads produced the files in the runtime directory. The
-    // installation only counts as complete when every artifact listed here passed its checksum.
+    // Records which verified downloads produced the files in the runtime directory. Only
+    // installations performed by a verifying build write it; see IsVerified for how its
+    // absence is treated.
     private sealed record RuntimeReceipt(
         string Version,
         string? ArchiveSha256,
@@ -186,7 +187,9 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             Directory.CreateDirectory(_runtimeRoot);
             Directory.CreateDirectory(RuntimeDirectory);
 
-            var receipt = ReadReceipt();
+            // Reaching this point means the files are incomplete or a receipt disagrees with the
+            // pins, so anything the receipt does not vouch for is downloaded and verified again.
+            var receipt = ReadReceipt() ?? CreateEmptyReceipt();
             if (!HasRequiredFiles(DownloadedRuntimeFiles)
                 || !HashMatches(receipt.ArchiveSha256, _package.ArchiveSha256))
             {
@@ -452,40 +455,51 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         }
     }
 
-    private RuntimeReceipt ReadReceipt()
+    // Returns null when there is no usable receipt. An unreadable one is treated the same way: it
+    // can only come from an interrupted write by a verifying build, which never leaves unverified
+    // files behind, so reading it as a mismatch would only force a needless re-download.
+    private RuntimeReceipt? ReadReceipt()
     {
+        if (!File.Exists(ReceiptPath))
+            return null;
+
         try
         {
-            if (File.Exists(ReceiptPath))
-            {
-                var receipt = JsonSerializer.Deserialize<RuntimeReceipt>(File.ReadAllText(ReceiptPath));
-                if (receipt is { WheelSha256: not null } && receipt.Version == _package.RuntimeVersion)
-                    return receipt;
-            }
+            var receipt = JsonSerializer.Deserialize<RuntimeReceipt>(File.ReadAllText(ReceiptPath));
+            if (receipt is { WheelSha256: not null } && receipt.Version == _package.RuntimeVersion)
+                return receipt;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             Debug.WriteLine($"Ignoring unreadable sherpa-onnx CUDA runtime receipt '{ReceiptPath}': {ex.Message}");
         }
 
-        // Without a usable receipt nothing on disk is known to have passed a checksum. That includes
-        // installations made before downloads were verified: their archives are gone and
-        // sherpa-onnx-c-api.dll is patched in place, so they cannot be checked after the fact. As
-        // with a WhisperCpp receipt mismatch they are downloaded again instead of being trusted.
-        return new RuntimeReceipt(
-            _package.RuntimeVersion,
-            null,
-            new Dictionary<string, string>(StringComparer.Ordinal));
+        return null;
     }
+
+    private RuntimeReceipt CreateEmptyReceipt() =>
+        new(_package.RuntimeVersion, null, new Dictionary<string, string>(StringComparer.Ordinal));
 
     private void WriteReceipt(RuntimeReceipt receipt) =>
         File.WriteAllText(ReceiptPath, JsonSerializer.Serialize(receipt));
 
-    private bool IsVerified(RuntimeReceipt receipt) =>
-        HashMatches(receipt.ArchiveSha256, _package.ArchiveSha256)
-        && _package.Dependencies.All(dependency =>
-            receipt.WheelSha256.TryGetValue(dependency.PackageName, out var sha256)
-            && HashMatches(sha256, dependency.Sha256));
+    private bool IsVerified(RuntimeReceipt? receipt)
+    {
+        // A complete installation without a receipt predates download verification. Its files came
+        // from the same pinned URLs, but the archives are gone and sherpa-onnx-c-api.dll is patched
+        // in place, so they cannot be checked after the fact. They are kept as they are and nothing
+        // is written: re-downloading 1.75 GB on the explicit CUDA preference, or silently falling
+        // back to the CPU on Auto where the installer never runs, would be worse than trusting a
+        // working GPU setup. Only a receipt that exists and disagrees with the pins, which means a
+        // real version change, sends the installation back through the installer.
+        if (receipt is null)
+            return true;
+
+        return HashMatches(receipt.ArchiveSha256, _package.ArchiveSha256)
+            && _package.Dependencies.All(dependency =>
+                receipt.WheelSha256.TryGetValue(dependency.PackageName, out var sha256)
+                && HashMatches(sha256, dependency.Sha256));
+    }
 
     private static bool HashMatches(string? actualSha256, string expectedSha256) =>
         string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase);

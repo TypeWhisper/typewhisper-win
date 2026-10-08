@@ -593,22 +593,54 @@ public class SherpaOnnxPluginTests
     }
 
     [Fact]
-    public async Task CudaRuntimeInstaller_ReinstallsRuntimeFilesThatHaveNoVerifiedReceipt()
+    public async Task CudaRuntimeInstaller_KeepsCompleteInstallationsMadeBeforeReceipts()
     {
         var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
         try
         {
             // An installation made before downloads were verified: every file is present and patched,
-            // but no receipt says where the files came from.
-            var nativeDir = Path.Join(tempDir, "Runtimes", "sherpa-onnx-cuda", "test-v1", "native");
-            Directory.CreateDirectory(nativeDir);
-            foreach (var fileName in new[] { "onnxruntime.dll", "onnxruntime_providers_cuda.dll", "sherpaort.dll", "cublas64_12.dll" })
-                File.WriteAllText(Path.Join(nativeDir, fileName), "unverified");
-            File.WriteAllBytes(
-                Path.Join(nativeDir, "sherpa-onnx-c-api.dll"),
-                Encoding.ASCII.GetBytes("prefix sherpaort.dll\0\0\0 suffix"));
+            // but there is no receipt. It must keep working without any download or write.
+            var nativeDir = SeedInstalledRuntimeFiles(tempDir);
             var archive = CreateSherpaCudaArchive();
             var wheel = CreateCublasWheel();
+            var handler = new PinnedDownloadHandler(archive, wheel);
+            using var client = new HttpClient(handler);
+            var installer = new SherpaCudaRuntimeInstaller(tempDir, client, CreateCudaRuntimePackage(archive, wheel));
+
+            Assert.True(installer.IsInstalled);
+            await installer.EnsureInstalledAsync(CancellationToken.None);
+
+            Assert.True(installer.IsInstalled);
+            Assert.Empty(handler.RequestedUrls);
+            Assert.Equal(["native"], ListRuntimeRootEntries(tempDir));
+            Assert.Equal("unverified", File.ReadAllText(Path.Join(nativeDir, "cublas64_12.dll")));
+            Assert.Equal("unverified", File.ReadAllText(Path.Join(nativeDir, "onnxruntime.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CudaRuntimeInstaller_ReinstallsWhenTheReceiptDisagreesWithThePins()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
+        try
+        {
+            // A receipt from an earlier pin: the wheel still matches, the archive does not.
+            var nativeDir = SeedInstalledRuntimeFiles(tempDir);
+            var archive = CreateSherpaCudaArchive();
+            var wheel = CreateCublasWheel();
+            File.WriteAllText(
+                Path.Join(tempDir, "Runtimes", "sherpa-onnx-cuda", "test-v1", "installed.json"),
+                JsonSerializer.Serialize(new
+                {
+                    Version = "test-v1",
+                    ArchiveSha256 = new string('0', 64),
+                    WheelSha256 = new Dictionary<string, string> { ["nvidia-cublas-cu12"] = Sha256Hex(wheel) }
+                }));
             var handler = new PinnedDownloadHandler(archive, wheel);
             using var client = new HttpClient(handler);
             var installer = new SherpaCudaRuntimeInstaller(tempDir, client, CreateCudaRuntimePackage(archive, wheel));
@@ -617,9 +649,10 @@ public class SherpaOnnxPluginTests
             await installer.EnsureInstalledAsync(CancellationToken.None);
 
             Assert.True(installer.IsInstalled);
-            Assert.Equal([TestArchiveUrl, TestWheelUrl], handler.RequestedUrls);
-            Assert.Equal("cublas", File.ReadAllText(Path.Join(nativeDir, "cublas64_12.dll")));
+            // Only the artifact whose pin changed is downloaded again.
+            Assert.Equal([TestArchiveUrl], handler.RequestedUrls);
             Assert.Equal("onnxruntime", File.ReadAllText(Path.Join(nativeDir, "onnxruntime.dll")));
+            Assert.Equal("unverified", File.ReadAllText(Path.Join(nativeDir, "cublas64_12.dll")));
         }
         finally
         {
@@ -845,6 +878,20 @@ public class SherpaOnnxPluginTests
     }
 
     private static string Sha256Hex(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    // Lays out a complete, patched runtime directory the way the installer leaves it after a
+    // successful installation, without a receipt.
+    private static string SeedInstalledRuntimeFiles(string pluginDataDirectory)
+    {
+        var nativeDir = Path.Join(pluginDataDirectory, "Runtimes", "sherpa-onnx-cuda", "test-v1", "native");
+        Directory.CreateDirectory(nativeDir);
+        foreach (var fileName in new[] { "onnxruntime.dll", "onnxruntime_providers_cuda.dll", "sherpaort.dll", "cublas64_12.dll" })
+            File.WriteAllText(Path.Join(nativeDir, fileName), "unverified");
+        File.WriteAllBytes(
+            Path.Join(nativeDir, "sherpa-onnx-c-api.dll"),
+            Encoding.ASCII.GetBytes("prefix sherpaort.dll\0\0\0 suffix"));
+        return nativeDir;
+    }
 
     private static IEnumerable<string> ListRuntimeRootEntries(string pluginDataDirectory) =>
         Directory.EnumerateFileSystemEntries(Path.Join(pluginDataDirectory, "Runtimes", "sherpa-onnx-cuda", "test-v1"))
