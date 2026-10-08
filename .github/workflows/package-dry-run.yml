@@ -76,6 +76,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
 
       - name: Create artifact directories
         shell: pwsh
@@ -83,14 +84,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
           New-Item -ItemType Directory -Force -Path "releases/${{ steps.meta.outputs.velopack_channel }}" | Out-Null
 
-      - name: Restore solution
-        run: dotnet restore TypeWhisper.slnx
-
-      - name: Build solution
-        run: dotnet build TypeWhisper.slnx -c Release --no-restore -p:Version=${{ steps.meta.outputs.version }} -bl:artifacts/logs/typewhisper-package.binlog
-
       - name: Publish app
-        run: dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.platform }} -p:Version=${{ steps.meta.outputs.version }} --self-contained false -o publish/${{ matrix.rid }}
+        run: dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.platform }} -p:Version=${{ steps.meta.outputs.version }} --self-contained false -o publish/${{ matrix.rid }} -bl:artifacts/logs/typewhisper-package.binlog
 
       - name: Install Velopack CLI
         run: dotnet tool install -g vpk --version 0.0.1298

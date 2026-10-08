@@ -16,6 +16,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/TranscriptScrollFollow.cs" Link="TranscriptScrollFollow.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Moq" />

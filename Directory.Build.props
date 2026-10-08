@@ -4,6 +4,8 @@
     <Version Condition="'$(Version)' == ''">0.0.1-dev</Version>
     <Company>TypeWhisper</Company>
     <Product>TypeWhisper</Product>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>10.0</AnalysisLevel>
     <Copyright>Copyright © 2026 TypeWhisper</Copyright>
   </PropertyGroup>
 

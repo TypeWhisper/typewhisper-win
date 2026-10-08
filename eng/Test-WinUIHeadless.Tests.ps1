@@ -48,15 +48,18 @@ function dotnet {
     if (($args -contains '--no-build') -ne $project.StartsWith('plugins/')) {
         throw "Plugin tests must reuse the shared build and app tests must build themselves: $args"
     }
+    $expectedCoverage = $headlessFixtureState.coverage -and $project -in @($appProjects[0], $appProjects[3])
+    if (($args -contains '--collect') -ne $expectedCoverage) { throw "Unexpected coverage instrumentation for $project" }
     $headlessFixtureState.calls.Add($project)
     $global:LASTEXITCODE = if ($project -in $headlessFixtureState.failures) { 1 } else { 0 }
 }
 
-function Expect-Run([string]$Suite, [string[]]$Expected, [string[]]$Failures = @(), [string]$BuildFailure = '') {
-    $headlessFixtureState = @{ calls = [Collections.Generic.List[string]]::new(); failures = $Failures; buildFailure = $BuildFailure }
+function Expect-Run([string]$Suite, [string[]]$Expected, [string[]]$Failures = @(), [string]$BuildFailure = '', [bool]$Coverage = $false) {
+    $headlessFixtureState = @{ calls = [Collections.Generic.List[string]]::new(); failures = $Failures; buildFailure = $BuildFailure; coverage = $Coverage }
     $resultsDirectory = Join-Path $fixture ('results-' + [guid]::NewGuid().ToString('N'))
     $arguments = @{ Configuration = 'Release'; ResultsDirectory = $resultsDirectory }
     if ($Suite) { $arguments.Suite = $Suite }
+    if ($Coverage) { $arguments.CollectCoverage = $true }
     $failure = $null
     try { & (Join-Path $fixture 'eng/Test-WinUIHeadless.ps1') @arguments }
     catch { $failure = $_.Exception.Message }
@@ -104,6 +107,7 @@ try {
     Expect-Run '' ($expectedAppProjects + $pluginBuild + $pluginProjects)
     Expect-Run 'All' ($expectedAppProjects + $pluginBuild + $pluginProjects)
     Expect-Run 'App' $expectedAppProjects
+    Expect-Run 'All' ($expectedAppProjects + $pluginBuild + $pluginProjects) -Coverage $true
     Expect-Run 'Plugins' ($pluginBuild + $pluginProjects)
     Expect-Run 'All' ($expectedAppProjects + $pluginBuild + $pluginProjects) @($appProjects[0], $pluginProjects[0])
     Expect-Run 'Plugins' ($pluginBuild + $pluginProjects) @($pluginProjects[0])

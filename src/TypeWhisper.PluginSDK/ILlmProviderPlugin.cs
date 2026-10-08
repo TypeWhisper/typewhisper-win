@@ -28,7 +28,6 @@ public interface ILlmProviderPlugin : ITypeWhisperPlugin
 /// duplicate request. The interface stays so that packages built against earlier SDKs keep loading;
 /// removing it would change every package that implements it.
 /// </remarks>
-[Obsolete("Not consumed by the host; kept for binary compatibility.")]
 public interface ILlmRequestHedgingSupport
 {
     /// <summary>Gets whether the provider supports one concurrent duplicate request.</summary>

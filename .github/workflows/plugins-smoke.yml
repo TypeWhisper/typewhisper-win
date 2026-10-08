@@ -35,6 +35,7 @@ jobs:
             plugins/**/*.csproj
             src/**/*.csproj
             Directory.Build.props
+            Directory.Packages.props
       - name: Test plugins without models or provider credentials
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release -Suite Plugins -ResultsDirectory artifacts/test-results/plugins
@@ -177,6 +178,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
 
       - name: Create artifact directory
         shell: pwsh

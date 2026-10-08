@@ -42,6 +42,16 @@ test projects once through a generated `PluginTests.slnx` in the results
 directory and then runs each project with `--no-build`; `summary.json` records
 that shared build under `pluginBuild`.
 
+Use `-CollectCoverage` with `-Suite App` to write Cobertura reports for Core and
+Presentation alongside the test results. CI collects these reports on both
+platforms. Plugin lifecycle tests stay uninstrumented because coverage changes
+collectible assembly lifetimes. SDK analyzers run during builds, incorrect
+`ValueTask` consumption fails compilation, and CI checks changed whitespace.
+
+App publishes include `THIRD-PARTY-NOTICES.txt` and a `Licenses` directory built
+from restored NuGet metadata and upstream notices. Verify that packaging with
+`./eng/Write-RuntimeNotices.Tests.ps1`.
+
 For a focused iteration:
 
 ```powershell

@@ -53,6 +53,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
 
       - name: Create artifact directory
         shell: pwsh

@@ -3,7 +3,8 @@ param(
     [string]$Configuration = 'Release',
     [string]$ResultsDirectory,
     [ValidateSet('All', 'App', 'Plugins')]
-    [string]$Suite = 'All'
+    [string]$Suite = 'All',
+    [switch]$CollectCoverage
 )
 
 Set-StrictMode -Version Latest
@@ -44,7 +45,12 @@ function Test-Project([hashtable]$Check, [string[]]$Options = @()) {
     & dotnet test (Join-Path $repository $Check.Project) -c $Configuration @Options --verbosity minimal --logger "trx;LogFileName=$($Check.Name).trx" --results-directory $ResultsDirectory
     $results.Add([pscustomobject]@{ name = $Check.Name; exitCode = $LASTEXITCODE; durationSeconds = ([DateTimeOffset]::UtcNow - $started).TotalSeconds })
 }
-foreach ($check in $appChecks) { Test-Project $check }
+foreach ($check in $appChecks) {
+    # Instrumenting dynamically loaded plugins changes their AssemblyLoadContext lifetime and
+    # invalidates the host's unload tests. Collect coverage for the pure Core/Presentation suites.
+    $options = if ($CollectCoverage -and $check.Name -in @('Core', 'Presentation')) { @('--collect', 'XPlat Code Coverage') } else { @() }
+    Test-Project $check $options
+}
 $build = $null
 if ($pluginChecks.Count -gt 0) {
     # Restore and build every plugin test project through one generated solution, so the shared SDK and

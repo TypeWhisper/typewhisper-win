@@ -17,3 +17,7 @@ indent_size = 2
 # Batch files need CRLF for cmd.exe, matching .gitattributes.
 [*.{cmd,bat}]
 end_of_line = crlf
+
+[*.cs]
+# Incorrect ValueTask consumption can fail only under real asynchronous completion.
+dotnet_diagnostic.CA2012.severity = error

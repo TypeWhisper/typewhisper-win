@@ -22,7 +22,7 @@ public sealed record PluginTranscriptionResult(
     /// <summary>
     /// Backward-compatible constructor for plugins compiled against SDK &lt; 1.1.
     /// </summary>
-    public PluginTranscriptionResult(string text, string detectedLanguage, double durationSeconds)
+    public PluginTranscriptionResult(string text, string? detectedLanguage, double durationSeconds)
         : this(text, detectedLanguage, durationSeconds, null) { }
 }
 

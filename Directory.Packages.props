@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup Label="Application">
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.13" />
     <!-- TypeWhisper.WinUI also downloads H.NotifyIcon.WinUI with a PackageDownload and a
          HintPath that name this version explicitly; bump the three together. -->

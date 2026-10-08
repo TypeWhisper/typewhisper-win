@@ -63,6 +63,7 @@ jobs:
           cache-dependency-path: |
             **/*.csproj
             Directory.Build.props
+            Directory.Packages.props
       - name: Test portable host and application logic
         if: matrix.rid == 'win-x64'
         shell: pwsh
