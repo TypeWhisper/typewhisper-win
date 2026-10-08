@@ -20,9 +20,14 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
     private readonly VocabularyHostServices _host;
     private readonly VocabularyPluginSession _session;
     internal bool Enabled => _session.Enabled;
+    // False after an idle release; the session stays enabled and loads the model again when it is needed.
+    internal bool Loaded => _session.Loaded;
     internal string? Error { get; private set; }
+    // Raised off the UI thread when a released model could not load again for a rescoring.
+    internal event Action<Exception>? LoadFailed;
 
-    internal LocalCtcVocabulary(string? dataDirectory = null, Func<IPluginHostServices, Task<IVocabularyPluginLease>>? load = null, Func<string>? packageDirectory = null)
+    internal LocalCtcVocabulary(string? dataDirectory = null, Func<IPluginHostServices, Task<IVocabularyPluginLease>>? load = null, Func<string>? packageDirectory = null,
+        ModelIdleUnloadPolicy? idlePolicy = null)
     {
         dataDirectory ??= DataDirectory;
         _diagnostics = new(Path.Combine(dataDirectory, "ctc-diagnostics.jsonl"));
@@ -35,9 +40,25 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
             else Publish();
         });
         _session = new(ct => load is not null ? load(_host) : VocabularyPluginLease.LoadAsync(
-            packageDirectory?.Invoke() ?? Path.Combine(AppContext.BaseDirectory, "Plugins", PluginId), _host, HostVersion, ct));
+            packageDirectory?.Invoke() ?? Path.Combine(AppContext.BaseDirectory, "Plugins", PluginId), _host, HostVersion, ct), idlePolicy);
+        // The journal shows whether the model was in memory when a dictation was rescored.
+        _session.Changed += () => Trace("model " + (_session.Loaded ? "loaded" : "released"));
+        _session.LoadFailed += ex => { Trace("model load-failed error=" + ex.GetType().Name); LoadFailed?.Invoke(ex); };
     }
     internal void Trace(string message) => _diagnostics.Write(message);
+
+    // A model released after inactivity loads while the user speaks instead of at the final rescoring.
+    internal void PrepareForDictation()
+    {
+        if (Enabled && !Loaded) _ = PrepareAsync();
+    }
+
+    // Load failures are reported through LoadFailed; the rescoring tries once more and keeps its text otherwise.
+    private async Task PrepareAsync()
+    {
+        try { await _session.PrepareAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Trace("model prepare-failed error=" + ex.GetType().Name); }
+    }
 
     internal void RequestCancelActivation()
     {
