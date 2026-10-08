@@ -12,6 +12,14 @@ on:
         description: 'Also publish the verified 1.0 Daily upgrade (original TypeWhisper installation)'
         type: boolean
         default: false
+      signing_policy:
+        description: 'Signing policy (test-signing is never published)'
+        type: choice
+        default: none
+        options:
+          - none
+          - test-signing
+          - release-signing
   schedule:
     - cron: '0 4 * * *'
   pull_request:
@@ -19,6 +27,9 @@ on:
       - '.github/workflows/winui-daily-candidate.yml'
       - 'eng/Test-WinUIDailyCandidate*.ps1'
       - 'eng/Test-DailyUpgradePackage*.ps1'
+      - 'eng/Build-WinUIDailyPackages.ps1'
+      - 'eng/signpath/**'
+      - '.github/actions/signpath*/**'
 
 permissions:
   contents: read
@@ -32,14 +43,44 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       value: ${{ steps.version.outputs.value }}
+      signing_policy: ${{ steps.signing.outputs.policy }}
     steps:
       - id: version
         run: echo "value=1.1.0-daily.$(date -u +%Y%m%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      - name: Resolve signing policy
+        id: signing
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_POLICY: ${{ inputs.signing_policy || 'none' }}
+          RELEASE_POLICY: ${{ vars.SIGNPATH_SIGNING_POLICY || 'none' }}
+          PUBLISH_REQUESTED: ${{ inputs.publish_daily || inputs.publish_legacy_daily }}
+        run: |
+          set -euo pipefail
+          policy=none
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then policy="$REQUESTED_POLICY"; fi
+          if [ "$EVENT_NAME" = schedule ]; then policy="$RELEASE_POLICY"; fi
+          case "$policy" in none|test-signing|release-signing) ;; *) echo 'Invalid signing policy'; exit 1;; esac
+          if [ "$policy" = test-signing ] && { [ "$EVENT_NAME" != workflow_dispatch ] || [ "$PUBLISH_REQUESTED" = true ]; }; then
+            echo 'Test-signed artifacts must not be published.'; exit 1
+          fi
+          if [ "$policy" != none ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo 'Signing is restricted to main through the signpath environment.'; exit 1
+          fi
+          if [ "$RELEASE_POLICY" = release-signing ] && [ "$PUBLISH_REQUESTED" = true ] && [ "$policy" != release-signing ]; then
+            echo 'Public releases require production signing once enabled.'; exit 1
+          fi
+          echo "policy=$policy" >> "$GITHUB_OUTPUT"
   candidate:
     needs: version
+    # The signpath environment holds the only token copy and permits only main.
+    # GitHub enforces that branch rule even if a PR changes this workflow.
+    environment: ${{ needs.version.outputs.signing_policy == 'none' && 'unsigned-candidate' || 'signpath' }}
     env:
       CANDIDATE_VERSION: ${{ needs.version.outputs.value }}
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -52,6 +93,12 @@ jobs:
             framework: net10.0-arm64-runtime
     steps:
       - uses: actions/checkout@v7
+      - name: Test signing integration safeguards
+        shell: pwsh
+        run: |
+          node --test eng/signpath/sign.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./eng/signpath/Verify-Signatures.Tests.ps1
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
@@ -77,29 +124,24 @@ jobs:
         run: |
           ./eng/Test-WinUIDailyCandidate.ps1 -PublishDirectory candidate `
             -ExpectedVersion $env:CANDIDATE_VERSION -RuntimeIdentifier '${{ matrix.rid }}'
-      - name: Build side-by-side Daily installer
+      - name: Install Velopack
         shell: pwsh
         run: |
           dotnet tool install vpk --version 0.0.1298 --tool-path tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./tools/vpk.exe pack --packId TypeWhisperDaily --packTitle 'TypeWhisper' `
-            --packVersion $env:CANDIDATE_VERSION --packDir candidate `
-            --mainExe TypeWhisper.exe --channel '${{ matrix.rid }}-winui-daily' `
-            --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
-            --icon src/TypeWhisper.WinUI/Assets/app.ico `
-            --outputDir installer
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Get-ChildItem installer -Filter '*Setup.exe')) { throw 'Daily installer is missing.' }
-      - name: Build original-installation Daily upgrade
-        shell: pwsh
-        run: |
-          ./tools/vpk.exe pack --packId TypeWhisper --packTitle 'TypeWhisper' `
-            --packVersion $env:CANDIDATE_VERSION --packDir candidate `
-            --mainExe TypeWhisper.exe --channel '${{ matrix.rid }}-daily' `
-            --runtime '${{ matrix.rid }}' --framework '${{ matrix.framework }}' `
-            --icon src/TypeWhisper.WinUI/Assets/app.ico --outputDir legacy-installer
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./eng/Test-DailyUpgradePackage.ps1 -ReleaseDirectory legacy-installer -RuntimeIdentifier '${{ matrix.rid }}' -ExpectedVersion $env:CANDIDATE_VERSION
+      - name: Build and sign Daily packages
+        uses: ./.github/actions/signpath
+        env:
+          SIGNPATH_GITHUB_TOKEN: ${{ github.token }}
+        with:
+          policy: ${{ needs.version.outputs.signing_policy }}
+          # Avoid passing credentials to unsigned runs; the environment provides
+          # the trust boundary, not this PR-editable expression.
+          api-token: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && (needs.version.outputs.signing_policy == 'test-signing' || needs.version.outputs.signing_policy == 'release-signing') && secrets.SIGNPATH_API_TOKEN || '' }}
+          certificate-thumbprint: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
+          script: |
+            ./eng/Build-WinUIDailyPackages.ps1 -Version $env:CANDIDATE_VERSION `
+              -RuntimeIdentifier '${{ matrix.rid }}' -Framework '${{ matrix.framework }}'
       - name: Archive candidate and record provenance
         shell: pwsh
         run: |
@@ -107,7 +149,8 @@ jobs:
           $name = "TypeWhisper-$env:CANDIDATE_VERSION-${{ matrix.rid }}-candidate"
           @{ version = $env:CANDIDATE_VERSION; commit = '${{ github.sha }}'; runtime = '${{ matrix.rid }}';
              minimumWindowsBuild = 19041; profile = 'TypeWhisper-WinUI';
-             distribution = 'daily-candidate'; automaticUpdates = $false } |
+             distribution = 'daily-candidate'; automaticUpdates = $false;
+             signingPolicy = '${{ needs.version.outputs.signing_policy }}' } |
             ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
           Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
           Copy-Item installer/* artifacts/candidate/
@@ -125,7 +168,7 @@ jobs:
 
   release:
     needs: [version, candidate]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_daily))
+    if: needs.version.outputs.signing_policy != 'test-signing' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_daily))
     runs-on: ubuntu-latest
     permissions:
       contents: write
