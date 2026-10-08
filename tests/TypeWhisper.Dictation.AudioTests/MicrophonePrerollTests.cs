@@ -96,6 +96,28 @@ public sealed class MicrophonePrerollTests
         Assert.False(state.Observe(0x2B1, 8, true));
     }
 
+    [Fact]
+    public void BoundedPreviewCopiesOnlyTheTailAndLeavesTheFullRecordingIntact()
+    {
+        var input = new Input();
+        using var audio = Create(input);
+        Assert.True(audio.WarmUp());
+        audio.StartRecording(enableRecovery: false);
+        input.Feed(Enumerable.Repeat((short)1000, 1000).ToArray());
+        input.Feed(Enumerable.Repeat((short)2000, 500).ToArray());
+
+        var tail = audio.GetCurrentBuffer(500)!;
+
+        Assert.Equal(500, tail.Length);
+        Assert.All(tail, sample => Assert.Equal(2000f / 32768f, sample));
+        Assert.Equal(1500, audio.GetCurrentBuffer()!.Length);
+        tail[0] = -1; // the snapshot owns its buffer
+        var recording = audio.StopRecording()!;
+        Assert.Equal(1500, recording.Length);
+        Assert.Equal(1000f / 32768f, recording[0]);
+        Assert.Equal(2000f / 32768f, recording[1000]);
+    }
+
     private static AudioRecordingService Create(Input input) =>
         new(new ImmediateAudioTests.ReplayDevice(), input, Timeout.InfiniteTimeSpan) { NormalizationEnabled = false };
 

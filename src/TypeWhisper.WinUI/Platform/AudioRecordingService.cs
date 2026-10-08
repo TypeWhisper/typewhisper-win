@@ -509,12 +509,23 @@ public sealed partial class AudioRecordingService : IStreamingAudioSource, IDisp
     /// <summary>
     /// Returns current buffer.
     /// </summary>
-    public float[]? GetCurrentBuffer()
+    public float[]? GetCurrentBuffer() => GetCurrentBuffer(int.MaxValue);
+
+    /// <summary>Copies only the newest samples for a bounded live preview; the recording remains complete.</summary>
+    public float[]? GetCurrentBuffer(int maximumSamples)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumSamples);
         if (!_isRecording || _sampleBuffer is null) return null;
         // The live preview calls this on the UI thread while the stop clears the buffer on a worker
         // thread, so the buffer is read once under the lock instead of trusting the check above.
-        lock (_bufferLock) { return _sampleBuffer?.ToArray(); }
+        lock (_bufferLock)
+        {
+            if (_sampleBuffer is null) return null;
+            var count = Math.Min(_sampleBuffer.Count, maximumSamples);
+            var samples = new float[count];
+            _sampleBuffer.CopyTo(_sampleBuffer.Count - count, samples, 0, count);
+            return samples;
+        }
     }
 
     /// <summary>

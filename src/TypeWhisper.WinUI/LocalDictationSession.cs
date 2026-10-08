@@ -356,7 +356,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         finally { _gate.Release(); Changed?.Invoke(); }
     }
-    private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples)
+    private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples, CancellationToken cancellation)
     {
         var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
         var language = _languageAtStart == "auto" ? null : _languageAtStart;
@@ -366,7 +366,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             return LanguageHintTranscription.DecodeAsync(engine, samples,
                 () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes), language,
                 _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct, dictionary?.EnabledTerms);
-        }, _operationCancellation.Token);
+        }, cancellation);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }
     internal event Action? Changed;
@@ -914,8 +914,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _ctcAtStart = RescoresWithCtc && CtcVocabulary.Enabled;
                 if (_cloudStream is null && _earlyStopSamples is null && LivePreviewEnabled && SupportsLiveTranscription &&
                     (!UsesRegistryProvider || ActiveRegistryProvider is { SupportsPcm: true, SupportsLocalLivePreview: true } preview && PackageIsLocal(preview.PluginId)))
-                    _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
-                        DecodeAsync,
+                    _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer(LocalLivePreview.MaximumPreviewSamples) : null,
+                        DecodePreviewAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
                         _ => { LivePreviewText = Loc.T("Live preview unavailable · final transcription will continue."); LivePreviewChanged?.Invoke(); AppDiagnostics.Write("dictation.live-preview.failed"); });
                 AppDiagnostics.Write("dictation.startup.complete");
@@ -947,8 +947,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             }
             _effects.End();
             _sounds.PlayStopSound();
-            // Native decoding cannot be interrupted; drain the cancelled preview
-            // before the final decode uses the same recognizer.
+            // Cancel and drain the preview before the final decode uses the same recognizer.
+            // Isolated native engines have a bounded cancellation grace period.
             await _livePreview.StopAsync();
             // Use captured samples for the policy and history, never decoder padding or elapsed stop time.
             _operationCancellation.Token.ThrowIfCancellationRequested();
@@ -1152,9 +1152,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { AppDiagnostics.Write("correction.observe.start-failed", ex); }
     }
-    private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
+    private async Task<string> DecodePreviewAsync(float[] samples, CancellationToken cancellation)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _operationCancellation.Token);
+        return (UsesRegistryProvider ? await DecodeRegistryAsync(samples, linked.Token)
+            : await _transcriptionPlugin.DecodeAsync(samples, false, _taskAtStart == TranscriptionTask.Translate, linked.Token, _languageAtStart)).Text;
+    }
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
-        UsesRegistryProvider ? DecodeRegistryAsync(samples)
+        UsesRegistryProvider ? DecodeRegistryAsync(samples, _operationCancellation.Token)
             : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
     private void StopSilenceMonitoring()
     {
