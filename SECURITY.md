@@ -42,6 +42,8 @@ Issues in these areas are especially relevant.
   connections only, and rejects browser `Origin` headers.
 - The API issues a token, but requests need it only when **Require API token**
   is enabled in Settings; see the [API reference](docs/WINUI-HTTP-API.md).
+- The API accepts requests only from processes running as the same Windows user
+  as TypeWhisper, so other user accounts on a shared machine cannot use it.
 - API keys and plugin secrets are stored with Windows DPAPI, scoped to the
   current Windows user.
 - Exported diagnostics and the JSON support report include app, platform,

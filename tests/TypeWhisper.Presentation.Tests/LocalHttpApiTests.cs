@@ -473,6 +473,91 @@ public sealed class LocalHttpApiTests
     public void WeakTokensAreRejected(string token) => Assert.Throws<ArgumentException>(() =>
         new LocalHttpApi(8978, token, (_, _) => Task.FromResult(LocalApiResponse.Json(200, new { }))));
 
+    // Another user's process is refused on every route, even the public ones and even with a valid token:
+    // the token file is readable only by the owning user, so a token from elsewhere was leaked.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OtherUsersPeersAreRejectedOnEveryRouteBeforeAuthenticationAndBody(bool requireAuthentication)
+    {
+        var backendCalls = 0;
+        var statusCalls = 0;
+        var verifier = new FakePeerVerifier(false);
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref backendCalls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { secret = "private" }));
+        }, requireAuthentication: requireAuthentication, statusHandler: _ =>
+        {
+            Interlocked.Increment(ref statusCalls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { status = "ready" }));
+        }, peerVerifier: verifier);
+        await server.StartAsync();
+        using var client = Client(server, true);
+        foreach (var path in new[] { "v1/status", "docs", "v1/models", "v1/history" })
+        {
+            using var response = await client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.Contains("forbidden", body);
+            Assert.DoesNotContain("private", body);
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("v1/dictation/start", new StringContent("{}"))).StatusCode);
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, server.Port);
+        await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes($"POST /v1/transcribe HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nAuthorization: Bearer {Token}\r\nContent-Length: 999999999\r\n\r\n"));
+        using var reader = new StreamReader(tcp.GetStream());
+        Assert.Contains("403", await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(0, backendCalls);
+        Assert.Equal(0, statusCalls);
+        Assert.Equal(6, verifier.Calls);
+        Assert.All(verifier.Peers, peer => Assert.True(IPAddress.IsLoopback(peer.Address)));
+        Assert.All(verifier.LocalPorts, port => Assert.Equal(server.Port, port));
+    }
+
+    [Fact]
+    public async Task OwnUsersPeersKeepTokenAndPublicRouteBehaviour()
+    {
+        var calls = 0;
+        var verifier = new FakePeerVerifier(true);
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { }));
+        }, peerVerifier: verifier);
+        await server.StartAsync();
+        using var client = Client(server);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/status")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("docs")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("v1/models")).StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/models")).StatusCode);
+        client.DefaultRequestHeaders.Add("Origin", "http://localhost:8978");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/models")).StatusCode);
+        Assert.Equal(1, calls);
+        // The browser check runs first, so the verifier never sees the Origin request.
+        Assert.Equal(4, verifier.Calls);
+        Assert.All(verifier.LocalPorts, port => Assert.Equal(server.Port, port));
+    }
+
+    private sealed class FakePeerVerifier(bool ownUser) : ILocalPeerVerifier
+    {
+        public int Calls;
+        public List<IPEndPoint> Peers { get; } = [];
+        public List<int> LocalPorts { get; } = [];
+
+        public bool IsOwnUser(IPEndPoint peer, int localPort)
+        {
+            lock (Peers)
+            {
+                Calls++;
+                Peers.Add(peer);
+                LocalPorts.Add(localPort);
+            }
+            return ownUser;
+        }
+    }
+
     private static int FreePort()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);

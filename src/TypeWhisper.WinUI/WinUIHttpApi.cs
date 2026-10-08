@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -14,6 +15,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     private const string ApiVersion = "1.2";
     private sealed record Preferences(bool Enabled = false, int Port = 8978, bool RequireAuthentication = false);
     private readonly WindowsPluginSecretStore _secrets = new(WinUIProfile.DataPath("HttpApi"));
+    private readonly WindowsLocalPeerVerifier _peerVerifier = new();
     private readonly SemaphoreSlim _changes = new(1, 1);
     private LocalHttpApi? _host;
     private string? _token;
@@ -69,7 +71,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             }
             if (_closed) return;
             _host = new LocalHttpApi(port, _token, DispatchAsync, requireAuthentication: requireAuthentication, statusHandler: token => DispatchAsync(new LocalApiRequest("GET", "/v1/status", [], null, new Dictionary<string, string?>()), token),
-                processingTimeout: TranscriptionTimeout);
+                processingTimeout: TranscriptionTimeout, peerVerifier: _peerVerifier);
             await _host.StartAsync();
             var discovery = new FileInfo(DiscoveryPath + ".tmp");
             using (discovery.Create()) { }

@@ -31,11 +31,23 @@ public sealed record LocalApiResponse(int StatusCode, byte[] Body, string Conten
         new(statusCode, JsonSerializer.SerializeToUtf8Bytes(value));
 }
 
+/// <summary>Identifies the process behind a loopback connection. Loopback alone does not prove the caller is the
+/// signed-in user: other Windows sessions on the same machine, mirrored-networking WSL2 and host-network containers
+/// reach 127.0.0.1 as well, so the host asks the platform who owns the peer socket.</summary>
+public interface ILocalPeerVerifier
+{
+    /// <summary>Returns whether the process that owns the socket at <paramref name="peer"/>, connected to this
+    /// host's listener on <paramref name="localPort"/>, runs under the same user as the app. Must return
+    /// <see langword="false"/> whenever the owner cannot be determined.</summary>
+    bool IsOwnUser(IPEndPoint peer, int localPort);
+}
+
 /// <summary>A loopback-only transport. Backend operations must honor their cancellation token.</summary>
 public sealed class LocalHttpApi : IAsyncDisposable
 {
     private readonly Func<LocalApiRequest, CancellationToken, Task<LocalApiResponse>> _handler;
     private readonly Func<CancellationToken, Task<LocalApiResponse>>? _statusHandler;
+    private readonly ILocalPeerVerifier? _peerVerifier;
     private readonly byte[] _tokenHash;
     private readonly bool _requireAuthentication;
     private readonly int _maxBodyBytes;
@@ -51,12 +63,14 @@ public sealed class LocalHttpApi : IAsyncDisposable
 
     /// <summary>Creates a host with configurable token authentication and bounded request admission.
     /// <c>processingTimeout</c> may return a longer limit for the backend work of a method and path; the body
-    /// must still arrive within <c>requestTimeout</c>, and the longer limit starts once it has.</summary>
+    /// must still arrive within <c>requestTimeout</c>, and the longer limit starts once it has.
+    /// <c>peerVerifier</c> limits every route, including the public status and documentation, to the signed-in
+    /// user's own processes; without one, any loopback peer is admitted as before.</summary>
     public LocalHttpApi(int port, string token,
         Func<LocalApiRequest, CancellationToken, Task<LocalApiResponse>> handler,
         int maxBodyBytes = 32 * 1024 * 1024, int maxConcurrency = 4, TimeSpan? requestTimeout = null,
         bool requireAuthentication = true, Func<CancellationToken, Task<LocalApiResponse>>? statusHandler = null,
-        Func<string, string, TimeSpan?>? processingTimeout = null)
+        Func<string, string, TimeSpan?>? processingTimeout = null, ILocalPeerVerifier? peerVerifier = null)
     {
         if (port is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(port));
         if (string.IsNullOrWhiteSpace(token) || token.Length < 32 || token.Any(char.IsWhiteSpace))
@@ -68,6 +82,7 @@ public sealed class LocalHttpApi : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(requestTimeout));
         _statusHandler = statusHandler;
         _processingTimeout = processingTimeout;
+        _peerVerifier = peerVerifier;
         Port = port;
         _tokenHash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
         _requireAuthentication = requireAuthentication;
@@ -162,6 +177,11 @@ public sealed class LocalHttpApi : IAsyncDisposable
             var publicDocs = request.HttpMethod == "GET" && request.Url?.AbsolutePath is "/docs" or "/docs/";
             if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) || request.Headers["Origin"] is not null)
                 response = Error(403, "Request origin is not allowed.");
+            // The peer check guards the token-free mode and backs up the token: the discovery file is readable
+            // only by the owning user, so a token presented by another user's process was leaked, not granted.
+            // It also covers the public routes, which would otherwise tell other users which model is loaded.
+            else if (_peerVerifier is not null && !_peerVerifier.IsOwnUser(request.RemoteEndPoint, Port))
+                response = Error(403, "Only processes of the signed-in user may use this API.");
             else if (_requireAuthentication && !publicStatus && !publicDocs && !Authenticated(request))
                 response = Error(401, "Authentication required.");
             else if (!admitted)

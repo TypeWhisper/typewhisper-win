@@ -16,7 +16,10 @@
     <PackageReference Include="Velopack" />
     <Using Include="Xunit" />
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/LicenseService.cs" Link="LicenseService.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/WindowsLocalPeerVerifier.cs" Link="WindowsLocalPeerVerifier.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/NativeMethods.LocalPeer.cs" Link="NativeMethods.LocalPeer.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AppDistribution.cs" Link="AppDistribution.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AppReleaseGithubSource.cs" Link="AppReleaseGithubSource.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/WindowsClipboardTransaction.cs" Link="WindowsClipboardTransaction.cs" />
