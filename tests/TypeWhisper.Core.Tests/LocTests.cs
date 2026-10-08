@@ -117,15 +117,7 @@ public sealed partial class LocTests : IDisposable
         .Select(match => Regex.Unescape(match.Groups[1].Value))
         .Distinct();
 
-    private static IEnumerable<string> SourceFiles()
-    {
-        var root = AppContext.BaseDirectory;
-        while (!File.Exists(Path.Combine(root, "TypeWhisper.slnx")) && !Directory.Exists(Path.Combine(root, ".git")) && !File.Exists(Path.Combine(root, ".git")))
-            root = Path.GetDirectoryName(root) ?? throw new DirectoryNotFoundException("The repository root was not found.");
-        var separator = Path.DirectorySeparatorChar;
-        return Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
-            .Where(file => !file.Contains($"{separator}obj{separator}") && !file.Contains($"{separator}bin{separator}"));
-    }
+    private static IEnumerable<string> SourceFiles() => Repository.SourceFiles("src", "*.cs");
 
     [GeneratedRegex("""Loc\.(?:T|Mark)\(\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
     private static partial Regex Call();
