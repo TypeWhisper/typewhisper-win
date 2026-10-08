@@ -3,7 +3,10 @@
        version from here. A project that has to stay on another version sets VersionOverride on
        its own PackageReference and says why (see TypeWhisper.Plugin.GemmaLocal for LLamaSharp). -->
   <PropertyGroup>
-    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- A nested worktree with its own Directory.Build.props is a separate checkout. Do not
+         enable central versions there when its branch does not contain this file yet. -->
+    <_TypeWhisperNearestBuildProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildProjectDirectory)'))</_TypeWhisperNearestBuildProps>
+    <ManagePackageVersionsCentrally Condition="'$(_TypeWhisperNearestBuildProps)' == '$(MSBuildThisFileDirectory)Directory.Build.props'">true</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
   <ItemGroup Label="Application">
