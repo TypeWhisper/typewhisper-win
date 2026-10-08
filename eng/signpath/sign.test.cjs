@@ -35,7 +35,10 @@ for (const failure of ['upload', 'sign', 'verify', null]) {
         : args[0].includes(`${path.sep}upload${path.sep}`) ? 'upload' : 'sign';
       calls.push(stage);
       assert.equal(fs.readFileSync(original, 'utf8'), 'original');
-      if (stage !== 'verify') assert.equal(options.env.INPUT_SCRIPT, undefined);
+      if (stage !== 'verify') {
+        assert.equal(options.env.INPUT_SCRIPT, undefined);
+        assert.equal(fs.readFileSync(options.env.GITHUB_OUTPUT, 'utf8'), '');
+      }
       if (stage === failure) return { status: 1 };
       if (stage === 'upload') {
         assert.equal(options.env.INPUT_ARCHIVE, 'true');

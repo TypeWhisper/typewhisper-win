@@ -10,6 +10,8 @@ function runNodeAction(entry, inputs, outputFile, env) {
   const childEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith('INPUT_')));
   for (const [name, value] of Object.entries(inputs)) childEnv[`INPUT_${name.toUpperCase()}`] = String(value);
   childEnv.GITHUB_OUTPUT = outputFile;
+  // The Actions toolkit requires the runner-provided output file to exist.
+  fs.writeFileSync(outputFile, '', { flag: 'wx' });
   const result = spawnSync(process.execPath, [entry], { env: childEnv, stdio: 'inherit' });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Signing action failed: ${path.basename(path.dirname(entry))} (exit ${result.status}).`);
