@@ -188,13 +188,15 @@ public class CommandTests
                 payload.RootElement.EnumerateObject().Select(property => property.Name));
             Assert.Equal("0.1", payload.RootElement.GetProperty("audio_ducking_level").GetRawText());
             await Reply(context, 200, """
-                {"input_devices":[{"id":"sonar","name":"Sonar","is_system_default":true}],"input_priority":[{"id":"quadcast","name":"QuadCast"}],
+                {"input_devices":[{"id":"sonar","name":"Sonar","is_system_default":true},{"id":"new-cloud-id","name":"Cloud"}],
+                 "input_priority":[{"id":"quadcast","name":"QuadCast"},{"id":"old-cloud-id","name":"Cloud"}],
                  "active_input":null,"audio_ducking_enabled":true,"audio_ducking_level":0.1,"pause_media_during_recording":false,"sound_feedback_enabled":true}
                 """);
             var result = await run;
             Assert.Equal(0, result.Exit);
             Assert.Contains("Active input: none", result.Output);
             Assert.Contains("1. QuadCast (not connected)", result.Output);
+            Assert.Contains("2. Cloud" + Environment.NewLine, result.Output);
             Assert.Contains("Sonar (Windows default)", result.Output);
             Assert.Contains("Lower audio while recording: on, 10%", result.Output);
         }

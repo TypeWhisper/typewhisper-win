@@ -455,8 +455,9 @@ public static class CliAudioSettings
         text.AppendLine(priority.Length == 0 ? "Microphone priority: Windows default" : "Microphone priority:");
         for (var i = 0; i < priority.Length; i++)
         {
-            var id = Text(priority[i], "id");
-            var available = connected.Any(device => string.Equals(Text(device, "id"), id, StringComparison.OrdinalIgnoreCase));
+            // The app matches a saved microphone by ID, then by name, since Windows can assign a new endpoint ID.
+            var available = connected.Any(device => string.Equals(Text(device, "id"), Text(priority[i], "id"), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Text(device, "name"), Text(priority[i], "name"), StringComparison.OrdinalIgnoreCase));
             text.AppendLine($"  {i + 1}. {Name(priority[i])}{(available ? "" : " (not connected)")}");
         }
         text.AppendLine("Input devices:");
