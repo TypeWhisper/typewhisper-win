@@ -11,14 +11,18 @@ original signatures and the shared CLI runtime hashes remain unchanged.
 
 ## Test the integration
 
-1. Confirm the SignPath CI user's notification address and store that user's API
+1. Install the official [SignPath GitHub App](https://github.com/apps/signpath)
+   for `TypeWhisper/typewhisper-win`. Select only this repository and review the
+   app's repository and organization administration permissions before installing.
+   The current connector rejects requests when the app is missing or suspended.
+2. Confirm the SignPath CI user's notification address and store that user's API
    token in the repository Actions secret `SIGNPATH_API_TOKEN`.
-2. Run **Candidate** manually with `signing_policy=test-signing` and both
+3. Run **Candidate** manually with `signing_policy=test-signing` and both
    publication options disabled. A repository branch can be used for this test.
-3. Check the SignPath request links in each packaging job's summary and the
+4. Check the SignPath request links in each packaging job's summary and the
    signature verification results for the candidate, setup, portable archive
    and update package. Both architectures must pass.
-4. Ask SignPath to review the setup and issue the production certificate.
+5. Ask SignPath to review the setup and issue the production certificate.
 
 The test certificate thumbprint is pinned in `eng/signpath/run.cjs`. The test
 certificate is not installed in the runner's trust store. Test signatures must
@@ -57,9 +61,8 @@ verified before replacing the originals. Velopack then calculates its feeds and
 package hashes from the signed bytes; release SHA-256 files are generated last.
 
 The GitHub connector verifies the originating workflow and GitHub-hosted runners.
-SignPath may additionally require installation of its GitHub App for repository
-audit-log policies. Any production approval/origin requirements remain controlled
-by SignPath's release signing policy.
+The GitHub App also supports repository audit-log policies. Any production
+approval/origin requirements remain controlled by SignPath's release signing policy.
 
 Code signing identifies the publisher and supports SmartScreen reputation. It
 does not guarantee that a newly published file immediately avoids SmartScreen.
