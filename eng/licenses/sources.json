@@ -1,0 +1,43 @@
+[
+  {
+    "Repository": "HavenDV/H.NotifyIcon",
+    "File": "H.NotifyIcon.txt",
+    "Ref": "bcaaabecf16566dd910a3798fe874014e251b28d",
+    "Path": "LICENSE.md"
+  },
+  {
+    "Repository": "naudio/NAudio",
+    "File": "NAudio.txt",
+    "Ref": "v2.2.1",
+    "Path": "license.txt"
+  },
+  {
+    "Repository": "NuGet/NuGet.Client",
+    "File": "NuGet.txt",
+    "Ref": "0da03caba83448ee887f0f1846dd05e1f1705d45",
+    "Path": "LICENSE.txt"
+  },
+  {
+    "Repository": "velopack/velopack",
+    "File": "Velopack.txt",
+    "Ref": "ed8600eee530a38d2669444b03eb240e56bc5aa3",
+    "Path": "LICENSE"
+  },
+  {
+    "Repository": "dotMorten/WinUIEx",
+    "File": "WinUIEx.txt",
+    "Ref": "72f2975d2a237c0d7ad1113fe617d5894e66feb6",
+    "Path": "LICENSE"
+  },
+  {
+    "File": "Win2D.txt",
+    "Note": "Upstream source license; the NuGet binary license URL is also preserved. The package build hash is not a public GitHub commit.",
+    "Ref": "25680382dd2136779e10ea6084f0c5ba437ae288",
+    "Repository": "microsoft/Win2D",
+    "Path": "LICENSE.txt"
+  },
+  {
+    "File": "DotNet.txt",
+    "Source": "NuGet System.Drawing.Common 10.0.0, LICENSE.TXT"
+  }
+]

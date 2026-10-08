@@ -70,6 +70,9 @@ jobs:
       - name: Verify headless suite selection and failure reporting
         shell: pwsh
         run: ./eng/Test-WinUIHeadless.Tests.ps1
+      - name: Verify dependency notice packaging
+        shell: pwsh
+        run: ./eng/Write-RuntimeNotices.Tests.ps1
       - name: Verify Store package version rules
         shell: pwsh
         run: |

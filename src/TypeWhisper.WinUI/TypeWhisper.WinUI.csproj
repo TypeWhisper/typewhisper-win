@@ -79,6 +79,9 @@
     </ItemGroup>
     <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
+  <Target Name="PublishDependencyNotices" AfterTargets="Publish">
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../eng/Write-RuntimeNotices.ps1&quot; -AssetsPath &quot;$(ProjectAssetsFile)&quot; -OutputDirectory &quot;$(PublishDir)/.&quot; -AdditionalPackages &quot;@(PackageDownload->'%(Identity)@%(Version)', ';')&quot;" />
+  </Target>
   <Target Name="WriteDevelopmentStartupReceipt" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
     <PropertyGroup>
       <_StartupSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))</_StartupSourceRoot>
