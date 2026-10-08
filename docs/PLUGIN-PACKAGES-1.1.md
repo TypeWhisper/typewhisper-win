@@ -22,7 +22,8 @@ test projects alongside the SDK/host and presentation checks. Tests do not requi
 Computer Use, a desktop, downloaded models, or live API credentials.
 
 The Plugins workflow builds only packages with changes under their own directory
-on pull requests and pushes to `main`.
+on pull requests and pushes to `main`. A changed source under `plugins/shared/`
+counts for every package whose project links it (see `plugins/shared/README.md`).
 Shared SDK, host and workflow edits do not expand that build matrix. For a full
 cross-plugin compatibility sweep, start Plugins manually with **Run workflow**.
 Manifest validation and the separate headless test suites still run normally.
