@@ -8,7 +8,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginHost;
 
 /// <summary>The worker process ended or stopped answering; the request may be retried in a new worker.</summary>
-public sealed class TranscriptionWorkerCrashedException(string message, int? exitCode, string diagnostics, Exception? inner = null)
+public class TranscriptionWorkerCrashedException(string message, int? exitCode, string diagnostics, Exception? inner = null)
     : Exception(message, inner)
 {
     /// <summary>The worker's exit code, when it could be observed.</summary>
@@ -16,6 +16,13 @@ public sealed class TranscriptionWorkerCrashedException(string message, int? exi
     /// <summary>The last lines the worker and its native libraries wrote to stdout and stderr.</summary>
     public string Diagnostics { get; } = diagnostics;
 }
+
+/// <summary>
+/// The worker stayed silent for a whole inactivity window during a request and was ended by the host.
+/// It is a crash for the restart policy; the message tells the user that nothing actually crashed.
+/// </summary>
+public sealed class TranscriptionWorkerUnresponsiveException(string message, string diagnostics)
+    : TranscriptionWorkerCrashedException(message, null, diagnostics);
 
 /// <summary>One running worker. Requests are answered in order; the owner sends one at a time.</summary>
 internal interface ITranscriptionWorkerConnection : IAsyncDisposable
@@ -31,8 +38,21 @@ internal interface ITranscriptionWorkerConnection : IAsyncDisposable
 internal sealed record TranscriptionWorkerLaunch(string ExecutablePath, IReadOnlyList<string> PrefixArguments, string PackageDirectory,
     string DataDirectory, string AssetDirectory, string SelectionId, Version HostVersion)
 {
+    // A beat is one tiny frame, so a short interval costs nothing; the window is what the user waits
+    // when a worker froze. It is silence, not work, that is measured: a slow decode or a model load
+    // that reads gigabytes keeps beating, so neither needs a longer window. 90 s is 18 missed beats,
+    // enough to ride out a long garbage collection or a starved thread pool without ending a worker
+    // that is only busy.
+    internal static readonly TimeSpan DefaultHeartbeatInterval = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan DefaultRequestInactivityTimeout = TimeSpan.FromSeconds(90);
+
     internal TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(60);
     internal TimeSpan CancellationGrace { get; init; } = TimeSpan.FromSeconds(3);
+    /// <summary>How often the worker reports that a request is still running.</summary>
+    internal TimeSpan HeartbeatInterval { get; init; } = DefaultHeartbeatInterval;
+    /// <summary>How long a worker may stay silent during a request before it is ended; <see cref="Timeout.InfiniteTimeSpan"/> disables the watchdog.</summary>
+    internal TimeSpan RequestInactivityTimeout { get; init; } = DefaultRequestInactivityTimeout;
+    internal bool WatchesInactivity => RequestInactivityTimeout != Timeout.InfiniteTimeSpan;
 }
 
 internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnection
@@ -44,12 +64,13 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
     private readonly TranscriptionWorkerLaunch _launch;
     private readonly Action<PluginLogLevel, string> _log;
     private readonly ConcurrentQueue<string> _output = new();
-    private readonly ConcurrentDictionary<long, TaskCompletionSource<TranscriptionWorkerMessage>> _pending = new();
+    private readonly ConcurrentDictionary<long, PendingRequest> _pending = new();
     private readonly SemaphoreSlim _write = new(1, 1);
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task _reader = Task.CompletedTask;
     private long _nextId;
     private int _disposed;
+    private bool _heartbeats;
 
     public TranscriptionAccelerationPreference Acceleration { get; }
     public int ProcessId { get; }
@@ -67,8 +88,12 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
     internal static async Task<TranscriptionWorkerProcess> StartAsync(TranscriptionWorkerLaunch launch,
         TranscriptionAccelerationPreference acceleration, Action<PluginLogLevel, string> log, CancellationToken ct)
     {
+        // One late beat must not end a worker; the window has to hold several.
+        if (launch.WatchesInactivity && launch.RequestInactivityTimeout < launch.HeartbeatInterval * 2)
+            throw new ArgumentException("The inactivity window must be at least twice the heartbeat interval.", nameof(launch));
         var arguments = new TranscriptionWorkerArguments("TypeWhisper.Transcription." + Guid.NewGuid().ToString("N"), Environment.ProcessId,
-            launch.PackageDirectory, launch.DataDirectory, launch.AssetDirectory, launch.SelectionId, acceleration, launch.HostVersion);
+            launch.PackageDirectory, launch.DataDirectory, launch.AssetDirectory, launch.SelectionId, acceleration, launch.HostVersion,
+            launch.WatchesInactivity ? launch.HeartbeatInterval : null);
         var pipe = new NamedPipeServerStream(arguments.PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         var info = new ProcessStartInfo(launch.ExecutablePath)
@@ -132,6 +157,8 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
             // Activation errors are the plugin's own and repeat on every start; they are not crashes.
             if (frame.Message.Error is { } error) throw TranscriptionWorkerProtocol.ToException(error);
             State = frame.Message.State;
+            // A worker that announces no beat (an older build) is never ended for silence.
+            _heartbeats = frame.Message.HeartbeatInterval is not null;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -148,15 +175,15 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
     {
         ct.ThrowIfCancellationRequested();
         var id = Interlocked.Increment(ref _nextId);
-        var answer = new TaskCompletionSource<TranscriptionWorkerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pending[id] = answer;
+        var pending = new PendingRequest();
+        _pending[id] = pending;
         try
         {
             if (_ended.Task.IsCompleted) throw await CrashAsync("The local transcription engine stopped unexpectedly.").ConfigureAwait(false);
             try { await WriteAsync(request with { Type = TranscriptionWorkerMessageTypes.Request, Id = id }, payload).ConfigureAwait(false); }
             catch (Exception ex) when (ex is IOException or ObjectDisposedException)
             { throw await CrashAsync("The local transcription engine stopped unexpectedly.", ex).ConfigureAwait(false); }
-            var response = await WaitAsync(answer.Task, id, ct).ConfigureAwait(false);
+            var response = await WaitAsync(pending, id, request.Command, ct).ConfigureAwait(false);
             if (response.State is { } state) State = state;
             return response;
         }
@@ -165,9 +192,10 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
 
     // Native decoding may not stop at once. After a cancellation the worker gets a short grace period
     // to finish; one that does not answer is ended, so cancelling never waits for a long decode.
-    private async Task<TranscriptionWorkerMessage> WaitAsync(Task<TranscriptionWorkerMessage> answer, long id, CancellationToken ct)
+    private async Task<TranscriptionWorkerMessage> WaitAsync(PendingRequest pending, long id, string? command, CancellationToken ct)
     {
-        try { return await answer.WaitAsync(ct).ConfigureAwait(false); }
+        var answer = pending.Answer.Task;
+        try { return await WatchAsync(pending, id, command, ct).ConfigureAwait(false); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested && !answer.IsCompleted)
         {
             try { await WriteAsync(new() { Type = TranscriptionWorkerMessageTypes.Cancel, Id = id }, default).ConfigureAwait(false); }
@@ -180,6 +208,27 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
             }
             throw new OperationCanceledException(ct);
         }
+    }
+
+    // A request may take as long as it needs while the worker keeps beating; one that falls silent for
+    // the whole window is ended, because the caller otherwise waits on a frozen worker until it gives up.
+    private async Task<TranscriptionWorkerMessage> WatchAsync(PendingRequest pending, long id, string? command, CancellationToken ct)
+    {
+        var answer = pending.Answer.Task;
+        if (!_heartbeats || !_launch.WatchesInactivity) return await answer.WaitAsync(ct).ConfigureAwait(false);
+        var window = _launch.RequestInactivityTimeout;
+        for (var remaining = window - pending.Silence; remaining > TimeSpan.Zero; remaining = window - pending.Silence)
+        {
+            try { return await answer.WaitAsync(remaining, ct).ConfigureAwait(false); }
+            catch (TimeoutException) { }
+        }
+        // An answer that lands on the window's last tick is still an answer.
+        if (answer.IsCompleted) return await answer.ConfigureAwait(false);
+        _log(PluginLogLevel.Warning, $"The transcription worker did not answer the {command} request for {window.TotalSeconds:0} s and was ended.");
+        // The reader must not report the end as a crash of this request; the exit code would be the host's own.
+        _pending.TryRemove(id, out _);
+        Kill();
+        throw new TranscriptionWorkerUnresponsiveException("The local transcription engine stopped answering and was ended.", Diagnostics);
     }
 
     private async Task WriteAsync(TranscriptionWorkerMessage message, ReadOnlyMemory<byte> payload)
@@ -199,16 +248,20 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
                 var message = frame.Message;
                 if (message.Type == TranscriptionWorkerMessageTypes.Log && message.LogMessage is { } text)
                     _log(message.LogLevel ?? PluginLogLevel.Info, text);
-                else if (message.Type == TranscriptionWorkerMessageTypes.Response && _pending.TryGetValue(message.Id, out var answer))
-                    answer.TrySetResult(message);
+                else if (message.Type == TranscriptionWorkerMessageTypes.Response && _pending.TryGetValue(message.Id, out var pending))
+                    pending.Answer.TrySetResult(message);
+                else if (message.Type == TranscriptionWorkerMessageTypes.Heartbeat && _pending.TryGetValue(message.Id, out pending))
+                    pending.Touch();
             }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or ObjectDisposedException) { failure = ex; }
         _ended.TrySetResult();
         if (_pending.IsEmpty) return;
         var crash = await CrashAsync("The local transcription engine stopped unexpectedly.", failure).ConfigureAwait(false);
-        foreach (var answer in _pending.Values) answer.TrySetException(crash);
+        foreach (var pending in _pending.Values) pending.Answer.TrySetException(crash);
     }
+
+    private string Diagnostics => string.Join(Environment.NewLine, _output);
 
     private async Task<TranscriptionWorkerCrashedException> CrashAsync(string message, Exception? inner = null)
     {
@@ -220,7 +273,7 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException) { }
         var code = exitCode is { } value ? $" (exit code 0x{value:X8})" : "";
-        return new(message + code, exitCode, string.Join(Environment.NewLine, _output), inner);
+        return new(message + code, exitCode, Diagnostics, inner);
     }
 
     private bool HasExited()
@@ -257,6 +310,15 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
         _job?.Dispose();
         _process.Dispose();
         _write.Dispose();
+    }
+
+    // The answer and the time of the last frame the worker sent for this request.
+    private sealed class PendingRequest
+    {
+        private long _lastFrame = Environment.TickCount64;
+        internal TaskCompletionSource<TranscriptionWorkerMessage> Answer { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TimeSpan Silence => TimeSpan.FromMilliseconds(Environment.TickCount64 - Volatile.Read(ref _lastFrame));
+        internal void Touch() => Volatile.Write(ref _lastFrame, Environment.TickCount64);
     }
 }
 

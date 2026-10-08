@@ -42,6 +42,18 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     private static TranscriptionIsolation Isolation() =>
         new(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5));
 
+    // Short enough for tests, long enough that a loaded machine does not miss ten beats in a row.
+    private static readonly TimeSpan InactivityWindow = TimeSpan.FromSeconds(2);
+
+    private IsolatedTranscriptionEngine WatchedEngine()
+    {
+        var isolation = new TranscriptionIsolation(WorkerPath, [TranscriptionWorkerServer.Argument], new HashSet<string> { PluginId }, new Version(1, 1, 5))
+            { HeartbeatInterval = TimeSpan.FromMilliseconds(200), RequestInactivityTimeout = InactivityWindow };
+        var engine = isolation.TryIsolate(_inner, PackageDirectory, _host)!;
+        engine.Notice += message => { lock (_notices) _notices.Add(message); };
+        return engine;
+    }
+
     private static void WritePackage(string folder, Type type)
     {
         Directory.CreateDirectory(folder);
@@ -176,6 +188,58 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.NotNull(await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
         Assert.Empty(_notices);
         Assert.DoesNotContain(_logs, line => line.Contains("worker crashed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AWorkerThatStopsBeatingIsEndedAfterTheInactivityWindowAndTheRequestRetried()
+    {
+        await using var engine = WatchedEngine();
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var frozen = Process.GetProcessById(engine.WorkerProcessId!.Value);
+        var timer = Stopwatch.StartNew();
+        var result = await engine.TranscribePcmAsync(new float[] { 0 }, "freeze-once", false, default);
+        Assert.True(timer.Elapsed >= InactivityWindow - TimeSpan.FromMilliseconds(50), "The worker was ended before the window had passed.");
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(20), "Ending the frozen worker took too long.");
+        Assert.Equal(engine.WorkerProcessId.ToString(), Fields(result)["pid"]);
+        Assert.NotEqual(frozen.Id, engine.WorkerProcessId);
+        await frozen.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Contains(_logs, line => line.Contains("did not answer the transcribe request", StringComparison.Ordinal));
+        Assert.Contains(_logs, line => line.Contains("worker stopped answering (1 in a row", StringComparison.Ordinal));
+        Assert.DoesNotContain(_logs, line => line.Contains("worker crashed", StringComparison.Ordinal));
+        Assert.False(engine.UsesCpuFallback);
+        Assert.Empty(_notices);
+    }
+
+    [Fact]
+    public async Task ASlowRequestThatKeepsBeatingIsNotEnded()
+    {
+        await using var engine = WatchedEngine();
+        await engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var worker = engine.WorkerProcessId;
+        Assert.True(WorkerProbePlugin.SlowDecode > InactivityWindow, "The slow decode must outlast the window to prove anything.");
+        var result = await engine.TranscribePcmAsync(new float[] { 0 }, "slow", false, default);
+        Assert.Equal(worker.ToString(), Fields(result)["pid"]);
+        Assert.DoesNotContain(_logs, line => line.Contains("did not answer", StringComparison.Ordinal) || line.Contains("stopped answering", StringComparison.Ordinal));
+        Assert.Empty(_notices);
+    }
+
+    [Fact]
+    public async Task DisposingDuringAHungRequestEndsTheWorkerWithinTheCancellationGrace()
+    {
+        await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var worker = Process.GetProcessById(_engine.WorkerProcessId!.Value);
+        // The request ignores cancellation and keeps beating, so only the stop can end it.
+        var hung = _engine.TranscribePcmAsync(new float[] { 0 }, "hang-hard", false, default);
+        await Task.Delay(300);
+        var timer = Stopwatch.StartNew();
+        await _engine.DisposeAsync();
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), "Disposing waited behind the hung request.");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => hung);
+        Assert.Contains("was stopped", error.Message);
+        await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(_engine.WorkerProcessId);
+        Assert.DoesNotContain(_logs, line => line.Contains("worker crashed", StringComparison.Ordinal) || line.Contains("stopped answering", StringComparison.Ordinal));
+        Assert.Empty(_notices);
     }
 
     [Fact]

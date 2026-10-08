@@ -58,11 +58,12 @@ public static class TranscriptionWorkerServer
             }).ConfigureAwait(false);
             return ExitEngineUnavailable;
         }
-        var session = new Session(engine, connection);
+        var session = new Session(engine, connection, options.HeartbeatInterval);
+        // Announcing the beat lets the host arm its inactivity watchdog only for a worker that will beat.
         await connection.SendAsync(new()
         {
             Type = TranscriptionWorkerMessageTypes.Hello, ProtocolVersion = TranscriptionWorkerProtocol.Version,
-            ProcessId = Environment.ProcessId, State = session.State()
+            ProcessId = Environment.ProcessId, State = session.State(), HeartbeatInterval = options.HeartbeatInterval
         }).ConfigureAwait(false);
         return await session.RunAsync().ConfigureAwait(false);
     }
@@ -119,7 +120,7 @@ public static class TranscriptionWorkerServer
         });
     }
 
-    private sealed class Session(IPcmTranscriptionEnginePlugin engine, Connection connection)
+    private sealed class Session(IPcmTranscriptionEnginePlugin engine, Connection connection, TimeSpan? heartbeatInterval)
     {
         private readonly Channel<(TranscriptionWorkerMessage Message, byte[] Payload)> _requests =
             Channel.CreateUnbounded<(TranscriptionWorkerMessage, byte[])>(new() { SingleReader = true, SingleWriter = true });
@@ -151,9 +152,13 @@ public static class TranscriptionWorkerServer
                 }
                 TranscriptionWorkerResult? result = null;
                 TranscriptionWorkerError? error = null;
+                using var beating = new CancellationTokenSource();
+                var heartbeat = HeartbeatAsync(message.Id, beating.Token);
                 try { result = await ExecuteAsync(message, payload, cancellation.Token).ConfigureAwait(false); }
                 catch (Exception ex) when (ex is not OutOfMemoryException) { error = TranscriptionWorkerProtocol.ToError(ex); }
-                finally { lock (_sync) { _current = 0; _currentCancellation = null; } }
+                finally { lock (_sync) { _current = 0; _currentCancellation = null; } beating.Cancel(); }
+                // The response is the last frame for this id.
+                await heartbeat.ConfigureAwait(false);
                 try { await connection.SendAsync(Response(message.Id, error, result)).ConfigureAwait(false); }
                 catch (InvalidDataException ex) { await connection.SendAsync(Response(message.Id, TranscriptionWorkerProtocol.ToError(ex), null)).ConfigureAwait(false); }
             }
@@ -165,6 +170,24 @@ public static class TranscriptionWorkerServer
         {
             Type = TranscriptionWorkerMessageTypes.Response, Id = id, Error = error, Result = result, State = State()
         };
+
+        // A hung native call keeps this process alive, so the host cannot tell a long decode from a worker that
+        // no longer does anything. The beat says that the runtime still schedules work; it runs on the thread pool
+        // next to the engine call, so a stall inside that call is not visible here, only a frozen worker is.
+        private async Task HeartbeatAsync(long id, CancellationToken ct)
+        {
+            if (heartbeatInterval is not { } interval) return;
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(interval, ct).ConfigureAwait(false);
+                    await connection.SendAsync(new() { Type = TranscriptionWorkerMessageTypes.Heartbeat, Id = id }).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or ObjectDisposedException) { }
+        }
 
         // Reads on its own so a cancellation can reach a request that is still decoding.
         private async Task ReadAsync()
@@ -237,15 +260,24 @@ public static class TranscriptionWorkerServer
     }
 }
 
+// The heartbeat is optional on both sides: a worker without the argument never beats, and a host that
+// receives no beats never arms its watchdog, so either side may be older than the other.
 internal sealed record TranscriptionWorkerArguments(string PipeName, int ParentProcessId, string PackageDirectory,
-    string DataDirectory, string AssetDirectory, string SelectionId, TranscriptionAccelerationPreference Acceleration, Version HostVersion)
+    string DataDirectory, string AssetDirectory, string SelectionId, TranscriptionAccelerationPreference Acceleration, Version HostVersion,
+    TimeSpan? HeartbeatInterval = null)
 {
-    internal IEnumerable<string> ToArguments() =>
-    [
-        "--pipe", PipeName, "--parent-pid", ParentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        "--package", PackageDirectory, "--data", DataDirectory, "--assets", AssetDirectory, "--selection", SelectionId,
-        "--acceleration", Acceleration.ToString(), "--host-version", HostVersion.ToString()
-    ];
+    internal IEnumerable<string> ToArguments()
+    {
+        string[] arguments =
+        [
+            "--pipe", PipeName, "--parent-pid", ParentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--package", PackageDirectory, "--data", DataDirectory, "--assets", AssetDirectory, "--selection", SelectionId,
+            "--acceleration", Acceleration.ToString(), "--host-version", HostVersion.ToString()
+        ];
+        return HeartbeatInterval is { } interval
+            ? arguments.Concat(["--heartbeat", interval.ToString("c", System.Globalization.CultureInfo.InvariantCulture)])
+            : arguments;
+    }
 
     internal static bool TryParse(IReadOnlyList<string> args, out TranscriptionWorkerArguments options)
     {
@@ -259,7 +291,8 @@ internal sealed record TranscriptionWorkerArguments(string PipeName, int ParentP
         {
             options = new(Value("--pipe"), int.Parse(Value("--parent-pid"), System.Globalization.CultureInfo.InvariantCulture),
                 Value("--package"), Value("--data"), Value("--assets"), Value("--selection"),
-                Enum.Parse<TranscriptionAccelerationPreference>(Value("--acceleration")), Version.Parse(Value("--host-version")));
+                Enum.Parse<TranscriptionAccelerationPreference>(Value("--acceleration")), Version.Parse(Value("--host-version")),
+                values.ContainsKey("--heartbeat") ? TimeSpan.ParseExact(Value("--heartbeat"), "c", System.Globalization.CultureInfo.InvariantCulture) : null);
             return true;
         }
         catch (Exception ex) when (ex is FormatException or ArgumentException or OverflowException) { return false; }
