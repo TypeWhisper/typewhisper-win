@@ -213,12 +213,10 @@ public static class HistoryFolderSync
             var relative = $"assets/history/{Generation}/{id.ToString().ToLowerInvariant()}/{sha}.wav";
             var destination = AssetPath(package, relative)!;
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            // Assets are named by their content hash, so when two devices publish the same recording at once either
+            // flushed copy may win; the check below still verifies what ended up in the folder.
             if (!File.Exists(destination))
-            {
-                var partial = Path.Combine(Path.GetDirectoryName(destination)!, "." + Guid.NewGuid().ToString().ToUpperInvariant() + ".partial");
-                File.WriteAllBytes(partial, bytes);
-                File.Move(partial, destination, overwrite: false);
-            }
+                AtomicFileWriter.WriteAllBytes(destination, bytes);
             if (!Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(destination))).Equals(sha, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("The published audio does not match the local recording.");
             var at = Utc(record.Timestamp);
@@ -495,13 +493,10 @@ public static class HistoryFolderSync
         return value;
     }
 
-    private static void WriteJson<T>(T value, string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temporary = path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(value, Json));
-        File.Move(temporary, path, overwrite: true);
-    }
+    // Two writers of one device file must not share a temporary name on a shared folder, and the flushed move
+    // shows readers a whole file. macOS skips hidden files and reads only .json, so it never sees the temporary file.
+    private static void WriteJson<T>(T value, string path) =>
+        AtomicFileWriter.WriteAllText(path, JsonSerializer.Serialize(value, Json));
 }
 
 /// <summary>A History operation file, compatible with macOS.</summary>

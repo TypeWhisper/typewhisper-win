@@ -674,16 +674,11 @@ public static class CloudFolderSyncEngine
         return operations;
     }
 
-    private static void WriteJson<T>(T value, string path)
-    {
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory))
-            Directory.CreateDirectory(directory);
-
-        var tempPath = $"{path}.tmp";
-        File.WriteAllText(tempPath, CloudFolderSyncJson.Serialize(value));
-        File.Move(tempPath, path, overwrite: true);
-    }
+    // A Mac and a PC can write the same manifest at the same moment on a shared folder. A uniquely named
+    // temporary file keeps their passes from colliding, and the flushed move shows readers a whole file.
+    // macOS skips hidden files and reads only the .json extension, so the temporary file is invisible to it.
+    private static void WriteJson<T>(T value, string path) =>
+        AtomicFileWriter.WriteAllText(path, CloudFolderSyncJson.Serialize(value));
 
     private static string OperationTimestamp(DateTime date) =>
         new DateTimeOffset(NormalizeUtc(date)).ToUnixTimeMilliseconds().ToString();

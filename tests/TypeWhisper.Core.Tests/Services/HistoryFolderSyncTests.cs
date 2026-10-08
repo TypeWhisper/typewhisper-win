@@ -227,6 +227,22 @@ public sealed class HistoryFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public void PassSucceedsWhileAnotherWriterStillHoldsTheObviousTemporaryName()
+    {
+        var devices = Path.Combine(Package, "devices");
+        Directory.CreateDirectory(devices);
+        // A second writer of this device file is mid-write: the obvious temporary name exists and is locked.
+        using var foreign = new FileStream(Path.Combine(devices, "windows-transport.json.tmp"), FileMode.CreateNew, FileAccess.Write, FileShare.None);
+
+        Assert.Equal(2, Sync(_folder, "windows-transport", new HistorySyncState { Enabled = true }, [Local()]).OperationsWritten);
+
+        var device = JsonDocument.Parse(File.ReadAllText(Path.Combine(devices, "windows-transport.json"))).RootElement;
+        Assert.Equal("windows-transport", device.GetProperty("deviceId").GetString());
+        Assert.Equal(["windows-transport.json.tmp"], Directory.GetFiles(devices, "*.tmp").Select(Path.GetFileName));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(Package, "ops"), "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public void RecordsDevicesForHistoryOriginNames()
     {
         Directory.CreateDirectory(Path.Combine(Package, "devices"));
