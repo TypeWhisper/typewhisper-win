@@ -80,7 +80,7 @@ Endpoint parity does not make platform-specific assets or all Mac transcription 
 
 `PATCH /v1/settings/audio` takes a JSON object (`Content-Type: application/json`) with any subset of `input_priority`, `audio_ducking_enabled`, `audio_ducking_level` (number from 0 to 1), `pause_media_during_recording` and `sound_feedback_enabled`. Priority entries need a non-empty `id` and a `name` and are stored exactly as sent. Changes take effect immediately through the same session calls as the Audio settings page and are saved to `microphone.json` and `audio.json`; no restart or backup restore is involved. An open Audio page is redrawn with the new values. The response is the full GET state.
 
-The whole body is validated before anything changes. Unknown fields, the read-only `input_devices` and `active_input`, duplicate fields, duplicate device IDs and invalid values return 400. A PATCH during recording, processing or another session operation returns 409. If saving the preferences fails after the priority was applied, the previous priority is put back and the request returns 500.
+The whole body is validated before anything changes. Unknown fields, the read-only `input_devices` and `active_input`, duplicate fields, duplicate device IDs and invalid values return 400. A PATCH during recording, processing or another session operation returns 409. If a save fails after the priority was applied, the previous priority is put back and the request returns 500; the error message says so if that restore also failed.
 
 Windows supports every field above. A field that exists only on another platform is omitted from the Windows GET response and rejected by PATCH with 400.
 
@@ -144,6 +144,6 @@ The script refuses an active cloud model and checks successful text, segment sha
 
 ## Raycast and Mac-route acceptance
 
-`tests/native/test_winui_http_api_parity.py` prepares and exercises the isolated `http-api-parity-20260908` profile. It checks all 29 method/path pairs, incorrect methods, legacy token-free calls, History paging/deletion, Dictionary CRUD, profile toggles, local model unload/load, real recorder capture/save and dictation session polling. Model removal uses a missing model; installed model assets are not deleted.
+`tests/native/test_winui_http_api_parity.py` prepares and exercises the isolated `http-api-parity-20260908` profile. It checks all 31 method/path pairs, incorrect methods, legacy token-free calls, History paging/deletion, Dictionary CRUD, profile toggles, local model unload/load, real recorder capture/save and dictation session polling. Model removal uses a missing model; installed model assets are not deleted.
 
 The 2026-09-08 native run passed. A separate changed-backup round trip returned 202, rejected a concurrent import with 409, restarted the app, and restored the fixture term. File-transcription and authenticated lifecycle acceptance remain covered by `test-winui-http-api-lifecycle.ps1`, with RequireAuthentication explicitly enabled in that fixture. Full spoken dictation accuracy and cloud-provider inference are not asserted by the parity script.

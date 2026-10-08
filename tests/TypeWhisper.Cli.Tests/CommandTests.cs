@@ -183,7 +183,8 @@ public class CommandTests
             Assert.Equal("PATCH", context.Request.HttpMethod);
             Assert.Equal("/v1/settings/audio", context.Request.RawUrl);
             Assert.StartsWith("application/json", context.Request.ContentType);
-            using var payload = JsonDocument.Parse(await new StreamReader(context.Request.InputStream).ReadToEndAsync());
+            using var reader = new StreamReader(context.Request.InputStream);
+            using var payload = JsonDocument.Parse(await reader.ReadToEndAsync());
             Assert.Equal(new[] { "input_priority", "audio_ducking_enabled", "audio_ducking_level", "pause_media_during_recording", "sound_feedback_enabled" },
                 payload.RootElement.EnumerateObject().Select(property => property.Name));
             Assert.Equal("0.1", payload.RootElement.GetProperty("audio_ducking_level").GetRawText());

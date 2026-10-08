@@ -227,6 +227,29 @@ public sealed class LocalApiAudioSettingsTests : IDisposable
     }
 
     [Fact]
+    public void PrioritySetterFailingAfterItsWriteIsRolledBack()
+    {
+        var priority = File.ReadAllBytes(_target.PriorityPath);
+        _target.FailAfterPriorityWrite = 1;
+        var response = Call("PATCH", """{"input_priority":[]}""");
+        Assert.Equal(500, response.StatusCode);
+        Assert.Equal(new[] { QuadCast, Cloud }, _target.InputPriority);
+        Assert.Equal(priority, File.ReadAllBytes(_target.PriorityPath));
+    }
+
+    [Fact]
+    public void FailedRollbackIsReported()
+    {
+        _target.FailPreferences = () => "Access denied";
+        _target.FailAfterPriorityWrite = 2;
+        var response = Call("PATCH", """{"input_priority":[],"audio_ducking_enabled":false}""");
+        Assert.Equal(500, response.StatusCode);
+        var message = Json(response).GetProperty("error").GetProperty("message").GetString()!;
+        Assert.Contains("Access denied", message);
+        Assert.Contains("could not be restored", message);
+    }
+
+    [Fact]
     public void CatalogRegistersGetAndPatch()
     {
         Assert.True(LocalApiRouteCatalog.Contains("GET", LocalApiAudioSettings.Path));
@@ -243,6 +266,8 @@ public sealed class LocalApiAudioSettingsTests : IDisposable
         internal int PreferenceWrites { get; private set; }
         internal Func<string?>? FailPriority { get; set; }
         internal Func<string?>? FailPreferences { get; set; }
+        // Fails the given priority write (1-based) after it has saved and applied the list, like a status refresh error.
+        internal int FailAfterPriorityWrite { get; set; }
         public bool CanChange { get; set; } = true;
         public IReadOnlyList<LocalApiAudioInput> InputDevices { get; init; } = [];
         public IReadOnlyList<MicrophonePriorityItem> InputPriority { get; private set; } = [];
@@ -264,7 +289,7 @@ public sealed class LocalApiAudioSettingsTests : IDisposable
             File.WriteAllText(PriorityPath, JsonSerializer.Serialize(selected));
             InputPriority = selected;
             PriorityWrites++;
-            return null;
+            return PriorityWrites == FailAfterPriorityWrite ? "Status refresh failed" : null;
         }
 
         public string? SavePreferences(DictationAudioPreferences preferences)

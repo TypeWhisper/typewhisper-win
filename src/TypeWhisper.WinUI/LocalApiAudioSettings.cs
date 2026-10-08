@@ -57,20 +57,24 @@ internal sealed class LocalApiAudioSettings(ILocalApiAudioTarget target)
             SoundFeedbackEnabled = patch.SoundFeedbackEnabled ?? preferences.SoundFeedbackEnabled
         };
         var priorityChanged = patch.InputPriority is { } priority && !priority.SequenceEqual(previousPriority);
+        // Keep the request all-or-nothing: a failed step puts the previous microphone order back.
         if (priorityChanged && target.SetInputPriority(patch.InputPriority!) is { } priorityError)
-            return Failure(priorityError);
+            return Failure(priorityError, RestorePriority(previousPriority));
         if (next != preferences && target.SavePreferences(next) is { } preferencesError)
-        {
-            // Keep the request all-or-nothing: put the previous microphone order back.
-            if (priorityChanged) target.SetInputPriority(previousPriority);
-            return Failure(preferencesError);
-        }
+            return Failure(preferencesError, priorityChanged ? RestorePriority(previousPriority) : null);
         return State();
     }
 
-    private LocalApiResponse Failure(string message) => target.CanChange
-        ? Error(500, "Audio settings could not be saved: " + message)
-        : Error(409, "Finish active recording and processing before changing audio settings.");
+    // A setter can fail after it has already saved and applied the new order.
+    private string? RestorePriority(IReadOnlyList<MicrophonePriorityItem> previous) =>
+        target.InputPriority.SequenceEqual(previous) ? null : target.SetInputPriority(previous);
+
+    private LocalApiResponse Failure(string message, string? rollbackError) =>
+        rollbackError is not null
+            ? Error(500, $"Audio settings could not be saved: {message} The previous microphone priority could not be restored either: {rollbackError}")
+            : target.CanChange
+                ? Error(500, "Audio settings could not be saved: " + message)
+                : Error(409, "Finish active recording and processing before changing audio settings.");
 
     private LocalApiResponse State()
     {
