@@ -136,4 +136,38 @@ public sealed class PersistedCloudFolderSyncTests : IDisposable
         { Assert.Throws<InvalidOperationException>(() => client.Configure(null, false)); commit(); return Task.CompletedTask; });
         Assert.Equal(Folder, client.Preferences.Folder);
     }
+
+    [Fact]
+    public async Task UnchangedPassLeavesPreferencesFileAlone()
+    {
+        var client = Client("a");
+        Write("a", "dictionary.json", new[] { Word("Keep", DateTime.UtcNow) });
+        await client.SyncAsync(() => true);
+        var preferencesPath = Path.Combine(Profile("a"), "cloud-folder-sync.json");
+        var stale = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(preferencesPath, stale);
+        var before = client.Preferences; var bytes = File.ReadAllBytes(preferencesPath);
+        var published = false;
+        var result = await client.SyncAsync(() => true, (commit, changed) => { published = true; Assert.False(changed); commit(); return Task.CompletedTask; });
+        Assert.True(published); Assert.Equal(0, result.MutationsApplied);
+        Assert.Equal(stale, File.GetLastWriteTimeUtc(preferencesPath));
+        Assert.Equal(bytes, File.ReadAllBytes(preferencesPath));
+        Assert.Same(before, client.Preferences);
+    }
+
+    [Fact]
+    public async Task PassThatAppliesRemoteChangesStillSavesProgress()
+    {
+        var a = Client("a"); Write("a", "dictionary.json", new[] { Word("Shared", DateTime.UtcNow) });
+        await a.SyncAsync(() => true);
+        var b = Client("b");
+        var preferencesPath = Path.Combine(Profile("b"), "cloud-folder-sync.json");
+        var stale = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(preferencesPath, stale);
+        var result = await b.SyncAsync(() => true);
+        Assert.Equal(1, result.MutationsApplied);
+        Assert.NotEqual(stale, File.GetLastWriteTimeUtc(preferencesPath));
+        Assert.Equal("Shared", Assert.Single(Read<DictionaryEntry[]>("b", "dictionary.json")).Original);
+        Assert.Contains(new PersistedCloudFolderSync(Profile("b")).Preferences.State!.KnownLocalItemIds, id => id.StartsWith("dictionary:", StringComparison.Ordinal));
+    }
 }
