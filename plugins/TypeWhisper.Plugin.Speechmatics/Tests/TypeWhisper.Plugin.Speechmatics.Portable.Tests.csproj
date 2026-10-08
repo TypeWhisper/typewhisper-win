@@ -9,6 +9,7 @@
     <Using Include="Xunit" />
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../TypeWhisper.Plugin.Speechmatics.csproj" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
     <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
