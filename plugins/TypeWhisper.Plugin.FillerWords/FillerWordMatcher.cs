@@ -161,11 +161,17 @@ internal sealed class FillerWordMatcher
         return true;
     }
 
-    /// <summary>Returns whether a word appended to <paramref name="kept"/> would open a sentence.</summary>
+    /// <summary>
+    /// Returns whether a word appended to <paramref name="kept"/> would open a sentence: it
+    /// starts the text or a line, or follows sentence-ending punctuation.
+    /// </summary>
     private static bool OpensSentence(StringBuilder kept)
     {
         for (var index = kept.Length - 1; index >= 0; index--)
         {
+            if (IsLineBreak(kept[index]))
+                return true;
+
             if (!char.IsWhiteSpace(kept[index]))
                 return kept[index] is '.' or '!' or '?' or '…';
         }

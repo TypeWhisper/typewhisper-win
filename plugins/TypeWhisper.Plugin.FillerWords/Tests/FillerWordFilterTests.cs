@@ -222,6 +222,8 @@ public sealed class FillerWordFilterTests
     [InlineData("Gut. Äh, 10 Uhr passt", "Gut. 10 Uhr passt")]
     [InlineData("Gut. Äh, geht's dir gut?", "Gut. Geht's dir gut?")]
     [InlineData("Äh, ich.", "Ich.")]
+    [InlineData("Notiz\nÄh, ich komme", "Notiz\nIch komme")]
+    [InlineData("Notiz\r\n  Äh, ich komme", "Notiz\r\n  Ich komme")]
     public void Remove_RestoresTheCapitalOfASentenceOpenedByAFiller(string input, string expected) =>
         Assert.Equal(expected, FillerWordFilter.Remove(input, "de"));
 
@@ -266,6 +268,9 @@ public sealed class FillerWordFilterTests
     [InlineData("Gut, ich, ich, ich, ich komme.", "Gut, ich komme.")]
     [InlineData("Gut, ich, ich, ich, dann komme ich.", "Gut, ich, dann komme ich.")]
     [InlineData("ich ich, ich komme", "ich komme")]
+    [InlineData("I'm I'm I'm ready", "I'm ready")]
+    [InlineData("don't don't don't", "don't")]
+    [InlineData("C'est c'est c'est bien", "C'est bien")]
     public void RepeatedWordCollapser_CollapsesThreeOrMoreRepetitions(string input, string expected) =>
         Assert.Equal(expected, RepeatedWordCollapser.Collapse(input));
 
