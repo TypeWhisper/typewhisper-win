@@ -48,16 +48,36 @@ public static class FillerWordFilter
         "うーむ"
     ];
 
+    /// <summary>
+    /// Filler words that are real words elsewhere, keyed to the languages in which they
+    /// are only filler: "um" is German for "at" and Portuguese for "a", "eh" is German for
+    /// "anyway". They are removed only when the text is known to be in one of these languages.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> LanguageBoundFillerWords = new(StringComparer.Ordinal)
+    {
+        ["um"] = ["en"],
+        ["ah"] = ["en", "de"],
+        ["eh"] = ["en"]
+    };
+
     /// <summary>Removes the default filler words from <paramref name="text"/>.</summary>
-    public static string Remove(string text) => Remove(text, DefaultFillerWords);
+    /// <param name="text">The text to clean.</param>
+    /// <param name="language">The language of <paramref name="text"/>, or null when unknown.</param>
+    public static string Remove(string text, string? language = null) => Remove(text, DefaultFillerWords, language);
 
     /// <summary>Removes the given filler words from <paramref name="text"/>.</summary>
-    public static string Remove(string text, IReadOnlyList<string> words)
+    /// <param name="text">The text to clean.</param>
+    /// <param name="words">The filler words to remove.</param>
+    /// <param name="language">
+    /// The language of <paramref name="text"/>, or null when unknown. Language-bound filler
+    /// words are then removed only if the text itself shows its language reliably.
+    /// </param>
+    public static string Remove(string text, IReadOnlyList<string> words, string? language = null)
     {
         if (string.IsNullOrWhiteSpace(text))
             return text;
 
-        var normalized = NormalizeWords(words);
+        var normalized = WordsForLanguage(NormalizeWords(words), language, text);
         if (normalized.Count == 0)
             return text;
 
@@ -102,6 +122,31 @@ public static class FillerWordFilter
                 : string.CompareOrdinal(left, right));
 
         return normalized;
+    }
+
+    /// <summary>
+    /// Drops language-bound filler words unless <paramref name="language"/>, or failing that
+    /// a reliable guess from <paramref name="text"/>, is one of their languages.
+    /// </summary>
+    private static IReadOnlyList<string> WordsForLanguage(IReadOnlyList<string> words, string? language, string text)
+    {
+        if (!words.Any(LanguageBoundFillerWords.ContainsKey))
+            return words;
+
+        var textLanguage = NormalizeLanguage(language) ?? TextLanguageDetector.Detect(text);
+
+        return words
+            .Where(word => !LanguageBoundFillerWords.TryGetValue(word, out var languages)
+                || (textLanguage is not null && languages.Contains(textLanguage, StringComparer.Ordinal)))
+            .ToList();
+    }
+
+    /// <summary>Reduces a language tag such as "de-DE" to its lower-case primary subtag.</summary>
+    private static string? NormalizeLanguage(string? language)
+    {
+        var primary = language?.Trim().Split('-', '_')[0].ToLowerInvariant();
+
+        return string.IsNullOrEmpty(primary) || primary == "auto" ? null : primary;
     }
 
     /// <summary>Returns whether the word contains kana or CJK ideographs.</summary>

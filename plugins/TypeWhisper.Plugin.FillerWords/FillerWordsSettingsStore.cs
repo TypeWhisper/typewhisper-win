@@ -8,9 +8,11 @@ namespace TypeWhisper.Plugin.FillerWords;
 public sealed class FillerWordsSettingsStore
 {
     private const string WordsKey = "words";
+    private const string CollapseRepeatedWordsKey = "collapseRepeatedWords";
 
     private readonly IPluginHostServices _host;
     private string _wordsText;
+    private bool _collapseRepeatedWords;
 
     internal FillerWordsSettingsStore(IPluginHostServices host)
     {
@@ -26,6 +28,8 @@ public sealed class FillerWordsSettingsStore
         {
             _wordsText = stored;
         }
+
+        _collapseRepeatedWords = host.GetSetting<bool?>(CollapseRepeatedWordsKey) ?? true;
     }
 
     /// <summary>Gets or sets the raw filler word list as entered by the user.</summary>
@@ -39,6 +43,20 @@ public sealed class FillerWordsSettingsStore
 
             _host.SetSetting(WordsKey, value);
             _wordsText = value;
+        }
+    }
+
+    /// <summary>Gets or sets whether a word repeated three or more times in a row is collapsed to one.</summary>
+    public bool CollapseRepeatedWords
+    {
+        get => _collapseRepeatedWords;
+        set
+        {
+            if (_collapseRepeatedWords == value)
+                return;
+
+            _host.SetSetting(CollapseRepeatedWordsKey, value);
+            _collapseRepeatedWords = value;
         }
     }
 

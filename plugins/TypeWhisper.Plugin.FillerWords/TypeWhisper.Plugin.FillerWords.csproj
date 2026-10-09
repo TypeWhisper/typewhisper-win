@@ -5,13 +5,17 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>TypeWhisper.Plugin.FillerWords</RootNamespace>
-    <PluginVersion Condition="'$(PluginVersion)' == ''">1.0.0</PluginVersion>
+    <PluginVersion Condition="'$(PluginVersion)' == ''">1.1.0</PluginVersion>
     <Version>$(PluginVersion)</Version>
     <InformationalVersion>$(PluginVersion)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.FillerWords.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
