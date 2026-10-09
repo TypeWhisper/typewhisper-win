@@ -104,32 +104,61 @@ internal sealed class FillerWordMatcher
 
     /// <summary>
     /// Appends <paramref name="text"/> from <paramref name="start"/> to <paramref name="end"/>.
-    /// While a capital is owed, the first letter or digit is upper-cased and the debt settled.
+    /// While a capital is owed, the next word settles the debt. Only a plain lower-case word
+    /// is capitalized; handles, identifiers and mixed-case names such as "@jdoe", "example.com"
+    /// or "iPhone" keep their casing.
     /// </summary>
     private static void AppendRestoringCapital(StringBuilder result, string text, int start, int end, ref bool capitalOwed)
     {
-        var index = start;
-        while (capitalOwed && index < end)
+        if (capitalOwed)
         {
-            if (!Rune.TryGetRuneAt(text, index, out var rune))
-            {
+            var index = start;
+            while (index < end && char.IsWhiteSpace(text[index]))
                 index++;
-                continue;
-            }
 
-            if (Rune.IsLetterOrDigit(rune))
+            if (index < end)
             {
-                result.Append(text, start, index - start);
-                result.Append(Rune.ToUpperInvariant(rune).ToString());
-                start = index + rune.Utf16SequenceLength;
                 capitalOwed = false;
-                break;
-            }
 
-            index += rune.Utf16SequenceLength;
+                if (IsPlainLowerCaseWord(text, index, end) && Rune.TryGetRuneAt(text, index, out var first))
+                {
+                    Span<char> upper = stackalloc char[2];
+                    var length = Rune.ToUpperInvariant(first).EncodeToUtf16(upper);
+
+                    result.Append(text, start, index - start);
+                    result.Append(upper[..length]);
+                    start = index + first.Utf16SequenceLength;
+                }
+            }
         }
 
         result.Append(text, start, end - start);
+    }
+
+    /// <summary>
+    /// Returns whether the token at <paramref name="index"/> is an ordinary lower-case word:
+    /// letters with inner apostrophes or hyphens, optionally followed by sentence punctuation.
+    /// </summary>
+    private static bool IsPlainLowerCaseWord(string text, int index, int end)
+    {
+        if (!char.IsLower(text, index))
+            return false;
+
+        var tokenEnd = index;
+        while (tokenEnd < end && !char.IsWhiteSpace(text[tokenEnd]))
+            tokenEnd++;
+
+        while (tokenEnd > index && text[tokenEnd - 1] is ',' or '.' or '!' or '?' or '…' or ';' or ':')
+            tokenEnd--;
+
+        for (var position = index; position < tokenEnd; position++)
+        {
+            var c = text[position];
+            if (char.IsUpper(c) || !(char.IsLetter(c) || char.IsSurrogate(c) || c is '\'' or '’' or '-'))
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>Returns whether a word appended to <paramref name="kept"/> would open a sentence.</summary>

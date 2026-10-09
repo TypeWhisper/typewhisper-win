@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 namespace TypeWhisper.Plugin.FillerWords;
 
 /// <summary>
-/// Guesses the language of dictated text from common function words. It is only asked
-/// when the host reports no language and is deliberately strict: an answer needs several
-/// matching words and a clear lead over every other language, so in doubt there is none.
+/// Guesses the language of dictated text from common function words. It is deliberately
+/// strict: an answer needs several matching words and a clear lead over every other
+/// language, so in doubt there is none.
 /// </summary>
 internal static class TextLanguageDetector
 {
@@ -54,12 +54,12 @@ internal static class TextLanguageDetector
 
         try
         {
-            foreach (Match match in Word.Matches(text))
-            {
-                var word = match.Value.Replace('’', '\'').ToLowerInvariant();
-                if (LanguageByWord.TryGetValue(word, out var language))
-                    hits[language] = hits.GetValueOrDefault(language) + 1;
-            }
+            var languages = Word.Matches(text)
+                .Select(match => LanguageByWord.GetValueOrDefault(match.Value.Replace('’', '\'').ToLowerInvariant()))
+                .OfType<string>();
+
+            foreach (var language in languages)
+                hits[language] = hits.GetValueOrDefault(language) + 1;
         }
         catch (RegexMatchTimeoutException)
         {
@@ -87,23 +87,13 @@ internal static class TextLanguageDetector
         return bestHits >= MinimumHits && bestHits >= runnerUpHits * MinimumLeadFactor ? best : null;
     }
 
-    private static Dictionary<string, string> BuildIndex(Dictionary<string, string> wordsByLanguage)
-    {
-        var index = new Dictionary<string, string>(StringComparer.Ordinal);
-        var shared = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var (language, words) in wordsByLanguage)
-        {
-            foreach (var word in words.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (!index.TryAdd(word, language) && index[word] != language)
-                    shared.Add(word);
-            }
-        }
-
-        foreach (var word in shared)
-            index.Remove(word);
-
-        return index;
-    }
+    private static Dictionary<string, string> BuildIndex(Dictionary<string, string> wordsByLanguage) =>
+        wordsByLanguage
+            .SelectMany(pair => pair.Value
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.Ordinal)
+                .Select(word => (Word: word, Language: pair.Key)))
+            .GroupBy(entry => entry.Word, StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single().Language, StringComparer.Ordinal);
 }

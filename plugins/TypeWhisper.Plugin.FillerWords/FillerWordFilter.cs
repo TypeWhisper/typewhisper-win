@@ -69,8 +69,9 @@ public static class FillerWordFilter
     /// <param name="text">The text to clean.</param>
     /// <param name="words">The filler words to remove.</param>
     /// <param name="language">
-    /// The language of <paramref name="text"/>, or null when unknown. Language-bound filler
-    /// words are then removed only if the text itself shows its language reliably.
+    /// The language reported for <paramref name="text"/>, or null when unknown. A language the
+    /// text itself shows reliably takes precedence, because a translated dictation reports its
+    /// source language while the text is English.
     /// </param>
     public static string Remove(string text, IReadOnlyList<string> words, string? language = null)
     {
@@ -125,15 +126,15 @@ public static class FillerWordFilter
     }
 
     /// <summary>
-    /// Drops language-bound filler words unless <paramref name="language"/>, or failing that
-    /// a reliable guess from <paramref name="text"/>, is one of their languages.
+    /// Drops language-bound filler words unless a reliable guess from <paramref name="text"/>,
+    /// or failing that <paramref name="language"/>, is one of their languages.
     /// </summary>
     private static IReadOnlyList<string> WordsForLanguage(IReadOnlyList<string> words, string? language, string text)
     {
         if (!words.Any(LanguageBoundFillerWords.ContainsKey))
             return words;
 
-        var textLanguage = NormalizeLanguage(language) ?? TextLanguageDetector.Detect(text);
+        var textLanguage = TextLanguageDetector.Detect(text) ?? NormalizeLanguage(language);
 
         return words
             .Where(word => !LanguageBoundFillerWords.TryGetValue(word, out var languages)

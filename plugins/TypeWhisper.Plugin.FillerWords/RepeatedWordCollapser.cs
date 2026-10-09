@@ -13,9 +13,10 @@ public static class RepeatedWordCollapser
 
     // Repetitions may be separated by spaces or tabs, optionally after a comma, because
     // speech models such as Parakeet write a stutter as "ich, ich, ich". Other punctuation
-    // and line breaks between repetitions mark them as deliberate and keep them.
+    // and line breaks between repetitions mark them as deliberate and keep them. Apostrophes
+    // and dashes belong to the word, so "test test test-case" has only two repetitions.
     private static readonly Regex Repetition = new(
-        @"(?<![\p{L}\p{N}_'’])(?<word>\p{L}+)(?:,?[ \t]+\k<word>(?![\p{L}\p{N}_'’])){2,}",
+        @"(?<![\p{L}\p{N}_'’\p{Pd}])(?<word>\p{L}+)(?:,?[ \t]+\k<word>(?![\p{L}\p{N}_'’\p{Pd}])){2,}",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
         MatchTimeout);
 

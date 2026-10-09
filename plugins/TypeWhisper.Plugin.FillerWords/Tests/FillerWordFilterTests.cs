@@ -204,9 +204,11 @@ public sealed class FillerWordFilterTests
     public void Remove_FallsBackToTheTextLanguage_WhenTheLanguageIsUnknown(string? language) =>
         Assert.Equal("So I think this is what we need", FillerWordFilter.Remove("So um I think this is what we need", language));
 
-    [Fact]
-    public void Remove_TrustsTheGivenLanguageOverTheText() =>
-        Assert.Equal("So um I think this is what we need", FillerWordFilter.Remove("So um I think this is what we need", "de"));
+    [Theory]
+    [InlineData("So um I think this is what we need", "de", "So I think this is what we need")]
+    [InlineData("Wir treffen uns um 10 Uhr im Büro, das ist gut", "en", "Wir treffen uns um 10 Uhr im Büro, das ist gut")]
+    public void Remove_PrefersTheLanguageTheTextShowsReliably(string input, string language, string expected) =>
+        Assert.Equal(expected, FillerWordFilter.Remove(input, language));
 
     [Fact]
     public void Remove_KeepsCustomWordsThatAreNotLanguageBound() =>
@@ -218,8 +220,19 @@ public sealed class FillerWordFilterTests
     [InlineData("Fertig! Ähm äh ich komme", "Fertig! Ich komme")]
     [InlineData("Gut?\nÄh, ich komme", "Gut?\nIch komme")]
     [InlineData("Gut. Äh, 10 Uhr passt", "Gut. 10 Uhr passt")]
+    [InlineData("Gut. Äh, geht's dir gut?", "Gut. Geht's dir gut?")]
+    [InlineData("Äh, ich.", "Ich.")]
     public void Remove_RestoresTheCapitalOfASentenceOpenedByAFiller(string input, string expected) =>
         Assert.Equal(expected, FillerWordFilter.Remove(input, "de"));
+
+    [Theory]
+    [InlineData("Um, @jdoe replied", "@jdoe replied")]
+    [InlineData("Um, iPhone is ready", "iPhone is ready")]
+    [InlineData("Um, example.com is down", "example.com is down")]
+    [InlineData("Um, snake_case works", "snake_case works")]
+    [InlineData("Um, \"quoted\" text", "\"quoted\" text")]
+    public void Remove_KeepsTheCasingOfIdentifiersAfterARemovedSentenceOpener(string input, string expected) =>
+        Assert.Equal(expected, FillerWordFilter.Remove(input, English));
 
     [Theory]
     [InlineData("Gut, äh, ich komme", "Gut, ich komme")]
@@ -265,6 +278,9 @@ public sealed class FillerWordFilterTests
     [InlineData("the the theory")]
     [InlineData("1 1 1 2")]
     [InlineData("I I I'm here")]
+    [InlineData("test test test-case failed")]
+    [InlineData("test-test test test")]
+    [InlineData("ja ja ja–nein")]
     [InlineData("")]
     public void RepeatedWordCollapser_KeepsDeliberateRepetitions(string input) =>
         Assert.Equal(input, RepeatedWordCollapser.Collapse(input));
