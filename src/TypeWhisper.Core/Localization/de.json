@@ -3089,5 +3089,15 @@
   "↑↓ Select   Enter Insert   Esc Back": "↑↓ Auswählen   Enter Einfügen   Esc Zurück",
   "↑↓ Select   Enter Insert   Esc Close": "↑↓ Auswählen   Enter Einfügen   Esc Schließen",
   "↑↓ Select   Enter Run   Esc Close": "↑↓ Auswählen   Enter Ausführen   Esc Schließen",
-  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "Das Fenster hat sich geändert, während das Modell geladen wurde. Deshalb wurde nichts eingefügt. Kopiere den Text und füge ihn dort ein, wo du ihn haben möchtest."
+  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "Das Fenster hat sich geändert, während das Modell geladen wurde. Deshalb wurde nichts eingefügt. Kopiere den Text und füge ihn dort ein, wo du ihn haben möchtest.",
+  "Processing device": "Verarbeitungsgerät",
+  "Automatic uses NVIDIA CUDA once it is installed and the CPU otherwise. The first switch to NVIDIA CUDA downloads about 2 GB of NVIDIA libraries and needs an NVIDIA graphics card. If the graphics card fails, TypeWhisper keeps the previous device.": "Automatisch nutzt NVIDIA CUDA, sobald es installiert ist, und sonst den Prozessor. Der erste Wechsel zu NVIDIA CUDA lädt etwa 2 GB NVIDIA-Bibliotheken herunter und braucht eine NVIDIA-Grafikkarte. Scheitert die Grafikkarte, behält TypeWhisper das bisherige Gerät.",
+  "NVIDIA CUDA once it is installed, otherwise the CPU": "NVIDIA CUDA, sobald installiert, sonst der Prozessor",
+  "Works on every PC": "Funktioniert auf jedem PC",
+  "Needs an NVIDIA graphics card. Downloads about 2 GB the first time.": "Braucht eine NVIDIA-Grafikkarte. Lädt beim ersten Mal etwa 2 GB herunter.",
+  "Switching to NVIDIA CUDA… The first switch downloads about 2 GB.": "Wechsel zu NVIDIA CUDA … Der erste Wechsel lädt etwa 2 GB herunter.",
+  "Could not change the processing device: {0}": "Das Verarbeitungsgerät konnte nicht geändert werden: {0}",
+  "Finish recording or the current model operation before changing the processing device.": "Beende die Aufnahme oder den laufenden Modellvorgang, bevor du das Verarbeitungsgerät änderst.",
+  "Switching the processing device… Wait until the model is ready before dictating.": "Verarbeitungsgerät wird gewechselt … Warte mit dem Diktieren, bis das Modell bereit ist.",
+  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "Das Verarbeitungsgerät konnte nicht geändert werden: {0} Das Modell ist nicht geladen; wähle „Modell verwenden“, um es erneut zu laden."
 }

@@ -3089,5 +3089,15 @@
   "↑↓ Select   Enter Insert   Esc Back": "↑↓ 选择   Enter 插入   Esc 返回",
   "↑↓ Select   Enter Insert   Esc Close": "↑↓ 选择   Enter 插入   Esc 关闭",
   "↑↓ Select   Enter Run   Esc Close": "↑↓ 选择   Enter 运行   Esc 关闭",
-  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "模型加载期间窗口发生了变化，因此未插入任何内容。请复制文本，然后粘贴到你需要的位置。"
+  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "模型加载期间窗口发生了变化，因此未插入任何内容。请复制文本，然后粘贴到你需要的位置。",
+  "Processing device": "处理设备",
+  "Automatic uses NVIDIA CUDA once it is installed and the CPU otherwise. The first switch to NVIDIA CUDA downloads about 2 GB of NVIDIA libraries and needs an NVIDIA graphics card. If the graphics card fails, TypeWhisper keeps the previous device.": "“自动”会在安装 NVIDIA CUDA 后使用它，否则使用 CPU。首次切换到 NVIDIA CUDA 时会下载约 2 GB 的 NVIDIA 库，并且需要 NVIDIA 显卡。如果显卡出现故障，TypeWhisper 会保留之前的设备。",
+  "NVIDIA CUDA once it is installed, otherwise the CPU": "安装后使用 NVIDIA CUDA，否则使用 CPU",
+  "Works on every PC": "适用于所有电脑",
+  "Needs an NVIDIA graphics card. Downloads about 2 GB the first time.": "需要 NVIDIA 显卡。首次使用时会下载约 2 GB。",
+  "Switching to NVIDIA CUDA… The first switch downloads about 2 GB.": "正在切换到 NVIDIA CUDA… 首次切换会下载约 2 GB。",
+  "Could not change the processing device: {0}": "无法更改处理设备：{0}",
+  "Finish recording or the current model operation before changing the processing device.": "请先完成录音或当前的模型操作，然后再更改处理设备。",
+  "Switching the processing device… Wait until the model is ready before dictating.": "正在切换处理设备… 请等待模型准备就绪后再听写。",
+  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "无法更改处理设备：{0} 模型未加载；请选择“使用模型”重新加载。"
 }
