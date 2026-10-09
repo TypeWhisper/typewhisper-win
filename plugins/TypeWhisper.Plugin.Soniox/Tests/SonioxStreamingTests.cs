@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -17,9 +19,9 @@ public sealed class SonioxStreamingTests
     public void ConfigurationPreservesRegionAndOrderedLanguages(string region, string host)
     {
         Assert.Equal(new Uri("wss://" + host + "/transcribe-websocket"), SonioxStreamingSession.Endpoint(region));
-        using var doc = JsonDocument.Parse(SonioxStreamingSession.Configuration("fixture-key", ["de", "en"]));
+        using var doc = JsonDocument.Parse(SonioxStreamingSession.Configuration(["de", "en"]));
         var config = doc.RootElement;
-        Assert.Equal("fixture-key", config.GetProperty("api_key").GetString());
+        Assert.False(config.TryGetProperty("api_key", out _));
         Assert.Equal("stt-rt-v5", config.GetProperty("model").GetString());
         Assert.Equal("pcm_s16le", config.GetProperty("audio_format").GetString());
         Assert.Equal(16000, config.GetProperty("sample_rate").GetInt32());
@@ -40,6 +42,32 @@ public sealed class SonioxStreamingTests
         Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.StartStreamingAsync(null, new(true)));
         Assert.Throws<ArgumentException>(() => SonioxStreamingSession.Endpoint("elsewhere"));
+    }
+
+    [Fact]
+    public async Task ConnectSendsKeyInAuthorizationHeaderOnly()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var ct = timeout.Token;
+        using var reservation = new TcpListener(IPAddress.Loopback, 0); reservation.Start();
+        var port = ((IPEndPoint)reservation.LocalEndpoint).Port; reservation.Stop();
+        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var server = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync().WaitAsync(ct);
+            var authorization = context.Request.Headers["Authorization"];
+            using var socket = (await context.AcceptWebSocketAsync(null)).WebSocket;
+            var buffer = new byte[8192];
+            var frame = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
+            return (authorization, Encoding.UTF8.GetString(buffer, 0, frame.Count));
+        }, ct);
+        await using (var session = await SonioxStreamingSession.ConnectAsync("fixture-key", new Uri($"ws://127.0.0.1:{port}/"), ["de"], ct))
+        {
+            var (authorization, start) = await server;
+            Assert.Equal("Bearer fixture-key", authorization);
+            Assert.DoesNotContain("fixture-key", start);
+            Assert.Equal("stt-rt-v5", JsonDocument.Parse(start).RootElement.GetProperty("model").GetString());
+        }
     }
 
     [Fact]
