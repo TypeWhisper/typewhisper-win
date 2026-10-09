@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -7,8 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using SharpCompress.Archives;
-using SharpCompress.Common;
+using SharpCompress.Compressors.BZip2;
 
 namespace TypeWhisper.Plugin.SherpaOnnx;
 
@@ -40,12 +40,14 @@ internal sealed record CudaDependencyPackage(
 
 internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 {
-    internal const string RuntimeVersion = "v1.13.0";
-    internal const string AssetFileName = "sherpa-onnx-v1.13.0-cuda-12.x-cudnn-9.x-win-x64-cuda.tar.bz2";
+    // Must match the org.k2fsa.sherpa.onnx package version: this archive replaces its native C API.
+    internal const string RuntimeVersion = "v1.13.8";
+    internal const string AssetFileName =
+        "sherpa-onnx-v1.13.8-cuda-12.x-cudnn-9.x-onnxruntime1.28.2-win-x64-cuda.tar.bz2";
     internal const string DownloadUrl =
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.0/" + AssetFileName;
-    // SHA-256 of AssetFileName (310,691,085 bytes); matches checksum.txt of the v1.13.0 release.
-    internal const string ArchiveSha256 = "5653f993b9a1f5980a9c376caf3b6a8d56912a3657a9cfd0e30a58fc3e6d12d6";
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/" + AssetFileName;
+    // SHA-256 of AssetFileName (595,017,373 bytes); matches the asset digest of the v1.13.8 release.
+    internal const string ArchiveSha256 = "066c5b54dbafaa1388001a9c9837ac1374dbba6d6678f193ca06aa0d8e94d8c3";
     private const string SherpaNativeLibraryFileName = "sherpa-onnx-c-api.dll";
     private const string OnnxRuntimeFileName = "onnxruntime.dll";
     private const string SherpaOnnxRuntimeDependencyFileName = "sherpaort.dll";
@@ -341,14 +343,32 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 
     private static void ExtractArchive(string archivePath, string destinationDirectory)
     {
-        using var archive = ArchiveFactory.OpenArchive(archivePath, null);
-        foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))
+        // The pinned asset is a BZip2-compressed TAR, which SharpCompress's archive detection does
+        // not open. Decode the BZip2 layer explicitly; only DLLs are needed from the archive.
+        var root = Path.GetFullPath(destinationDirectory);
+        using var compressed = File.OpenRead(archivePath);
+        using var decompressed = BZip2Stream.Create(
+            compressed,
+            SharpCompress.Compressors.CompressionMode.Decompress,
+            false,
+            leaveOpen: true);
+        using var reader = new TarReader(decompressed);
+        while (reader.GetNextEntry() is { } entry)
         {
-            entry.WriteToDirectory(destinationDirectory, new ExtractionOptions
+            if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile)
+                || !entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                || entry.DataStream is null)
             {
-                ExtractFullPath = true,
-                Overwrite = true
-            });
+                continue;
+            }
+
+            var destination = Path.GetFullPath(Path.Join(root, entry.Name));
+            if (!destination.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Unsafe entry in the sherpa-onnx CUDA runtime archive.");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            using var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None);
+            entry.DataStream.CopyTo(output);
         }
     }
 

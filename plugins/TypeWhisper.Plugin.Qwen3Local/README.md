@@ -1,7 +1,7 @@
 # Qwen3 ASR (Local) — portable V2 plugin
 
 Offline CPU transcription with Qwen3-ASR 0.6B or 1.7B INT8 through sherpa-onnx
-1.13.0. This is a separate plugin (`com.typewhisper.qwen3-local`); the legacy
+1.13.8. This is a separate plugin (`com.typewhisper.qwen3-local`); the legacy
 Qwen3 STT endpoint plugin retains its own identity and configuration.
 
 ## Models
