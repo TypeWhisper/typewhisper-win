@@ -1,14 +1,19 @@
 using System.Reflection;
+using TypeWhisper.Plugin.Shared;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.FillerWords;
 
 /// <summary>
-/// Removes filler words such as "um" and "uh" from transcribed text.
+/// Removes filler words such as "um" and "uh" from transcribed text and collapses
+/// stuttered repetitions such as "I I I".
 /// </summary>
 public sealed class FillerWordsPlugin : IPostProcessorPlugin, IPluginTextSettings
 {
+    private const string WordsSettingId = "words";
+    private const string CollapseRepeatedWordsSettingId = "collapseRepeatedWords";
+
     private static readonly string BuildVersion =
         typeof(FillerWordsPlugin).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
@@ -37,6 +42,8 @@ public sealed class FillerWordsPlugin : IPostProcessorPlugin, IPluginTextSetting
 
     internal IPluginLocalization? Loc => _host?.Localization;
 
+    private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
+
     /// <summary>Activates the plugin and loads the configured filler word list.</summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
@@ -54,28 +61,56 @@ public sealed class FillerWordsPlugin : IPostProcessorPlugin, IPluginTextSetting
     }
 
 
-    /// <summary>Removes the configured filler words from the transcription.</summary>
+    /// <summary>
+    /// Removes the configured filler words from the transcription and, unless turned off,
+    /// collapses stuttered repetitions. Words that are real words in other languages are
+    /// only removed when the dictation language matches.
+    /// </summary>
     public Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var result = FillerWordFilter.Remove(text, Settings?.Words ?? FillerWordFilter.DefaultFillerWords);
+        var settings = Settings;
+        var result = FillerWordFilter.Remove(text, settings?.Words ?? FillerWordFilter.DefaultFillerWords, context.SourceLanguage);
+        if (settings?.CollapseRepeatedWords ?? true)
+            result = RepeatedWordCollapser.Collapse(result);
         ct.ThrowIfCancellationRequested();
         return Task.FromResult(result);
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<PluginTextSetting> TextSettings => Settings is null ? [] :
-        [new("words", "Filler words", "Enter one word or phrase per line. An empty list leaves text unchanged.", Settings.WordsText) { IsMultiline = true }];
+    public IReadOnlyList<PluginTextSetting> TextSettings => Settings is not { } settings ? [] :
+    [
+        new(WordsSettingId, L("Filler words", "Füllwörter"),
+            L("Enter one word or phrase per line. Words that are real words in other languages, such as \"um\", are only removed when the dictation language matches.",
+              "Ein Wort oder eine Wendung pro Zeile. Wörter, die in anderen Sprachen echte Wörter sind, etwa „um“, werden nur entfernt, wenn die Diktatsprache passt."),
+            settings.WordsText) { IsMultiline = true },
+        new(CollapseRepeatedWordsSettingId, L("Collapse repeated words", "Wiederholte Wörter zusammenfassen"),
+            L("Shortens a word that occurs three or more times in a row, such as \"I I I\", to a single word.",
+              "Kürzt ein Wort, das drei- oder mehrmals hintereinander vorkommt, etwa „ich ich ich“, auf ein Wort."),
+            settings.CollapseRepeatedWords ? "true" : "false")
+        { Choices = [new("true", L("On", "Ein")), new("false", L("Off", "Aus"))] }
+    ];
 
     /// <inheritdoc />
     public Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (id != "words") throw new ArgumentException("Unknown setting.", nameof(id));
+        if (id is not (WordsSettingId or CollapseRepeatedWordsSettingId)) throw new ArgumentException("Unknown setting.", nameof(id));
         ArgumentNullException.ThrowIfNull(value);
         if (value.Length > 32768) throw new ArgumentException("The filler word list is too long.", nameof(value));
         if (Settings is null) throw new InvalidOperationException("Enable the plugin before configuring it.");
-        Settings.WordsText = value;
+        if (id == WordsSettingId)
+        {
+            Settings.WordsText = value;
+            return Task.CompletedTask;
+        }
+
+        Settings.CollapseRepeatedWords = value switch
+        {
+            "true" => true,
+            "false" => false,
+            _ => throw new ArgumentException("Unsupported setting value.", nameof(value))
+        };
         return Task.CompletedTask;
     }
 

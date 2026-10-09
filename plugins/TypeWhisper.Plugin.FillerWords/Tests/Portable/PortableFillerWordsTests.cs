@@ -26,7 +26,7 @@ public sealed class PortableFillerWordsTests : IDisposable
         }
         using var restarted = new FillerWordsPlugin();
         await restarted.ActivateAsync(new VocabularyHostServices(_root));
-        Assert.Equal(words, Assert.Single(restarted.TextSettings).Value);
+        Assert.Equal(words, WordsSetting(restarted).Value);
         Assert.Equal(3, restarted.Settings!.WordCount);
         Assert.Equal("Das ist gut.", await restarted.ProcessAsync("Das ist ähm sozusagen quasi gut.", new(), default));
     }
@@ -41,7 +41,7 @@ public sealed class PortableFillerWordsTests : IDisposable
         }
         using var restarted = new FillerWordsPlugin();
         await restarted.ActivateAsync(new VocabularyHostServices(_root));
-        Assert.Equal("basically", Assert.Single(restarted.TextSettings).Value);
+        Assert.Equal("basically", WordsSetting(restarted).Value);
         Assert.Equal("It works, um", await restarted.ProcessAsync("It basically works, um", new(), default));
     }
 
@@ -55,9 +55,9 @@ public sealed class PortableFillerWordsTests : IDisposable
         using var plugin = new FillerWordsPlugin();
         await plugin.ActivateAsync(host.Object);
         await Assert.ThrowsAsync<IOException>(async () => await plugin.SaveTextSettingAsync("words", "basically", default));
-        Assert.Equal("um", Assert.Single(plugin.TextSettings).Value);
+        Assert.Equal("um", WordsSetting(plugin).Value);
         Assert.Equal("um", stored);
-        Assert.Equal("basically works", await plugin.ProcessAsync("um basically works", new(), default));
+        Assert.Equal("basically works", await plugin.ProcessAsync("um basically works", new() { SourceLanguage = "en" }, default));
     }
 
     [Fact]
@@ -65,12 +65,56 @@ public sealed class PortableFillerWordsTests : IDisposable
     {
         using var plugin = new FillerWordsPlugin();
         await plugin.ActivateAsync(new VocabularyHostServices(_root));
-        var previous = Assert.Single(plugin.TextSettings).Value;
+        var previous = WordsSetting(plugin).Value;
         using var canceled = new CancellationTokenSource(); canceled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await plugin.ProcessAsync("um yes", new(), canceled.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await plugin.SaveTextSettingAsync("words", "", canceled.Token));
-        Assert.Equal(previous, Assert.Single(plugin.TextSettings).Value);
+        Assert.Equal(previous, WordsSetting(plugin).Value);
     }
+
+    [Theory]
+    [InlineData("de", "Wir treffen uns um 10 Uhr", "Wir treffen uns um 10 Uhr")]
+    [InlineData("en", "um, I think", "I think")]
+    [InlineData("de", "Gut. Äh, ich ich ich komme", "Gut. Ich komme")]
+    [InlineData("de", "Gut, äh, ich, ich, ich, ich komme.", "Gut, ich komme.")]
+    public async Task ProcessingUsesTheDictationLanguage(string language, string input, string expected)
+    {
+        using var plugin = new FillerWordsPlugin();
+        await plugin.ActivateAsync(new VocabularyHostServices(_root));
+        Assert.Equal(expected, await plugin.ProcessAsync(input, new() { SourceLanguage = language }, default));
+    }
+
+    [Fact]
+    public async Task CollapsingRepeatedWordsCanBeTurnedOffAcrossHostRestart()
+    {
+        using (var plugin = new FillerWordsPlugin())
+        {
+            await plugin.ActivateAsync(new VocabularyHostServices(_root));
+            Assert.Equal("true", CollapseSetting(plugin).Value);
+            Assert.Equal("ich komme", await plugin.ProcessAsync("ich ich ich komme", new(), default));
+            await plugin.SaveTextSettingAsync("collapseRepeatedWords", "false", default);
+        }
+        using var restarted = new FillerWordsPlugin();
+        await restarted.ActivateAsync(new VocabularyHostServices(_root));
+        Assert.Equal("false", CollapseSetting(restarted).Value);
+        Assert.Equal("ich ich ich komme", await restarted.ProcessAsync("ich ich ich komme", new(), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => restarted.SaveTextSettingAsync("collapseRepeatedWords", "maybe", default));
+        Assert.Equal("false", CollapseSetting(restarted).Value);
+    }
+
+    [Fact]
+    public async Task EmptyWordListStillCollapsesRepeatedWords()
+    {
+        using var plugin = new FillerWordsPlugin();
+        await plugin.ActivateAsync(new VocabularyHostServices(_root));
+        await plugin.SaveTextSettingAsync("words", "", default);
+        Assert.Equal("um ich komme", await plugin.ProcessAsync("um ich ich ich komme", new() { SourceLanguage = "en" }, default));
+    }
+
+    private static PluginTextSetting WordsSetting(FillerWordsPlugin plugin) => plugin.TextSettings.Single(setting => setting.Id == "words");
+
+    private static PluginTextSetting CollapseSetting(FillerWordsPlugin plugin) =>
+        plugin.TextSettings.Single(setting => setting.Id == "collapseRepeatedWords");
 
     [Fact]
     public void RealPackageRequiresExplicitEnablementAndRunsThroughRegistry()
@@ -107,7 +151,7 @@ public sealed class PortableFillerWordsTests : IDisposable
             Task.FromResult(new WeakReference(AssemblyLoadContext.GetLoadContext(plugin.GetType().Assembly)!)));
         var processor = Assert.Single(registry.PostProcessors);
         Assert.Equal(manifest.Version, processor.Version);
-        Assert.Equal("hello", await registry.ProcessTextAsync(processor, "um hello", new()));
+        Assert.Equal("hello", await registry.ProcessTextAsync(processor, "um hello", new() { SourceLanguage = "en" }));
         Assert.Null(await registry.SetEnabledAsync(manifest.Id, false));
         Assert.Empty(registry.PostProcessors);
         await registry.DisposeAsync();

@@ -3,5 +3,10 @@
   "Settings.Hint": "Ein Wort pro Zeile. Kommas und Semikolons sind ebenfalls erlaubt.",
   "Settings.WordCount": "{0} Wörter",
   "Settings.WordCountOne": "1 Wort",
-  "Settings.ResetDefaults": "Standard wiederherstellen"
+  "Settings.ResetDefaults": "Standard wiederherstellen",
+  "Settings.WordsDescription": "Ein Wort oder eine Wendung pro Zeile. Wörter, die in anderen Sprachen echte Wörter sind, etwa „um“, werden nur entfernt, wenn die Diktatsprache passt.",
+  "Settings.CollapseRepeatedWords": "Wiederholte Wörter zusammenfassen",
+  "Settings.CollapseRepeatedWordsDescription": "Kürzt ein Wort, das drei- oder mehrmals hintereinander vorkommt, etwa „ich ich ich“, auf ein Wort.",
+  "Settings.On": "Ein",
+  "Settings.Off": "Aus"
 }

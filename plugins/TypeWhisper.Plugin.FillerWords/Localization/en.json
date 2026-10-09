@@ -3,5 +3,10 @@
   "Settings.Hint": "One word per line. Commas and semicolons are also accepted.",
   "Settings.WordCount": "{0} words",
   "Settings.WordCountOne": "1 word",
-  "Settings.ResetDefaults": "Reset Defaults"
+  "Settings.ResetDefaults": "Reset Defaults",
+  "Settings.WordsDescription": "Enter one word or phrase per line. Words that are real words in other languages, such as \"um\", are only removed when the dictation language matches.",
+  "Settings.CollapseRepeatedWords": "Collapse repeated words",
+  "Settings.CollapseRepeatedWordsDescription": "Shortens a word that occurs three or more times in a row, such as \"I I I\", to a single word.",
+  "Settings.On": "On",
+  "Settings.Off": "Off"
 }

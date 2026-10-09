@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.filler-words",
   "name": "Filler Words",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minHostVersion": "1.0.0",
   "author": "TypeWhisper",
   "description": "Removes filler words like \"um\" and \"uh\" from transcribed text",

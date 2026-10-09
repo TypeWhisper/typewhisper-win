@@ -67,6 +67,8 @@ internal sealed class FillerWordMatcher
     /// <summary>
     /// Replaces adjacent Latin matches as one run, so separators consumed between
     /// consecutive fillers do not reappear as leading, doubled or trailing whitespace.
+    /// A capitalized filler that opened a sentence hands its capital to the next word,
+    /// so "Gut. Äh, ich komme" becomes "Gut. Ich komme".
     /// </summary>
     private string ApplyLatin(string text)
     {
@@ -76,6 +78,7 @@ internal sealed class FillerWordMatcher
 
         var result = new StringBuilder(text.Length);
         var sourceIndex = 0;
+        var capitalOwed = false;
 
         for (var matchIndex = 0; matchIndex < matches.Count; matchIndex++)
         {
@@ -89,13 +92,91 @@ internal sealed class FillerWordMatcher
                 runEnd = nextMatch.Index + nextMatch.Length;
             }
 
-            result.Append(text, sourceIndex, firstMatch.Index - sourceIndex);
+            AppendRestoringCapital(result, text, sourceIndex, firstMatch.Index, ref capitalOwed);
+            capitalOwed |= char.IsUpper(firstMatch.Groups["word"].Value[0]) && OpensSentence(result);
             result.Append(LatinReplacement(firstMatch, runEnd, text));
             sourceIndex = runEnd;
         }
 
-        result.Append(text, sourceIndex, text.Length - sourceIndex);
+        AppendRestoringCapital(result, text, sourceIndex, text.Length, ref capitalOwed);
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Appends <paramref name="text"/> from <paramref name="start"/> to <paramref name="end"/>.
+    /// While a capital is owed, the next word settles the debt. Only a plain lower-case word
+    /// is capitalized; handles, identifiers and mixed-case names such as "@jdoe", "example.com"
+    /// or "iPhone" keep their casing.
+    /// </summary>
+    private static void AppendRestoringCapital(StringBuilder result, string text, int start, int end, ref bool capitalOwed)
+    {
+        if (capitalOwed)
+        {
+            var index = start;
+            while (index < end && char.IsWhiteSpace(text[index]))
+                index++;
+
+            if (index < end)
+            {
+                capitalOwed = false;
+
+                if (IsPlainLowerCaseWord(text, index, end) && Rune.TryGetRuneAt(text, index, out var first))
+                {
+                    Span<char> upper = stackalloc char[2];
+                    var length = Rune.ToUpperInvariant(first).EncodeToUtf16(upper);
+
+                    result.Append(text, start, index - start);
+                    result.Append(upper[..length]);
+                    start = index + first.Utf16SequenceLength;
+                }
+            }
+        }
+
+        result.Append(text, start, end - start);
+    }
+
+    /// <summary>
+    /// Returns whether the token at <paramref name="index"/> is an ordinary lower-case word:
+    /// letters with inner apostrophes or hyphens, optionally followed by sentence punctuation.
+    /// </summary>
+    private static bool IsPlainLowerCaseWord(string text, int index, int end)
+    {
+        if (!char.IsLower(text, index))
+            return false;
+
+        var tokenEnd = index;
+        while (tokenEnd < end && !char.IsWhiteSpace(text[tokenEnd]))
+            tokenEnd++;
+
+        while (tokenEnd > index && text[tokenEnd - 1] is ',' or '.' or '!' or '?' or '…' or ';' or ':')
+            tokenEnd--;
+
+        for (var position = index; position < tokenEnd; position++)
+        {
+            var c = text[position];
+            if (char.IsUpper(c) || !(char.IsLetter(c) || char.IsSurrogate(c) || c is '\'' or '’' or '-'))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Returns whether a word appended to <paramref name="kept"/> would open a sentence: it
+    /// starts the text or a line, or follows sentence-ending punctuation.
+    /// </summary>
+    private static bool OpensSentence(StringBuilder kept)
+    {
+        for (var index = kept.Length - 1; index >= 0; index--)
+        {
+            if (IsLineBreak(kept[index]))
+                return true;
+
+            if (!char.IsWhiteSpace(kept[index]))
+                return kept[index] is '.' or '!' or '?' or '…';
+        }
+
+        return true;
     }
 
     private static Regex BuildLatinPattern(IReadOnlyList<string> words)
@@ -107,7 +188,7 @@ internal sealed class FillerWordMatcher
         var pattern =
             @"(?<lead>(?>[ \t]*))" +
             @"(?:(?<![\p{L}\p{N}_,.!?…])" + AttachedPunctuation + @"+(?<gap>(?>[ \t]*)))?" +
-            @"(?<![\p{L}\p{N}_])(?:" + alternation + @")(?![\p{L}\p{N}_])" +
+            @"(?<![\p{L}\p{N}_])(?<word>" + alternation + @")(?![\p{L}\p{N}_])" +
             AttachedPunctuation + @"*" +
             @"(?<trail>(?>[ \t]*))";
 
