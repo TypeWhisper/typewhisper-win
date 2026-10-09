@@ -32,6 +32,12 @@ For an AMD GPU, start with whisper.cpp and Vulkan. Select a whisper.cpp model, c
 
 whisper.cpp places the model on one Vulkan device. From plugin 1.2.20, TypeWhisper picks the first dedicated GPU and uses integrated graphics only when there is no dedicated GPU. On systems with both, for example a Ryzen processor with Radeon graphics next to a dedicated card, the dedicated card is used even when Windows lists the integrated graphics first. On a system with an NVIDIA card and AMD integrated graphics, Vulkan runs on the NVIDIA card. Choose NVIDIA CUDA there for the best speed.
 
+## Overlay and capture layers
+
+Overlay and capture tools such as Steam, OBS or graphics driver utilities install implicit Vulkan layers, which the Vulkan loader adds to every Vulkan process. They can crash or slow Vulkan transcription. TypeWhisper therefore starts with `VK_LOADER_LAYERS_DISABLE=~implicit~`, which also applies to its transcription worker and to Cohere Transcribe (Local). It does not change the overlay in games or other apps.
+
+If you set `VK_LOADER_LAYERS_DISABLE` yourself, TypeWhisper keeps your value. To keep the implicit layers, for example to capture TypeWhisper's GPU work with a profiling tool, set `TYPEWHISPER_KEEP_VULKAN_IMPLICIT_LAYERS=1` and restart TypeWhisper.
+
 ## Manual ROCm hook
 
 TypeWhisper does not ship or discover a supported ROCm build of whisper.cpp. The ROCm/TheRock SDK by itself is not a loadable TypeWhisper runtime.

@@ -52,6 +52,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutRules.cs" Link="ShortcutRules.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ShortcutKeys.cs" Link="ShortcutKeys.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/VulkanLayerPolicy.cs" Link="VulkanLayerPolicy.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- The app files compiled into these tests rely on the app's project-wide import. -->
