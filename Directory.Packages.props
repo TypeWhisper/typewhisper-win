@@ -18,9 +18,9 @@
     <PackageVersion Include="Interop.UIAutomationClient" Version="10.19041.0" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
-    <PackageVersion Include="NAudio" Version="2.2.1" />
-    <PackageVersion Include="NAudio.Wasapi" Version="2.2.1" />
-    <PackageVersion Include="NAudio.WinMM" Version="2.2.1" />
+    <PackageVersion Include="NAudio" Version="2.4.0" />
+    <PackageVersion Include="NAudio.Wasapi" Version="2.4.0" />
+    <PackageVersion Include="NAudio.WinMM" Version="2.4.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageVersion Include="System.Speech" Version="10.0.0" />
     <!-- Packaging workflows read this version when installing the vpk tool. -->

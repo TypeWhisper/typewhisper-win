@@ -4,7 +4,7 @@
     <Version>1.2.2</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="NAudio" />
+    <PackageReference Include="NAudio.Wasapi" />
     <Compile Remove="Tests/**/*.cs" />
     <Compile Include="../shared/PortableLocalization.cs" Link="Shared/PortableLocalization.cs" />
     <Using Include="TypeWhisper.Plugin.Shared" />
