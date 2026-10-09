@@ -206,16 +206,16 @@
     {
       "id": "com.typewhisper.filler-words",
       "name": "Filler Words",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "minHostVersion": "1.0.0",
       "author": "TypeWhisper",
       "description": "Removes filler words like \"um\" and \"uh\" from transcribed text",
       "categories": [
         "post-processing"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.filler-words-1.0.0-win-x64.zip",
-      "sha256": "237b4fb47a7b723ecd7b74bf9f9c48f863d0e896f6e98668ba9a37c8810d195c",
-      "size": 10738,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-filler-words-v1.1.0/com.typewhisper.filler-words-1.1.0-win-x64.zip",
+      "sha256": "4be54e9a010ee110c717458887cb99cc0603e4956f56e4bbbdfa5e0139893090",
+      "size": 15642,
       "platforms": [
         "windows"
       ],
