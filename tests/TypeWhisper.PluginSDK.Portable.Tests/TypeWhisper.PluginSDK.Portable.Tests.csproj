@@ -32,7 +32,7 @@
     <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
   </ItemGroup>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <PackageReference Include="NAudio" />
+    <PackageReference Include="NAudio.Wasapi" />
     <Compile Include="../../src/TypeWhisper.WinUI/MediaFoundationFileDecoder.cs" Link="MediaFoundationFileDecoder.cs" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
