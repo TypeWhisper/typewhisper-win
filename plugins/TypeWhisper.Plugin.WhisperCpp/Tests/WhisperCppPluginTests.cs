@@ -36,7 +36,7 @@ public partial class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.2.23", manifest.Version);
+        Assert.Equal("1.2.24", manifest.Version);
         Assert.Equal("1.1.6", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }

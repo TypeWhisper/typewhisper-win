@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using TypeWhisper.Plugin.WhisperCpp;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using Whisper.net;
 
@@ -172,7 +173,64 @@ public partial class WhisperCppPluginTests
         await Assert.ThrowsAsync<NotSupportedException>(() =>
             plugin.TranscribePcmAsync(ReadOnlyMemory<float>.Empty, "de", true, default));
         await Assert.ThrowsAsync<NotSupportedException>(() =>
+            plugin.TranscribePcmWithPromptAsync(new float[160], "de", true, "TypeWhisper", default));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
             plugin.TranscribeAsync([], "de", true, null, default));
+    }
+
+    [Fact]
+    public void DictionaryTermsBecomeAPlainPromptOfWholeTermsWithinWhispersPromptWindow()
+    {
+        using var plugin = new WhisperCppPlugin();
+        Assert.True(plugin.SupportsDictionaryTerms);
+        Assert.False(((ITranscriptionEnginePlugin)plugin).SupportsStructuredDictionaryTerms);
+        var terms = Enumerable.Range(0, 100).Select(index => $"Fachbegriff{index:00}").ToArray();
+        var prompt = PluginDictionaryTerms.CreatePrompt(terms, plugin.DictionaryTermsBudget)!;
+        Assert.InRange(prompt.Length, 400, 448);
+        var kept = prompt.Split(", ");
+        Assert.Equal(terms.Take(kept.Length), kept);
+    }
+
+    // Transcripts large-v3-turbo returned for noise and speech with this prompt.
+    [Theory]
+    [InlineData("Kwek, Hillger, seofood, Kwek", true)]
+    [InlineData("Kwixta", true)]
+    [InlineData("Kwyjibo", true)]
+    [InlineData("hillger.", true)]
+    [InlineData("Please send the Quijibo build to Marko Hillger at seofood.", false)]
+    [InlineData("Hillger hat angerufen", false)]
+    [InlineData(".", false)]
+    [InlineData("", false)]
+    public void PromptEchoIsSuspectedOnlyWhenEveryWordResemblesATerm(string text, bool suspected) =>
+        Assert.Equal(suspected, DictionaryPromptEcho.IsSuspected(text, "Kwyjibo, Hillger, seofood, Zelnorm, Quixxa, Brontolux"));
+
+    [Theory]
+    [InlineData(".", false)]
+    [InlineData(" ... ", false)]
+    [InlineData(null, false)]
+    [InlineData("Hilger", true)]
+    [InlineData("東京", true)]
+    public void PunctuationAloneHasNoWords(string? text, bool words) =>
+        Assert.Equal(words, DictionaryPromptEcho.HasWords(text));
+
+    // Opt-in: set TYPEWHISPER_TEST_WHISPER_DATA to a whisper.cpp plugin data folder containing Models/ggml-large-v3-turbo.bin.
+    [Fact]
+    public async Task NoiseWithADictionaryPromptDoesNotReturnTheTerms()
+    {
+        var data = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_WHISPER_DATA");
+        if (string.IsNullOrWhiteSpace(data) || !OperatingSystem.IsWindows()) return;
+        using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(new FakePluginHostServices(data));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdVulkan);
+        plugin.SelectModel("large-v3-turbo");
+        const string prompt = "Kwyjibo, Hillger, seofood, Zelnorm, Quixxa, Brontolux";
+        var random = new Random(1);
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var noise = Enumerable.Range(0, 16000 * 3).Select(_ => (float)(random.NextDouble() - .5) * .06f).ToArray();
+            var result = await plugin.TranscribePcmWithPromptAsync(noise, null, false, prompt, default);
+            Assert.False(DictionaryPromptEcho.IsSuspected(result.Text, prompt), result.Text);
+        }
     }
 
     [Fact]

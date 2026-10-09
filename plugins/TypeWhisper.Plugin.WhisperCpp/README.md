@@ -2,7 +2,7 @@
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.23`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.6`.
+Version `1.2.24`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.6`.
 Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup
@@ -12,6 +12,8 @@ Download a model explicitly, select the processing device and save the settings,
 This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
 
 Native translation outputs English. Version 1.2.21 rejects translation with English-only or Large V3 Turbo weights, including quantized Turbo, before loading the model. Use a multilingual non-Turbo model such as Small or Medium for translation.
+
+Version 1.2.24 passes active dictionary terms to Whisper as its initial prompt, for microphone dictation and file transcription. The host keeps whole terms in dictionary order up to 448 characters, which stays inside Whisper's 224-token prompt window. Without speech, Whisper tends to repeat its prompt; when every word of a transcript resembles a dictionary term, the plugin decodes the audio once more without the prompt and keeps the prompted text only if that pass still finds words. Hosts older than this change still send no terms to local PCM engines; transcription is then unchanged.
 
 Before a model download starts, version 1.2.22 removes abandoned partial files of the same model and checks that its drive has room for the model plus a 256 MB reserve. If it does not, the download stops immediately and names the required and available space.
 

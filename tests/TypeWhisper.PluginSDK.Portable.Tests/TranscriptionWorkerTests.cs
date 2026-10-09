@@ -134,6 +134,21 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DictionaryTermsReachThePcmEngineInTheWorkerProcess()
+    {
+        var result = await LanguageHintTranscription.DecodeAsync(_engine, new float[] { 0, 0.5f },
+            () => throw new InvalidOperationException("Must not encode PCM"), "de", [], false, default, ["TypeWhisper", "Grüße, Marco"]);
+        var fields = Fields(result);
+        Assert.Equal(_engine.WorkerProcessId.ToString(), fields["pid"]);
+        Assert.Equal("2", fields["length"]);
+        Assert.Equal("TypeWhisper, Grüße, Marco", fields["prompt"]);
+
+        var withoutTerms = await LanguageHintTranscription.DecodeAsync(_engine, new float[] { 0 },
+            () => throw new InvalidOperationException("Must not encode PCM"), "de", [], false, default);
+        Assert.Equal("", Fields(withoutTerms)["prompt"]);
+    }
+
+    [Fact]
     public async Task ModelChangesInTheHostReachTheRunningWorker()
     {
         await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);

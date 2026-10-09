@@ -123,7 +123,11 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     }
 
     public Task<PluginTranscriptionResult> TranscribePcmAsync(ReadOnlyMemory<float> samples, string? language, bool translate, CancellationToken cancellationToken) =>
-        TranscribeCoreAsync(new() { AudioFormat = TranscriptionWorkerAudioFormats.Pcm, Language = language, Translate = translate },
+        TranscribePcmWithPromptAsync(samples, language, translate, null, cancellationToken);
+
+    public Task<PluginTranscriptionResult> TranscribePcmWithPromptAsync(ReadOnlyMemory<float> samples, string? language, bool translate, string? prompt,
+        CancellationToken cancellationToken) =>
+        TranscribeCoreAsync(new() { AudioFormat = TranscriptionWorkerAudioFormats.Pcm, Language = language, Translate = translate, Prompt = prompt },
             MemoryMarshal.AsBytes(samples.Span).ToArray(), cancellationToken);
 
     public Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct) =>
