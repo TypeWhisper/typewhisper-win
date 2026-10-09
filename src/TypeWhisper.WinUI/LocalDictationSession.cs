@@ -255,9 +255,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             SetStatus(Loc.T("Switching the processing device… Wait until the model is ready before dictating."), DictationPhase.LoadingModel);
             await _livePreview.StopAsync();
             await Models.SetAccelerationAsync(preference);
+            LocalPluginError = null;
             return null;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return Models.Error ?? ex.Message; }
+        // Like a failed model selection, the plugin needs attention in Integrations.
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return LocalPluginError = Models.Error ?? ex.Message; }
         finally
         {
             _gate.Release();
