@@ -5,6 +5,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // Before the worker dispatch, so worker and CrispASR processes inherit it.
+        VulkanLayerPolicy.Apply();
         // A local speech engine runs in a copy of this executable, so a native crash ends only that copy.
         // Worker mode must start before installer hooks, WinUI and single-instance activation.
         if (TypeWhisper.PluginHost.TranscriptionWorkerServer.IsWorkerInvocation(args))
