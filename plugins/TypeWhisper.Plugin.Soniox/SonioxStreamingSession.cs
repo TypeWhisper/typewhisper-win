@@ -37,22 +37,26 @@ internal sealed class SonioxStreamingSession : IStreamingSession
         _ => throw new ArgumentException("Unknown Soniox region.", nameof(region))
     });
 
-    internal static byte[] Configuration(string key, IReadOnlyList<string> languages) => JsonSerializer.SerializeToUtf8Bytes(new
+    // The key travels in the Authorization header, not here: Soniox refuses keys in the start message from 2027-01-15.
+    internal static byte[] Configuration(IReadOnlyList<string> languages) => JsonSerializer.SerializeToUtf8Bytes(new
     {
-        api_key = key, model = "stt-rt-v5", audio_format = "pcm_s16le", sample_rate = 16000, num_channels = 1,
+        model = "stt-rt-v5", audio_format = "pcm_s16le", sample_rate = 16000, num_channels = 1,
         language_hints = languages, enable_language_identification = true, enable_endpoint_detection = true
     });
 
-    internal static async Task<IStreamingSession> ConnectAsync(string key, string region, IReadOnlyList<string> languages, CancellationToken ct)
+    internal static Task<IStreamingSession> ConnectAsync(string key, string region, IReadOnlyList<string> languages, CancellationToken ct) =>
+        ConnectAsync(key, Endpoint(region), languages, ct);
+
+    internal static async Task<IStreamingSession> ConnectAsync(string key, Uri uri, IReadOnlyList<string> languages, CancellationToken ct)
     {
-        var uri = Endpoint(region);
         var socket = new ClientWebSocket();
         try
         {
+            socket.Options.SetRequestHeader("Authorization", "Bearer " + key);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(15));
             await socket.ConnectAsync(uri, timeout.Token).ConfigureAwait(false);
-            await socket.SendAsync(Configuration(key, languages).AsMemory(), WebSocketMessageType.Text, true, timeout.Token).ConfigureAwait(false);
+            await socket.SendAsync(Configuration(languages).AsMemory(), WebSocketMessageType.Text, true, timeout.Token).ConfigureAwait(false);
             return new SonioxStreamingSession(socket);
         }
         catch { socket.Dispose(); throw; }
