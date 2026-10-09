@@ -77,6 +77,34 @@ public sealed class LanguageHintTranscriptionTests
             () => throw new InvalidOperationException("Must not encode PCM"), null, ["en", "de"], false, default));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DictionaryPromptReachesOnlyCapablePcmEngines(bool dictionary)
+    {
+        var engine = new Mock<IPcmTranscriptionEnginePlugin>();
+        engine.SetupGet(e => e.SupportsDictionaryTerms).Returns(dictionary);
+        engine.SetupGet(e => e.DictionaryTermsBudget).Returns(new DictionaryTermsBudget(MaxTotalChars: 6));
+        float[] samples = [0.5f];
+        var result = new PluginTranscriptionResult("AA BB", "de", 1, null);
+        engine.Setup(e => e.TranscribePcmAsync(samples, "de", false, default)).ReturnsAsync(result);
+        engine.Setup(e => e.TranscribePcmWithPromptAsync(samples, "de", false, "AA, BB", default)).ReturnsAsync(result);
+        Assert.Same(result, await LanguageHintTranscription.DecodeAsync(engine.Object, samples,
+            () => throw new InvalidOperationException("Must not encode PCM"), "de", [], false, default, ["AA", "BB", "CC"]));
+        engine.Verify(e => e.TranscribePcmWithPromptAsync(samples, "de", false, "AA, BB", default), dictionary ? Times.Once() : Times.Never());
+        engine.Verify(e => e.TranscribePcmAsync(samples, "de", false, default), dictionary ? Times.Never() : Times.Once());
+    }
+
+    [Fact]
+    public async Task PcmEnginesWithoutThePromptMemberKeepTheirPcmBehavior()
+    {
+        var engine = new Mock<IPcmTranscriptionEnginePlugin> { CallBase = true };
+        float[] samples = [0.5f];
+        var result = new PluginTranscriptionResult("Hallo", "de", 1, null);
+        engine.Setup(e => e.TranscribePcmAsync(samples, "de", false, default)).ReturnsAsync(result);
+        Assert.Same(result, await engine.Object.TranscribePcmWithPromptAsync(samples, "de", false, "TypeWhisper", default));
+    }
+
     [Fact]
     public async Task CapablePcmUsesExplicitWavHintsContract()
     {

@@ -31,6 +31,8 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
     /// <inheritdoc />
     public bool SupportsLocalLivePreview => true;
     /// <inheritdoc />
+    public bool SupportsDictionaryTerms => true;
+    /// <inheritdoc />
     public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends =>
         [TranscriptionAccelerationBackend.Cpu, TranscriptionAccelerationBackend.NvidiaCuda];
     /// <inheritdoc />
@@ -79,9 +81,16 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
         Result(language, wavAudio.Length, prompt, ct);
     /// <inheritdoc />
     public Task<PluginTranscriptionResult> TranscribePcmAsync(ReadOnlyMemory<float> samples, string? language, bool translate, CancellationToken cancellationToken) =>
-        Result(language, samples.Length, samples.IsEmpty ? null : samples.Span[^1].ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+        Result(language, samples.Length, LastSample(samples), cancellationToken);
+    /// <inheritdoc />
+    public Task<PluginTranscriptionResult> TranscribePcmWithPromptAsync(ReadOnlyMemory<float> samples, string? language, bool translate, string? prompt,
+        CancellationToken cancellationToken) =>
+        Result(language, samples.Length, LastSample(samples), cancellationToken, prompt);
 
-    private async Task<PluginTranscriptionResult> Result(string? language, int length, string? detail, CancellationToken ct)
+    private static string? LastSample(ReadOnlyMemory<float> samples) =>
+        samples.IsEmpty ? null : samples.Span[^1].ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private async Task<PluginTranscriptionResult> Result(string? language, int length, string? detail, CancellationToken ct, string? prompt = null)
     {
         switch (language)
         {
@@ -100,7 +109,7 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
                 if (!File.Exists(frozen)) { File.WriteAllText(frozen, ""); await Task.Run(Freeze); }
                 break;
         }
-        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};asyncSelects={_host!.GetSetting<int>("asyncSelectCalls")};accel={_acceleration};length={length};detail={detail}", language, 1)
+        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};asyncSelects={_host!.GetSetting<int>("asyncSelectCalls")};accel={_acceleration};length={length};detail={detail};prompt={prompt}", language, 1)
         {
             TokenTimings = [new VocabularyTokenTiming("probe", 0.25, 0.5)],
             Segments = [new PluginTranscriptionSegment("probe", 0, 1) { NoSpeechProbability = 0.25f }]

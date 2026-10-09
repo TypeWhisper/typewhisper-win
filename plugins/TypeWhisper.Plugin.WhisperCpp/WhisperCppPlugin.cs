@@ -149,7 +149,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.23";
+    public string PluginVersion => "1.2.24";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -198,6 +198,20 @@ public sealed partial class WhisperCppPlugin :
     public IReadOnlyList<string> SupportedLanguages => _selectedModelId?.EndsWith(".en", StringComparison.Ordinal) == true ? ["en"] : WhisperLanguages;
     /// <inheritdoc />
     public bool SupportsLocalLivePreview => true;
+    /// <summary>
+    /// Gets whether active dictionary terms are passed to Whisper as its initial prompt.
+    /// </summary>
+    public bool SupportsDictionaryTerms => true;
+    /// <summary>
+    /// Whisper reads at most 224 prompt tokens and drops the oldest ones beyond that, which would discard the
+    /// first and most important terms. <see cref="WhisperPrompt"/> keeps the prompt within 224 UTF-8 bytes,
+    /// so the host sends no more characters than that.
+    /// </summary>
+    public DictionaryTermsBudget DictionaryTermsBudget { get; } = new(MaxTotalChars: WhisperPrompt.MaxTokens);
+    /// <summary>
+    /// Gets whether the host sends terms with exact boundaries, so a term containing a comma is kept or dropped as a whole.
+    /// </summary>
+    public bool SupportsStructuredDictionaryTerms => true;
     /// <summary>
     /// Gets the supported acceleration backends.
     /// </summary>
@@ -513,11 +527,21 @@ public sealed partial class WhisperCppPlugin :
         CancellationToken ct)
     {
         await using var audioStream = new MemoryStream(wavAudio, writable: false);
-        return await TranscribeCoreAsync(processor => processor.ProcessAsync(audioStream, ct), language, translate, prompt, ct).ConfigureAwait(false);
+        // A suspected prompt echo decodes the same audio a second time.
+        return await TranscribeCoreAsync(processor =>
+        {
+            audioStream.Position = 0;
+            return processor.ProcessAsync(audioStream, ct);
+        }, language, translate, prompt, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public Task<PluginTranscriptionResult> TranscribePcmAsync(ReadOnlyMemory<float> samples, string? language, bool translate, CancellationToken cancellationToken)
+    public Task<PluginTranscriptionResult> TranscribePcmAsync(ReadOnlyMemory<float> samples, string? language, bool translate, CancellationToken cancellationToken) =>
+        TranscribePcmWithPromptAsync(samples, language, translate, null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<PluginTranscriptionResult> TranscribePcmWithPromptAsync(ReadOnlyMemory<float> samples, string? language, bool translate, string? prompt,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var sample in samples.Span)
@@ -525,7 +549,7 @@ public sealed partial class WhisperCppPlugin :
         if (samples.IsEmpty) return translate && !SupportsTranslation
             ? Task.FromException<PluginTranscriptionResult>(new NotSupportedException(TranslationUnsupportedMessage))
             : Task.FromResult(new PluginTranscriptionResult("", language, 0, null));
-        return TranscribeCoreAsync(processor => processor.ProcessAsync(samples, cancellationToken), language, translate, null, cancellationToken);
+        return TranscribeCoreAsync(processor => processor.ProcessAsync(samples, cancellationToken), language, translate, prompt, cancellationToken);
     }
 
     private async Task<PluginTranscriptionResult> TranscribeCoreAsync(
@@ -539,23 +563,43 @@ public sealed partial class WhisperCppPlugin :
                 throw new NotSupportedException(TranslationUnsupportedMessage);
             await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false);
 
-            var builder = _factory!.CreateBuilder()
-                .WithLanguage(ResolveDecodeLanguage(modelId, language));
+            prompt = WhisperPrompt.Create(prompt);
+            if (prompt is null)
+                return await DecodeAsync(process, modelId, language, translate, null, ct).ConfigureAwait(false);
 
-            if (!string.IsNullOrWhiteSpace(prompt))
-                builder.WithPrompt(prompt);
+            var prompted = await DecodeAsync(process, modelId, language, translate, prompt, ct).ConfigureAwait(false);
+            if (!DictionaryPromptEcho.IsSuspected(prompted.Text, prompt))
+                return prompted;
 
-            if (translate)
-                builder.WithTranslate();
-
-            using var processor = builder.Build();
-
-            return await CollectResultAsync(process(processor), ct).ConfigureAwait(false);
+            // Without speech, Whisper tends to repeat its prompt. Only audio that still yields words
+            // without the prompt keeps the prompted text, so a dictated term alone stays correct.
+            var plain = await DecodeAsync(process, modelId, language, translate, null, ct).ConfigureAwait(false);
+            if (DictionaryPromptEcho.HasWords(plain.Text))
+                return prompted;
+            _host?.Log(PluginLogLevel.Info, "Discarded a transcript that only repeated dictionary terms.");
+            return plain;
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private async Task<PluginTranscriptionResult> DecodeAsync(Func<WhisperProcessor, IAsyncEnumerable<SegmentData>> process,
+        string modelId, string? language, bool translate, string? prompt, CancellationToken ct)
+    {
+        var builder = _factory!.CreateBuilder()
+            .WithLanguage(ResolveDecodeLanguage(modelId, language));
+
+        if (prompt is not null)
+            builder.WithPrompt(prompt);
+
+        if (translate)
+            builder.WithTranslate();
+
+        using var processor = builder.Build();
+
+        return await CollectResultAsync(process(processor), ct).ConfigureAwait(false);
     }
 
     internal static string ResolveDecodeLanguage(string modelId, string? language) =>

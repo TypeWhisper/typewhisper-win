@@ -23,7 +23,9 @@ public static class LanguageHintTranscription
             throw new NotSupportedException("This provider cannot translate audio to English.");
         if (language is not null || preferredLanguages.Count == 0 || !engine.SupportsLanguageHints)
         {
-            if (engine is IPcmTranscriptionEnginePlugin pcm) return pcm.TranscribePcmAsync(samples, language, translate, ct);
+            if (engine is IPcmTranscriptionEnginePlugin pcm) return prompt is null
+                ? pcm.TranscribePcmAsync(samples, language, translate, ct)
+                : pcm.TranscribePcmWithPromptAsync(samples, language, translate, prompt, ct);
             return ChunkedTranscription.DecodeAsync(samples, encodeWav, engine.MaximumAudioUploadBytes,
                 (wav, token) => PluginRequestRetry.RunAsync(engine.PluginId,
                     attempt => engine.TranscribeAsync(wav, language, translate, prompt, attempt), token, retry), ct);

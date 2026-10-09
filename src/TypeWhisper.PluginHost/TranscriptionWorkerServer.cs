@@ -226,6 +226,8 @@ public static class TranscriptionWorkerServer
                     await EnsureModelAsync(message.ModelId, ct).ConfigureAwait(false);
                     var result = message.AudioFormat switch
                     {
+                        TranscriptionWorkerAudioFormats.Pcm when message.Prompt is { } prompt =>
+                            await engine.TranscribePcmWithPromptAsync(ToSamples(payload), message.Language, message.Translate, prompt, ct).ConfigureAwait(false),
                         TranscriptionWorkerAudioFormats.Pcm => await engine.TranscribePcmAsync(ToSamples(payload), message.Language, message.Translate, ct).ConfigureAwait(false),
                         TranscriptionWorkerAudioFormats.Wav when message.LanguageHints is { } hints =>
                             await engine.TranscribeWithLanguageHintsAsync(payload, hints, message.Translate, message.Prompt, ct).ConfigureAwait(false),
