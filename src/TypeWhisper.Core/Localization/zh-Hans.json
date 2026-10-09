@@ -3088,5 +3088,6 @@
   "↑↓ Navigate   Enter Open": "↑↓ 导航   Enter 打开",
   "↑↓ Select   Enter Insert   Esc Back": "↑↓ 选择   Enter 插入   Esc 返回",
   "↑↓ Select   Enter Insert   Esc Close": "↑↓ 选择   Enter 插入   Esc 关闭",
-  "↑↓ Select   Enter Run   Esc Close": "↑↓ 选择   Enter 运行   Esc 关闭"
+  "↑↓ Select   Enter Run   Esc Close": "↑↓ 选择   Enter 运行   Esc 关闭",
+  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "模型加载期间窗口发生了变化，因此未插入任何内容。请复制文本，然后粘贴到你需要的位置。"
 }

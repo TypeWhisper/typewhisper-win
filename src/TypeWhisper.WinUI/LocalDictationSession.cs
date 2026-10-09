@@ -750,6 +750,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (!_audio.IsRecording || adoptEarlyCapture)
             {
                 if (!adoptEarlyCapture) _earlyStopSamples = null;
+                _reviewAfterTargetChange = false;
                 // A workflow model left over from a capture that ended elsewhere never outlives the next start.
                 if (_workflowModelOverride is not null) await RestoreWorkflowModelAsync();
                 // A dictation workflow's own model applies before its task and language are checked against it.
@@ -895,7 +896,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 NativeMethods.GetWindowThreadProcessId(_target, out var currentTargetProcessId);
-                if (!DictationStartupTarget.IsValid(_target, NativeMethods.GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
+                if (!DictationStartupTarget.IsValid(_target, NativeMethods.GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId)
+                    && !KeepForReviewAfterTargetChange(adoptEarlyCapture))
                 {
                     AppDiagnostics.Write("dictation.target-changed");
                     SetStatus(Loc.T("The target changed during recording setup. Focus your text field and try again."), DictationPhase.Idle);
@@ -907,7 +909,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 NativeMethods.GetWindowThreadProcessId(_target, out currentTargetProcessId);
-                if (!DictationStartupTarget.IsValid(_target, NativeMethods.GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId))
+                if (!DictationStartupTarget.IsValid(_target, NativeMethods.GetForegroundWindow(), TrayMenuHandle, processId, currentTargetProcessId)
+                    && !KeepForReviewAfterTargetChange(adoptEarlyCapture))
                 {
                     await StopCloudStreamAsync();
                     AppDiagnostics.Write("dictation.target-changed");
@@ -1033,7 +1036,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             };
             var delivery = new DictationOutputDelivery(_history);
             AppDiagnostics.Write("delivery.begin");
-            var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null ? _outputAtStart : _outputAtStart with { AutoPaste = false },
+            var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null && !_reviewAfterTargetChange ? _outputAtStart : _outputAtStart with { AutoPaste = false },
                 () => OutputPreferences.Current, async () =>
                 {
                     // Recheck after waiting: settings can change while modifiers are held.
@@ -1075,6 +1078,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
                     _workflowActionAtStart, text, new TypeWhisper.PluginSDK.Models.ActionContext(record.AppName, record.AppProcessName,
                         record.AppUrl, record.Language, rawText), ct));
+            if (_reviewAfterTargetChange && outcome.ReviewReason == DictationReviewReason.AutomaticPasteDisabled)
+                outcome = outcome with { Message = Loc.T("The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.") };
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             AppDiagnostics.Write(outcome.NeedsReview ? "delivery.review" : "delivery.completed");
             if (_disposed) return;
