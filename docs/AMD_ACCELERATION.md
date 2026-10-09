@@ -34,7 +34,7 @@ whisper.cpp places the model on one Vulkan device. From plugin 1.2.20, TypeWhisp
 
 ## Overlay and capture layers
 
-Overlay and capture tools such as Steam, OBS or graphics driver utilities install implicit Vulkan layers, which the Vulkan loader adds to every Vulkan process. They can crash or slow Vulkan transcription. TypeWhisper therefore starts with `VK_LOADER_LAYERS_DISABLE=~implicit~`, which also applies to its transcription worker and to Cohere Transcribe (Local). It does not change the overlay in games or other apps.
+Overlay and capture tools such as Steam, OBS or graphics driver utilities install implicit Vulkan layers, which the Vulkan loader adds to every Vulkan process. They can crash or slow Vulkan transcription. TypeWhisper therefore starts with `VK_LOADER_LAYERS_DISABLE=~implicit~`, which also applies to its transcription worker and to Cohere Transcribe (Local). It does not change the overlay in games or other apps. The variable needs Vulkan loader 1.3.234 or later, which current graphics drivers install as `vulkan-1.dll` in `System32`. Older loaders ignore it and keep loading the layers; updating the graphics driver updates the loader.
 
 If you set `VK_LOADER_LAYERS_DISABLE` yourself, TypeWhisper keeps your value. To keep the implicit layers, for example to capture TypeWhisper's GPU work with a profiling tool, set `TYPEWHISPER_KEEP_VULKAN_IMPLICIT_LAYERS=1` and restart TypeWhisper.
 
