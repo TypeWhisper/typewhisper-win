@@ -13,6 +13,9 @@ internal sealed partial class LocalDictationSession
     // Samples captured when the user finished speaking before the model was ready. Later audio is dropped.
     private int? _earlyStopSamples;
 
+    // The window changed while the model loaded. The speech is kept, but nothing is inserted or sent to a workflow action.
+    private bool _reviewAfterTargetChange;
+
     private bool CanCaptureWhileModelLoads => !_disposed && _phase == DictationPhase.LoadingModel && !_earlyCapture
         && !_audio.IsRecording && !_fileBusy && !_recorderReserved && !_workflowReserved;
 
@@ -58,6 +61,17 @@ internal sealed partial class LocalDictationSession
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { AppDiagnostics.WriteFailure("dictation.capture.adopt-failed", ex); }
+    }
+
+    // An adopted capture already holds speech, and a long load (such as a first CUDA download) leaves time to
+    // switch windows. Its transcript goes to review instead of being discarded. Other starts still stop, since
+    // nothing has been said yet and the shortcut can simply be pressed again.
+    private bool KeepForReviewAfterTargetChange(bool adoptedEarlyCapture)
+    {
+        if (!adoptedEarlyCapture) return false;
+        if (!_reviewAfterTargetChange) AppDiagnostics.Write("dictation.target-changed.review");
+        _reviewAfterTargetChange = true;
+        return true;
     }
 
     private void BeginRecordingFeedback(DictationAudioPreferences preferences)

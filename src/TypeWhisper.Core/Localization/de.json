@@ -3088,5 +3088,6 @@
   "↑↓ Navigate   Enter Open": "↑↓ Navigieren   Enter Öffnen",
   "↑↓ Select   Enter Insert   Esc Back": "↑↓ Auswählen   Enter Einfügen   Esc Zurück",
   "↑↓ Select   Enter Insert   Esc Close": "↑↓ Auswählen   Enter Einfügen   Esc Schließen",
-  "↑↓ Select   Enter Run   Esc Close": "↑↓ Auswählen   Enter Ausführen   Esc Schließen"
+  "↑↓ Select   Enter Run   Esc Close": "↑↓ Auswählen   Enter Ausführen   Esc Schließen",
+  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "Das Fenster hat sich geändert, während das Modell geladen wurde. Deshalb wurde nichts eingefügt. Kopiere den Text und füge ihn dort ein, wo du ihn haben möchtest."
 }

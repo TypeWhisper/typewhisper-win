@@ -3088,5 +3088,6 @@
   "↑↓ Navigate   Enter Open": "↑↓ 移動   Enter 開く",
   "↑↓ Select   Enter Insert   Esc Back": "↑↓ 選択   Enter 挿入   Esc 戻る",
   "↑↓ Select   Enter Insert   Esc Close": "↑↓ 選択   Enter 挿入   Esc 閉じる",
-  "↑↓ Select   Enter Run   Esc Close": "↑↓ 選択   Enter 実行   Esc 閉じる"
+  "↑↓ Select   Enter Run   Esc Close": "↑↓ 選択   Enter 実行   Esc 閉じる",
+  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "モデルの読み込み中にウィンドウが変わったため、何も挿入されませんでした。テキストをコピーして、使いたい場所に貼り付けてください。"
 }
