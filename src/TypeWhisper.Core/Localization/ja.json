@@ -3098,5 +3098,6 @@
   "Switching to NVIDIA CUDA… The first switch downloads about 2 GB.": "NVIDIA CUDA に切り替えています… 最初の切り替えでは約 2 GB をダウンロードします。",
   "Could not change the processing device: {0}": "処理デバイスを変更できませんでした: {0}",
   "Finish recording or the current model operation before changing the processing device.": "処理デバイスを変更する前に、録音または現在のモデル操作を終了してください。",
-  "Switching the processing device… Wait until the model is ready before dictating.": "処理デバイスを切り替えています… モデルの準備ができるまで音声入力をお待ちください。"
+  "Switching the processing device… Wait until the model is ready before dictating.": "処理デバイスを切り替えています… モデルの準備ができるまで音声入力をお待ちください。",
+  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "処理デバイスを変更できませんでした: {0} モデルが読み込まれていません。「モデルを使用」を選んで再度読み込んでください。"
 }

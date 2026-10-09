@@ -53,11 +53,14 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal bool SupportsModelRemoval => _lease?.Engine.SupportsModelRemoval == true;
     internal bool CanRemoveModel(string modelId) => Enabled && SupportsModelRemoval &&
         ActiveModelId != modelId && _lease?.Engine.SelectedModelId != modelId;
+    // A profile saved by an x64 build may be opened by the ARM64 build, which has no CUDA runtime.
     internal TranscriptionAccelerationPreference Acceleration =>
         Enum.TryParse<TranscriptionAccelerationPreference>(_host.GetSetting<string>(AccelerationSetting), out var saved)
-            && AccelerationChoices.Contains(saved) ? saved : TranscriptionAccelerationPreference.Auto;
+            && AccelerationChoices.Contains(saved) && (saved != TranscriptionAccelerationPreference.NvidiaCuda || CudaArchitecture)
+            ? saved : TranscriptionAccelerationPreference.Auto;
     // The CUDA runtime exists only for 64-bit Windows.
-    internal bool SupportsCuda => System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64
+    private static bool CudaArchitecture => System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64;
+    internal bool SupportsCuda => CudaArchitecture
         && _lease?.Engine.SupportedAccelerationBackends.Contains(TranscriptionAccelerationBackend.NvidiaCuda) == true;
     // How the loaded model runs; null while no model is loaded.
     internal TranscriptionAccelerationBackend? ActiveBackend => Ready ? _lease!.Engine.AccelerationStatus.ActiveBackend : null;
@@ -149,19 +152,21 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     // on the first load. If that load fails, the previous device and model are restored.
     internal async Task SetAccelerationAsync(TranscriptionAccelerationPreference preference, CancellationToken ct = default)
     {
-        if (!AccelerationChoices.Contains(preference)) throw new ArgumentOutOfRangeException(nameof(preference));
+        if (!AccelerationChoices.Contains(preference) || preference == TranscriptionAccelerationPreference.NvidiaCuda && !CudaArchitecture)
+            throw new ArgumentOutOfRangeException(nameof(preference));
         if (Acceleration == preference) return;
         if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException(Loc.T("A model operation is already in progress."));
         Busy = true; Error = null;
         Feedback = preference == TranscriptionAccelerationPreference.NvidiaCuda
             ? Loc.T("Switching to NVIDIA CUDA… The first switch downloads about 2 GB.") : null;
         Changed?.Invoke();
+        string? model = null;
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             var engine = _lease?.Engine ?? throw new InvalidOperationException(Loc.T("Enable the local plugin in Plugins first."));
             var previous = Acceleration;
-            var model = ActiveModelId;
+            model = ActiveModelId;
             _host.SetSetting(AccelerationSetting, preference.ToString());
             engine.SetAccelerationPreference(preference);
             if (model is null) { Feedback = null; return; }
@@ -185,7 +190,10 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Feedback = null;
-            Error = Loc.T("Could not change the processing device: {0}", ex.Message);
+            // When the previous model could not be loaded again either, no model is ready for dictation.
+            Error = model is not null && ActiveModelId is null
+                ? Loc.T("Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.", ex.Message)
+                : Loc.T("Could not change the processing device: {0}", ex.Message);
             throw;
         }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }

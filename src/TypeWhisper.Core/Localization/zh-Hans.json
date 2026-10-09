@@ -3098,5 +3098,6 @@
   "Switching to NVIDIA CUDA… The first switch downloads about 2 GB.": "正在切换到 NVIDIA CUDA… 首次切换会下载约 2 GB。",
   "Could not change the processing device: {0}": "无法更改处理设备：{0}",
   "Finish recording or the current model operation before changing the processing device.": "请先完成录音或当前的模型操作，然后再更改处理设备。",
-  "Switching the processing device… Wait until the model is ready before dictating.": "正在切换处理设备… 请等待模型准备就绪后再听写。"
+  "Switching the processing device… Wait until the model is ready before dictating.": "正在切换处理设备… 请等待模型准备就绪后再听写。",
+  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "无法更改处理设备：{0} 模型未加载；请选择“使用模型”重新加载。"
 }

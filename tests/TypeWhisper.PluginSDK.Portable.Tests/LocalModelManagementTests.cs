@@ -209,6 +209,17 @@ public sealed class LocalModelManagementTests : IDisposable
         Assert.Contains("No CUDA device", runtime.Error);
     }
     [Fact]
+    public async Task FailedRollbackSaysTheModelIsNotLoaded()
+    {
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        _engine.Setup(e => e.LoadModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("Worker failed"));
+        await Assert.ThrowsAsync<IOException>(() => runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.Cpu));
+        Assert.False(runtime.Ready);
+        Assert.Equal(TranscriptionAccelerationPreference.Auto, runtime.Acceleration);
+        Assert.Contains("Worker failed", runtime.Error);
+        Assert.Contains("not loaded", runtime.Error);
+    }
+    [Fact]
     public async Task RequestModelSelectionDoesNotPersistAndCanRestoreAfterCancellation()
     {
         _downloaded.Add("canary");
