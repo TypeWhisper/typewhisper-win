@@ -80,6 +80,8 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
             }
             // Existing visual-test flags are not navigation destinations.
             if (value == "--settings-small") continue;
+            // 1.0 startup shortcuts were created by Velopack, which prefixes their arguments with -a.
+            if (value == "-a") continue;
             return Failure(Loc.T("Unknown activation argument: {0}", value));
         }
         if (paths.Count > 0 && route is not null && route != "--files") return Failure(Loc.T("File activation cannot be combined with another destination."));
