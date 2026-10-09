@@ -3,7 +3,7 @@ using Xunit;
 
 public sealed class NativeModelProbeTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "probe-" + Guid.NewGuid());
+    private readonly string _root = Path.Join(Path.GetTempPath(), "probe-" + Guid.NewGuid());
     private readonly string _plugin;
     private readonly string _assets;
     private readonly string _runtime;
