@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -87,31 +86,26 @@ public sealed class ParakeetCtcPlugin : IVocabularyRescorerPlugin
             aligned.Add((position, position + token.Length, timing.StartSeconds, timing.EndSeconds));
             cursor = position + token.Length;
         }
-        var words = Regex.Matches(request.Text, @"[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*").Cast<Match>().ToArray();
-        var candidates = new List<(int Start, int Length, string Term, string Original, double From, double To)>();
-        var similarityRejected = 0; var timingRejected = 0; double bestSimilarity = 0;
+        var candidates = new List<(int Start, int Length, string Term, string Original, double Similarity, double From, double To)>();
+        var similarityRejected = 0; var spanRejected = 0; var timingRejected = 0; double bestSimilarity = 0;
         foreach (var term in request.Terms.Take(256).DistinctBy(t => t.Text, StringComparer.Ordinal))
         {
             cancellation.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(term.Text) || term.Text.Length > 160) continue;
             var threshold = term.MinimumSimilarity ?? CtcBiasPolicy.MinimumSimilarity(Math.Min(request.Terms.Count, 256));
             if (!float.IsFinite(threshold) || threshold is < 0 or > 1) continue;
-            for (var first = 0; first < words.Length; first++)
-            for (var count = 1; count <= 3 && first + count <= words.Length; count++)
+            var spans = CtcVocabularySpans.Find(request.Text, term.Text, threshold, out var termSimilarityRejected, out var termSpanRejected, out var termBest);
+            similarityRejected += termSimilarityRejected; spanRejected += termSpanRejected; bestSimilarity = Math.Max(bestSimilarity, termBest);
+            foreach (var span in spans)
             {
-                var start = words[first].Index;
-                var end = words[first + count - 1].Index + words[first + count - 1].Length;
-                var original = request.Text[start..end];
-                var similarity = Similarity(original, term.Text);
-                bestSimilarity = Math.Max(bestSimilarity, similarity);
-                if (original == term.Text || similarity < threshold) { similarityRejected++; continue; }
+                var (start, end) = (span.Start, span.Start + span.Length);
                 var times = aligned.Where(t => t.Start < end && t.End > start).ToArray();
                 if (times.Length == 0 || times[0].Start > start || times[^1].End < end) { timingRejected++; continue; }
-                candidates.Add((start, end - start, term.Text, original, times[0].From, times[^1].To));
+                candidates.Add((start, span.Length, term.Text, request.Text[start..end], span.Similarity, times[0].From, times[^1].To));
             }
         }
-        var proposals = new List<VocabularyReplacement>();
-        Trace($"candidates count={candidates.Count} similarityRejected={similarityRejected} timingRejected={timingRejected} bestSimilarity={bestSimilarity:R} termLimit=256 candidateLimit=64");
+        var proposals = new List<(VocabularyReplacement Replacement, double Similarity)>();
+        Trace($"candidates count={candidates.Count} similarityRejected={similarityRejected} spanRejected={spanRejected} timingRejected={timingRejected} bestSimilarity={bestSimilarity:R} termLimit=256 candidateLimit=64");
         // Cache one bounded emission window at a time; long recordings do not
         // allocate an unbounded [time, vocabulary] matrix.
         int cachedStart = -1, cachedEnd = -1;
@@ -141,28 +135,11 @@ public sealed class ParakeetCtcPlugin : IVocabularyRescorerPlugin
             var accepted = CtcBiasPolicy.Accept(original.Score, preferred.Score, preferred.Tokens);
             Trace($"candidate start={candidate.Start} length={candidate.Length} originalScore={original.Score:R} preferredScore={preferred.Score:R} tokens={preferred.Tokens} bonus={bonus:R} accepted={accepted}");
             if (accepted)
-                proposals.Add(new(candidate.Start, candidate.Length, candidate.Term, preferred.Score + bonus - original.Score));
+                proposals.Add((new(candidate.Start, candidate.Length, candidate.Term, preferred.Score + bonus - original.Score), candidate.Similarity));
         }
-        var selected = new List<VocabularyReplacement>();
-        foreach (var proposal in proposals.OrderByDescending(p => p.Score))
-            if (!selected.Any(p => p.Start < proposal.Start + proposal.Length && proposal.Start < p.Start + p.Length)) selected.Add(proposal);
+        var selected = CtcVocabularySpans.Select(proposals);
         Trace($"plugin-finish replacements={selected.Count}");
-        return new(request.RecordingId, selected.OrderBy(p => p.Start).ToArray());
-    }
-
-    private static double Similarity(string a, string b)
-    {
-        a = string.Concat(a.Where(char.IsLetterOrDigit)).ToLowerInvariant();
-        b = string.Concat(b.Where(char.IsLetterOrDigit)).ToLowerInvariant();
-        if (a.Length == 0 || b.Length == 0 || a.Length > 160) return 0;
-        var row = Enumerable.Range(0, b.Length + 1).ToArray();
-        for (var i = 1; i <= a.Length; i++)
-        {
-            var diagonal = row[0]; row[0] = i;
-            for (var j = 1; j <= b.Length; j++)
-            { var previous = row[j]; row[j] = Math.Min(Math.Min(row[j] + 1, row[j - 1] + 1), diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)); diagonal = previous; }
-        }
-        return 1 - row[^1] / (double)Math.Max(a.Length, b.Length);
+        return new(request.RecordingId, selected);
     }
 
     public async Task DeactivateAsync()
