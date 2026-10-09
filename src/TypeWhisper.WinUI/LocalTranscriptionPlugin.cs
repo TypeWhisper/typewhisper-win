@@ -15,6 +15,10 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
 {
     internal const string PluginId = "com.typewhisper.sherpa-onnx";
     internal const string ModelId = "parakeet-tdt-0.6b";
+    internal const string AccelerationSetting = "Acceleration";
+    // Automatic uses NVIDIA CUDA once its runtime is installed and the CPU otherwise.
+    internal static readonly IReadOnlyList<TranscriptionAccelerationPreference> AccelerationChoices =
+        [TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Cpu, TranscriptionAccelerationPreference.NvidiaCuda];
     private LocalTranscriptionLease? _lease;
     private readonly IPluginHostServices _host;
     private readonly Func<Task<LocalTranscriptionLease>> _load;
@@ -49,6 +53,14 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal bool SupportsModelRemoval => _lease?.Engine.SupportsModelRemoval == true;
     internal bool CanRemoveModel(string modelId) => Enabled && SupportsModelRemoval &&
         ActiveModelId != modelId && _lease?.Engine.SelectedModelId != modelId;
+    internal TranscriptionAccelerationPreference Acceleration =>
+        Enum.TryParse<TranscriptionAccelerationPreference>(_host.GetSetting<string>(AccelerationSetting), out var saved)
+            && AccelerationChoices.Contains(saved) ? saved : TranscriptionAccelerationPreference.Auto;
+    // The CUDA runtime exists only for 64-bit Windows.
+    internal bool SupportsCuda => System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64
+        && _lease?.Engine.SupportedAccelerationBackends.Contains(TranscriptionAccelerationBackend.NvidiaCuda) == true;
+    // How the loaded model runs; null while no model is loaded.
+    internal TranscriptionAccelerationBackend? ActiveBackend => Ready ? _lease!.Engine.AccelerationStatus.ActiveBackend : null;
     internal double Progress { get; private set; }
     internal string? Error { get; private set; }
     internal string? Feedback { get; private set; }
@@ -106,7 +118,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             Error = null; Feedback = null;
             _lease = await _load();
             Generation++;
-            _lease.Engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+            _lease.Engine.SetAccelerationPreference(Acceleration);
             try { _host.SetSetting("Enabled", true); }
             catch { await ReleaseAsync(); throw; }
             var selected = _host.GetSetting<string>("SelectedModelId") ?? _lease.Engine.SelectedModelId
@@ -130,6 +142,52 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         Busy = true; Error = null; Feedback = null; Changed?.Invoke();
         try { ObjectDisposedException.ThrowIf(_disposed, this); await ActivateCoreAsync(modelId, ct, persistSelection); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); throw; }
+        finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+    }
+
+    // A loaded model is loaded again, which starts a worker with the new device. CUDA downloads its runtime
+    // on the first load. If that load fails, the previous device and model are restored.
+    internal async Task SetAccelerationAsync(TranscriptionAccelerationPreference preference, CancellationToken ct = default)
+    {
+        if (!AccelerationChoices.Contains(preference)) throw new ArgumentOutOfRangeException(nameof(preference));
+        if (Acceleration == preference) return;
+        if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException(Loc.T("A model operation is already in progress."));
+        Busy = true; Error = null;
+        Feedback = preference == TranscriptionAccelerationPreference.NvidiaCuda
+            ? Loc.T("Switching to NVIDIA CUDA… The first switch downloads about 2 GB.") : null;
+        Changed?.Invoke();
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var engine = _lease?.Engine ?? throw new InvalidOperationException(Loc.T("Enable the local plugin in Plugins first."));
+            var previous = Acceleration;
+            var model = ActiveModelId;
+            _host.SetSetting(AccelerationSetting, preference.ToString());
+            engine.SetAccelerationPreference(preference);
+            if (model is null) { Feedback = null; return; }
+            ActiveModelId = null;
+            try
+            {
+                await engine.LoadModelAsync(model, ct);
+                ActiveModelId = model;
+                Feedback = Loc.T("Model ready for dictation.");
+            }
+            catch
+            {
+                _host.SetSetting(AccelerationSetting, previous.ToString());
+                engine.SetAccelerationPreference(previous);
+                try { await engine.LoadModelAsync(model, CancellationToken.None); ActiveModelId = model; }
+                catch (Exception rollback) when (rollback is not OutOfMemoryException)
+                { _host.Log(PluginLogLevel.Error, "Could not restore the previous processing device: " + rollback.Message); }
+                throw;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Feedback = null;
+            Error = Loc.T("Could not change the processing device: {0}", ex.Message);
+            throw;
+        }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
 
@@ -199,7 +257,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                     await ReleaseAsync();
                     _lease = await _load();
                     Generation++;
-                    _lease.Engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+                    _lease.Engine.SetAccelerationPreference(Acceleration);
                     if (_lease.Engine.SelectedModelId is not null)
                         throw new InvalidOperationException("The local plugin did not restore its unselected state.");
                 }

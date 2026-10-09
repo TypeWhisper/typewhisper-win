@@ -3089,5 +3089,14 @@
   "↑↓ Select   Enter Insert   Esc Back": "↑↓ 選択   Enter 挿入   Esc 戻る",
   "↑↓ Select   Enter Insert   Esc Close": "↑↓ 選択   Enter 挿入   Esc 閉じる",
   "↑↓ Select   Enter Run   Esc Close": "↑↓ 選択   Enter 実行   Esc 閉じる",
-  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "モデルの読み込み中にウィンドウが変わったため、何も挿入されませんでした。テキストをコピーして、使いたい場所に貼り付けてください。"
+  "The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.": "モデルの読み込み中にウィンドウが変わったため、何も挿入されませんでした。テキストをコピーして、使いたい場所に貼り付けてください。",
+  "Processing device": "処理デバイス",
+  "Automatic uses NVIDIA CUDA once it is installed and the CPU otherwise. The first switch to NVIDIA CUDA downloads about 2 GB of NVIDIA libraries and needs an NVIDIA graphics card. If the graphics card fails, TypeWhisper keeps the previous device.": "「自動」は NVIDIA CUDA がインストールされていればそれを使い、そうでなければ CPU を使います。NVIDIA CUDA への最初の切り替えでは約 2 GB の NVIDIA ライブラリをダウンロードし、NVIDIA グラフィックカードが必要です。グラフィックカードで失敗した場合、TypeWhisper は以前のデバイスを維持します。",
+  "NVIDIA CUDA once it is installed, otherwise the CPU": "インストール後は NVIDIA CUDA、それ以外は CPU",
+  "Works on every PC": "すべての PC で動作します",
+  "Needs an NVIDIA graphics card. Downloads about 2 GB the first time.": "NVIDIA グラフィックカードが必要です。初回は約 2 GB をダウンロードします。",
+  "Switching to NVIDIA CUDA… The first switch downloads about 2 GB.": "NVIDIA CUDA に切り替えています… 最初の切り替えでは約 2 GB をダウンロードします。",
+  "Could not change the processing device: {0}": "処理デバイスを変更できませんでした: {0}",
+  "Finish recording or the current model operation before changing the processing device.": "処理デバイスを変更する前に、録音または現在のモデル操作を終了してください。",
+  "Switching the processing device… Wait until the model is ready before dictating.": "処理デバイスを切り替えています… モデルの準備ができるまで音声入力をお待ちください。"
 }

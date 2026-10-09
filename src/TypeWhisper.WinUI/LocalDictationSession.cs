@@ -247,6 +247,23 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         finally { _gate.Release(); }
     }
+    internal async Task<string?> SetLocalAccelerationAsync(TypeWhisper.PluginSDK.Models.TranscriptionAccelerationPreference preference)
+    {
+        if (!CanSelectModel || !await _gate.WaitAsync(0)) return Loc.T("Finish recording or the current model operation before changing the processing device.");
+        try
+        {
+            SetStatus(Loc.T("Switching the processing device… Wait until the model is ready before dictating."), DictationPhase.LoadingModel);
+            await _livePreview.StopAsync();
+            await Models.SetAccelerationAsync(preference);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return Models.Error ?? ex.Message; }
+        finally
+        {
+            _gate.Release();
+            if (!_disposed) SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose a downloaded model in Dictation."), DictationPhase.Idle);
+        }
+    }
     internal Task<string?> SelectDictationModelAsync(string id)
     {
         foreach (var provider in DictationProviders)

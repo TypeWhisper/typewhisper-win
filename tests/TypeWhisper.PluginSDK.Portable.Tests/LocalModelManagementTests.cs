@@ -169,6 +169,46 @@ public sealed class LocalModelManagementTests : IDisposable
         Assert.Equal(2, _loads.Count);
     }
     [Fact]
+    public async Task SavedProcessingDeviceIsAppliedAndDefaultsToAutomatic()
+    {
+        var applied = new List<TranscriptionAccelerationPreference>();
+        _engine.Setup(e => e.SetAccelerationPreference(It.IsAny<TranscriptionAccelerationPreference>())).Callback(applied.Add);
+        await using (var runtime = Create()) { await runtime.InitializeAsync(); Assert.Equal(TranscriptionAccelerationPreference.Auto, runtime.Acceleration); }
+        new VocabularyHostServices(_root).SetSetting(LocalTranscriptionPlugin.AccelerationSetting, "NvidiaCuda");
+        await using (var runtime = Create()) await runtime.InitializeAsync();
+        new VocabularyHostServices(_root).SetSetting(LocalTranscriptionPlugin.AccelerationSetting, "AmdRocm");
+        await using (var runtime = Create()) await runtime.InitializeAsync();
+        Assert.Equal([TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.NvidiaCuda, TranscriptionAccelerationPreference.Auto], applied);
+    }
+    [Fact]
+    public async Task ChangingTheProcessingDeviceSavesItAndLoadsTheActiveModelAgain()
+    {
+        var current = TranscriptionAccelerationPreference.Auto;
+        var loadedWith = new List<TranscriptionAccelerationPreference>();
+        _engine.Setup(e => e.SetAccelerationPreference(It.IsAny<TranscriptionAccelerationPreference>())).Callback((TranscriptionAccelerationPreference value) => current = value);
+        _engine.Setup(e => e.LoadModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).Callback(() => loadedWith.Add(current)).Returns(Task.CompletedTask);
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        await runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.NvidiaCuda);
+        Assert.Equal([TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.NvidiaCuda], loadedWith);
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, runtime.ActiveModelId);
+        Assert.Equal("NvidiaCuda", new VocabularyHostServices(_root).GetSetting<string>(LocalTranscriptionPlugin.AccelerationSetting));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.AmdVulkan));
+    }
+    [Fact]
+    public async Task FailedProcessingDeviceChangeRestoresThePreviousDeviceAndModel()
+    {
+        var current = TranscriptionAccelerationPreference.Auto;
+        _engine.Setup(e => e.SetAccelerationPreference(It.IsAny<TranscriptionAccelerationPreference>())).Callback((TranscriptionAccelerationPreference value) => current = value);
+        _engine.Setup(e => e.LoadModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(() => current == TranscriptionAccelerationPreference.NvidiaCuda ? Task.FromException(new InvalidOperationException("No CUDA device")) : Task.CompletedTask);
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.NvidiaCuda));
+        Assert.Equal(TranscriptionAccelerationPreference.Auto, current);
+        Assert.Equal(TranscriptionAccelerationPreference.Auto, runtime.Acceleration);
+        Assert.True(runtime.Ready); Assert.False(runtime.Busy);
+        Assert.Contains("No CUDA device", runtime.Error);
+    }
+    [Fact]
     public async Task RequestModelSelectionDoesNotPersistAndCanRestoreAfterCancellation()
     {
         _downloaded.Add("canary");

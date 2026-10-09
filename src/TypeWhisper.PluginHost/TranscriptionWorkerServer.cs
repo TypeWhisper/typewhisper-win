@@ -90,7 +90,7 @@ public static class TranscriptionWorkerServer
 
     // A native crash must end the process at once. Windows Error Reporting would otherwise keep the
     // crashed worker alive behind a "stopped working" dialog, and the host would wait for it.
-    private static void SuppressCrashDialogs()
+    internal static void SuppressCrashDialogs()
     {
         if (!OperatingSystem.IsWindows()) return;
         const uint FailCriticalErrors = 0x0001, NoGpFaultErrorBox = 0x0002, NoOpenFileErrorBox = 0x8000;

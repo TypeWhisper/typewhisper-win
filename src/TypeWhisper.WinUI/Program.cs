@@ -9,6 +9,9 @@ internal static class Program
         // Worker mode must start before installer hooks, WinUI and single-instance activation.
         if (TypeWhisper.PluginHost.TranscriptionWorkerServer.IsWorkerInvocation(args))
             Environment.Exit(TypeWhisper.PluginHost.TranscriptionWorkerServer.Run(args));
+        // The Parakeet plugin checks its CUDA runtime in a copy of this executable before it uses the graphics card.
+        if (TypeWhisper.PluginHost.NativeModelProbe.IsProbeInvocation(args))
+            Environment.Exit(TypeWhisper.PluginHost.NativeModelProbe.Run(args, LocalCtcVocabulary.HostVersion));
 #if !DEBUG && !TYPEWHISPER_STORE
         // Installer callbacks must run before XAML, single-instance activation or profile access.
         // Candidate builds do not contact an update feed or automatically apply an update.

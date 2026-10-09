@@ -15,6 +15,9 @@ internal sealed class LiveModelsView : UserControl
     private readonly TextBlock _vocabulary = Copy("", 12, true);
     private readonly HandCursorButton _setupAction = Button(Loc.T("Retry setup"), Loc.T("Retry dictionary boosting setup"));
     private readonly TextBlock _feedback = Copy("", 12, true);
+    private readonly SettingsCard _device = new();
+    private readonly SettingsRow _deviceRow = new();
+    private readonly ChoicePicker _devicePicker = new();
     private readonly List<ModelRow> _rows = [];
     private string? _message;
     private bool _confirmingRemoval;
@@ -37,7 +40,20 @@ internal sealed class LiveModelsView : UserControl
         list.Children.Add(_cards);
         _panel.Children.Add(new Border { Child = list, Padding = new Thickness(18, setup ? 2 : 16, 18, 2), CornerRadius = new CornerRadius(12),
             Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1) });
-        if (!setup) _panel.Children.Add(_vocabulary);
+        if (!setup)
+        {
+            _devicePicker.Configure(Loc.T("Processing device"), "chip", Loc.T("Processing device"));
+            _devicePicker.SelectionChanged += async id =>
+            {
+                _message = null;
+                _message = await _session.SetLocalAccelerationAsync(Enum.Parse<TranscriptionAccelerationPreference>(id));
+                if (IsLoaded) Update();
+            };
+            _deviceRow.Set(Loc.T("Processing device"), "", Loc.T("Automatic uses NVIDIA CUDA once it is installed and the CPU otherwise. The first switch to NVIDIA CUDA downloads about 2 GB of NVIDIA libraries and needs an NVIDIA graphics card. If the graphics card fails, TypeWhisper keeps the previous device."), _devicePicker);
+            _device.Children.Add(_deviceRow);
+            _panel.Children.Add(_device);
+            _panel.Children.Add(_vocabulary);
+        }
         _setupAction.HorizontalAlignment = HorizontalAlignment.Left;
         _setupAction.Click += async (_, _) =>
         {
@@ -75,6 +91,7 @@ internal sealed class LiveModelsView : UserControl
         _setupAction.IsEnabled = _session.CtcVocabulary.Busy || (_session.CanChangeProvider && !models.Busy);
         _feedback.Text = _message ?? models.Error ?? models.Feedback
             ?? Loc.T("Choose a downloaded model to use it. Downloads do not change your active model.");
+        if (!_setup) UpdateDevice(models);
         foreach (var row in _rows)
         {
             var state = states.Single(s => s.Model.Id == row.Model.Id);
@@ -98,6 +115,24 @@ internal sealed class LiveModelsView : UserControl
             AutomationProperties.SetName(row.Action, $"{row.Action.Content} {row.Model.DisplayName}");
             AutomationProperties.SetItemStatus(row.Action, row.Status.Text);
         }
+    }
+
+    private void UpdateDevice(LocalTranscriptionPlugin models)
+    {
+        _device.Visibility = models.Enabled && models.SupportsCuda ? Visibility.Visible : Visibility.Collapsed;
+        var selected = models.Acceleration.ToString();
+        if (_devicePicker.SelectedId != selected)
+            _devicePicker.SetOptions([
+                new(nameof(TranscriptionAccelerationPreference.Auto), Loc.T("Automatic"), Loc.T("NVIDIA CUDA once it is installed, otherwise the CPU")),
+                new(nameof(TranscriptionAccelerationPreference.Cpu), "CPU", Loc.T("Works on every PC")),
+                new(nameof(TranscriptionAccelerationPreference.NvidiaCuda), "NVIDIA CUDA", Loc.T("Needs an NVIDIA graphics card. Downloads about 2 GB the first time."))], selected);
+        _devicePicker.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanSelectModel;
+        _deviceRow.Description = models.ActiveBackend switch
+        {
+            TranscriptionAccelerationBackend.NvidiaCuda => Loc.T("In use: {0}", "NVIDIA CUDA"),
+            TranscriptionAccelerationBackend.Cpu => Loc.T("In use: {0}", "CPU"),
+            _ => ""
+        };
     }
 
     private Border CreateRow(PluginModelInfo model)
