@@ -5,34 +5,26 @@ namespace TypeWhisper.Plugin.WhisperCpp;
 
 /// <summary>
 /// Turns dictionary terms into Whisper's initial prompt within its 224-token window. Whisper.net exposes
-/// no tokenizer, so the count is a conservative estimate: two ASCII characters per token, and one token
-/// per UTF-8 byte otherwise, the most Whisper's byte-level tokenizer can use.
+/// no tokenizer, so the prompt is limited to 224 UTF-8 bytes: every token of Whisper's byte-level
+/// tokenizer covers at least one byte, so the window holds whatever the terms contain.
 /// </summary>
 internal static class WhisperPrompt
 {
     internal const int MaxTokens = 224;
 
-    /// <summary>Keeps whole terms in order while the estimate fits, or returns null without terms.</summary>
+    /// <summary>Keeps whole terms in order while they fit, or returns null without terms.</summary>
     internal static string? Create(string? prompt)
     {
         var kept = new StringBuilder();
-        var tokens = 0d;
+        var bytes = 0;
         foreach (var term in PluginDictionaryTerms.ParsePrompt(prompt))
         {
             var addition = (kept.Length == 0 ? "" : ", ") + term;
-            var cost = EstimateTokens(addition);
-            if (tokens + cost > MaxTokens) break;
+            var cost = Encoding.UTF8.GetByteCount(addition);
+            if (bytes + cost > MaxTokens) break;
             kept.Append(addition);
-            tokens += cost;
+            bytes += cost;
         }
         return kept.Length == 0 ? null : kept.ToString();
-    }
-
-    internal static double EstimateTokens(string text)
-    {
-        var tokens = 0d;
-        foreach (var rune in text.EnumerateRunes())
-            tokens += rune.IsAscii ? 0.5 : rune.Utf8SequenceLength;
-        return tokens;
     }
 }

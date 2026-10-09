@@ -204,10 +204,10 @@ public sealed partial class WhisperCppPlugin :
     public bool SupportsDictionaryTerms => true;
     /// <summary>
     /// Whisper reads at most 224 prompt tokens and drops the oldest ones beyond that, which would discard the
-    /// first and most important terms. Latin-script terms take at least two characters per token, so 448
-    /// characters fit; <see cref="WhisperPrompt"/> trims further for scripts that need more tokens.
+    /// first and most important terms. <see cref="WhisperPrompt"/> keeps the prompt within 224 UTF-8 bytes,
+    /// so the host sends no more characters than that.
     /// </summary>
-    public DictionaryTermsBudget DictionaryTermsBudget { get; } = new(MaxTotalChars: WhisperPrompt.MaxTokens * 2);
+    public DictionaryTermsBudget DictionaryTermsBudget { get; } = new(MaxTotalChars: WhisperPrompt.MaxTokens);
     /// <summary>
     /// Gets whether the host sends terms with exact boundaries, so a term containing a comma is kept or dropped as a whole.
     /// </summary>

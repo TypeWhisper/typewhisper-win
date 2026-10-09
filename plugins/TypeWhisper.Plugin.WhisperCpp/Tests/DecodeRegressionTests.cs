@@ -1,3 +1,4 @@
+using System.Text;
 using System.Runtime.CompilerServices;
 using TypeWhisper.Plugin.WhisperCpp;
 using TypeWhisper.PluginSDK;
@@ -178,30 +179,19 @@ public partial class WhisperCppPluginTests
             plugin.TranscribeAsync([], "de", true, null, default));
     }
 
-    [Fact]
-    public void LatinDictionaryTermsFillTheHostBudgetAndStayWhole()
+    [Theory]
+    [InlineData("Fachbegriff{0:00}")]
+    [InlineData("東京都庁{0:00}")]
+    [InlineData("a3f9C2e1x{0:00}")]
+    public void DictionaryTermsStayWholeWithinWhispersPromptWindow(string pattern)
     {
         using var plugin = new WhisperCppPlugin();
         Assert.True(plugin.SupportsDictionaryTerms);
         Assert.True(((ITranscriptionEnginePlugin)plugin).SupportsStructuredDictionaryTerms);
-        var terms = Enumerable.Range(0, 100).Select(index => $"Fachbegriff{index:00}").ToArray();
-        var structured = PluginDictionaryTerms.CreateStructuredPrompt(terms, plugin.DictionaryTermsBudget);
-        var prompt = WhisperPrompt.Create(structured)!;
-        Assert.InRange(prompt.Length, 400, 448);
-        var kept = prompt.Split(", ");
-        Assert.Equal(terms.Take(kept.Length), kept);
-        Assert.Equal(prompt, WhisperPrompt.Create(PluginDictionaryTerms.CreatePrompt(terms, plugin.DictionaryTermsBudget)));
-    }
-
-    [Fact]
-    public void NonLatinTermsAreTrimmedToTheEstimatedTokenWindow()
-    {
-        using var plugin = new WhisperCppPlugin();
-        var terms = Enumerable.Range(0, 60).Select(index => $"東京都庁{index:00}").ToArray();
-        var hostPrompt = PluginDictionaryTerms.CreateStructuredPrompt(terms, plugin.DictionaryTermsBudget);
-        Assert.True(PluginDictionaryTerms.ParsePrompt(hostPrompt).Count > 30);
-        var prompt = WhisperPrompt.Create(hostPrompt)!;
-        Assert.InRange(WhisperPrompt.EstimateTokens(prompt), 200, WhisperPrompt.MaxTokens);
+        var terms = Enumerable.Range(0, 100).Select(index => string.Format(pattern, index)).ToArray();
+        var prompt = WhisperPrompt.Create(PluginDictionaryTerms.CreateStructuredPrompt(terms, plugin.DictionaryTermsBudget))!;
+        // Every token of Whisper's byte-level tokenizer covers at least one UTF-8 byte.
+        Assert.InRange(Encoding.UTF8.GetByteCount(prompt), WhisperPrompt.MaxTokens - 30, WhisperPrompt.MaxTokens);
         var kept = prompt.Split(", ");
         Assert.Equal(terms.Take(kept.Length), kept);
     }
