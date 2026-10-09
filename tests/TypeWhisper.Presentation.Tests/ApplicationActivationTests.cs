@@ -119,6 +119,13 @@ public sealed class ApplicationActivationTests
     }
 
     [Fact]
+    public void LegacyVelopackStartupShortcutStartsMinimized()
+    {
+        var request = ApplicationActivationRequest.ParseCommandLine("\"C:\\TypeWhisper\\current\\TypeWhisper.exe\"  -a \"--minimized\"");
+        Assert.Null(request.Error); Assert.False(request.ShowWindow); Assert.Null(request.Route);
+    }
+
+    [Fact]
     public void FileAndPendingRequestLimitsRejectExcessWithoutTruncatingSilently()
     {
         var files = Enumerable.Range(0, 21).Select(i => $@"C:\audio\{i}.wav");
