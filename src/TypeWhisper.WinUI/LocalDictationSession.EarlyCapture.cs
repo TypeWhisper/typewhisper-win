@@ -13,7 +13,7 @@ internal sealed partial class LocalDictationSession
     // Samples captured when the user finished speaking before the model was ready. Later audio is dropped.
     private int? _earlyStopSamples;
 
-    // The window changed while the model loaded. The speech is kept, but nothing is inserted.
+    // The window changed while the model loaded. The speech is kept, but nothing is inserted or sent to a workflow action.
     private bool _reviewAfterTargetChange;
 
     private bool CanCaptureWhileModelLoads => !_disposed && _phase == DictationPhase.LoadingModel && !_earlyCapture

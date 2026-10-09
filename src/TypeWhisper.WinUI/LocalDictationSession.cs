@@ -1075,7 +1075,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         _ = ObserveCorrectionsAfterPasteAsync(pasted, _target, _operationCancellation.Token);
                     return inserted;
                 }, _operationCancellation.Token, samples, 16000,
-                string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
+                _reviewAfterTargetChange || string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
                     _workflowActionAtStart, text, new TypeWhisper.PluginSDK.Models.ActionContext(record.AppName, record.AppProcessName,
                         record.AppUrl, record.Language, rawText), ct));
             if (_reviewAfterTargetChange && outcome.ReviewReason == DictationReviewReason.AutomaticPasteDisabled)
