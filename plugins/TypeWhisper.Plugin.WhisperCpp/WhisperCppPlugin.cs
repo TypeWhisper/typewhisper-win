@@ -204,10 +204,14 @@ public sealed partial class WhisperCppPlugin :
     public bool SupportsDictionaryTerms => true;
     /// <summary>
     /// Whisper reads at most 224 prompt tokens and drops the oldest ones beyond that, which would discard the
-    /// first and most important terms. Names and technical terms take roughly 2.5 to 3 characters per token,
-    /// so whole terms up to 448 characters stay within the window with room to spare.
+    /// first and most important terms. Latin-script terms take at least two characters per token, so 448
+    /// characters fit; <see cref="WhisperPrompt"/> trims further for scripts that need more tokens.
     /// </summary>
-    public DictionaryTermsBudget DictionaryTermsBudget { get; } = new(MaxTotalChars: 448);
+    public DictionaryTermsBudget DictionaryTermsBudget { get; } = new(MaxTotalChars: WhisperPrompt.MaxTokens * 2);
+    /// <summary>
+    /// Gets whether the host sends terms with exact boundaries, so a term containing a comma is kept or dropped as a whole.
+    /// </summary>
+    public bool SupportsStructuredDictionaryTerms => true;
     /// <summary>
     /// Gets the supported acceleration backends.
     /// </summary>
@@ -559,7 +563,8 @@ public sealed partial class WhisperCppPlugin :
                 throw new NotSupportedException(TranslationUnsupportedMessage);
             await LoadModelCoreAsync(modelId, ct).ConfigureAwait(false);
 
-            if (string.IsNullOrWhiteSpace(prompt))
+            prompt = WhisperPrompt.Create(prompt);
+            if (prompt is null)
                 return await DecodeAsync(process, modelId, language, translate, null, ct).ConfigureAwait(false);
 
             var prompted = await DecodeAsync(process, modelId, language, translate, prompt, ct).ConfigureAwait(false);

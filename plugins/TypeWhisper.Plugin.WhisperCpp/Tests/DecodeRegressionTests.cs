@@ -179,16 +179,40 @@ public partial class WhisperCppPluginTests
     }
 
     [Fact]
-    public void DictionaryTermsBecomeAPlainPromptOfWholeTermsWithinWhispersPromptWindow()
+    public void LatinDictionaryTermsFillTheHostBudgetAndStayWhole()
     {
         using var plugin = new WhisperCppPlugin();
         Assert.True(plugin.SupportsDictionaryTerms);
-        Assert.False(((ITranscriptionEnginePlugin)plugin).SupportsStructuredDictionaryTerms);
+        Assert.True(((ITranscriptionEnginePlugin)plugin).SupportsStructuredDictionaryTerms);
         var terms = Enumerable.Range(0, 100).Select(index => $"Fachbegriff{index:00}").ToArray();
-        var prompt = PluginDictionaryTerms.CreatePrompt(terms, plugin.DictionaryTermsBudget)!;
+        var structured = PluginDictionaryTerms.CreateStructuredPrompt(terms, plugin.DictionaryTermsBudget);
+        var prompt = WhisperPrompt.Create(structured)!;
         Assert.InRange(prompt.Length, 400, 448);
         var kept = prompt.Split(", ");
         Assert.Equal(terms.Take(kept.Length), kept);
+        Assert.Equal(prompt, WhisperPrompt.Create(PluginDictionaryTerms.CreatePrompt(terms, plugin.DictionaryTermsBudget)));
+    }
+
+    [Fact]
+    public void NonLatinTermsAreTrimmedToTheEstimatedTokenWindow()
+    {
+        using var plugin = new WhisperCppPlugin();
+        var terms = Enumerable.Range(0, 60).Select(index => $"東京都庁{index:00}").ToArray();
+        var hostPrompt = PluginDictionaryTerms.CreateStructuredPrompt(terms, plugin.DictionaryTermsBudget);
+        Assert.True(PluginDictionaryTerms.ParsePrompt(hostPrompt).Count > 30);
+        var prompt = WhisperPrompt.Create(hostPrompt)!;
+        Assert.InRange(WhisperPrompt.EstimateTokens(prompt), 200, WhisperPrompt.MaxTokens);
+        var kept = prompt.Split(", ");
+        Assert.Equal(terms.Take(kept.Length), kept);
+    }
+
+    [Fact]
+    public void StructuredTermsKeepTheirCommas()
+    {
+        var prompt = PluginDictionaryTerms.CreateStructuredPrompt(["Grüße, Marco", "TypeWhisper"]);
+        Assert.Equal("Grüße, Marco, TypeWhisper", WhisperPrompt.Create(prompt));
+        Assert.Null(WhisperPrompt.Create(null));
+        Assert.Null(WhisperPrompt.Create(" "));
     }
 
     // Transcripts large-v3-turbo returned for noise and speech with this prompt.
