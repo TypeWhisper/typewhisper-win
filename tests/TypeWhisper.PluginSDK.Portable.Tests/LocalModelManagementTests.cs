@@ -173,15 +173,33 @@ public sealed class LocalModelManagementTests : IDisposable
     {
         var applied = new List<TranscriptionAccelerationPreference>();
         _engine.Setup(e => e.SetAccelerationPreference(It.IsAny<TranscriptionAccelerationPreference>())).Callback(applied.Add);
+        _engine.SetupGet(e => e.SupportedAccelerationBackends).Returns([TranscriptionAccelerationBackend.Cpu, TranscriptionAccelerationBackend.AmdVulkan]);
         await using (var runtime = Create()) { await runtime.InitializeAsync(); Assert.Equal(TranscriptionAccelerationPreference.Auto, runtime.Acceleration); }
+        new VocabularyHostServices(_root).SetSetting(LocalTranscriptionPlugin.AccelerationSetting, "AmdVulkan");
+        await using (var runtime = Create()) await runtime.InitializeAsync();
+        // NVIDIA CUDA from an earlier plugin and devices the plugin never offered read as Automatic.
         new VocabularyHostServices(_root).SetSetting(LocalTranscriptionPlugin.AccelerationSetting, "NvidiaCuda");
         await using (var runtime = Create()) await runtime.InitializeAsync();
         new VocabularyHostServices(_root).SetSetting(LocalTranscriptionPlugin.AccelerationSetting, "AmdRocm");
         await using (var runtime = Create()) await runtime.InitializeAsync();
-        // Only an x64 process can use CUDA; elsewhere a saved CUDA choice reads as Automatic.
-        var cuda = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64
-            ? TranscriptionAccelerationPreference.NvidiaCuda : TranscriptionAccelerationPreference.Auto;
-        Assert.Equal([TranscriptionAccelerationPreference.Auto, cuda, TranscriptionAccelerationPreference.Auto], applied);
+        Assert.Equal([TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.AmdVulkan,
+            TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Auto], applied);
+    }
+    [Fact]
+    public async Task TheGraphicsCardChoiceFollowsWhatThePluginOffers()
+    {
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        Assert.Null(runtime.GpuChoice);
+        Assert.False(runtime.SupportsDeviceChoice);
+        Assert.Equal([TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Cpu], runtime.AccelerationChoices);
+
+        _engine.SetupGet(e => e.SupportedAccelerationBackends).Returns([TranscriptionAccelerationBackend.Cpu, TranscriptionAccelerationBackend.AmdVulkan]);
+        Assert.Equal(TranscriptionAccelerationPreference.AmdVulkan, runtime.GpuChoice);
+
+        // Plugin versions before 1.3 offered NVIDIA CUDA, which exists only for x64.
+        _engine.SetupGet(e => e.SupportedAccelerationBackends).Returns([TranscriptionAccelerationBackend.Cpu, TranscriptionAccelerationBackend.NvidiaCuda]);
+        var x64 = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64;
+        Assert.Equal(x64 ? TranscriptionAccelerationPreference.NvidiaCuda : null, runtime.GpuChoice);
     }
     [Fact]
     public async Task ChangingTheProcessingDeviceSavesItAndLoadsTheActiveModelAgain()
@@ -190,12 +208,14 @@ public sealed class LocalModelManagementTests : IDisposable
         var loadedWith = new List<TranscriptionAccelerationPreference>();
         _engine.Setup(e => e.SetAccelerationPreference(It.IsAny<TranscriptionAccelerationPreference>())).Callback((TranscriptionAccelerationPreference value) => current = value);
         _engine.Setup(e => e.LoadModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).Callback(() => loadedWith.Add(current)).Returns(Task.CompletedTask);
+        _engine.SetupGet(e => e.SupportedAccelerationBackends).Returns([TranscriptionAccelerationBackend.Cpu, TranscriptionAccelerationBackend.AmdVulkan]);
         await using var runtime = Create(); await runtime.InitializeAsync();
         await runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.Cpu);
-        Assert.Equal([TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Cpu], loadedWith);
+        await runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.AmdVulkan);
+        Assert.Equal([TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Cpu, TranscriptionAccelerationPreference.AmdVulkan], loadedWith);
         Assert.Equal(LocalTranscriptionPlugin.ModelId, runtime.ActiveModelId);
-        Assert.Equal("Cpu", new VocabularyHostServices(_root).GetSetting<string>(LocalTranscriptionPlugin.AccelerationSetting));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.AmdVulkan));
+        Assert.Equal("AmdVulkan", new VocabularyHostServices(_root).GetSetting<string>(LocalTranscriptionPlugin.AccelerationSetting));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => runtime.SetAccelerationAsync(TranscriptionAccelerationPreference.NvidiaCuda));
     }
     [Fact]
     public async Task FailedProcessingDeviceChangeRestoresThePreviousDeviceAndModel()

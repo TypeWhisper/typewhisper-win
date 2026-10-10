@@ -11,7 +11,8 @@ Acceleration is a setting of each local transcription plugin, not a global choic
 | Engine | CPU | NVIDIA CUDA | AMD Vulkan | AMD ROCm |
 |--------|-----|-------------|------------|----------|
 | whisper.cpp | Supported | Supported on Windows x64 | Recommended AMD path on Windows x64 | Manual advanced hook |
-| sherpa-onnx, including Parakeet and Canary | Supported | Supported on Windows x64 | Not supported | Not supported |
+| NVIDIA Parakeet (Parakeet, Parakeet Ultra) | Supported | Up to plugin 1.2; replaced by Vulkan | Supported on Windows x64 from plugin 1.3, also on NVIDIA and Intel | Not supported |
+| NVIDIA Parakeet (Canary) | Supported | Up to plugin 1.2 | Not supported | Not supported |
 | Cohere Transcribe (Local) | Supported | Supported when its verified runtime is available | Supported when its verified runtime is available | Not supported |
 
 Other local engines can expose their own subset.
@@ -27,6 +28,12 @@ After a whisper.cpp model has loaded (plugin 1.2.20 or later), the Processing de
 Nothing is shown before the first dictation or file transcription loads the model. If the description instead says to restart TypeWhisper, a different native runtime is already loaded in the process. Restart before switching.
 
 For an AMD GPU, start with whisper.cpp and Vulkan. Select a whisper.cpp model, choose Vulkan, dictate once, then reopen the plugin settings and check that `In use:` names your AMD GPU before evaluating performance.
+
+## NVIDIA Parakeet on the graphics card
+
+From plugin 1.3, the NVIDIA Parakeet plugin's **Processing device** offers Automatic, CPU and Graphics card. The graphics card runs Parakeet and Parakeet Ultra through transcribe.cpp on any graphics card with Vulkan, from NVIDIA, AMD or Intel. The first switch downloads the transcribe.cpp runtime (17 MB) and the model as a GGUF file (about 740 MB); the CPU keeps using its own ONNX files. Automatic uses the graphics card once these files are present and the CPU otherwise. Canary always runs on the CPU. The graphics card is chosen as for whisper.cpp below, and In use: names it.
+
+The first load after a graphics driver update can take about half a minute while the driver compiles its shaders; later loads take about a second. A NVIDIA CUDA choice saved by plugin 1.2 reads as Automatic, and the plugin deletes the CUDA runtime that version downloaded.
 
 ## Which GPU Vulkan uses
 
@@ -53,7 +60,7 @@ Restart TypeWhisper after changing the environment variable. The custom DLL and 
 
 ZLUDA is not an officially supported TypeWhisper backend. If a ZLUDA setup makes the whisper.cpp CUDA runtime load, Whisper.net reports the backend only as CUDA. TypeWhisper cannot reliably distinguish native NVIDIA CUDA from CUDA translated through ZLUDA, so `In use: NVIDIA CUDA` is not proof that native NVIDIA CUDA is active.
 
-ZLUDA does not add AMD acceleration to sherpa-onnx. Parakeet and Canary continue to use the CPU unless their supported NVIDIA CUDA runtime is available.
+ZLUDA is not needed for Parakeet: from plugin 1.3 it runs on AMD graphics through Vulkan.
 
 ## Diagnostics
 

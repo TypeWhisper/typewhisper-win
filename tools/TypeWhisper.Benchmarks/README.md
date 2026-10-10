@@ -22,6 +22,8 @@ dotnet run -c Release --project tools/TypeWhisper.Benchmarks -- wer C:\path\to\m
 
 `wer` also accepts a Qwen3-ASR directory (`conv_frontend.onnx`, `encoder.int8.onnx`, `decoder.int8.onnx`, `tokenizer/`) and then decodes like the Qwen3 ASR (Local) plugin, in windows of at most ten seconds.
 
+`wer` and `files` also accept a transcribe.cpp `.gguf` model file instead of a directory. It decodes through the bindings of the NVIDIA Parakeet plugin's graphics card path in one pass. `--native <directory>` (or `TYPEWHISPER_TRANSCRIBECPP_NATIVE`) points at an extracted `transcribe-native-0.3.1-windows-x86_64-cpu-vulkan` release. `--backend auto|cpu|vulkan` selects the backend; `vulkan` takes the first dedicated GPU. `--device N` picks a device by the index printed to stderr. `files --timings` adds each clip's token times, converted as the engine's plugin hands them to the host, for the `rescore` mode of `tests/TypeWhisper.ParakeetCtc.Probe`. The first Vulkan run on a machine compiles shaders in the graphics driver and loads much more slowly; repeat it before comparing load times. For a sherpa-onnx model directory, `--sherpa-cuda <directory>` runs it with the CUDA provider from a directory holding the `lib` DLLs of the matching sherpa-onnx CUDA release plus the cuDNN 9 and cuBLAS 12 DLLs it loads.
+
 To transcribe your own recordings, put 16 kHz mono 16-bit PCM WAV files in one directory:
 
 ```powershell

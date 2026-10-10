@@ -16,9 +16,16 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal const string PluginId = "com.typewhisper.sherpa-onnx";
     internal const string ModelId = "parakeet-tdt-0.6b";
     internal const string AccelerationSetting = "Acceleration";
-    // Automatic uses NVIDIA CUDA once its runtime is installed and the CPU otherwise.
-    internal static readonly IReadOnlyList<TranscriptionAccelerationPreference> AccelerationChoices =
-        [TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Cpu, TranscriptionAccelerationPreference.NvidiaCuda];
+    // Automatic uses the graphics card once its files are installed and the CPU otherwise. Plugin 1.3 reaches the
+    // graphics card through Vulkan, earlier versions through NVIDIA CUDA, so the choice follows what the plugin offers.
+    internal IReadOnlyList<TranscriptionAccelerationPreference> AccelerationChoices => GpuChoice is { } gpu
+        ? [TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Cpu, gpu]
+        : [TranscriptionAccelerationPreference.Auto, TranscriptionAccelerationPreference.Cpu];
+    internal TranscriptionAccelerationPreference? GpuChoice =>
+        _lease?.Engine.SupportedAccelerationBackends is not { } backends ? null
+        : backends.Contains(TranscriptionAccelerationBackend.AmdVulkan) ? TranscriptionAccelerationPreference.AmdVulkan
+        : backends.Contains(TranscriptionAccelerationBackend.NvidiaCuda) && CudaArchitecture ? TranscriptionAccelerationPreference.NvidiaCuda
+        : null;
     private LocalTranscriptionLease? _lease;
     private readonly IPluginHostServices _host;
     private readonly Func<Task<LocalTranscriptionLease>> _load;
@@ -53,17 +60,19 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal bool SupportsModelRemoval => _lease?.Engine.SupportsModelRemoval == true;
     internal bool CanRemoveModel(string modelId) => Enabled && SupportsModelRemoval &&
         ActiveModelId != modelId && _lease?.Engine.SelectedModelId != modelId;
-    // A profile saved by an x64 build may be opened by the ARM64 build, which has no CUDA runtime.
+    // A choice the plugin no longer offers reads as Automatic: NVIDIA CUDA after the switch to Vulkan, which would
+    // otherwise download the graphics card files unasked at startup, or any graphics card in an ARM64 build.
     internal TranscriptionAccelerationPreference Acceleration =>
         Enum.TryParse<TranscriptionAccelerationPreference>(_host.GetSetting<string>(AccelerationSetting), out var saved)
-            && AccelerationChoices.Contains(saved) && (saved != TranscriptionAccelerationPreference.NvidiaCuda || CudaArchitecture)
+            && AccelerationChoices.Contains(saved)
             ? saved : TranscriptionAccelerationPreference.Auto;
     // The CUDA runtime exists only for 64-bit Windows.
     private static bool CudaArchitecture => System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64;
-    internal bool SupportsCuda => CudaArchitecture
-        && _lease?.Engine.SupportedAccelerationBackends.Contains(TranscriptionAccelerationBackend.NvidiaCuda) == true;
+    internal bool SupportsDeviceChoice => GpuChoice is not null;
     // How the loaded model runs; null while no model is loaded.
     internal TranscriptionAccelerationBackend? ActiveBackend => Ready ? _lease!.Engine.AccelerationStatus.ActiveBackend : null;
+    // The plugin's description of the device, such as the graphics card's name.
+    internal string? ActiveDevice => Ready ? _lease!.Engine.AccelerationStatus.DisplayText : null;
     internal double Progress { get; private set; }
     internal string? Error { get; private set; }
     internal string? Feedback { get; private set; }
@@ -148,17 +157,20 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
 
-    // A loaded model is loaded again, which starts a worker with the new device. CUDA downloads its runtime
-    // on the first load. If that load fails, the previous device and model are restored.
+    // A loaded model is loaded again, which starts a worker with the new device. The graphics card downloads its
+    // files on the first load. If that load fails, the previous device and model are restored.
     internal async Task SetAccelerationAsync(TranscriptionAccelerationPreference preference, CancellationToken ct = default)
     {
-        if (!AccelerationChoices.Contains(preference) || preference == TranscriptionAccelerationPreference.NvidiaCuda && !CudaArchitecture)
-            throw new ArgumentOutOfRangeException(nameof(preference));
+        if (!AccelerationChoices.Contains(preference)) throw new ArgumentOutOfRangeException(nameof(preference));
         if (Acceleration == preference) return;
         if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException(Loc.T("A model operation is already in progress."));
         Busy = true; Error = null;
-        Feedback = preference == TranscriptionAccelerationPreference.NvidiaCuda
-            ? Loc.T("Switching to NVIDIA CUDA… The first switch downloads about 2 GB.") : null;
+        Feedback = preference switch
+        {
+            TranscriptionAccelerationPreference.AmdVulkan => Loc.T("Switching to the graphics card… The first switch downloads about 760 MB."),
+            TranscriptionAccelerationPreference.NvidiaCuda => Loc.T("Switching to NVIDIA CUDA… The first switch downloads about 2 GB."),
+            _ => null
+        };
         Changed?.Invoke();
         string? model = null;
         try
