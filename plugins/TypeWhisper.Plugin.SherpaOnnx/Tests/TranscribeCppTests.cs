@@ -216,6 +216,26 @@ public sealed class TranscribeCppTests : IDisposable
     }
 
     [GpuPlatformFact]
+    public async Task SwitchingAModelDownloadedForTheGpuToTheCpuDownloadsItsCpuFiles()
+    {
+        using var http = Server(out var requests);
+        var cpuLoads = 0;
+        using var plugin = CreatePlugin(http, path => new FakeGpu(path), cpu: (_, _) => { cpuLoads++; return null!; });
+        await plugin.ActivateAsync(new TestHost(_root));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdVulkan);
+        await plugin.DownloadModelAsync(ModelId, null, default);
+        await plugin.LoadModelAsync(ModelId, default);
+
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await plugin.LoadModelAsync(ModelId, default);
+
+        Assert.Equal(["/runtime.tar.gz", "/model.gguf", "/encoder.int8.onnx", "/tokens.txt"], requests);
+        Assert.Equal(1, cpuLoads);
+        Assert.Equal(TranscriptionAccelerationBackend.Cpu, plugin.AccelerationStatus.ActiveBackend);
+        Assert.True(plugin.IsModelDownloaded(ModelId));
+    }
+
+    [GpuPlatformFact]
     public async Task AutomaticUsesTheGpuOnlyOnceItsFilesArePresentAndFallsBackToTheCpu()
     {
         using var http = Server(out var requests);

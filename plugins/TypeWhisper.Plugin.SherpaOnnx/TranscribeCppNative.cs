@@ -219,8 +219,10 @@ internal static class TranscribeCppRuntime
     // Native code keeps the pointer for the life of the process.
     private static TranscribeCppNative.LogCallback? _logCallback;
     private static Action<int, string>? _log;
+    // ggml cannot register its backends twice, so a failed start stays failed until the process ends.
+    private static Exception? _startError;
 
-    internal static bool IsInitialized { get { lock (Sync) return _library != IntPtr.Zero; } }
+    internal static bool IsInitialized { get { lock (Sync) return _library != IntPtr.Zero && _startError is null; } }
     internal static uint AllowedBackends { get { lock (Sync) return _mask; } }
 
     /// <summary>Checks the bundle's contract against the version these bindings were written for.</summary>
@@ -248,6 +250,8 @@ internal static class TranscribeCppRuntime
         {
             if (_library != IntPtr.Zero)
             {
+                if (_startError is not null)
+                    throw new InvalidOperationException("transcribe.cpp failed to start in this process: " + _startError.Message, _startError);
                 if (string.Equals(_directory, directory, StringComparison.OrdinalIgnoreCase) && _mask == allowedBackends) return;
                 throw new InvalidOperationException("transcribe.cpp is already loaded with other backends in this process. Restart TypeWhisper to switch.");
             }
@@ -260,32 +264,36 @@ internal static class TranscribeCppRuntime
             _library = NativeLibrary.Load(path, typeof(TranscribeCppNative).Assembly,
                 DllImportSearchPath.UseDllDirectoryForDependencies | DllImportSearchPath.SafeDirectories);
 
-            foreach (var (which, size) in TranscribeCppNative.ManagedStructSizes)
-            {
-                var native = (int)TranscribeCppNative.transcribe_abi_struct_size(which);
-                if (native != size) throw new InvalidDataException($"transcribe.cpp struct {which} has {native} bytes; the bindings expect {size}.");
-            }
-
-            if (log is not null)
-            {
-                _log = log;
-                _logCallback = static (level, message, _) => _log?.Invoke(level, Marshal.PtrToStringUTF8(message)?.TrimEnd() ?? "");
-                TranscribeCppNative.transcribe_log_set(_logCallback, IntPtr.Zero);
-            }
-
-            var utf8 = Marshal.StringToCoTaskMemUTF8(directory);
             try
             {
-                var parameters = new TranscribeCppNative.BackendInitParams();
-                TranscribeCppNative.transcribe_backend_init_params_init(ref parameters);
-                parameters.ArtifactDirectory = utf8;
-                parameters.AllowedBackends = allowedBackends;
-                var status = TranscribeCppNative.transcribe_init_backends_ex(ref parameters);
-                if (status != TranscribeCppNative.Ok)
-                    throw new InvalidOperationException("transcribe.cpp found no usable compute device: " + TranscribeCppNative.StatusText(status));
+                foreach (var (which, size) in TranscribeCppNative.ManagedStructSizes)
+                {
+                    var native = (int)TranscribeCppNative.transcribe_abi_struct_size(which);
+                    if (native != size) throw new InvalidDataException($"transcribe.cpp struct {which} has {native} bytes; the bindings expect {size}.");
+                }
+
+                if (log is not null)
+                {
+                    _log = log;
+                    _logCallback = static (level, message, _) => _log?.Invoke(level, Marshal.PtrToStringUTF8(message)?.TrimEnd() ?? "");
+                    TranscribeCppNative.transcribe_log_set(_logCallback, IntPtr.Zero);
+                }
+
+                var utf8 = Marshal.StringToCoTaskMemUTF8(directory);
+                try
+                {
+                    var parameters = new TranscribeCppNative.BackendInitParams();
+                    TranscribeCppNative.transcribe_backend_init_params_init(ref parameters);
+                    parameters.ArtifactDirectory = utf8;
+                    parameters.AllowedBackends = allowedBackends;
+                    var status = TranscribeCppNative.transcribe_init_backends_ex(ref parameters);
+                    if (status != TranscribeCppNative.Ok)
+                        throw new InvalidOperationException("transcribe.cpp found no usable compute device: " + TranscribeCppNative.StatusText(status));
+                }
+                finally { Marshal.FreeCoTaskMem(utf8); }
+                _mask = allowedBackends;
             }
-            finally { Marshal.FreeCoTaskMem(utf8); }
-            _mask = allowedBackends;
+            catch (Exception ex) { _startError = ex; throw; }
         }
     }
 

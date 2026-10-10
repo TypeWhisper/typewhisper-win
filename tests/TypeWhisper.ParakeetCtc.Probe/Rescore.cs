@@ -51,10 +51,15 @@ internal static class Rescore
             if (outcome.Error is not null) throw new InvalidOperationException(outcome.Error);
             if (outcome.Modified) changed++;
             if (timings.Length == 0) unaligned++;
-            var referenceTokens = Words(reference);
-            var before = EditDistance(referenceTokens, Words(hypothesis));
-            var after = EditDistance(referenceTokens, Words(outcome.Text));
-            wordsBefore += before; wordsAfter += after; referenceWords += referenceTokens.Length;
+            // Like the benchmark, only clips with a reference text count towards WER.
+            int? before = null, after = null;
+            if (reference.Length > 0)
+            {
+                var referenceTokens = Words(reference);
+                before = EditDistance(referenceTokens, Words(hypothesis));
+                after = EditDistance(referenceTokens, Words(outcome.Text));
+                wordsBefore += before.Value; wordsAfter += after.Value; referenceWords += referenceTokens.Length;
+            }
             var row = new { id, before = hypothesis, after = outcome.Text, word_edits_before = before, word_edits_after = after, ctc_ms = timer.Elapsed.TotalMilliseconds };
             rows.Add(row);
             if (outcome.Modified) Console.WriteLine(JsonSerializer.Serialize(row, Json));
@@ -65,7 +70,8 @@ internal static class Rescore
             engine = results.RootElement.GetProperty("summary").GetProperty("engine").GetString(),
             terms = terms.Select(t => t.Text),
             clips = rows.Count, changed_clips = changed, clips_without_timings = unaligned,
-            micro_wer_before = wordsBefore / (double)referenceWords, micro_wer_after = wordsAfter / (double)referenceWords,
+            micro_wer_before = referenceWords > 0 ? wordsBefore / (double)referenceWords : (double?)null,
+            micro_wer_after = referenceWords > 0 ? wordsAfter / (double)referenceWords : (double?)null,
             median_ctc_ms = elapsed[elapsed.Count / 2], max_ctc_ms = elapsed[^1]
         };
         Console.WriteLine(JsonSerializer.Serialize(summary, Json));

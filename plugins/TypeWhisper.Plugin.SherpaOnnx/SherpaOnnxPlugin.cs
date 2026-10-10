@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
@@ -296,12 +296,13 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
         var model = GetModelDefinition(modelId);
-        if (DownloadsForGpu(model))
-        {
-            await DownloadGpuFilesAsync(model, progress, ct);
-            return;
-        }
-        var dir = GetModelDirectory(modelId);
+        if (DownloadsForGpu(model)) await DownloadGpuFilesAsync(model, progress, ct);
+        else await DownloadCpuFilesAsync(model, progress, ct);
+    }
+
+    private async Task DownloadCpuFilesAsync(ModelDefinition model, IProgress<double>? progress, CancellationToken ct)
+    {
+        var dir = GetModelDirectory(model.Id);
         Directory.CreateDirectory(dir);
 
         var missing = model.Files.Where(f => !File.Exists(Path.Join(dir, f.FileName)) || new FileInfo(Path.Join(dir, f.FileName)).Length == 0).ToList();
@@ -423,10 +424,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             TranscriptionAccelerationPreference.Auto => IsGpuReady(model),
             _ => false
         };
+        // A model downloaded for the other device gets the files this one needs, as when the device is switched.
         if (useGpu && !IsGpuReady(model))
             await DownloadGpuFilesAsync(model, null, ct);
         if (!useGpu && !IsCpuReady(model))
-            throw new FileNotFoundException($"Model files not found for: {modelId}");
+            await DownloadCpuFilesAsync(model, null, ct);
 
         await Task.Run(() =>
         {

@@ -46,7 +46,7 @@ internal sealed class TranscribeCppAssetStore(HttpClient http, TranscribeCppAsse
         try
         {
             var receipt = JsonSerializer.Deserialize<Receipt>(File.ReadAllText(Path.Join(directory, "ready.json")));
-            return receipt?.Sha256 == asset.Sha256 && receipt.Files is { Count: > 0 } files && files.All(pair =>
+            return receipt is { Files: { Count: > 0 } files } && receipt.Sha256 == asset.Sha256 && files.All(pair =>
                 new FileInfo(Path.Join(directory, pair.Key)) is { Exists: true } file && file.Length == pair.Value)
                 && files.ContainsKey(asset.FileName);
         }
