@@ -135,7 +135,8 @@ internal sealed class SettingsRow : StackPanel
 
     internal SettingsRow Set(string title, string description = "", string help = "", FrameworkElement? control = null)
     {
-        if (_header.Parent is null) Children.Insert(0, _header);
+        // Set may run again on a row that is not in the visual tree yet, where Parent is still null.
+        if (!Children.Contains(_header)) Children.Insert(0, _header);
         _title.Text = title;
         Description = description;
         if (_help is not null) _titleLine.Children.Remove(_help);
