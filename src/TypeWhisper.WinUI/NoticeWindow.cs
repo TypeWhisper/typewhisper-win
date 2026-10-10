@@ -18,8 +18,12 @@ namespace TypeWhisper.WinUI;
 /// <param name="ActionLabel">Label of an optional button, such as "Edit workflow".</param>
 /// <param name="Action">What the button does; the card closes first.</param>
 /// <param name="Duration">How long the card stays; hovering pauses the countdown.</param>
+/// <param name="Actions">Further buttons after the optional one, such as "Later"; primary ones use the accent style.</param>
 internal sealed record AppNotice(string Text, string? Title = null, bool IsError = true, string? ActionLabel = null,
-    Action? Action = null, TimeSpan? Duration = null);
+    Action? Action = null, TimeSpan? Duration = null, IReadOnlyList<NoticeAction>? Actions = null);
+
+/// <summary>A button on the notice card; the card closes before <paramref name="Run"/> is called.</summary>
+internal sealed record NoticeAction(string Label, Action Run, bool Primary = false);
 
 // Replaces the notice area of the former Quick Launch window. Like the dictation overlay, it never takes focus, so
 // a shortcut used in another app leaves that app in front.
@@ -33,14 +37,14 @@ internal sealed class NoticeWindow : Window
     // Long messages, such as the upgrade report, scroll instead of being cut off.
     private readonly ScrollViewer _textScroll = new() { MaxHeight = 320, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private bool _announce;
-    private readonly HandCursorButton _action = new() { Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Left };
+    // Buttons wrap to a second line when translated labels do not fit beside each other.
+    private readonly ShortcutWrapPanel _actions = new() { Spacing = 8, Visibility = Visibility.Collapsed };
     private readonly ScaleTransform _countdown = new() { ScaleX = 1 };
     private readonly Border _countdownBar;
     private readonly Stopwatch _clock = new();
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private TimeSpan _duration;
     private TimeSpan _elapsedBeforePause;
-    private Action? _run;
     private bool _closed;
     private DisplayArea? _area;
     private OverlayPreferences? _layout;
@@ -68,13 +72,6 @@ internal sealed class NoticeWindow : Window
         };
         AutomationProperties.SetName(close, Loc.T("Dismiss notice"));
         close.Click += (_, _) => Dismiss();
-        _action.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
-        _action.Click += (_, _) =>
-        {
-            var run = _run;
-            Dismiss();
-            run?.Invoke();
-        };
         var header = new Grid { ColumnSpacing = 8 };
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -89,7 +86,7 @@ internal sealed class NoticeWindow : Window
         content.Children.Add(header);
         _textScroll.Content = _text;
         content.Children.Add(_textScroll);
-        content.Children.Add(_action);
+        content.Children.Add(_actions);
         content.Children.Add(new Border { Height = 3, CornerRadius = new CornerRadius(1.5), Background = (Brush)Application.Current.Resources["HairlineBrush"], Child = _countdownBar });
         _card = new Border
         {
@@ -128,9 +125,26 @@ internal sealed class NoticeWindow : Window
         _text.Text = notice.Text;
         _textScroll.ChangeView(null, 0, null, true);
         _announce = true;
-        _run = notice.Action;
-        _action.Content = notice.ActionLabel;
-        _action.Visibility = notice.Action is not null && notice.ActionLabel is not null ? Visibility.Visible : Visibility.Collapsed;
+        _actions.Children.Clear();
+        var actions = (notice.Action is not null && notice.ActionLabel is not null ? [new NoticeAction(notice.ActionLabel, notice.Action)] : Array.Empty<NoticeAction>())
+            .Concat(notice.Actions ?? []);
+        foreach (var action in actions)
+        {
+            var button = new HandCursorButton
+            {
+                Content = action.Label,
+                Style = (Style)Application.Current.Resources[action.Primary ? "PrimaryButtonStyle" : "SecondaryButtonStyle"]
+            };
+            button.Click += (_, _) =>
+            {
+                // A replaced notice must not run the buttons of the one before.
+                if (!_actions.Children.Contains(button)) return;
+                Dismiss();
+                action.Run();
+            };
+            _actions.Children.Add(button);
+        }
+        _actions.Visibility = _actions.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         AutomationProperties.SetName(_card, _title.Text + ". " + notice.Text);
         _duration = notice.Duration ?? TimeSpan.FromSeconds(notice.IsError ? 12 : 6);
         _elapsedBeforePause = TimeSpan.Zero;
@@ -180,7 +194,7 @@ internal sealed class NoticeWindow : Window
     {
         _timer.Stop();
         _clock.Reset();
-        _run = null;
+        _actions.Children.Clear();
         if (!_closed) AppWindow.Hide();
     }
 }

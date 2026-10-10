@@ -23,6 +23,7 @@ internal sealed class TrayIconService : IDisposable
     private string _dictationStatus = Loc.T("Loading…");
     private bool _hotkeysPaused;
     private string? _pauseError;
+    private Action? _notificationClicked;
 
     internal TrayIconService(Action toggleRecorder, Action recent, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates,
         Action pasteLast, Action copyLast, Action readLast, Action diagnostics)
@@ -83,6 +84,10 @@ internal sealed class TrayIconService : IDisposable
             NoLeftClickDelay = true,
         };
         _icon.ForceCreate(enablesEfficiencyMode: false);
+        _icon.TrayIcon.MessageWindow.MouseEventReceived += (_, e) =>
+        {
+            if (e.MouseEvent == H.NotifyIcon.Core.MouseEvent.BalloonToolTipClicked && !_closing) _notificationClicked?.Invoke();
+        };
     }
 
     public void Dispose()
@@ -133,6 +138,15 @@ internal sealed class TrayIconService : IDisposable
         _recorderAction.IsEnabled = canToggle;
     }
     internal void AllowShutdownRetry() => _exitAction.IsEnabled = true;
+
+    // A Windows notification from the tray icon, shown at the bottom right like in TypeWhisper 1.0.
+    // Windows keeps it quiet during Do Not Disturb; clicking it runs the latest action.
+    internal void ShowNotification(string title, string message, Action clicked)
+    {
+        if (_closing) return;
+        _notificationClicked = clicked;
+        _icon.ShowNotification(title, message);
+    }
 
     private static MenuFlyoutItem Label(string text) => new()
     {

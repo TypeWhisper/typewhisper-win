@@ -63,6 +63,44 @@ public sealed class AppUpdatePreferences
         });
 }
 
+/// <summary>
+/// Remembers how the user answered the automatic update notice, as Sparkle does on macOS: "Later" waits a day,
+/// "Skip this version" stays silent about that version only. Manual checks ignore both.
+/// </summary>
+public sealed class AppUpdateReminder
+{
+    /// <summary>How long "Later" postpones the notice, and how often TypeWhisper checks in the background.</summary>
+    public static readonly TimeSpan Interval = TimeSpan.FromHours(24);
+    private readonly string _path;
+    private State _state = new(null, null);
+    /// <summary>Loads earlier answers; an unreadable file only means the notice may appear again.</summary>
+    public AppUpdateReminder(string path)
+    {
+        _path = path;
+        try { if (File.Exists(path)) _state = JsonSerializer.Deserialize<State>(File.ReadAllText(path)) ?? _state; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { Error = ex; }
+    }
+    /// <summary>The last failed load or save, for diagnostics.</summary>
+    public Exception? Error { get; private set; }
+    /// <summary>The version the user chose to skip.</summary>
+    public string? SkippedVersion => _state.SkippedVersion;
+    /// <summary>Whether an automatic check should announce <paramref name="version"/> at <paramref name="now"/>.</summary>
+    public bool ShouldNotify(string version, DateTimeOffset now) =>
+        !string.Equals(version, _state.SkippedVersion, StringComparison.OrdinalIgnoreCase) && !(now < _state.RemindAfter);
+    /// <summary>Postpones the notice for a day.</summary>
+    public void Later(DateTimeOffset now) => Save(_state with { RemindAfter = now + Interval });
+    /// <summary>Stays silent about <paramref name="version"/>, also if the feed offers it again after another one.</summary>
+    public void Skip(string version) => Save(new(version, null));
+    // A failed write keeps the answer for this session.
+    private void Save(State state)
+    {
+        _state = state;
+        try { AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(state)); Error = null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Error = ex; }
+    }
+    private sealed record State(string? SkippedVersion, DateTimeOffset? RemindAfter);
+}
+
 /// <summary>An available version and whether installing it would downgrade the app.</summary>
 public sealed record AppUpdateOffer(string Version, bool IsDowngrade);
 /// <summary>Distinguishes an unpublished track from an up-to-date installation.</summary>

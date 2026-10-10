@@ -4,7 +4,7 @@ using global::Windows.Foundation;
 
 namespace TypeWhisper.WinUI;
 
-// Small, dependency-free flow layout for variable-width shortcut chips.
+// Small, dependency-free flow layout for variable-width shortcut chips and notice buttons.
 public sealed class ShortcutWrapPanel : Panel
 {
     public double Spacing { get; set; } = 8;
