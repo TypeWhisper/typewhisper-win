@@ -5,9 +5,10 @@ using System.Text;
 using System.Text.Json;
 using NAudio.Wave;
 using SherpaOnnx;
+using TypeWhisper.PluginSDK;
 
 /// <summary>
-/// Scores a sherpa-onnx transducer directory on a pinned public FLEURS subset.
+/// Scores a sherpa-onnx transducer directory, or a transcribe.cpp GGUF file, on a pinned public FLEURS subset.
 /// Downloads corpus audio only; model files must already exist.
 /// </summary>
 internal static class WerBenchmark
@@ -26,9 +27,10 @@ internal static class WerBenchmark
     ];
 
     internal const string Usage =
-        "wer <existing-model-directory> <corpus-cache-directory> [--languages de_de,en_us] [--samples 100] " +
-        "[--threads N] [--noise-snr dB] [--concat-seconds N] [--output results.json]";
-    internal const string FilesUsage = "files <existing-model-directory> <wav-directory> [--threads N] [--raw] [--output results.json]";
+        "wer <existing-model-directory-or-gguf> <corpus-cache-directory> [--languages de_de,en_us] [--samples 100] " +
+        "[--threads N] [--noise-snr dB] [--concat-seconds N] [--output results.json] [--sherpa-cuda runtime-dir] " + TranscribeCppDecoder.OptionsUsage;
+    internal const string FilesUsage = "files <existing-model-directory-or-gguf> <wav-directory> [--threads N] [--raw] [--timings] [--output results.json] [--sherpa-cuda runtime-dir] " +
+        TranscribeCppDecoder.OptionsUsage;
 
     internal static async Task RunAsync(string[] args)
     {
@@ -41,10 +43,13 @@ internal static class WerBenchmark
         double? noiseSnr = null;
         var concatSeconds = 0;
         string? output = null;
+        var native = new TranscribeCppDecoder.Options();
+        string? sherpaCuda = null;
         for (var index = 3; index < args.Length; index += 2)
         {
             if (index + 1 >= args.Length) throw new ArgumentException("Missing value for " + args[index]);
             var value = args[index + 1];
+            if (native.TryParse(args[index], value)) continue;
             switch (args[index])
             {
                 case "--languages": languages = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries); break;
@@ -53,17 +58,17 @@ internal static class WerBenchmark
                 case "--noise-snr": noiseSnr = double.Parse(value, CultureInfo.InvariantCulture); break;
                 case "--concat-seconds": concatSeconds = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "--output": output = Path.GetFullPath(value); break;
+                case "--sherpa-cuda": sherpaCuda = Path.GetFullPath(value); break;
                 default: throw new ArgumentException("Unknown option: " + args[index]);
             }
         }
         if (languages.Except(AllLanguages).FirstOrDefault() is { } unknown)
             throw new ArgumentException("Unsupported FLEURS language: " + unknown);
 
-        var config = CreateConfig(modelDirectory, threads, out var qwen, out var modelFiles);
-
         var load = Stopwatch.StartNew();
-        using var recognizer = new OfflineRecognizer(config);
+        using var decoder = CreateDecoder(modelDirectory, threads, native, sherpaCuda, out var modelFiles);
         load.Stop();
+        var modelRoot = File.Exists(modelDirectory) ? Path.GetDirectoryName(modelDirectory)! : modelDirectory;
 
         using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         var languageResults = new List<object>();
@@ -87,12 +92,12 @@ internal static class WerBenchmark
                 if (noiseSnr is { } snr) samples = AddNoise(samples, snr, unit.Id);
                 if (!warmedUp)
                 {
-                    Decode(recognizer, samples, qwen);
+                    decoder.Decode(samples);
                     warmedUp = true;
                 }
 
                 var timer = Stopwatch.StartNew();
-                var hypothesis = Decode(recognizer, samples, qwen);
+                var hypothesis = decoder.Decode(samples);
                 timer.Stop();
 
                 var reference = Normalize(unit.Reference);
@@ -126,7 +131,8 @@ internal static class WerBenchmark
         var summary = new
         {
             model_directory = modelDirectory,
-            model_files = modelFiles.Select(path => new { name = Path.GetRelativePath(modelDirectory, path).Replace('\\', '/'), bytes = new FileInfo(path).Length,
+            engine = decoder.Description,
+            model_files = modelFiles.Select(path => new { name = Path.GetRelativePath(modelRoot, path).Replace('\\', '/'), bytes = new FileInfo(path).Length,
                 sha256 = Sha256(path) }),
             dataset = DatasetRepository + "@" + DatasetRevision,
             samples_per_language = sampleCount,
@@ -150,6 +156,27 @@ internal static class WerBenchmark
             await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new { summary, languages = languageResults, clips = clipResults },
                 new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         }
+    }
+
+    // A .gguf file runs through transcribe.cpp; a directory is scored with sherpa-onnx as before.
+    private static IBenchmarkDecoder CreateDecoder(string modelPath, int threads, TranscribeCppDecoder.Options native, string? sherpaCuda,
+        out string[] modelFiles)
+    {
+        if (modelPath.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sherpaCuda is not null) throw new ArgumentException("--sherpa-cuda applies to sherpa-onnx models only.");
+            if (!File.Exists(modelPath)) throw new FileNotFoundException("Missing model file: " + modelPath);
+            modelFiles = [modelPath];
+            return new TranscribeCppDecoder(modelPath, threads, native);
+        }
+        native.EnsureUnused();
+        var config = CreateConfig(modelPath, threads, out var qwen, out modelFiles);
+        if (sherpaCuda is not null)
+        {
+            UseSherpaRuntime(sherpaCuda);
+            config.ModelConfig.Provider = "cuda";
+        }
+        return new SherpaDecoder(new OfflineRecognizer(config), qwen, config.ModelConfig.Provider, threads);
     }
 
     private static OfflineRecognizerConfig CreateConfig(string modelDirectory, int threads, out bool qwen, out string[] modelFiles)
@@ -205,28 +232,35 @@ internal static class WerBenchmark
         var threads = Math.Max(1, Environment.ProcessorCount / 2);
         string? output = null;
         var normalize = true;
+        var timings = false;
+        var native = new TranscribeCppDecoder.Options();
+        string? sherpaCuda = null;
         for (var index = 3; index < args.Length; index += 2)
         {
             // --raw skips the recorder's peak normalization, like file transcription of an unprocessed WAV.
             if (args[index] == "--raw") { normalize = false; index--; continue; }
+            // --timings records token times for an offline CTC vocabulary rescoring pass (tests/TypeWhisper.ParakeetCtc.Probe).
+            if (args[index] == "--timings") { timings = true; index--; continue; }
             if (index + 1 >= args.Length) throw new ArgumentException("Missing value for " + args[index]);
+            if (native.TryParse(args[index], args[index + 1])) continue;
             switch (args[index])
             {
                 case "--threads": threads = int.Parse(args[index + 1], CultureInfo.InvariantCulture); break;
                 case "--output": output = Path.GetFullPath(args[index + 1]); break;
+                case "--sherpa-cuda": sherpaCuda = Path.GetFullPath(args[index + 1]); break;
                 default: throw new ArgumentException("Unknown option: " + args[index]);
             }
         }
-        var config = CreateConfig(modelDirectory, threads, out var qwen, out var modelFiles);
         var load = Stopwatch.StartNew();
-        using var recognizer = new OfflineRecognizer(config);
+        using var decoder = CreateDecoder(modelDirectory, threads, native, sherpaCuda, out var modelFiles);
         load.Stop();
+        var modelRoot = File.Exists(modelDirectory) ? Path.GetDirectoryName(modelDirectory)! : modelDirectory;
         var paths = Directory.GetFiles(wavDirectory, "*.wav").Order(StringComparer.Ordinal).Where(HasAudio).ToArray();
         if (paths.Length == 0) throw new FileNotFoundException("No WAV files in " + wavDirectory);
         // Each recording is read when it is scored, so long directories never hold more than one decoded file.
         static Clip Load(string path, bool normalize) => new(Path.GetFileNameWithoutExtension(path), ReadOptional(Path.ChangeExtension(path, ".txt")),
             ReadWav(path, normalize, RecorderMinimumPeak), ReadOptional(Path.ChangeExtension(path, ".formatted.txt")));
-        Decode(recognizer, Load(paths[0], normalize).Samples, qwen);
+        decoder.Decode(Load(paths[0], normalize).Samples);
         var results = new List<object>();
         double audioSeconds = 0, decodeSeconds = 0;
         long wordEdits = 0, words = 0, characterEdits = 0, characters = 0;
@@ -234,7 +268,7 @@ internal static class WerBenchmark
         foreach (var clip in paths.Select(path => Load(path, normalize)))
         {
             var timer = Stopwatch.StartNew();
-            var hypothesis = Decode(recognizer, clip.Samples, qwen);
+            var (hypothesis, tokenTimings) = timings ? decoder.DecodeWithTimings(clip.Samples) : (decoder.Decode(clip.Samples), []);
             timer.Stop();
             var seconds = clip.Samples.Length / (double)SampleRate;
             audioSeconds += seconds; decodeSeconds += timer.Elapsed.TotalSeconds;
@@ -256,7 +290,8 @@ internal static class WerBenchmark
                 scored++; if (exactMatch == true) exact++;
             }
             var row = new { id = clip.Id, audio_seconds = seconds, elapsed_ms = timer.Elapsed.TotalMilliseconds, hypothesis,
-                reference = clip.Reference.Length > 0 ? clip.Reference : null, formatted = clip.Formatted.Length > 0 ? clip.Formatted : null, word_edits = clipWordEdits, reference_words = referenceWords, exact = exactMatch };
+                reference = clip.Reference.Length > 0 ? clip.Reference : null, formatted = clip.Formatted.Length > 0 ? clip.Formatted : null, word_edits = clipWordEdits, reference_words = referenceWords, exact = exactMatch,
+                token_timings = timings ? tokenTimings.Select(t => new { text = t.Text, start = t.StartSeconds, end = t.EndSeconds }) : null };
             results.Add(row);
             Console.WriteLine(JsonSerializer.Serialize(row, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         }
@@ -264,7 +299,8 @@ internal static class WerBenchmark
         var summary = new
         {
             model_directory = modelDirectory,
-            model_files = modelFiles.Select(path => new { name = Path.GetRelativePath(modelDirectory, path).Replace('\\', '/'), bytes = new FileInfo(path).Length }),
+            engine = decoder.Description,
+            model_files = modelFiles.Select(path => new { name = Path.GetRelativePath(modelRoot, path).Replace('\\', '/'), bytes = new FileInfo(path).Length }),
             threads, load_ms = load.Elapsed.TotalMilliseconds, peak_working_set_mb = process.PeakWorkingSet64 / (1024d * 1024),
             audio_seconds = audioSeconds, realtime_factor = decodeSeconds / audioSeconds,
             scored_clips = scored, exact_matches = exact,
@@ -285,6 +321,37 @@ internal static class WerBenchmark
         foreach (var candidate in new[] { name + ".int8.onnx", name + ".onnx" })
             if (File.Exists(Path.Combine(directory, candidate))) return Path.Combine(directory, candidate);
         throw new FileNotFoundException("Missing model file: " + name + "[.int8].onnx");
+    }
+
+    // Loads sherpa-onnx from a directory holding the lib folder of a sherpa-onnx CUDA release plus the cuDNN and cuBLAS
+    // DLLs it needs, to compare CUDA with the Vulkan path. It must match the org.k2fsa.sherpa.onnx package version.
+    private static void UseSherpaRuntime(string directory)
+    {
+        var library = Path.Join(directory, "sherpa-onnx-c-api.dll");
+        if (!File.Exists(library)) throw new FileNotFoundException("Missing sherpa-onnx CUDA runtime: " + library);
+        Environment.SetEnvironmentVariable("PATH", directory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"));
+        System.Runtime.InteropServices.NativeLibrary.SetDllImportResolver(typeof(OfflineRecognizer).Assembly, (name, _, _) =>
+            name.StartsWith("sherpa-onnx-c-api", StringComparison.OrdinalIgnoreCase)
+                ? System.Runtime.InteropServices.NativeLibrary.Load(library) : IntPtr.Zero);
+    }
+
+    private sealed class SherpaDecoder(OfflineRecognizer recognizer, bool qwen, string provider, int threads) : IBenchmarkDecoder
+    {
+        public string Description => $"sherpa-onnx {provider}, {threads} threads";
+        public string Decode(float[] samples) => WerBenchmark.Decode(recognizer, samples, qwen);
+
+        // Same conversion as SherpaOnnxPlugin for a single-chunk Parakeet recording.
+        public (string Text, VocabularyTokenTiming[] Timings) DecodeWithTimings(float[] samples)
+        {
+            if (qwen) return (Decode(samples), []);
+            using var stream = recognizer.CreateStream();
+            stream.AcceptWaveform(SampleRate, samples);
+            recognizer.Decode(stream);
+            var result = stream.Result;
+            return (result.Text.Trim(), result.Tokens is not null && result.Timestamps is not null
+                ? TypeWhisper.PluginSDK.Helpers.TranscriptionTokenTimings.Create(result.Tokens, result.Timestamps, result.Durations, samples.Length / (double)SampleRate) : []);
+        }
+        public void Dispose() => recognizer.Dispose();
     }
 
     private static string Decode(OfflineRecognizer recognizer, float[] samples, bool qwen)

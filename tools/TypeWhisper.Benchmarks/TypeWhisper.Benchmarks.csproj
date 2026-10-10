@@ -10,5 +10,9 @@
     <PackageReference Include="System.Speech" />
     <PackageReference Include="NAudio" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" />
+    <!-- Token timings use the SDK helper the local plugins use. -->
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+    <!-- The plugin's bindings, so a benchmark measures exactly what the plugin runs. -->
+    <Compile Include="../../plugins/TypeWhisper.Plugin.SherpaOnnx/TranscribeCppNative.cs" Link="TranscribeCpp/TranscribeCppNative.cs" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,11 @@ using TypeWhisper.PluginSDK;
 using Moq;
 using TypeWhisper.PluginHost;
 
+if (args.Length > 0 && args[0] == "rescore")
+{
+    await Rescore.RunAsync(args);
+    return;
+}
 if (args.Length is not (2 or 3)) throw new ArgumentException("Usage: <CTC model directory> <fixture WAV> [published plugin directory]");
 var tokens = File.ReadAllLines(Path.Combine(args[0], "tokens.txt")).Select(line => line[..line.LastIndexOf(' ')]).ToArray();
 using var reader = new WaveFileReader(args[1]);
