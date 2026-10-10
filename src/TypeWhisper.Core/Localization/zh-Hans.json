@@ -3104,5 +3104,10 @@
   "Could not change the processing device: {0}": "无法更改处理设备：{0}",
   "Finish recording or the current model operation before changing the processing device.": "请先完成录音或当前的模型操作，然后再更改处理设备。",
   "Switching the processing device… Wait until the model is ready before dictating.": "正在切换处理设备… 请等待模型准备就绪后再听写。",
-  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "无法更改处理设备：{0} 模型未加载；请选择“使用模型”重新加载。"
+  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "无法更改处理设备：{0} 模型未加载；请选择“使用模型”重新加载。",
+  "TypeWhisper {0} is available": "TypeWhisper {0} 现已推出",
+  "Click to install it now, later or skip this version.": "点击以立即或稍后安装，或跳过此版本。",
+  "Version {0} is available. You have version {1}.": "版本 {0} 现已推出。你当前的版本是 {1}。",
+  "Later": "稍后",
+  "Skip this version": "跳过此版本"
 }

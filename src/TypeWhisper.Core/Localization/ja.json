@@ -3104,5 +3104,10 @@
   "Could not change the processing device: {0}": "処理デバイスを変更できませんでした: {0}",
   "Finish recording or the current model operation before changing the processing device.": "処理デバイスを変更する前に、録音または現在のモデル操作を終了してください。",
   "Switching the processing device… Wait until the model is ready before dictating.": "処理デバイスを切り替えています… モデルの準備ができるまで音声入力をお待ちください。",
-  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "処理デバイスを変更できませんでした: {0} モデルが読み込まれていません。「モデルを使用」を選んで再度読み込んでください。"
+  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "処理デバイスを変更できませんでした: {0} モデルが読み込まれていません。「モデルを使用」を選んで再度読み込んでください。",
+  "TypeWhisper {0} is available": "TypeWhisper {0} が利用可能です",
+  "Click to install it now, later or skip this version.": "クリックして、今すぐまたは後でインストールするか、このバージョンをスキップします。",
+  "Version {0} is available. You have version {1}.": "バージョン {0} が利用可能です。現在のバージョンは {1} です。",
+  "Later": "後で",
+  "Skip this version": "このバージョンをスキップ"
 }

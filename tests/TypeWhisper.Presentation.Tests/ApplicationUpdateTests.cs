@@ -29,6 +29,21 @@ public sealed class ApplicationUpdateTests : IDisposable
         Assert.Throws<ArgumentException>(() => AppUpdatePreferences.Feed(channel, "win-x86"));
     }
     [Fact]
+    public void LaterWaitsADayAndSkipLastsUntilAnotherVersion()
+    {
+        var path = Path.Combine(_root, "update-reminder.json");
+        var now = new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero);
+        var reminder = new AppUpdateReminder(path);
+        Assert.True(reminder.ShouldNotify("1.1.1", now));
+        reminder.Later(now);
+        Assert.False(new AppUpdateReminder(path).ShouldNotify("1.1.1", now.AddHours(23)));
+        Assert.True(new AppUpdateReminder(path).ShouldNotify("1.1.1", now.AddHours(24)));
+        reminder.Skip("1.1.1");
+        reminder = new AppUpdateReminder(path);
+        Assert.False(reminder.ShouldNotify("1.1.1", now.AddDays(30)));
+        Assert.True(reminder.ShouldNotify("1.1.2", now));
+    }
+    [Fact]
     public void FailedSavePreservesSelection()
     {
         var preferences = Preferences();

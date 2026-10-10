@@ -116,6 +116,7 @@ public sealed partial class MainWindow : Window
             _ = StartCloudSyncAfterAccessChecksAsync(Task.WhenAll(WinUILicensing.ValidateAsync(), WinUIPremiumAccount.RefreshAsync()));
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
             _ = UpdatePluginsAutomaticallyAsync();
+            _ = CheckApplicationUpdatesAutomaticallyAsync();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
     }

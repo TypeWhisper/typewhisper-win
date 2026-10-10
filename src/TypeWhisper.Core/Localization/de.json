@@ -3104,5 +3104,10 @@
   "Could not change the processing device: {0}": "Das Verarbeitungsgerät konnte nicht geändert werden: {0}",
   "Finish recording or the current model operation before changing the processing device.": "Beende die Aufnahme oder den laufenden Modellvorgang, bevor du das Verarbeitungsgerät änderst.",
   "Switching the processing device… Wait until the model is ready before dictating.": "Verarbeitungsgerät wird gewechselt … Warte mit dem Diktieren, bis das Modell bereit ist.",
-  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "Das Verarbeitungsgerät konnte nicht geändert werden: {0} Das Modell ist nicht geladen; wähle „Modell verwenden“, um es erneut zu laden."
+  "Could not change the processing device: {0} The model is not loaded; choose Use model to load it again.": "Das Verarbeitungsgerät konnte nicht geändert werden: {0} Das Modell ist nicht geladen; wähle „Modell verwenden“, um es erneut zu laden.",
+  "TypeWhisper {0} is available": "TypeWhisper {0} ist verfügbar",
+  "Click to install it now, later or skip this version.": "Klicke, um die Version jetzt oder später zu installieren oder sie zu überspringen.",
+  "Version {0} is available. You have version {1}.": "Version {0} ist verfügbar. Du hast Version {1}.",
+  "Later": "Später",
+  "Skip this version": "Diese Version überspringen"
 }
