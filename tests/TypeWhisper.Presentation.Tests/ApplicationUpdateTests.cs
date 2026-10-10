@@ -44,6 +44,16 @@ public sealed class ApplicationUpdateTests : IDisposable
         Assert.True(reminder.ShouldNotify("1.1.2", now));
     }
     [Fact]
+    public void FailedReminderSaveKeepsTheAnswerAndReportsIt()
+    {
+        var path = Path.Combine(_root, "update-reminder.json");
+        Directory.CreateDirectory(path);
+        var reminder = new AppUpdateReminder(path);
+        reminder.Skip("1.1.1");
+        Assert.NotNull(reminder.Error);
+        Assert.False(reminder.ShouldNotify("1.1.1", DateTimeOffset.Now));
+    }
+    [Fact]
     public void FailedSavePreservesSelection()
     {
         var preferences = Preferences();

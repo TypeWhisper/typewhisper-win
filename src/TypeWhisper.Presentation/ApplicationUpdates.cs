@@ -78,8 +78,10 @@ public sealed class AppUpdateReminder
     {
         _path = path;
         try { if (File.Exists(path)) _state = JsonSerializer.Deserialize<State>(File.ReadAllText(path)) ?? _state; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { Error = ex; }
     }
+    /// <summary>The last failed load or save, for diagnostics.</summary>
+    public Exception? Error { get; private set; }
     /// <summary>The version the user chose to skip.</summary>
     public string? SkippedVersion => _state.SkippedVersion;
     /// <summary>Whether an automatic check should announce <paramref name="version"/> at <paramref name="now"/>.</summary>
@@ -93,8 +95,8 @@ public sealed class AppUpdateReminder
     private void Save(State state)
     {
         _state = state;
-        try { AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(state)); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        try { AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(state)); Error = null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Error = ex; }
     }
     private sealed record State(string? SkippedVersion, DateTimeOffset? RemindAfter);
 }

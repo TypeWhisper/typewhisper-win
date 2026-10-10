@@ -15,7 +15,16 @@ public sealed partial class MainWindow
             return InstallApplicationUpdateAsync?.Invoke(action) ?? Task.FromResult<string?>(Loc.T("Restart is currently unavailable."));
         });
     private AppUpdateReminder? _updateReminder;
-    private AppUpdateReminder UpdateReminder => _updateReminder ??= new(WinUIProfile.DataPath("update-reminder.json"));
+    private AppUpdateReminder UpdateReminder
+    {
+        get
+        {
+            if (_updateReminder is not null) return _updateReminder;
+            _updateReminder = new(WinUIProfile.DataPath("update-reminder.json"));
+            if (_updateReminder.Error is { } error) AppDiagnostics.Write("app.update.reminder.load-failed", error);
+            return _updateReminder;
+        }
+    }
     /// <summary>Shows a Windows notification from the tray icon; the action runs when it is clicked.</summary>
     internal Action<string, string, Action>? ShowTrayNotification { get; set; }
     private PluginAutoUpdatePreference? _pluginAutoUpdates;
@@ -86,8 +95,15 @@ public sealed partial class MainWindow
         ShowNotice(new AppNotice(Loc.T("Version {0} is available. You have version {1}.", offer.Version, WindowsApplicationUpdates.CurrentVersion),
             Loc.T("Update available"), IsError: false, Duration: TimeSpan.FromMinutes(1), Actions: [
                 new(Loc.T("Download and restart"), () => InstallApplicationUpdate(offer), Primary: true),
-                new(Loc.T("Later"), () => UpdateReminder.Later(DateTimeOffset.Now)),
-                new(Loc.T("Skip this version"), () => UpdateReminder.Skip(offer.Version))]));
+                new(Loc.T("Later"), () => AnswerUpdateNotice(reminder => reminder.Later(DateTimeOffset.Now))),
+                new(Loc.T("Skip this version"), () => AnswerUpdateNotice(reminder => reminder.Skip(offer.Version)))]));
+    }
+
+    // An answer that cannot be saved still holds until TypeWhisper restarts.
+    private void AnswerUpdateNotice(Action<AppUpdateReminder> answer)
+    {
+        answer(UpdateReminder);
+        if (UpdateReminder.Error is { } error) AppDiagnostics.Write("app.update.reminder.save-failed", error);
     }
 
     // Settings shows the download progress and explains why a restart has to wait.
