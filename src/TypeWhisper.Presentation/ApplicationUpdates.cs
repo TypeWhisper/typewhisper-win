@@ -65,7 +65,7 @@ public sealed class AppUpdatePreferences
 
 /// <summary>
 /// Remembers how the user answered the automatic update notice, as Sparkle does on macOS: "Later" waits a day,
-/// "Skip this version" stays silent until a different version is offered. Manual checks ignore both.
+/// "Skip this version" stays silent about that version only. Manual checks ignore both.
 /// </summary>
 public sealed class AppUpdateReminder
 {
@@ -87,7 +87,7 @@ public sealed class AppUpdateReminder
         !string.Equals(version, _state.SkippedVersion, StringComparison.OrdinalIgnoreCase) && !(now < _state.RemindAfter);
     /// <summary>Postpones the notice for a day.</summary>
     public void Later(DateTimeOffset now) => Save(_state with { RemindAfter = now + Interval });
-    /// <summary>Stays silent until another version is offered.</summary>
+    /// <summary>Stays silent about <paramref name="version"/>, also if the feed offers it again after another one.</summary>
     public void Skip(string version) => Save(new(version, null));
     // A failed write keeps the answer for this session.
     private void Save(State state)

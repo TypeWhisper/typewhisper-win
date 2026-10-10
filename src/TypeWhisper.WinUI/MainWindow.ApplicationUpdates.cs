@@ -50,14 +50,16 @@ public sealed partial class MainWindow
     private async Task CheckApplicationUpdatesAutomaticallyAsync()
     {
         var updates = ApplicationUpdates;
-        var wait = TimeSpan.FromMinutes(1);
+        var plugins = _dictation.Packages.Updates;
+        // The plugin check starts after one minute; start later so both rarely meet.
+        var wait = TimeSpan.FromMinutes(2);
         while (true)
         {
             await Task.Delay(wait);
             if (_closing || _profileRestoreClosing) return;
-            // Busy, recording or an installation without updates: look again soon.
+            // Busy, recording, a plugin update or an installation without updates: look again soon.
             wait = TimeSpan.FromMinutes(15);
-            if (!updates.CanCheck || _dictation.IsRecording) continue;
+            if (!updates.CanCheck || _dictation.IsRecording || plugins.Checking || plugins.Busy) continue;
             wait = AppUpdateReminder.Interval;
             await updates.CheckAsync();
             if (_closing || _profileRestoreClosing) return;
