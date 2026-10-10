@@ -36,7 +36,9 @@ public sealed partial class MainWindow
     {
         var updates = _dictation.Packages.Updates;
         var wait = TimeSpan.FromMinutes(1);
-        bool CanUpdate() => PluginAutoUpdates.Enabled && _dictation.CanChangeProvider && !_dictation.IsRecording && !_dictation.Models.Busy && !updates.Busy;
+        // An app update check or download keeps plugins unchanged, so its restart is not refused.
+        bool CanUpdate() => PluginAutoUpdates.Enabled && _dictation.CanChangeProvider && !_dictation.IsRecording && !_dictation.Models.Busy && !updates.Busy
+            && !ApplicationUpdates.Busy;
         while (true)
         {
             await Task.Delay(wait);
