@@ -14,7 +14,8 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.Plugin.SherpaOnnx;
 
 /// <summary>
-/// Provides sherpa onnx plugin behavior.
+/// Runs NVIDIA Parakeet and Canary locally: on the CPU through sherpa-onnx, and Parakeet on any Vulkan graphics card
+/// through transcribe.cpp, whose runtime and GGUF model are downloaded when the GPU is first chosen.
 /// </summary>
 public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEnginePlugin
 {
@@ -59,14 +60,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             new("decoder.int8.onnx", $"{ParakeetUltraRepo}/decoder.int8.onnx", 12, "1fab98fe6c12aded87d2da66272cc9e148d0a0044ce3850a12fe56302ec4a922"),
             new("joiner.int8.onnx", $"{ParakeetUltraRepo}/joiner.int8.onnx", 6, "8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2"),
             new("tokens.txt", $"{ParakeetUltraRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
-        ]),
+        ], TranscribeCppAsset.ParakeetUltraQ8),
         new("parakeet-tdt-0.6b", "Parakeet TDT 0.6B", "NVIDIA", "~670 MB", 670, 25, false, false,
         [
             new("encoder.int8.onnx", $"{ParakeetRepo}/encoder.int8.onnx", 652, "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
             new("decoder.int8.onnx", $"{ParakeetRepo}/decoder.int8.onnx", 12, "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e"),
             new("joiner.int8.onnx", $"{ParakeetRepo}/joiner.int8.onnx", 6, "3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3"),
             new("tokens.txt", $"{ParakeetRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
-        ]),
+        ], TranscribeCppAsset.ParakeetV3Q8),
         new("canary-180m-flash", "Canary 180M Flash", "NVIDIA", "~198 MB", 198, 4, false, true,
         [
             new("encoder.int8.onnx", $"{CanaryRepo}/encoder.int8.onnx", 127, "7a75b4e2a5857a6dcc0819503bbe3fad66943db4a3ccf21d3f27c633667d303f"),
@@ -79,14 +80,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     private readonly HttpClient _httpClient;
     private readonly IReadOnlyList<ModelDefinition> _models;
     internal Func<string, long?> AvailableBytes { get; set; } = ModelStorageSpace.GetAvailableBytes;
-    private readonly Func<string, string, string, OfflineRecognizer>? _recognizerFactory;
-    private ISherpaCudaRuntimeInstaller? _cudaRuntimeInstaller;
-    private ISherpaCudaRuntimeProbe? _cudaRuntimeProbe;
+    private readonly Func<string, string, OfflineRecognizer>? _recognizerFactory;
+    private readonly Func<string, IGpuRecognizer>? _gpuFactory;
+    private readonly TranscribeCppAssetStore _gpuRuntime;
     private IPluginHostServices? _host;
     private OfflineRecognizer? _recognizer;
+    private IGpuRecognizer? _gpu;
     private string? _loadedModelId;
     private string? _loadedModelDir;
-    private string? _loadedNativeProvider;
     private string? _selectedModelId;
     private TranscriptionAccelerationPreference _accelerationPreference = TranscriptionAccelerationPreference.Auto;
     private TranscriptionAccelerationStatus _accelerationStatus = new(
@@ -97,39 +98,23 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// Initializes a new instance of the SherpaOnnxPlugin class.
     /// </summary>
     public SherpaOnnxPlugin()
-        : this(cudaRuntimeInstaller: null, recognizerFactory: null, cudaRuntimeProbe: null)
+        : this(httpClient: null)
     {
     }
 
-    // Tests download through a fake handler and a small catalog whose hashes they control.
-    internal SherpaOnnxPlugin(HttpClient httpClient, IReadOnlyList<ModelDefinition>? models = null)
-        : this(cudaRuntimeInstaller: null, recognizerFactory: null, cudaRuntimeProbe: null, httpClient, models)
-    {
-    }
-
-    internal SherpaOnnxPlugin(ISherpaCudaRuntimeInstaller cudaRuntimeInstaller)
-        : this(cudaRuntimeInstaller, null)
-    {
-    }
-
+    // Tests download through a fake handler and a small catalog whose hashes they control, and replace the native
+    // recognizers: the CPU factory receives model id and directory, the GPU factory the GGUF path.
     internal SherpaOnnxPlugin(
-        ISherpaCudaRuntimeInstaller cudaRuntimeInstaller,
-        Func<string, string, string, OfflineRecognizer>? recognizerFactory)
-        : this(cudaRuntimeInstaller, recognizerFactory, cudaRuntimeProbe: null)
+        HttpClient? httpClient,
+        IReadOnlyList<ModelDefinition>? models = null,
+        Func<string, string, OfflineRecognizer>? recognizerFactory = null,
+        Func<string, IGpuRecognizer>? gpuFactory = null,
+        TranscribeCppAsset? gpuRuntime = null)
     {
-    }
-
-    internal SherpaOnnxPlugin(
-        ISherpaCudaRuntimeInstaller? cudaRuntimeInstaller,
-        Func<string, string, string, OfflineRecognizer>? recognizerFactory,
-        ISherpaCudaRuntimeProbe? cudaRuntimeProbe,
-        HttpClient? httpClient = null,
-        IReadOnlyList<ModelDefinition>? models = null)
-    {
-        _cudaRuntimeInstaller = cudaRuntimeInstaller;
         _recognizerFactory = recognizerFactory;
-        _cudaRuntimeProbe = cudaRuntimeProbe;
+        _gpuFactory = gpuFactory;
         _httpClient = httpClient ?? new HttpClient();
+        _gpuRuntime = new(_httpClient, gpuRuntime ?? TranscribeCppAsset.Runtime, path => AvailableBytes(path));
         _models = models ?? DefaultModels;
         TranscriptionModels = _models.Select(m =>
             new PluginModelInfo(m.Id, m.DisplayName)
@@ -159,7 +144,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.1";
+    public string PluginVersion => "1.3.0";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -192,13 +177,15 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// </summary>
     public bool SupportsModelRemoval => true;
     /// <summary>
-    /// Gets the supported acceleration backends.
+    /// The CPU everywhere, and on Windows x64 any graphics card with Vulkan through transcribe.cpp. The host labels
+    /// <see cref="TranscriptionAccelerationBackend.AmdVulkan"/> as its Vulkan option; it is not limited to AMD.
     /// </summary>
-    public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; } =
-    [
-        TranscriptionAccelerationBackend.Cpu,
-        TranscriptionAccelerationBackend.NvidiaCuda
-    ];
+    public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; } = GpuPlatform
+        ? [TranscriptionAccelerationBackend.Cpu, TranscriptionAccelerationBackend.AmdVulkan]
+        : [TranscriptionAccelerationBackend.Cpu];
+
+    // transcribe.cpp publishes its Vulkan runtime for Windows x64 only.
+    internal static bool GpuPlatform => OperatingSystem.IsWindows() && RuntimeInformation.ProcessArchitecture == Architecture.X64;
     /// <summary>
     /// Gets the acceleration preference.
     /// </summary>
@@ -225,19 +212,25 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
-        _cudaRuntimeInstaller ??= new SherpaCudaRuntimeInstaller(host.PluginAssetDirectory, _httpClient);
-        if (_cudaRuntimeProbe is null
-            && Environment.ProcessPath is { } hostExecutablePath
-            && Path.GetDirectoryName(typeof(SherpaOnnxPlugin).Assembly.Location) is { } pluginDirectory)
-        {
-            _cudaRuntimeProbe = new SherpaCudaRuntimeProbe(
-                hostExecutablePath,
-                pluginDirectory,
-                host.PluginAssetDirectory);
-        }
         SherpaOnnxNativeRuntime.RegisterResolver();
         if (host.AllowLegacyDataMigration) MigrateModelFiles();
+        RemoveRetiredCudaRuntime(host.PluginAssetDirectory);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Deletes the NVIDIA CUDA runtime that plugin versions before 1.3.0 downloaded (about 2.3 GB). The GPU now runs
+    /// through Vulkan, so nothing loads it any more. Files an older process still holds are left for the next start.
+    /// </summary>
+    internal static void RemoveRetiredCudaRuntime(string pluginAssetDirectory)
+    {
+        var directory = Path.Join(pluginAssetDirectory, "Runtimes", "sherpa-onnx-cuda");
+        try
+        {
+            if (Directory.Exists(directory) && (File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0)
+                Directory.Delete(directory, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     /// <summary>
@@ -251,17 +244,18 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
 
     /// <summary>
-    /// Sets acceleration preference.
+    /// Sets acceleration preference; it takes effect on the next model load. A NVIDIA CUDA choice saved for an earlier
+    /// version reads as Automatic, so the update does not download the graphics card files unasked.
     /// </summary>
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
     {
-        _accelerationPreference = preference;
-        var cudaRuntimeInstalled = _cudaRuntimeInstaller?.IsInstalled == true;
-        var desiredProvider = GetProvider(preference, cudaRuntimeInstalled);
-        _accelerationStatus = _loadedNativeProvider is not null
-            && !string.Equals(_loadedNativeProvider, desiredProvider, StringComparison.OrdinalIgnoreCase)
-            ? CreateRestartRequiredStatus(_loadedNativeProvider, desiredProvider)
-            : CreatePendingAccelerationStatus(preference, cudaRuntimeInstalled);
+        _accelerationPreference = preference switch
+        {
+            TranscriptionAccelerationPreference.Cpu => preference,
+            TranscriptionAccelerationPreference.AmdVulkan when GpuPlatform => preference,
+            _ => TranscriptionAccelerationPreference.Auto
+        };
+        if (_loadedModelId is null) _accelerationStatus = CreatePendingAccelerationStatus(_accelerationPreference);
     }
 
     /// <summary>
@@ -274,21 +268,39 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     }
 
     /// <summary>
-    /// Gets whether the requested model is available locally.
+    /// Whether the model can be used with the current processing device: its CPU files are present, or, unless the CPU
+    /// was chosen, its GPU files and the Vulkan runtime are.
     /// </summary>
     public bool IsModelDownloaded(string modelId)
     {
         var model = GetModelDefinition(modelId);
-        var dir = GetModelDirectory(modelId);
+        return IsCpuReady(model) || (_accelerationPreference != TranscriptionAccelerationPreference.Cpu && IsGpuReady(model));
+    }
+
+    private bool IsCpuReady(ModelDefinition model)
+    {
+        var dir = GetModelDirectory(model.Id);
         return model.Files.All(f => File.Exists(Path.Combine(dir, f.FileName)) && new FileInfo(Path.Combine(dir, f.FileName)).Length > 0);
     }
 
+    private bool IsGpuReady(ModelDefinition model) => GpuPlatform && model.Gguf is { } gguf
+        && _gpuRuntime.IsReady(GpuRuntimeDirectory) && GpuModelStore(gguf).IsReady(GpuModelDirectory(model.Id));
+
+    // With the GPU chosen, a download fetches what the GPU runs; otherwise the CPU files.
+    private bool DownloadsForGpu(ModelDefinition model) =>
+        GpuPlatform && model.Gguf is not null && _accelerationPreference == TranscriptionAccelerationPreference.AmdVulkan;
+
     /// <summary>
-    /// Downloads the requested model and reports progress when available.
+    /// Downloads the requested model for the current processing device and reports progress when available.
     /// </summary>
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
         var model = GetModelDefinition(modelId);
+        if (DownloadsForGpu(model))
+        {
+            await DownloadGpuFilesAsync(model, progress, ct);
+            return;
+        }
         var dir = GetModelDirectory(modelId);
         Directory.CreateDirectory(dir);
 
@@ -327,6 +339,26 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             progress?.Report(completed / total);
         }
     }
+
+    // The Vulkan runtime is shared by every model; each model keeps its GGUF next to its CPU files, so removing the
+    // model removes both.
+    private async Task DownloadGpuFilesAsync(ModelDefinition model, IProgress<double>? progress, CancellationToken ct)
+    {
+        var store = GpuModelStore(model.Gguf!);
+        var runtimeSize = _gpuRuntime.IsReady(GpuRuntimeDirectory) ? 0 : _gpuRuntime.Asset.Size;
+        double total = runtimeSize + model.Gguf!.Size;
+        await _gpuRuntime.DownloadAsync(GpuRuntimeDirectory,
+            new DownloadProgress(value => progress?.Report(value * runtimeSize / total)), ct);
+        await store.DownloadAsync(GpuModelDirectory(model.Id),
+            new DownloadProgress(value => progress?.Report((runtimeSize + value * model.Gguf.Size) / total)), ct);
+    }
+
+    private TranscribeCppAssetStore GpuModelStore(TranscribeCppAsset gguf) => new(_httpClient, gguf, path => AvailableBytes(path));
+
+    private string GpuRuntimeDirectory =>
+        Path.Join(_host?.PluginAssetDirectory ?? ".", "Runtimes", "transcribe-cpp", TranscribeCppNative.Version + "-cpu-vulkan");
+
+    private string GpuModelDirectory(string modelId) => Path.Join(GetModelDirectory(modelId), "gpu");
 
     internal static async Task VerifyChecksumAsync(string fileName, string sha256, string path, CancellationToken ct)
     {
@@ -376,104 +408,87 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     }
 
     /// <summary>
-    /// Loads the selected transcription model into memory.
+    /// Loads the model on the chosen processing device. The GPU downloads its runtime and model on first use and runs
+    /// the model on the first dedicated graphics card with Vulkan, or on integrated graphics when there is none.
+    /// Automatic uses the GPU once its files are present and falls back to the CPU when the GPU cannot load.
     /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken ct)
     {
         var model = GetModelDefinition(modelId);
         var dir = GetModelDirectory(modelId);
-
-        if (!model.Files.All(f => File.Exists(Path.Combine(dir, f.FileName))))
-            throw new FileNotFoundException($"Model files not found for: {modelId}");
-
-        var provider = await ResolveProviderForLoadAsync(ct);
-        var providerForLoad = provider;
-        string? cudaProbeFallbackDetail = null;
-        if (string.Equals(provider, "cuda", StringComparison.OrdinalIgnoreCase)
-            && !SherpaCudaRuntimeProbe.IsProbeProcess)
+        var preference = _accelerationPreference;
+        var useGpu = GpuPlatform && model.Gguf is not null && preference switch
         {
-            var probeResult = _cudaRuntimeProbe is null
-                ? new CudaRuntimeProbeResult(
-                    false,
-                    "CUDA safety probe is unavailable in this TypeWhisper installation.")
-                : await _cudaRuntimeProbe.ProbeAsync(
-                    modelId,
-                    dir,
-                    _cudaRuntimeInstaller?.RuntimeDirectory ?? string.Empty,
-                    ct);
-
-            if (!probeResult.Success)
-            {
-                var detail = probeResult.ErrorMessage ?? "Native CUDA safety probe failed.";
-                _accelerationStatus = CreateCudaUnavailableStatus(detail);
-                SherpaOnnxNativeRuntime.ConfigureBundledRuntime();
-
-                if (_accelerationPreference != TranscriptionAccelerationPreference.Auto)
-                    throw new InvalidOperationException(detail);
-
-                _host?.Log(
-                    PluginLogLevel.Warning,
-                    $"CUDA safety probe failed for {modelId}; falling back to CPU: {detail}");
-                providerForLoad = "cpu";
-                cudaProbeFallbackDetail = detail;
-            }
-        }
+            TranscriptionAccelerationPreference.AmdVulkan => true,
+            TranscriptionAccelerationPreference.Auto => IsGpuReady(model),
+            _ => false
+        };
+        if (useGpu && !IsGpuReady(model))
+            await DownloadGpuFilesAsync(model, null, ct);
+        if (!useGpu && !IsCpuReady(model))
+            throw new FileNotFoundException($"Model files not found for: {modelId}");
 
         await Task.Run(() =>
         {
             lock (_sync)
             {
                 UnloadRecognizerUnsafe();
-
-                var activeProvider = providerForLoad;
-                var accelerationStatus = cudaProbeFallbackDetail is not null
-                    ? CreateCudaUnavailableStatus(cudaProbeFallbackDetail)
-                    : CreateLoadedAccelerationStatus(activeProvider);
-
-                try
+                TranscriptionAccelerationStatus status;
+                if (useGpu)
                 {
-                    _recognizer = CreateRecognizerForLoad(model, dir, activeProvider);
-                }
-                catch (Exception ex) when (
-                    string.Equals(activeProvider, "cuda", StringComparison.OrdinalIgnoreCase))
-                {
-                    accelerationStatus = CreateCudaUnavailableStatus(ex.Message);
-                    if (_accelerationPreference != TranscriptionAccelerationPreference.Auto)
-                    {
-                        _accelerationStatus = accelerationStatus;
-                        throw;
-                    }
-
-                    _host?.Log(
-                        PluginLogLevel.Warning,
-                        $"CUDA provider failed for {modelId}; falling back to CPU: {ex.Message}");
-                    activeProvider = "cpu";
                     try
                     {
-                        _recognizer = CreateRecognizerForLoad(model, dir, activeProvider);
+                        _gpu = CreateGpuRecognizer(Path.Join(GpuModelDirectory(modelId), model.Gguf!.FileName));
+                        status = _gpu.Status;
                     }
-                    catch (Exception cpuEx)
+                    catch (Exception ex) when (preference == TranscriptionAccelerationPreference.Auto && IsCpuReady(model)
+                        && ex is not OperationCanceledException)
                     {
-                        _accelerationStatus = CreateNativeRuntimeUnavailableStatus(
-                            "CPU fallback failed after CUDA provider failed. " + cpuEx.Message);
+                        _host?.Log(PluginLogLevel.Warning, $"The GPU could not load {modelId}; falling back to the CPU: {ex.Message}");
+                        status = new(TranscriptionAccelerationBackend.Cpu, "Using CPU", "GPU unavailable: " + ex.Message);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _accelerationStatus = new(TranscriptionAccelerationBackend.Cpu, "GPU unavailable", ex.Message);
                         throw;
                     }
                 }
+                else
+                {
+                    status = preference == TranscriptionAccelerationPreference.AmdVulkan
+                        ? new(TranscriptionAccelerationBackend.Cpu, "Using CPU", $"{model.DisplayName} runs on the CPU.")
+                        : new(TranscriptionAccelerationBackend.Cpu, "Using CPU");
+                }
+                if (_gpu is null) _recognizer = CreateRecognizerForLoad(model, dir);
 
                 _loadedModelId = modelId;
                 _loadedModelDir = dir;
-                _loadedNativeProvider ??= activeProvider;
                 _selectedModelId = modelId;
                 _canarySrcLang = "en";
                 _canaryTgtLang = "en";
-                _accelerationStatus = accelerationStatus;
+                _accelerationStatus = status;
 
-                _host?.Log(
-                    PluginLogLevel.Info,
-                    $"Loaded model {modelId} using provider {activeProvider} ({_accelerationStatus.DisplayText})");
-                Debug.WriteLine($"[SherpaOnnx] Model {modelId} loaded from {dir} using {activeProvider}");
+                _host?.Log(PluginLogLevel.Info, $"Loaded model {modelId} ({_accelerationStatus.DisplayText})");
+                Debug.WriteLine($"[SherpaOnnx] Model {modelId} loaded from {dir} ({_accelerationStatus.DisplayText})");
             }
         }, ct);
+    }
+
+    private IGpuRecognizer CreateGpuRecognizer(string ggufPath)
+    {
+        if (_gpuFactory is not null) return _gpuFactory(ggufPath);
+        var host = _host;
+        TranscribeCppRuntime.Initialize(GpuRuntimeDirectory, TranscribeCppNative.BackendMaskCpu | TranscribeCppNative.BackendMaskVulkan,
+            (level, message) =>
+            {
+                // 2 = WARN, 3 = ERROR; INFO and DEBUG would flood the log with per-run decoder statistics.
+                if (level is 2 or 3 && message.Length > 0)
+                    host?.Log(level == 3 ? PluginLogLevel.Error : PluginLogLevel.Warning, "transcribe.cpp: " + message);
+            });
+        var device = TranscribeCppRuntime.PreferredVulkanDevice(TranscribeCppRuntime.Devices())
+            ?? throw new InvalidOperationException("No graphics card with Vulkan support was found. Update the graphics driver or choose CPU.");
+        return new TranscribeCppRecognizer(TranscribeCppSession.Open(ggufPath, TranscribeCppNative.BackendVulkan, device,
+            Math.Max(1, Environment.ProcessorCount / 2)));
     }
 
     /// <summary>
@@ -494,6 +509,8 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
             lock (_sync)
             {
+                if (_gpu is not null && _loadedModelId is not null)
+                    return TranscribeOnGpu(_gpu, audioSamples, cancellationToken);
                 if (_recognizer is null || _loadedModelId is null)
                     throw new InvalidOperationException("Kein Modell geladen. LoadModelAsync zuerst aufrufen.");
 
@@ -508,8 +525,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
                 // Long recordings need bounded chunks; single-chunk recordings retain token timings.
                 if (audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
-                    return new PluginTranscriptionResult(
-                        TranscribeParakeetSamples(_recognizer, audioSamples, cancellationToken), null, audioDuration, NoSpeechProbability: null);
+                {
+                    var recognizer = _recognizer;
+                    return new PluginTranscriptionResult(TranscribeParakeetSamples(chunk => RecognizeSamples(recognizer, chunk), audioSamples,
+                        cancellationToken), null, audioDuration, NoSpeechProbability: null);
+                }
 
                 using var stream = _recognizer.CreateStream();
                 stream.AcceptWaveform(SampleRate, audioSamples);
@@ -525,14 +545,32 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         }, cancellationToken);
     }
 
+    // The GPU uses the same chunks as the CPU: one pass over a long recording would hold its whole attention on the
+    // graphics card. Token timings, which dictionary boosting needs, come from single-chunk recordings.
+    private PluginTranscriptionResult TranscribeOnGpu(IGpuRecognizer gpu, float[] audioSamples, CancellationToken ct)
+    {
+        var duration = audioSamples.Length / (double)SampleRate;
+        if (audioSamples.Length == 0) return new(string.Empty, null, 0, NoSpeechProbability: null);
+        if (audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
+            return new(TranscribeParakeetSamples(chunk => gpu.Transcribe(chunk, tokens: false, ct).Text, audioSamples, ct),
+                null, duration, NoSpeechProbability: null);
+        var result = gpu.Transcribe(audioSamples, tokens: true, ct);
+        return new(result.Text, null, duration, NoSpeechProbability: null) { TokenTimings = TokenTimings(result.Tokens, duration) };
+    }
+
+    internal static VocabularyTokenTiming[] TokenTimings(IReadOnlyList<TranscribeCppToken> tokens, double duration) =>
+        TranscriptionTokenTimings.Create(tokens.Select(token => token.Text).ToArray(),
+            tokens.Select(token => (float)token.StartSeconds).ToArray(),
+            tokens.Select(token => (float)(token.EndSeconds - token.StartSeconds)).ToArray(), duration);
+
     private string TranscribeParakeetSamples(
-        OfflineRecognizer recognizer,
+        Func<float[], string> recognize,
         float[] audioSamples,
         CancellationToken ct)
     {
         var chunks = CreateParakeetChunks(audioSamples.Length);
         if (chunks.Count == 1)
-            return RecognizeSamples(recognizer, audioSamples);
+            return recognize(audioSamples);
 
         _host?.Log(
             PluginLogLevel.Info,
@@ -544,7 +582,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             ct.ThrowIfCancellationRequested();
             var samples = new float[chunk.Count];
             Array.Copy(audioSamples, chunk.Offset, samples, 0, chunk.Count);
-            transcript = MergeChunkTranscripts(transcript, RecognizeSamples(recognizer, samples));
+            transcript = MergeChunkTranscripts(transcript, recognize(samples));
         }
 
         return transcript;
@@ -738,126 +776,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
     // --- Private helpers ---
 
-    internal async Task<string> ResolveProviderForLoadAsync(CancellationToken cancellationToken)
-    {
-        var cudaRuntimeInstalled = _cudaRuntimeInstaller?.IsInstalled == true;
-        var desiredProvider = GetProvider(_accelerationPreference, cudaRuntimeInstalled);
-
-        if (_accelerationPreference == TranscriptionAccelerationPreference.NvidiaCuda)
-        {
-            ISherpaCudaRuntimeInstaller installer;
-            try
-            {
-                EnsureCudaPlatformSupported();
-                installer = _cudaRuntimeInstaller
-                    ?? throw new InvalidOperationException("The sherpa-onnx CUDA runtime installer is not available.");
-
-                if (!installer.IsInstalled)
-                    await installer.EnsureInstalledAsync(cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _accelerationStatus = CreateCudaUnavailableStatus(ex.Message);
-                throw;
-            }
-
-            if (!installer.IsInstalled || string.IsNullOrWhiteSpace(installer.RuntimeDirectory))
-            {
-                _accelerationStatus = CreateCudaUnavailableStatus(
-                    "The sherpa-onnx CUDA runtime could not be installed.");
-                throw new InvalidOperationException(_accelerationStatus.Detail);
-            }
-
-            SherpaOnnxNativeRuntime.ConfigureCudaRuntime(installer.RuntimeDirectory);
-            desiredProvider = "cuda";
-        }
-        else if (desiredProvider == "cuda" && _cudaRuntimeInstaller?.RuntimeDirectory is { } runtimeDirectory)
-        {
-            SherpaOnnxNativeRuntime.ConfigureCudaRuntime(runtimeDirectory);
-        }
-
-        if (_loadedNativeProvider is not null
-            && !string.Equals(_loadedNativeProvider, desiredProvider, StringComparison.OrdinalIgnoreCase))
-        {
-            _accelerationStatus = CreateRestartRequiredStatus(_loadedNativeProvider, desiredProvider);
-            throw new InvalidOperationException(_accelerationStatus.Detail);
-        }
-
-        _accelerationStatus = _accelerationPreference == TranscriptionAccelerationPreference.Auto
-            && desiredProvider == "cpu"
-            && !cudaRuntimeInstalled
-            ? CreatePendingAccelerationStatus(_accelerationPreference, cudaRuntimeInstalled)
-            : CreateLoadedAccelerationStatus(desiredProvider);
-        return desiredProvider;
-    }
-
-    internal static string GetProvider(
-        TranscriptionAccelerationPreference preference,
-        bool cudaRuntimeInstalled) =>
-        preference switch
-        {
-            TranscriptionAccelerationPreference.Cpu => "cpu",
-            TranscriptionAccelerationPreference.NvidiaCuda => "cuda",
-            _ => cudaRuntimeInstalled ? "cuda" : "cpu"
-        };
-
-    internal void MarkNativeRuntimeLoadedForTests(string provider) => _loadedNativeProvider = provider;
-
-    private static void EnsureCudaPlatformSupported()
-    {
-        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            throw new InvalidOperationException(
-                "NVIDIA CUDA acceleration for sherpa-onnx is only available on Windows x64.");
-    }
-
-    private static TranscriptionAccelerationStatus CreatePendingAccelerationStatus(
-        TranscriptionAccelerationPreference preference,
-        bool cudaRuntimeInstalled) =>
-        GetProvider(preference, cudaRuntimeInstalled) == "cuda"
-            ? new(
-                TranscriptionAccelerationBackend.NvidiaCuda,
-                "Using CUDA")
-            : new(
-                TranscriptionAccelerationBackend.Cpu,
-                "Using CPU",
-                preference == TranscriptionAccelerationPreference.Auto
-                    ? "CUDA runtime is not installed. Select NVIDIA CUDA to install it."
-                    : null);
-
-    private static TranscriptionAccelerationStatus CreateLoadedAccelerationStatus(string provider) =>
-        string.Equals(provider, "cuda", StringComparison.OrdinalIgnoreCase)
-            ? new(TranscriptionAccelerationBackend.NvidiaCuda, "Using CUDA")
+    private static TranscriptionAccelerationStatus CreatePendingAccelerationStatus(TranscriptionAccelerationPreference preference) =>
+        preference == TranscriptionAccelerationPreference.AmdVulkan
+            ? new(TranscriptionAccelerationBackend.AmdVulkan, "Using GPU")
             : new(TranscriptionAccelerationBackend.Cpu, "Using CPU");
-
-    private static TranscriptionAccelerationStatus CreateCudaUnavailableStatus(string detail) =>
-        new(
-            TranscriptionAccelerationBackend.Cpu,
-            "CUDA unavailable",
-            detail);
-
-    private static TranscriptionAccelerationStatus CreateNativeRuntimeUnavailableStatus(string detail) =>
-        new(
-            TranscriptionAccelerationBackend.Cpu,
-            "Native runtime unavailable",
-            detail);
-
-    private static TranscriptionAccelerationStatus CreateRestartRequiredStatus(
-        string loadedProvider,
-        string desiredProvider)
-    {
-        var active = string.Equals(loadedProvider, "cuda", StringComparison.OrdinalIgnoreCase)
-            ? TranscriptionAccelerationBackend.NvidiaCuda
-            : TranscriptionAccelerationBackend.Cpu;
-        var desired = string.Equals(desiredProvider, "cuda", StringComparison.OrdinalIgnoreCase)
-            ? "CUDA"
-            : "CPU";
-
-        return new TranscriptionAccelerationStatus(
-            active,
-            active == TranscriptionAccelerationBackend.NvidiaCuda ? "Using CUDA" : "Using CPU",
-            $"Restart TypeWhisper to switch sherpa-onnx to {desired}.",
-            RequiresRestart: true);
-    }
 
     private string GetModelDirectory(string modelId)
     {
@@ -882,13 +804,15 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     {
         _recognizer?.Dispose();
         _recognizer = null;
+        _gpu?.Dispose();
+        _gpu = null;
         _loadedModelId = null;
         _loadedModelDir = null;
         _canarySrcLang = "en";
         _canaryTgtLang = "en";
     }
 
-    internal static OfflineRecognizerConfig CreateParakeetConfig(string modelDir, string provider)
+    internal static OfflineRecognizerConfig CreateParakeetConfig(string modelDir)
     {
         var config = new OfflineRecognizerConfig();
         config.ModelConfig.Transducer.Encoder = Path.Combine(modelDir, "encoder.int8.onnx");
@@ -896,36 +820,26 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         config.ModelConfig.Transducer.Joiner = Path.Combine(modelDir, "joiner.int8.onnx");
         config.ModelConfig.Tokens = Path.Combine(modelDir, "tokens.txt");
         config.ModelConfig.NumThreads = Math.Max(1, Environment.ProcessorCount / 2);
-        config.ModelConfig.Provider = provider;
+        config.ModelConfig.Provider = "cpu";
         config.ModelConfig.Debug = 0;
         config.DecodingMethod = "greedy_search";
         return config;
     }
 
-    private static OfflineRecognizer CreateParakeetRecognizer(string modelDir, string provider) =>
-        new(CreateParakeetConfig(modelDir, provider));
-
-    private static OfflineRecognizer CreateRecognizer(
-        ModelDefinition model,
-        string modelDir,
-        string provider) =>
+    private static OfflineRecognizer CreateRecognizer(ModelDefinition model, string modelDir) =>
         model.SupportsTranslation
-            ? CreateCanaryRecognizer(modelDir, "en", "en", provider)
-            : CreateParakeetRecognizer(modelDir, provider);
+            ? CreateCanaryRecognizer(modelDir, "en", "en")
+            : new(CreateParakeetConfig(modelDir));
 
-    private OfflineRecognizer CreateRecognizerForLoad(
-        ModelDefinition model,
-        string modelDir,
-        string provider) =>
+    private OfflineRecognizer CreateRecognizerForLoad(ModelDefinition model, string modelDir) =>
         _recognizerFactory is null
-            ? CreateRecognizer(model, modelDir, provider)
-            : _recognizerFactory(model.Id, modelDir, provider);
+            ? CreateRecognizer(model, modelDir)
+            : _recognizerFactory(model.Id, modelDir);
 
     internal static OfflineRecognizerConfig CreateCanaryConfig(
         string modelDir,
         string srcLang,
-        string tgtLang,
-        string provider)
+        string tgtLang)
     {
         var config = new OfflineRecognizerConfig();
         config.ModelConfig.Canary.Encoder = Path.Combine(modelDir, "encoder.int8.onnx");
@@ -935,7 +849,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         config.ModelConfig.Canary.UsePnc = 1;
         config.ModelConfig.Tokens = Path.Combine(modelDir, "tokens.txt");
         config.ModelConfig.NumThreads = Math.Max(1, Environment.ProcessorCount / 2);
-        config.ModelConfig.Provider = provider;
+        config.ModelConfig.Provider = "cpu";
         config.ModelConfig.Debug = 0;
         config.DecodingMethod = "greedy_search";
         return config;
@@ -944,9 +858,8 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     private static OfflineRecognizer CreateCanaryRecognizer(
         string modelDir,
         string srcLang,
-        string tgtLang,
-        string provider) =>
-        new(CreateCanaryConfig(modelDir, srcLang, tgtLang, provider));
+        string tgtLang) =>
+        new(CreateCanaryConfig(modelDir, srcLang, tgtLang));
 
     private void EnsureCanaryLanguage(string? language, bool translate)
     {
@@ -958,7 +871,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         if (srcLang == _canarySrcLang && tgtLang == _canaryTgtLang) return;
 
         _recognizer?.Dispose();
-        _recognizer = CreateCanaryRecognizer(_loadedModelDir, srcLang, tgtLang, _loadedNativeProvider ?? "cpu");
+        _recognizer = CreateCanaryRecognizer(_loadedModelDir, srcLang, tgtLang);
         _canarySrcLang = srcLang;
         _canaryTgtLang = tgtLang;
     }
@@ -1100,7 +1013,8 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         int LanguageCount,
         bool IsRecommended,
         bool SupportsTranslation,
-        IReadOnlyList<ModelFileDefinition> Files);
+        IReadOnlyList<ModelFileDefinition> Files,
+        TranscribeCppAsset? Gguf = null);
 
     /// <summary>
     /// One model file, pinned to an immutable URL and the SHA-256 it must have. The hash is not

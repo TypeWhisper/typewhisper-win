@@ -18,6 +18,7 @@ internal sealed class LiveModelsView : UserControl
     private readonly SettingsCard _device = new();
     private readonly SettingsRow _deviceRow = new();
     private readonly ChoicePicker _devicePicker = new();
+    private TranscriptionAccelerationPreference? _deviceGpu;
     private readonly List<ModelRow> _rows = [];
     private string? _message;
     private bool _confirmingRemoval;
@@ -49,7 +50,7 @@ internal sealed class LiveModelsView : UserControl
                 _message = await _session.SetLocalAccelerationAsync(Enum.Parse<TranscriptionAccelerationPreference>(id));
                 if (IsLoaded) Update();
             };
-            _deviceRow.Set(Loc.T("Processing device"), "", Loc.T("Automatic uses NVIDIA CUDA once it is installed and the CPU otherwise. The first switch to NVIDIA CUDA downloads about 2 GB of NVIDIA libraries and needs an NVIDIA graphics card. If the graphics card fails, TypeWhisper keeps the previous device."), _devicePicker);
+            _deviceRow.Set(Loc.T("Processing device"), "", "", _devicePicker);
             _device.Children.Add(_deviceRow);
             _panel.Children.Add(_device);
             _panel.Children.Add(_vocabulary);
@@ -117,19 +118,35 @@ internal sealed class LiveModelsView : UserControl
         }
     }
 
+    // Plugin 1.3 offers the graphics card through Vulkan, earlier versions through NVIDIA CUDA.
     private void UpdateDevice(LocalTranscriptionPlugin models)
     {
-        _device.Visibility = models.Enabled && models.SupportsCuda ? Visibility.Visible : Visibility.Collapsed;
+        var gpu = models.GpuChoice;
+        _device.Visibility = models.Enabled && gpu is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (gpu is null) return;
+        var vulkan = gpu == TranscriptionAccelerationPreference.AmdVulkan;
         var selected = models.Acceleration.ToString();
-        if (_devicePicker.SelectedId != selected)
+        if (_devicePicker.SelectedId != selected || _deviceGpu != gpu)
+        {
+            _deviceGpu = gpu;
+            _deviceRow.Set(Loc.T("Processing device"), "", vulkan
+                ? Loc.T("Automatic uses the graphics card once its files are downloaded and the CPU otherwise. The first switch to the graphics card downloads about 760 MB and needs a graphics card with Vulkan from NVIDIA, AMD or Intel. Canary always runs on the CPU. If the graphics card fails, TypeWhisper keeps the previous device.")
+                : Loc.T("Automatic uses NVIDIA CUDA once it is installed and the CPU otherwise. The first switch to NVIDIA CUDA downloads about 2 GB of NVIDIA libraries and needs an NVIDIA graphics card. If the graphics card fails, TypeWhisper keeps the previous device."), _devicePicker);
             _devicePicker.SetOptions([
-                new(nameof(TranscriptionAccelerationPreference.Auto), Loc.T("Automatic"), Loc.T("NVIDIA CUDA once it is installed, otherwise the CPU")),
+                new(nameof(TranscriptionAccelerationPreference.Auto), Loc.T("Automatic"), vulkan
+                    ? Loc.T("The graphics card once its files are downloaded, otherwise the CPU")
+                    : Loc.T("NVIDIA CUDA once it is installed, otherwise the CPU")),
                 new(nameof(TranscriptionAccelerationPreference.Cpu), "CPU", Loc.T("Works on every PC")),
-                new(nameof(TranscriptionAccelerationPreference.NvidiaCuda), "NVIDIA CUDA", Loc.T("Needs an NVIDIA graphics card. Downloads about 2 GB the first time."))], selected);
+                vulkan
+                    ? new(nameof(TranscriptionAccelerationPreference.AmdVulkan), Loc.T("Graphics card"), Loc.T("NVIDIA, AMD or Intel through Vulkan. Downloads about 760 MB the first time."))
+                    : new(nameof(TranscriptionAccelerationPreference.NvidiaCuda), "NVIDIA CUDA", Loc.T("Needs an NVIDIA graphics card. Downloads about 2 GB the first time."))], selected);
+        }
         _devicePicker.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanSelectModel;
         _deviceRow.Description = models.ActiveBackend switch
         {
             TranscriptionAccelerationBackend.NvidiaCuda => Loc.T("In use: {0}", "NVIDIA CUDA"),
+            // The plugin names the graphics card, for example "NVIDIA GeForce RTX 4060 Ti".
+            TranscriptionAccelerationBackend.AmdVulkan => Loc.T("In use: {0}", models.ActiveDevice ?? Loc.T("Graphics card")),
             TranscriptionAccelerationBackend.Cpu => Loc.T("In use: {0}", "CPU"),
             _ => ""
         };
