@@ -31,7 +31,7 @@ public sealed class ApplicationUpdateTests : IDisposable
     [Fact]
     public void LaterWaitsADayAndSkipLastsUntilAnotherVersion()
     {
-        var path = Path.Combine(_root, "update-reminder.json");
+        var path = Path.Join(_root, "update-reminder.json");
         var now = new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero);
         var reminder = new AppUpdateReminder(path);
         Assert.True(reminder.ShouldNotify("1.1.1", now));
@@ -46,7 +46,7 @@ public sealed class ApplicationUpdateTests : IDisposable
     [Fact]
     public void FailedReminderSaveKeepsTheAnswerAndReportsIt()
     {
-        var path = Path.Combine(_root, "update-reminder.json");
+        var path = Path.Join(_root, "update-reminder.json");
         Directory.CreateDirectory(path);
         var reminder = new AppUpdateReminder(path);
         reminder.Skip("1.1.1");
