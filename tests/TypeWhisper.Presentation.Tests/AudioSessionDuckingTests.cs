@@ -5,8 +5,8 @@ public sealed class AudioSessionDuckingTests : IDisposable
 {
     private const uint Own = 100;
     private const string Device = "speakers";
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "typewhisper-ducking-" + Guid.NewGuid().ToString("N"));
-    private DateTimeOffset _now = new(2026, 10, 12, 9, 0, 0, TimeSpan.Zero);
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "typewhisper-ducking-" + Guid.NewGuid().ToString("N"));
+    private readonly DateTimeOffset _now = new(2026, 10, 12, 9, 0, 0, TimeSpan.Zero);
     private readonly List<IReadOnlyList<AudioDuckingJournalEntry>> _journal = [];
 
     private IReadOnlyList<AudioDuckingJournalEntry> Journal => _journal.Count == 0 ? [] : _journal[^1];
@@ -165,7 +165,7 @@ public sealed class AudioSessionDuckingTests : IDisposable
     [Fact]
     public void JournalRoundTripsAndDisappearsWhenEmpty()
     {
-        var path = Path.Combine(_directory, "audio-ducking.json");
+        var path = Path.Join(_directory, "audio-ducking.json");
         Assert.Empty(AudioDuckingJournal.Load(path));
         var entries = new[] { new AudioDuckingJournalEntry(Device, "app:music", .8f, .08f, _now) };
 

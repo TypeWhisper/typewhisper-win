@@ -64,8 +64,8 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
             if (matching.Count == 0) continue;
             try
             {
-                foreach (var session in matching)
-                    if (Math.Abs(session.Volume - entry.Ducked) < Tolerance) session.Volume = entry.Saved;
+                foreach (var session in matching.Where(session => Math.Abs(session.Volume - entry.Ducked) < Tolerance))
+                    session.Volume = entry.Saved;
                 _pending.Remove(entry);
                 changed = true;
             }
@@ -112,9 +112,9 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
     private void Lower(IReadOnlyList<IDuckableAudioSession> sessions)
     {
         var lowered = new List<(IDuckableAudioSession Session, AudioDuckingJournalEntry Entry)>();
-        foreach (var session in sessions)
+        // Checked per session, so a session listed twice is lowered once.
+        foreach (var session in sessions.Where(session => session.ProcessId != ownProcessId && !_ducked.ContainsKey(session.InstanceId)))
         {
-            if (session.ProcessId == ownProcessId || _ducked.ContainsKey(session.InstanceId)) continue;
             try
             {
                 var saved = session.Volume;
