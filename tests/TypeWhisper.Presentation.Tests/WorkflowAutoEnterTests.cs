@@ -7,8 +7,8 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class WorkflowAutoEnterTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "typewhisper-auto-enter-" + Guid.NewGuid());
-    private string FilePath => Path.Combine(_directory, "workflows.json");
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "typewhisper-auto-enter-" + Guid.NewGuid());
+    private string FilePath => Path.Join(_directory, "workflows.json");
 
     private static Workflow Rule(string id, WorkflowTrigger trigger, WorkflowAutoEnterMode mode) => new()
     {
