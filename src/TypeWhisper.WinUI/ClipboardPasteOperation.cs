@@ -13,6 +13,8 @@ internal interface IClipboardPastePlatform
     Task PrepareSubmitAsync();
     /// <summary>Waits until the same field shows the pasted text; false when it changed or the paste never appeared.</summary>
     Task<bool> WaitForSubmitAsync();
+    /// <summary>Releases a field recorded for a paste that was not sent.</summary>
+    void DiscardSubmit();
     /// <summary>Sends Enter down and up, releasing it after a partial send; returns the number of events sent.</summary>
     uint SendSubmit();
     Task RestoreAsync(IDisposable lease);
@@ -43,11 +45,13 @@ internal static class ClipboardPasteOperation
         }
         catch
         {
+            if (submit) platform.DiscardSubmit();
             await RestoreAsync(platform, lease, sent, null);
             throw;
         }
         if (sent != 4)
         {
+            if (submit) platform.DiscardSubmit();
             await RestoreAsync(platform, lease, sent, null);
             return new(false, Task.CompletedTask);
         }

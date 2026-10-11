@@ -28,6 +28,7 @@ public class ClipboardPasteOperationTests
         public uint SubmitSent = 2;
         public Task<bool>? Landed;
         public Task PrepareSubmitAsync() { Calls.Add("submit-prepare"); return Task.CompletedTask; }
+        public void DiscardSubmit() => Calls.Add("submit-discard");
         public Task<bool> WaitForSubmitAsync() { Calls.Add("submit-wait"); if (LoseFocusBeforeSubmit) CanPaste = false; return Landed ?? Task.FromResult(true); }
         public uint SendSubmit() { Calls.Add("enter"); return SubmitSent; }
         public void Dispose() => Calls.Add("dispose");
@@ -154,6 +155,15 @@ public class ClipboardPasteOperationTests
         Assert.False(result.Inserted);
         Assert.False(result.Submitted);
         Assert.DoesNotContain("submit-wait", platform.Calls);
+        Assert.Equal(new[] { "capture", "submit-prepare", "submit-discard", "restore", "dispose" }, platform.Calls);
+    }
+
+    [Fact]
+    public async Task FailedPasteReleasesTheRecordedField()
+    {
+        var platform = new Fake { ThrowOnSend = true };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ClipboardPasteOperation.RunAsync(platform, "text", submit: true));
+        Assert.Contains("submit-discard", platform.Calls);
     }
 
     [Fact]

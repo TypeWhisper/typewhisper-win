@@ -73,6 +73,8 @@ internal sealed partial class LocalDictationSession
         if (!adoptedEarlyCapture) return false;
         if (!_reviewAfterTargetChange) AppDiagnostics.Write("dictation.target-changed.review");
         _reviewAfterTargetChange = true;
+        // Nothing is pasted, so Enter in the newly focused app reaches it and an earlier request is dropped.
+        _submit.Resolve(false);
         return true;
     }
 

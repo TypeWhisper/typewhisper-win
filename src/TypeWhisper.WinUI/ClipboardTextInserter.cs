@@ -64,6 +64,7 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         public Task RestoreAsync(IDisposable lease) => clipboard.RestoreAsync((IClipboardLease)lease, CancellationToken.None);
         public Task WaitForPasteAsync() => Task.Delay(500);
         public async Task PrepareSubmitAsync() => _landing = await PasteLandingObserver.CaptureAsync(target);
+        public void DiscardSubmit() { _landing?.Dispose(); _landing = null; }
         // Without an identifiable field, Ctrl+V is ahead in the input queue and a short delay covers most targets.
         public async Task<bool> WaitForSubmitAsync()
         {
