@@ -9,6 +9,7 @@ namespace TypeWhisper.WinUI.Platform;
 /// </summary>
 public sealed class AudioDuckingService : IAudioDuckingService
 {
+    private const int ElementNotFound = unchecked((int)0x80070490);
     private readonly object _gate = new();
     private readonly object _queueGate = new();
     private readonly AudioSessionDucking _sessions;
@@ -20,6 +21,8 @@ public sealed class AudioDuckingService : IAudioDuckingService
     private List<IDuckableAudioSession>? _starting;
     // Held while an interrupted run's entries wait for their app to play again on that output.
     private readonly Dictionary<string, (MMDevice Device, AudioSessionManager Manager)> _recovery = new(StringComparer.Ordinal);
+    // Registered while such an output is not connected; used only on the work queue.
+    private (MMDeviceEnumerator Enumerator, OutputWatch Watcher)? _outputWatch;
 
     /// <summary>Gets or sets the output endpoint to attenuate; null or empty selects the default multimedia endpoint.</summary>
     public string? OutputDeviceId { get; set; }
@@ -83,9 +86,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
         // Restore releases both, also when listing the sessions fails.
         lock (_gate) (_device, _manager, _starting) = (device, manager, new List<IDuckableAudioSession>());
         manager.OnSessionCreated += OnSessionCreated;
-        // The manager listed its sessions before the handler was attached; list again so none is missed.
-        manager.RefreshSessions();
-        var sessions = Sessions(manager);
+        var sessions = SessionsAfterSubscribing(enumerator, manager, device.ID);
         lock (_gate)
         {
             _sessions.Duck(device.ID, factor, [.. sessions, .. _starting!]);
@@ -125,7 +126,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
     }
 
     // Restores what an interrupted run left lowered and keeps listening on each output until every such app
-    // has played again. An output that is not connected now is retried on the next recording or start.
+    // has played again. An output that is not connected now is retried once Windows reports it active.
     private void RecoverPending()
     {
         List<string> devices;
@@ -141,28 +142,61 @@ public sealed class AudioDuckingService : IAudioDuckingService
             devices = [.. pending.Except(_recovery.Keys)];
         }
         foreach (var (device, manager) in idle) Release(device, manager, OnRecoverySessionCreated);
-        if (devices.Count == 0) return;
-        using var enumerator = new MMDeviceEnumerator();
-        foreach (var deviceId in devices)
+        var disconnected = false;
+        if (devices.Count > 0)
         {
-            MMDevice? device = null;
-            AudioSessionManager? manager = null;
-            try
+            using var enumerator = new MMDeviceEnumerator();
+            foreach (var deviceId in devices)
             {
-                device = enumerator.GetDevice(deviceId);
-                if (device.State != DeviceState.Active) continue;
-                manager = device.AudioSessionManager;
-                manager.OnSessionCreated += OnRecoverySessionCreated;
-                manager.RefreshSessions();
-                var sessions = Sessions(manager);
-                lock (_gate)
-                {
-                    _sessions.Recover(deviceId, sessions);
-                    if (_sessions.PendingDevices.Contains(deviceId)) { _recovery[deviceId] = (device, manager); device = null; }
-                }
+                try { disconnected |= !Listen(enumerator, deviceId); }
+                // A removed output is not an error; Windows reports it again once it is added.
+                catch (System.Runtime.InteropServices.COMException ex) when (ex.HResult == ElementNotFound) { disconnected = true; }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                { disconnected = true; AppDiagnostics.Write("audio.ducking.recover-failed", ex); }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.recover-failed", ex); }
-            finally { if (device is not null) Release(device, manager, OnRecoverySessionCreated); }
+        }
+        WatchOutputs(disconnected);
+    }
+
+    // Returns false when the output is not active.
+    private bool Listen(MMDeviceEnumerator enumerator, string deviceId)
+    {
+        var device = enumerator.GetDevice(deviceId);
+        if (device.State != DeviceState.Active) { device.Dispose(); return false; }
+        AudioSessionManager manager;
+        try { manager = device.AudioSessionManager; }
+        catch { device.Dispose(); throw; }
+        // Registered before subscribing, so a session reported while the existing ones are listed is not dropped.
+        // From here on RecoverPending releases it once nothing is pending for this output.
+        lock (_gate) _recovery[deviceId] = (device, manager);
+        manager.OnSessionCreated += OnRecoverySessionCreated;
+        var sessions = SessionsAfterSubscribing(enumerator, manager, deviceId);
+        bool settled;
+        lock (_gate)
+        {
+            _sessions.Recover(deviceId, sessions);
+            settled = !_sessions.PendingDevices.Contains(deviceId) && _recovery.Remove(deviceId);
+        }
+        if (settled) Release(device, manager, OnRecoverySessionCreated);
+        return true;
+    }
+
+    private void WatchOutputs(bool watch)
+    {
+        if (watch == _outputWatch is not null) return;
+        if (watch)
+        {
+            var enumerator = new MMDeviceEnumerator();
+            var watcher = new OutputWatch(() => Enqueue(RecoverPending));
+            if (enumerator.RegisterEndpointNotificationCallback(watcher) < 0) { enumerator.Dispose(); return; }
+            _outputWatch = (enumerator, watcher);
+        }
+        else
+        {
+            var (enumerator, watcher) = _outputWatch!.Value;
+            _outputWatch = null;
+            enumerator.UnregisterEndpointNotificationCallback(watcher);
+            enumerator.Dispose();
         }
     }
 
@@ -180,6 +214,15 @@ public sealed class AudioDuckingService : IAudioDuckingService
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.recover-failed", ex); }
+    }
+
+    // Windows reports sessions only once the subscribed manager's list was first counted. Listing through a
+    // fresh manager after that leaves no session between the list and the notifications.
+    private static List<IDuckableAudioSession> SessionsAfterSubscribing(MMDeviceEnumerator enumerator, AudioSessionManager subscribed, string deviceId)
+    {
+        _ = subscribed.Sessions.Count;
+        using var listing = enumerator.GetDevice(deviceId);
+        return Sessions(listing.AudioSessionManager);
     }
 
     private static void Release(MMDevice device, AudioSessionManager? manager, AudioSessionManager.SessionCreatedDelegate handler)
@@ -232,5 +275,14 @@ public sealed class AudioDuckingService : IAudioDuckingService
         // An expired session belongs to an app that stopped playing; it is no longer in the volume mixer.
         internal static Session? TryCreate(AudioSessionControl control) =>
             control.State == AudioSessionState.AudioSessionStateExpired ? null : new(control);
+    }
+
+    private sealed class OutputWatch(Action changed) : IMMNotificationClient
+    {
+        public void OnDeviceStateChanged(string deviceId, DeviceState newState) { if (newState == DeviceState.Active) changed(); }
+        public void OnDeviceAdded(string pwstrDeviceId) => changed();
+        public void OnDeviceRemoved(string deviceId) { }
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId) { }
+        public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
     }
 }
