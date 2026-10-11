@@ -2270,7 +2270,8 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
     private void RefreshCaptureEndpointIds(MMDeviceEnumerator enumerator)
     {
         var endpointIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All))
+        using var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All);
+        foreach (var device in endpoints)
         {
             using (device)
                 endpointIds.Add(device.ID);
@@ -2433,7 +2434,8 @@ internal sealed class WasapiAudioInputDeviceProvider : IAudioInputDeviceProvider
         get
         {
             using var enumerator = new MMDeviceEnumerator();
-            return enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).Count;
+            using var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+            return endpoints.Count;
         }
     }
 
@@ -2772,8 +2774,8 @@ internal static class WasapiAudioInputDeviceResolver
     public static List<CaptureEndpoint> GetCaptureDevicesInWaveInOrder()
     {
         using var enumerator = new MMDeviceEnumerator();
-        var devices = enumerator
-            .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+        using var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+        var devices = endpoints
             .Select(device => new CaptureEndpoint(device, device.FriendlyName))
             .ToList();
         var order = WasapiAudioInputDeviceOrdering.BuildWaveInCompatibleOrder(

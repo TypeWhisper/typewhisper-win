@@ -13,7 +13,8 @@ if (args is ["devices"])
         string? defaultId = null;
         try { using var endpoint = enumerator.GetDefaultAudioEndpoint(flow, Role.Console); defaultId = endpoint.ID; }
         catch (System.Runtime.InteropServices.COMException) { }
-        foreach (var endpoint in enumerator.EnumerateAudioEndPoints(flow, DeviceState.Active))
+        using var endpoints = enumerator.EnumerateAudioEndPoints(flow, DeviceState.Active);
+        foreach (var endpoint in endpoints)
             using (endpoint) result.Add(new { flow = flow.ToString(), name = endpoint.FriendlyName,
                 id = endpoint.ID, isDefault = endpoint.ID == defaultId });
     }
