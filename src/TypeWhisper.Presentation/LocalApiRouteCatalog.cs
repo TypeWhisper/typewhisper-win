@@ -8,7 +8,7 @@ public sealed record LocalApiRoute(string Method, string Path);
 /// <summary>The shared macOS API contract and additional Windows discovery/documentation routes.</summary>
 public static class LocalApiRouteCatalog
 {
-    /// <summary>The 31 method/path pairs shared with the macOS API.</summary>
+    /// <summary>The 32 method/path pairs shared with the macOS API.</summary>
     public static IReadOnlyList<LocalApiRoute> MacRoutes { get; } = Array.AsReadOnly<LocalApiRoute>([
         new("POST", "/v1/transcribe"), new("POST", "/v1/transcribe/local-file"),
         new("GET", "/v1/status"), new("GET", "/v1/models"),
@@ -18,6 +18,7 @@ public static class LocalApiRouteCatalog
         new("GET", "/v1/profiles"), new("PUT", "/v1/profiles/toggle"),
         new("POST", "/v1/dictation/start"), new("POST", "/v1/dictation/stop"),
         new("GET", "/v1/dictation/status"), new("GET", "/v1/dictation/transcription"),
+        new("PUT", "/v1/browser/context"),
         new("POST", "/v1/recorder/start"), new("POST", "/v1/recorder/stop"),
         new("GET", "/v1/recorder/status"), new("GET", "/v1/recorder/session"),
         new("GET", "/v1/dictionary/terms"), new("PUT", "/v1/dictionary/terms"), new("DELETE", "/v1/dictionary/terms"),

@@ -164,7 +164,8 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         if (request.Method == "OPTIONS") return new LocalApiResponse(204, [], "text/plain");
         if (LocalApiRouteCatalog.Routes.Any(route => route.Path == request.Path) && !LocalApiRouteCatalog.Contains(request.Method, request.Path)) return Error(405, "Method not allowed.");
         if (_importPending) return Error(503, "Settings import is restarting the app.");
-        if (request.Path == "/v1/status") return LocalApiResponse.Json(200, new { status = session.IsReady ? "ready" : "no_model", engine = session.ActiveEngineId, model = session.ActiveModelId, api_version = ApiVersion, supports_workflow_dictation = true, supports_streaming = session.SupportsLiveTranscription, supports_translation = session.SupportsTranslation });
+        if (request.Path == "/v1/status") return LocalApiStatus.Response(session.IsReady, session.ActiveEngineId, session.ActiveModelId, ApiVersion, session.SupportsLiveTranscription, session.SupportsTranslation);
+        if (LocalApiBrowserContext.Handle(request, session.BrowserContext, ct) is { } browserContext) return browserContext;
         if (request.Path == "/v1/history") return await new LocalApiHistory(session.HistoryReader, session.HistoryActions).HandleAsync(request, ct);
         if (await HandleDictationAsync(request, ct) is { } dictation) return dictation;
         if (await HandleDataAsync(request, ct) is { } data) return data;
