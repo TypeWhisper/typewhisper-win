@@ -34,7 +34,7 @@ internal static class AudioDuckingJournal
 // feedback keep their volume. Windows keeps per-app volumes across restarts, so every lowered volume is
 // journaled before it is set; the next start restores apps an interrupted run left lowered.
 // A volume that no longer matches the lowered one was changed by the user and is kept.
-internal sealed class AudioSessionDucking(uint ownProcessId, Action<IReadOnlyList<AudioDuckingJournalEntry>> saveJournal,
+internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<AudioDuckingJournalEntry>, bool> saveJournal,
     Func<DateTimeOffset> now, Action<string, Exception> log)
 {
     private const float Tolerance = 0.001f;
@@ -127,7 +127,12 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Action<IReadOnlyLis
             catch (Exception ex) when (ex is not OutOfMemoryException) { log("audio.ducking.session-failed", ex); }
         }
         if (lowered.Count == 0) return;
-        Save();
+        // Without a journal entry a crash would leave the app lowered, so it is not lowered at all.
+        if (!Save())
+        {
+            foreach (var (session, _) in lowered) _ducked.Remove(session.InstanceId);
+            return;
+        }
         var failed = false;
         foreach (var (session, entry) in lowered)
         {
@@ -138,5 +143,5 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Action<IReadOnlyLis
         if (failed) Save();
     }
 
-    private void Save() => saveJournal([.. _pending, .. _ducked.Values.Select(ducked => ducked.Entry)]);
+    private bool Save() => saveJournal([.. _pending, .. _ducked.Values.Select(ducked => ducked.Entry)]);
 }

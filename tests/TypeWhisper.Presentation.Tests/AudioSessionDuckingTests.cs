@@ -16,7 +16,7 @@ public sealed class AudioSessionDuckingTests : IDisposable
         if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true);
     }
 
-    private AudioSessionDucking Create() => new(Own, entries => _journal.Add(entries), () => _now, (_, ex) => throw ex);
+    private AudioSessionDucking Create() => new(Own, entries => { _journal.Add(entries); return true; }, () => _now, (_, ex) => throw ex);
 
     [Fact]
     public void LowersOtherAppsButNotTypeWhisperAndRestoresThem()
@@ -139,7 +139,7 @@ public sealed class AudioSessionDuckingTests : IDisposable
     public void FailedRestoreStaysPendingForTheNextStart()
     {
         var music = new FakeSession("music", 1, .8f);
-        var ducking = new AudioSessionDucking(Own, entries => _journal.Add(entries), () => _now, (_, _) => { });
+        var ducking = new AudioSessionDucking(Own, entries => { _journal.Add(entries); return true; }, () => _now, (_, _) => { });
         ducking.Duck(Device, .1f, [music]);
 
         music.Changing = _ => throw new InvalidOperationException("Session is gone.");
@@ -148,6 +148,18 @@ public sealed class AudioSessionDuckingTests : IDisposable
         var entry = Assert.Single(Journal);
         Assert.Equal("app:music", entry.SessionId);
         Assert.False(ducking.IsDucked);
+    }
+
+    [Fact]
+    public void NothingIsLoweredWhenTheJournalCannotBeSaved()
+    {
+        var music = new FakeSession("music", 1, .8f);
+        var ducking = new AudioSessionDucking(Own, _ => false, () => _now, (_, ex) => throw ex);
+
+        ducking.Duck(Device, .1f, [music]);
+        ducking.Restore();
+
+        Assert.Equal(.8f, music.Volume);
     }
 
     [Fact]
