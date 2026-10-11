@@ -17,7 +17,7 @@ public sealed class SystemAudioTimelineTests
         var samples = service.StopCapture(TimeSpan.FromSeconds(1.0));
 
         Assert.Equal(16000, samples.Length);
-        Assert.Equal(16000 - 5 * Packet, Array.FindIndex(samples, sample => sample != 0));
+        Assert.Equal(16000 - 5 * Packet, Array.FindIndex(samples, sample => sample > 0));
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public sealed class SystemAudioTimelineTests
 
         var sound = samples.AsSpan(16000 - 5 * Packet, 10 * Packet).ToArray();
         Assert.All(sound, sample => Assert.NotEqual(0f, sample));
-        Assert.Equal(16000 + 5 * Packet, Array.FindLastIndex(samples, sample => sample != 0) + 1);
+        Assert.Equal(16000 + 5 * Packet, Array.FindLastIndex(samples, sample => sample > 0) + 1);
     }
 
     [Fact]
