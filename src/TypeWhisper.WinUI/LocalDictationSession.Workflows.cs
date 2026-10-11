@@ -1,5 +1,6 @@
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
@@ -9,6 +10,8 @@ internal sealed partial class LocalDictationSession
     private AutomaticWorkflowSnapshot? _workflowAtStart;
     private string? _targetHostAtStart;
     internal WorkflowLlmDefaults WorkflowDefaults { get; } = new(WinUIProfile.DataPath("workflow-llm-default.json"));
+    // Active tabs reported by a TypeWhisper browser extension through PUT /v1/browser/context; memory only.
+    internal BrowserExtensionContextStore BrowserContext { get; } = new(ForegroundProcess, Environment.ProcessId);
 
     // Called once on the UI thread after the original target process has been captured,
     // before microphone capture only when the matched rule decides whether recording can run.
@@ -20,8 +23,8 @@ internal sealed partial class LocalDictationSession
             var workflows = new ManualWorkflowStore(WinUIProfile.DataPath("workflows.json")).Read();
             if (workflows.Any(workflow => workflow.IsEnabled && workflow.Trigger.HasWebsiteBindings &&
                 workflow.Trigger.Kind is TypeWhisper.Core.Models.WorkflowTriggerKind.App or TypeWhisper.Core.Models.WorkflowTriggerKind.Website))
-                _targetHostAtStart = await WindowsBrowserTargetReader.CaptureAsync(_target, (int)_targetProcessId,
-                    _targetApp, _operationCancellation.Token);
+                _targetHostAtStart = await BrowserContext.CaptureHostAsync((int)_targetProcessId, _targetApp,
+                    () => WindowsBrowserTargetReader.CaptureAsync(_target, (int)_targetProcessId, _targetApp, _operationCancellation.Token));
             _operationCancellation.Token.ThrowIfCancellationRequested();
             _workflowAtStart = AutomaticWorkflowSnapshot.Select(workflows, _targetApp, _targetHostAtStart, WorkflowDefaults.Resolve);
         }
@@ -39,6 +42,16 @@ internal sealed partial class LocalDictationSession
         if (SupportsTranslation) return false;
         try { return WorkflowTranscriptionTask.AutomaticRuleDecidesTask(new ManualWorkflowStore(WinUIProfile.DataPath("workflows.json")).Read(), globalTask, false); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
+    }
+
+    private static BrowserForegroundProcess? ForegroundProcess()
+    {
+        var window = NativeMethods.GetForegroundWindow();
+        if (window == IntPtr.Zero) return null;
+        NativeMethods.GetWindowThreadProcessId(window, out var processId);
+        if (processId == 0) return null;
+        try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); return new((int)processId, process.ProcessName); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return null; }
     }
 
     private static string TargetProcessName(uint processId)

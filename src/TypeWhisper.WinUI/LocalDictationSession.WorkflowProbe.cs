@@ -20,6 +20,7 @@ internal sealed partial class LocalDictationSession
         _targetHostAtStart = null;
         _targetApp = "";
         string? error = null;
+        var reported = false;
         try
         {
             _target = NativeMethods.GetForegroundWindow();
@@ -31,6 +32,7 @@ internal sealed partial class LocalDictationSession
             {
                 using var process = System.Diagnostics.Process.GetProcessById((int)processId);
                 _targetApp = process.ProcessName;
+                reported = BrowserContext.Current((int)processId, _targetApp) is not null;
                 await CaptureWorkflowAtStartAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 NativeMethods.GetWindowThreadProcessId(_target, out var currentProcessId);
@@ -55,8 +57,8 @@ internal sealed partial class LocalDictationSession
                 ProcessName = Bounded(_targetApp, 260),
                 Host = TypeWhisper.Presentation.BrowserWorkflowContext.NormalizeHost(_targetHostAtStart),
                 SelectedWorkflowId = Bounded(_workflowAtStart?.Id, 256),
-                CaptureStage = WindowsBrowserTargetReader.LastProbeStage,
-                AddressState = WindowsBrowserTargetReader.LastAddressState,
+                CaptureStage = reported ? "extension_report" : WindowsBrowserTargetReader.LastProbeStage,
+                AddressState = reported ? null : WindowsBrowserTargetReader.LastAddressState,
                 Error = error
             });
             AtomicFileWriter.WriteAllBytes(path, payload);

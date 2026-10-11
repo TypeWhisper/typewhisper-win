@@ -183,7 +183,7 @@ public sealed class LocalHttpApi : IAsyncDisposable
             var publicStatus = request.HttpMethod == "GET" && request.Url?.AbsolutePath == "/v1/status";
             var publicDocs = request.HttpMethod == "GET" && request.Url?.AbsolutePath is "/docs" or "/docs/";
             if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) ||
-                !AllowedHost(request.UserHostName) || request.Headers["Origin"] is not null)
+                !AllowedHost(request.UserHostName) || !AllowedOrigin(request.Headers["Origin"]))
                 response = Error(403, "Request origin is not allowed.");
             // The peer check guards the token-free mode and backs up the token: the discovery file is readable
             // only by the owning user, so a token presented by another user's process was leaked, not granted.
@@ -268,6 +268,16 @@ public sealed class LocalHttpApi : IAsyncDisposable
             || Port == 80 && (string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(host, "[::1]", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Web pages always send their http(s) or "null" origin. Browser extensions send their own scheme and call with
+    // host permission for this address, so they need no CORS headers; the token and peer checks still apply.
+    private static bool AllowedOrigin(string? origin)
+    {
+        if (origin is null) return true;
+        var separator = origin.IndexOf("://", StringComparison.Ordinal);
+        return separator > 0 && origin[..separator].ToLowerInvariant() is "chrome-extension" or "moz-extension"
+            or "safari-web-extension" or "extension";
     }
 
     private bool Authenticated(HttpListenerRequest request)

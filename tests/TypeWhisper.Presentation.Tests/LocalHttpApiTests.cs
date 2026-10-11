@@ -153,7 +153,7 @@ public sealed class LocalHttpApiTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task TokenRequirementControlsLegacyRequestsButAlwaysBlocksBrowserOrigins(bool requireAuthentication)
+    public async Task TokenRequirementControlsLegacyRequestsButAlwaysBlocksWebOrigins(bool requireAuthentication)
     {
         var calls = 0;
         await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
@@ -181,6 +181,27 @@ public sealed class LocalHttpApiTests
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("v1/transcribe", new StringContent("audio"))).StatusCode);
         }
         Assert.Equal(authenticatedCalls, calls);
+
+        // Browser extensions send their own origin scheme and pass, with the token when one is required.
+        foreach (var origin in new[] { "chrome-extension://abcdefghijklmnopabcdefghijklmnop", "moz-extension://5f1c4e0a-1d2b-4c3d-9e8f-0a1b2c3d4e5f",
+            "safari-web-extension://ABCDEF", "extension://abc" })
+        {
+            client.DefaultRequestHeaders.Remove("Origin");
+            client.DefaultRequestHeaders.Add("Origin", origin);
+            client.DefaultRequestHeaders.Authorization = null;
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/status")).StatusCode);
+            Assert.Equal(expected, (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+            Assert.Equal(HttpStatusCode.OK, (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
+        }
+        Assert.Equal(authenticatedCalls + (requireAuthentication ? 4 : 8), calls);
+        // Web pages that imitate the extension prefix stay blocked.
+        foreach (var origin in new[] { "https://chrome-extension.example", "http://extension.example", "chrome-extension:abc" })
+        {
+            client.DefaultRequestHeaders.Remove("Origin");
+            client.DefaultRequestHeaders.Add("Origin", origin);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
+        }
     }
 
     [Fact]
