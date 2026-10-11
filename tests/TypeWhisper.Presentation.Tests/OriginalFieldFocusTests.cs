@@ -4,6 +4,8 @@ using Xunit;
 public class OriginalFieldFocusTests
 {
     [Theory]
+    // #592: role="combobox" search fields such as Google's; read-only dropdowns stay excluded.
+    [InlineData(50003)]
     [InlineData(50025)]
     [InlineData(50026)]
     public void CustomEditorsRequireFocusAndWritableTextMetadata(int controlType)

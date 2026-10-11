@@ -7,10 +7,12 @@ internal static class OriginalFieldFocus
     // Chromium/Electron contenteditable controls may expose Group or Custom, not Edit.
     // Keep the exact captured element; accept those roles only with writable text metadata.
     // Windows Terminal's input control is Text (50020) with class TermControl (#551).
+    // Search fields with role="combobox" (e.g. Google) are ComboBox (50003) in Chromium (#592);
+    // the writable check keeps read-only dropdowns such as <select> out.
     internal static bool IsEditableControl(int controlType, bool keyboardFocusable, Func<bool> writableTextPattern,
         string? className = null) =>
         controlType is 50004 or 50030 ||
-        ((controlType is 50025 or 50026 || (controlType is 50020 && className == "TermControl")) &&
+        ((controlType is 50003 or 50025 or 50026 || (controlType is 50020 && className == "TermControl")) &&
             keyboardFocusable && writableTextPattern());
 
     // Classic console windows report the client process (e.g. powershell), while their
