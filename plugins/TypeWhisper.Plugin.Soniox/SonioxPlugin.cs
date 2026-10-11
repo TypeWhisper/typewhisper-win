@@ -453,6 +453,8 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
 
     internal static SonioxTranscriptionUpload CreateCompressedUpload(byte[] wavAudio)
     {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("AAC encoding requires Windows Media Foundation; use WAV on this platform.");
         ArgumentNullException.ThrowIfNull(wavAudio);
 
         using var input = new MemoryStream(wavAudio, writable: false);

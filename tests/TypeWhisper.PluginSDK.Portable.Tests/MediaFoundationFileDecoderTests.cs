@@ -2,6 +2,7 @@ using System.Text;
 using TypeWhisper.WinUI;
 using Xunit;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class MediaFoundationFileDecoderTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "typewhisper-media-" + Guid.NewGuid());

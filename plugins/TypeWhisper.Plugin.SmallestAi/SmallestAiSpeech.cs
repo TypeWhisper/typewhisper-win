@@ -139,7 +139,8 @@ public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSe
             throw new InvalidDataException("Speech audio must be no longer than two minutes.");
     }
 
-    internal Func<byte[], string?, ITtsPlaybackSession> PlaybackFactory { get; set; } = (audio, device) => new SmallestAiPlaybackSession(audio, device);
+    internal Func<byte[], string?, ITtsPlaybackSession> PlaybackFactory { get; set; } = (audio, device) =>
+        OperatingSystem.IsWindows() ? new SmallestAiPlaybackSession(audio, device) : throw new PlatformNotSupportedException("Speech playback requires Windows.");
 
     /// <inheritdoc />
     public async Task<ITtsPlaybackSession> SpeakAsync(TtsSpeakRequest request, CancellationToken ct)

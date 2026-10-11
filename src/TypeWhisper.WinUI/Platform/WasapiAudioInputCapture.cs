@@ -75,7 +75,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
             EventWaitHandle? frameEvent = null;
             try
             {
-                audioClient = _device.AudioClient;
+                audioClient = _device.CreateAudioClient();
                 var waveFormat = audioClient.MixFormat;
                 var requestedDuration = ReferenceTimesPerMillisecond * _bufferMilliseconds;
                 var streamFlags = AudioClientStreamFlags.EventCallback
