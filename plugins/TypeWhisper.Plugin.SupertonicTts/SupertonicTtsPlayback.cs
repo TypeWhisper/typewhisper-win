@@ -7,6 +7,9 @@ using NAudio.Wave;
 
 namespace TypeWhisper.Plugin.SupertonicTts;
 
+// NAudio 3 obsoletes WasapiOut; moving to WasapiPlayer is tracked in #629.
+#pragma warning disable CS0618
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 internal sealed class SupertonicTtsPlaybackSession : ITtsPlaybackSession, IDisposable
 {
     private readonly MMDevice _device;
@@ -68,6 +71,7 @@ internal sealed class SupertonicTtsPlaybackSession : ITtsPlaybackSession, IDispo
         return pcm;
     }
 }
+#pragma warning restore CS0618
 
 internal sealed class SupertonicInactiveTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsPlaybackSession
 {

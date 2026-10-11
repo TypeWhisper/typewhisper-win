@@ -36,7 +36,10 @@ else if (args is ["play", var deviceId, var input])
     if (endpoint.DataFlow != DataFlow.Render) throw new ArgumentException("Choose a render endpoint.");
     using var wave = new AudioFileReader(input);
     if (wave.TotalTime > TimeSpan.FromSeconds(20)) throw new ArgumentException("Smoke-test audio must be at most 20 seconds.");
+    // NAudio 3 obsoletes WasapiOut; moving to WasapiPlayer is tracked in #629.
+#pragma warning disable CS0618
     using var player = new WasapiOut(endpoint, AudioClientShareMode.Shared, true, 100);
+#pragma warning restore CS0618
     var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     player.PlaybackStopped += (_, e) => { if (e.Exception is not null) stopped.TrySetException(e.Exception); else stopped.TrySetResult(); };
     player.Init(wave);

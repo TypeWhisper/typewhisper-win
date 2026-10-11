@@ -8,7 +8,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class WindowsMediaFoundationFactAttribute : FactAttribute
 {
     public WindowsMediaFoundationFactAttribute() => Skip = GetSkipReason(OperatingSystem.IsWindows(),
-        () => MediaFoundationEncoder.GetEncodeBitrates(AudioSubtypes.MFAudioFormat_AAC, 16_000, 1).Length > 0);
+        () => OperatingSystem.IsWindows() && MediaFoundationEncoder.GetEncodeBitrates(AudioSubtypes.MFAudioFormat_AAC, 16_000, 1).Length > 0);
 
     internal static string? GetSkipReason(bool windows, Func<bool> hasEncoder)
     {

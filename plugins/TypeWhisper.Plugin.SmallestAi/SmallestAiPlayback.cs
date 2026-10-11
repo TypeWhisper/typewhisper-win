@@ -7,6 +7,9 @@ using NAudio.Wave;
 
 namespace TypeWhisper.Plugin.SmallestAi;
 
+// NAudio 3 obsoletes WasapiOut; moving to WasapiPlayer is tracked in #629.
+#pragma warning disable CS0618
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 internal sealed class SmallestAiPlaybackSession : ITtsPlaybackSession, IDisposable
 {
     private readonly MMDevice _device;
@@ -62,3 +65,4 @@ internal sealed class SmallestAiPlaybackSession : ITtsPlaybackSession, IDisposab
     }
     public void Dispose() { if (Volatile.Read(ref _disposed) != 0) return; Stop(); DisposeResources(); }
 }
+#pragma warning restore CS0618

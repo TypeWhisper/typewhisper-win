@@ -74,7 +74,10 @@ internal sealed class WindowsSystemVoiceBackend : ISpokenFeedbackBackend
             : enumerator.GetDevice(request.OutputDeviceId);
         if (device.State != DeviceState.Active)
             throw new InvalidOperationException("The saved audio output is unavailable. Choose an active output in Audio settings.");
+        // NAudio 3 obsoletes WasapiOut; moving to WasapiPlayer is tracked in #629.
+#pragma warning disable CS0618
         using var output = new WasapiOut(device, AudioClientShareMode.Shared, true, 100);
+#pragma warning restore CS0618
         var stopped = new TaskCompletionSource<StoppedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
         EventHandler<StoppedEventArgs> playbackStopped = (_, args) => stopped.TrySetResult(args);
         output.PlaybackStopped += playbackStopped;

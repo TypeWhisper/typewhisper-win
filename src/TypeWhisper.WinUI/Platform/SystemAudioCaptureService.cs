@@ -371,7 +371,10 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
             selected = useDefault ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
                 : enumerator.GetDevice(captureMix ? deviceId![CaptureDevicePrefix.Length..] : deviceId!);
             if (selected.State != DeviceState.Active) throw new InvalidOperationException("The selected audio endpoint is not active.");
+            // NAudio 3 obsoletes WasapiCapture and WasapiLoopbackCapture; moving to WasapiRecorder is tracked in #629.
+#pragma warning disable CS0618
             return new WasapiCaptureAdapter(captureMix ? new WasapiCapture(selected) : new WasapiLoopbackCapture(selected), selected);
+#pragma warning restore CS0618
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

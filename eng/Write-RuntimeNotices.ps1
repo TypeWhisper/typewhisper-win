@@ -10,7 +10,7 @@ $licenses = Join-Path $output 'Licenses'
 New-Item -ItemType Directory -Force -Path $licenses | Out-Null
 $fallbacks = @{
     'H.GeneratedIcons.System.Drawing' = 'H.NotifyIcon.txt'; 'H.NotifyIcon' = 'H.NotifyIcon.txt'; 'H.NotifyIcon.WinUI' = 'H.NotifyIcon.txt'
-    'NAudio.Core' = 'NAudio.txt'; 'NAudio.Wasapi' = 'NAudio.txt'; 'NAudio.WinMM' = 'NAudio.txt'
+    'NAudio.Core' = 'NAudio.txt'; 'NAudio.Midi' = 'NAudio.txt'; 'NAudio.Wasapi' = 'NAudio.txt'; 'NAudio.WinMM' = 'NAudio.txt'
     'NuGet.Versioning' = 'NuGet.txt'; 'Velopack' = 'Velopack.txt'; 'WinUIEx' = 'WinUIEx.txt'
     'Microsoft.Graphics.Win2D' = 'Win2D.txt'; 'Microsoft.Win32.SystemEvents' = 'DotNet.txt'
     'System.Security.Cryptography.ProtectedData' = 'DotNet.txt'; 'System.Speech' = 'DotNet.txt'

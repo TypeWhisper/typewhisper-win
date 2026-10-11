@@ -7,6 +7,7 @@ using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.PluginSDK.PortableFixture;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class PortablePluginAudioInteropTests
 {
     [Fact]

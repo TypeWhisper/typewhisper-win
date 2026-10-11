@@ -102,7 +102,8 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
         _injectedAssetManager = assetManager;
         _assetManager = assetManager;
         _synthesizerFactory = synthesizerFactory;
-        _playbackFactory = playbackFactory ?? ((samples, sampleRate) => new SupertonicTtsPlaybackSession(samples, sampleRate));
+        _playbackFactory = playbackFactory ?? ((samples, sampleRate) => OperatingSystem.IsWindows()
+            ? new SupertonicTtsPlaybackSession(samples, sampleRate) : throw new PlatformNotSupportedException("Speech playback requires Windows."));
         _huggingFaceTokenValidationClient = huggingFaceTokenValidationClient;
     }
 
@@ -332,7 +333,9 @@ public sealed partial class SupertonicTtsPlugin : ITtsProviderPlugin, ILocalTtsM
 
             return synthesis.Samples.Length == 0
                 ? SupertonicInactiveTtsPlaybackSession.Instance
-                : _usePortablePlayback ? new SupertonicTtsPlaybackSession(synthesis.Samples, synthesis.SampleRate, request.OutputDeviceId) : _playbackFactory(synthesis.Samples, synthesis.SampleRate);
+                : !_usePortablePlayback ? _playbackFactory(synthesis.Samples, synthesis.SampleRate)
+                : OperatingSystem.IsWindows() ? new SupertonicTtsPlaybackSession(synthesis.Samples, synthesis.SampleRate, request.OutputDeviceId)
+                : throw new PlatformNotSupportedException("Speech playback requires Windows.");
         }
         finally
         {

@@ -4,6 +4,8 @@ using NAudio.Wave;
 
 namespace TypeWhisper.WinUI;
 
+// NAudio 3 obsoletes WasapiCapture; moving to WasapiRecorder is tracked in #629.
+#pragma warning disable CS0618
 internal sealed class AudioLevelSource : IDisposable
 {
     private readonly Stopwatch _callbackClock = Stopwatch.StartNew();
@@ -127,3 +129,4 @@ internal sealed class AudioLevelSource : IDisposable
         _capture = null;
     }
 }
+#pragma warning restore CS0618

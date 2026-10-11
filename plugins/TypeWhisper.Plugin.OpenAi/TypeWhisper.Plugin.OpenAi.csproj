@@ -11,7 +11,6 @@
     <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="NAudio.Wasapi" />
-    <PackageReference Include="NAudio.WinMM" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.OpenAi.Portable.Tests" />
     <Content Include="manifest.json;Localization/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
@@ -20,7 +19,7 @@
       <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.openai/</PackageDirectory>
     </PropertyGroup>
     <ItemGroup>
-      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(TargetDir)NAudio.Core.dll;$(TargetDir)NAudio.Wasapi.dll;$(TargetDir)NAudio.WinMM.dll" />
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(TargetDir)NAudio.Core.dll;$(TargetDir)NAudio.Wasapi.dll;$(TargetDir)System.Numerics.Tensors.dll" />
       <PackageLocalization Include="$(ProjectDir)Localization/*.json" />
     </ItemGroup>
     <MakeDir Directories="$(PackageDirectory)Localization" />
