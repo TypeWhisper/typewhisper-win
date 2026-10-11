@@ -14,7 +14,7 @@ public sealed partial class MainWindow
                 _dictationInput?.InterruptPendingGesture();
                 _dictationHotkey?.Interrupt();
                 foreach (var entry in _recordingShortcuts.Values) entry.Registration.Interrupt();
-                _escapeCancelHook?.Interrupt();
+                _dictationKeyHook?.Interrupt();
             }, () =>
             {
                 if (_closing || _profileRestoreClosing) return null;
@@ -27,7 +27,7 @@ public sealed partial class MainWindow
                 if (_dictationHotkey?.Recover() is { } error) errors.Add(error);
                 foreach (var entry in _recordingShortcuts.Values)
                     if (entry.Registration.Recover() is { } failure) errors.Add(failure);
-                if (_escapeCancelHook?.Recover() is { } escapeError) errors.Add(escapeError);
+                if (_dictationKeyHook?.Recover() is { } keyError) errors.Add(keyError);
                 return errors.Count == 0 ? null : string.Join(" ", errors.Distinct());
             }, ReportHotkeyRecovery);
             _hotkeyRecovery.SessionActivity += (message, reason) =>

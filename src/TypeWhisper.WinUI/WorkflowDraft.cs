@@ -12,6 +12,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string ModelId { get; init; } = "";
     /// <summary>Optional action destination for the processed text.</summary>
     public string? TargetActionPluginId { get; init; }
+    /// <summary>When Enter follows the inserted text.</summary>
+    public WorkflowAutoEnterMode AutoEnterMode { get; init; }
     /// <summary>Optional memory context source.</summary>
     public string? MemoryPluginId { get; init; }
     /// <summary>Whether manual execution is enabled.</summary>
@@ -72,11 +74,17 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
                 WorkflowTriggerKind.Hotkey => WorkflowTrigger.Hotkey(ShortcutRules.Split(Hotkeys), HotkeyBehavior),
                 _ => WorkflowTrigger.Manual()
             },
-        Output = Stored?.Output is { } output && output.TargetActionPluginId == TargetActionPluginId
-            ? output : (Stored?.Output ?? new WorkflowOutput()) with { TargetActionPluginId = TargetActionPluginId },
+        Output = StoredOutput(Stored?.Output ?? new WorkflowOutput()),
         Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with
         { MemoryPluginId = MemoryPluginId, FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget, SelectedTask = SelectedTask, InputLanguage = InputLanguage, TranscriptionModelOverride = TranscriptionModel }
     };
+
+    // Unchanged output settings keep their stored representation.
+    private WorkflowOutput StoredOutput(WorkflowOutput output)
+    {
+        if (output.TargetActionPluginId != TargetActionPluginId) output = output with { TargetActionPluginId = TargetActionPluginId };
+        return output.AutoEnterMode == AutoEnterMode ? output : output.WithAutoEnterMode(AutoEnterMode);
+    }
 
     private string[] DomainPatterns() => WebsiteDomains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .Select(value => TypeWhisper.Presentation.BrowserWorkflowContext.NormalizePattern(value)
@@ -91,7 +99,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Hotkeys = string.Join(",", workflow.Trigger.Hotkeys),
         HotkeyBehavior = workflow.Trigger.HotkeyBehavior,
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
-        TargetActionPluginId = workflow.Output.TargetActionPluginId, MemoryPluginId = workflow.Behavior.MemoryPluginId,
+        TargetActionPluginId = workflow.Output.TargetActionPluginId, AutoEnterMode = workflow.Output.AutoEnterMode, MemoryPluginId = workflow.Behavior.MemoryPluginId,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, SelectedTask = workflow.Behavior.SelectedTask,
         InputLanguage = TypeWhisper.Presentation.WorkflowSpokenLanguage.Inherits(workflow.Behavior.InputLanguage) ? null : workflow.Behavior.InputLanguage,
         TranscriptionModel = string.IsNullOrWhiteSpace(workflow.Behavior.TranscriptionModelOverride) ? null : workflow.Behavior.TranscriptionModelOverride, Stored = workflow

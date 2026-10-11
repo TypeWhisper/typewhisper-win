@@ -41,7 +41,7 @@ public sealed class SupportDiagnosticsReportTests
         Assert.Equal("gpt-4.1", metadata.GetProperty("modelId").GetString());
         Assert.Equal(1, metadata.GetProperty("websiteBindingCount").GetInt32());
         Assert.True(metadata.GetProperty("hasCustomInstructions").GetBoolean());
-        Assert.True(metadata.GetProperty("autoEnter").GetBoolean());
+        Assert.Equal("always", metadata.GetProperty("autoEnterMode").GetString());
     }
 
     [Fact]

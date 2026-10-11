@@ -76,7 +76,7 @@ public sealed record SupportDiagnosticsReport(
     /// <summary>Explicit technical metadata of one enabled workflow.</summary>
     public sealed record WorkflowMetadata(string Trigger, string Template, string? ProviderId, string? ModelId,
         string? TranscriptionModelId, int AppBindingCount, int WebsiteBindingCount, int HotkeyCount,
-        bool HasCustomInstructions, bool AutoEnter, string? ActionPluginId, string NumberNormalizationMode,
+        bool HasCustomInstructions, string AutoEnterMode, string? ActionPluginId, string NumberNormalizationMode,
         bool UsesDefaultLlm);
 
     /// <summary>Data quantities without any stored text.</summary>
@@ -118,7 +118,7 @@ public sealed record SupportDiagnosticsReport(
                 Identifier(effective.Behavior.ProviderOverride), Identifier(effective.Behavior.ModelOverride),
                 Identifier(workflow.Behavior.TranscriptionModelOverride), workflow.Trigger.ProcessNames.Count,
                 workflow.Trigger.WebsitePatterns.Count, workflow.Trigger.Hotkeys.Count,
-                !string.IsNullOrWhiteSpace(workflow.Behavior.FineTuning), workflow.Output.AutoEnter,
+                !string.IsNullOrWhiteSpace(workflow.Behavior.FineTuning), workflow.Output.AutoEnterMode.ToRawValue(),
                 Identifier(workflow.Output.TargetActionPluginId), workflow.Output.NumberNormalizationMode.ToString(),
                 workflow.Template != WorkflowTemplate.Dictation && workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit);
         }).ToArray(), Identifier(defaults?.Provider), Identifier(defaults?.Model));

@@ -42,13 +42,13 @@ public sealed partial class WorkflowsView : UserControl
 
     // The fields of the configuration page. They are created in code so that they can sit in settings rows.
     private readonly WorkflowTemplatePicker ConfigTemplate = new();
-    private readonly ChoicePicker ConfigActionTarget = new(), ConfigMemory = new(), ConfigTrigger = new(), ConfigContextMode = new(),
+    private readonly ChoicePicker ConfigActionTarget = new(), ConfigAutoEnter = new(), ConfigMemory = new(), ConfigTrigger = new(), ConfigContextMode = new(),
         ConfigTask = new(), ConfigLanguage = new(), ConfigTranscriptionModel = new(), ConfigProvider = new(), ConfigModel = new();
     private readonly ToggleSwitch ConfigEnabled = AppToggleSwitch.Create(true);
     private readonly StackPanel ConfigShortcutHost = new();
     private readonly SettingsRow ConfigShortcutSection = new(), ConfigAppSection = new(), ConfigWebsiteSection = new(), ConfigContextSection = new(),
         ConfigTaskSection = new(), ConfigLanguageSection = new(), ConfigTranscriptionModelSection = new(), ConfigMemorySection = new(), ConfigInstructionSection = new(), ConfigProviderSection = new(),
-        ConfigModelSection = new(), ConfigTranslationSection = new(), ConfigActionSection = new();
+        ConfigModelSection = new(), ConfigTranslationSection = new(), ConfigActionSection = new(), ConfigAutoEnterSection = new();
     private TextBox ConfigName = null!, ConfigAppProcesses = null!, ConfigWebsiteDomains = null!, ConfigTranslationTarget = null!,
         ConfigPriority = null!, ConfigInstruction = null!;
     private HandCursorButton DeleteWorkflowButton = null!;
@@ -160,6 +160,8 @@ public sealed partial class WorkflowsView : UserControl
         ConfigMemory.SelectionChanged += _ => UpdateConfigurationState();
         ConfigActionTarget.Configure(Loc.T("Action Target"), "plugin", Loc.T("Workflow action target"));
         ConfigActionTarget.SelectionChanged += _ => UpdateConfigurationState();
+        ConfigAutoEnter.Configure(Loc.T("Press Enter after inserting"), "keyboard", Loc.T("Workflow Enter after inserting"));
+        ConfigAutoEnter.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTrigger.Configure(Loc.T("Activation"), "workflow", Loc.T("Workflow activation"));
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTask.Configure(Loc.T("Transcription task"), "microphone", Loc.T("Workflow transcription task"));
@@ -251,6 +253,8 @@ public sealed partial class WorkflowsView : UserControl
         var behavior = new SettingsCard(Loc.T("Behavior"));
         // Its description says where the result goes.
         behavior.Children.Add(ConfigActionSection.Set(Loc.T("Action Target"), control: ConfigActionTarget));
+        // Its description explains the chosen option.
+        behavior.Children.Add(ConfigAutoEnterSection.Set(Loc.T("Press Enter after inserting"), control: ConfigAutoEnter));
         behavior.Children.Add(ConfigMemorySection.Set(Loc.T("Memory context"),
             Loc.T("Optional: search saved facts related to your text. Up to five matches are sent to this workflow’s LLM provider. Nothing is remembered automatically. Dictation-only workflows do not use memory context."), ConfigMemory));
         ConfigurationFields.Children.Add(behavior);
@@ -302,7 +306,7 @@ public sealed partial class WorkflowsView : UserControl
     {
         if (_page != Page.Configuration) return;
         if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
-        else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigActionTarget.IsPopupOpen && !ConfigMemory.IsPopupOpen && !ConfigTask.IsPopupOpen && !ConfigLanguage.IsPopupOpen && !ConfigTranscriptionModel.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
+        else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigActionTarget.IsPopupOpen && !ConfigAutoEnter.IsPopupOpen && !ConfigMemory.IsPopupOpen && !ConfigTask.IsPopupOpen && !ConfigLanguage.IsPopupOpen && !ConfigTranscriptionModel.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
     }
 
     private void ShowPage(Page page)
@@ -329,7 +333,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_closing) return;
         if (_run is not null) { _run.Cancel(); return; }
         if (_page != Page.Configuration) { ExitRequested?.Invoke(this, EventArgs.Empty); return; }
-        foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget, ConfigMemory, ConfigTask, ConfigLanguage, ConfigTranscriptionModel })
+        foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget, ConfigAutoEnter, ConfigMemory, ConfigTask, ConfigLanguage, ConfigTranscriptionModel })
             if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
         if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { DismissDiscard(); return; }
         if (!ConfigurationDirty) { LeaveConfiguration(); return; }
@@ -440,6 +444,7 @@ public sealed partial class WorkflowsView : UserControl
             : session.LanguageChoices.Count > 0 && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
+        || ConfigAutoEnter.SelectedId != _opened.AutoEnterMode.ToRawValue()
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
         || _draftIcon != _opened.IconKind
         || ConfigTrigger.SelectedId != _opened.ActivationId || ConfigAppProcesses.Text != _opened.AppProcesses
@@ -513,6 +518,12 @@ public sealed partial class WorkflowsView : UserControl
         _loadingConfiguration = true;
         ConfigEnabled.IsOn = _opened.IsEnabled;
         ConfigureActionTargets(_opened.TargetActionPluginId ?? "");
+        ConfigAutoEnter.SetOptions([
+            new(WorkflowAutoEnterMode.Never.ToRawValue(), Loc.T("Never"), Loc.T("Only insert the text")),
+            new(WorkflowAutoEnterMode.SpokenCommand.ToRawValue(), Loc.T("When I say “press enter”"), Loc.T("Submit when the dictation ends with these words")),
+            new(WorkflowAutoEnterMode.Always.ToRawValue(), Loc.T("Always"), Loc.T("Submit every inserted dictation")),
+            new(WorkflowAutoEnterMode.DuringDictation.ToRawValue(), Loc.T("When I press Enter during dictation"), Loc.T("Choose per dictation whether to submit"))],
+            _opened.AutoEnterMode.ToRawValue());
         ConfigureMemorySources(_opened.MemoryPluginId ?? "");
         DeleteWorkflowButton.Visibility = _creating ? Visibility.Collapsed : Visibility.Visible;
         _suggestedName = _creating ? WorkflowTemplateCatalog.DefinitionFor(_opened.Template).Name : null;
@@ -634,6 +645,16 @@ public sealed partial class WorkflowsView : UserControl
             : _session?.PluginRuntime.Actions.Any(a => a.PluginId == ConfigActionTarget.SelectedId) == true
                 ? Loc.T("The finished text is sent to this action instead of being pasted. Running this workflow can create an item in the selected service.")
                 : Loc.T("This action is unavailable. Its saved selection is preserved; enable the plugin or choose another target.");
+        // Enter follows text that dictation inserts, never a plugin action, a selected-text result or a manual run.
+        ConfigAutoEnterSection.Visibility = ConfigTrigger.SelectedId is "DictationHotkey" or "App" or "Website" or "Global"
+            && string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? Visibility.Visible : Visibility.Collapsed;
+        ConfigAutoEnterSection.Description = ConfigAutoEnter.SelectedId switch
+        {
+            "spokenCommand" => Loc.T("Presses Enter when the dictation ends with “press enter” or “press return”. These words are removed from the text."),
+            "always" => Loc.T("Presses Enter after every inserted dictation, except when processing failed."),
+            "duringDictation" => Loc.T("Press Enter during recording to stop, insert the text and submit it. Stopping with the shortcut only inserts the text. Enter with Ctrl, Alt, Shift or Windows still reaches the app."),
+            _ => Loc.T("TypeWhisper only inserts the dictated text.")
+        };
         var error = ConfigurationError;
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? Loc.T("Save as disabled. Enable this workflow before running it.")
             : !string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? Loc.T("Runs the selected plugin action after processing. The result is sent there instead of being pasted.")
@@ -667,6 +688,7 @@ public sealed partial class WorkflowsView : UserControl
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
             SelectedTask = ConfigSelectedTask, InputLanguage = ConfigSelectedLanguage, TranscriptionModel = ConfigSelectedTranscriptionModel,
             TargetActionPluginId = string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? null : ConfigActionTarget.SelectedId,
+            AutoEnterMode = WorkflowAutoEnterModes.Parse(ConfigAutoEnter.SelectedId, false),
             MemoryPluginId = string.IsNullOrEmpty(ConfigMemory.SelectedId) ? null : ConfigMemory.SelectedId,
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,
             IsEnabled = ConfigEnabled.IsOn, Description = ConfigEnabled.IsOn ? Loc.T("Manual workflow") : Loc.T("Disabled manual workflow") };

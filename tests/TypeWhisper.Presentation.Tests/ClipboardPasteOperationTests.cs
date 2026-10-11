@@ -24,6 +24,10 @@ public class ClipboardPasteOperationTests
         public TaskCompletionSource? PendingWait;
         public Task WaitForPasteAsync() { Calls.Add("wait"); return PendingWait?.Task ?? Task.CompletedTask; }
         public Task RestoreAsync(IDisposable lease) { Calls.Add("restore"); return Task.CompletedTask; }
+        public bool LoseFocusBeforeSubmit;
+        public uint SubmitSent = 2;
+        public Task WaitForSubmitAsync() { Calls.Add("submit-wait"); if (LoseFocusBeforeSubmit) CanPaste = false; return Task.CompletedTask; }
+        public uint SendSubmit() { Calls.Add("enter"); return SubmitSent; }
         public void Dispose() => Calls.Add("dispose");
     }
     [Fact]
@@ -50,6 +54,81 @@ public class ClipboardPasteOperationTests
         await result.Restored;
         Assert.Equal(new[] { "capture", "paste", "wait", "restore", "dispose" }, platform.Calls);
     }
+    [Fact]
+    public async Task SubmitPressesEnterAfterPasteBeforeRestore()
+    {
+        var consumed = new TaskCompletionSource();
+        var platform = new Fake { PendingWait = consumed };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true);
+        Assert.True(result.Inserted);
+        Assert.True(result.Submitted);
+        Assert.Equal(new[] { "capture", "paste", "wait", "submit-wait", "enter" }, platform.Calls);
+        consumed.SetResult();
+        await result.Restored;
+        Assert.Equal("restore", platform.Calls[^2]);
+    }
+
+    [Fact]
+    public async Task PasteWithoutSubmitNeverPressesEnter()
+    {
+        var platform = new Fake();
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text");
+        Assert.False(result.Submitted);
+        Assert.DoesNotContain("enter", platform.Calls);
+    }
+
+    [Fact]
+    public async Task ChangedFocusAfterPasteKeepsTextButSkipsEnter()
+    {
+        var platform = new Fake { LoseFocusBeforeSubmit = true };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true);
+        Assert.True(result.Inserted);
+        Assert.False(result.Submitted);
+        Assert.DoesNotContain("enter", platform.Calls);
+    }
+
+    [Fact]
+    public async Task ChangedFieldAfterPasteSkipsEnter()
+    {
+        var checks = 0;
+        var platform = new Fake { VerifyField = () => Task.FromResult(++checks <= 2) };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true);
+        Assert.True(result.Inserted);
+        Assert.False(result.Submitted);
+        Assert.DoesNotContain("enter", platform.Calls);
+    }
+
+    [Fact]
+    public async Task FailedFieldCheckBeforeEnterDoesNotFailThePaste()
+    {
+        var checks = 0;
+        var platform = new Fake { VerifyField = () => ++checks <= 2 ? Task.FromResult(true) : throw new InvalidOperationException("UI Automation") };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true);
+        Assert.True(result.Inserted);
+        Assert.False(result.Submitted);
+        await result.Restored;
+        Assert.Contains("restore", platform.Calls);
+    }
+
+    [Theory]
+    [InlineData(0u, false)]
+    [InlineData(1u, true)]
+    public async Task SentEnterKeyDownCountsAsSubmitted(uint sent, bool submitted)
+    {
+        var platform = new Fake { SubmitSent = sent };
+        Assert.Equal(submitted, (await ClipboardPasteOperation.RunAsync(platform, "text", submit: true)).Submitted);
+    }
+
+    [Fact]
+    public async Task RejectedPasteNeverPressesEnter()
+    {
+        var platform = new Fake { LoseFocusAfterCapture = true };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true);
+        Assert.False(result.Inserted);
+        Assert.False(result.Submitted);
+        Assert.DoesNotContain("submit-wait", platform.Calls);
+    }
+
     [Fact]
     public async Task UnsafeSnapshotDoesNotPaste()
     {

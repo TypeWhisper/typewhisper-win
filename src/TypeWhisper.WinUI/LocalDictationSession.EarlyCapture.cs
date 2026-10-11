@@ -20,7 +20,7 @@ internal sealed partial class LocalDictationSession
         && !_audio.IsRecording && !_fileBusy && !_recorderReserved && !_workflowReserved;
 
     // A loading model must not cost the first words: the microphone opens now and the audio waits for the model.
-    private bool BeginEarlyCapture()
+    private bool BeginEarlyCapture(AutomaticWorkflowSnapshot? workflow)
     {
         if (!CanCaptureWhileModelLoads) return false;
         var preferences = AudioPreferences;
@@ -47,6 +47,8 @@ internal sealed partial class LocalDictationSession
             return false;
         }
         _earlyCapture = true;
+        // Enter during the load already stops and submits; the adopted start applies the matched workflow.
+        _submit.Begin(SubmitArmingFor(workflow));
         BeginRecordingFeedback(preferences);
         Changed?.Invoke();
         return true;

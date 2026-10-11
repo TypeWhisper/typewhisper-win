@@ -114,7 +114,7 @@ public sealed class AutomaticWorkflowTests
     [Fact]
     public async Task UnsupportedSelectedRuleDoesNotFallBackOrInvokeProvider()
     {
-        var rule = Rule("selected", WorkflowTrigger.App("editor")) with { Output = new() { AutoEnter = true } };
+        var rule = Rule("selected", WorkflowTrigger.App("editor")) with { Output = new() { Format = "markdown" } };
         var snapshot = AutomaticWorkflowSnapshot.Select([rule, Rule("fallback", WorkflowTrigger.Global())], "editor")!;
         Assert.Equal("selected", snapshot.Id);
         Assert.NotNull(snapshot.Error);

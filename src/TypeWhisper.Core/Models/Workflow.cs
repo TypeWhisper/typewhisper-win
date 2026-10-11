@@ -358,9 +358,14 @@ public sealed record WorkflowOutput
     /// </summary>
     public string? Format { get; init; }
     /// <summary>
-    /// Gets or sets the auto enter value.
+    /// Gets or sets the legacy auto enter value; true means Enter after every insertion.
     /// </summary>
     public bool AutoEnter { get; init; }
+    /// <summary>
+    /// Gets or sets the raw auto enter mode stored in workflow JSON; null falls back to <see cref="AutoEnter"/>.
+    /// </summary>
+    [JsonPropertyName("autoEnterModeRaw")]
+    public string? AutoEnterModeRaw { get; init; }
     /// <summary>
     /// Gets or sets the target action plugin id value.
     /// </summary>
@@ -378,6 +383,18 @@ public sealed record WorkflowOutput
     [JsonIgnore]
     public WorkflowNumberNormalizationMode NumberNormalizationMode =>
         WorkflowNumberNormalizationModes.Parse(NumberNormalizationModeRaw);
+
+    /// <summary>
+    /// Gets when Enter is pressed after insertion.
+    /// </summary>
+    [JsonIgnore]
+    public WorkflowAutoEnterMode AutoEnterMode => WorkflowAutoEnterModes.Parse(AutoEnterModeRaw, AutoEnter);
+
+    /// <summary>
+    /// Returns this output with the mode and the legacy flag that macOS writes for it.
+    /// </summary>
+    public WorkflowOutput WithAutoEnterMode(WorkflowAutoEnterMode mode) =>
+        this with { AutoEnterModeRaw = mode == WorkflowAutoEnterMode.Never ? null : mode.ToRawValue(), AutoEnter = mode == WorkflowAutoEnterMode.Always };
 }
 
 /// <summary>
