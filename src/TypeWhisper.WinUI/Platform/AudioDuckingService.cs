@@ -21,7 +21,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
     private List<IDuckableAudioSession>? _starting;
     // Held while an interrupted run's entries wait for their app to play again on that output.
     private readonly Dictionary<string, (MMDevice Device, AudioSessionManager Manager)> _recovery = new(StringComparer.Ordinal);
-    // Registered while such an output is not connected; used only on the work queue.
+    // Registered while such entries are pending; used only on the work queue.
     private (MMDeviceEnumerator Enumerator, OutputWatch Watcher)? _outputWatch;
 
     /// <summary>Gets or sets the output endpoint to attenuate; null or empty selects the default multimedia endpoint.</summary>
@@ -126,43 +126,52 @@ public sealed class AudioDuckingService : IAudioDuckingService
     }
 
     // Restores what an interrupted run left lowered and keeps listening on each output until every such app
-    // has played again. An output that is not connected now is retried once Windows reports it active.
+    // has played again. Output changes are watched meanwhile, so an output that is connected later, or
+    // disconnected and connected again, gets a new listener.
     private void RecoverPending()
     {
         List<string> devices;
+        bool pending;
         var idle = new List<(MMDevice Device, AudioSessionManager Manager)>();
         lock (_gate)
         {
-            var pending = _sessions.PendingDevices;
-            foreach (var deviceId in _recovery.Keys.Except(pending).ToList())
+            var pendingDevices = _sessions.PendingDevices;
+            foreach (var deviceId in _recovery.Keys.Except(pendingDevices).ToList())
             {
                 idle.Add(_recovery[deviceId]);
                 _recovery.Remove(deviceId);
             }
-            devices = [.. pending.Except(_recovery.Keys)];
+            devices = [.. pendingDevices.Except(_recovery.Keys)];
+            pending = pendingDevices.Count > 0;
         }
         foreach (var (device, manager) in idle) Release(device, manager, OnRecoverySessionCreated);
-        var disconnected = false;
         if (devices.Count > 0)
         {
             using var enumerator = new MMDeviceEnumerator();
             foreach (var deviceId in devices)
             {
-                try { disconnected |= !Listen(enumerator, deviceId); }
-                // A removed output is not an error; Windows reports it again once it is added.
-                catch (System.Runtime.InteropServices.COMException ex) when (ex.HResult == ElementNotFound) { disconnected = true; }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                { disconnected = true; AppDiagnostics.Write("audio.ducking.recover-failed", ex); }
+                try { Listen(enumerator, deviceId); }
+                // A removed output is not an error; the watch reports it once it is added again.
+                catch (System.Runtime.InteropServices.COMException ex) when (ex.HResult == ElementNotFound) { }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.recover-failed", ex); }
             }
         }
-        WatchOutputs(disconnected);
+        WatchOutputs(pending);
     }
 
-    // Returns false when the output is not active.
-    private bool Listen(MMDeviceEnumerator enumerator, string deviceId)
+    // A listener on an output that changed state may no longer receive sessions, so it is replaced.
+    private void OutputChanged(string deviceId)
+    {
+        (MMDevice Device, AudioSessionManager Manager) listener;
+        lock (_gate) if (!_recovery.Remove(deviceId, out listener)) listener = default;
+        if (listener.Device is not null) Release(listener.Device, listener.Manager, OnRecoverySessionCreated);
+        RecoverPending();
+    }
+
+    private void Listen(MMDeviceEnumerator enumerator, string deviceId)
     {
         var device = enumerator.GetDevice(deviceId);
-        if (device.State != DeviceState.Active) { device.Dispose(); return false; }
+        if (device.State != DeviceState.Active) { device.Dispose(); return; }
         AudioSessionManager manager;
         try { manager = device.AudioSessionManager; }
         catch { device.Dispose(); throw; }
@@ -178,7 +187,6 @@ public sealed class AudioDuckingService : IAudioDuckingService
             settled = !_sessions.PendingDevices.Contains(deviceId) && _recovery.Remove(deviceId);
         }
         if (settled) Release(device, manager, OnRecoverySessionCreated);
-        return true;
     }
 
     private void WatchOutputs(bool watch)
@@ -187,7 +195,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
         if (watch)
         {
             var enumerator = new MMDeviceEnumerator();
-            var watcher = new OutputWatch(() => Enqueue(RecoverPending));
+            var watcher = new OutputWatch(deviceId => Enqueue(() => OutputChanged(deviceId)));
             if (enumerator.RegisterEndpointNotificationCallback(watcher) < 0) { enumerator.Dispose(); return; }
             _outputWatch = (enumerator, watcher);
         }
@@ -222,7 +230,8 @@ public sealed class AudioDuckingService : IAudioDuckingService
     {
         _ = subscribed.Sessions.Count;
         using var listing = enumerator.GetDevice(deviceId);
-        return Sessions(listing.AudioSessionManager);
+        using var manager = listing.AudioSessionManager;
+        return Sessions(manager);
     }
 
     private static void Release(MMDevice device, AudioSessionManager? manager, AudioSessionManager.SessionCreatedDelegate handler)
@@ -277,11 +286,11 @@ public sealed class AudioDuckingService : IAudioDuckingService
             control.State == AudioSessionState.AudioSessionStateExpired ? null : new(control);
     }
 
-    private sealed class OutputWatch(Action changed) : IMMNotificationClient
+    private sealed class OutputWatch(Action<string> changed) : IMMNotificationClient
     {
-        public void OnDeviceStateChanged(string deviceId, DeviceState newState) { if (newState == DeviceState.Active) changed(); }
-        public void OnDeviceAdded(string pwstrDeviceId) => changed();
-        public void OnDeviceRemoved(string deviceId) { }
+        public void OnDeviceStateChanged(string deviceId, DeviceState newState) => changed(deviceId);
+        public void OnDeviceAdded(string pwstrDeviceId) => changed(pwstrDeviceId);
+        public void OnDeviceRemoved(string deviceId) => changed(deviceId);
         public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId) { }
         public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
     }

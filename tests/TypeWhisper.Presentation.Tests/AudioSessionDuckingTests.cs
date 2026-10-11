@@ -128,11 +128,11 @@ public sealed class AudioSessionDuckingTests : IDisposable
     }
 
     [Fact]
-    public void OldEntriesAreDropped()
+    public void OldEntriesStayUntilTheAppPlaysAgain()
     {
         var ducking = Create();
-        ducking.Resume([new AudioDuckingJournalEntry(Device, "app:music", .8f, .08f, _now - AudioSessionDucking.PendingLifetime - TimeSpan.FromMinutes(1))]);
-        Assert.Empty(ducking.PendingDevices);
+        ducking.Resume([new AudioDuckingJournalEntry(Device, "app:music", .8f, .08f, _now - TimeSpan.FromDays(400))]);
+        Assert.Equal([Device], ducking.PendingDevices);
     }
 
     [Fact]

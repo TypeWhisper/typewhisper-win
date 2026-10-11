@@ -38,8 +38,6 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
     Func<DateTimeOffset> now, Action<string, Exception> log)
 {
     private const float Tolerance = 0.001f;
-    // An app that has not played since then has likely been left as it is or removed.
-    internal static readonly TimeSpan PendingLifetime = TimeSpan.FromDays(30);
     private readonly List<AudioDuckingJournalEntry> _pending = [];
     private readonly Dictionary<string, (IDuckableAudioSession Session, AudioDuckingJournalEntry Entry)> _ducked = new(StringComparer.Ordinal);
     private string? _deviceId;
@@ -48,11 +46,8 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
     internal bool IsDucked => _deviceId is not null;
     internal IReadOnlyList<string> PendingDevices => _pending.Select(entry => entry.DeviceId).Distinct(StringComparer.Ordinal).ToList();
 
-    internal void Resume(IEnumerable<AudioDuckingJournalEntry> previous)
-    {
-        var cutoff = now() - PendingLifetime;
-        _pending.AddRange(previous.Where(entry => entry.At >= cutoff));
-    }
+    // Kept until the app plays again, however long that takes, since Windows keeps its lowered volume until then.
+    internal void Resume(IEnumerable<AudioDuckingJournalEntry> previous) => _pending.AddRange(previous);
 
     // Restores sessions an earlier run left lowered. Entries whose app is not playing now stay pending.
     internal void Recover(string deviceId, IReadOnlyList<IDuckableAudioSession> sessions)
