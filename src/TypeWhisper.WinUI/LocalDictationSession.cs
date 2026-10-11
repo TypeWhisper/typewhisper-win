@@ -15,7 +15,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 {
     private readonly AudioRecordingService _audio;
     private readonly SoundService _sounds = new();
-    private readonly AudioDuckingService _ducking = new();
+    private readonly AudioDuckingService _ducking = new(WinUIProfile.DataPath("audio-ducking.json"));
     private readonly RecordingAudioEffects _effects;
     private readonly LocalLivePreview _livePreview = new();
     private StreamingDictation? _cloudStream;

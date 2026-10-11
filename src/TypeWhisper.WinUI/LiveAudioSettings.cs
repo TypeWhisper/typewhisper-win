@@ -37,12 +37,12 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             preferences.OutputDeviceId ?? "", id => session.AudioPreferences with { OutputDeviceId = id });
         AddToggle(Loc.T("Sound feedback"), Loc.T("Play a short sound when recording starts or stops."), preferences.SoundFeedbackEnabled,
             value => session.AudioPreferences with { SoundFeedbackEnabled = value });
-        AddToggle(Loc.T("Lower audio while recording"), Loc.T("Reduce the selected output's volume, then restore it after recording. This includes TypeWhisper sounds on that output."), preferences.AudioDuckingEnabled,
+        AddToggle(Loc.T("Lower audio while recording"), Loc.T("Lower other apps on the selected output, then restore them after recording. TypeWhisper sounds keep their volume."), preferences.AudioDuckingEnabled,
             value => session.AudioPreferences with { AudioDuckingEnabled = value });
         var level = (int)Math.Round(preferences.AudioDuckingLevel * 100);
         // An API-set level outside the presets is listed instead of being shown as unavailable.
-        var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Append(level).Distinct().Order().Select(percent => new Choice(percent.ToString(), percent == 0 ? Loc.T("Muted") : $"{percent}%", Loc.T("Of the current output volume"))).ToArray();
-        AddPicker(Loc.T("Recording volume"), Loc.T("0% silences the output. Your own volume changes during recording are preserved."), levels,
+        var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Append(level).Distinct().Order().Select(percent => new Choice(percent.ToString(), percent == 0 ? Loc.T("Muted") : $"{percent}%", Loc.T("Of each app's current volume"))).ToArray();
+        AddPicker(Loc.T("Recording volume"), Loc.T("0% silences other apps. Your own volume changes during recording are preserved."), levels,
             level.ToString(), id => session.AudioPreferences with { AudioDuckingLevel = int.Parse(id) / 100f });
         AddToggle(Loc.T("Pause media during recording"), Loc.T("Send the media Play/Pause key at start and stop, as in the previous app. Use while media is playing; paused media may start."), preferences.PauseMediaDuringRecording,
             value => session.AudioPreferences with { PauseMediaDuringRecording = value });
