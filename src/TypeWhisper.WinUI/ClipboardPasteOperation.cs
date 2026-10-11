@@ -8,7 +8,8 @@ internal interface IClipboardPastePlatform
     bool ClipboardIsOwned { get; }
     uint SendPaste();
     Task WaitForPasteAsync();
-    /// <summary>Records the focused field before Ctrl+V, so the paste can be confirmed before Enter.</summary>
+    /// <summary>Records the focused field before Ctrl+V, so the paste can be confirmed before Enter. Never throws: a field
+    /// that cannot be recorded leaves Enter to the later checks.</summary>
     Task PrepareSubmitAsync();
     /// <summary>Waits until the same field shows the pasted text; false when it changed or the paste never appeared.</summary>
     Task<bool> WaitForSubmitAsync();
@@ -36,7 +37,7 @@ internal static class ClipboardPasteOperation
         uint sent = 0;
         try
         {
-            if (submit) await PrepareSubmitAsync(platform);
+            if (submit) await platform.PrepareSubmitAsync();
             if (await platform.VerifyFieldAsync() && platform.CanPaste && platform.ClipboardIsOwned)
                 sent = platform.SendPaste();
         }
@@ -54,13 +55,6 @@ internal static class ClipboardPasteOperation
         // The clipboard keeps the text until Enter was decided, so a slow target still pastes the dictation.
         var restored = RestoreAsync(platform, lease, sent, submitted);
         return new(true, restored, submitted is not null && await submitted);
-    }
-
-    // A field that cannot be recorded leaves Enter to the later checks; the paste itself goes ahead.
-    private static async Task PrepareSubmitAsync(IClipboardPastePlatform platform)
-    {
-        try { await platform.PrepareSubmitAsync(); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { }
     }
 
     // Enter follows only once the paste reached the same field, while the clipboard still holds the text. A failed

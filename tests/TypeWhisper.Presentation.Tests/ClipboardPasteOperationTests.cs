@@ -24,10 +24,10 @@ public class ClipboardPasteOperationTests
         public TaskCompletionSource? PendingWait;
         public Task WaitForPasteAsync() { Calls.Add("wait"); return PendingWait?.Task ?? Task.CompletedTask; }
         public Task RestoreAsync(IDisposable lease) { Calls.Add("restore"); return Task.CompletedTask; }
-        public bool LoseFocusBeforeSubmit, ThrowOnPrepare;
+        public bool LoseFocusBeforeSubmit;
         public uint SubmitSent = 2;
         public Task<bool>? Landed;
-        public Task PrepareSubmitAsync() { Calls.Add("submit-prepare"); return ThrowOnPrepare ? throw new InvalidOperationException("UI Automation") : Task.CompletedTask; }
+        public Task PrepareSubmitAsync() { Calls.Add("submit-prepare"); return Task.CompletedTask; }
         public Task<bool> WaitForSubmitAsync() { Calls.Add("submit-wait"); if (LoseFocusBeforeSubmit) CanPaste = false; return Landed ?? Task.FromResult(true); }
         public uint SendSubmit() { Calls.Add("enter"); return SubmitSent; }
         public void Dispose() => Calls.Add("dispose");
@@ -94,14 +94,6 @@ public class ClipboardPasteOperationTests
         Assert.Equal(new[] { "capture", "submit-prepare", "paste", "submit-wait", "wait", "enter", "restore", "dispose" }, platform.Calls);
     }
 
-    [Fact]
-    public async Task FieldThatCannotBeRecordedStillPastes()
-    {
-        var platform = new Fake { ThrowOnPrepare = true };
-        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true);
-        Assert.True(result.Inserted);
-        Assert.True(result.Submitted);
-    }
 
     [Fact]
     public async Task PasteWithoutSubmitNeverPressesEnter()

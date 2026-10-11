@@ -68,8 +68,8 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         public async Task<bool> WaitForSubmitAsync()
         {
             if (_landing is not { } landing) { AppDiagnostics.Write("submit.landing.unavailable"); await Task.Delay(100); return true; }
-            try { return await landing.WaitAsync(); }
-            finally { landing.Dispose(); _landing = null; }
+            _landing = null;
+            using (landing) return await landing.WaitAsync();
         }
         public uint SendSubmit()
         {
