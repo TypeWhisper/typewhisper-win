@@ -151,9 +151,11 @@ public sealed class AudioDuckingService : IAudioDuckingService
             foreach (var deviceId in devices)
             {
                 try { Listen(enumerator, deviceId); }
-                // A removed output is not an error; the watch reports it once it is added again.
-                catch (System.Runtime.InteropServices.COMException ex) when (ex.HResult == ElementNotFound) { }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.recover-failed", ex); }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // A removed output is not an error; the watch reports it once it is added again.
+                    if (ex.HResult != ElementNotFound) AppDiagnostics.Write("audio.ducking.recover-failed", ex);
+                }
             }
         }
         WatchOutputs(pending);
