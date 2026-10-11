@@ -87,7 +87,7 @@ public sealed class BackupRestoreServiceTests : IDisposable
             Template = WorkflowTemplate.CleanedText,
             Trigger = WorkflowTrigger.Manual(),
             Behavior = new WorkflowBehavior { FineTuning = "Keep product names." },
-            Output = new WorkflowOutput { AutoEnter = true }
+            Output = new WorkflowOutput().WithAutoEnterMode(WorkflowAutoEnterMode.DuringDictation)
         });
         source.Dictionary.AddEntry(new DictionaryEntry
         {
@@ -148,6 +148,7 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Single(destination.Snippets.Snippets);
         Assert.Single(destination.History.Records);
         Assert.Equal("Portable cleanup", destination.Workflows.Workflows[0].Name);
+        Assert.Equal(WorkflowAutoEnterMode.DuringDictation, destination.Workflows.Workflows[0].Output.AutoEnterMode);
         Assert.Equal("TypeWhisper", destination.Dictionary.Entries.Single(entry =>
             !entry.Id.StartsWith("pack:", StringComparison.Ordinal)).Replacement);
         Assert.Equal("Example Street 1", destination.Snippets.Snippets[0].Replacement);

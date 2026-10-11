@@ -834,7 +834,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 || !ValidShort(workflow.Behavior.TranslationTarget)
                 || workflow.Behavior.InputLanguageHints.Any(value => !ValidRequired(value) || !ValidShort(value))
                 || !ValidShort(workflow.Output.Format) || !ValidShort(workflow.Output.TargetActionPluginId)
-                || !ValidShort(workflow.Output.NumberNormalizationModeRaw))
+                || !ValidShort(workflow.Output.NumberNormalizationModeRaw) || !ValidShort(workflow.Output.AutoEnterModeRaw))
                 return Loc.T("A workflow contains invalid settings.");
         }
         foreach (var entry in data.Dictionary.Entries)

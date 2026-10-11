@@ -3,6 +3,9 @@ using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
+/// <summary>Whether the text was pasted and whether a requested Enter followed it.</summary>
+internal readonly record struct ClipboardInsertion(bool Inserted, bool Submitted);
+
 internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
 {
     private readonly WindowsClipboardTransaction _clipboard = new(owner);
@@ -10,19 +13,22 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     internal static SemaphoreSlim TransactionGate { get; } = new(1, 1);
     /// <summary>Completes once the latest paste restored the previous clipboard. Never faults.</summary>
     internal Task Restored => _restored;
-    /// <summary>Returns once Ctrl+V was sent. The clipboard stays gated until <see cref="Restored"/> completes.</summary>
-    internal async Task<bool> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null, Func<Task<bool>>? verifyFieldAsync = null)
+    /// <summary>Returns once Ctrl+V was sent, or with <paramref name="submit"/> once Enter followed it.
+    /// The clipboard stays gated until <see cref="Restored"/> completes.</summary>
+    internal async Task<ClipboardInsertion> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null, Func<Task<bool>>? verifyFieldAsync = null,
+        bool submit = false)
     {
         var dictation = AppDiagnostics.CurrentDictation;
         await TransactionGate.WaitAsync();
         var releaseNow = true;
         try
         {
-            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync), text);
+            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync), text, submit);
             AppDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
+            if (result.Inserted && submit) AppDiagnostics.Write(result.Submitted ? "clipboard.submit.sent" : "clipboard.submit.skipped");
             _restored = ReleaseAfterRestoreAsync(result.Restored, dictation);
             releaseNow = false;
-            return result.Inserted;
+            return new(result.Inserted, result.Submitted);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { AppDiagnostics.Write("clipboard.paste.exception", ex); throw; }
@@ -44,6 +50,7 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField, Func<Task<bool>>? verifyFieldAsync) : IClipboardPastePlatform
     {
         private IClipboardLease? _lease;
+        private PasteLandingObserver? _landing;
         public Task<bool> VerifyFieldAsync() => verifyFieldAsync?.Invoke() ?? Task.FromResult(true);
         public bool CanPaste => target != IntPtr.Zero && NativeMethods.GetForegroundWindow() == target && (verifyField?.Invoke() ?? true)
             && !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
@@ -56,6 +63,26 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         }
         public Task RestoreAsync(IDisposable lease) => clipboard.RestoreAsync((IClipboardLease)lease, CancellationToken.None);
         public Task WaitForPasteAsync() => Task.Delay(500);
+        public async Task PrepareSubmitAsync() => _landing = await PasteLandingObserver.CaptureAsync(target);
+        public void DiscardSubmit() { _landing?.Dispose(); _landing = null; }
+        // Without an identifiable field, Ctrl+V is ahead in the input queue and a short delay covers most targets.
+        public async Task<bool> WaitForSubmitAsync()
+        {
+            if (_landing is not { } landing) { AppDiagnostics.Write("submit.landing.unavailable"); await Task.Delay(100); return true; }
+            _landing = null;
+            using (landing) return await landing.WaitAsync();
+        }
+        public uint SendSubmit()
+        {
+            NativeMethods.Input[] inputs = [Key(0x0D, false), Key(0x0D, true)];
+            var sent = NativeMethods.SendInput(2, inputs, Marshal.SizeOf<NativeMethods.Input>());
+            if (sent == 1)
+            {
+                NativeMethods.Input[] release = [Key(0x0D, true)];
+                NativeMethods.SendInput(1, release, Marshal.SizeOf<NativeMethods.Input>());
+            }
+            return sent;
+        }
         public uint SendPaste()
         {
             NativeMethods.Input[] inputs = [Key(0x11, false), Key(0x56, false), Key(0x56, true), Key(0x11, true)];

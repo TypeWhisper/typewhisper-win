@@ -39,6 +39,9 @@ public sealed class AutomaticWorkflowSnapshot
     public string? InputLanguage => _workflow?.Behavior.InputLanguage;
     /// <summary>The provider-qualified transcription model for this recording; null uses the selected model.</summary>
     public string? TranscriptionModel => _workflow?.Behavior.TranscriptionModelOverride is { } model && !string.IsNullOrWhiteSpace(model) ? model : null;
+    /// <summary>When Enter follows insertion. A plugin action receives the text instead, so it never submits.</summary>
+    public WorkflowAutoEnterMode AutoEnterMode => _workflow is { } workflow && Error is null && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId)
+        ? workflow.Output.AutoEnterMode : WorkflowAutoEnterMode.Never;
     /// <summary>Whether the workflow translates, so its output can be in another language than the dictation.</summary>
     public bool Translates => _workflow?.Template == WorkflowTemplate.Translation;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
@@ -93,13 +96,20 @@ public sealed class AutomaticWorkflowSnapshot
             || behavior.Settings.Count != 0 || !WorkflowSpokenLanguage.IsSupported(behavior.InputLanguage)
             || behavior.InputLanguageHints.Count != 0 || !WorkflowTranscriptionTask.IsSupported(behavior.SelectedTask)
             || behavior.WhisperModeOverride is not null || !SupportsTranscriptionModel(workflow)
-            || !string.IsNullOrWhiteSpace(output.Format) || output.AutoEnter
+            || !string.IsNullOrWhiteSpace(output.Format) || !WorkflowAutoEnterModes.IsKnown(output.AutoEnterModeRaw)
             || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw))
             return Loc.T("The selected workflow has unsupported trigger, recording or output settings. Review your transcript; nothing was pasted.");
         if (workflow.Template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(behavior.FineTuning))
             return Loc.T("The selected custom workflow requires instructions. Review your transcript; nothing was pasted.");
         return null;
     }
+
+    /// <summary>Whether a matching App, Website or Global rule could submit with Enter during dictation. An unsupported
+    /// rule only opens review, so it never takes Enter.</summary>
+    public static bool MaySubmitDuringDictation(IEnumerable<Workflow> workflows) => workflows.Any(workflow => workflow.IsEnabled
+        && workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global
+        && workflow.Output.AutoEnterMode == WorkflowAutoEnterMode.DuringDictation && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId)
+        && UnsupportedReason(workflow) is null);
 
     // Only dictation shortcuts and API starts know their workflow before capture, when the model can still change.
     private static bool SupportsTranscriptionModel(Workflow workflow) => string.IsNullOrWhiteSpace(workflow.Behavior.TranscriptionModelOverride)

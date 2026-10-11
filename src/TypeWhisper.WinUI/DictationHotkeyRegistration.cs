@@ -61,6 +61,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
     internal void ObservePause() => _state.Suspend();
+    // Read by the Enter hook, which runs on the same UI thread.
+    internal bool HoldsKey(int key) => !_disposed && !_interrupted && _state.Holds(key);
 
     internal void Interrupt()
     {

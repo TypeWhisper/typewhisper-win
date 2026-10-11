@@ -650,6 +650,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     // The stop itself waits for the model; remember where the user finished speaking.
     internal void MarkEarlyStop()
     {
+        // A stop that arrives while the start is still running decides this recording: a later Enter only reaches the app.
+        if (!_disposed && _audio.IsRecording) _submit.Close();
         if (_disposed || !_audio.IsRecording || !_earlyCapture || _earlyStopSamples is not null) return;
         _earlyStopSamples = _audio.SampleCountAfterStopDrain;
         AppDiagnostics.Write("dictation.early-stop");
@@ -679,6 +681,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 await _audio.StopRecordingAsync();
                 AppDiagnostics.Write("dictation.canceled");
             }
+            if (!_audio.IsRecording) _submit.Reset();
             await StopCloudStreamAsync();
             _effects.End();
             await _livePreview.StopAsync();
@@ -713,7 +716,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         {
             // Return once the microphone is open, so a stop or cancel reaches the capture while the model
             // loads. API starts report their outcome to the caller and are not deferred.
-            if (captureStarted is null && BeginEarlyCapture()) _ = AdoptEarlyCaptureAsync(workflow);
+            if (captureStarted is null && BeginEarlyCapture(workflow)) _ = AdoptEarlyCaptureAsync(workflow);
             return;
         }
 #if DEBUG
@@ -725,7 +728,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 var target = NativeMethods.GetForegroundWindow();
                 const string sample = "We use teh tool every day.";
                 for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
-                var inserted = await _inserter.InsertAsync(sample, target);
+                var inserted = (await _inserter.InsertAsync(sample, target)).Inserted;
                 File.WriteAllText(WinUIProfile.DataPath("correction-probe.txt"), inserted ? "inserted" : "paste_failed");
                 await _inserter.Restored;
                 if (inserted) CorrectionLearning.Observe(sample, target);
@@ -774,7 +777,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_workflowModelOverride is not null) await RestoreWorkflowModelAsync();
                 // A dictation workflow's own model applies before its task and language are checked against it.
                 // API starts are registered once capture begins, so they load the model before the microphone opens.
-                if (!adoptEarlyCapture && captureStarted is null && SwitchesWorkflowModel(workflow?.TranscriptionModel) && BeginWorkflowModelCapture())
+                if (!adoptEarlyCapture && captureStarted is null && SwitchesWorkflowModel(workflow?.TranscriptionModel) && BeginWorkflowModelCapture(workflow!))
                 {
                     adoptEarlyCapture = true;
                     preparingRecording = true;
@@ -866,6 +869,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     return;
                 }
                 AppDiagnostics.Write("dictation.capture.active");
+                // An adopted capture keeps an Enter pressed while the model loaded.
+                if (adoptEarlyCapture) _submit.Continue(SubmitArmingAtCapture(workflow, ruleMatched));
+                else _submit.Begin(SubmitArmingAtCapture(workflow, ruleMatched));
+                AppDiagnostics.Write($"dictation.submit.arming decision={_submit.Arming}");
                 PrepareTranscriptionModel();
                 _targetProcessId = processId;
                 _targetApp = TargetProcessName(processId);
@@ -911,6 +918,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     AppDiagnostics.Write($"dictation.language-resolved language={resolvedLanguage}");
                 }
                 _workflowActionAtStart = FindWorkflowAction(_workflowAtStart?.TargetActionPluginId);
+                _submit.Resolve(AutoEnterModeAtStart == WorkflowAutoEnterMode.DuringDictation);
+                AppDiagnostics.Write($"dictation.submit.resolved decision={_submit.Arming}");
                 _workflowMemoryAtStart = FindWorkflowMemory(_workflowAtStart?.MemoryPluginId);
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
@@ -951,7 +960,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             }
 
             finishingRecording = true;
-            AppDiagnostics.Write("dictation.stop");
+            // Enter after this point reaches the app; the decision belongs to the recording that just ended.
+            _submit.Close();
+            var submitRequested = _submit.Requested;
+            AppDiagnostics.Write($"dictation.stop decision={(submitRequested ? "submit" : "insert")}");
             StopSilenceMonitoring();
             _livePreview.Cancel();
             _lastDuration = _audio.RecordingDuration;
@@ -1021,6 +1033,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (refined.Error is not null) System.Diagnostics.Debug.WriteLine(refined.Error);
             }
             else CtcVocabulary.Trace($"{recordingId} host-skipped enabledAtStart={_ctcAtStart} enabledNow={CtcVocabulary.Enabled} dictionaryLoaded={dictionary is not null}");
+            // A spoken "press enter" is removed before post-processing, as on macOS.
+            var autoEnterMode = submitRequested ? WorkflowAutoEnterMode.DuringDictation : AutoEnterModeAtStart;
+            var autoEnter = WorkflowAutoEnterResolver.Resolve(refinedText, autoEnterMode, submitRequested);
+            refinedText = autoEnter.Text;
             var boostVocabulary = _boostVocabulary && !_ctcAtStart;
             var snippets = _snippetSnapshot is null ? null : await _snippetSnapshot;
             var processed = await new DictationLexiconSnapshot(dictionary, snippets).ProcessAsync(refinedText, _textAtStart, _languageAtStart,
@@ -1053,6 +1069,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 AppProcessName = _targetApp == "Target app" ? null : _targetApp,
                 AppUrl = _targetHostAtStart
             };
+            var submitSkipped = false;
             var delivery = new DictationOutputDelivery(_history);
             AppDiagnostics.Write("delivery.begin");
             var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null && !_reviewAfterTargetChange ? _outputAtStart : _outputAtStart with { AutoPaste = false },
@@ -1084,12 +1101,16 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues, outputLanguage);
                     // A dictation of only a spoken line break must still insert it.
                     if (pasted.Length == 0) pasted = text;
-                    var inserted = await _inserter.InsertAsync(pasted, _target, () =>
+                    var submit = WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(autoEnterMode, autoEnter, pasted,
+                        record.Status != TranscriptionRecordStatus.Succeeded);
+                    var insertion = await _inserter.InsertAsync(pasted, _target, () =>
                         !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
                         (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
                         async () => !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
-                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)));
+                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit);
+                    var inserted = insertion.Inserted;
+                    submitSkipped = inserted && submit && !insertion.Submitted;
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
                         _ = ObserveCorrectionsAfterPasteAsync(pasted, _target, _operationCancellation.Token);
                     return inserted;
@@ -1112,6 +1133,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText) };
             var message = !pasteFailed ? outcome.Message : outcome.CopiedToClipboard
                 ? Loc.T("Not inserted. The text is on the clipboard.") : Loc.T("Not inserted. Copy the text from the review window.");
+            if (submitSkipped) message += " · " + Loc.T("Enter was not pressed.");
             SetStatus(snippetError is null ? message : message + " · " + snippetError,
                 pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
                     : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
@@ -1164,7 +1186,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     if (!_disposed) Changed?.Invoke();
                 }
                 await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-                if (!_audio.IsRecording) { if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
+                if (!_audio.IsRecording) { _submit.Reset(); if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null; _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); await RestoreWorkflowModelAsync(); }
                 if (finishingRecording) PublishMicrophoneNoticeAfterDictation();
                 if (!_audio.IsRecording) AppDiagnostics.EndDictation();
             }

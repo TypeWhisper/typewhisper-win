@@ -94,6 +94,8 @@ public sealed partial class MainWindow : Window
                 cancelError = Loc.T("Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.");
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingShortcut?.Value ?? "";
+            // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
+            InitializeEscapeCancel();
             await _dictation.InitializeAsync();
             // A dictation captured while the model loaded is waiting to be adopted; the remaining
             // startup steps yield in between so they do not freeze it or its overlay in one block.
@@ -109,7 +111,7 @@ public sealed partial class MainWindow : Window
             InitializeWorkflowPaletteShortcut();
             InitializeRecordingShortcuts();
             InitializeRecorderShortcut();
-            InitializeEscapeCancel();
+            MoveDictationKeyHookToFront();
             InitializeHotkeyRecovery();
             // License and account checks can wait up to 30 s on the network. They run side by side
             // and no longer hold up activations such as --settings; sync still starts after them.

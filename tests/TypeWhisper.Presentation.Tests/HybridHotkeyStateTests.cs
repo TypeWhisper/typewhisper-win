@@ -308,4 +308,32 @@ public class HybridHotkeyStateTests
         Assert.Null(state.Key(0x50, true, 40, bindings, true, RecordingMode.Toggle, held: physical.Contains));
         Assert.Null(state.Key(0x50, false, 80, bindings, true, RecordingMode.Toggle, held: physical.Contains));
     }
+
+    [Fact]
+    public void HeldShortcutThatStartedTheRecordingOwnsItsModifiers()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        Assert.False(state.Holds(0xA2));
+        state.Key(0xA2, true, 0, bindings, mode: RecordingMode.Hold);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 10, bindings, mode: RecordingMode.Hold));
+
+        Assert.True(state.Holds(0xA2));
+        Assert.True(state.Holds(0xA0));
+        Assert.False(state.Holds(0xA4));
+        Assert.False(state.Holds(0x5B));
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA0, false, 500, bindings, true, RecordingMode.Hold));
+        Assert.False(state.Holds(0xA2));
+    }
+
+    [Fact]
+    public void ShortcutPressedToStopDoesNotOwnModifiers()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        state.Key(0xA2, true, 0, bindings, true, RecordingMode.Toggle);
+        state.Key(0xA0, true, 10, bindings, true, RecordingMode.Toggle);
+
+        Assert.False(state.Holds(0xA2));
+    }
 }

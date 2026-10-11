@@ -62,7 +62,7 @@ public sealed class WorkflowTranscriptionTaskTests
     [Fact]
     public void UnsupportedAutomaticRuleDoesNotApplyItsTask()
     {
-        var rule = Dictation("translate", WorkflowTrigger.Global()) with { Output = new() { AutoEnter = true } };
+        var rule = Dictation("translate", WorkflowTrigger.Global()) with { Output = new() { Format = "markdown" } };
         var snapshot = AutomaticWorkflowSnapshot.Select([rule], "editor")!;
         Assert.NotNull(snapshot.Error);
         Assert.Equal(TranscriptionTask.Transcribe,

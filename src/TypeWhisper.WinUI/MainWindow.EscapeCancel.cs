@@ -5,7 +5,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    private EscapeCancelHook? _escapeCancelHook;
+    private DictationKeyHook? _dictationKeyHook;
     private readonly EscapeCancelConfirmation _escapeConfirmation = new();
     private DispatcherQueueTimer? _escapeWarningTimer;
     private DispatcherQueueTimer? _cancelledBannerTimer;
@@ -20,8 +20,10 @@ public sealed partial class MainWindow
         try
         {
             // Install after the dictation hooks: Windows calls the newest low-level hook first,
-            // so a consumed Escape never reaches their gesture state.
-            _escapeCancelHook = new(() => EscapeCancelTarget is not null, () => DispatcherQueue.TryEnqueue(HandleEscapeCancel));
+            // so a consumed Escape or Enter never reaches their gesture state.
+            _dictationKeyHook = new(() => EscapeCancelTarget is not null, () => DispatcherQueue.TryEnqueue(HandleEscapeCancel),
+                EnterSubmitAvailable, SubmitDictationWithEnter, HeldByDictationShortcut,
+                () => AppDiagnostics.Write("shortcut.enter-passed decision=modifiers"));
             _escapeWarningTimer = OneShotTimer(EscapeCancelConfirmation.WindowMilliseconds + 50, ObserveEscapeCancelTarget);
             _cancelledBannerTimer = OneShotTimer(EscapeCancelConfirmation.BannerMilliseconds, () => _dictation.Cancelled = false);
             _dictation.Changed += () => DispatcherQueue.TryEnqueue(ObserveEscapeCancelTarget);
@@ -29,9 +31,37 @@ public sealed partial class MainWindow
         catch (System.ComponentModel.Win32Exception ex)
         {
             AppDiagnostics.Write("escape.hook.failed", ex);
-            ShowActivationNotice(Loc.T("Esc cannot cancel dictation in this session. Use the dictation shortcut or restart TypeWhisper."));
+            ShowActivationNotice(Loc.T("Esc cannot cancel dictation and Enter cannot submit it in this session. Use the dictation shortcut or restart TypeWhisper."));
         }
     }
+
+    private bool EnterSubmitAvailable()
+    {
+        if (_closing || _profileRestoreClosing || _dictationInput?.IsRecordingOrStarting != true) return false;
+        if (_dictation.CanRequestSubmit) return true;
+        // Only Enter during a recording is logged, never which other keys are typed.
+        AppDiagnostics.Write("shortcut.enter-passed decision=" + _dictation.SubmitUnavailableReason.ToLowerInvariant());
+        return false;
+    }
+
+    // Windows calls the newest low-level hook first. The shortcut hooks installed after this one would otherwise see
+    // a consumed Esc or Enter in their gesture state, so it is reinstalled once they exist.
+    private void MoveDictationKeyHookToFront()
+    {
+        if (_closing || _profileRestoreClosing || _dictationKeyHook is null) return;
+        if (_dictationKeyHook.Recover() is not null) AppDiagnostics.Write("escape.hook.reorder-failed");
+    }
+
+    // Runs inside the keyboard hook callback, like a stop shortcut: the coordinator takes the stop right away.
+    private void SubmitDictationWithEnter()
+    {
+        if (!_dictation.RequestSubmit()) return;
+        AppDiagnostics.Write("shortcut.enter-submit");
+        _ = _dictationInput?.SubmitAsync(TypeWhisper.Presentation.DictationInputAction.Stop);
+    }
+
+    private bool HeldByDictationShortcut(int key) => _dictationHotkey?.HoldsKey(key) == true
+        || _recordingShortcuts.Values.Any(entry => entry.Registration.HoldsKey(key));
 
     private DispatcherQueueTimer OneShotTimer(long milliseconds, Action tick)
     {
@@ -95,6 +125,6 @@ public sealed partial class MainWindow
     {
         _escapeWarningTimer?.Stop();
         _cancelledBannerTimer?.Stop();
-        _escapeCancelHook?.Dispose();
+        _dictationKeyHook?.Dispose();
     }
 }

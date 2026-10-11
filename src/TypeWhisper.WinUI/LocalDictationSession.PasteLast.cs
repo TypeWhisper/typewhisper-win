@@ -23,7 +23,7 @@ internal sealed partial class LocalDictationSession
                 for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
                 // Exit, profile restore or the target app closing may have happened during the waits above.
                 if (_disposed || !destination.IsCurrent) return false;
-                return await _inserter.InsertAsync(text, window, () => !_disposed && destination.IsCurrent);
+                return (await _inserter.InsertAsync(text, window, () => !_disposed && destination.IsCurrent)).Inserted;
             });
         }
         finally { _gate.Release(); }
@@ -39,7 +39,7 @@ internal sealed partial class LocalDictationSession
             if (!target.IsCurrent || !await ActivateAsync(target.Window)) return false;
             for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
             if (_disposed || !target.IsCurrent) return false;
-            return await _inserter.InsertAsync(text, target.Window, () => !_disposed && target.IsCurrent);
+            return (await _inserter.InsertAsync(text, target.Window, () => !_disposed && target.IsCurrent)).Inserted;
         }
         finally { _gate.Release(); }
     }

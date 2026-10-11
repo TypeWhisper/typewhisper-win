@@ -13,10 +13,10 @@ internal sealed partial class LocalDictationSession
 
     // Like any loading model, a workflow model must not cost the first words: the microphone opens
     // before the load and the start adopts that capture. Without it, the overlay shows the load.
-    private bool BeginWorkflowModelCapture()
+    private bool BeginWorkflowModelCapture(TypeWhisper.Presentation.AutomaticWorkflowSnapshot workflow)
     {
         SetStatus(Loc.T("Loading the workflow's transcription model…"), DictationPhase.LoadingModel);
-        if (BeginEarlyCapture()) return true;
+        if (BeginEarlyCapture(workflow)) return true;
         _showModelLoadingForDictation = true;
         Changed?.Invoke();
         return false;

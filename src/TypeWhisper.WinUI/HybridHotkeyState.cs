@@ -82,6 +82,12 @@ internal sealed class HybridHotkeyState
         return action;
     }
 
+    /// <summary>Whether the held shortcut that started the current recording includes this left or right modifier key.</summary>
+    internal bool Holds(int key) => _armed is not null && _startedByGesture && (_down.Contains(key) || _down.Contains(key switch
+    {
+        0xA0 or 0xA1 => 0x10, 0xA2 or 0xA3 => 0x11, 0xA4 or 0xA5 => 0x12, _ => -1
+    }) || key == 0xA2 && _down.Contains(AltGrControl));
+
     private static bool IsModifier(int key) => key == AltGrControl || ShortcutKeys.IsModifier(key);
     // With a main key AltGr is Ctrl+Alt, as for RegisterHotKey. Without one it counts as neither,
     // so typing "@" or "Ś" with AltGr does not start and cancel a modifier-only shortcut.
