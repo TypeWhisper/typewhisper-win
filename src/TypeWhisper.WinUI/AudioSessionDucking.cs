@@ -113,6 +113,14 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
             try
             {
                 var saved = session.Volume;
+                // An app that recreates its session during the recording gets the volume already lowered for it.
+                var earlier = _ducked.Values.Select(item => item.Entry)
+                    .FirstOrDefault(entry => entry.SessionId == session.SessionId && Math.Abs(saved - entry.Ducked) < Tolerance);
+                if (earlier is not null)
+                {
+                    _ducked[session.InstanceId] = (session, earlier);
+                    continue;
+                }
                 var ducked = saved * _factor;
                 if (saved - ducked < Tolerance) continue;
                 var entry = new AudioDuckingJournalEntry(_deviceId!, session.SessionId, saved, ducked, now());

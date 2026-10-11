@@ -14,6 +14,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
     private readonly object _queueGate = new();
     private readonly AudioSessionDucking _sessions;
     private Task _work = Task.CompletedTask;
+    private bool _closed;
     // Held while ducked so sessions that start during the recording are reported.
     private MMDevice? _device;
     private AudioSessionManager? _manager;
@@ -56,10 +57,21 @@ public sealed class AudioDuckingService : IAudioDuckingService
     /// </summary>
     public void RestoreAudio() => Enqueue(Restore);
 
-    /// <summary>Completes once queued ducking and restoring has been applied.</summary>
-    public Task WhenIdleAsync()
+    /// <summary>
+    /// Restores lowered apps, stops listening for sessions and outputs, and completes once nothing more is written.
+    /// Later requests are ignored.
+    /// </summary>
+    public Task ShutdownAsync()
     {
-        lock (_queueGate) return _work;
+        lock (_queueGate)
+        {
+            if (!_closed)
+            {
+                Enqueue(Close);
+                _closed = true;
+            }
+            return _work;
+        }
     }
 
     // Session notifications are only delivered to registrations made on an MTA thread, and the work stays
@@ -67,7 +79,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
     private void Enqueue(Action action)
     {
         lock (_queueGate)
-            _work = _work.ContinueWith(_ =>
+            if (!_closed) _work = _work.ContinueWith(_ =>
             {
                 try { action(); }
                 catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.failed", ex); }
@@ -189,6 +201,20 @@ public sealed class AudioDuckingService : IAudioDuckingService
             settled = !_sessions.PendingDevices.Contains(deviceId) && _recovery.Remove(deviceId);
         }
         if (settled) Release(device, manager, OnRecoverySessionCreated);
+    }
+
+    // Unregistering waits for running notifications, so no callback writes the journal after this returns.
+    private void Close()
+    {
+        Restore();
+        List<(MMDevice Device, AudioSessionManager Manager)> listeners;
+        lock (_gate)
+        {
+            listeners = [.. _recovery.Values];
+            _recovery.Clear();
+        }
+        foreach (var (device, manager) in listeners) Release(device, manager, OnRecoverySessionCreated);
+        WatchOutputs(false);
     }
 
     private void WatchOutputs(bool watch)

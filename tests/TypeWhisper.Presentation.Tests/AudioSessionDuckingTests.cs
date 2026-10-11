@@ -80,6 +80,24 @@ public sealed class AudioSessionDuckingTests : IDisposable
     }
 
     [Fact]
+    public void SessionRecreatedDuringRecordingIsNotLoweredTwice()
+    {
+        var ducking = Create();
+        var first = new FakeSession("music", 1, .8f);
+        ducking.Duck(Device, .5f, [first]);
+        // Windows starts the replacement at the volume it remembers for the app.
+        var replacement = new FakeSession("music", 2, first.Volume);
+
+        ducking.Add(replacement);
+        Assert.Equal(.4f, replacement.Volume, 3);
+        ducking.Restore();
+
+        Assert.Equal(.8f, first.Volume);
+        Assert.Equal(.8f, replacement.Volume);
+        Assert.Empty(Journal);
+    }
+
+    [Fact]
     public void SilentAndUnchangedSessionsAreNotJournaled()
     {
         var ducking = Create();
