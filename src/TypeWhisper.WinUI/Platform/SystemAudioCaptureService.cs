@@ -30,6 +30,7 @@ public sealed class SystemAudioCaptureService : IDisposable
     private int _burstBase;
     private int _burstStart;
     private int _burstEnd;
+    private int _published;
     private const int MaximumSamples = 16000 * 60 * 60;
     // NAudio drains every packet of a wake-up back to back; wake-ups are tens of milliseconds apart.
     private static readonly TimeSpan BurstWindow = TimeSpan.FromMilliseconds(5);
@@ -63,7 +64,8 @@ public sealed class SystemAudioCaptureService : IDisposable
     /// </summary>
     public event Action<float>? AudioLevelChanged;
     /// <summary>
-    /// Raised when normalized 16 kHz mono samples are available.
+    /// Raised when normalized 16 kHz mono timeline samples are final: when the next burst of
+    /// packets starts and when capture stops. Together the chunks equal the stopped capture.
     /// </summary>
     public event EventHandler<SamplesAvailableEventArgs>? SamplesAvailable;
 
@@ -85,7 +87,7 @@ public sealed class SystemAudioCaptureService : IDisposable
             _startedAt = startedAt;
             _stopSample = null;
             _lastPacketAt = null;
-            _burstBase = _burstStart = _burstEnd = 0;
+            _burstBase = _burstStart = _burstEnd = _published = 0;
         }
         _peakRmsLevel = 0;
 
@@ -126,11 +128,16 @@ public sealed class SystemAudioCaptureService : IDisposable
             _isRecording = false;
         }
 
+        float[] result;
+        float[]? published;
         lock (_lock)
         {
             PadTo(_stopSample.Value);
-            return [.. _samples];
+            published = TakeUnpublished(_samples.Count);
+            result = [.. _samples];
         }
+        if (published is not null) SamplesAvailable?.Invoke(this, new SamplesAvailableEventArgs(published));
+        return result;
     }
 
     /// <summary>
@@ -171,6 +178,7 @@ public sealed class SystemAudioCaptureService : IDisposable
         if (rms > _peakRmsLevel)
             _peakRmsLevel = rms;
 
+        float[]? published = null;
         lock (_lock)
         {
             // NAudio exposes callback receipt time, not WASAPI device position, and raises one callback
@@ -181,6 +189,8 @@ public sealed class SystemAudioCaptureService : IDisposable
             {
                 _burstBase = _burstStart = _samples.Count;
                 _burstEnd = TimelineSample(receivedAt);
+                // Earlier bursts can no longer move.
+                published = TakeUnpublished(_burstBase);
             }
             _lastPacketAt = receivedAt;
             var burstStart = Math.Max(0, _burstEnd - (_samples.Count - _burstStart) - samples.Length);
@@ -191,7 +201,6 @@ public sealed class SystemAudioCaptureService : IDisposable
                 _samples.RemoveRange(_burstBase + padding, _burstStart - _burstBase - padding);
                 _burstStart = _burstBase + padding;
             }
-            var previousCount = _samples.Count;
             if (_samples.Count == _burstStart && padding > _burstStart - _burstBase)
             {
                 PadTo(_burstBase + padding);
@@ -199,11 +208,18 @@ public sealed class SystemAudioCaptureService : IDisposable
             }
             var count = Math.Min(samples.Length, (_stopSample ?? MaximumSamples) - _samples.Count);
             if (count > 0) _samples.AddRange(samples.AsSpan(0, count).ToArray());
-            samples = _samples.GetRange(previousCount, _samples.Count - previousCount).ToArray();
         }
 
         AudioLevelChanged?.Invoke(peak);
-        SamplesAvailable?.Invoke(this, new SamplesAvailableEventArgs(samples));
+        if (published is not null) SamplesAvailable?.Invoke(this, new SamplesAvailableEventArgs(published));
+    }
+
+    private float[]? TakeUnpublished(int end)
+    {
+        if (end <= _published) return null;
+        var chunk = _samples.GetRange(_published, end - _published).ToArray();
+        _published = end;
+        return chunk;
     }
 
     private int TimelineSample(TimeSpan now) => ToSample(now - _startedAt + _timelineOffset);

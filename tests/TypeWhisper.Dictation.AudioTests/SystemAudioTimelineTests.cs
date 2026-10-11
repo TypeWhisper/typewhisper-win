@@ -11,10 +11,12 @@ public sealed class SystemAudioTimelineTests
     [Fact]
     public void PacketsDrainedInOneWakeUpEndWhenTheFirstArrived()
     {
-        var (service, capture, clock) = Start();
+        var (service, capture, clock, published) = Start();
         clock.Burst(capture, seconds: 1.0, packets: 5);
 
         var samples = service.StopCapture(TimeSpan.FromSeconds(1.0));
+
+        Assert.Equal(samples, published);
 
         Assert.Equal(16000, samples.Length);
         Assert.Equal(16000 - 5 * Packet, Array.FindIndex(samples, sample => sample > 0));
@@ -23,11 +25,13 @@ public sealed class SystemAudioTimelineTests
     [Fact]
     public void SchedulingJitterBetweenWakeUpsStaysContiguous()
     {
-        var (service, capture, clock) = Start();
+        var (service, capture, clock, published) = Start();
         clock.Burst(capture, seconds: 1.0, packets: 5);
         clock.Burst(capture, seconds: 1.062, packets: 5);
 
         var samples = service.StopCapture(TimeSpan.FromSeconds(1.062));
+
+        Assert.Equal(samples, published);
 
         var sound = samples.AsSpan(16000 - 5 * Packet, 10 * Packet).ToArray();
         Assert.All(sound, sample => Assert.NotEqual(0f, sample));
@@ -37,24 +41,30 @@ public sealed class SystemAudioTimelineTests
     [Fact]
     public void SilenceBetweenWakeUpsIsKept()
     {
-        var (service, capture, clock) = Start();
+        var (service, capture, clock, published) = Start();
         clock.Burst(capture, seconds: 1.0, packets: 5);
         clock.Burst(capture, seconds: 1.5, packets: 5);
 
         var samples = service.StopCapture(TimeSpan.FromSeconds(1.5));
+
+        Assert.Equal(samples, published);
 
         Assert.Equal(24000, samples.Length);
         Assert.All(samples.AsSpan(16000, 24000 - 5 * Packet - 16000).ToArray(), sample => Assert.Equal(0f, sample));
         Assert.All(samples.AsSpan(24000 - 5 * Packet).ToArray(), sample => Assert.NotEqual(0f, sample));
     }
 
-    private static (SystemAudioCaptureService Service, FakeCapture Capture, FakeClock Clock) Start()
+    // The published chunks must add up to the stopped capture, so streaming consumers see the
+    // same timeline even though a burst moves earlier while its packets arrive.
+    private static (SystemAudioCaptureService Service, FakeCapture Capture, FakeClock Clock, List<float> Published) Start()
     {
         var capture = new FakeCapture();
         var clock = new FakeClock();
+        var published = new List<float>();
         var service = new SystemAudioCaptureService(new FakeFactory(capture), () => clock.Now);
+        service.SamplesAvailable += (_, e) => published.AddRange(e.Samples);
         service.StartCapture();
-        return (service, capture, clock);
+        return (service, capture, clock, published);
     }
 
     private sealed class FakeClock
