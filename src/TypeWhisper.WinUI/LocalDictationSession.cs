@@ -650,6 +650,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     // The stop itself waits for the model; remember where the user finished speaking.
     internal void MarkEarlyStop()
     {
+        // A stop that arrives while the start is still running decides this recording: a later Enter only reaches the app.
+        if (!_disposed && _audio.IsRecording) _submit.Close();
         if (_disposed || !_audio.IsRecording || !_earlyCapture || _earlyStopSamples is not null) return;
         _earlyStopSamples = _audio.SampleCountAfterStopDrain;
         AppDiagnostics.Write("dictation.early-stop");

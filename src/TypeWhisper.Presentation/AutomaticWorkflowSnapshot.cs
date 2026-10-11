@@ -104,10 +104,12 @@ public sealed class AutomaticWorkflowSnapshot
         return null;
     }
 
-    /// <summary>Whether a matching App, Website or Global rule could submit with Enter during dictation.</summary>
+    /// <summary>Whether a matching App, Website or Global rule could submit with Enter during dictation. An unsupported
+    /// rule only opens review, so it never takes Enter.</summary>
     public static bool MaySubmitDuringDictation(IEnumerable<Workflow> workflows) => workflows.Any(workflow => workflow.IsEnabled
         && workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global
-        && workflow.Output.AutoEnterMode == WorkflowAutoEnterMode.DuringDictation && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId));
+        && workflow.Output.AutoEnterMode == WorkflowAutoEnterMode.DuringDictation && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId)
+        && UnsupportedReason(workflow) is null);
 
     // Only dictation shortcuts and API starts know their workflow before capture, when the model can still change.
     private static bool SupportsTranscriptionModel(Workflow workflow) => string.IsNullOrWhiteSpace(workflow.Behavior.TranscriptionModelOverride)

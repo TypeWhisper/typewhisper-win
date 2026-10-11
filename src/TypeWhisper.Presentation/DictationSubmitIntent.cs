@@ -33,10 +33,10 @@ public sealed class DictationSubmitIntent
     /// <summary>Starts a recording without any request.</summary>
     public void Begin(DictationSubmitArming arming) { _arming = arming; _requested = false; _closed = false; }
 
-    /// <summary>Re-arms a recording that is already running, keeping its request unless it can no longer submit.</summary>
+    /// <summary>Re-arms a recording that is already running, keeping its request unless it can no longer submit.
+    /// A stopped recording still applies its workflow to an Enter pressed before the stop.</summary>
     public void Continue(DictationSubmitArming arming)
     {
-        if (_closed) return;
         _arming = arming;
         if (arming == DictationSubmitArming.Off) _requested = false;
     }
@@ -52,7 +52,6 @@ public sealed class DictationSubmitIntent
     /// <summary>Applies the matched workflow. A pending request is dropped when the workflow does not submit.</summary>
     public void Resolve(bool submitsDuringDictation)
     {
-        if (_closed) return;
         _arming = submitsDuringDictation ? DictationSubmitArming.Armed : DictationSubmitArming.Off;
         if (!submitsDuringDictation) _requested = false;
     }

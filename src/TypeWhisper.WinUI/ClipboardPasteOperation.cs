@@ -8,8 +8,10 @@ internal interface IClipboardPastePlatform
     bool ClipboardIsOwned { get; }
     uint SendPaste();
     Task WaitForPasteAsync();
-    /// <summary>Waits until the target has inserted the pasted text, before Enter submits it.</summary>
-    Task WaitForSubmitAsync();
+    /// <summary>Records the focused field before Ctrl+V, so the paste can be confirmed before Enter.</summary>
+    Task PrepareSubmitAsync();
+    /// <summary>Waits until the same field shows the pasted text; false when it changed or the paste never appeared.</summary>
+    Task<bool> WaitForSubmitAsync();
     /// <summary>Sends Enter down and up, releasing it after a partial send; returns the number of events sent.</summary>
     uint SendSubmit();
     Task RestoreAsync(IDisposable lease);
@@ -34,39 +36,56 @@ internal static class ClipboardPasteOperation
         uint sent = 0;
         try
         {
+            if (submit) await PrepareSubmitAsync(platform);
             if (await platform.VerifyFieldAsync() && platform.CanPaste && platform.ClipboardIsOwned)
                 sent = platform.SendPaste();
         }
         catch
         {
-            await RestoreAsync(platform, lease, sent);
+            await RestoreAsync(platform, lease, sent, null);
             throw;
         }
-        var restored = RestoreAsync(platform, lease, sent);
-        if (sent == 4) return new(true, restored, submit && await SubmitAsync(platform));
-        await restored;
-        return new(false, Task.CompletedTask);
+        if (sent != 4)
+        {
+            await RestoreAsync(platform, lease, sent, null);
+            return new(false, Task.CompletedTask);
+        }
+        var submitted = submit ? SubmitAsync(platform) : null;
+        // The clipboard keeps the text until Enter was decided, so a slow target still pastes the dictation.
+        var restored = RestoreAsync(platform, lease, sent, submitted);
+        return new(true, restored, submitted is not null && await submitted);
     }
 
-    // Enter follows within the restore delay, while the clipboard still holds the text, and only into the same
-    // field. A failed check leaves the pasted text unsent rather than turning the paste into a failure. A sent
-    // key-down may already have submitted, so it counts as sent.
+    // A field that cannot be recorded leaves Enter to the later checks; the paste itself goes ahead.
+    private static async Task PrepareSubmitAsync(IClipboardPastePlatform platform)
+    {
+        try { await platform.PrepareSubmitAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+    }
+
+    // Enter follows only once the paste reached the same field, while the clipboard still holds the text. A failed
+    // check leaves the pasted text unsent rather than turning the paste into a failure. A sent key-down may already
+    // have submitted, so it counts as sent.
     private static async Task<bool> SubmitAsync(IClipboardPastePlatform platform)
     {
         try
         {
-            await platform.WaitForSubmitAsync();
-            return await platform.VerifyFieldAsync() && platform.CanPaste && platform.SendSubmit() > 0;
+            return await platform.WaitForSubmitAsync() && await platform.VerifyFieldAsync() && platform.CanPaste
+                && platform.SendSubmit() > 0;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
     }
 
-    private static async Task RestoreAsync(IClipboardPastePlatform platform, IDisposable lease, uint sent)
+    private static async Task RestoreAsync(IClipboardPastePlatform platform, IDisposable lease, uint sent, Task<bool>? submitted)
     {
         using (lease)
         {
             // Do not restore before the target has had a chance to consume Ctrl+V.
-            try { if (sent > 0) await platform.WaitForPasteAsync(); }
+            try
+            {
+                if (sent > 0) await platform.WaitForPasteAsync();
+                if (submitted is not null) await submitted;
+            }
             finally { await platform.RestoreAsync(lease); }
         }
     }

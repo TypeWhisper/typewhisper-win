@@ -50,6 +50,7 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target, Func<bool>? verifyField, Func<Task<bool>>? verifyFieldAsync) : IClipboardPastePlatform
     {
         private IClipboardLease? _lease;
+        private PasteLandingObserver? _landing;
         public Task<bool> VerifyFieldAsync() => verifyFieldAsync?.Invoke() ?? Task.FromResult(true);
         public bool CanPaste => target != IntPtr.Zero && NativeMethods.GetForegroundWindow() == target && (verifyField?.Invoke() ?? true)
             && !new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
@@ -62,8 +63,14 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         }
         public Task RestoreAsync(IDisposable lease) => clipboard.RestoreAsync((IClipboardLease)lease, CancellationToken.None);
         public Task WaitForPasteAsync() => Task.Delay(500);
-        // Ctrl+V is ahead in the input queue; the delay covers targets that insert the pasted text asynchronously.
-        public Task WaitForSubmitAsync() => Task.Delay(100);
+        public async Task PrepareSubmitAsync() => _landing = await PasteLandingObserver.CaptureAsync(target);
+        // Without an identifiable field, Ctrl+V is ahead in the input queue and a short delay covers most targets.
+        public async Task<bool> WaitForSubmitAsync()
+        {
+            if (_landing is not { } landing) { AppDiagnostics.Write("submit.landing.unavailable"); await Task.Delay(100); return true; }
+            try { return await landing.WaitAsync(); }
+            finally { landing.Dispose(); _landing = null; }
+        }
         public uint SendSubmit()
         {
             NativeMethods.Input[] inputs = [Key(0x0D, false), Key(0x0D, true)];

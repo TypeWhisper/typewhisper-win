@@ -134,6 +134,7 @@ public class WorkflowOutputTests
 
         Assert.True(WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(WorkflowAutoEnterMode.Always, always, "text", false));
         Assert.False(WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(WorkflowAutoEnterMode.Always, always, "text", true));
+        Assert.False(WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(WorkflowAutoEnterMode.Always, always, "", false));
         Assert.True(WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(WorkflowAutoEnterMode.DuringDictation, requested, "processed", true));
         Assert.False(WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(WorkflowAutoEnterMode.DuringDictation, requested, " ", false));
     }

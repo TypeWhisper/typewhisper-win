@@ -95,14 +95,15 @@ public static partial class WorkflowAutoEnterResolver
     }
 
     /// <summary>
-    /// Decides whether Enter follows the insertion. Always does not submit a dictation whose processing
-    /// failed; an explicit request by voice or key still submits non-empty text.
+    /// Decides whether Enter follows the insertion. Empty text is never submitted, since Enter would send what the
+    /// field already held. Always does not submit a dictation whose processing failed; an explicit request by voice
+    /// or key still does.
     /// </summary>
     public static bool ShouldPressEnterAfterInsertion(WorkflowAutoEnterMode mode, WorkflowAutoEnterResolution resolution,
         string insertedText, bool processingFailed)
     {
-        if (mode == WorkflowAutoEnterMode.Always) return !processingFailed;
-        return resolution.ShouldPressEnter && !string.IsNullOrWhiteSpace(insertedText);
+        if (string.IsNullOrWhiteSpace(insertedText)) return false;
+        return mode == WorkflowAutoEnterMode.Always ? !processingFailed : resolution.ShouldPressEnter;
     }
 
     [GeneratedRegex(@"^(.+?)\s+press\s+(?:enter|return)[\s\p{P}\p{S}]*$", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant)]

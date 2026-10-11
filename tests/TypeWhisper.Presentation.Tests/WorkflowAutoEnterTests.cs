@@ -41,6 +41,24 @@ public sealed class WorkflowAutoEnterTests : IDisposable
     }
 
     [Fact]
+    public void ShortcutStopDuringStartupKeepsEnterOutAndTheMatchedRuleStillApplies()
+    {
+        var intent = new DictationSubmitIntent();
+        intent.Begin(DictationSubmitArming.Pending);
+        intent.Close();
+        intent.Resolve(true);
+
+        Assert.False(intent.CanPress);
+        Assert.False(intent.Requested);
+
+        intent.Begin(DictationSubmitArming.Pending);
+        intent.Press();
+        intent.Close();
+        intent.Resolve(true);
+        Assert.True(intent.Requested);
+    }
+
+    [Fact]
     public void ClosedRecordingLetsEnterThrough()
     {
         var intent = new DictationSubmitIntent();
@@ -156,6 +174,7 @@ public sealed class WorkflowAutoEnterTests : IDisposable
         Assert.False(AutomaticWorkflowSnapshot.MaySubmitDuringDictation([during with { Trigger = WorkflowTrigger.Hotkey(["CTRL+L"], WorkflowHotkeyBehavior.StartDictation) }]));
         Assert.False(AutomaticWorkflowSnapshot.MaySubmitDuringDictation([during with { Output = during.Output with { TargetActionPluginId = "action" } }]));
         Assert.False(AutomaticWorkflowSnapshot.MaySubmitDuringDictation([Rule("always", WorkflowTrigger.Global(), WorkflowAutoEnterMode.Always)]));
+        Assert.False(AutomaticWorkflowSnapshot.MaySubmitDuringDictation([during with { Output = during.Output with { Format = "markdown" } }]));
     }
 
     [Fact]
