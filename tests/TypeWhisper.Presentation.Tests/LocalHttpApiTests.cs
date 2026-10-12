@@ -506,9 +506,10 @@ public sealed class LocalHttpApiTests
     [Fact]
     public async Task ProcessingTimeoutLetsSelectedRoutesOutlastRequestTimeout()
     {
-        await using var server = new LocalHttpApi(FreePort(), Token, async (_, token) =>
+        await using var server = new LocalHttpApi(FreePort(), Token, async (request, token) =>
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(500), token);
+            // Other routes wait until the request timeout cancels them; a fixed delay could win that race on a busy runner.
+            await Task.Delay(request.Method == "POST" ? TimeSpan.FromMilliseconds(500) : Timeout.InfiniteTimeSpan, token);
             return LocalApiResponse.Json(200, new { });
         }, requestTimeout: TimeSpan.FromMilliseconds(100),
             processingTimeout: (method, path) => method == "POST" && path == "/v1/transcribe" ? TimeSpan.FromSeconds(10) : null);
