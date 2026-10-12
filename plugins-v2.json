@@ -287,16 +287,16 @@
     {
       "id": "com.typewhisper.gladia",
       "name": "Gladia",
-      "version": "1.2.3",
+      "version": "1.2.4",
       "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
       "description": "Transcribes recorded audio and provides live dictation with Gladia.",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.gladia-1.2.3-win-x64.zip",
-      "sha256": "1e0115736a1ab3d8be308c2efe08b09f9f2f392073aafc98b682ac2b914717b0",
-      "size": 25243,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gladia-v1.2.4/com.typewhisper.gladia-1.2.4-win-x64.zip",
+      "sha256": "c2fcbc30db52ee025e9b2145a9a41ab52ebb5f2b1bf710763ec2777ee1c315ec",
+      "size": 25640,
       "platforms": [
         "windows"
       ],
