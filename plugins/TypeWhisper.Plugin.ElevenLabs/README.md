@@ -1,6 +1,6 @@
 # ElevenLabs for Windows 1.1
 
-Independent portable implementation of `com.typewhisper.elevenlabs`, based on the existing Windows provider and the macOS ElevenLabs plugin. The legacy project, settings, secrets and published package remain separate.
+Portable transcription plugin `com.typewhisper.elevenlabs`.
 
 ## Capabilities
 
@@ -17,9 +17,9 @@ Dictionary keyterms are limited to 1,000 entries, fewer than 50 characters and a
 
 `dotnet test plugins/TypeWhisper.Plugin.ElevenLabs/Tests/TypeWhisper.Plugin.ElevenLabs.Portable.Tests.csproj -c Release`
 
-The build stages package contents under `bin/Release/portable-host/Plugins/com.typewhisper.elevenlabs`. Package that folder's contents, excluding the SDK and credentials. `portable.proj` supplies the standard build/copy contract. Plugin CI and headless-test discovery include both plugin roots.
+The build stages package contents under `bin/Release/portable-host/Plugins/com.typewhisper.elevenlabs`. Package that folder's contents, excluding the SDK and credentials. `portable.proj` supplies the standard build/copy contract. Plugin CI and headless-test discovery include this project.
 
-The suite covers request fields, audio preservation, ISO language metadata, timings, persistence, restricted keys, classified errors, cancellation, keyterm limits, isolated package load/install/restart/uninstall/reinstall, fragmented live responses, repeated final text and interrupted finalization. Live English and German file transcription and a 3.2-second German WebSocket recording passed. The German transcript matched exactly; live finalization took 268 ms in that run. A repeated-audio stress test exposed a mid-word periodic commit; the pause-aware correction has separate regression coverage. After the correction, a varied 27.43-second English recording completed as two confirmed segments and matched the batch transcript exactly (338 ms finalization). A real batch request with dictionary terms, audio-event tagging and a two-speaker hint also succeeded. Replaying eight identical German audio clips produced shortened provider transcripts even with cleanup disabled; that synthetic repetition case is not claimed as accurate recognition. The native settings page rendered the expected choices. These observations are separate from the fake-transport tests.
+The suite covers request fields, audio preservation, ISO language metadata, timings, persistence, restricted keys, classified errors, cancellation, keyterm limits, isolated package load/install/restart/uninstall/reinstall, fragmented live responses, repeated final text and interrupted finalization. Validate recognition quality and native microphone delivery separately; repeated audio can produce shortened provider transcripts.
 
 Protocol references:
 
@@ -27,6 +27,6 @@ Protocol references:
 - [Realtime commit strategies](https://elevenlabs.io/docs/eleven-api/guides/how-to/speech-to-text/realtime/transcripts-and-commit-strategies)
 - [Realtime events](https://elevenlabs.io/docs/eleven-api/guides/how-to/speech-to-text/realtime/event-reference)
 
-No package or catalog is published by building or staging this development port.
+Building or staging a package does not publish it.
 
 Dictionary terms use the structured host contract 1.1.5 or newer, preserving literal commas inside each entry. Older plugin packages keep their original prompt contract.

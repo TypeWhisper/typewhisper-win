@@ -1,6 +1,6 @@
 # GitHub Copilot portable plugin
 
-Implements `ILlmProviderPlugin` for cleanup, translation and rewriting in WinUI workflows using the official `GitHub.Copilot.SDK` 1.0.13. Requires host 1.1.2 or newer. This is an independent v2 plugin; it does not modify or depend on the legacy AuthenticatedCli plugin.
+Implements `ILlmProviderPlugin` for cleanup, translation and rewriting in WinUI workflows using the official `GitHub.Copilot.SDK` 1.0.13. Requires host 1.1.2 or newer.
 
 ## Connect
 
@@ -38,34 +38,20 @@ dotnet msbuild plugins/TypeWhisper.Plugin.GitHubCopilot/portable.proj -t:Package
 
 The independent staged package is at `bin/Release/portable-host/Plugins/com.typewhisper.github-copilot/`; the ZIP and SHA-256 file are at `bin/Release/com.typewhisper.github-copilot-1.1.3.zip[.sha256]`.
 
-The package contains the runtime for the build machine's architecture. Only advertise that architecture in a catalog entry; build and validate other architectures separately. Do not enable `CopilotSkipCliDownload` for distribution builds. The package intentionally excludes the host-owned `TypeWhisper.PluginSDK.dll`. Keep the runtime and all applicable licenses together. This change does not publish a catalog entry or package.
+The package contains the runtime for the build machine's architecture. Only advertise that architecture in a catalog entry; build and validate other architectures separately. Do not enable `CopilotSkipCliDownload` for distribution builds. The package intentionally excludes the host-owned `TypeWhisper.PluginSDK.dll`. Keep the runtime and all applicable licenses together.
 
-## Acceptance evidence and remaining release checks
-
-Validated on Windows x64: 46 plugin tests passed in Release, including two-account routing, editor/workflow isolation, failed atomic saves, missing-account rejection, session identity verification, secret non-forwarding, proxy environment preservation, canceled-refresh readiness, the shared startup deadline, live model invalidation, late legacy cancellation and the packaged-runtime smoke test. Package tests retry transient cleanup failures and fail if cleanup remains unsuccessful. The independent ZIP was generated and its SHA-256 and required runtime entries verified; a planted stale staging file was excluded on rebuild. The full Windows headless suite also passed before the review corrections.
-
-Live packaged-provider acceptance passed on 2026-09-14 using the existing user's GitHub account, with no paid-plan upgrade. The initial `gh` keyring login alone was not recognized by the runtime; signing in through the official Copilot CLI browser flow resolved this. The SDK returned only `auto`, which the plugin listed, selected and used successfully. Input: `Hello, this is a short TypeWhisper test.` Instruction: `Translate the user's text into German. Return only the translation.` Output: `Hallo, dies ist ein kurzer TypeWhisper-Test.` This exercised the real package loader, connection/settings actions, model catalog and `ILlmProviderPlugin.ProcessAsync` against GitHub; it was not a native WinUI interaction test. The model list alone does not establish the account's exact Copilot plan.
-
-Additional live acceptance: six `auto` requests exercised German dictation cleanup, translation, email drafting, literal preservation and a two-request isolation probe. All requests completed without API errors in 3.52–8.72 seconds. Cleanup retained the leading filler “Also”; the remaining outputs met the manually reviewed criteria. Full synthetic prompts, outputs and limitations are in [the live acceptance report](../../docs/copilot-live-acceptance.md).
-
-The account-bound implementation also passed a live translation. A second live check created two profiles for the one available real account in an isolated package store, restarted the real runtime registry, restored both provider roles and executed the secondary role after selecting the primary profile in settings. It returned `SECONDARY_PROFILE_OK`. Two different GitHub identities are covered by fake-provider and real-SDK loopback tests; a live run with two distinct signed-in accounts remains outstanding. Functional assertions passed, but the helper exited with a DLL cleanup error. Automatic approval review blocked a subsequent deletion attempt; the temporary directory remains.
-
-Earlier native WinUI smoke checks confirmed the development build from this checkout opens with the installed plugin, renders its Copilot icon, restores `Auto`, and exposes one **Save profile** footer instead of per-field save buttons. The final multi-account settings check also displayed the GitHub account selector and add-profile button. A concurrent task was operating the same app and publishing another checkout to the shared development output, so the final check did not revalidate host branding or exercise a native save click. Model configuration was persisted through the real profile capability before app startup. The host bundles GitHub's Octicons mark with light/dark variants and its MIT license.
+## Validation
 
 - Provider fake tests cover connection state, model discovery, exact prompt/text forwarding, profile persistence, stale/invalid model drafts, failed writes, missing models, sanitized failures, empty output, cancellation and deactivation.
 - LSP-framed loopback tests exercise the real SDK's requests and responses, including tool restrictions, signed-out/token-auth rejection, cancellation, remote abort and session deletion. No paid requests or real credentials are used.
 - Package tests use the real immutable plugin store and collectible loader for install, host LLM/configuration discovery, restart, uninstall/reinstall, dependency resolution and host-version rejection. Update staging is tested against a deliberately lower-version metadata fixture that is never executed; the actual new package is loaded after restart.
 - A smoke test starts the actual packaged runtime with an isolated signed-out profile and verifies its authentication status without a model request.
-- The existing portable test discovery includes this project's tests automatically. Legacy source, manifests, catalogs and build graph remain unchanged.
+- Portable test discovery includes this project automatically.
 
-Before publication, complete the remaining native end-to-end workflow execution and coexistence/update checks in `docs/PLUGIN-MIGRATION-1.1.md`. The recorded live tests use the packaged provider, not microphone capture or output insertion. Further live requests require their own acceptance scope; normal tests remain account-free. A prior released Copilot plugin is not available for a real version-to-version upgrade run yet.
+Before publication, complete native workflow execution, two distinct signed-in account checks, package updates and installed coexistence checks in [portable plugin development](../../docs/PLUGIN-MIGRATION-1.1.md). Normal automated tests remain account-free. Package-provider checks do not replace microphone capture or output insertion acceptance.
 
 For a native development host, use the required launcher with the current checkout:
 
 ```powershell
-F:\typewhisper\typewhisper-dev-tools\build-typewhisper-windows-dev.ps1 --winui --run <current-checkout>
+F:\typewhisper\typewhisper-dev-tools\build-typewhisper-windows-dev.ps1 --run <current-checkout>
 ```
-
-
-
-

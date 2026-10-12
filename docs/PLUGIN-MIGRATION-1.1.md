@@ -1,6 +1,6 @@
 # Portable plugin development
 
-The WinUI host is the only application. All portable implementations live under `plugins/`; WPF provider assemblies, settings views and the legacy plugin publishing workflow have been removed.
+The WinUI host loads portable plugins from `plugins/` through the shared SDK and package host.
 
 ## Current source layout
 
@@ -8,7 +8,7 @@ The WinUI host is the only application. All portable implementations live under 
 - `src/TypeWhisper.PluginSDK`: UI-independent contracts. Settings are rendered by WinUI through those contracts.
 - `src/TypeWhisper.PluginHost`: package verification, activation, configuration and lifecycle management.
 
-Providers that existed only for WPF are no longer included. Their removal does not imply that equivalent WinUI functionality has been implemented. Existing published legacy packages and catalogs are not modified by source cleanup.
+Previously published 1.0 plugin packages and the legacy catalog remain unchanged. Publish portable packages only to the 1.1 feed.
 
 ## Acceptance before publication
 
@@ -20,4 +20,4 @@ Providers that existed only for WPF are no longer included. Their removal does n
 
 See [plugin package documentation](PLUGIN-PACKAGES-1.1.md) for the package contract. Run `eng/Test-WinUIHeadless.ps1` for the host, application and provider suites. Published packages continue to use the v2 catalog and immutable package store.
 
-The source-directory consolidation does not rename the public `plugins-v2.json` feed. Existing 1.1 clients depend on that URL. Application upgrades from 1.0 use the profile migration described in [Daily delivery and migration](DAILY-1.1-CANDIDATE.md).
+The public `plugins-v2.json` feed URL remains stable for existing 1.1 clients. Application upgrades from 1.0 use the profile migration described in [Daily delivery and migration](DAILY-1.1-CANDIDATE.md).

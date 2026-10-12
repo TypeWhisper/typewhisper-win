@@ -43,17 +43,13 @@ The package is staged under `bin/Release/portable-host/Plugins/com.typewhisper.s
 
 Tests cover every template through real PowerShell, Unicode, draft tests without persistence, batch validation, stale selection rejection, disabled defaults, restart persistence, timeout, cancellation, fail-open chaining, corrupt-store protection and portable package lifecycle. Regression coverage also includes leading PowerShell declarations, descendant cleanup, multiline quoted strings and packaged localization without a host localization service. Shell execution tests require Windows; configuration and package tests also run headlessly on other platforms. Automated tests do not replace visual and dictation acceptance in the app.
 
-## Migration scope
+## Platform scope
 
-Runtime sources originated from `plugins/TypeWhisper.Plugin.Script` at `4db8f6ac`, adapted under `plugins` without WPF. The macOS implementation at `ac00e39ea63e4789de8427d034d2085b3d898159` was compared but not modified. macOS commands and paths require manual adaptation. Legacy settings and scripts are not imported automatically; configuration remains in the portable plugin data directory. Public catalog publication remains separate.
-
-## Development acceptance
-
-Marco confirmed the Markdown checklist in real dictation and verified syntax colors, Format, Ctrl+Z and the test-result preview in the Windows development app. Twenty focused editor tests cover token boundaries, Unicode, formatter preservation and bounded text-only undo; 41 portable plugin tests cover execution and settings.
+macOS commands and paths require manual adaptation. Configuration lives in the portable plugin data directory. Application-level import is described in the [1.0 upgrade guide](../../docs/DAILY-1.1-CANDIDATE.md#profile-migration).
 
 ## Windows screenshots
 
-Captured from the running development app on September 21, 2026. The editor image shows syntax highlighting and the Format/Expand controls; the second image shows the checklist test result, including German umlauts, in the settings status area. Unsaved draft indicators are visible.
+The editor image shows syntax highlighting and the Format/Expand controls; the second shows the checklist test result, including German umlauts. Unsaved draft indicators are visible.
 
 ![Script Runner command editor](../../docs/screenshots/script-runner-editor.jpg)
 

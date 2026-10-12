@@ -1,8 +1,7 @@
 # Windows 1.1 capability map
 
 This describes the current source, not a claim that every combination of device,
-provider and package has passed native acceptance. Detailed historical work is in
-the [functional journal](archive/winui/WINUI-FUNCTIONAL-STATUS.md).
+provider and package has passed native acceptance.
 
 | Area | Current behavior | Important boundary |
 | --- | --- | --- |
@@ -15,16 +14,16 @@ the [functional journal](archive/winui/WINUI-FUNCTIONAL-STATUS.md).
 | Workflows | Templates, app/site matching, dedicated shortcuts, explicit LLM selection/defaults and plugin destinations. | A missing provider is reported; it is not silently replaced with another service. |
 | Dictionary and snippets | Terms, corrections, packs and spoken text expansion. | Provider-level vocabulary support and local text replacement are different mechanisms. |
 | History | Separate window with Inbox, smart mailboxes, devices and sources; search, edit, copy/export, retention and optional retained audio. | History-off output can remain available in memory for the running session; that is not durable storage. |
-| Plugins | Portable package installation, settings, models, updates and explicit capabilities. | WPF assemblies do not load. A package capability still needs a host consumer. |
-| Memory | Explicit workflow memory sources and action-based storage. | Context is opt-in per workflow; see [File Memory acceptance](FILE-MEMORY-ACCEPTANCE.md). |
+| Plugins | Portable package installation, settings, models, updates and explicit capabilities. | Packages must use the portable SDK. A capability still needs a host consumer. |
+| Memory | Explicit workflow memory sources and action-based storage. | Context is opt-in per workflow; see [File Memory](../plugins/TypeWhisper.Plugin.FileMemory/README.md). |
 | Premium and sync | License/account access, correction learning and configured cloud-folder synchronization of dictionary, snippets, History, Inbox and new audio with macOS. | Local tests do not establish complete cross-platform or cloud-provider acceptance. |
 | API and CLI | Local authenticated automation, transcription, model control, History, workflows and backups. | Follow the [API](WINUI-HTTP-API.md) and [CLI](WINDOWS-CLI.md) references. |
 | Updates and migration | Architecture/channel-specific packages and copy-based 1.0 profile import. | Installed upgrade acceptance gates the original Daily rollout. Stable is separate. |
 
 ## Known release boundaries
 
-- The first-dictation insertion fix for [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513)
-  (field capture retry for cold Chromium/Electron accessibility trees) still needs native confirmation after a fresh start.
+- Confirm first-dictation insertion after a fresh start on the selected candidate,
+  including Chromium/Electron targets with cold accessibility trees.
 - Package builds do not replace real ARM64 execution or older-Windows acceptance.
 - Calendar adapters and research prototypes do not establish available calendar sign-in or meeting automation.
 - Plugins published after an application Daily can have different source and validation revisions.

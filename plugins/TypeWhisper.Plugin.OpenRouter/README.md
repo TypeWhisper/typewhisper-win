@@ -1,6 +1,6 @@
 # OpenRouter for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.openrouter`, version `1.1.3`, requiring host `1.1.2` or later. The protocol was ported from the Windows provider at `ce38c355` and compared with the macOS OpenRouter provider on September 14, 2026. The package has no WPF dependency and does not read or migrate legacy profiles.
+Portable .NET 10 implementation of `com.typewhisper.openrouter`, version `1.1.3`, requiring host `1.1.2` or later.
 
 The plugin provides text processing through `/api/v1/chat/completions` and recorded-audio transcription through `/api/v1/audio/transcriptions`. Audio is sent as base64 WAV in JSON. Translation, streaming and dictionary prompts are not advertised. Following the macOS provider, requests to OpenAI, Groq and Together models request verbose JSON with segment timestamps. Returned valid segments are preserved; unavailable timestamps are not synthesized.
 
@@ -16,25 +16,17 @@ dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Por
 dotnet msbuild plugins/TypeWhisper.Plugin.OpenRouter/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All 69 plugin tests and 259 portable SDK/host tests passed in Release. The shared settings change also passed all 96 OpenAI Compatible tests. The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK/WPF assemblies and minimum host version. Test API responses and keys are fixtures.
+The plugin suite covers requests, catalogs, model selection, temperature, secrets, errors, cancellation, typed text responses, timestamps, and isolated installation/restart/uninstall/reinstall with both provider roles. Package checks verify the dependency manifest, absence of bundled host SDK or UI-framework assemblies and minimum host version. Test API responses and keys are fixtures.
 
-The standard package output is `bin/Release/portable-host/Plugins/com.typewhisper.openrouter/`: plugin DLL, dependency manifest and plugin manifest. Existing CI discovery includes the new project and its tests automatically.
+The standard package output is `bin/Release/portable-host/Plugins/com.typewhisper.openrouter/`: plugin DLL, dependency manifest and plugin manifest. Existing CI discovery includes this project and its tests automatically.
 
-## Development acceptance
+## Language and settings behavior
 
-The required Windows development helper built and launched this worktree. The package was installed into the development profile, with the preceding package index backed up outside that profile. Computer Use verified the OpenRouter settings page and key entry. The native refresh actions loaded 21 transcription models and 430 text models on September 14, 2026. Connection validation and the key-budget action succeeded.
+Known OpenAI transcription model IDs expose a conservative 57-language set. Other models retain automatic detection until their language capabilities are established.
 
-Authenticated checks through the installed package translated a short German sentence with `openai/gpt-4o-mini` and transcribed synthetic English speech with `openai/whisper-large-v3-turbo`. The full running-app HTTP path returned the exact English sentence with `language=en`, provider segments and valid SRT output. The previously selected NVIDIA model was restored after request-scoped overrides. No microphone-to-paste check is claimed.
+The host renders one full-width configuration form and a fixed **Save settings** button. API-key edits, model choices, refreshed catalogs and temperature are committed together. Connection and budget checks can use an entered key without saving it. Failed writes leave the active configuration and encrypted key intact. Regression checks cover grouped commits, key rollback, invalid input, draft catalog refresh and persisted selection repair.
 
-That host check initially rejected explicit English because the port lacked language metadata. Version `1.1.1` adds a conservative 57-language set for the six known OpenAI transcription model IDs. Other models retain automatic detection until their language capabilities are established. The regression covers model changes, metadata and restart.
-
-A real development package update from `1.1.0` to `1.1.1` was staged in the immutable package store while the host was running. The old version remained active with a pending receipt; the prescribed helper restarted the host, which promoted the new package without warnings. The encrypted key, selected transcription model, 430 text models and 21 transcription models survived. Live text processing and app-level transcription succeeded again after the update.
-
-ARM64 hardware execution, long recordings, the German native layout, other upstream model families and side-by-side installed-generation acceptance remain pending. No public plugin catalog or release was modified.
-
-Version `1.1.2` uses the same host-rendered editor as OpenAI Compatible, with a single full-width configuration and one fixed **Save settings** button. API-key edits, model choices, refreshed catalogs and temperature are committed together; connection and budget checks can use an entered key without saving it. A failed settings write leaves the active configuration and encrypted key intact. The native sidebar uses the existing OpenRouter brand asset in both themes.
-
-Computer Use verified the logo, unsaved-change indicator, disabled/enabled Save button, conditional custom-temperature field and successful page-level save. The original provider-default temperature mode and selected models were retained after the test. Automated regression checks cover the grouped commit, encrypted-key rollback, invalid input, draft catalog refresh, generic settings interfaces and persisted selection repair during activation.
+Validate ARM64 execution, long recordings, German native layouts, upstream model families and installed 1.0/1.1 coexistence separately.
 
 ## Provider references
 

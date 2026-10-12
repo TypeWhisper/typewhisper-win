@@ -1,20 +1,16 @@
 # Qwen3 ASR (Local) — portable V2 plugin
 
 Offline CPU transcription with Qwen3-ASR 0.6B or 1.7B INT8 through sherpa-onnx
-1.13.8. This is a separate plugin (`com.typewhisper.qwen3-local`); the legacy
-Qwen3 STT endpoint plugin retains its own identity and configuration.
+1.13.8. Plugin ID: `com.typewhisper.qwen3-local`.
 
 ## Models
 
-| Model | Tier | Download | Installed | Working memory | Speed (RTF) |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Qwen3-ASR 0.6B INT8 (recommended) | Low memory | 879 MB | ~1 GB | ~2 GB | 0.15 |
-| Qwen3-ASR 1.7B INT8 | Higher accuracy, slower | 2.4 GB | 2.4 GB | ~3.5 GB | 0.27 |
+| Model | Tier | Download | Installed | Working memory |
+| --- | --- | ---: | ---: | ---: |
+| Qwen3-ASR 0.6B INT8 (recommended) | Low memory | 879 MB | ~1 GB | ~2 GB |
+| Qwen3-ASR 1.7B INT8 | Higher accuracy, slower | 2.4 GB | 2.4 GB | ~3.5 GB |
 
-Both models run on the CPU only; no GPU execution provider is used. Speed is the
-real-time factor on a Ryzen 7 7800X3D with four inference threads (lower is
-faster) and varies by device. The settings page shows the tier at the start of
-each model's size line.
+Both models run on the CPU only; no GPU execution provider is used. The settings page shows the tier at the start of each model's size line. Working memory varies by device and recording.
 
 The macOS plugin offers MLX models at 4, 5, 6 and 8 bit and BF16. Windows has no
 validated sherpa-onnx artifact for those precisions, so its tiers are the two INT8
@@ -109,33 +105,9 @@ The host does not reference this provider's assembly. `portable.proj` supplies
 the standard portable package; the existing plugin smoke and headless workflows
 discover the project and its tests.
 
-## Accuracy and speed
+## Recognition limits
 
-Measured on 2026-10-04 with `tools/TypeWhisper.Benchmarks` on Windows x64 / Ryzen 7
-7800X3D, four CPU threads, with the plugin's windowing and peak level.
-
-The first 100 clips each of the pinned public FLEURS test set (German and English;
-lowercased and stripped of punctuation, without number normalization):
-
-| | 0.6B INT8 | 1.7B INT8 |
-| --- | ---: | ---: |
-| WER German | 13.2 % | 9.6 % |
-| WER English | 8.0 % | 7.0 % |
-| CER German / English | 6.2 % / 5.2 % | 4.4 % / 4.3 % |
-| Real-time factor | 0.148 | 0.266 |
-| Load time | 3.4 s | 4.5 s |
-| Peak working set | 2.1 GB | 3.5 GB |
-
-Before the plugin removed the `language X<asr_text>` marker, it appeared in 38 of
-200 1.7B transcripts and raised its WER to 14.4 % (German) and 9.0 % (English). With 1.7B, one English clip
-produced no text and another a single unrelated word.
-
-Twelve self-recorded German dictation clips (code, numbers, formatting, proper
-nouns, URLs; private corpus) compared against the intended final text: 1.7B matched
-6 of 12 exactly including punctuation and digits, 0.6B 3 of 12. 1.7B wrote numbers
-as digits, while 0.6B spelled them out; 1.7B once answered a German SQL sentence in
-English. The clips were recorded through a remote-desktop microphone, so this is
-indicative only.
+Evaluate both models on representative recordings before choosing. Dictation can contain substitutions, omissions, unrelated text or unexpected language changes. See the [benchmark procedure](../../tools/TypeWhisper.Benchmarks/README.md) for comparable accuracy and timing measurements.
 
 ## Validation
 
@@ -172,36 +144,6 @@ cancellation and unload/reload. It retains model files for repeat runs and
 writes measured results to `qwen-local-validation-<model>.json` under the chosen
 asset directory.
 
-On 2026-10-05, both real inference tests passed on Windows x64 / Ryzen 7 7800X3D
-with four CPU inference threads:
+Model selection is persisted through the host and restored after reactivation or restart; removing assets clears it. After first enablement, use **Refresh models** if downloaded models are not yet shown.
 
-| Input | Audio | 0.6B | 1.7B |
-| --- | ---: | ---: | ---: |
-| German | 6.72 s | 1.07 s | 2.08 s |
-| English with noise | 19.02 s | 2.29 s | 4.34 s |
-| Repeated German | 36.10 s | 5.71 s | 10.85 s |
-
-Loading took 2.75 s and 4.35 s; peak test-process working set was 1,809 MiB and
-3,133 MiB. These samples are smoke checks; see the accuracy section for the
-benchmark.
-
-This package is installed locally for development. Publication to the V2
-catalog requires its own release archive and catalog entry.
-
-On 2026-09-15, the prescribed WinUI development build/relaunch passed with
-version 1.0.0 and the 0.6B model. In the real host, the plugin was enabled, its
-downloaded model was loaded through **Use model**, and
-`/v1/transcribe/local-file` returned the German transcript in 1.07 s. The model
-inventory reported `cloud: false`, `downloaded: true`, and `active: true`. The
-settings UI showed **Loaded · active for dictation**. This verifies the
-file-transcription path and native runtime coexistence with the existing
-Parakeet provider. Immediately after first enablement, the host required **Refresh
-models** before showing the downloaded model. Model selection is persisted through
-the host and restored after reactivation or restart; removing assets clears it.
-
-A separate [physical microphone and paste check](../../docs/screenshots/qwen3-local/README.md)
-completed the local speaker → microphone → Qwen → Notepad path. Its strict text
-assertion failed: the model recognized "transgression" instead of "transcription".
-The actual pasted text matched the host's final result, including an existing
-dictionary correction. This is evidence of the working integration and a recognition
-limitation, not a passing exact-transcript acceptance test.
+Check physical microphone-to-paste delivery separately from file transcription. See the [settings and microphone screenshots](../../docs/screenshots/qwen3-local/README.md).

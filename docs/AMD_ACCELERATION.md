@@ -66,6 +66,5 @@ ZLUDA is not needed for Parakeet: from plugin 1.3 it runs on AMD graphics throug
 
 Report the TypeWhisper and plugin versions, Windows architecture, model, chosen
 processing device and the `In use:` text after loading. Include the native error if shown,
-without credentials or private transcripts. The old WPF diagnostics-export path
-and `transcription_acceleration` payload are not available in the current WinUI
-source; do not follow older instructions for that menu.
+without credentials or private transcripts. Export the support report from
+Settings > Advanced for additional diagnostics.

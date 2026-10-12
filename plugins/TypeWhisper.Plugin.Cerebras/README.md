@@ -1,6 +1,6 @@
 # Cerebras for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.cerebras`, version `1.1.2`, requiring host `1.1.2` or later. The package has no WPF references and does not import legacy settings or credentials. Protocol behavior was compared with the Windows provider at `21dc546a` and the [macOS Cerebras plugin](https://github.com/TypeWhisper/typewhisper-mac/tree/main/TypeWhisperPluginSDK/Plugins/CerebrasPlugin) on September 14, 2026.
+Portable .NET 10 implementation of `com.typewhisper.cerebras`, version `1.1.2`, requiring host `1.1.2` or later.
 
 ## Features
 
@@ -22,19 +22,13 @@ dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Por
 dotnet msbuild plugins/TypeWhisper.Plugin.Cerebras/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All 43 provider/package tests and 259 portable SDK/host tests passed. The first shared-suite run encountered a Windows DLL cleanup lock in an existing fixture; a subsequent unchanged run passed all 259 tests. The package test exercises the real immutable store and runtime: ZIP hash/identity, installation, grouped configuration, restart, duplicate-install rejection, uninstall/reinstall, retained secrets/settings and minimum host version. The package contains only the provider DLL, dependency manifest and plugin manifest. Build and test discovery already includes `plugins`.
+The package test exercises the real immutable store and runtime: ZIP hash/identity, installation, grouped configuration, restart, duplicate-install rejection, uninstall/reinstall, retained secrets/settings and minimum host version. The package contains only the provider DLL, dependency manifest and plugin manifest. Build and test discovery already includes `plugins`.
 
-The existing [local audio acceptance script](../../docs/WINUI-LOCAL-AUDIO-TEST.md) now accepts an explicit workflow ID and expected final text. Seven headless lifecycle cases verify orchestration, including workflow selection, final-output mismatches, recording cleanup and model restoration. This enables a future physical microphone → transcription provider → Cerebras workflow → Notepad check.
+Use the [local audio acceptance script](../../docs/WINUI-LOCAL-AUDIO-TEST.md) with an explicit workflow ID and expected final text to check microphone → transcription → Cerebras workflow → Notepad delivery.
 
-## Development acceptance and limits
+## Validation limits
 
-The prescribed Windows development helper built and launched this checkout. The package was installed and enabled through the real development-profile store, preserving the preceding plugin receipts. Marco saved the key through the native settings page. Authenticated connection validation and model discovery succeeded; the returned catalog contained `gemma-4-31b`, `gpt-oss-120b` and `qwen-3.8-27b`.
-
-Real text requests through the installed `1.1.0` package were attempted with GPT-OSS 120B and Qwen 3.8 27B. Both returned HTTP 402 (`payment_required`, quota). No successful real inference is claimed. Marco chose not to change billing or credentials, so no further inference or microphone workflow requests were made. Local evidence is in ignored `artifacts/cerebras/`; no credentials, profile exports or recordings belong in Git.
-
-Version `1.1.1` adds a clear non-transient billing failure and stricter completion validation. The development update from `1.1.0` was staged through the immutable store and promoted on host restart without warnings. Settings and encrypted-secret file hashes remained unchanged, as did all unrelated installation receipts. Native dark-theme settings, the logo, saved state, conditional temperature field and draft Save behavior were verified. See the [screenshots and acceptance notes](../../docs/screenshots/cerebras/README.md). The original temperature mode was restored without saving the draft.
-
-Successful live inference, physical microphone-to-paste execution, native light-theme/German layout checks, ARM64 execution and installed legacy/v2 side-by-side acceptance remain pending. No public catalog or release was changed. Legacy provider source, manifests and projects remain unchanged.
+Live inference and microphone-to-paste acceptance require an account with available quota. HTTP 402 is a billing failure. Validate native light-theme/German layouts, ARM64 execution and installed 1.0/1.1 coexistence separately. See the [settings screenshots](../../docs/screenshots/cerebras/README.md).
 
 ## Provider references
 

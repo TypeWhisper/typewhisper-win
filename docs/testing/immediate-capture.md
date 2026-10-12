@@ -67,19 +67,8 @@ reconstruct a clipped word, so sample preservation is the decisive assertion.
 The automated capture uses a deterministic input adapter; these manual checks cover
 the real shortcut, OS microphone driver, UI dispatcher and target-field inspection.
 
-## Development validation (September 21, 2026)
+## Startup controls and API identity
 
-- 1,281 presentation tests, 274 portable host tests and two immediate-capture tests passed.
-- Whisper Large V3 Turbo was loaded after capture began. All 70,881 samples and the
-  complete German sentence were retained. Soniox passed the same live-cloud comparison.
-- The delayed control lost exactly 4,800 samples (300 ms). Both models reconstructed
-  the first word in this particular control, illustrating why transcript text alone
-  is insufficient to detect missing audio.
-- Marco confirmed immediate-speaking microphone tests with local Whisper and Soniox
-  in the development app.
-
-### Startup controls and API identity
-
-The original target remains locked during setup. The exact native handle of TypeWhisper's tray menu is an allowed temporary foreground window, so finishing from the tray does not discard early audio. Other foreground changes, exited processes and changed process IDs remain rejected. Seven policy cases cover these boundaries.
+The original target remains locked during setup. The exact native handle of TypeWhisper's tray menu is an allowed temporary foreground window, so finishing from the tray does not discard early audio. Other foreground changes, exited processes and changed process IDs remain rejected. Policy tests cover these boundaries.
 
 API starts register their generation immediately after microphone capture begins, before provider setup or a queued silence stop can complete. A successful start response returns that session ID and its current status, which may already be processing, completed or failed after a slow startup. Requests where the microphone never started still return 409. Existing API generation/result correlation tests cover stable identity and isolation from subsequent recordings.

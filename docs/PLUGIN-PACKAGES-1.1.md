@@ -2,10 +2,10 @@
 
 The WinUI catalog is shown to users as **Plugins**. Its current feed URL remains
 `https://typewhisper.github.io/typewhisper-win/plugins-v2.json` so existing Daily builds
-continue to receive updates. The older `plugins.json` URL serves historical clients and
+continue to receive updates. The older `plugins.json` URL serves 1.0 clients and
 must not be overwritten with portable packages.
 There is no community feed or fallback to the legacy catalog in the 1.1 host.
-The WPF host and its legacy plugin release workflow have been removed. Previously published legacy packages and feeds are unchanged.
+Previously published 1.0 plugin packages and the legacy feed remain unchanged for 1.0 users.
 
 ## Plugin-owned builds and tests
 
@@ -182,8 +182,7 @@ package tests run without provider credentials and exercise generic installation
 ## Keep the legacy catalog and packages independent
 
 Current portable providers use `manifest.json` in both source and package output.
-The old WPF targets and duplicate `manifest.portable.json` source files have been
-removed. Previously published legacy manifests and packages remain immutable;
+Previously published legacy manifests and packages remain immutable;
 portable packages, including Deepgram, evolve independently without replacing
 those historical release assets.
 
@@ -191,25 +190,14 @@ Publishing portable plugins requires separate ZIP assets and entries containing 
 URLs, sizes and SHA-256 hashes. Do not replace existing release assets or edit `plugins.json`
 when publishing `plugins-v2.json`. Local development installation is not publication.
 
-## Catalog publication evidence and updates
+## Catalog publication and updates
 
-The catalog published on 23 September 2026 contains 34 Windows x64 plugins: 29 archives in
-[the Windows Daily plugin release](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-winui-20260923)
-plus [xAI / Grok 1.3.2](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugin-xai-1.3.2-20260923),
-and four retained versioned archives. The public feed, every ZIP URL, exact size, SHA-256,
-and package identity were checked. xAI's automated tests passed; live inference was not
-tested because the connected xAI team lacks API credits.
-
-For the maintained Actions workflow, tag/dispatch instructions, validation and recovery,
-see [Plugin releases](PLUGIN-RELEASES.md). File Memory 1.4.0 was subsequently published
-with verified downloads, bringing that catalog snapshot to 35 entries. These counts
-are dated evidence; read the public feed for the current inventory.
+Read the public feed for the current inventory.
 
 Publish through the **Release plugins** workflow described in
 [Plugin releases](PLUGIN-RELEASES.md): one plugin version per run, released under the
-tag `plugin-<ID suffix>-v<version>` as a plain, non-latest GitHub release. The dated
-`plugins-winui-YYYYMMDD` bundles and prereleases above are historical; do not create
-new releases in that shape.
+tag `plugin-<ID suffix>-v<version>` as a plain, non-latest GitHub release. Do not create
+new dated `plugins-winui-YYYYMMDD` bundles or prereleases.
 
 `eng/Build-PortablePluginCatalog.py` remains the staging step underneath that workflow.
 It builds the selected portable project in a clean Windows checkout and stages the ZIP
@@ -229,7 +217,7 @@ Previous release assets and the legacy `plugins.json` stay intact.
 
 The 1.1 feed uses `categories`, an array of capability IDs. For example, Groq declares
 `["transcription", "llm"]`. The staging script normalizes older singular `category`
-metadata into this feed field. The legacy Windows target retains its existing manifest contract.
+metadata into this feed field. Published 1.0 packages retain their existing manifest contract.
 
 ## Live cloud transcription
 
@@ -243,12 +231,8 @@ Live text disabled keeps the existing post-recording request path. Groq remains 
 `SupportsStreaming`: `FinalizeAsync` must await all final segments, and an interrupted stream
 must fail. Older packages without this capability remain on the post-recording path.
 Deepgram uses `language=multi` for Auto in streaming, and the explicit language otherwise.
-Its portable transport is separate from the unchanged legacy Windows transport.
 
 Protocol references: [CloseStream](https://developers.deepgram.com/docs/close-stream),
 [multilingual streaming](https://developers.deepgram.com/docs/language-detection).
 
-The initial portable catalog published NVIDIA/Groq 1.1.1 and Deepgram 1.1.2. All three public
-archives were installed and activated in an isolated profile through the actual portable host.
-Deepgram's release is at https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-streaming-20260908.
-The native Restart now action and live microphone transcription remain manual acceptance checks.
+Validate native restart and live microphone transcription for the selected package versions.

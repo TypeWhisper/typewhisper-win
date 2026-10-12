@@ -23,11 +23,9 @@ dotnet msbuild plugins/TypeWhisper.Plugin.SmallestAi/portable.proj /t:Build /p:C
 dotnet test plugins/TypeWhisper.Plugin.SmallestAi/Tests -c Release
 ```
 
-Package `bin/Release/portable-host/Plugins/com.typewhisper.smallest-ai` as the ZIP root. The plugin uses the framework-independent SDK without WPF; Windows audio playback uses NAudio/WASAPI.
+Package `bin/Release/portable-host/Plugins/com.typewhisper.smallest-ai` as the ZIP root. The plugin uses the framework-independent SDK; Windows audio playback uses NAudio/WASAPI.
 
-58 tests cover transcription and host retry/chunk integration, WebSocket finalization, package lifecycle, voice catalog parsing and persistence, model/voice pairing, language and speed, output-device forwarding, cancellation, invalid audio, and failed catalog refreshes.
-
-Authenticated tests retrieved 483 voices and exercised German synthesis, playback, and stopping. The user confirmed dictation, live transcription, and the in-app Test voice action using Ben from the Lightning Pro German catalog. The development package update preserves the API key and unrelated receipts. In-app acceptance is complete; public package publication is pending.
+Tests cover transcription and host retry/chunk integration, WebSocket finalization, package lifecycle, voice catalog parsing and persistence, model/voice pairing, language and speed, output-device forwarding, cancellation, invalid audio, and failed catalog refreshes.
 
 ## API references
 

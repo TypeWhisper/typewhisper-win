@@ -28,22 +28,21 @@ unconfirmed external action without checking its destination first.
 
 ## Storage warnings
 
-A History or History-audio save failure no longer blocks delivery of successfully
+A History or History-audio save failure does not block delivery of successfully
 processed text. TypeWhisper still attempts the selected paste or workflow action.
 After successful delivery, a dismissible warning appears in the notice card at the overlay position,
 without opening a result window or taking focus from the target application.
 
 If delivery also fails, the result window keeps the text and reports the storage
 warning alongside the reason for manual handling. Turning History off remains a
-normal preference, not a storage error. No additional History write is authorized
-by these changes.
+normal preference, not a storage error. The warning does not trigger an additional
+History write.
 
 ## Reporting unexpected windows
 
 Include the application version, heading and explanatory message, target app,
 whether it happens only after startup, and the automatic-insertion setting.
-Do not include private dictated text or credentials. The first-dictation
-insertion report [#513](https://github.com/TypeWhisper/typewhisper-win/issues/513)
-was traced to Chromium/Electron returning their render host instead of the text
-field on the first accessibility query. Field capture now retries briefly while
-the target stays in front; confirm the fix natively after a fresh start.
+Do not include private dictated text or credentials. Chromium/Electron can return
+their render host instead of a text field on the first accessibility query.
+Field capture retries briefly while the target stays in front; include a
+fresh-start check when reporting insertion problems.

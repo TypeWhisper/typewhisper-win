@@ -1,6 +1,6 @@
 # Speechmatics for the portable host
 
-Independent .NET 10 package `com.typewhisper.speechmatics`, version `1.2.6`, requiring host `1.1.5`. The separate `seofood/speechmatics-portable` branch includes the host logo assets. No other migration branch is required.
+Portable .NET 10 package `com.typewhisper.speechmatics`, version `1.2.6`, requiring host `1.1.5`.
 
 ## Behavior
 
@@ -14,7 +14,7 @@ The shared host Save button persists the API key and edited fields. Keys use the
 
 ## macOS comparison
 
-Compared with `TypeWhisperPluginSDK/Plugins/SpeechmaticsPlugin`: regional processing, Standard/Enhanced selection and custom vocabulary are preserved. Windows uses the host's live-capture session contract and an explicit fallback-language setting; the macOS implementation falls back to batch for automatic language identification. The Windows dictionary budget remains 100 terms / 4,000 characters. macOS sources are not modified.
+Compared with `TypeWhisperPluginSDK/Plugins/SpeechmaticsPlugin`: regional processing, Standard/Enhanced selection and custom vocabulary are preserved. Windows uses the host's live-capture session contract and an explicit fallback-language setting; the macOS implementation falls back to batch for automatic language identification. The Windows dictionary budget remains 100 terms / 4,000 characters.
 
 ## Verification
 
@@ -23,13 +23,11 @@ dotnet test plugins/TypeWhisper.Plugin.Speechmatics/Tests/TypeWhisper.Plugin.Spe
 dotnet msbuild plugins/TypeWhisper.Plugin.Speechmatics/portable.proj '-t:Build;CopyPackage' -p:Configuration=Release -p:PluginDestination=<staging-directory>
 ```
 
-All **67 tests passed**, covering HTTP protocols/errors, cancellation, encrypted-key persistence and failed saves, standalone immutable package lifecycle, regional WebSockets, explicit/fallback languages, vocabulary, fragmented/revised transcripts, punctuation boundaries, binary audio ordering, exact stop sequence counts, completion timeouts and real host accumulation.
+Tests cover HTTP protocols/errors, cancellation, encrypted-key persistence and failed saves, standalone immutable package lifecycle, regional WebSockets, explicit/fallback languages, vocabulary, fragmented/revised transcripts, punctuation boundaries, binary audio ordering, exact stop sequence counts, completion timeouts and real host accumulation.
 
-Authenticated tests on September 19, 2026 passed against Europe: connection validation, Enhanced batch transcription and paced live audio through the actual portable host. Live previews appeared during capture (first preview about 0.7 seconds), and the complete final sentence arrived after stopping without batch fallback. The 1.2.0 immutable ZIP was installed in the development profile with credentials and unrelated package receipts preserved. The development WinUI build and launch succeeded.
+Settings saves avoid capturing the UI synchronization context. Batch language comes from recognized words, with transcript configuration as fallback. Batch assembly respects JSON-v2 punctuation attachment and word delimiters, including contractions and scripts without spaces. Explicit language identifiers are normalized before batch and live requests.
 
-The 1.2.1 review fix prevents settings saves from capturing the UI synchronization context under contention. A regression test reproduces the previous behavior and verifies the correction. Version 1.2.2 reads the effective batch language from recognized words, with nested transcript configuration as a fallback and attaches separate colon, semicolon, closing-bracket and closing-quote fragments. Regression cases cover automatic detection and both provisional/final punctuation. An additional real EU Standard test on 1.2.2 passed with automatic language identification and returned the complete English sentence with `DetectedLanguage=en`; the response confirmed `model=standard`. Version 1.2.3 respects JSON-v2 punctuation attachment directions and the provider word delimiter when assembling batch results; regressions include brackets, contractions and scripts without word spaces. The real EU Standard/automatic-language test passed again on 1.2.3 with the complete transcript and `DetectedLanguage=en`. Version 1.2.4 normalizes explicit language identifiers before batch and live requests; batch and regional-live regressions cover mixed-case input. Installed/UI acceptance remains on 1.2.0.
-
-Native UI verification passed: provider logos, Europe, Enhanced, German, live text enabled and the shared Save button. The installed immutable package also passed paced live transcription through the real host. Screenshots are in `docs/screenshots/speechmatics/`. Marco confirmed successful live microphone transcription in the development app on September 19, 2026, with Europe and German selected. US endpoint access and ARM64 execution are not live-tested. No public package/catalog release has been performed.
+US endpoint access and ARM64 execution need separate live acceptance. Settings screenshots are in [docs/screenshots/speechmatics](../../docs/screenshots/speechmatics/).
 
 References: [regions and authentication](https://docs.speechmatics.com/get-started/authentication), [realtime protocol](https://docs.speechmatics.com/api-ref/realtime-transcription-websocket), [supported languages](https://docs.speechmatics.com/speech-to-text/languages).
 

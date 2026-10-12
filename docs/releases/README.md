@@ -1,28 +1,10 @@
-# Release notes and validation records
+# Release notes
 
-## Current release work
+## Current release-note sources
 
-- [Windows 1.1 readiness](../WINUI-PROGRESS.md)
-- [Daily delivery, profile migration and rollout gates](../DAILY-1.1-CANDIDATE.md)
-- [Daily release-note source](1.1-daily.md)
+- [Windows 1.1 Daily release notes](1.1-daily.md): source used by the candidate workflow.
+- [Windows 1.1 readiness](../WINUI-PROGRESS.md): current release checks.
+- [Daily delivery, profile migration and rollout gates](../DAILY-1.1-CANDIDATE.md): installation and upgrade requirements.
 
-## Dated 1.1 evidence
-
-These documents record particular sessions and builds and are kept in the
-[archive](../archive/README.md). Later code and acceptance may supersede their
-open items. Do not use them as the current release checklist.
-
-| Record | Scope |
-| --- | --- |
-| [September 9 validation](../archive/releases/1.1-validation-2026-09-09.md) | Earlier candidate validation |
-| [Daily validation](../archive/releases/1.1-daily-validation.md) | Packaging, clean x64 VM setup and early 1.1 updates |
-| [September 10 handoff](../archive/releases/1.1-next-session.md) | Historical next-session checklist |
-| [September 10 issue triage](../archive/releases/1.1-open-issues-2026-09-10.md) | Issues evaluated against that checkout |
-| [Plugin audit](../archive/releases/1.1-plugin-audit.md) | Earlier portable migration inventory |
-| [Plugin live fixes](../archive/releases/1.1-plugin-live-fixes.md) | Groq subtitle translation and Deepgram language checks |
-| [OpenAI validation](../archive/releases/1.1-openai-validation.md) | Provider-specific acceptance |
-
-Versioned `v*.md` files are release notes for earlier shipped versions. Their
-features, executable names and installation requirements describe those releases,
-not the current WinUI branch. Public release assets and notes are available in
+Older release notes, including 0.x and 1.0, live on
 [GitHub Releases](https://github.com/TypeWhisper/typewhisper-win/releases).

@@ -7,7 +7,7 @@ Host 1.1.3 adds `ILocalLlmModelManagement`; older hosts reject this package befo
 
 ## Relationship to Gemma 3 (Local)
 
-This plugin started as a copy of `TypeWhisper.Plugin.GemmaLocal` (`com.typewhisper.gemma-local` 1.2.4) and has its own plugin ID, so both can be installed side by side. Models, the model selection and the CPU-thread setting are not migrated from Gemma 3 (Local). Workflows that select Gemma 3 (Local) keep using it until the user picks Local LLM instead.
+Local LLM and Gemma 3 (Local) have distinct plugin IDs and can be installed side by side. Models, the model selection and the CPU-thread setting are not migrated from Gemma 3 (Local). Workflows that select Gemma 3 (Local) keep using it until the user picks Local LLM instead.
 
 ## Models
 
@@ -56,4 +56,4 @@ $env:TYPEWHISPER_LOCAL_LLM_MODELS = "$env:TEMP\tw-localllm-models"
 dotnet test plugins/TypeWhisper.Plugin.LocalLlm/Tests -c Release --filter LiveModelTests
 ```
 
-On Windows x64 with the CPU backend, the live check passed for Gemma 4 E2B, Qwen3.5 2B and LFM2.5 2.6B. Loading took 2 to 6 seconds. Gemma 4 E2B and Qwen3.5 2B answered the correction and the translation in 0.6 to 1.5 seconds. LFM2.5 took 6 to 22 seconds because it reasons first, and its correction was less reliable. The E4B and 26B-A4B models have not been run yet.
+Evaluate correction and translation quality on the selected model. E4B, 26B-A4B and non-Windows native execution need separate acceptance.
