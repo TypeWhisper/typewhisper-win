@@ -409,7 +409,7 @@
     {
       "id": "com.typewhisper.meta",
       "name": "Meta",
-      "version": "1.2.13",
+      "version": "1.2.14",
       "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
       "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark.",
@@ -417,9 +417,9 @@
         "transcription",
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.meta-1.2.13-win-x64.zip",
-      "sha256": "5c319306c7b53fdb4f82ea0b118e5ead75ef21aaee1180b88827c582f6bc7bde",
-      "size": 33473,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-meta-v1.2.14/com.typewhisper.meta-1.2.14-win-x64.zip",
+      "sha256": "6176e0d977fa0a14bb6d396a946c917f890d707d52e98f00e0bb48926707a547",
+      "size": 34334,
       "platforms": [
         "windows"
       ],
