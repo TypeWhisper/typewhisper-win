@@ -70,7 +70,8 @@ internal sealed partial class PremiumView
         manage.Click += (_, _) => ShowDetails(null);
         Grid.SetColumn(manage, 2); accessRow.Children.Add(manage);
         _overview.Children.Add(Card(accessRow));
-        if (!active)
+        // Purchase prompts stay hidden while the organization provides the license, even if activation is pending.
+        if (!active && !WinUILicensing.Managed)
         {
             var hero = new StackPanel { Spacing = 12 };
             hero.Children.Add(IconTile("\uE734", gold));

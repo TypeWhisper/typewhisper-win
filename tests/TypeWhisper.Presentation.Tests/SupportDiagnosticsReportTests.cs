@@ -59,6 +59,22 @@ public sealed class SupportDiagnosticsReportTests
     }
 
     [Fact]
+    public void PolicySectionReportsSensitiveValuesAsSetOnly()
+    {
+        var reading = new ManagedPolicyReading(true, null, ManagedPolicyRawSection.Of(
+            [KeyValuePair.Create("ManagedLicenseKey", ManagedPolicyRawValue.FromText("TW-SECRET-KEY-1234"))]),
+            ManagedPolicyRawSection.Missing);
+
+        var policy = Report.SummarizePolicy(ManagedPolicyValidator.Validate(reading, 1, DateTimeOffset.UtcNow), watching: false);
+
+        var value = Assert.Single(policy.Enforced);
+        Assert.Equal("ManagedLicenseKey", value.Name);
+        Assert.Equal("[set]", value.Value);
+        Assert.Null(value.Items);
+        Assert.DoesNotContain("SECRET", (Empty() with { Policy = policy }).ToJson());
+    }
+
+    [Fact]
     public void WorkflowsKeepTechnicalMetadataWithoutUserContent()
     {
         var workflow = new Workflow
