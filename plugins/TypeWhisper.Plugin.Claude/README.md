@@ -1,6 +1,6 @@
 # Claude for the portable host
 
-Independent .NET 10 implementation of `com.typewhisper.claude`, version `1.1.1`, requiring host `1.1.2` or later. Protocol behavior was compared with the Windows provider at `8631b9a0`, the macOS Claude plugin, and the official Anthropic API documentation on September 15, 2026.
+Portable .NET 10 implementation of `com.typewhisper.claude`, version `1.1.1`, requiring host `1.1.2` or later.
 
 ## Features
 
@@ -14,7 +14,7 @@ Only complete `end_turn` responses are delivered. All text blocks are concatenat
 
 Opening settings and activating the plugin are offline. Refresh stages a catalog until Save settings. Failed refreshes preserve the existing catalog; changed credentials require a new refresh. A refresh finishing after a key change, deactivation or newer action cannot stage obsolete results. Configuration and its encrypted-secret reference commit in one settings write, and failed writes retain the preceding configuration.
 
-This is an API-key provider. Claude Code sign-in is part of the separate Authenticated CLI integration. This package does not advertise transcription, TTS, tools or streaming. It neither imports legacy data nor changes legacy source or catalogs. Compared with macOS, Windows uses explicit refresh instead of automatic background refresh, and does not expose per-request temperature overrides.
+This is an API-key provider. Claude Code sign-in is part of the separate Authenticated CLI integration. This package does not advertise transcription, TTS, tools or streaming. Compared with macOS, Windows uses explicit refresh instead of automatic background refresh, and does not expose per-request temperature overrides.
 
 ## Verification
 
@@ -23,17 +23,13 @@ dotnet test plugins/TypeWhisper.Plugin.Claude/Tests/TypeWhisper.Plugin.Claude.Po
 dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Portable.Tests.csproj -c Release
 ```
 
-All 57 provider/package tests and 259 portable SDK/host tests passed. Tests cover request bodies and headers, Unicode, multi-block text, incomplete output, HTTP failures, cancellation, pagination bounds, stale refreshes, draft settings, persistence failures, default preservation, temperature compatibility and retired model errors.
+Tests cover request bodies and headers, Unicode, multi-block text, incomplete output, HTTP failures, cancellation, pagination bounds, stale refreshes, draft settings, persistence failures, default preservation, temperature compatibility and retired model errors.
 
-The package lifecycle test uses the real immutable store and runtime to exercise ZIP/hash/identity validation, installation, activation, configuration, restart, duplicate-install rejection, uninstall/reinstall and minimum host version. The package contains the provider DLL, dependency manifest and plugin manifest, with no WPF references.
-
-The release package was installed into the existing WinUI development profile through `PortablePluginStore`; all unrelated installation receipts were preserved. Local package and installation evidence are in ignored `artifacts/claude/`.
-
-The prescribed development helper built and launched the WinUI checkout successfully. Existing setup-wizard comparison and license-source generator warnings were reported. Native activation, the Claude navigation logo, English dark-theme settings, the four-model dropdown and conditional temperature field were verified. Selecting Custom activates the unsaved-changes state and Save button; provider-default mode was restored without saving a custom value. See [screenshots and acceptance notes](../../docs/screenshots/claude/README.md).
+The package lifecycle test uses the real immutable store and runtime to exercise ZIP/hash/identity validation, installation, activation, configuration, restart, duplicate-install rejection, uninstall/reinstall and minimum host version. The package contains the provider DLL, dependency manifest and plugin manifest.
 
 Authenticated provider requests and microphone-to-Claude workflow execution are deferred because no Anthropic account is available for acceptance testing. Fake-transport tests do not establish live provider behavior.
 
-Light-theme/German-layout checks, native update acceptance, ARM64 execution and installed legacy/v2 side-by-side acceptance remain pending. Initial desktop capture/input failures were resolved by reopening RDP and activating the settings window. No public package or catalog was published.
+Validate light-theme/German layouts, package updates, ARM64 execution and installed 1.0/1.1 coexistence separately. See the [settings screenshots](../../docs/screenshots/claude/README.md).
 
 ## References
 

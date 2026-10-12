@@ -1,6 +1,6 @@
 # Portable plugin host
 
-This library supports the 1.1 greenfield host. WinUI uses it for installed-package discovery, plugin management, the rebuilt sherpa-onnx engine and CTC vocabulary refinement. Reuse existing provider source; old binary compatibility is not required.
+WinUI uses this library for installed-package discovery, plugin management, the sherpa-onnx engine and CTC vocabulary refinement.
 
 - `PortablePluginPackage` inspects `manifest.json`, checks identity/minimum host version, shares the host SDK assembly and loads dependencies in a collectible context. Only call `LoadAsync` after explicit enablement of a trusted local package. Optional package lifecycle hooks instantiate a verified plugin without activating it. In-process plugins are not sandboxed.
 - `PortablePluginInventory` discovers packages through metadata inspection without activation. `PluginManagementController` provides the actual UI's state and action guards through injected runtime bindings and discovery, with no dependency on WinUI or a desktop session.
@@ -18,8 +18,8 @@ For unusually slow hardware or diagnosis, set `TYPEWHISPER_TRANSCRIPTION_TIMEOUT
 to a positive value up to 86400, or `-1` to disable this deadline. The heartbeat watchdog and
 explicit cancellation remain active.
 
-Run `eng/Test-WinUIHeadless.ps1` for the mandatory SDK, host, presentation and plugin-owned checks. The published sherpa-onnx package also passed a separate real PCM inference/token-timing test using existing local weights. See the [test guide](../../TESTING_GUIDE.md) for test scope and artifacts.
+Run `eng/Test-WinUIHeadless.ps1` for the mandatory SDK, host, presentation and plugin-owned checks. See the [test guide](../../TESTING_GUIDE.md) for test scope and artifacts.
 
-The reference checkout `F:\typewhisper\typewhisper-win` contains the existing text-based `VocabularyBoostingService`; its implementation matched this worktree before the snapshot extraction. Text similarity must not be described as acoustic CTC evidence. The existing Parakeet TDT model alone does not provide the additional CTC model used by the Mac rescorer.
+Text similarity must not be described as acoustic CTC evidence. The existing Parakeet TDT model alone does not provide the additional CTC model used by the Mac rescorer.
 
 Package storage, the portable plugin feed and optional install/uninstall hooks are documented in [the 1.1 package contract](../../docs/PLUGIN-PACKAGES-1.1.md).

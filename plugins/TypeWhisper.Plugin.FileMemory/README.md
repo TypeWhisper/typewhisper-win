@@ -5,7 +5,7 @@ File Memory keeps explicitly saved facts in a local JSON file. Version `1.4.1`, 
 ## Remember and reuse
 
 1. Add a fact in File Memory settings and choose **Save memory**, or select **Remember in File Memory** as a workflow’s **Action Target**. A Dictation Only workflow saves the transcript without LLM processing.
-2. In a text-processing workflow, select **File Memory** under **Memory context**. This is off by default. Up to five matching entries are supplied to that workflow’s selected LLM provider as reference data.
+2. In a text-processing workflow, select **File Memory** under **Memory context**. This is off by default. Up to five matching entries, each limited to 1,600 characters, are supplied to that workflow’s selected LLM provider as reference data.
 3. Run that workflow on related text. For example, store “Project Aurora uses British English”, then ask about Aurora’s language convention.
 
 No automatic fact extraction or global recall occurs. Dictation-only workflows do not read memory context. Storage is local; opted-in text workflows may send matching entries to their selected provider. Lexical retrieval ranks matching words and phrases; it is not semantic embedding search, and paraphrases without shared words may not match. No-match input proceeds unchanged. An unavailable configured memory source fails the workflow for review instead of silently substituting another source.
@@ -24,4 +24,12 @@ dotnet test tests/TypeWhisper.Presentation.Tests -c Release
 dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests -c Release
 ```
 
-Coverage includes CRUD, persistence, corruption protection, cancellation, ranked recall, package lifecycle, workflow action-to-memory retrieval through the real host, stale activation rejection, opt-in/no-op behavior, bounded prompt data and workflow editor round trips. Live UI and model acceptance are recorded separately; automated tests use no credentials.
+Coverage includes CRUD, persistence, corruption protection, cancellation, ranked recall, package lifecycle, workflow action-to-memory retrieval through the real host, stale activation rejection, opt-in/no-op behavior, bounded prompt data and workflow editor round trips. Automated tests use no credentials.
+
+## Manual validation
+
+1. Configure a workflow with **Remember in File Memory** as its action target and save `Project Aurora uses British English.`
+2. Confirm the entry in File Memory settings. Edit it, save, restart and search for `Aurora`.
+3. Configure a text-processing workflow with a working LLM and **File Memory** under **Memory context**.
+4. Ask `Which language convention does Aurora use?` and verify that the answer uses the saved fact.
+5. Turn **Memory context** off and verify that the workflow no longer receives the stored entry.

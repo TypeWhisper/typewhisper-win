@@ -150,8 +150,10 @@ fixtures and their limits.
 | Store | Manual MSIX packaging; separate Store installation/activation acceptance |
 
 Record the exact source/build, environment, scenario, outcome and unresolved
-limits with validation evidence. Historical tests are preserved under
-[docs/archive](docs/archive/README.md) and [docs/releases](docs/releases/README.md).
+limits in the relevant pull request or release record.
+
+Certificate fixtures are restricted to disposable GitHub Actions runners; obtain
+their results from CI.
 
 ## Maintainer's local setup
 

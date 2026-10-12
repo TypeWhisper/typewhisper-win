@@ -1,9 +1,5 @@
 # Windows Premium and cloud compatibility
 
-> Scoped implementation and acceptance record. Observations apply to the stated revisions and environments; see [current capabilities](WINUI-FUNCTIONAL-STATUS.md) and [release readiness](WINUI-PROGRESS.md) for overall status.
-
-Reference: TypeWhisper macOS commit `5f04ae3d1910a252748ba53f26a6e13d5cf18851`.
-
 ## Premium overview
 
 The Windows landing page follows `PremiumSettingsView.swift`, `PremiumFeatureOverview.swift`, and `.github/screenshots/premium*.png`: access summary, locked promotion, three tinted feature cards, and access/settings details opened on demand. Details use the existing Settings page instead of separate macOS windows. Meeting automation remains unavailable. Cloud folder sync is now connected to the Windows profile. License activation and correction learning retain their existing implementations.
@@ -34,8 +30,8 @@ Apple reference: https://support.apple.com/en-us/118443
 
 The Windows Core already implements dictionary/snippet operations, provider detection, conflict handling, and local store adapters. The WinUI Sync & backup view and Premium sync card now share controls for folder selection, enabling/pausing sync, and manual sync. Automatic sync checks every 15 seconds, including remote-only changes. A commercial license enables folder sync without requiring Apple account sign-in. The app persists per-folder progress, serializes runs, rechecks entitlement before publication, and cancels/drains on shutdown or profile restore. Local catalogs are captured before cloud I/O and compared again before commit; concurrent changes abort publication and retry on the next tick. No profile lock is held during cloud I/O.
 
-## Compatibility validation started
+## Compatibility validation
 
-Three unchanged Mac fixtures are checked into `tests/TypeWhisper.Core.Tests/Fixtures/PremiumSync`. Integration tests feed them through the actual Windows folder-sync engine in temporary directories. They cover correction import, term import, repeated-import idempotence, and legacy snippets without tags. The legacy fixture exposed a null tags collection; Windows now normalizes missing tags to an empty list, matching the Mac.
+Mac fixtures are checked into `tests/TypeWhisper.Core.Tests/Fixtures/PremiumSync`. Integration tests feed them through the Windows folder-sync engine in temporary directories. They cover correction import, term import, repeated-import idempotence, and legacy snippets without tags. Windows normalizes missing tags to an empty list, matching the Mac.
 
-Additional tests now cover two persisted profiles, edits, deletions, restart/idempotence, concurrent local edits, cancellation, entitlement loss, malformed/missing catalogs, legacy identifiers, and acoustic `ctcMinSimilarity` preservation. Tombstones are retained to prevent a fresh device from resurrecting older upserts; distributed compaction is not implemented. This does not establish history synchronization, cloud placeholder hydration, or a live Apple-server Mac-to-Windows round trip. No user cloud folder or account was modified by these tests.
+Additional tests cover two persisted profiles, edits, deletions, restart/idempotence, concurrent local edits, cancellation, entitlement loss, malformed/missing catalogs, legacy identifiers, and acoustic `ctcMinSimilarity` preservation. Tombstones are retained to prevent a fresh device from resurrecting older upserts; distributed compaction is not implemented. These fixtures do not establish history synchronization, cloud placeholder hydration, or a live Apple-server Mac-to-Windows round trip.

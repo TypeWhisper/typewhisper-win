@@ -19,9 +19,7 @@ Personal API keys use the raw Authorization header. Keys remain in the encrypted
 
 `dotnet test plugins/TypeWhisper.Plugin.Linear/Tests/TypeWhisper.Plugin.Linear.Portable.Tests.csproj -c Release`
 
-24 tests cover package lifecycle, key persistence, failed saves, settings, issue requests, response validation, pagination, cached choices, account changes, and canceled/failed refreshes. A read-only live check with the existing development-profile key succeeded and loaded two teams and one project. No live issue was created during automated verification; the complete workflow remains a manual acceptance step.
-
-The macOS Linear plugin was compared for action behavior and team selection. The Windows implementation adds an optional project selector and uses the shared WinUI settings host.
+Tests cover package lifecycle, key persistence, failed saves, settings, issue requests, response validation, pagination, cached choices, account changes and canceled/failed refreshes. Validate complete workflow delivery separately; the connection test never creates an issue.
 
 References: [Linear GraphQL](https://linear.app/developers/graphql), [pagination](https://linear.app/developers/pagination).
 

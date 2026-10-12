@@ -3,23 +3,18 @@
 Authenticated CLI providers with process isolation, discovery, status refresh and portable provider/path settings.
 
 Version `1.3.5`; plugin ID `com.typewhisper.authenticated-cli`; minimum host `1.1.2`.
-Independent branch: `seofood/authenticatedcli-portable`, based on `4db8f6ac`.
 
 ## Setup
 
 Install and sign in to a supported CLI separately, refresh its status in plugin settings, then select it in an LLM workflow.
 
-This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
+## Platform scope
 
-## Source and platform scope
-
-Protocol/runtime sources and applicable fixtures were snapshotted from `plugins/TypeWhisper.Plugin.AuthenticatedCli` at `4db8f6ac`, then adapted under `plugins`. The package does not reference the legacy provider DLL or compile WPF settings views. Legacy sources, catalogs and published packages remain unchanged.
-
-The macOS repository was compared during migration; it was not modified. The Windows provider discovers Codex models through the installed CLI app-server model/list protocol, offers documented Claude model aliases, and retains the verified free OpenCode Zen model list. Per-provider model settings are passed explicitly to the CLI, with workflow model overrides taking precedence. Antigravity is unavailable without a supported structured-output contract.
+The Windows provider discovers Codex models through the installed CLI app-server model/list protocol, offers documented Claude model aliases, and retains the verified free OpenCode Zen model list. Per-provider model settings are passed explicitly to the CLI, with workflow model overrides taking precedence. Antigravity is unavailable without a supported structured-output contract.
 
 ## Build and verification
 
-From this branch's repository root:
+From the repository root:
 
 ```powershell
 dotnet msbuild plugins/TypeWhisper.Plugin.AuthenticatedCli/portable.proj /t:Build /p:Configuration=Release
@@ -49,19 +44,7 @@ try {
 }
 ```
 
-Live verification on Windows 11 build 26300 with Claude Code 2.1.293 and the
-`opus` alias reproduced the `StructuredOutput` denial with the blanket `"*"`.
-Removing it returned `Das ist ein Test, ob es funktioniert.` with exit code 0
-and no permission denials. The staged 1.3.4 package returned the same result
-through the portable loader and native process runner. The native WinUI
-development host's **Test workflow** dialog also completed the saved Claude/Opus
-workflow with that corrected result in an isolated test profile.
-
-Plugin regression tests cover installer junctions, npm native binary discovery, model pagination and explicit model arguments. Fake CLI protocol, executable discovery, process cancellation and package lifecycle. Native process/job-object and directory-junction fixtures run on Windows; platform-independent profile, catalog and package tests also run on Linux. One real OpenCode test is intentionally opt-in via TYPEWHISPER_LIVE_OPENCODE_TEST=1. Activation can inspect installed CLI availability/authentication status; it does not submit inference requests. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
-
-The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
-
-The shared portable SDK/host suite passed 259 tests on the Live Transcript host branch. Automated fixture tests do not replace authenticated provider, native model/device, microphone or visual UI acceptance. Public catalog publication and production-profile migration are pending.
+Plugin regression tests cover installer junctions, npm native binary discovery, model pagination and explicit model arguments. They also cover fake CLI protocols, executable discovery, process cancellation and package lifecycle. Native process/job-object and directory-junction fixtures run on Windows; platform-independent profile, catalog and package tests also run on Linux. One real OpenCode test is intentionally opt-in via TYPEWHISPER_LIVE_OPENCODE_TEST=1. Activation can inspect installed CLI availability/authentication status; it does not submit inference requests. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
 
 ## Automatic discovery and model selection
 
@@ -69,9 +52,7 @@ Automatic detection resolves local installer junctions to their native executabl
 
 Refresh CLIs and models queries availability and the current Codex catalog without starting an inference session. Codex model discovery uses the documented [app-server model/list API](https://developers.openai.com/codex/app-server#list-models-modellist). Claude's named choices are [CLI aliases](https://code.claude.com/docs/en/model-config#model-aliases), not a fetched account catalog. OpenCode continues to expose only verified free Zen models.
 
-Live development verification found Codex and npm OpenCode automatically. Model discovery returned six Codex entries and seven free Zen entries. Claude and Antigravity were not installed in the test environment. Existing user credentials are consumed by their respective CLIs; the plugin does not copy them.
-
-A real synthetic text-processing request through the saved Codex model choice (`gpt-5.6-luna`) completed successfully with the expected German correction. Current Codex tool-disable configuration uses `features.view_image`; the obsolete `tools.view_image` override was removed.
+Codex tool-disable configuration uses `features.view_image`. Existing user credentials are consumed by their respective CLIs; the plugin does not copy them.
 
 ## CLI profiles
 

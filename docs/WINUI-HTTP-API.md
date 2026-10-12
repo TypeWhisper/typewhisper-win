@@ -132,7 +132,7 @@ Headless host and parser tests run in the existing Presentation suite:
 
 They exercise real loopback HTTP, authentication-before-body, body limits, multipart, UTF-8, duplicate/unknown options, port conflicts, concurrent admission, request timeout and cancellation/drain. No cloud credentials or microphone are required.
 
-For native acceptance, prepare http-api-20260908 as an isolated Debug profile with a ready local model and synthetic speech at artifacts/ui-fixtures/file-speech-en.wav. The 2026-09-08 run reused the Canary-only packages/model assets from the isolated watched-folder fixture without personal data or cloud keys:
+For native acceptance, prepare `http-api-20260908` as an isolated Debug profile with a ready local model and synthetic speech at `artifacts/ui-fixtures/file-speech-en.wav`. These fixture names are used by the native scripts. Use only test data and local model assets:
 
     ./tests/native/test-winui-http-api-lifecycle.ps1 -SourcePath (Get-Location).Path
 
@@ -146,6 +146,6 @@ The script refuses an active cloud model and checks successful text, segment sha
 
 ## Raycast and Mac-route acceptance
 
-`tests/native/test_winui_http_api_parity.py` prepares and exercises the isolated `http-api-parity-20260908` profile. It checks all 31 method/path pairs, incorrect methods, legacy token-free calls, History paging/deletion, Dictionary CRUD, profile toggles, local model unload/load, real recorder capture/save and dictation session polling. Model removal uses a missing model; installed model assets are not deleted.
+`tests/native/test_winui_http_api_parity.py` prepares and exercises the isolated `http-api-parity-20260908` profile. It checks supported method/path pairs, incorrect methods, legacy token-free calls, History paging/deletion, Dictionary CRUD, profile toggles, local model unload/load, real recorder capture/save and dictation session polling. Model removal uses a missing model; installed model assets are not deleted.
 
-The 2026-09-08 native run passed. A separate changed-backup round trip returned 202, rejected a concurrent import with 409, restarted the app, and restored the fixture term. File-transcription and authenticated lifecycle acceptance remain covered by `test-winui-http-api-lifecycle.ps1`, with RequireAuthentication explicitly enabled in that fixture. Full spoken dictation accuracy and cloud-provider inference are not asserted by the parity script.
+File-transcription and authenticated lifecycle acceptance are covered by `test-winui-http-api-lifecycle.ps1`, with RequireAuthentication explicitly enabled in that fixture. Full spoken dictation accuracy and cloud-provider inference are not asserted by the parity script.

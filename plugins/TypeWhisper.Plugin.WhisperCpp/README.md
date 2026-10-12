@@ -3,29 +3,24 @@
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
 Version `1.2.24`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.6`.
-Independent branch: `seofood/whispercpp-portable`, based on `4db8f6ac`.
 
 ## Setup
 
 Download a model explicitly, select the processing device and save the settings, then load the model. The shared Save button persists the processing-device choice. Model download, use and removal remain explicit actions. GPU capability and driver requirements must be checked on the target machine.
 
-This package uses host-rendered portable settings and an independent WinUI data directory. Legacy settings, credentials and model files are not imported automatically.
+Native translation outputs English. The provider rejects translation with English-only or Large V3 Turbo weights, including quantized Turbo, before loading the model. Use a multilingual non-Turbo model such as Small or Medium for translation.
 
-Native translation outputs English. Version 1.2.21 rejects translation with English-only or Large V3 Turbo weights, including quantized Turbo, before loading the model. Use a multilingual non-Turbo model such as Small or Medium for translation.
+The provider passes active dictionary terms to Whisper as its initial prompt, for microphone dictation and file transcription. Terms arrive with exact boundaries and stay whole and in dictionary order: the prompt is limited to 224 UTF-8 bytes. Whisper reads at most 224 prompt tokens and each token covers at least one byte, so even identifiers or non-Latin terms never push the first terms out of the window. Without speech, Whisper tends to repeat its prompt; when every word of a transcript resembles a dictionary term, the plugin decodes the audio once more without the prompt and keeps the prompted text only if that pass still finds words. Hosts older than this change still send no terms to local PCM engines; transcription is then unchanged.
 
-Version 1.2.24 passes active dictionary terms to Whisper as its initial prompt, for microphone dictation and file transcription. Terms arrive with exact boundaries and stay whole and in dictionary order: the prompt is limited to 224 UTF-8 bytes. Whisper reads at most 224 prompt tokens and each token covers at least one byte, so even identifiers or non-Latin terms never push the first terms out of the window. Without speech, Whisper tends to repeat its prompt; when every word of a transcript resembles a dictionary term, the plugin decodes the audio once more without the prompt and keeps the prompted text only if that pass still finds words. Hosts older than this change still send no terms to local PCM engines; transcription is then unchanged.
+Before a model download starts, the plugin removes abandoned partial files of the same model and checks that its drive has room for the model plus a 256 MB reserve. If it does not, the download stops immediately and names the required and available space.
 
-Before a model download starts, version 1.2.22 removes abandoned partial files of the same model and checks that its drive has room for the model plus a 256 MB reserve. If it does not, the download stops immediately and names the required and available space.
+## Platform scope
 
-## Source and platform scope
-
-Protocol/runtime sources and applicable fixtures were snapshotted from `plugins/TypeWhisper.Plugin.WhisperCpp` at `4db8f6ac`, then adapted under `plugins`. The package does not reference the legacy provider DLL or compile WPF settings views. Legacy sources, catalogs and published packages remain unchanged.
-
-The macOS repository was compared at `ac00e39ea63e4789de8427d034d2085b3d898159`; it was not modified. The macOS counterpart uses WhisperKit/Apple runtime integrations. This package retains whisper.cpp for Windows. The tested package targets Windows x64; ARM64 redistribution is not validated and requires ARM64 VC runtime assets on the build machine.
+The macOS counterpart uses WhisperKit/Apple runtime integrations. This package retains whisper.cpp for Windows. The tested package targets Windows x64; ARM64 redistribution is not validated and requires ARM64 VC runtime assets on the build machine.
 
 ## Build and verification
 
-From this branch's repository root:
+From the repository root:
 
 ```powershell
 dotnet msbuild plugins/TypeWhisper.Plugin.WhisperCpp/portable.proj /t:Build /p:Configuration=Release
@@ -36,19 +31,17 @@ The complete package is staged under `bin/Release/portable-host/Plugins/com.type
 
 Create distributable packages on Windows, where the required Visual C++ runtime DLLs are staged. Non-Windows builds skip that Windows-only step for headless tests; their staging directories are not complete distribution packages, and `CopyPackage` rejects non-Windows hosts.
 
-95 plugin tests pass, covering model/runtime contracts, download integrity, native package contents, package lifecycle, processing-device persistence, language choices and PCM validation. Large V3 Turbo was downloaded and verified on an NVIDIA RTX 4060 Ti using CUDA. A synthetic English WAV and both partial and complete PCM buffers transcribed successfully. The saved model is loaded on the first WAV or PCM decode after activation, including after an app restart. Cold-start inference was verified without calling LoadModelAsync first. Local live preview uses repeated decoding of recording buffers; this is not a native streaming model. All packages have isolated install, enable, restart, disable, uninstall and reinstall coverage through the real portable package loader and host services.
+Tests cover model/runtime contracts, download integrity, native package contents, package lifecycle, processing-device persistence, language choices and PCM validation. The saved model loads on the first WAV or PCM decode after activation, including after restart. Local live preview repeatedly decodes recording buffers; this is not a native streaming model.
 
-CUDA downloads are stored in the persistent plugin asset directory. A version-specific native runtime cache combines those downloads with packaged Whisper libraries, keeping installed packages immutable and reusing cuBLAS across upgrades. Source 1.2.6 passed cold PCM-first and WAV CUDA inference from this cache, with loaded module paths verified.
+CUDA downloads are stored in the persistent plugin asset directory. A version-specific native runtime cache combines those downloads with packaged Whisper libraries, keeping installed packages immutable and reusing cuBLAS across upgrades.
 
 Review regressions also cover readiness with missing model files, English-only decoder language, cancelled model loads, multilingual segment spacing, timestamp export and no-speech aggregation. CUDA installer tests verify Windows behavior and reject unsupported hosts without attempting downloads.
 
-The ZIP was installed and loaded in the WinUI development profile, preserving existing installation receipts. No credentials were copied from the legacy profile.
+CPU, custom ROCm and ARM64 inference need separate native acceptance.
 
-Marco confirmed German microphone dictation and local live preview on Large V3 Turbo after the restart-loading fix. The installed package and UI screenshots are version 1.2.4, with the Whisper (Local) name and chip icon. CPU, custom ROCm and ARM64 inference remain unverified. Public catalog publication and production-profile migration are pending.
+Vulkan selects the first dedicated GPU rather than assuming device 0 is dedicated. The plugin reads the GPU list before model loading. Processing device reports the active GPU or why it fell back to CPU; the load log records the GPU name.
 
-Source 1.2.20 places Vulkan models on the first dedicated GPU instead of whisper.cpp's default device 0, which can be integrated graphics. It reads the GPU list from the loaded ggml runtime before the model loads. Processing device shows what the loaded model runs on, for example `Vulkan · NVIDIA GeForce RTX 4060 Ti`, or why a GPU choice fell back to CPU. The load log records the GPU name. Large V3 Turbo ran through the Vulkan runtime on both an NVIDIA RTX 4060 Ti and the integrated AMD Radeon graphics of a Ryzen 7 7800X3D. The ggml device list reported the Radeon as integrated.
-
-Source 1.2.19 verifies the persisted CUDA package identity and freshly computed DLL hashes on every check, stages complete files before atomic replacement and publishes its installation receipt last. Regression tests cover corruption, interrupted installation and package changes.
+The CUDA installer verifies the persisted CUDA package identity and freshly computed DLL hashes on every check, stages complete files before atomic replacement and publishes its installation receipt last. Regression tests cover corruption, interrupted installation and package changes.
 
 Model removal persists deselection before deleting weights. Download progress uses the known model size when the response stream cannot seek; abandoned GUID temporary files are cleaned without touching active or unrelated downloads. Staged native-cache DLLs are compared with their sources and repaired when damaged.
 

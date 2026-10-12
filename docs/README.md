@@ -30,7 +30,7 @@ Use the release notes for the package you installed when they differ from this b
 - [Daily release-note source](releases/1.1-daily.md): copy for the current candidate workflow.
 - [Store submission](STORE_SUBMISSION.md): separate MSIX packaging and acceptance.
 - [Polar API maintenance](POLAR-API-VERSION-MAINTENANCE.md): license compatibility and follow-up.
-- [Release records](releases/README.md): dated validation and previous release notes.
+- [Release notes](releases/README.md): current sources and published versions.
 
 ## Research and evidence
 
@@ -39,16 +39,14 @@ on one provider, machine or commit does not establish general release readiness.
 
 | Topic | Evidence or investigation |
 | --- | --- |
-| Plugin acceptance | [File Memory](FILE-MEMORY-ACCEPTANCE.md), [Copilot](copilot-live-acceptance.md), [screenshots](screenshots/README.md) |
+| Plugin validation | [File Memory](../plugins/TypeWhisper.Plugin.FileMemory/README.md#manual-validation), [Copilot](../plugins/TypeWhisper.Plugin.GitHubCopilot/README.md), [screenshots](screenshots/README.md) |
 | Dictation | [Standby recovery](HOTKEY-RESUME-VALIDATION.md), [immediate capture](testing/immediate-capture.md), [dictionary boundaries](testing/dictionary-term-boundaries.md) |
 | Windows integration | [Calendar and meeting automation](windows-meeting-automation.md), [Premium and cloud compatibility](windows-premium-cloud-parity.md) |
 | Research | [Browser microphone integration](BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md), [Parakeet Realtime EOU evaluation](PARAKEET_REALTIME_EOU_WINDOWS.md), [acceleration investigation](AMD_ACCELERATION.md) |
-| Historical evidence | [Archived WinUI journals and dated 1.1 session records](archive/README.md) |
 
 ## Keep these guides current
 
 Update the owning guide when behavior changes. Record validation with its date,
-source revision or change, environment and limitations; do not turn old test counts
-into a current quality claim. Keep implementation journals in the archive and
-research explicitly marked as research. Link to a single contract instead of
-copying command lists or release gates into multiple files.
+source revision or change, environment and limitations in the relevant pull request
+or release record. Keep research explicitly marked as research. Link to a single
+contract instead of copying command lists or release gates into multiple files.

@@ -80,12 +80,11 @@ Python/JavaScript suites, native validation and evidence requirements.
 | `src/TypeWhisper.Cli` | Local API command-line client |
 | `plugins` | Provider implementations, manifests, package builds and tests |
 | `tests`, `eng` | Regression suites, native probes and build/release tooling |
-| `docs` | User guides, contracts, release guidance and historical evidence |
+| `docs` | User guides, contracts and release guidance |
 | `experiments` | Isolated research; not part of application releases |
 
 Start with [architecture](docs/WINUI-MIGRATION.md), [plugin development](docs/PLUGIN-MIGRATION-1.1.md)
-or [release readiness](docs/WINUI-PROGRESS.md). Historical WinUI implementation
-journals are kept in the [archive](docs/archive/README.md).
+or [release readiness](docs/WINUI-PROGRESS.md).
 
 ## License
 

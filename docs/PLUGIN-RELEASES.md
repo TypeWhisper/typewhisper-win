@@ -1,7 +1,7 @@
 # Plugin releases
 
 The **Release plugins** workflow publishes the portable Windows x64 packages used by
-the current application. It replaces the old WPF release workflow removed in #497.
+the current application.
 It discovers IDs from committed manifests rather than maintaining a project-name map.
 It never patches a version during the build: bump the manifest, implementation and
 project version together, test them, and merge first.
@@ -13,7 +13,7 @@ for `com.typewhisper.file-memory` 1.4.0. The release is titled after the plugin
 rather than a prerelease, and never becomes the repository's latest release. The
 generated notes contain only the source commit line; write the change description
 into the release afterwards and keep that line so publication reruns can verify
-provenance. There is no run-numbered "TypeWhisper Plugins" release any more.
+provenance. Do not create run-numbered plugin releases.
 
 ## Run from Actions
 
@@ -94,23 +94,9 @@ The Python scripts use the authenticated `gh` CLI for GitHub access and anonymou
 HTTPS for public-download checks. Preparation and default publication validation
 do not mutate GitHub. Model downloads and provider credentials are not required.
 
-## First real release: File Memory 1.4.0
+## Release tooling checks
 
-- Source: `44487251c6dc8209b5aa687f0581e78d58389032` (merged #517).
-- [Release](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugin-file-memory-v1.4.0).
-- All 30 package tests passed in Release configuration before packaging.
-- ZIP: 19,080 bytes; SHA-256
-  `d4d19dfe1134ac82ab96705882b252f1fd716ae1df289f9abf92ca8aad2aaa25`.
-- Public archive, GitHub Pages build and exact public catalog entry verified.
-- Catalog grew from 34 to 35 entries. The legacy catalog blob remained
-  `b58a54d3f32d40792be3ff7bf4b7514acf376856`.
-- A second preparation/publication attempt correctly made no remote changes.
-- The scripts were exercised locally with `gh`; the hosted Actions path still needs
-  its first dispatch after this workflow is merged.
-
-34 release tests cover selection, version conflicts, concurrent catalog updates,
+Release tests cover selection, version conflicts, concurrent catalog updates,
 archive corruption, unsafe paths, failed downloads, draft recovery and Pages retry.
 Catalog metadata is validated through the actual .NET host client before staging and
 before publication; the publishing runner therefore also installs .NET 10.
-`actionlint` 1.7.12 accepts the workflows with only its outdated `queue` syntax warning
-suppressed; the property was separately checked against the current GitHub documentation.

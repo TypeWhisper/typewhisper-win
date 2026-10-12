@@ -1,6 +1,6 @@
 # Local Parakeet timing probe
 
-Run the already-started legacy API without activating a model or downloading assets:
+Probe the already-running local API without activating a model or downloading assets:
 
 ```powershell
 dotnet run --project tools/TypeWhisper.Benchmarks -- api http://127.0.0.1:8978
@@ -32,7 +32,7 @@ dotnet run -c Release --project tools/TypeWhisper.Benchmarks -- files C:\path\to
 
 A UTF-8 `name.txt` next to `name.wav` holds what was said (verbatim). Such clips get word and character edits after the same normalization as `wer`. An optional `name.formatted.txt` holds the intended final text, for example digits and code identifiers; the `exact` flag compares the transcript with it, or with `name.txt` when it is missing, including punctuation and casing. The summary adds micro WER/CER and the number of exact matches. Clips without a `.txt` are only transcribed and timed. Like the app's recorder, `files` raises each clip to a 0.707 peak unless its peak is below 0.01 (near-silence stays unscaled); `--raw` decodes the files at their original level instead. Keep personal recordings outside the repository.
 
-The `api` and `decoder` modes use only synthetic English Windows speech. No microphone, clipboard, dictation-control endpoints or history endpoints are accessed. The inspected legacy local-file transcription handler does not add history entries. Tokens, if required, come from `TYPEWHISPER_BENCHMARK_TOKEN` and are never logged. Requests and authentication are restricted to loopback without redirects.
+The `api` and `decoder` modes use only synthetic English Windows speech. No microphone, clipboard, dictation-control endpoints or history endpoints are accessed. The [local-file API](../../docs/WINUI-HTTP-API.md) does not add History entries. Tokens, if required, come from `TYPEWHISPER_BENCHMARK_TOKEN` and are never logged. Requests and authentication are restricted to loopback without redirects.
 
 Each clip has one unmeasured warm-up and three measured runs; JSON lines include PCM hashes, transcripts, wall time, API-reported processing time, median and range. Verify hashes before comparing separate invocations. Three runs provide a preliminary baseline, not a reliable tail-latency estimate.
 
