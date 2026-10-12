@@ -109,12 +109,16 @@ for (const [event, ref, policy, expected] of [
   ['pull_request', 'refs/pull/1/merge', 'test-signing', /never pull requests/],
   ['workflow_dispatch', 'refs/heads/feature', 'release-signing', /restricted to main/],
   ['workflow_dispatch', 'refs/heads/feature', 'test-signing', /restricted to main/],
+  ['workflow_dispatch', 'refs/heads/release/1.1/hotfix', 'release-signing', /restricted to main/],
+  ['workflow_dispatch', 'refs/heads/release/foo', 'release-signing', /restricted to main/],
+  // A release branch passes the branch check and then needs the environment's credentials.
+  ['workflow_dispatch', 'refs/heads/release/1.1', 'release-signing', /Missing ACTIONS_RUNTIME_TOKEN/],
   ['schedule', 'refs/heads/main', 'unknown', /Invalid signing policy/],
 ]) {
   test(`reject ${policy} from ${event} on ${ref}`, () => {
     const result = childProcess.spawnSync(process.execPath, [path.join(__dirname, 'run.cjs')], {
       encoding: 'utf8', env: { ...process.env, INPUT_SCRIPT: 'throw "must not execute"',
-        INPUT_POLICY: policy, GITHUB_EVENT_NAME: event, GITHUB_REF: ref },
+        INPUT_POLICY: policy, GITHUB_EVENT_NAME: event, GITHUB_REF: ref, ACTIONS_RUNTIME_TOKEN: '' },
     });
     assert.equal(result.status, 1);
     assert.match(result.stderr, expected);

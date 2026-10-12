@@ -90,6 +90,11 @@ jobs:
               version="$REQUESTED_VERSION" ;;
             *) echo 'Unknown channel.'; exit 1 ;;
           esac
+          # Publishing needs main or a release/X.Y branch; the release job only checks the prefix.
+          if { [ "$PUBLISH" = true ] || [ "$PUBLISH_LEGACY_DAILY" = true ]; } && [ "$GITHUB_REF" != refs/heads/main ] &&
+            ! [[ "$GITHUB_REF" =~ ^refs/heads/release/[0-9]+\.[0-9]+$ ]]; then
+            echo 'Releases are published from main or a release/X.Y branch.'; exit 1
+          fi
           # Dailies come from main only. A release/X.Y branch publishes RC and Stable versions of its own X.Y line.
           if [ "$CHANNEL" = daily ] && [ "$GITHUB_REF" != refs/heads/main ] && { [ "$PUBLISH" = true ] || [ "$PUBLISH_LEGACY_DAILY" = true ]; }; then
             echo 'Dailies are published from main only.'; exit 1
@@ -125,8 +130,8 @@ jobs:
           if [ "$policy" = test-signing ] && { [ "$EVENT_NAME" != workflow_dispatch ] || [ "$PUBLISH_REQUESTED" = true ]; }; then
             echo 'Test-signed artifacts must not be published.'; exit 1
           fi
-          if [ "$policy" != none ] && [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo 'Signing is restricted to main through the signpath environment.'; exit 1
+          if [ "$policy" != none ] && [ "$GITHUB_REF" != refs/heads/main ] && ! [[ "$GITHUB_REF" =~ ^refs/heads/release/[0-9]+\.[0-9]+$ ]]; then
+            echo 'Signing is restricted to main and release/X.Y through the signpath environment.'; exit 1
           fi
           if [ "$RELEASE_POLICY" = release-signing ] && [ "$PUBLISH_REQUESTED" = true ] && [ "$policy" != release-signing ]; then
             echo 'Public releases require production signing once enabled.'; exit 1
@@ -134,7 +139,7 @@ jobs:
           echo "policy=$policy" >> "$GITHUB_OUTPUT"
   candidate:
     needs: version
-    # The signpath environment holds the only token copy and permits only main.
+    # The signpath environment holds the only token copy and permits only the branches in its deployment rules.
     # GitHub enforces that branch rule even if a PR changes this workflow.
     environment: ${{ needs.version.outputs.signing_policy == 'none' && 'unsigned-candidate' || 'signpath' }}
     env:

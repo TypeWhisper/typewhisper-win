@@ -33,8 +33,10 @@ untrusted-root status. Test-signed packages cannot enter the release job.
 ## Protect the signing credential
 
 Create the repository environment `signpath`. Under **Deployment branches and
-tags**, choose **Selected branches and tags** and add exactly one **Branch** rule:
-`main`. Do not add tags, feature branches or `refs/pull/*/merge` patterns.
+tags**, choose **Selected branches and tags** and add a **Branch** rule for
+`main`, plus one for each release branch that publishes signed builds, such as
+`release/1.1`. Do not add tags, feature branches, wildcards or `refs/pull/*/merge`
+patterns.
 GitHub enforces this restriction before starting a job or releasing its secrets,
 even when a pull request modifies the workflow or its tests.
 
@@ -46,7 +48,9 @@ GitHub cannot return an existing secret's value; use the original token or rotat
 it in SignPath if it is no longer available.
 
 Unsigned jobs use the separate `unsigned-candidate` environment, which must
-contain no signing credentials. Both test and production signing require `main`.
+contain no signing credentials. Both test and production signing require `main`
+or a `release/X.Y` branch, and the environment rule above decides which of them
+may sign.
 The environment restriction adds no manual approval step; SignPath's own release
 approval policy still applies.
 
@@ -75,7 +79,7 @@ After SignPath has activated `release-signing`:
 During onboarding the variable is unset and existing scheduled releases remain
 unsigned. A signing failure never falls back to unsigned output. Production
 signatures must be trusted, match the configured certificate and have a timestamp.
-Signing is limited to `main`; signing is never performed for PR runs. The workflow
+Signing is limited to `main` and `release/X.Y`; signing is never performed for PR runs. The workflow
 also omits the token input on PR and unsigned runs, as a secondary safeguard.
 The protected environment and secret scope provide the trust boundary.
 
