@@ -349,16 +349,16 @@
     {
       "id": "com.typewhisper.granite-speech",
       "name": "IBM Granite Speech (Local)",
-      "version": "1.2.6",
+      "version": "1.2.7",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Local IBM Granite 4.0 1B Speech transcription and live preview with managed PyTorch runtime",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.granite-speech-1.2.6-win-x64.zip",
-      "sha256": "e8090f71f9e7237abed533ed2c89e2c8236c3453760208947bad5c502d311bb6",
-      "size": 28695,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-granite-speech-v1.2.7/com.typewhisper.granite-speech-1.2.7-win-x64.zip",
+      "sha256": "9436b1b4a92533aa937d26e60eae0081077a2b882535c33d52b2d2daf368d10d",
+      "size": 29813,
       "platforms": [
         "windows"
       ],
