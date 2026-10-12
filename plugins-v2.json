@@ -616,16 +616,16 @@
     {
       "id": "com.typewhisper.soniox",
       "name": "Soniox",
-      "version": "1.3.2",
+      "version": "1.3.3",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Soniox speech-to-text transcription engine",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.soniox-1.3.2-win-x64.zip",
-      "sha256": "86a057d317c1c1928ec7d13893137069a43796921138d22931a403aa1df48526",
-      "size": 255822,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-soniox-v1.3.3/com.typewhisper.soniox-1.3.3-win-x64.zip",
+      "sha256": "e85418e604c9354052bd0b86bb9bada860c3bde8eb4d656f1cbcb1f2fb663660",
+      "size": 446343,
       "platforms": [
         "windows"
       ],
