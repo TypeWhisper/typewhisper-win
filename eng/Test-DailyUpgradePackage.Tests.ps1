@@ -45,7 +45,7 @@ function Expect-Rejection([string]$Message = '') {
 try {
     $checks = 0
     foreach ($fixtureChannel in @('daily', 'rc', 'stable')) {
-        foreach ($fixtureRid in @('win-x64', 'win-arm64')) {
+        foreach ($fixtureRid in @('win-x64')) {
             $version = $versions[$fixtureChannel]
             $fixtureFeed = switch ($fixtureChannel) { 'daily' { "$fixtureRid-daily" } 'rc' { "$fixtureRid-rc" } 'stable' { $fixtureRid } }
             Get-ChildItem -LiteralPath $fixture -Filter 'releases.*.json' | Remove-Item

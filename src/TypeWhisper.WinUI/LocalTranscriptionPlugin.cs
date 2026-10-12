@@ -61,7 +61,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal bool CanRemoveModel(string modelId) => Enabled && SupportsModelRemoval &&
         ActiveModelId != modelId && _lease?.Engine.SelectedModelId != modelId;
     // A choice the plugin no longer offers reads as Automatic: NVIDIA CUDA after the switch to Vulkan, which would
-    // otherwise download the graphics card files unasked at startup, or any graphics card in an ARM64 build.
+    // otherwise download the graphics card files unasked at startup.
     internal TranscriptionAccelerationPreference Acceleration =>
         Enum.TryParse<TranscriptionAccelerationPreference>(_host.GetSetting<string>(AccelerationSetting), out var saved)
             && AccelerationChoices.Contains(saved)

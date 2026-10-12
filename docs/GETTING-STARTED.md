@@ -9,8 +9,9 @@ repository, so select an application installer rather than a plugin ZIP.
 
 Setup installs .NET 10 Runtime when needed. The portable ZIP requires that runtime
 separately. The current source configures Windows build 19041 as its minimum;
-native acceptance on older Windows and ARM64 is still pending. Store packages
-have their own minimum. Check the notes accompanying your actual package.
+native acceptance on older Windows is still pending. Store packages
+have their own minimum. TypeWhisper is built for x64 only; Windows 11 on Arm can
+run it through emulation, which is untested. Check the notes accompanying your actual package.
 
 Existing 1.0 installations and early 1.1 installations have different package
 identities. The [upgrade guide](DAILY-1.1-CANDIDATE.md) explains which update feed

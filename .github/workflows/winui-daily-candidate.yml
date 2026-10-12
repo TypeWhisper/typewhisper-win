@@ -2,7 +2,7 @@ name: Candidate
 
 # PR runs only validate. Publishing is restricted to scheduled Daily runs or explicit main runs.
 # Daily also ships the separate early 1.1 Daily installation. RC and Stable ship only the original
-# TypeWhisper installation, on the feeds its 1.0 updater reads (win-<arch>-rc and win-<arch>).
+# TypeWhisper installation, on the feeds its 1.0 updater reads (win-x64-rc and win-x64).
 on:
   workflow_dispatch:
     inputs:
@@ -143,9 +143,6 @@ jobs:
           - rid: win-x64
             platform: x64
             framework: net10.0-x64-runtime
-          - rid: win-arm64
-            platform: ARM64
-            framework: net10.0-arm64-runtime
     steps:
       - uses: actions/checkout@v7
       - name: Test signing integration safeguards
@@ -263,9 +260,9 @@ jobs:
           set -euo pipefail
           # Each channel ships exactly its own feeds; any other feed would update the wrong installations.
           case "$CHANNEL" in
-            daily) expected='releases.win-arm64-winui-daily.json releases.win-x64-winui-daily.json' ;;
-            rc) expected='releases.win-arm64-rc.json releases.win-x64-rc.json' ;;
-            stable) expected='releases.win-arm64.json releases.win-x64.json' ;;
+            daily) expected='releases.win-x64-winui-daily.json' ;;
+            rc) expected='releases.win-x64-rc.json' ;;
+            stable) expected='releases.win-x64.json' ;;
             *) echo 'Unknown channel.'; exit 1 ;;
           esac
           actual="$(cd artifacts && ls releases.*.json | sort | paste -sd ' ' -)"
@@ -277,7 +274,6 @@ jobs:
           if [ "$CHANNEL" = daily ] && [ "$PUBLISH_LEGACY_DAILY" = "true" ]; then
             cp artifacts/legacy-upgrade/* upload/
             test -f upload/releases.win-x64-daily.json
-            test -f upload/releases.win-arm64-daily.json
           fi
           case "$CHANNEL" in
             daily)

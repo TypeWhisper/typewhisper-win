@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory)][string]$PublishDirectory,
     [Parameter(Mandatory)][string]$ExpectedVersion,
-    [Parameter(Mandatory)][ValidateSet('win-x64', 'win-arm64')][string]$RuntimeIdentifier,
+    [Parameter(Mandatory)][ValidateSet('win-x64')][string]$RuntimeIdentifier,
     [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily'
 )
 Set-StrictMode -Version Latest
@@ -63,7 +63,6 @@ try {
     $stream.Position = $peOffset
     if ($reader.ReadUInt32() -ne 0x4550) { throw 'Invalid executable PE header.' }
     $machine = $reader.ReadUInt16()
-    $expected = if ($RuntimeIdentifier -eq 'win-arm64') { 0xaa64 } else { 0x8664 }
-    if ($machine -ne $expected) { throw "Executable architecture does not match $RuntimeIdentifier" }
+    if ($machine -ne 0x8664) { throw "Executable architecture does not match $RuntimeIdentifier" }
 } finally { $reader.Dispose() }
 Write-Host "Validated $ExpectedVersion ($RuntimeIdentifier) candidate contents. Native installation/startup acceptance is still required."

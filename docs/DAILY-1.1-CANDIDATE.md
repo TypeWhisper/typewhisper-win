@@ -1,25 +1,25 @@
 # TypeWhisper Daily delivery and 1.0 migration
 
-The Candidate workflow builds x64 and ARM64 validation artifacts on relevant pull requests and manual dispatches. Scheduled main runs publish a Daily prerelease. The app is always named **TypeWhisper** and its executable is **TypeWhisper.exe**; Daily is an update channel, not a product name.
+The Candidate workflow builds x64 validation artifacts on relevant pull requests and manual dispatches. Scheduled main runs publish a Daily prerelease. The app is always named **TypeWhisper** and its executable is **TypeWhisper.exe**; Daily is an update channel, not a product name.
 
 ## Installation compatibility
 
 | Existing installation | Package ID | Stable feed | RC feed | Daily feed | Entry point after update |
 | --- | --- | --- | --- | --- | --- |
-| Original TypeWhisper (1.0 and 1.1) | `TypeWhisper` | `win-<arch>` | `win-<arch>-rc` | `win-<arch>-daily` | `TypeWhisper.exe` |
-| Separate early 1.1 Daily | `TypeWhisperDaily` | none | none | `win-<arch>-winui-daily` | `TypeWhisper.exe` |
+| Original TypeWhisper (1.0 and 1.1) | `TypeWhisper` | `win-x64` | `win-x64-rc` | `win-x64-daily` | `TypeWhisper.exe` |
+| Separate early 1.1 Daily | `TypeWhisperDaily` | none | none | `win-x64-winui-daily` | `TypeWhisper.exe` |
 
-The internal `TypeWhisperDaily` identity is retained for existing installations. Both packages use the TypeWhisper display title. Each updater requires its installed package identity and rejects pre-1.1 packages. The original installation keeps the feeds its 1.0 updater reads, so 1.0 installations on any channel upgrade in place; until a channel carries a 1.1 release, 1.1 reports it as unpublished instead of offering the 1.0 package. The separate installation only receives Daily builds and explains that Stable and RC need the regular installer. An exact owned startup command pointing at `TypeWhisper.WinUI.exe` is migrated to `TypeWhisper.exe` on every installed launch; no registration is created and unrelated commands are left untouched. An existing 1.0 Startup-folder shortcut remains in place without creating a second registration, and the startup settings can disable that owned shortcut.
+The internal `TypeWhisperDaily` identity is retained for existing installations. Both packages use the TypeWhisper display title. Each updater requires its installed package identity and rejects pre-1.1 packages. The original installation keeps the feeds its 1.0 updater reads, so x64 installations of 1.0 on any channel upgrade in place; until a channel carries a 1.1 release, 1.1 reports it as unpublished instead of offering the 1.0 package. The separate installation only receives Daily builds and explains that Stable and RC need the regular installer. An exact owned startup command pointing at `TypeWhisper.WinUI.exe` is migrated to `TypeWhisper.exe` on every installed launch; no registration is created and unrelated commands are left untouched. An existing 1.0 Startup-folder shortcut remains in place without creating a second registration, and the startup settings can disable that owned shortcut.
 
 Both package variants are built and the original-installation package is inspected before publication. Original Daily assets are kept in the `legacy-upgrade` artifact directory until rollout is enabled. A main dispatch with `channel=daily`, `publish=true` and `publish_legacy_daily=true` publishes both feeds. Set the repository variable `LEGACY_DAILY_UPGRADE_ENABLED=true` only after installed upgrade acceptance to continue publishing the original feed on scheduled runs. Without that gate, the separate 1.1 Daily continues receiving updates and the old Daily feed is unchanged.
 
-The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK remains 26100; the configured minimum OS is 19041. Changing that minimum is not native compatibility evidence. Validate older Windows releases and ARM64 hardware separately.
+The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK remains 26100; the configured minimum OS is 19041. Changing that minimum is not native compatibility evidence. Validate older Windows releases separately. There is no ARM64 build: ARM64 installations of 1.0 from GitHub find no update and stay on 1.0.9. Windows 11 on Arm can run the x64 version through emulation, which is untested, so Store installations there can receive it as an update.
 
 ## Release candidates and Stable
 
 RC and Stable use the same Candidate workflow. Dispatch it on `main` with `channel=rc` and a version such as `1.1.0-rc.1`, or `channel=stable` and a version such as `1.1.0`. Without `publish` it only builds and validates. With `publish=true`, the run first checks that the tag does not exist yet and that `docs/releases/v<version>.md` is on `main`; those notes become the release text.
 
-These releases contain only the original `TypeWhisper` installation: `TypeWhisper-win-<arch>-rc-Setup.exe` or `TypeWhisper-win-<arch>-Setup.exe`, plus the `win-<arch>-rc` or `win-<arch>` feed. An RC is a prerelease. Stable is published as the latest release, which is what makes installed 1.0 Stable updaters find it; its Setup keeps the 1.0 download name. Run the installed-upgrade acceptance below on the RC before publishing Stable. The Microsoft Store Stable submission stays a separate, manual step.
+These releases contain only the original `TypeWhisper` installation: `TypeWhisper-win-x64-rc-Setup.exe` or `TypeWhisper-win-x64-Setup.exe`, plus the `win-x64-rc` or `win-x64` feed. An RC is a prerelease. Stable is published as the latest release, which is what makes installed 1.0 Stable updaters find it; its Setup keeps the 1.0 download name. Run the installed-upgrade acceptance below on the RC before publishing Stable. The Microsoft Store Stable submission stays a separate, manual step.
 
 ## Profile migration
 
@@ -51,6 +51,6 @@ UI-only preferences without a current equivalent, account sign-ins, archived aud
 3. Install a second 1.1 Daily through the new app to prove subsequent updates still use the correct feed.
 4. Upgrade the separate early 1.1 Daily and check the executable rename and owned startup registration.
 5. Exercise interrupted/offline migration, existing 1.1 profiles, missing providers and rollback. A downgrade does not copy new 1.1 edits back into the preserved 1.0 profile.
-6. Repeat native acceptance for older Windows and ARM64 before expanding the support claim.
+6. Repeat native acceptance for older Windows before expanding the support claim.
 
 Automated tests and a development UI smoke test do not replace the installed 1.0-to-1.1-to-next-1.1 sequence. Stable delivery is a separate rollout.

@@ -2,7 +2,7 @@ param(
     [string]$Version = $env:VERSION,
     [ValidateSet('stable', 'beta')]
     [string]$StoreProduct = 'stable',
-    [ValidateSet("win-x64", "win-arm64")]
+    [ValidateSet("win-x64")]
     [string]$RuntimeIdentifier = "win-x64",
     [string]$Configuration = "Release",
     [string]$OutputRoot = "artifacts/store"
@@ -31,7 +31,7 @@ function Get-MakeAppxPath {
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $msixVersion = & (Join-Path $PSScriptRoot 'Get-StorePackageVersion.ps1') -Version $Version
 $manifest = & (Join-Path $PSScriptRoot 'New-StorePackageManifest.ps1') -Version $msixVersion -StoreProduct $StoreProduct -RuntimeIdentifier $RuntimeIdentifier
-$platform = if ($RuntimeIdentifier -eq 'win-arm64') { 'ARM64' } else { 'x64' }
+$platform = 'x64'
 
 $outputRootPath = [IO.Path]::GetFullPath((Join-Path $repoRoot "$OutputRoot/$StoreProduct"))
 $repoPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar

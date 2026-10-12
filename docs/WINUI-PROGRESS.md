@@ -68,7 +68,7 @@ see [timer behavior during sleep](https://learn.microsoft.com/en-us/dotnet/core/
 | 1.0 upgrades | Complete the installed 1.0 → 1.1 → next-1.1 sequence, migration, interrupted import and rollback checks in the [upgrade guide](DAILY-1.1-CANDIDATE.md). Earlier updates between 1.1 Dailys do not cover this. |
 | Published plugins | Verify install, configuration, actual use and update through the published catalog for release-critical providers. Preserve the legacy feed. |
 | Display behavior | Complete the outstanding primary-display, mixed-DPI, overlay-layout and live-text positioning checks on the selected candidate. |
-| Hardware support | Execute ARM64 and older-Windows acceptance before extending support claims. |
+| Hardware support | Execute older-Windows acceptance before extending support claims. 1.1 is built for x64 only; Windows 11 on Arm through emulation is untested. |
 | Licensing | Finish live lifecycle evidence and distribution follow-up in [Polar maintenance](POLAR-API-VERSION-MAINTENANCE.md). Version pinning and error handling are implemented. |
 | Channels and notes | Confirm the candidate's actual package identity, runtime requirements, data import and feed availability. RC and Stable are separate rollout decisions. |
 | Daily feedback | Reproduce reported blockers against the selected candidate. |
