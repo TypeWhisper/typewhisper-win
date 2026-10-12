@@ -64,6 +64,24 @@ public sealed class AudioSessionDuckingTests : IDisposable
     }
 
     [Fact]
+    public void VolumeChangedWhileTheJournalIsWrittenIsNotLowered()
+    {
+        var music = new FakeSession("music", 1, .8f);
+        var ducking = new AudioSessionDucking(Own, entries =>
+        {
+            _journal.Add(entries);
+            if (entries.Count > 0) music.Volume = .5f;
+            return true;
+        }, () => _now, (_, ex) => throw ex);
+
+        ducking.Duck(Device, .1f, [music]);
+
+        Assert.Equal(.5f, music.Volume);
+        Assert.False(ducking.Holds(music));
+        Assert.Empty(Journal);
+    }
+
+    [Fact]
     public void VolumeChangedDuringRecordingIsKept()
     {
         var music = new FakeSession("music", 1, .8f);

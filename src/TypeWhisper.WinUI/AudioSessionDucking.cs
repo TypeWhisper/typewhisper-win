@@ -153,14 +153,19 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
             foreach (var (session, _) in lowered) _ducked.Remove(session.InstanceId);
             return;
         }
-        var failed = false;
+        var skipped = false;
         foreach (var (session, entry) in lowered)
         {
-            try { session.Volume = entry.Ducked; }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _ducked.Remove(session.InstanceId); failed = true; log("audio.ducking.session-failed", ex); }
+            try
+            {
+                // A volume the user changed while the journal was written is kept and not lowered.
+                if (Math.Abs(session.Volume - entry.Saved) < Tolerance) { session.Volume = entry.Ducked; continue; }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { log("audio.ducking.session-failed", ex); }
+            _ducked.Remove(session.InstanceId);
+            skipped = true;
         }
-        if (failed) Save();
+        if (skipped) Save();
     }
 
     private bool Save() => saveJournal([.. _pending, .. _ducked.Values.Select(ducked => ducked.Entry)]);
