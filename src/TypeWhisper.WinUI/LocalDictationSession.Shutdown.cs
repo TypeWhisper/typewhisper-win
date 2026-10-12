@@ -56,6 +56,9 @@ internal sealed partial class LocalDictationSession
             await Release(RestoreWorkflowModelAsync);
             await Release(() => _plugins.DisposeAsync().AsTask());
             await Release(() => { _effects.End(); _audio.Dispose(); return Task.CompletedTask; });
+            // Windows remembers each app's volume, so lowered apps are restored before exiting, and the journal
+            // in the profile is no longer written once this completes.
+            await Release(_ducking.ShutdownAsync);
             await Release(() => _recoveryAudio.DisposeAsync().AsTask());
             await Release(() => _inserter.Restored);
             await Release(async () => { if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null; _inserter.Dispose(); _operationCancellation.Dispose(); });

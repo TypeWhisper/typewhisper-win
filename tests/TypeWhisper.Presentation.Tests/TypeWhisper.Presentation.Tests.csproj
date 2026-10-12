@@ -38,6 +38,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/DictationOverlayState.cs" Link="DictationOverlayState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationAudioPreferences.cs" Link="DictationAudioPreferences.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/RecordingAudioEffects.cs" Link="RecordingAudioEffects.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/AudioSessionDucking.cs" Link="AudioSessionDucking.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/SilenceAutoStop.cs" Link="SilenceAutoStop.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/SerializedBackgroundWork.cs" Link="SerializedBackgroundWork.cs" />
