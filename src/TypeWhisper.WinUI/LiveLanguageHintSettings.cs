@@ -57,6 +57,6 @@ internal static class LiveLanguageHintSettings
 
     private static string Name(string code)
     {
-        try { return CultureInfo.GetCultureInfo(code).EnglishName; } catch (CultureNotFoundException) { return code; }
+        try { return CultureInfo.GetCultureInfo(code).DisplayName; } catch (CultureNotFoundException) { return code; }
     }
 }

@@ -184,7 +184,7 @@ internal sealed class LiveModelsView : UserControl
         meta.Children.Add(languages);
         var languageNames = model.LanguageCodes.Select(code =>
         {
-            try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
+            try { return System.Globalization.CultureInfo.GetCultureInfo(code).DisplayName; }
             catch (System.Globalization.CultureNotFoundException) { return code; }
         }).Order(StringComparer.CurrentCulture).ToArray();
         var description = languageNames.Length == 0 ? Loc.T("The plugin has not supplied a language list.") : string.Join(", ", languageNames);

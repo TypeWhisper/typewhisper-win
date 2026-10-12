@@ -194,7 +194,7 @@ public sealed partial class SetupWizard : UserControl
     private static string LanguageName(string code)
     {
         if (code == "auto") return Loc.T("Automatic");
-        try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
+        try { return System.Globalization.CultureInfo.GetCultureInfo(code).DisplayName; }
         catch (System.Globalization.CultureNotFoundException) { return code; }
     }
     private void RefreshModelPickers()
