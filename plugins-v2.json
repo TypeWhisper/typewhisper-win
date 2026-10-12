@@ -367,6 +367,26 @@
       ]
     },
     {
+      "id": "com.typewhisper.linear",
+      "name": "Linear",
+      "version": "1.2.3",
+      "minHostVersion": "1.1.5",
+      "author": "TypeWhisper",
+      "description": "Create Linear issues from workflow text. Select a team and optional project using your Linear API key.",
+      "categories": [
+        "integrations"
+      ],
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-linear-v1.2.3/com.typewhisper.linear-1.2.3-win-x64.zip",
+      "sha256": "62a1c3cc78f7ff2a0b9a99a74be38db09a02368ba64c72f5da7a254e5d66254f",
+      "size": 21208,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
       "id": "com.typewhisper.local-llm-llamacpp",
       "name": "Local LLM",
       "version": "1.0.0",
