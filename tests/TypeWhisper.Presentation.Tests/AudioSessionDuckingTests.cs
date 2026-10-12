@@ -123,6 +123,9 @@ public sealed class AudioSessionDuckingTests : IDisposable
 
         ducking.Add(replacement);
         Assert.Equal(.4f, replacement.Volume, 3);
+        // The next save writes the shared entry once.
+        ducking.Add(new FakeSession("video", 3, 1f));
+        Assert.Equal(["app:music", "app:video"], Journal.Select(entry => entry.SessionId));
         ducking.Restore();
 
         Assert.Equal(.8f, first.Volume);

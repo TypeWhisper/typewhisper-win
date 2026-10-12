@@ -168,5 +168,6 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
         if (skipped) Save();
     }
 
-    private bool Save() => saveJournal([.. _pending, .. _ducked.Values.Select(ducked => ducked.Entry)]);
+    // A recreated session shares its entry with the one it replaced, so each entry is written once.
+    private bool Save() => saveJournal([.. _pending, .. _ducked.Values.Select(ducked => ducked.Entry).Distinct()]);
 }

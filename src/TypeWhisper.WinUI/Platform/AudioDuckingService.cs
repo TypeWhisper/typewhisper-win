@@ -225,8 +225,10 @@ public sealed class AudioDuckingService : IAudioDuckingService
             watch = pendingDevices.Count > 0 || _device is not null;
         }
         foreach (var (device, manager) in idle) Release(device, manager, OnRecoverySessionCreated);
-        // Watched before the outputs are checked, so one that becomes active meanwhile is reported.
-        WatchOutputs(watch);
+        // Watched before the outputs are checked, so one that becomes active meanwhile is reported. Outputs that
+        // are active now are recovered even when the watch cannot be set up.
+        try { WatchOutputs(watch); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.watch-failed", ex); }
         if (devices.Count > 0)
         {
             using var enumerator = new MMDeviceEnumerator();
