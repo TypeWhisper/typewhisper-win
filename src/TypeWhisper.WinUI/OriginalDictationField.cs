@@ -61,11 +61,12 @@ internal sealed class OriginalDictationField : IAsyncDisposable
 
     // Capture has ended, so nothing else uses the element yet. A password field the lock
     // rejected stays rejected: falling back to its window would paste into it after all.
+    // An element that cannot answer may be one, so it is rejected too.
     private bool KeepWindowOnly()
     {
         bool password;
         try { password = _element is { } element && element.CurrentIsPassword != 0; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); password = false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); password = true; }
         Release(_element); _element = null;
         if (password) { AppDiagnostics.Write("field.capture.password"); return false; }
         _windowOnly = true;
