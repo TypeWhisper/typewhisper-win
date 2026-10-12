@@ -226,7 +226,7 @@
     {
       "id": "com.typewhisper.fireworks",
       "name": "Fireworks AI",
-      "version": "1.1.7",
+      "version": "1.1.8",
       "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
       "description": "Portable Fireworks AI transcription and text processing. Whisper V3 Turbo currently works; live transcription is unavailable.",
@@ -234,9 +234,9 @@
         "transcription",
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.fireworks-1.1.7-win-x64.zip",
-      "sha256": "e299c7954f251d03dd6533a5214d394a5a45172bb97f36b4c5e35dbabccfd703",
-      "size": 20310,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fireworks-v1.1.8/com.typewhisper.fireworks-1.1.8-win-x64.zip",
+      "sha256": "a764dedc77345821171a46b29d3cc4f935ca439d3a486f71b2f6afa76635a189",
+      "size": 21543,
       "platforms": [
         "windows"
       ],
