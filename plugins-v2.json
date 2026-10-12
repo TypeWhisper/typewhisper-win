@@ -389,16 +389,16 @@
     {
       "id": "com.typewhisper.local-llm-llamacpp",
       "name": "Local LLM",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "minHostVersion": "1.1.3",
       "author": "TypeWhisper",
       "description": "Run Gemma 4, Qwen3.5 and LFM2.5 GGUF models locally with the bundled llama.cpp CPU runtime. No API key required.",
       "categories": [
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-local-llm-llamacpp-v1.0.0/com.typewhisper.local-llm-llamacpp-1.0.0-win-x64.zip",
-      "sha256": "3603007310f272dc208cbc6e235b6ec5a42801617abb44d7f1b787750e4bd68d",
-      "size": 37544175,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-local-llm-llamacpp-v1.0.1/com.typewhisper.local-llm-llamacpp-1.0.1-win-x64.zip",
+      "sha256": "2dd54325d193ab2df85f01e9e4244dfe032064c3a662eab4527ffc0e4359912f",
+      "size": 37544649,
       "platforms": [
         "windows"
       ],
