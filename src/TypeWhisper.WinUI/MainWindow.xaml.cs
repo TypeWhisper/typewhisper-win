@@ -116,6 +116,8 @@ public sealed partial class MainWindow : Window
             // License and account checks can wait up to 30 s on the network. They run side by side
             // and no longer hold up activations such as --settings; sync still starts after them.
             _ = StartCloudSyncAfterAccessChecksAsync(Task.WhenAll(WinUILicensing.ValidateAsync(), WinUIPremiumAccount.RefreshAsync()));
+            // A managed license key that appears or changes while running is applied without a restart.
+            WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(() => { if (!_closing) WinUILicensing.ApplyPolicyChange(); });
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
             _ = UpdatePluginsAutomaticallyAsync();
             _ = CheckApplicationUpdatesAutomaticallyAsync();

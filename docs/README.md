@@ -12,6 +12,7 @@ Use the release notes for the package you installed when they differ from this b
 - [Import from other apps](IMPORT-FROM-OTHER-APPS.md): words and snippets from Wispr Flow or Handy.
 - [Windows CLI](WINDOWS-CLI.md) and [HTTP API](WINUI-HTTP-API.md): supported automation contracts.
 - [Privacy policy](PRIVACY.md): data handling overview.
+- [Managed license activation](enterprise/windows-managed-license.md): provisioning a commercial license through machine policy.
 
 ## Develop and validate
 

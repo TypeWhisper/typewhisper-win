@@ -3131,5 +3131,9 @@
   "Transcribe with language": "指定语言转录",
   "JSON output": "JSON 输出",
   "Copy to clipboard": "复制到剪贴板",
-  "Installed at {0}": "安装位置：{0}"
+  "Installed at {0}": "安装位置：{0}",
+  "Your organization provides the commercial license on this device. Activation happens automatically and the key is not shown.": "你的组织在此设备上提供商业许可证。激活会自动进行，不会显示密钥。",
+  "The organization license could not be activated. Check the network connection and contact your administrator if this continues.": "无法激活组织许可证。请检查网络连接，如果问题持续存在，请联系管理员。",
+  "Retry activation": "重试激活",
+  "Managed by your organization": "由你的组织管理"
 }
