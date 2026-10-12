@@ -696,7 +696,7 @@
     {
       "id": "com.typewhisper.webhook",
       "name": "Webhook",
-      "version": "1.3.2",
+      "version": "1.3.3",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Send dictation as JSON to your automations. Test destinations before enabling delivery.",
@@ -704,9 +704,9 @@
         "post-processing",
         "integrations"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.webhook-1.3.2-win-x64.zip",
-      "sha256": "a7b4d7fde6b361cd0f0b9bab8036205a9bc2edc67ace1182c06cc9e7921fde46",
-      "size": 19156,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-webhook-v1.3.3/com.typewhisper.webhook-1.3.3-win-x64.zip",
+      "sha256": "8a0ecb4bc63ffee077920314dd5e94b63d326b02261917a97b816f03c304dd7a",
+      "size": 21147,
       "platforms": [
         "windows"
       ],
