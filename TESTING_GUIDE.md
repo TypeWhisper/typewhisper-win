@@ -133,8 +133,7 @@ development profile.
 Exercise the changed flow and its most relevant failure case. For release work,
 use [release readiness](docs/WINUI-PROGRESS.md): setup, dictation, files, recorder,
 plugins, persistence and updates have different acceptance environments.
-Installed upgrade tests belong in a disposable VM; ARM64 execution requires ARM64
-hardware. [Local audio checks](docs/WINUI-LOCAL-AUDIO-TEST.md) explain microphone
+Installed upgrade tests belong in a disposable VM. [Local audio checks](docs/WINUI-LOCAL-AUDIO-TEST.md) explain microphone
 fixtures and their limits.
 
 ## CI and packaging
@@ -142,7 +141,7 @@ fixtures and their limits.
 | Workflow | Responsibility |
 | --- | --- |
 | CI | WinUI solution build and headless application, plugin host/SDK and platform suites |
-| Candidate | x64/ARM64 candidates and gated Daily publication |
+| Candidate | x64 candidates and gated Daily publication |
 | Packaging | Installer/portable-package validation without publication |
 | Plugins | All plugin tests on Windows/Linux, release tooling, Python sidecar tests and manifests; changed-provider builds, with all builds on manual runs |
 | Release plugins | Tested plugin packages and catalog publication |

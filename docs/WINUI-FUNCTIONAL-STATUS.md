@@ -24,7 +24,7 @@ provider and package has passed native acceptance.
 
 - Confirm first-dictation insertion after a fresh start on the selected candidate,
   including Chromium/Electron targets with cold accessibility trees.
-- Package builds do not replace real ARM64 execution or older-Windows acceptance.
+- Package builds do not replace older-Windows acceptance. TypeWhisper is built for x64 only; running it on Windows 11 on Arm through emulation is untested.
 - Calendar adapters and research prototypes do not establish available calendar sign-in or meeting automation.
 - Plugins published after an application Daily can have different source and validation revisions.
 - Local translation supporting code is not a promise of an automatic Marian fallback in the WinUI workflow path.

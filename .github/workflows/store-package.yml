@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rid: [win-x64, win-arm64]
+        rid: [win-x64]
     env:
       VERSION: ${{ inputs.version }}
       DESTINATION: ${{ inputs.destination }}

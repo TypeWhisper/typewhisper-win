@@ -66,7 +66,7 @@ Confirm ownership and record shipped versions in #471 before closing it.
 
 | Target date | Work | Status |
 | --- | --- | --- |
-| 2026-09-28 | Ship the pin and credential-preservation fix through direct/Velopack and Microsoft Store channels, allowing for Store review before the October 1 default change reported in #471. Include supported x64/Arm64 packages and any distributed WinUI builds that share this service. | Pending release |
+| 2026-09-28 | Ship the pin and credential-preservation fix through direct/Velopack and Microsoft Store channels, allowing for Store review before the October 1 default change reported in #471. Include the x64 packages and any distributed WinUI builds that share this service. | Pending release |
 | 2026-11-16 | Provision a dedicated sandbox license; review `2026-10` changes and run activation → validation → deactivation for commercial and supporter entitlements. Check the returned version and verify validation of the removed activation. | Pending; sandbox not configured |
 | 2026-12-01 | Ship the tested `2026-10` migration through both channels, ahead of the January 2027 retirement reported in #471. Recheck Polar's actual supported versions and retirement dates before release. | Pending migration |
 

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Version,
-    [Parameter(Mandatory)][ValidateSet('win-x64', 'win-arm64')][string]$RuntimeIdentifier,
+    [Parameter(Mandatory)][ValidateSet('win-x64')][string]$RuntimeIdentifier,
     [Parameter(Mandatory)][string]$Framework,
     # Daily also builds the separate early 1.1 Daily installation. RC and Stable ship only the
     # original installation, on the feeds its 1.0 updater already reads.

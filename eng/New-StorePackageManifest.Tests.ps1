@@ -2,12 +2,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $checks = 0
 foreach ($product in @('stable', 'beta')) {
-    foreach ($rid in @('win-x64', 'win-arm64')) {
+    foreach ($rid in @('win-x64')) {
         $manifest = & (Join-Path $PSScriptRoot 'New-StorePackageManifest.ps1') -Version '1.1.1.0' -StoreProduct $product -RuntimeIdentifier $rid
         [xml]$xml = $manifest
         $name = if ($product -eq 'beta') { 'TypeWhisper.TypeWhisperBeta' } else { 'TypeWhisper.TypeWhisper' }
         $displayName = if ($product -eq 'beta') { 'TypeWhisper Beta' } else { 'TypeWhisper' }
-        $architecture = if ($rid -eq 'win-arm64') { 'arm64' } else { 'x64' }
+        $architecture = 'x64'
         if ($xml.Package.Identity.Name -cne $name -or $xml.Package.Identity.Version -cne '1.1.1.0' -or
             $xml.Package.Identity.ProcessorArchitecture -cne $architecture -or
             $xml.Package.Properties.DisplayName -cne $displayName -or

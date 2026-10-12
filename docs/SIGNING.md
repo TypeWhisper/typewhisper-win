@@ -1,6 +1,6 @@
 # Windows release signing
 
-The Candidate workflow can sign the x64 and ARM64 builds through the SignPath
+The Candidate workflow can sign the x64 build through the SignPath
 Foundation organization `855e873b-1597-4361-b8d9-2d871b7c7d0c`, project
 `typewhisper-win`, artifact configuration `github-executables`.
 

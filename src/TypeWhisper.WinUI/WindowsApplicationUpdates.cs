@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.InteropServices;
 using TypeWhisper.Presentation;
 using TypeWhisper.WinUI.Platform;
 using Velopack;
@@ -36,11 +35,10 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
     {
         _update = null; _offer = null; _manager = null;
         if (UnavailableReason is { } reason) throw new InvalidOperationException(reason);
-        var arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
         var installation = ApplicationInstallation.Resolve(Velopack.Locators.VelopackLocator.Current.AppId)!;
         if (!installation.Supports(channel))
             throw new InvalidOperationException(Loc.T("This installation receives Daily builds only. Install TypeWhisper from the download page to use Stable or Release Candidate."));
-        var feed = installation.Feed(channel, arch);
+        var feed = installation.Feed(channel);
         var source = new AppReleaseGithubSource("https://github.com/TypeWhisper/typewhisper-win", feed, channel != AppUpdateChannel.Stable);
         var manager = new UpdateManager(source, new UpdateOptions { ExplicitChannel = feed, AllowVersionDowngrade = allowDowngrade });
         try

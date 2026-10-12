@@ -266,7 +266,7 @@ def validate_packages(directory, plan, identities):
     for receipt_path in Path(directory).rglob("package-info-*.json"):
         receipt = json.loads(receipt_path.read_text(encoding="utf-8-sig"))
         destination, rid = receipt["destination"], receipt["runtimeIdentifier"]
-        if destination not in plan["destinations"] or rid not in ("win-x64", "win-arm64"):
+        if destination not in plan["destinations"] or rid != "win-x64":
             raise ReleaseError("Unexpected package destination or architecture.")
         key = (destination, rid)
         if key in receipts:
@@ -295,8 +295,8 @@ def validate_packages(directory, plan, identities):
             if identity is None or any(identity.get(key) != value for key, value in expected_manifest.items()):
                 raise ReleaseError("MSIX manifest does not match the Store destination.")
         result.setdefault(destination, []).append(package)
-    if set(receipts) != {(destination, rid) for destination in plan["destinations"] for rid in ("win-x64", "win-arm64")}:
-        raise ReleaseError("Both x64 and ARM64 packages are required for every destination.")
+    if set(receipts) != {(destination, "win-x64") for destination in plan["destinations"]}:
+        raise ReleaseError("An x64 package is required for every destination.")
     return result
 
 
@@ -433,7 +433,7 @@ def main():
                 summary.write("## Store beta submissions\n\n")
                 for submission in receipt["submissions"]:
                     summary.write(f"- {submission['destination']}: {submission['submissionId']} ({submission['status']})\n")
-                summary.write("\nMicrosoft certification and Store delivery still apply. This run does not establish installed-package or native ARM64 acceptance.\n")
+                summary.write("\nMicrosoft certification and Store delivery still apply. This run does not establish installed-package acceptance.\n")
 
 
 if __name__ == "__main__":

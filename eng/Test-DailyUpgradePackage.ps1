@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$ReleaseDirectory,
-    [Parameter(Mandatory)][ValidateSet('win-x64', 'win-arm64')][string]$RuntimeIdentifier,
+    [Parameter(Mandatory)][ValidateSet('win-x64')][string]$RuntimeIdentifier,
     [Parameter(Mandatory)][string]$ExpectedVersion,
     # The original installation keeps its 1.0 feed per channel: win-x64-daily, win-x64-rc and win-x64.
     [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily'

@@ -15,10 +15,11 @@ Both beta routes can run together. A normal Store link does not enroll someone i
 Initial beta submissions on October 5, 2026:
 
 - TypeWhisper has live x64 and ARM64 packages at `1.0.9.0` (Submission 8).
+- 1.1 submissions contain only the x64 package and replace the ARM64 package. Windows 11 on Arm runs it through emulation, which is untested.
 - `Internal Beta` is assigned to `TypeWhisper Internal Testers`. Manage members in Partner Center; do not commit tester email addresses.
 - TypeWhisper Beta is a separate MSIX product with public audience, direct-link-only discovery, and a free Store download.
 - Both initial betas were submitted for certification at `1.1.1.0`, built from `main` revision `9ceaf011c73f1a285e6c88599478e732c8630ef8`. Check Partner Center for current certification and publication status.
-- The public beta listing, properties, and IARC questionnaire are complete. The rating considers possible AI-generated text (Germany: USK 12). Installed-MSIX and native ARM64 acceptance are separate from the completed package checks.
+- The public beta listing, properties, and IARC questionnaire are complete. The rating considers possible AI-generated text (Germany: USK 12). Installed-MSIX acceptance is separate from the completed package checks.
 
 | Identity | TypeWhisper / internal flight | Public beta |
 | --- | --- | --- |
@@ -38,7 +39,7 @@ Both use publisher `CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75` and publisher displ
 
 Open GitHub Actions -> **Store** -> **Run workflow**. Choose the source branch/tag, destination, and a new numeric version. Build both beta products from the same revision and verify their `sourceRevision` receipts match.
 
-Each x64/ARM64 artifact includes its MSIX and a `package-info-<rid>.json` receipt with the source commit, destination, Store identity, and SHA-256. The workflow does not upload to Partner Center, enroll testers, or publish.
+Each x64 artifact includes its MSIX and a `package-info-<rid>.json` receipt with the source commit, destination, Store identity, and SHA-256. The workflow does not upload to Partner Center, enroll testers, or publish.
 
 ## Automatic beta updates after Daily
 
@@ -49,7 +50,7 @@ The automation then:
 1. Reads the two Store products and all flights on TypeWhisper. An existing submission or draft makes the run wait without changing it; a failed submission requires review. The first submissions must finish publishing before automatic updates can start.
 2. Compares the Daily source with each beta's last published source. Unchanged destinations are skipped, and an older or diverged source cannot replace a newer beta.
 3. Allocates a version on the `1.1` release line above the packages currently visible in the regular submission, all flights, and public beta. The fourth component remains zero. Exhausting the numeric build component requires deliberately updating the release line.
-4. Calls **Store** to build x64 and ARM64 packages for the selected destinations at the exact Daily commit. The receipts record the checked-out source, not the newer workflow commit.
+4. Calls **Store** to build x64 packages for the selected destinations at the exact Daily commit. The receipts record the checked-out source, not the newer workflow commit.
 5. Verifies receipts, hashes, manifest identities, architectures and required payloads, then rechecks Store state before writing. It creates new submissions, retains listing/rating/availability data, replaces the packages, and requests publication after certification.
 
 The workflow uses one concurrency group and never cancels an in-progress upload to make room for the next Daily. It never deletes existing drafts, submits a regular stable update, or modifies tester groups. There is no guaranteed daily publication time: every update still goes through Microsoft certification and Store delivery.
@@ -97,7 +98,7 @@ For local development builds and launches, use the workspace development launche
 & F:\typewhisper\typewhisper-dev-tools\build-typewhisper-windows-dev.ps1 --run <current-checkout-or-worktree>
 ```
 
-Use the Store workflow for submission artifacts. A successful packaging run does not establish certification, installed activation, or native ARM64 execution.
+Use the Store workflow for submission artifacts. A successful packaging run does not establish certification or installed activation.
 
 ## Version numbers
 

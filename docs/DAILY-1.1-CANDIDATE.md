@@ -1,6 +1,6 @@
 # TypeWhisper Daily delivery and 1.0 migration
 
-The Candidate workflow builds x64 and ARM64 validation artifacts on relevant pull requests and manual dispatches. Scheduled main runs publish a Daily prerelease. The app is always named **TypeWhisper** and its executable is **TypeWhisper.exe**; Daily is an update channel, not a product name.
+The Candidate workflow builds x64 validation artifacts on relevant pull requests and manual dispatches. Scheduled main runs publish a Daily prerelease. The app is always named **TypeWhisper** and its executable is **TypeWhisper.exe**; Daily is an update channel, not a product name.
 
 ## Installation compatibility
 
@@ -13,7 +13,7 @@ The internal `TypeWhisperDaily` identity is retained for existing installations.
 
 Both package variants are built and the original-installation package is inspected before publication. Original Daily assets are kept in the `legacy-upgrade` artifact directory until rollout is enabled. A main dispatch with `channel=daily`, `publish=true` and `publish_legacy_daily=true` publishes both feeds. Set the repository variable `LEGACY_DAILY_UPGRADE_ENABLED=true` only after installed upgrade acceptance to continue publishing the original feed on scheduled runs. Without that gate, the separate 1.1 Daily continues receiving updates and the old Daily feed is unchanged.
 
-The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK remains 26100; the configured minimum OS is 19041. Changing that minimum is not native compatibility evidence. Validate older Windows releases and ARM64 hardware separately.
+The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK remains 26100; the configured minimum OS is 19041. Changing that minimum is not native compatibility evidence. Validate older Windows releases separately. There is no ARM64 build: 1.0 ARM64 installations find no update and stay on 1.0.9, and Windows 11 on Arm can run the x64 version through emulation, which is untested.
 
 ## Release candidates and Stable
 
@@ -51,6 +51,6 @@ UI-only preferences without a current equivalent, account sign-ins, archived aud
 3. Install a second 1.1 Daily through the new app to prove subsequent updates still use the correct feed.
 4. Upgrade the separate early 1.1 Daily and check the executable rename and owned startup registration.
 5. Exercise interrupted/offline migration, existing 1.1 profiles, missing providers and rollback. A downgrade does not copy new 1.1 edits back into the preserved 1.0 profile.
-6. Repeat native acceptance for older Windows and ARM64 before expanding the support claim.
+6. Repeat native acceptance for older Windows before expanding the support claim.
 
 Automated tests and a development UI smoke test do not replace the installed 1.0-to-1.1-to-next-1.1 sequence. Stable delivery is a separate rollout.

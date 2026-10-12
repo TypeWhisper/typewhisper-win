@@ -22,19 +22,19 @@ public sealed record ApplicationInstallation(string PackageId, string Executable
     public bool Supports(AppUpdateChannel channel) => PackageId == "TypeWhisper" || channel == AppUpdateChannel.Daily;
 
     /// <summary>
-    /// The original installation keeps the 1.0 feeds on every channel, so 1.0 installations upgrade to 1.1 in place.
-    /// <see cref="Accepts"/> keeps 1.1 from installing the 1.0 packages those feeds still hold.
+    /// The original installation keeps the 1.0 x64 feeds on every channel, so 1.0 installations upgrade to 1.1 in place.
+    /// <see cref="Accepts"/> keeps 1.1 from installing the 1.0 packages those feeds still hold. 1.1 has no ARM64 build,
+    /// so 1.0 ARM64 installations find no update on their feeds.
     /// </summary>
-    public string Feed(AppUpdateChannel channel, string architecture)
+    public string Feed(AppUpdateChannel channel)
     {
-        if (architecture is not ("win-x64" or "win-arm64")) throw new ArgumentException("Unsupported architecture.", nameof(architecture));
         if (!Enum.IsDefined(channel) || !Supports(channel)) throw new ArgumentOutOfRangeException(nameof(channel));
-        if (PackageId == "TypeWhisperDaily") return architecture + "-winui-daily";
+        if (PackageId == "TypeWhisperDaily") return "win-x64-winui-daily";
         return channel switch
         {
-            AppUpdateChannel.Stable => architecture,
-            AppUpdateChannel.ReleaseCandidate => architecture + "-rc",
-            _ => architecture + "-daily"
+            AppUpdateChannel.Stable => "win-x64",
+            AppUpdateChannel.ReleaseCandidate => "win-x64-rc",
+            _ => "win-x64-daily"
         };
     }
 

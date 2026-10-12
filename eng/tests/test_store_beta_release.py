@@ -92,7 +92,7 @@ def make_packages(root, plan):
     for destination in plan["destinations"]:
         product = release.DESTINATIONS[destination]
         identity = IDENTITIES[product]
-        for rid in ("win-x64", "win-arm64"):
+        for rid in ("win-x64",):
             directory = root / destination / rid
             directory.mkdir(parents=True)
             name = f"TypeWhisper-{product}-{rid}-{plan['version']}.msix"
@@ -182,7 +182,7 @@ class StoreBetaReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(release.ReleaseError, "hash"):
             release.validate_packages(self.packages, self.plan, IDENTITIES)
         receipt_path.unlink()
-        with self.assertRaisesRegex(release.ReleaseError, "Both x64 and ARM64"):
+        with self.assertRaisesRegex(release.ReleaseError, "An x64 package is required"):
             release.validate_packages(self.packages, self.plan, IDENTITIES)
 
     def test_provenance_rejects_wrong_source_version_product_and_identity(self):
@@ -204,7 +204,7 @@ class StoreBetaReleaseTests(unittest.TestCase):
                 uploads.append(zipped.namelist())
         result = release.submit(self.store, self.github, self.plan, IDENTITIES, self.packages, self.receipt, upload=upload)
         self.assertEqual(len(uploads), 2)
-        self.assertTrue(all(len(files) == 2 for files in uploads))
+        self.assertTrue(all(len(files) == 1 for files in uploads))
         self.assertTrue(all(item["status"] == "PreProcessing" for item in result["submissions"]))
         self.assertNotIn("sas", self.receipt.read_text())
         writes = [(method, path, body) for method, path, body in self.store.calls if method != "GET"]
@@ -218,7 +218,7 @@ class StoreBetaReleaseTests(unittest.TestCase):
             self.assertEqual(body["ageRatings"], {"USK": "12"})
             self.assertEqual(body["listings"], {"en-us": {"description": "Beta"}})
             key = "flightPackages" if "/flights/" in path else "applicationPackages"
-            self.assertEqual([p["fileStatus"] for p in body[key]], ["PendingDelete", "PendingUpload", "PendingUpload"])
+            self.assertEqual([p["fileStatus"] for p in body[key]], ["PendingDelete", "PendingUpload"])
             self.assertEqual(release.source_from_notes(body), SOURCE)
 
     def test_race_during_build_prevents_all_store_writes(self):

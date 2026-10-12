@@ -38,7 +38,8 @@ the portable ZIP requires it separately. First setup needs internet access to
 install a plugin and download model assets where applicable.
 
 The source configures a minimum Windows build of 19041. Native acceptance on
-older Windows and ARM64 remains pending; Store packaging has its own minimum.
+older Windows remains pending; Store packaging has its own minimum. TypeWhisper
+is built for x64 only; Windows 11 on Arm can run the x64 version through emulation, which is untested.
 Use the requirements attached to the actual release you install.
 
 The original 1.0 installation and early separate 1.1 installations use different
@@ -55,8 +56,7 @@ dotnet build TypeWhisper.slnx
 dotnet publish src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj -c Release -r win-x64 --self-contained false -o publish/win-x64
 ```
 
-Use `win-arm64` for ARM64 packages. Published output includes the application
-resources and bundled CLI. Cross-building is not hardware execution evidence.
+Published output includes the application resources and bundled CLI.
 
 The maintainer's build-and-launch helper is described in the test guide under
 [Maintainer's local setup](TESTING_GUIDE.md#maintainers-local-setup).
