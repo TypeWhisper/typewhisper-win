@@ -2488,6 +2488,7 @@
   "The recovery setting could not be changed.": "復元の設定を変更できませんでした。",
   "The release search could not be completed. Please try again later.": "リリースの検索を完了できませんでした。後でもう一度お試しください。",
   "The release uses an incompatible installation identity.": "このリリースは互換性のないインストールIDを使用しています。",
+  "This installation receives Daily builds only. Install TypeWhisper from the download page to use Stable or Release Candidate.": "このインストールはDaily版のみを受け取ります。StableまたはRelease Candidateを使うには、ダウンロードページからTypeWhisperをインストールしてください。",
   "The restorable backup file could not be created either.": "復元可能なバックアップファイルも作成できませんでした。",
   "The restorable backup file could not be created, but the copy of your data folder is complete.": "復元可能なバックアップファイルは作成できませんでしたが、データフォルダのコピーは完了しています。",
   "The restore needs recovery before your profile can open again. Close TypeWhisper and reopen it to finish recovery.": "プロファイルを再び開くには、復元の回復処理が必要です。TypeWhisper を閉じて開き直し、回復を完了してください。",

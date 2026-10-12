@@ -188,7 +188,7 @@ need a separate scope decision.
 2. Record relevant automated and native acceptance against that candidate.
 3. Publish to the intended prerelease channel and gather feedback.
 4. Enable legacy Daily upgrades only after their installed-upgrade gate passes.
-5. Prepare RC/Stable distribution and matching notes as subsequent stages.
+5. Publish an RC, then Stable, through the Candidate workflow with their release notes; see [Release candidates and Stable](DAILY-1.1-CANDIDATE.md#release-candidates-and-stable).
 
 The mechanics and exact gate variables live in [Daily delivery](DAILY-1.1-CANDIDATE.md)
 and [plugin releases](PLUGIN-RELEASES.md). Store delivery follows its

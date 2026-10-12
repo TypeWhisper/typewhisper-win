@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('daily-upgrade-package-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
-$version = '1.1.0-daily.20260923.1'
+$versions = @{ daily = '1.1.0-daily.20260923.1'; rc = '1.1.0-rc.1'; stable = '1.1.0' }
 function Write-Fixture([string]$PackageId = 'TypeWhisper', [string]$Executable = 'TypeWhisper.exe',
     [string]$ManifestPath = 'TypeWhisper.nuspec', [switch]$DependencyNotices, [switch]$DuplicateManifest,
     [switch]$DependencyManifestFirst) {
@@ -16,7 +16,7 @@ function Write-Fixture([string]$PackageId = 'TypeWhisper', [string]$Executable =
             finally { $writer.Dispose() }
         }
         $writer = [IO.StreamWriter]::new($archive.CreateEntry($ManifestPath).Open())
-        try { $writer.Write("<package><metadata><id>$PackageId</id><version>$version</version><mainExe>$Executable</mainExe><rid>$fixtureRid</rid><channel>$fixtureRid-daily</channel></metadata></package>") }
+        try { $writer.Write("<package><metadata><id>$PackageId</id><version>$version</version><mainExe>$Executable</mainExe><rid>$fixtureRid</rid><channel>$fixtureFeed</channel></metadata></package>") }
         finally { $writer.Dispose() }
         if ($DependencyNotices) {
             foreach ($path in @('lib/app/licenses/NAudio/package.nuspec', 'lib\app\licenses\Velopack\package.nuspec')) {
@@ -29,10 +29,10 @@ function Write-Fixture([string]$PackageId = 'TypeWhisper', [string]$Executable =
         $archive.CreateEntry("lib/app/$Executable") | Out-Null
     } finally { $archive.Dispose() }
     @{ Assets = @(@{ PackageId = $PackageId; Version = $version; Type = 'Full'; FileName = 'upgrade.nupkg'; SHA256 = (Get-FileHash -LiteralPath $package).Hash }) } |
-        ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $fixture "releases.$fixtureRid-daily.json")
+        ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $fixture "releases.$fixtureFeed.json")
 }
 function Check-Fixture {
-    & "$PSScriptRoot/Test-DailyUpgradePackage.ps1" -ReleaseDirectory $fixture -RuntimeIdentifier $fixtureRid -ExpectedVersion $version
+    & "$PSScriptRoot/Test-DailyUpgradePackage.ps1" -ReleaseDirectory $fixture -RuntimeIdentifier $fixtureRid -ExpectedVersion $version -Channel $fixtureChannel
 }
 function Expect-Rejection([string]$Message = '') {
     $rejected = $false
@@ -43,20 +43,34 @@ function Expect-Rejection([string]$Message = '') {
     if (-not $rejected) { throw 'Invalid upgrade package was accepted.' }
 }
 try {
-    foreach ($fixtureRid in @('win-x64', 'win-arm64')) {
-        Write-Fixture; Check-Fixture
-        Write-Fixture -DependencyNotices; Check-Fixture
-        Write-Fixture -DependencyManifestFirst
-        Expect-Rejection 'The root package manifest must precede dependency manifests.'
-        Write-Fixture -PackageId 'TypeWhisperDaily'; Expect-Rejection
-        Write-Fixture -Executable 'TypeWhisper.WinUI.exe'; Expect-Rejection
-        Write-Fixture -ManifestPath 'lib/app/licenses/dependency/package.nuspec'; Expect-Rejection
-        Write-Fixture -DuplicateManifest; Expect-Rejection
-        Write-Fixture
-        Add-Content -LiteralPath (Join-Path $fixture 'upgrade.nupkg') -Value 'tampered'
-        Expect-Rejection
+    $checks = 0
+    foreach ($fixtureChannel in @('daily', 'rc', 'stable')) {
+        foreach ($fixtureRid in @('win-x64', 'win-arm64')) {
+            $version = $versions[$fixtureChannel]
+            $fixtureFeed = switch ($fixtureChannel) { 'daily' { "$fixtureRid-daily" } 'rc' { "$fixtureRid-rc" } 'stable' { $fixtureRid } }
+            Get-ChildItem -LiteralPath $fixture -Filter 'releases.*.json' | Remove-Item
+            Write-Fixture; Check-Fixture
+            Write-Fixture -DependencyNotices; Check-Fixture
+            Write-Fixture -DependencyManifestFirst
+            Expect-Rejection 'The root package manifest must precede dependency manifests.'
+            Write-Fixture -PackageId 'TypeWhisperDaily'; Expect-Rejection
+            Write-Fixture -Executable 'TypeWhisper.WinUI.exe'; Expect-Rejection
+            Write-Fixture -ManifestPath 'lib/app/licenses/dependency/package.nuspec'; Expect-Rejection
+            Write-Fixture -DuplicateManifest; Expect-Rejection
+            Write-Fixture
+            Add-Content -LiteralPath (Join-Path $fixture 'upgrade.nupkg') -Value 'tampered'
+            Expect-Rejection
+            # A package built for another channel must not pass under this channel's feed.
+            $channelFeed = $fixtureFeed
+            $fixtureFeed = if ($fixtureChannel -eq 'stable') { "$fixtureRid-rc" } else { $fixtureRid }
+            Write-Fixture
+            Move-Item -LiteralPath (Join-Path $fixture "releases.$fixtureFeed.json") -Destination (Join-Path $fixture "releases.$channelFeed.json") -Force
+            $fixtureFeed = $channelFeed
+            Expect-Rejection 'Package identity or restart executable changed.'
+            $checks += 9
+        }
     }
-    Write-Host '16 original Daily package checks passed.'
+    Write-Host "$checks original-installation package checks passed."
 } finally {
     $resolved = [IO.Path]::GetFullPath($fixture)
     $temporary = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar

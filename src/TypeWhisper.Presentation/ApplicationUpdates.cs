@@ -3,7 +3,7 @@ using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
-/// <summary>Compatible WinUI release tracks; none use legacy WPF package feeds.</summary>
+/// <summary>Release tracks. Each installation identity maps them to its own feeds; see <see cref="ApplicationInstallation.Feed"/>.</summary>
 public enum AppUpdateChannel
 {
     /// <summary>Final releases.</summary>
@@ -53,14 +53,6 @@ public sealed class AppUpdatePreferences
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { Error = Loc.T("The update channel could not be saved."); return false; }
     }
-    /// <summary>Resolves a compatible WinUI feed for a supported Windows architecture.</summary>
-    public static string Feed(AppUpdateChannel channel, string architecture) =>
-        architecture is not ("win-x64" or "win-arm64") ? throw new ArgumentException("Unsupported architecture.", nameof(architecture))
-        : architecture + "-winui-" + (channel switch
-        {
-            AppUpdateChannel.Stable => "stable", AppUpdateChannel.Daily => "daily",
-            AppUpdateChannel.ReleaseCandidate => "rc", _ => throw new ArgumentOutOfRangeException(nameof(channel))
-        });
 }
 
 /// <summary>

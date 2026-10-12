@@ -2488,6 +2488,7 @@
   "The recovery setting could not be changed.": "Die Wiederherstellungs-Einstellung konnte nicht geändert werden.",
   "The release search could not be completed. Please try again later.": "Die Suche nach Releases konnte nicht abgeschlossen werden. Bitte versuche es später erneut.",
   "The release uses an incompatible installation identity.": "Die Version verwendet eine inkompatible Installationskennung.",
+  "This installation receives Daily builds only. Install TypeWhisper from the download page to use Stable or Release Candidate.": "Diese Installation erhält nur Daily-Versionen. Installiere TypeWhisper über die Download-Seite, um Stable oder Release Candidate zu nutzen.",
   "The restorable backup file could not be created either.": "Auch die wiederherstellbare Backup-Datei konnte nicht erstellt werden.",
   "The restorable backup file could not be created, but the copy of your data folder is complete.": "Die wiederherstellbare Backup-Datei konnte nicht erstellt werden, aber die Kopie deines Datenordners ist vollständig.",
   "The restore needs recovery before your profile can open again. Close TypeWhisper and reopen it to finish recovery.": "Die Wiederherstellung muss repariert werden, bevor dein Profil wieder geöffnet werden kann. Schließe TypeWhisper und öffne es erneut, um den Vorgang abzuschließen.",

@@ -2488,6 +2488,7 @@
   "The recovery setting could not be changed.": "无法更改恢复设置。",
   "The release search could not be completed. Please try again later.": "无法完成版本搜索。请稍后重试。",
   "The release uses an incompatible installation identity.": "该版本使用了不兼容的安装标识。",
+  "This installation receives Daily builds only. Install TypeWhisper from the download page to use Stable or Release Candidate.": "此安装仅接收 Daily 版本。要使用 Stable 或 Release Candidate，请从下载页面安装 TypeWhisper。",
   "The restorable backup file could not be created either.": "可恢复的备份文件也未能创建。",
   "The restorable backup file could not be created, but the copy of your data folder is complete.": "无法创建可恢复的备份文件，但数据文件夹的副本是完整的。",
   "The restore needs recovery before your profile can open again. Close TypeWhisper and reopen it to finish recovery.": "需要先修复此次恢复，才能再次打开你的配置文件。请关闭并重新打开 TypeWhisper 以完成修复。",

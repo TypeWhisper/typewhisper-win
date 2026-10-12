@@ -2,7 +2,10 @@
 param(
     [Parameter(Mandatory)][string]$Version,
     [Parameter(Mandatory)][ValidateSet('win-x64', 'win-arm64')][string]$RuntimeIdentifier,
-    [Parameter(Mandatory)][string]$Framework
+    [Parameter(Mandatory)][string]$Framework,
+    # Daily also builds the separate early 1.1 Daily installation. RC and Stable ship only the
+    # original installation, on the feeds its 1.0 updater already reads.
+    [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -16,10 +19,14 @@ if ($signing) {
     if ($LASTEXITCODE -ne 0) { throw 'Candidate signing failed.' }
 }
 
-foreach ($package in @(
-    @{ Id = 'TypeWhisperDaily'; Channel = "$RuntimeIdentifier-winui-daily"; Directory = 'installer' },
-    @{ Id = 'TypeWhisper'; Channel = "$RuntimeIdentifier-daily"; Directory = 'legacy-installer' }
-)) {
+$packages = @(switch ($Channel) {
+    'daily' { @(
+        @{ Id = 'TypeWhisperDaily'; Channel = "$RuntimeIdentifier-winui-daily"; Directory = 'installer' },
+        @{ Id = 'TypeWhisper'; Channel = "$RuntimeIdentifier-daily"; Directory = 'legacy-installer' }) }
+    'rc' { @(@{ Id = 'TypeWhisper'; Channel = "$RuntimeIdentifier-rc"; Directory = 'installer' }) }
+    'stable' { @(@{ Id = 'TypeWhisper'; Channel = $RuntimeIdentifier; Directory = 'installer' }) }
+})
+foreach ($package in $packages) {
     $packArguments = @('pack', '--packId', $package.Id, '--packTitle', 'TypeWhisper',
         '--packVersion', $Version, '--packDir', 'candidate', '--mainExe', 'TypeWhisper.exe',
         '--channel', $package.Channel, '--runtime', $RuntimeIdentifier, '--framework', $Framework,
@@ -32,12 +39,13 @@ foreach ($package in @(
     }
     & ./tools/vpk.exe @packArguments
     if ($LASTEXITCODE -ne 0) { throw "Packaging $($package.Id) failed." }
-    if (-not (Get-ChildItem $package.Directory -Filter '*Setup.exe')) { throw 'Daily installer is missing.' }
+    if (-not (Get-ChildItem $package.Directory -Filter '*Setup.exe')) { throw 'Installer is missing.' }
     ./eng/Test-PortablePackage.ps1 -ReleaseDirectory $package.Directory
     if ($signing) {
         ./eng/signpath/Verify-Packages.ps1 -ReleaseDirectory $package.Directory `
             -Policy $env:SIGNPATH_POLICY -Thumbprint $env:SIGNPATH_CERTIFICATE_THUMBPRINT
     }
 }
-./eng/Test-DailyUpgradePackage.ps1 -ReleaseDirectory legacy-installer `
-    -RuntimeIdentifier $RuntimeIdentifier -ExpectedVersion $Version
+$original = @($packages | Where-Object { $_.Id -eq 'TypeWhisper' })[0]
+./eng/Test-DailyUpgradePackage.ps1 -ReleaseDirectory $original.Directory `
+    -RuntimeIdentifier $RuntimeIdentifier -ExpectedVersion $Version -Channel $Channel

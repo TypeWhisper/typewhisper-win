@@ -1,15 +1,29 @@
 name: Candidate
 
-# PR runs only validate. Publishing is restricted to scheduled or explicit main runs.
+# PR runs only validate. Publishing is restricted to scheduled Daily runs or explicit main runs.
+# Daily also ships the separate early 1.1 Daily installation. RC and Stable ship only the original
+# TypeWhisper installation, on the feeds its 1.0 updater reads (win-<arch>-rc and win-<arch>).
 on:
   workflow_dispatch:
     inputs:
-      publish_daily:
-        description: 'Publish a WinUI Daily prerelease from main after validation'
+      channel:
+        description: 'Release channel'
+        type: choice
+        default: daily
+        options:
+          - daily
+          - rc
+          - stable
+      version:
+        description: 'RC or Stable version, e.g. 1.1.0-rc.1 or 1.1.0 (leave empty for Daily)'
+        type: string
+        default: ''
+      publish:
+        description: 'Publish the release from main after validation'
         type: boolean
         default: false
       publish_legacy_daily:
-        description: 'Also publish the verified 1.0 Daily upgrade (original TypeWhisper installation)'
+        description: 'Daily only: also publish the verified 1.0 Daily upgrade (original TypeWhisper installation)'
         type: boolean
         default: false
       signing_policy:
@@ -39,25 +53,61 @@ env:
   DAILY_VERSION_PREFIX: 1.1.0-daily.
 
 concurrency:
-  group: winui-daily-candidate-${{ github.ref }}
-  cancel-in-progress: true
+  group: winui-daily-candidate-${{ github.ref }}-${{ inputs.channel || 'daily' }}
+  # Superseded pull request runs are cancelled; a run on main may be about to publish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   version:
     runs-on: ubuntu-latest
     outputs:
       value: ${{ steps.version.outputs.value }}
+      channel: ${{ steps.version.outputs.channel }}
       signing_policy: ${{ steps.signing.outputs.policy }}
     steps:
-      - id: version
-        run: echo "value=${DAILY_VERSION_PREFIX}$(date -u +%Y%m%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: docs/releases
+      - name: Resolve channel and version
+        id: version
+        env:
+          CHANNEL: ${{ inputs.channel || 'daily' }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          PUBLISH_LEGACY_DAILY: ${{ inputs.publish_legacy_daily }}
+        run: |
+          set -euo pipefail
+          case "$CHANNEL" in
+            daily)
+              if [ -n "$REQUESTED_VERSION" ]; then echo 'Daily versions are generated; leave the version empty.'; exit 1; fi
+              version="${DAILY_VERSION_PREFIX}$(date -u +%Y%m%d).${{ github.run_number }}" ;;
+            rc)
+              if ! [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]]; then echo 'An RC version looks like 1.1.0-rc.1.'; exit 1; fi
+              version="$REQUESTED_VERSION" ;;
+            stable)
+              if ! [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo 'A Stable version looks like 1.1.0.'; exit 1; fi
+              version="$REQUESTED_VERSION" ;;
+            *) echo 'Unknown channel.'; exit 1 ;;
+          esac
+          if [ "$CHANNEL" != daily ]; then
+            if [ "$PUBLISH_LEGACY_DAILY" = true ]; then echo 'The 1.0 Daily upgrade is published only with Daily.'; exit 1; fi
+            # gh release create would attach to an existing tag instead of failing.
+            set +e; git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; status=$?; set -e
+            if [ "$status" -eq 0 ]; then echo "Tag v$version already exists."; exit 1; fi
+            if [ "$status" -ne 2 ]; then echo 'Could not check existing tags.'; exit 1; fi
+            if [ "$PUBLISH" = true ] && [ ! -f "docs/releases/v$version.md" ]; then
+              echo "Add the release notes docs/releases/v$version.md before publishing."; exit 1
+            fi
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
       - name: Resolve signing policy
         id: signing
         env:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_POLICY: ${{ inputs.signing_policy || 'none' }}
           RELEASE_POLICY: ${{ vars.SIGNPATH_SIGNING_POLICY || 'none' }}
-          PUBLISH_REQUESTED: ${{ inputs.publish_daily || inputs.publish_legacy_daily }}
+          PUBLISH_REQUESTED: ${{ inputs.publish || inputs.publish_legacy_daily }}
         run: |
           set -euo pipefail
           policy=none
@@ -81,6 +131,7 @@ jobs:
     environment: ${{ needs.version.outputs.signing_policy == 'none' && 'unsigned-candidate' || 'signpath' }}
     env:
       CANDIDATE_VERSION: ${{ needs.version.outputs.value }}
+      CANDIDATE_CHANNEL: ${{ needs.version.outputs.channel }}
     runs-on: windows-latest
     permissions:
       contents: read
@@ -132,14 +183,14 @@ jobs:
         shell: pwsh
         run: |
           ./eng/Test-WinUIDailyCandidate.ps1 -PublishDirectory candidate `
-            -ExpectedVersion $env:CANDIDATE_VERSION -RuntimeIdentifier '${{ matrix.rid }}'
+            -ExpectedVersion $env:CANDIDATE_VERSION -RuntimeIdentifier '${{ matrix.rid }}' -Channel $env:CANDIDATE_CHANNEL
       - name: Install Velopack
         shell: pwsh
         run: |
           $version = ./eng/Get-CentralPackageVersion.ps1 -PackageId Velopack
           dotnet tool install vpk --version $version --tool-path tools
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build and sign Daily packages
+      - name: Build and sign packages
         uses: ./.github/actions/signpath
         env:
           SIGNPATH_GITHUB_TOKEN: ${{ github.token }}
@@ -151,7 +202,7 @@ jobs:
           certificate-thumbprint: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
           script: |
             ./eng/Build-WinUIDailyPackages.ps1 -Version $env:CANDIDATE_VERSION `
-              -RuntimeIdentifier '${{ matrix.rid }}' -Framework '${{ matrix.framework }}'
+              -RuntimeIdentifier '${{ matrix.rid }}' -Framework '${{ matrix.framework }}' -Channel $env:CANDIDATE_CHANNEL
       - name: Read the minimum Windows build from the project
         id: platform
         shell: pwsh
@@ -171,12 +222,13 @@ jobs:
           $name = "TypeWhisper-$env:CANDIDATE_VERSION-${{ matrix.rid }}-candidate"
           @{ version = $env:CANDIDATE_VERSION; commit = '${{ github.sha }}'; runtime = '${{ matrix.rid }}';
              minimumWindowsBuild = [int]$env:MINIMUM_WINDOWS_BUILD; profile = 'TypeWhisper-WinUI';
-             distribution = 'daily-candidate'; automaticUpdates = $false;
+             distribution = "$env:CANDIDATE_CHANNEL-candidate"; automaticUpdates = $false;
              signingPolicy = '${{ needs.version.outputs.signing_policy }}' } |
             ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
           Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
           Copy-Item installer/* artifacts/candidate/
-          Copy-Item legacy-installer artifacts/candidate/legacy-upgrade -Recurse
+          # Only Daily builds the original installation separately; RC and Stable ship it as the installer.
+          if (Test-Path legacy-installer) { Copy-Item legacy-installer artifacts/candidate/legacy-upgrade -Recurse }
           Get-ChildItem artifacts/candidate -File -Recurse | Where-Object Extension -In '.exe', '.nupkg' | ForEach-Object {
             (Get-FileHash $_.FullName -Algorithm SHA256).Hash | Set-Content ($_.FullName + '.sha256')
           }
@@ -190,7 +242,7 @@ jobs:
 
   release:
     needs: [version, candidate]
-    if: needs.version.outputs.signing_policy != 'test-signing' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_daily))
+    if: needs.version.outputs.signing_policy != 'test-signing' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -201,37 +253,57 @@ jobs:
           pattern: winui-daily-candidate-*
           path: artifacts
           merge-multiple: true
-      - name: Publish Daily prerelease
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ needs.version.outputs.value }}
+          CHANNEL: ${{ needs.version.outputs.channel }}
           PUBLISH_LEGACY_DAILY: ${{ inputs.publish_legacy_daily || vars.LEGACY_DAILY_UPGRADE_ENABLED == 'true' }}
         run: |
           set -euo pipefail
-          test -f artifacts/releases.win-x64-winui-daily.json
-          test -f artifacts/releases.win-arm64-winui-daily.json
-          test ! -f artifacts/releases.win-x64-daily.json
-          test ! -f artifacts/releases.win-arm64-daily.json
+          # Each channel ships exactly its own feeds; any other feed would update the wrong installations.
+          case "$CHANNEL" in
+            daily) expected='releases.win-arm64-winui-daily.json releases.win-x64-winui-daily.json' ;;
+            rc) expected='releases.win-arm64-rc.json releases.win-x64-rc.json' ;;
+            stable) expected='releases.win-arm64.json releases.win-x64.json' ;;
+            *) echo 'Unknown channel.'; exit 1 ;;
+          esac
+          actual="$(cd artifacts && ls releases.*.json | sort | paste -sd ' ' -)"
+          if [ "$actual" != "$expected" ]; then echo "Unexpected feeds: $actual"; exit 1; fi
           mkdir upload
           for file in artifacts/*; do
             if [ -f "$file" ]; then cp "$file" upload/; fi
           done
-          if [ "$PUBLISH_LEGACY_DAILY" = "true" ]; then
+          if [ "$CHANNEL" = daily ] && [ "$PUBLISH_LEGACY_DAILY" = "true" ]; then
             cp artifacts/legacy-upgrade/* upload/
             test -f upload/releases.win-x64-daily.json
             test -f upload/releases.win-arm64-daily.json
           fi
-          # Notes: the channel introduction, then GitHub's generated list of changes since the previous Daily.
-          previous_tag="$(gh release list --exclude-drafts --limit 100 --json tagName,publishedAt --jq 'sort_by(.publishedAt) | reverse | .[].tagName' \
-            | awk -v prefix="v${DAILY_VERSION_PREFIX}" -v current="$TAG" \
-                'index($0, prefix) == 1 && $0 != current && !found { print; found = 1 }')"
-          notes_args=(--notes-file docs/releases/1.1-daily.md --generate-notes)
-          if [ -n "$previous_tag" ]; then
-            echo "Generating release notes since $previous_tag"
-            notes_args+=(--notes-start-tag "$previous_tag")
-          fi
+          case "$CHANNEL" in
+            daily)
+              # Notes: the channel introduction, then GitHub's generated list of changes since the previous Daily.
+              previous_tag="$(gh release list --exclude-drafts --limit 100 --json tagName,publishedAt --jq 'sort_by(.publishedAt) | reverse | .[].tagName' \
+                | awk -v prefix="v${DAILY_VERSION_PREFIX}" -v current="$TAG" \
+                    'index($0, prefix) == 1 && $0 != current && !found { print; found = 1 }')"
+              notes_args=(--notes-file docs/releases/1.1-daily.md --generate-notes)
+              if [ -n "$previous_tag" ]; then
+                echo "Generating release notes since $previous_tag"
+                notes_args+=(--notes-start-tag "$previous_tag")
+              fi
+              title="TypeWhisper $TAG · Daily"
+              flags=(--prerelease --latest=false) ;;
+            rc)
+              notes_args=(--notes-file "docs/releases/$TAG.md")
+              title="TypeWhisper $TAG · Release Candidate"
+              flags=(--prerelease --latest=false) ;;
+            stable)
+              # Without the prerelease flag, 1.0 installations on Stable find this release and update.
+              notes_args=(--notes-file "docs/releases/$TAG.md")
+              title="TypeWhisper $TAG"
+              flags=(--latest) ;;
+          esac
+          # Assets upload to a draft first, so updaters never see a release with missing files.
           gh release create "$TAG" upload/* --target "$GITHUB_SHA" \
-            --title "TypeWhisper $TAG · Daily" "${notes_args[@]}" \
-            --prerelease --latest=false --draft
-          gh release edit "$TAG" --draft=false --prerelease --latest=false
+            --title "$title" "${notes_args[@]}" "${flags[@]}" --draft
+          gh release edit "$TAG" --draft=false "${flags[@]}"
 

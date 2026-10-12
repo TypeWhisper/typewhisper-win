@@ -2,15 +2,18 @@
 param(
     [Parameter(Mandatory)][string]$ReleaseDirectory,
     [Parameter(Mandatory)][ValidateSet('win-x64', 'win-arm64')][string]$RuntimeIdentifier,
-    [Parameter(Mandatory)][string]$ExpectedVersion
+    [Parameter(Mandatory)][string]$ExpectedVersion,
+    # The original installation keeps its 1.0 feed per channel: win-x64-daily, win-x64-rc and win-x64.
+    [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$velopackChannel = switch ($Channel) { 'daily' { "$RuntimeIdentifier-daily" } 'rc' { "$RuntimeIdentifier-rc" } 'stable' { $RuntimeIdentifier } }
 $root = (Resolve-Path -LiteralPath $ReleaseDirectory).Path
-$feed = Get-Content -LiteralPath (Join-Path $root "releases.$RuntimeIdentifier-daily.json") -Raw | ConvertFrom-Json
+$feed = Get-Content -LiteralPath (Join-Path $root "releases.$velopackChannel.json") -Raw | ConvertFrom-Json
 $full = @($feed.Assets | Where-Object Type -eq 'Full')
 if ($full.Count -ne 1 -or $full[0].PackageId -ne 'TypeWhisper' -or $full[0].Version -ne $ExpectedVersion) {
-    throw 'The legacy Daily feed must contain exactly one matching TypeWhisper full package.'
+    throw "The $velopackChannel feed must contain exactly one matching TypeWhisper full package."
 }
 $name = $full[0].FileName
 if ($name -ne [IO.Path]::GetFileName($name) -or $name -match '[/\\:]') { throw 'Invalid upgrade package filename.' }
@@ -34,8 +37,8 @@ try {
     try { [xml]$metadata = $reader.ReadToEnd() } finally { $reader.Dispose() }
     if ($metadata.package.metadata.id -ne 'TypeWhisper' -or $metadata.package.metadata.mainExe -ne 'TypeWhisper.exe' -or
         $metadata.package.metadata.version -ne $ExpectedVersion -or $metadata.package.metadata.rid -ne $RuntimeIdentifier -or
-        $metadata.package.metadata.channel -ne "$RuntimeIdentifier-daily") {
+        $metadata.package.metadata.channel -ne $velopackChannel) {
         throw 'Package identity or restart executable changed.'
     }
 } finally { $archive.Dispose() }
-Write-Host "Validated original-installation upgrade: $ExpectedVersion ($RuntimeIdentifier)."
+Write-Host "Validated original-installation upgrade: $ExpectedVersion ($velopackChannel)."

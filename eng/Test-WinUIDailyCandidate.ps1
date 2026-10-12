@@ -2,13 +2,18 @@
 param(
     [Parameter(Mandatory)][string]$PublishDirectory,
     [Parameter(Mandatory)][string]$ExpectedVersion,
-    [Parameter(Mandatory)][ValidateSet('win-x64', 'win-arm64')][string]$RuntimeIdentifier
+    [Parameter(Mandatory)][ValidateSet('win-x64', 'win-arm64')][string]$RuntimeIdentifier,
+    [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ($ExpectedVersion -notmatch '^1\.1\.0-daily\.[0-9]{8}\.[0-9]+$') {
-    throw 'A candidate must have an explicit 1.1.0-daily version.'
+switch ($Channel) {
+    'daily' { if ($ExpectedVersion -notmatch '^1\.1\.0-daily\.[0-9]{8}\.[0-9]+$') { throw 'A Daily candidate must have an explicit 1.1.0-daily version.' } }
+    'rc' { if ($ExpectedVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$') { throw 'A release candidate must have a version such as 1.1.0-rc.1.' } }
+    'stable' { if ($ExpectedVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable release must have a version such as 1.1.0.' } }
 }
+# 1.1 installations reject packages from the previous application generation.
+if ([version]($ExpectedVersion -replace '-.*$', '') -lt [version]'1.1.0') { throw 'A candidate must be version 1.1.0 or later.' }
 $root = (Resolve-Path -LiteralPath $PublishDirectory).Path
 $required = @('TypeWhisper.exe', 'TypeWhisper.dll', 'TypeWhisper.runtimeconfig.json',
     'TypeWhisper.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
