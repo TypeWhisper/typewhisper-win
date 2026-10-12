@@ -7,7 +7,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
 {
     internal static string LanguageName(string code)
     {
-        try { return System.Globalization.CultureInfo.GetCultureInfo(code).EnglishName; }
+        try { return System.Globalization.CultureInfo.GetCultureInfo(code).DisplayName; }
         catch (System.Globalization.CultureNotFoundException) { return code; }
     }
     internal void Configure(string category, StackPanel content, List<ChoicePicker> pickers)
