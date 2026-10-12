@@ -3,15 +3,23 @@ $ErrorActionPreference = 'Stop'
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('winui-package-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 $checks = 0
-function Expect-Rejection([string]$Version, [string]$Message) {
+function Expect-Rejection([string]$Version, [string]$Message, [string]$Channel = 'daily') {
     $failure = $null
-    try { & "$PSScriptRoot/Test-WinUIDailyCandidate.ps1" -PublishDirectory $fixture -ExpectedVersion $Version -RuntimeIdentifier win-x64 }
+    try { & "$PSScriptRoot/Test-WinUIDailyCandidate.ps1" -PublishDirectory $fixture -ExpectedVersion $Version -RuntimeIdentifier win-x64 -Channel $Channel }
     catch { $failure = $_.Exception.Message }
     if ($null -eq $failure -or $failure -notlike "*$Message*") { throw "Expected '$Message'; received '$failure'" }
 }
 try {
     Expect-Rejection '1.1.0' 'explicit 1.1.0-daily version'; $checks++
+    Expect-Rejection '1.1.0' 'such as 1.1.0-rc.1' 'rc'; $checks++
+    Expect-Rejection '1.1.0-rc.0' 'such as 1.1.0-rc.1' 'rc'; $checks++
+    Expect-Rejection '1.1.0-rc.1' 'such as 1.1.0.' 'stable'; $checks++
+    Expect-Rejection '1.1.0-daily.20260910.1' 'such as 1.1.0.' 'stable'; $checks++
+    Expect-Rejection '1.0.10' '1.1.0 or later' 'stable'; $checks++
+    Expect-Rejection '1.0.0-rc.3' '1.1.0 or later' 'rc'; $checks++
     Expect-Rejection '1.1.0-daily.20260910.1' 'missing TypeWhisper.exe'; $checks++
+    Expect-Rejection '1.1.0-rc.1' 'missing TypeWhisper.exe' 'rc'; $checks++
+    Expect-Rejection '1.1.0' 'missing TypeWhisper.exe' 'stable'; $checks++
     $required = @('TypeWhisper.exe', 'TypeWhisper.dll', 'TypeWhisper.runtimeconfig.json',
         'TypeWhisper.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
         'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json')

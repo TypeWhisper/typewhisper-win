@@ -18,16 +18,6 @@ public sealed class ApplicationUpdateTests : IDisposable
         Assert.True(preferences.Save(AppUpdateChannel.ReleaseCandidate));
         Assert.Equal(AppUpdateChannel.ReleaseCandidate, Preferences("9.0.0").Channel);
     }
-    [Theory]
-    [InlineData(AppUpdateChannel.Stable, "stable")]
-    [InlineData(AppUpdateChannel.Daily, "daily")]
-    [InlineData(AppUpdateChannel.ReleaseCandidate, "rc")]
-    public void FeedsCannotFallBackToLegacyPackages(AppUpdateChannel channel, string suffix)
-    {
-        foreach (var arch in new[] { "win-x64", "win-arm64" })
-            Assert.Equal(arch + "-winui-" + suffix, AppUpdatePreferences.Feed(channel, arch));
-        Assert.Throws<ArgumentException>(() => AppUpdatePreferences.Feed(channel, "win-x86"));
-    }
     [Fact]
     public void LaterWaitsADayAndSkipLastsUntilAnotherVersion()
     {

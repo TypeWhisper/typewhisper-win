@@ -38,6 +38,8 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
         if (UnavailableReason is { } reason) throw new InvalidOperationException(reason);
         var arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
         var installation = ApplicationInstallation.Resolve(Velopack.Locators.VelopackLocator.Current.AppId)!;
+        if (!installation.Supports(channel))
+            throw new InvalidOperationException(Loc.T("This installation receives Daily builds only. Install TypeWhisper from the download page to use Stable or Release Candidate."));
         var feed = installation.Feed(channel, arch);
         var source = new AppReleaseGithubSource("https://github.com/TypeWhisper/typewhisper-win", feed, channel != AppUpdateChannel.Stable);
         var manager = new UpdateManager(source, new UpdateOptions { ExplicitChannel = feed, AllowVersionDowngrade = allowDowngrade });
@@ -45,10 +47,16 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
         {
             var update = await manager.CheckForUpdatesAsync();
             if (update is null) return new(source.HasMatchingRelease != false, null);
-            if (!installation.Accepts(update.TargetFullRelease.PackageId, update.TargetFullRelease.Version.Major, update.TargetFullRelease.Version.Minor))
+            var target = update.TargetFullRelease;
+            if (!installation.Accepts(target.PackageId, target.Version.Major, target.Version.Minor))
+            {
+                // The original installation shares its feeds with 1.0. Until a 1.1 release reaches the
+                // channel, its newest entry is a 1.0 package, which counts as no release rather than an error.
+                if (target.PackageId == installation.PackageId) return new(false, null);
                 throw new InvalidDataException(Loc.T("The release uses an incompatible installation identity."));
+            }
             _manager = manager; _update = update;
-            _offer = new(update.TargetFullRelease.Version.ToString(), manager.CurrentVersion is { } current && update.TargetFullRelease.Version < current);
+            _offer = new(target.Version.ToString(), manager.CurrentVersion is { } current && target.Version < current);
             return new(true, _offer);
         }
         catch when (source.HasMatchingRelease == false) { return new(false, null); }
