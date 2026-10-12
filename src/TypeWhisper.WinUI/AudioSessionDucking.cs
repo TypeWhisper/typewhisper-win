@@ -53,6 +53,8 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
     private float _factor;
 
     internal bool IsDucked => _deviceId is not null;
+    // Sessions kept for restoring; the caller releases every other session it passed in.
+    internal bool Holds(IDuckableAudioSession session) => _ducked.Values.Any(ducked => ReferenceEquals(ducked.Session, session));
     internal IReadOnlyList<string> PendingDevices => _pending.Select(entry => entry.DeviceId).Distinct(StringComparer.Ordinal).ToList();
 
     // Kept until the app plays again, however long that takes, since Windows keeps its lowered volume until then.
@@ -95,9 +97,11 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
         Lower([session]);
     }
 
-    internal void Restore()
+    // Returns the sessions it no longer holds.
+    internal IReadOnlyList<IDuckableAudioSession> Restore()
     {
-        if (!IsDucked) return;
+        if (!IsDucked) return [];
+        List<IDuckableAudioSession> released = [.. _ducked.Values.Select(ducked => ducked.Session)];
         foreach (var (session, entry) in _ducked.Values)
         {
             try
@@ -111,6 +115,7 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
         _ducked.Clear();
         _deviceId = null;
         Save();
+        return released;
     }
 
     private void Lower(IReadOnlyList<IDuckableAudioSession> sessions)
