@@ -64,16 +64,16 @@
     {
       "id": "com.typewhisper.claude",
       "name": "Claude",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Anthropic Claude text processing with model discovery and secure API-key settings.",
       "categories": [
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.claude-1.1.0-win-x64.zip",
-      "sha256": "e57caa728b15996139123217f016cedd892425d5ebcdd6af8e3b2eaddc247bb5",
-      "size": 19817,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-claude-v1.1.1/com.typewhisper.claude-1.1.1-win-x64.zip",
+      "sha256": "32fd01e73c88219a5709c4a8014332d3e3f8408e9527456c6671b5786d252a1f",
+      "size": 21070,
       "platforms": [
         "windows"
       ],
