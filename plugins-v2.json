@@ -575,16 +575,16 @@
     {
       "id": "com.typewhisper.reson8",
       "name": "Reson8",
-      "version": "1.2.9",
+      "version": "1.2.10",
       "minHostVersion": "1.1.2",
       "author": "Y. Vos",
       "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.reson8-1.2.9-win-x64.zip",
-      "sha256": "a6596551b1a16ec6f883f6d7c8f39456c7c50eaabfd1ffe93403893cc8b89937",
-      "size": 26907,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-reson8-v1.2.10/com.typewhisper.reson8-1.2.10-win-x64.zip",
+      "sha256": "607cb3325ded6988f7ac2f48fe570b848346dc9dae14c20012e0ffe38e018df4",
+      "size": 28343,
       "platforms": [
         "windows"
       ],
