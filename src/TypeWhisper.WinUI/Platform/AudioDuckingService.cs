@@ -111,8 +111,23 @@ public sealed class AudioDuckingService : IAudioDuckingService
         catch { device.Dispose(); throw; }
         // Restore releases both, also when listing the sessions fails.
         lock (_gate) (_device, _manager, _duckedDeviceId, _starting) = (device, manager, device.ID, new List<IDuckableAudioSession>());
-        manager.OnSessionCreated += OnSessionCreated;
-        var sessions = SessionsAfterSubscribing(enumerator, manager, device.ID);
+        List<IDuckableAudioSession> sessions;
+        try
+        {
+            manager.OnSessionCreated += OnSessionCreated;
+            sessions = SessionsAfterSubscribing(enumerator, manager, device.ID);
+        }
+        catch
+        {
+            // Nothing was lowered yet, so the listener is taken back and the next recording tries again.
+            lock (_gate)
+            {
+                ReleaseUnheld(_starting ?? []);
+                (_device, _manager, _duckedDeviceId, _starting) = (null, null, null, null);
+            }
+            Release(device, manager, OnSessionCreated);
+            throw;
+        }
         lock (_gate)
         {
             List<IDuckableAudioSession> listed = [.. sessions, .. _starting!];
@@ -340,8 +355,8 @@ public sealed class AudioDuckingService : IAudioDuckingService
     // Called under the gate. Sessions wrap native controls that are released here rather than by the collector.
     private void ReleaseUnheld(IEnumerable<IDuckableAudioSession> sessions)
     {
-        foreach (var session in sessions)
-            if (!_sessions.Holds(session)) ((Session)session).Dispose();
+        foreach (var session in sessions.Where(session => !_sessions.Holds(session)))
+            ((Session)session).Dispose();
     }
 
     // Windows reports sessions only once the subscribed manager's list was first counted. Listing through a
@@ -417,7 +432,11 @@ public sealed class AudioDuckingService : IAudioDuckingService
         // An expired session belongs to an app that stopped playing; it is no longer in the volume mixer.
         internal static Session? TryCreate(AudioSessionControl control)
         {
-            if (control.State != NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateExpired) return new(control);
+            try
+            {
+                if (control.State != NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateExpired) return new(control);
+            }
+            catch { control.Dispose(); throw; }
             control.Dispose();
             return null;
         }

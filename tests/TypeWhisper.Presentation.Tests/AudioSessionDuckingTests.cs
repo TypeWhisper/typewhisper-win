@@ -161,6 +161,22 @@ public sealed class AudioSessionDuckingTests : IDisposable
     }
 
     [Fact]
+    public void SessionWhoseRecoveryFailedIsNotLoweredAgain()
+    {
+        var ducking = new AudioSessionDucking(Own, _ => true, () => _now, (_, _) => { });
+        ducking.Resume([new AudioDuckingJournalEntry(Device, "app:music", .8f, .08f, _now)]);
+        var music = new FakeSession("music", 7, .08f);
+        var failures = 1;
+        music.Changing = _ => { if (failures-- > 0) throw new InvalidOperationException("Transient failure."); };
+
+        ducking.Duck(Device, .5f, [music]);
+
+        Assert.Equal(.08f, music.Volume);
+        Assert.False(ducking.Holds(music));
+        Assert.Equal([Device], ducking.PendingDevices);
+    }
+
+    [Fact]
     public void OldEntriesStayUntilTheAppPlaysAgain()
     {
         var ducking = Create();

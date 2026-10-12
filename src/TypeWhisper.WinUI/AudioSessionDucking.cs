@@ -61,9 +61,11 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
     internal void Resume(IEnumerable<AudioDuckingJournalEntry> previous) => _pending.AddRange(previous);
 
     // Restores sessions an earlier run left lowered. Entries whose app is not playing now stay pending.
-    internal void Recover(string deviceId, IReadOnlyList<IDuckableAudioSession> sessions)
+    // Returns the sessions whose restore failed; they may still be at the lowered volume.
+    internal IReadOnlyList<IDuckableAudioSession> Recover(string deviceId, IReadOnlyList<IDuckableAudioSession> sessions)
     {
         var changed = false;
+        var unresolved = new List<IDuckableAudioSession>();
         foreach (var entry in _pending.Where(entry => entry.DeviceId == deviceId).ToList())
         {
             var matching = sessions.Where(session => session.SessionId == entry.SessionId && session.ProcessId != ownProcessId).ToList();
@@ -75,9 +77,10 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
                 _pending.Remove(entry);
                 changed = true;
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { log("audio.ducking.recover-failed", ex); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { unresolved.AddRange(matching); log("audio.ducking.recover-failed", ex); }
         }
         if (changed) Save();
+        return unresolved;
     }
 
     internal void Duck(string deviceId, float factor, IReadOnlyList<IDuckableAudioSession> sessions)
@@ -85,16 +88,16 @@ internal sealed class AudioSessionDucking(uint ownProcessId, Func<IReadOnlyList<
         if (IsDucked) return;
         _deviceId = deviceId;
         _factor = Math.Clamp(factor, 0f, 1f);
-        Recover(deviceId, sessions);
-        Lower(sessions);
+        // Lowering a session that still has an earlier run's lowered volume would lower it twice.
+        var unresolved = Recover(deviceId, sessions);
+        Lower([.. sessions.Except(unresolved)]);
     }
 
     // A session that starts playing during the recording is lowered as well.
     internal void Add(IDuckableAudioSession session)
     {
         if (_deviceId is null) return;
-        Recover(_deviceId, [session]);
-        Lower([session]);
+        if (Recover(_deviceId, [session]).Count == 0) Lower([session]);
     }
 
     // Returns the sessions it no longer holds.
