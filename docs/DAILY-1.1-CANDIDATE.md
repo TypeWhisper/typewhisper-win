@@ -17,9 +17,13 @@ The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK rem
 
 ## Release candidates and Stable
 
-RC and Stable use the same Candidate workflow. Dispatch it on `main` with `channel=rc` and a version such as `1.1.0-rc.1`, or `channel=stable` and a version such as `1.1.0`. Without `publish` it only builds and validates. With `publish=true`, the run first checks that the tag does not exist yet and that `docs/releases/v<version>.md` is on `main`; those notes become the release text.
+RC and Stable use the same Candidate workflow. From 1.1.0-rc.1 on, 1.1 releases come from the `release/1.1` branch: dispatch the workflow on that branch with `channel=rc` and a version such as `1.1.0-rc.1`, or `channel=stable` and a version such as `1.1.0`. A `release/X.Y` branch only publishes X.Y versions, and Dailies are published from `main` only. Without `publish` the run only builds and validates. With `publish=true`, it first checks that the tag does not exist yet and that `docs/releases/v<version>.md` is on the dispatched branch; those notes become the release text.
 
 These releases contain only the original `TypeWhisper` installation: `TypeWhisper-win-x64-rc-Setup.exe` or `TypeWhisper-win-x64-Setup.exe`, plus the `win-x64-rc` or `win-x64` feed. An RC is a prerelease. Stable is published as the latest release, which is what makes installed 1.0 Stable updaters find it; its Setup keeps the 1.0 download name. Run the installed-upgrade acceptance below on the RC before publishing Stable. The Microsoft Store Stable submission stays a separate, manual step.
+
+## Release branches
+
+As on macOS, `main` carries the next minor version and each released line has its own branch. `release/1.1` starts at the 1.1.0-rc.1 commit and takes only fixes for 1.1: open hotfix pull requests against `release/1.1`, publish the next RC or `1.1.x` from that branch, and then bring each fix to `main` with its own pull request. Once `release/1.1` exists, `main` moves to 1.2 and its Dailies become `1.2.0-daily.*`. CI runs for pull requests against any branch and for pushes to `release/**`, and the `main` ruleset also protects `release/**`. Store betas keep following the Dailies from `main`; RC and Stable runs from a release branch do not reach them. Signing on a release branch also needs the branch in the `signpath` environment's deployment rules.
 
 ## Profile migration
 
