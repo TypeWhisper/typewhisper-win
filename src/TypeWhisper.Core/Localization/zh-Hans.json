@@ -1908,7 +1908,7 @@
   "Retry saving and restoring": "重试保存和恢复",
   "Retry setup": "重试设置",
   "Retry · R": "重试 · R",
-  "Return to the text field active when recording started, even if you switch windows. If that field is unavailable, the result opens for review instead of being pasted elsewhere.": "即使切换了窗口，也会回到开始录音时所在的文本输入框。如果该输入框不可用，结果会打开供检查，而不会粘贴到别处。",
+  "Return to the text field active when recording started, even if you switch windows. If the app does not expose that field, return to its window instead. If neither is available, the result opens for review instead of being pasted elsewhere.": "即使切换了窗口，也会回到开始录音时所在的文本输入框。如果应用没有公开该输入框，则改为回到它的窗口。如果两者都不可用，结果会打开供检查，而不会粘贴到别处。",
   "Reusable text with spoken triggers.": "可通过语音触发的可复用文本。",
   "Review": "检查",
   "Review entries": "检查条目",

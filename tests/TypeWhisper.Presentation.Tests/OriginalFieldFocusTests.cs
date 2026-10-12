@@ -34,6 +34,17 @@ public class OriginalFieldFocusTests
     }
 
     [Fact]
+    public void OnlyTheCapturedTopLevelWindowStandsInForAField()
+    {
+        // #633: Zed exposes no accessibility tree; its focused element is the window (50032).
+        Assert.True(OriginalFieldFocus.IsUnstructuredTopLevelWindow(50032, 42, 42));
+        Assert.False(OriginalFieldFocus.IsUnstructuredTopLevelWindow(50032, 7, 42));
+        Assert.False(OriginalFieldFocus.IsUnstructuredTopLevelWindow(50032, 0, 0));
+        // #513: Chromium's cold render host Pane must keep the capture retrying.
+        Assert.False(OriginalFieldFocus.IsUnstructuredTopLevelWindow(50033, 42, 42));
+    }
+
+    [Fact]
     public void ConsoleElementsMayBelongToTheWindowHostProcess()
     {
         // #551: a conhost window reports powershell, its Document element reports conhost.

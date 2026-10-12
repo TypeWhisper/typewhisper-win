@@ -6,10 +6,15 @@ using TypeWhisper.WinUI.Platform;
 namespace TypeWhisper.WinUI;
 
 // Capture identity only: never read the user's field contents or select its text.
+// When no field can be identified, the lock keeps the window instead (#633): macOS pastes
+// normally when it cannot pin a field; Windows still refuses to paste into another window.
 internal sealed class OriginalDictationField : IAsyncDisposable
 {
     private readonly SerializedBackgroundWork _work = new();
     private bool _disposed;
+    private bool _windowOnly;
+    private int _windowReports;
+    private bool _passwordSeen;
     private long _verifiedAt;
     private readonly IUIAutomation2 _automation = (IUIAutomation2)new CUIAutomation8();
     private IUIAutomationElement? _element;
@@ -39,20 +44,37 @@ internal sealed class OriginalDictationField : IAsyncDisposable
             {
                 target._automation.ConnectionTimeout = 200;
                 target._automation.TransactionTimeout = 200;
-                AppDiagnostics.Write("field.capture.success");
+                AppDiagnostics.Write(target._windowOnly ? "field.capture.window-only" : "field.capture.success");
                 return target;
             }
         }
         catch (OperationCanceledException) { if (target is not null) await target.DisposeAsync(); throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.exception", ex); }
         AppDiagnostics.Write("field.capture.failed");
+        if (target is not null && target.KeepWindowOnly())
+        {
+            AppDiagnostics.Write("field.capture.window-only");
+            return target;
+        }
         if (target is not null) await target.DisposeAsync();
         return null;
     }
 
+    // Capture has ended, so nothing else uses the element yet. A password field the lock
+    // rejected stays rejected: falling back to its window would paste into it after all.
+    // That holds for any attempt of this capture, and for an element that cannot answer.
+    private bool KeepWindowOnly()
+    {
+        var password = _passwordSeen || MayBePassword();
+        Release(_element); _element = null;
+        if (password) { AppDiagnostics.Write("field.capture.password"); return false; }
+        _windowOnly = true;
+        return IsValid();
+    }
+
     private bool CaptureFocused()
     {
-        Release(_element); _element = null;
+        Release(_element); _element = null; _windowOnly = false;
         try { _element = _automation.GetFocusedElement(); }
         // UIA_E_ELEMENTNOTAVAILABLE and similar races are transient while focus settles: retry.
         catch (COMException ex) { AppDiagnostics.Write("field.capture.transient", ex); return false; }
@@ -62,7 +84,43 @@ internal sealed class OriginalDictationField : IAsyncDisposable
             _automation.ConnectionTimeout = 250; _automation.TransactionTimeout = 250;
         }
         DiagnoseCapture();
+        if (_element is not null && MayBePassword()) _passwordSeen = true;
+        // An app without an accessibility tree (e.g. Zed) will not expose a field on retry either.
+        // A structured app can report its window briefly while focus settles, so wait for repeats.
+        _windowReports = IsUnstructuredTopLevelWindow() ? _windowReports + 1 : 0;
+        if (_windowReports >= 3) return KeepWindowOnly();
         return IsCurrent();
+    }
+
+    // Window-only mode cannot follow focus inside the window, but it still must not paste into a
+    // password field the user moved to. Exceptions reach IsCurrent, which then refuses.
+    private bool FocusedElementIsPassword()
+    {
+        var focused = _automation.GetFocusedElement();
+        try
+        {
+            if (focused is null || focused.CurrentIsPassword == 0) return false;
+            AppDiagnostics.Write("field.verify.password");
+            return true;
+        }
+        finally { Release(focused); }
+    }
+
+    private bool MayBePassword()
+    {
+        if (_element is not { } element) return true;
+        try { return element.CurrentIsPassword != 0; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); return true; }
+    }
+
+    private bool IsUnstructuredTopLevelWindow()
+    {
+        try
+        {
+            return _element is not null && OriginalFieldFocus.IsUnstructuredTopLevelWindow(_element.CurrentControlType,
+                (IntPtr)_element.CurrentNativeWindowHandle, _window);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); return false; }
     }
 
     // These probes query the same provider as IsCurrent. A transient provider failure must leave
@@ -74,6 +132,8 @@ internal sealed class OriginalDictationField : IAsyncDisposable
             AppDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.element control={_element.CurrentControlType}");
             if (_element?.CurrentControlType is 50025 or 50026)
                 AppDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");
+            if (_element?.CurrentControlType is 50032)
+                AppDiagnostics.Write($"field.capture.window targetWindow={(IntPtr)_element.CurrentNativeWindowHandle == _window}");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); }
     }
@@ -81,6 +141,7 @@ internal sealed class OriginalDictationField : IAsyncDisposable
     private bool IsValid()
     {
         NativeMethods.GetWindowThreadProcessId(_window, out var process);
+        if (_windowOnly) return process == _process;
         if (process != _process || _element is null ||
             !OriginalFieldFocus.BelongsToWindowProcess(_element.CurrentProcessId, _process, WindowHostProcess) ||
             _element.CurrentIsEnabled == 0 || _element.CurrentIsPassword != 0 ||
@@ -130,6 +191,7 @@ internal sealed class OriginalDictationField : IAsyncDisposable
         {
             if (NativeMethods.GetForegroundWindow() != _window) { AppDiagnostics.Write("field.verify.other-window"); return false; }
             if (!IsValid()) { AppDiagnostics.Write("field.verify.invalid-element"); return false; }
+            if (_windowOnly) return !FocusedElementIsPassword();
             var focused = _automation.GetFocusedElement();
             try
             {
@@ -183,7 +245,7 @@ internal sealed class OriginalDictationField : IAsyncDisposable
                     // UIA providers (including Chromium/Electron) may activate the
                     // host only when the captured editable element receives focus.
                     // Do not require foreground ownership before requesting it.
-                    if (IsValid() && !expired())
+                    if (!_windowOnly && IsValid() && !expired())
                     {
                         AppDiagnostics.Write("field.restore.request-element-focus");
                         _element!.SetFocus();
@@ -195,6 +257,7 @@ internal sealed class OriginalDictationField : IAsyncDisposable
                 DiagnoseFocus();
                 return false;
             }
+            if (_windowOnly) return IsCurrent();
             return await OriginalFieldFocus.RestoreAsync(IsCurrent,
                 () => NativeMethods.GetForegroundWindow() == _window && IsValid(),
                 () => _element!.SetFocus(), ct => Task.Delay(25, ct), cancellation, expired);
@@ -238,6 +301,7 @@ internal sealed class OriginalDictationField : IAsyncDisposable
         var foreground = NativeMethods.GetForegroundWindow();
         NativeMethods.GetWindowThreadProcessId(foreground, out var process);
         AppDiagnostics.Write($"field.restore.observed targetWindow={foreground == _window} targetProcess={process == _process} ownProcess={process == Environment.ProcessId}");
+        if (_windowOnly) return;
         var focused = _automation.GetFocusedElement();
         try { AppDiagnostics.Write($"field.restore.observed originalElement={_automation.CompareElements(_element, focused) != 0}"); }
         finally { Release(focused); }

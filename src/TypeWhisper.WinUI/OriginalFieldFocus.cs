@@ -15,6 +15,12 @@ internal static class OriginalFieldFocus
         ((controlType is 50003 or 50025 or 50026 || (controlType is 50020 && className == "TermControl")) &&
             keyboardFocusable && writableTextPattern());
 
+    // Apps that draw their own UI without an accessibility tree (e.g. Zed, #633) report the
+    // top-level window itself as focused. Capture can keep that window after a few repeats instead
+    // of retrying for its whole budget; Chromium's cold render host Pane (#513) is a child window.
+    internal static bool IsUnstructuredTopLevelWindow(int controlType, IntPtr elementWindow, IntPtr capturedWindow) =>
+        controlType is 50032 && elementWindow != IntPtr.Zero && elementWindow == capturedWindow;
+
     // Classic console windows report the client process (e.g. powershell), while their
     // UIA elements live in conhost. UIA's process for the window itself identifies that host.
     internal static bool BelongsToWindowProcess(int elementProcess, uint windowProcess, Func<int> windowHostProcess) =>

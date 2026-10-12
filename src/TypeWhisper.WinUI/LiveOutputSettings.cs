@@ -37,7 +37,7 @@ internal static class LiveOutputSettings
             var lockToggle = AppToggleSwitch.Create(store.Current.LockPasteToFocusedField);
             AutomationProperties.SetName(lockToggle, Loc.T("Paste only into the original field"));
             lockRow.Set(Loc.T("Paste only into the original field"),
-                Loc.T("Return to the text field active when recording started, even if you switch windows. If that field is unavailable, the result opens for review instead of being pasted elsewhere."), lockToggle);
+                Loc.T("Return to the text field active when recording started, even if you switch windows. If the app does not expose that field, return to its window instead. If neither is available, the result opens for review instead of being pasted elsewhere."), lockToggle);
             var resettingLock = false;
             lockToggle.Toggled += (_, _) =>
             {
