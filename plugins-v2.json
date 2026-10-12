@@ -656,16 +656,16 @@
     {
       "id": "com.typewhisper.speechmatics",
       "name": "Speechmatics",
-      "version": "1.2.5",
+      "version": "1.2.6",
       "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
       "description": "Speechmatics batch and live transcription with regional processing, spoken languages and custom vocabulary.",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.speechmatics-1.2.5-win-x64.zip",
-      "sha256": "e1563a807b8c27f183905350fd480eafcfa3ab8c2cc38fbdbd1ec84036c6094b",
-      "size": 27730,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-speechmatics-v1.2.6/com.typewhisper.speechmatics-1.2.6-win-x64.zip",
+      "sha256": "321d2e3d93c775e84918c33b7006ff271a1f71a51113d3d7877beee5a14eb0c7",
+      "size": 28607,
       "platforms": [
         "windows"
       ],
