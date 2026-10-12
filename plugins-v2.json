@@ -615,7 +615,7 @@
     {
       "id": "com.typewhisper.smallest-ai",
       "name": "Smallest AI",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "minHostVersion": "1.1.4",
       "author": "TypeWhisper",
       "description": "Pulse transcription and Lightning text-to-speech",
@@ -623,9 +623,9 @@
         "transcription",
         "tts"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.smallest-ai-1.2.1-win-x64.zip",
-      "sha256": "ec9d622ec8e9c61b48917c7cebba39f369115639b13d90f288f0e742e20657b4",
-      "size": 250075,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-smallest-ai-v1.2.2/com.typewhisper.smallest-ai-1.2.2-win-x64.zip",
+      "sha256": "b12135ff83b848b17e68f8088bcd0d7beaa987882dc73a68a064437abad9a0fc",
+      "size": 441737,
       "platforms": [
         "windows"
       ],
