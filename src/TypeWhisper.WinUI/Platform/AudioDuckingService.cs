@@ -165,9 +165,14 @@ public sealed class AudioDuckingService : IAudioDuckingService
         AudioSessionManager manager;
         try { manager = device.AudioSessionManager; }
         catch { device.Dispose(); throw; }
-        // Subscribed before the swap, so a failure keeps the previous listener. Sessions reported before the swap
-        // are in the list taken after it.
-        try { manager.OnSessionCreated += OnSessionCreated; }
+        // Set up completely before it replaces the previous listener, so a failure keeps that one. Sessions it
+        // reports meanwhile are queued behind this and find it in place.
+        List<IDuckableAudioSession> sessions;
+        try
+        {
+            manager.OnSessionCreated += OnSessionCreated;
+            sessions = SessionsAfterSubscribing(enumerator, manager, deviceId);
+        }
         catch { Release(device, manager, OnSessionCreated); throw; }
         (MMDevice Device, AudioSessionManager? Manager) previous;
         lock (_gate)
@@ -178,16 +183,11 @@ public sealed class AudioDuckingService : IAudioDuckingService
                 previous = (_device, _manager);
                 (_device, _manager) = (device, manager);
             }
-        }
-        Release(previous.Device, previous.Manager, OnSessionCreated);
-        if (previous.Device == device) return;
-        var sessions = SessionsAfterSubscribing(enumerator, manager, deviceId);
-        lock (_gate)
-        {
             if (!_stopped && manager == _manager)
                 foreach (var session in sessions) _sessions.Add(session);
             ReleaseUnheld(sessions);
         }
+        Release(previous.Device, previous.Manager, OnSessionCreated);
     }
 
     private void Restore()
