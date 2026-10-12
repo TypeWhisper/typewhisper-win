@@ -2,7 +2,7 @@ name: Candidate
 
 # PR runs only validate. Publishing is restricted to scheduled Daily runs or explicit main runs.
 # Daily also ships the separate early 1.1 Daily installation. RC and Stable ship only the original
-# TypeWhisper installation, on the feeds its 1.0 updater reads (win-<arch>-rc and win-<arch>).
+# TypeWhisper installation, on the feeds its 1.0 updater reads (win-x64-rc and win-x64).
 on:
   workflow_dispatch:
     inputs:

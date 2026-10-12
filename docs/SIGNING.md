@@ -22,7 +22,7 @@ original signatures and the shared CLI runtime hashes remain unchanged.
    `signing_policy=test-signing` and both publication options disabled.
 4. Check the SignPath request links in each packaging job's summary and the
    signature verification results for the candidate, setup, portable archive
-   and update package. Both architectures must pass.
+   and update package. All of them must pass.
 5. Ask SignPath to review the setup and issue the production certificate.
 
 The test certificate thumbprint is pinned in `eng/signpath/run.cjs`. The test
@@ -58,9 +58,9 @@ After SignPath has activated `release-signing`:
    certificate's 40-character SHA-1 thumbprint from SignPath. This is a public
    certificate identifier, not a private key.
 2. Run Candidate on `main` with `signing_policy=release-signing`, publishing
-   disabled, and inspect both architectures.
+   disabled, and inspect the x64 build.
    The Foundation-provided release policy currently requires one approval by
-   Marco for each signing request. Each architecture submits five batches:
+   Marco for each signing request. The build submits five batches:
    the candidate executables, each package's generated helpers and each final
    installer. Each batch waits up to 30 minutes for completion. Approve requests
    in SignPath as they arrive during this production test.

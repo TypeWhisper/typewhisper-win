@@ -117,7 +117,7 @@ Beta/RC status belongs to the submission, not a version suffix. The app displays
 
 ## Submit and promote
 
-For the internal flight, open **Internal Beta** in TypeWhisper, upload both `internal-flight` architecture packages after acceptance, review Flight options, and submit for certification. Testers install/update the normal TypeWhisper product while signed into a listed Microsoft account. Membership changes may take up to 30 minutes.
+For the internal flight, open **Internal Beta** in TypeWhisper, upload the `internal-flight` x64 package after acceptance, review Flight options, and submit for certification. Testers install/update the normal TypeWhisper product while signed into a listed Microsoft account. Membership changes may take up to 30 minutes.
 
 For stable, create a regular TypeWhisper submission and copy the accepted packages from **Internal Beta**. Keep the flight on the accepted build or update it deliberately; its members continue to receive flight packages. Removing a tester or flight does not automatically downgrade an installed package: updates need an eligible higher version.
 
@@ -133,7 +133,7 @@ Both Store products declare the existing `typewhisper:` callback protocol. Store
 
 Device acceptance and release checks remain necessary alongside automation:
 
-- Verify installation, Store/Start-menu activation, microphone capture, curated plugin installation, restart, and Store-controlled updates on the supported architectures.
+- Verify installation, Store/Start-menu activation, microphone capture, curated plugin installation, restart, and Store-controlled updates on x64.
 - Verify the internal flight's installed upgrade and data migration. Both 1.1 Store packages require Windows 11 build 26100 or later; the existing 1.0.9 packages support older Windows.
 - Install public beta alongside stable. Check separate histories/settings/sign-ins, CLI installation, callback routing, and that resetting beta leaves stable data intact.
 - Complete the public beta listing, screenshots, properties, and age ratings, clearly identifying it as a beta.

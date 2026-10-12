@@ -67,7 +67,7 @@ body:
     id: architecture
     attributes:
       label: Architecture
-      description: TypeWhisper is built for x64. On Snapdragon and other Arm devices, Windows runs it through emulation.
+      description: TypeWhisper is built for x64. Windows 11 on Arm can run it through emulation, which is untested; Windows 10 on Arm cannot.
       options:
         - x64
         - Arm device (x64 through emulation)
