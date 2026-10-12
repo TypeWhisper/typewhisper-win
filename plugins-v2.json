@@ -23,7 +23,7 @@
     {
       "id": "com.typewhisper.authenticated-cli",
       "name": "Authenticated Provider CLIs",
-      "version": "1.3.4",
+      "version": "1.3.5",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Use authenticated Codex, Claude, Antigravity, and OpenCode Zen CLI sessions for prompt processing",
@@ -31,9 +31,9 @@
         "llm",
         "integrations"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-authenticated-cli-v1.3.4/com.typewhisper.authenticated-cli-1.3.4-win-x64.zip",
-      "sha256": "2abe2163334bf3ce5d16068eb345f445fbe59f8d0cf97768aca32c9f9049d594",
-      "size": 76921,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-authenticated-cli-v1.3.5/com.typewhisper.authenticated-cli-1.3.5-win-x64.zip",
+      "sha256": "d2409c8b59980dee30789c896436b52b3d640127b90020f532a4dfecc8522545",
+      "size": 78344,
       "platforms": [
         "windows"
       ],
