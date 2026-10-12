@@ -23,8 +23,6 @@ public sealed class AudioDuckingService : IAudioDuckingService
     private MMDevice? _device;
     private AudioSessionManager? _manager;
     private string? _duckedDeviceId;
-    // Sessions that started while the existing ones were being listed.
-    private List<IDuckableAudioSession>? _starting;
     // Held while an interrupted run's entries wait for their app to play again on that output.
     private readonly Dictionary<string, (MMDevice Device, AudioSessionManager Manager)> _recovery = new(StringComparer.Ordinal);
     // Registered while ducked or while such entries are pending; used only on the work queue.
@@ -88,15 +86,20 @@ public sealed class AudioDuckingService : IAudioDuckingService
     }
 
     // Session notifications are only delivered to registrations made on an MTA thread, and the work stays
-    // off the dictation path. Requests run in order, so a quick stop never restores before its duck.
-    private void Enqueue(Action action)
+    // off the dictation path and the Core Audio notification threads. Requests run in order, so a quick stop
+    // never restores before its duck. Returns false once shut down.
+    private bool Enqueue(Action action)
     {
         lock (_queueGate)
-            if (!_closed) _work = _work.ContinueWith(_ =>
+        {
+            if (_closed) return false;
+            _work = _work.ContinueWith(_ =>
             {
                 try { action(); }
                 catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.failed", ex); }
             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            return true;
+        }
     }
 
     private void Duck(string? deviceId, float factor)
@@ -109,8 +112,8 @@ public sealed class AudioDuckingService : IAudioDuckingService
         AudioSessionManager manager;
         try { manager = device.AudioSessionManager; }
         catch { device.Dispose(); throw; }
-        // Restore releases both, also when listing the sessions fails.
-        lock (_gate) (_device, _manager, _duckedDeviceId, _starting) = (device, manager, device.ID, new List<IDuckableAudioSession>());
+        // Sessions reported meanwhile are queued behind this duck and added after it.
+        lock (_gate) (_device, _manager, _duckedDeviceId) = (device, manager, device.ID);
         List<IDuckableAudioSession> sessions;
         try
         {
@@ -120,20 +123,14 @@ public sealed class AudioDuckingService : IAudioDuckingService
         catch
         {
             // Nothing was lowered yet, so the listener is taken back and the next recording tries again.
-            lock (_gate)
-            {
-                ReleaseUnheld(_starting ?? []);
-                (_device, _manager, _duckedDeviceId, _starting) = (null, null, null, null);
-            }
+            lock (_gate) (_device, _manager, _duckedDeviceId) = (null, null, null);
             Release(device, manager, OnSessionCreated);
             throw;
         }
         lock (_gate)
         {
-            List<IDuckableAudioSession> listed = [.. sessions, .. _starting!];
-            _sessions.Duck(device.ID, factor, listed);
-            _starting = null;
-            ReleaseUnheld(listed);
+            _sessions.Duck(device.ID, factor, sessions);
+            ReleaseUnheld(sessions);
         }
         RecoverPending();
     }
@@ -142,15 +139,19 @@ public sealed class AudioDuckingService : IAudioDuckingService
     {
         try
         {
-            if (Session.TryCreate(created) is not { } session) return;
-            lock (_gate)
-            {
-                if (!_stopped && sender == _manager && _starting is not null) { _starting.Add(session); return; }
-                if (!_stopped && sender == _manager) _sessions.Add(session);
-                ReleaseUnheld([session]);
-            }
+            // Lowering writes the journal, which is kept off the notification thread.
+            if (Session.TryCreate(created) is { } session && !Enqueue(() => AddCreated(sender, session))) session.Dispose();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.session-failed", ex); }
+    }
+
+    private void AddCreated(object sender, IDuckableAudioSession session)
+    {
+        lock (_gate)
+        {
+            if (!_stopped && sender == _manager) _sessions.Add(session);
+            ReleaseUnheld([session]);
+        }
     }
 
     // An output that was disconnected during the recording comes back with a new session manager; the old one
@@ -195,11 +196,10 @@ public sealed class AudioDuckingService : IAudioDuckingService
         AudioSessionManager? manager;
         lock (_gate)
         {
-            ReleaseUnheld([.. _starting ?? [], .. _sessions.Restore()]);
+            ReleaseUnheld(_sessions.Restore());
             (device, manager) = (_device, _manager);
-            (_device, _manager, _duckedDeviceId, _starting) = (null, null, null, null);
+            (_device, _manager, _duckedDeviceId) = (null, null, null);
         }
-        // Unregister outside the gate: it waits for a running notification, which may be waiting for the gate.
         if (device is not null) Release(device, manager, OnSessionCreated);
         RecoverPending();
     }
@@ -338,18 +338,22 @@ public sealed class AudioDuckingService : IAudioDuckingService
     {
         try
         {
-            if (Session.TryCreate(created) is not { } session) return;
-            using (session)
-            lock (_gate)
-            {
-                if (_stopped) return;
-                if (_recovery.FirstOrDefault(listener => listener.Value.Manager == sender).Key is not { } deviceId) return;
-                _sessions.Recover(deviceId, [session]);
-                // Unregistering from within a notification is not allowed.
-                if (!_sessions.PendingDevices.Contains(deviceId)) Enqueue(RecoverPending);
-            }
+            if (Session.TryCreate(created) is { } session && !Enqueue(() => RecoverCreated(sender, session))) session.Dispose();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.recover-failed", ex); }
+    }
+
+    private void RecoverCreated(object sender, Session session)
+    {
+        bool settled;
+        using (session)
+        lock (_gate)
+        {
+            if (_stopped || _recovery.FirstOrDefault(listener => listener.Value.Manager == sender).Key is not { } deviceId) return;
+            _sessions.Recover(deviceId, [session]);
+            settled = !_sessions.PendingDevices.Contains(deviceId);
+        }
+        if (settled) RecoverPending();
     }
 
     // Called under the gate. Sessions wrap native controls that are released here rather than by the collector.
