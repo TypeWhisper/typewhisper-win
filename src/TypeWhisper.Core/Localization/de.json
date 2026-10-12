@@ -1908,7 +1908,7 @@
   "Retry saving and restoring": "Speichern und Wiederherstellen erneut versuchen",
   "Retry setup": "Einrichtung erneut versuchen",
   "Retry · R": "Erneut versuchen · R",
-  "Return to the text field active when recording started, even if you switch windows. If that field is unavailable, the result opens for review instead of being pasted elsewhere.": "Kehrt zu dem Textfeld zurück, das beim Start der Aufnahme aktiv war, auch wenn du das Fenster wechselst. Ist dieses Feld nicht verfügbar, wird das Ergebnis zur Prüfung geöffnet, statt es woanders einzufügen.",
+  "Return to the text field active when recording started, even if you switch windows. If the app does not expose that field, return to its window instead. If neither is available, the result opens for review instead of being pasted elsewhere.": "Kehrt zu dem Textfeld zurück, das beim Start der Aufnahme aktiv war, auch wenn du das Fenster wechselst. Gibt die App dieses Feld nicht preis, kehrt TypeWhisper stattdessen zu ihrem Fenster zurück. Ist beides nicht verfügbar, wird das Ergebnis zur Prüfung geöffnet, statt es woanders einzufügen.",
   "Reusable text with spoken triggers.": "Wiederverwendbarer Text mit gesprochenen Auslösern.",
   "Review": "Prüfen",
   "Review entries": "Einträge prüfen",

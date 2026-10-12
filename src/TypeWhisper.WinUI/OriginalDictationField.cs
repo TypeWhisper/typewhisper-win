@@ -92,6 +92,20 @@ internal sealed class OriginalDictationField : IAsyncDisposable
         return IsCurrent();
     }
 
+    // Window-only mode cannot follow focus inside the window, but it still must not paste into a
+    // password field the user moved to. Exceptions reach IsCurrent, which then refuses.
+    private bool FocusedElementIsPassword()
+    {
+        var focused = _automation.GetFocusedElement();
+        try
+        {
+            if (focused is null || focused.CurrentIsPassword == 0) return false;
+            AppDiagnostics.Write("field.verify.password");
+            return true;
+        }
+        finally { Release(focused); }
+    }
+
     private bool MayBePassword()
     {
         if (_element is not { } element) return true;
@@ -177,7 +191,7 @@ internal sealed class OriginalDictationField : IAsyncDisposable
         {
             if (NativeMethods.GetForegroundWindow() != _window) { AppDiagnostics.Write("field.verify.other-window"); return false; }
             if (!IsValid()) { AppDiagnostics.Write("field.verify.invalid-element"); return false; }
-            if (_windowOnly) return true;
+            if (_windowOnly) return !FocusedElementIsPassword();
             var focused = _automation.GetFocusedElement();
             try
             {

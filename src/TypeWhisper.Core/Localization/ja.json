@@ -1908,7 +1908,7 @@
   "Retry saving and restoring": "保存と復元を再試行",
   "Retry setup": "セットアップを再試行",
   "Retry · R": "再試行 · R",
-  "Return to the text field active when recording started, even if you switch windows. If that field is unavailable, the result opens for review instead of being pasted elsewhere.": "ウインドウを切り替えても、録音開始時にアクティブだったテキスト入力欄に戻ります。その入力欄が利用できない場合は、別の場所に貼り付けずに結果を確認用に開きます。",
+  "Return to the text field active when recording started, even if you switch windows. If the app does not expose that field, return to its window instead. If neither is available, the result opens for review instead of being pasted elsewhere.": "ウインドウを切り替えても、録音開始時にアクティブだったテキスト入力欄に戻ります。アプリがその入力欄を公開していない場合は、代わりにそのウインドウに戻ります。どちらも利用できない場合は、別の場所に貼り付けずに結果を確認用に開きます。",
   "Reusable text with spoken triggers.": "音声トリガーで呼び出せる再利用可能なテキスト。",
   "Review": "レビュー",
   "Review entries": "項目を確認",
