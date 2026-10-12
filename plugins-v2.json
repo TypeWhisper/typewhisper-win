@@ -104,7 +104,7 @@
     {
       "id": "com.typewhisper.cohere",
       "name": "Cohere",
-      "version": "1.1.3",
+      "version": "1.1.4",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Preserves Windows Command text processing and adds the cloud Cohere Transcribe capability present in the Mac plugin.",
@@ -112,9 +112,9 @@
         "transcription",
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.cohere-1.1.3-win-x64.zip",
-      "sha256": "929386681d9729da6e89b11f41bf707dafcdd97de350a8c6103f52874d7263e7",
-      "size": 18860,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cohere-v1.1.4/com.typewhisper.cohere-1.1.4-win-x64.zip",
+      "sha256": "219635649a4c8c18781384f3b98feb9ba83cc1b549a0561cc3a3880ac4b22f83",
+      "size": 19354,
       "platforms": [
         "windows"
       ],
