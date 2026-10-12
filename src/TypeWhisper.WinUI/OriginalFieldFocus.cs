@@ -16,8 +16,8 @@ internal static class OriginalFieldFocus
             keyboardFocusable && writableTextPattern());
 
     // Apps that draw their own UI without an accessibility tree (e.g. Zed, #633) report the
-    // top-level window itself as focused. Only that exact window can stand in for a field;
-    // a window is then all the lock can verify, so focus moves inside it go unnoticed.
+    // top-level window itself as focused. Capture can keep that window after a few repeats instead
+    // of retrying for its whole budget; Chromium's cold render host Pane (#513) is a child window.
     internal static bool IsUnstructuredTopLevelWindow(int controlType, IntPtr elementWindow, IntPtr capturedWindow) =>
         controlType is 50032 && elementWindow != IntPtr.Zero && elementWindow == capturedWindow;
 
