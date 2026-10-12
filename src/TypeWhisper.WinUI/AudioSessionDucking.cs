@@ -20,8 +20,17 @@ internal sealed record AudioDuckingJournalEntry(string DeviceId, string SessionI
 
 internal static class AudioDuckingJournal
 {
-    internal static IReadOnlyList<AudioDuckingJournalEntry> Load(string path) =>
-        File.Exists(path) ? JsonSerializer.Deserialize<List<AudioDuckingJournalEntry>>(File.ReadAllText(path)) ?? [] : [];
+    internal static IReadOnlyList<AudioDuckingJournalEntry> Load(string path)
+    {
+        if (!File.Exists(path)) return [];
+        try { return JsonSerializer.Deserialize<List<AudioDuckingJournalEntry>>(File.ReadAllText(path)) ?? []; }
+        catch (JsonException)
+        {
+            // The next save would replace it, so it is kept for a look at what was lowered.
+            File.Move(path, path + ".corrupt", overwrite: true);
+            throw;
+        }
+    }
 
     internal static void Save(string path, IReadOnlyList<AudioDuckingJournalEntry> entries)
     {

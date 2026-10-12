@@ -194,6 +194,19 @@ public sealed class AudioSessionDuckingTests : IDisposable
         Assert.False(File.Exists(path));
     }
 
+    [Fact]
+    public void UnreadableJournalIsMovedAsideInsteadOfOverwritten()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Join(_directory, "audio-ducking.json");
+        File.WriteAllText(path, "{ not json");
+
+        Assert.ThrowsAny<System.Text.Json.JsonException>(() => AudioDuckingJournal.Load(path));
+
+        Assert.False(File.Exists(path));
+        Assert.Equal("{ not json", File.ReadAllText(path + ".corrupt"));
+    }
+
     private sealed class FakeSession(string app, uint processId, float volume) : IDuckableAudioSession
     {
         private float _volume = volume;

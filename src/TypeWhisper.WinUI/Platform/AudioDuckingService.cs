@@ -287,11 +287,11 @@ public sealed class AudioDuckingService : IAudioDuckingService
         }
         else
         {
-            var (enumerator, client) = _outputWatch!.Value;
+            using var enumerator = _outputWatch!.Value.Enumerator;
+            var client = _outputWatch.Value.Client;
             _outputWatch = null;
             try { client.Dispose(); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.release-failed", ex); }
-            finally { enumerator.Dispose(); }
         }
     }
 
@@ -325,13 +325,15 @@ public sealed class AudioDuckingService : IAudioDuckingService
     // A failure here is logged, so the remaining listeners are still released.
     private static void Release(MMDevice device, AudioSessionManager? manager, AudioSessionManager.SessionCreatedDelegate handler)
     {
-        try
+        using (device)
         {
-            if (manager is not null) manager.OnSessionCreated -= handler;
-            manager?.Dispose();
+            try
+            {
+                if (manager is not null) manager.OnSessionCreated -= handler;
+                manager?.Dispose();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.release-failed", ex); }
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.release-failed", ex); }
-        finally { device.Dispose(); }
     }
 
     // System sounds are lowered as well, as they are with the system volume on the Mac.
