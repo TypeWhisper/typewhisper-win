@@ -14,6 +14,7 @@ internal sealed class OriginalDictationField : IAsyncDisposable
     private bool _disposed;
     private bool _windowOnly;
     private int _windowReports;
+    private bool _passwordSeen;
     private long _verifiedAt;
     private readonly IUIAutomation2 _automation = (IUIAutomation2)new CUIAutomation8();
     private IUIAutomationElement? _element;
@@ -61,12 +62,10 @@ internal sealed class OriginalDictationField : IAsyncDisposable
 
     // Capture has ended, so nothing else uses the element yet. A password field the lock
     // rejected stays rejected: falling back to its window would paste into it after all.
-    // An element that cannot answer may be one, so it is rejected too.
+    // That holds for any attempt of this capture, and for an element that cannot answer.
     private bool KeepWindowOnly()
     {
-        bool password;
-        try { password = _element is { } element && element.CurrentIsPassword != 0; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); password = true; }
+        var password = _passwordSeen || MayBePassword();
         Release(_element); _element = null;
         if (password) { AppDiagnostics.Write("field.capture.password"); return false; }
         _windowOnly = true;
@@ -85,11 +84,19 @@ internal sealed class OriginalDictationField : IAsyncDisposable
             _automation.ConnectionTimeout = 250; _automation.TransactionTimeout = 250;
         }
         DiagnoseCapture();
+        if (_element is not null && MayBePassword()) _passwordSeen = true;
         // An app without an accessibility tree (e.g. Zed) will not expose a field on retry either.
         // A structured app can report its window briefly while focus settles, so wait for repeats.
         _windowReports = IsUnstructuredTopLevelWindow() ? _windowReports + 1 : 0;
         if (_windowReports >= 3) return KeepWindowOnly();
         return IsCurrent();
+    }
+
+    private bool MayBePassword()
+    {
+        if (_element is not { } element) return true;
+        try { return element.CurrentIsPassword != 0; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); return true; }
     }
 
     private bool IsUnstructuredTopLevelWindow()
