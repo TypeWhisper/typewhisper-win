@@ -165,16 +165,16 @@
     {
       "id": "com.typewhisper.elevenlabs",
       "name": "ElevenLabs",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
       "description": "Scribe v2 transcription with live text and dictionary terms",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.elevenlabs-1.1.1-win-x64.zip",
-      "sha256": "c69ccbe2339db8194593e6df7ae938aa2a28abedf33de21a70234ea563d38ce7",
-      "size": 24228,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-elevenlabs-v1.1.2/com.typewhisper.elevenlabs-1.1.2-win-x64.zip",
+      "sha256": "8a277a284e0f874a4d9b7d5617181264588f6423697fe302af20317af317767d",
+      "size": 25358,
       "platforms": [
         "windows"
       ],
