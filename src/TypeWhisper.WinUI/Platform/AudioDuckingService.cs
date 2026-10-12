@@ -287,11 +287,13 @@ public sealed class AudioDuckingService : IAudioDuckingService
         }
         else
         {
-            using var enumerator = _outputWatch!.Value.Enumerator;
-            var client = _outputWatch.Value.Client;
+            var (enumerator, client) = _outputWatch!.Value;
             _outputWatch = null;
-            try { client.Dispose(); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.release-failed", ex); }
+            using (enumerator)
+            {
+                try { client.Dispose(); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("audio.ducking.release-failed", ex); }
+            }
         }
     }
 
