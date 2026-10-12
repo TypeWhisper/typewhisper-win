@@ -1,6 +1,6 @@
 # AssemblyAI for the portable host
 
-Portable .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.2`, requiring host `1.1.5` or later.
+Portable .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.3`, requiring host `1.1.5` or later.
 
 ## Features
 

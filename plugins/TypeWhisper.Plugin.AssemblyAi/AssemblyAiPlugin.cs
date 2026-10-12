@@ -33,7 +33,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     /// <inheritdoc />
     public string PluginName => "AssemblyAI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.1.3";
     /// <inheritdoc />
     public string ProviderId => "assemblyai";
     /// <inheritdoc />
