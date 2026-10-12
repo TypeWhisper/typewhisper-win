@@ -491,7 +491,7 @@
     {
       "id": "com.typewhisper.openai",
       "name": "OpenAI / ChatGPT",
-      "version": "1.1.5",
+      "version": "1.1.6",
       "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
       "description": "OpenAI transcription, prompt processing, and text-to-speech with dynamic API and ChatGPT model catalogs. STT/TTS require an API key; prompts can use ChatGPT login.",
@@ -500,9 +500,9 @@
         "llm",
         "tts"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.openai-1.1.5-win-x64.zip",
-      "sha256": "7b1e7794dcad757d68f57c6b03ea143b992376326580102e062949079330d911",
-      "size": 257815,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-v1.1.6/com.typewhisper.openai-1.1.6-win-x64.zip",
+      "sha256": "9d45796dc77547943cab942a45d263f3812700e57cbc0085e671214bedf8bb59",
+      "size": 487988,
       "platforms": [
         "windows"
       ],
