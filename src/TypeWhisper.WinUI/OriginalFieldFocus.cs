@@ -15,6 +15,12 @@ internal static class OriginalFieldFocus
         ((controlType is 50003 or 50025 or 50026 || (controlType is 50020 && className == "TermControl")) &&
             keyboardFocusable && writableTextPattern());
 
+    // Apps that draw their own UI without an accessibility tree (e.g. Zed, #633) report the
+    // top-level window itself as focused. Only that exact window can stand in for a field;
+    // a window is then all the lock can verify, so focus moves inside it go unnoticed.
+    internal static bool IsUnstructuredTopLevelWindow(int controlType, IntPtr elementWindow, IntPtr capturedWindow) =>
+        controlType is 50032 && elementWindow != IntPtr.Zero && elementWindow == capturedWindow;
+
     // Classic console windows report the client process (e.g. powershell), while their
     // UIA elements live in conhost. UIA's process for the window itself identifies that host.
     internal static bool BelongsToWindowProcess(int elementProcess, uint windowProcess, Func<int> windowHostProcess) =>

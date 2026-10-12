@@ -74,6 +74,8 @@ internal sealed class OriginalDictationField : IAsyncDisposable
             AppDiagnostics.Write(_element is null ? "field.capture.no-element" : $"field.capture.element control={_element.CurrentControlType}");
             if (_element?.CurrentControlType is 50025 or 50026)
                 AppDiagnostics.Write($"field.capture.custom focusable={_element.CurrentIsKeyboardFocusable != 0} writable={HasWritableTextPattern()}");
+            if (_element?.CurrentControlType is 50032)
+                AppDiagnostics.Write($"field.capture.window targetWindow={(IntPtr)_element.CurrentNativeWindowHandle == _window}");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("field.capture.probe-failed", ex); }
     }
@@ -84,8 +86,10 @@ internal sealed class OriginalDictationField : IAsyncDisposable
         if (process != _process || _element is null ||
             !OriginalFieldFocus.BelongsToWindowProcess(_element.CurrentProcessId, _process, WindowHostProcess) ||
             _element.CurrentIsEnabled == 0 || _element.CurrentIsPassword != 0 ||
-            !OriginalFieldFocus.IsEditableControl(_element.CurrentControlType,
-                _element.CurrentIsKeyboardFocusable != 0, HasWritableTextPattern, _element.CurrentClassName)) return false;
+            !(OriginalFieldFocus.IsEditableControl(_element.CurrentControlType,
+                _element.CurrentIsKeyboardFocusable != 0, HasWritableTextPattern, _element.CurrentClassName) ||
+              OriginalFieldFocus.IsUnstructuredTopLevelWindow(_element.CurrentControlType,
+                  (IntPtr)_element.CurrentNativeWindowHandle, _window))) return false;
         var walker = _automation.RawViewWalker;
         IUIAutomationElement? parent = null;
         try
