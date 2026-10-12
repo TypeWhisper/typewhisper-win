@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TypeWhisper.Core.Models;
@@ -18,12 +19,13 @@ public sealed record SupportDiagnosticsReport(
     SupportDiagnosticsReport.WorkflowInfo? Workflows,
     SupportDiagnosticsReport.CountsInfo? Counts,
     SupportDiagnosticsReport.LogInfo? Log,
+    SupportDiagnosticsReport.PolicyInfo? Policy,
     IReadOnlyList<SupportDiagnosticsReport.CollectionError> CollectionErrors)
 {
     /// <summary>The Windows support-report schema, independent of the macOS schema.</summary>
     /// <remarks>Version 2 replaced settings.appFormattingEnabled with appAwareFormattingEnabled and added
-    /// stripFinalPeriodFromStandaloneValues.</remarks>
-    public int SchemaVersion => 2;
+    /// stripFinalPeriodFromStandaloneValues. Version 3 added the policy section.</remarks>
+    public int SchemaVersion => 3;
 
     /// <summary>App identity and process lifetime, without installation paths.</summary>
     public sealed record AppInfo(string Version, string Build, bool IsDevelopment, double UptimeSeconds);
@@ -89,6 +91,16 @@ public sealed record SupportDiagnosticsReport(
     /// <summary>An unavailable section identified only by exception type and HRESULT.</summary>
     public sealed record CollectionError(string Section, string? ErrorType, string? HResult);
 
+    /// <summary>Validated machine policy: key names, safe values and findings. Sensitive values are reported as set, never with content.</summary>
+    public sealed record PolicyInfo(string Status, long Revision, bool Watching, IReadOnlyList<PolicyValueInfo> Enforced,
+        IReadOnlyList<PolicyValueInfo> Recommended, IReadOnlyList<string> InvalidEnforced, IReadOnlyList<PolicyIssueInfo> Issues);
+
+    /// <summary>One policy value: numbers for booleans and enumerations, filtered identifiers for text, entries for lists.</summary>
+    public sealed record PolicyValueInfo(string Name, string? Value, IReadOnlyList<string>? Items);
+
+    /// <summary>A validation finding that names a key and a rule, never a rejected value.</summary>
+    public sealed record PolicyIssueInfo(string? Key, string? Scope, string Message);
+
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -122,6 +134,26 @@ public sealed record SupportDiagnosticsReport(
                 Identifier(workflow.Output.TargetActionPluginId), workflow.Output.NumberNormalizationMode.ToString(),
                 workflow.Template != WorkflowTemplate.Dictation && workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit);
         }).ToArray(), Identifier(defaults?.Provider), Identifier(defaults?.Model));
+
+    /// <summary>Projects a policy snapshot without exposing sensitive values.</summary>
+    public static PolicyInfo SummarizePolicy(ManagedPolicySnapshot snapshot, bool watching) => new(
+        snapshot.Status.ToString(), snapshot.Revision, watching,
+        PolicyValues(snapshot.EnforcedValues), PolicyValues(snapshot.RecommendedValues),
+        snapshot.InvalidEnforcedKeys.Order(StringComparer.Ordinal).ToArray(),
+        snapshot.Issues.Select(issue => new PolicyIssueInfo(issue.Key, issue.Scope?.ToString(), issue.Message)).ToArray());
+
+    private static PolicyValueInfo[] PolicyValues(IReadOnlyDictionary<string, ManagedPolicyValue> values) =>
+        values.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry =>
+        {
+            var sensitive = ManagedPolicyKeys.Find(entry.Key)?.Sensitive == true;
+            return entry.Value.Kind switch
+            {
+                ManagedPolicyValueKind.Text => new PolicyValueInfo(entry.Key, sensitive ? "[set]" : Identifier(entry.Value.Text), null),
+                ManagedPolicyValueKind.List => new PolicyValueInfo(entry.Key, null,
+                    sensitive ? ["[set]"] : entry.Value.Items!.Select(item => Identifier(item) ?? "[omitted]").ToArray()),
+                _ => new PolicyValueInfo(entry.Key, entry.Value.Number.ToString(CultureInfo.InvariantCulture), null)
+            };
+        }).ToArray();
 
     /// <summary>Keeps technical IDs, including provider/model IDs, while omitting paths, URLs and free text.</summary>
     // Namespaced IDs and relative paths cannot be distinguished without a trusted catalog.

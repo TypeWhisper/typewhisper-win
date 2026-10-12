@@ -23,6 +23,8 @@ public sealed partial class MainWindow
                 _dictation?.ObservePrerollSession(0, 0, _hotkeyRecovery?.SessionNotificationsAvailable == true);
                 // A prepared microphone client can go stale across sleep or a session switch.
                 _dictation?.RefreshMicrophoneAfterResume();
+                // Registry notifications can be lost across sleep or a session switch.
+                WinUIManagedPolicy.RequestRefresh();
                 var errors = new List<string>();
                 if (_dictationHotkey?.Recover() is { } error) errors.Add(error);
                 foreach (var entry in _recordingShortcuts.Values)
