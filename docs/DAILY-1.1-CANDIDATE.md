@@ -13,7 +13,7 @@ The internal `TypeWhisperDaily` identity is retained for existing installations.
 
 Both package variants are built and the original-installation package is inspected before publication. Original Daily assets are kept in the `legacy-upgrade` artifact directory until rollout is enabled. A main dispatch with `channel=daily`, `publish=true` and `publish_legacy_daily=true` publishes both feeds. Set the repository variable `LEGACY_DAILY_UPGRADE_ENABLED=true` only after installed upgrade acceptance to continue publishing the original feed on scheduled runs. Without that gate, the separate 1.1 Daily continues receiving updates and the old Daily feed is unchanged.
 
-The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK remains 26100; the configured minimum OS is 19041. Changing that minimum is not native compatibility evidence. Validate older Windows releases separately. There is no ARM64 build: 1.0 ARM64 installations find no update and stay on 1.0.9, and Windows 11 on Arm can run the x64 version through emulation, which is untested.
+The app uses installed .NET 10 with a bundled Windows App SDK. The build SDK remains 26100; the configured minimum OS is 19041. Changing that minimum is not native compatibility evidence. Validate older Windows releases separately. There is no ARM64 build: ARM64 installations of 1.0 from GitHub find no update and stay on 1.0.9. Windows 11 on Arm can run the x64 version through emulation, which is untested, so Store installations there can receive it as an update.
 
 ## Release candidates and Stable
 
