@@ -595,16 +595,16 @@
     {
       "id": "com.typewhisper.script",
       "name": "Script Runner",
-      "version": "1.3.7",
+      "version": "1.3.8",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Process transcriptions through custom shell scripts",
       "categories": [
         "post-processing"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.script-1.3.7-win-x64.zip",
-      "sha256": "5292dbce6b550021d753c6836d49498fe1440db834ef95ffeadb1324a6975057",
-      "size": 39004,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-script-v1.3.8/com.typewhisper.script-1.3.8-win-x64.zip",
+      "sha256": "b5039dd8806f252c2a53a3f8a9d13bf42c6ed29e3fdd81740ee88815c108168e",
+      "size": 40848,
       "platforms": [
         "windows"
       ],
