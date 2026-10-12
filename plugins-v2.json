@@ -534,7 +534,7 @@
     {
       "id": "com.typewhisper.openrouter",
       "name": "OpenRouter",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Text processing and speech-to-text via OpenRouter, with model discovery, text model pricing and API key budget checks.",
@@ -542,9 +542,9 @@
         "llm",
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-winui-20260923/com.typewhisper.openrouter-1.1.2-win-x64.zip",
-      "sha256": "719ca89e607f08faf1bbe581b10871a78126052add795676a792a88e3b262d39",
-      "size": 31682,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openrouter-v1.1.3/com.typewhisper.openrouter-1.1.3-win-x64.zip",
+      "sha256": "84cafbd48dcb76e503c17600e9f5c7bc3e0696e12d35cbc1917e3dc96afe9d5c",
+      "size": 33345,
       "platforms": [
         "windows"
       ],
