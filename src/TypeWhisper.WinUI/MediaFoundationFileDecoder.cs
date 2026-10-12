@@ -2,6 +2,7 @@ using NAudio.Wave;
 
 namespace TypeWhisper.WinUI;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 internal static class MediaFoundationFileDecoder
 {
     private const int MaximumSamples = 16000 * 60 * 60;
@@ -21,7 +22,7 @@ internal static class MediaFoundationFileDecoder
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
-                var count = resampler.Read(buffer, 0, buffer.Length);
+                var count = resampler.Read(buffer);
                 ct.ThrowIfCancellationRequested();
                 if (count == 0) break;
                 if (count % 2 != 0) throw new InvalidOperationException("The media decoder returned incomplete audio samples.");

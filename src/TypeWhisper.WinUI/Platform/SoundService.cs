@@ -75,7 +75,10 @@ public sealed class SoundService
                 device = string.IsNullOrEmpty(outputDeviceId)
                     ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
                     : enumerator.GetDevice(outputDeviceId);
+                // NAudio 3 obsoletes WasapiOut; moving to WasapiPlayer is tracked in #629.
+#pragma warning disable CS0618
                 output = new WasapiOut(device, AudioClientShareMode.Shared, true, 100);
+#pragma warning restore CS0618
             }
             output.Init(reader);
             output.PlaybackStopped += (_, _) => Cleanup();

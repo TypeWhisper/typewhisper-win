@@ -94,7 +94,8 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+            using var outputs = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+            foreach (var device in outputs)
                 using (device) choices.Add(new(device.ID, device.FriendlyName, Loc.T("Audio output")));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

@@ -26,7 +26,14 @@ public sealed class SystemAudioCaptureService : IDisposable
     private TimeSpan _startedAt;
     private TimeSpan _timelineOffset;
     private int? _stopSample;
+    private TimeSpan? _lastPacketAt;
+    private int _burstBase;
+    private int _burstStart;
+    private int _burstEnd;
+    private int _published;
     private const int MaximumSamples = 16000 * 60 * 60;
+    // NAudio drains every packet of a wake-up back to back; wake-ups are tens of milliseconds apart.
+    private static readonly TimeSpan BurstWindow = TimeSpan.FromMilliseconds(5);
 
     /// <summary>
     /// Initializes a new instance of the SystemAudioCaptureService class.
@@ -57,7 +64,8 @@ public sealed class SystemAudioCaptureService : IDisposable
     /// </summary>
     public event Action<float>? AudioLevelChanged;
     /// <summary>
-    /// Raised when normalized 16 kHz mono samples are available.
+    /// Raised when normalized 16 kHz mono timeline samples are final: when the next burst of
+    /// packets starts and when capture stops. Together the chunks equal the stopped capture.
     /// </summary>
     public event EventHandler<SamplesAvailableEventArgs>? SamplesAvailable;
 
@@ -78,6 +86,8 @@ public sealed class SystemAudioCaptureService : IDisposable
             _timelineOffset = timelineOffset;
             _startedAt = startedAt;
             _stopSample = null;
+            _lastPacketAt = null;
+            _burstBase = _burstStart = _burstEnd = _published = 0;
         }
         _peakRmsLevel = 0;
 
@@ -118,11 +128,16 @@ public sealed class SystemAudioCaptureService : IDisposable
             _isRecording = false;
         }
 
+        float[] result;
+        float[]? published;
         lock (_lock)
         {
             PadTo(_stopSample.Value);
-            return [.. _samples];
+            published = TakeUnpublished(_samples.Count);
+            result = [.. _samples];
         }
+        if (published is not null) SamplesAvailable?.Invoke(this, new SamplesAvailableEventArgs(published));
+        return result;
     }
 
     /// <summary>
@@ -163,20 +178,48 @@ public sealed class SystemAudioCaptureService : IDisposable
         if (rms > _peakRmsLevel)
             _peakRmsLevel = rms;
 
+        float[]? published = null;
         lock (_lock)
         {
-            // NAudio exposes callback receipt time, not WASAPI device position. Keep short scheduling
-            // jitter contiguous, but preserve real loopback silence instead of compressing the timeline.
-            var packetStart = Math.Max(0, TimelineSample(receivedAt) - samples.Length);
-            var previousCount = _samples.Count;
-            if (_samples.Count == 0 || packetStart - _samples.Count > 800) PadTo(packetStart);
+            // NAudio exposes callback receipt time, not WASAPI device position, and raises one callback
+            // per packet. Packets drained in one wake-up form a burst that ends when its first packet
+            // arrived. Keep short scheduling jitter contiguous, but preserve real loopback silence
+            // instead of compressing the timeline.
+            if (_lastPacketAt is not { } last || receivedAt - last > BurstWindow)
+            {
+                _burstBase = _burstStart = _samples.Count;
+                _burstEnd = TimelineSample(receivedAt);
+                // Earlier bursts can no longer move.
+                published = TakeUnpublished(_burstBase);
+            }
+            _lastPacketAt = receivedAt;
+            var burstStart = Math.Max(0, _burstEnd - (_samples.Count - _burstStart) - samples.Length);
+            var padding = _burstBase == 0 || burstStart - _burstBase > 800 ? Math.Max(0, burstStart - _burstBase) : 0;
+            // Each further packet of the burst moves its start earlier, shrinking the silence before it.
+            if (padding < _burstStart - _burstBase)
+            {
+                _samples.RemoveRange(_burstBase + padding, _burstStart - _burstBase - padding);
+                _burstStart = _burstBase + padding;
+            }
+            if (_samples.Count == _burstStart && padding > _burstStart - _burstBase)
+            {
+                PadTo(_burstBase + padding);
+                _burstStart = _samples.Count;
+            }
             var count = Math.Min(samples.Length, (_stopSample ?? MaximumSamples) - _samples.Count);
             if (count > 0) _samples.AddRange(samples.AsSpan(0, count).ToArray());
-            samples = _samples.GetRange(previousCount, _samples.Count - previousCount).ToArray();
         }
 
         AudioLevelChanged?.Invoke(peak);
-        SamplesAvailable?.Invoke(this, new SamplesAvailableEventArgs(samples));
+        if (published is not null) SamplesAvailable?.Invoke(this, new SamplesAvailableEventArgs(published));
+    }
+
+    private float[]? TakeUnpublished(int end)
+    {
+        if (end <= _published) return null;
+        var chunk = _samples.GetRange(_published, end - _published).ToArray();
+        _published = end;
+        return chunk;
     }
 
     private int TimelineSample(TimeSpan now) => ToSample(now - _startedAt + _timelineOffset);
@@ -352,9 +395,11 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
     {
         using var enumerator = new MMDeviceEnumerator();
         var devices = new List<SystemAudioOutputDevice>();
-        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
-            using (device) devices.Add(new(device.ID, device.FriendlyName));
-        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
+        using (var outputs = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+            foreach (var device in outputs)
+                using (device) devices.Add(new(device.ID, device.FriendlyName));
+        using var inputs = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+        foreach (var device in inputs)
             using (device)
                 if (IsSystemAudioCaptureMix(device)) devices.Add(new(CaptureDevicePrefix + device.ID, device.FriendlyName));
         return devices;
@@ -371,7 +416,10 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
             selected = useDefault ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
                 : enumerator.GetDevice(captureMix ? deviceId![CaptureDevicePrefix.Length..] : deviceId!);
             if (selected.State != DeviceState.Active) throw new InvalidOperationException("The selected audio endpoint is not active.");
+            // NAudio 3 obsoletes WasapiCapture and WasapiLoopbackCapture; moving to WasapiRecorder is tracked in #629.
+#pragma warning disable CS0618
             return new WasapiCaptureAdapter(captureMix ? new WasapiCapture(selected) : new WasapiLoopbackCapture(selected), selected);
+#pragma warning restore CS0618
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

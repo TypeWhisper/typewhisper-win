@@ -2080,13 +2080,13 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
     /// <summary>
     /// Gets the device count.
     /// </summary>
-    public int DeviceCount => WaveInEvent.DeviceCount;
+    public int DeviceCount => WaveIn.DeviceCount;
 
     /// <summary>
     /// Returns device name.
     /// </summary>
     public string GetDeviceName(int deviceNumber) =>
-        WaveInEvent.GetCapabilities(deviceNumber).ProductName;
+        WaveIn.GetCapabilities(deviceNumber).ProductName;
 
     public AudioInputDeviceInfo GetDeviceInfo(int deviceNumber)
     {
@@ -2154,20 +2154,21 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
 
     private static IReadOnlyList<string> GetWaveInDeviceNames()
     {
-        var count = WaveInEvent.DeviceCount;
+        var count = WaveIn.DeviceCount;
         var names = new List<string>(count);
         for (var i = 0; i < count; i++)
-            names.Add(WaveInEvent.GetCapabilities(i).ProductName);
+            names.Add(WaveIn.GetCapabilities(i).ProductName);
 
         return names;
     }
 }
 
-internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceChangeNotifier, IMMNotificationClient
+internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceChangeNotifier
 {
     private readonly object _captureEndpointIdsLock = new();
     private readonly HashSet<string> _captureEndpointIds = new(StringComparer.OrdinalIgnoreCase);
     private MMDeviceEnumerator? _enumerator;
+    private MMDeviceNotificationClient? _notifications;
 
     public event EventHandler? DevicesChanged;
 
@@ -2181,16 +2182,16 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
         {
             enumerator = new MMDeviceEnumerator();
             RefreshCaptureEndpointIds(enumerator);
-            var result = enumerator.RegisterEndpointNotificationCallback(this);
-            if (result < 0)
-            {
-                AudioCaptureDiagnostics.Log(
-                    $"Audio endpoint notification registration failed HRESULT=0x{result:X8}");
-                ClearCaptureEndpointIds();
-                enumerator.Dispose();
-                return false;
-            }
+            // Events arrive on the Core Audio notification thread, as before, rather than
+            // being posted to whichever synchronization context happens to call Start.
+            var notifications = enumerator.CreateNotificationClient(useSynchronizationContext: false);
+            notifications.DeviceStateChanged += (_, e) => OnDeviceStateChanged(e.DeviceId);
+            notifications.DeviceAdded += (_, e) => OnDeviceAdded(e.DeviceId);
+            notifications.DeviceRemoved += (_, e) => OnDeviceRemoved(e.DeviceId);
+            notifications.DefaultDeviceChanged += (_, e) => OnDefaultDeviceChanged(e.Flow, e.DeviceId);
+            notifications.PropertyValueChanged += (_, e) => OnPropertyValueChanged(e.DeviceId, e.PropertyKey);
 
+            _notifications = notifications;
             _enumerator = enumerator;
             return true;
         }
@@ -2204,25 +2205,25 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
         }
     }
 
-    public void OnDeviceStateChanged(string deviceId, DeviceState newState)
+    private void OnDeviceStateChanged(string deviceId)
     {
         if (IsCaptureEndpoint(deviceId))
             RaiseDevicesChanged();
     }
 
-    public void OnDeviceAdded(string pwstrDeviceId)
+    private void OnDeviceAdded(string deviceId)
     {
-        if (IsCaptureEndpoint(pwstrDeviceId))
+        if (IsCaptureEndpoint(deviceId))
             RaiseDevicesChanged();
     }
 
-    public void OnDeviceRemoved(string deviceId)
+    private void OnDeviceRemoved(string deviceId)
     {
         if (ForgetCaptureEndpoint(deviceId))
             RaiseDevicesChanged();
     }
 
-    public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
+    private void OnDefaultDeviceChanged(DataFlow flow, string defaultDeviceId)
     {
         if (flow == DataFlow.Capture)
         {
@@ -2231,9 +2232,9 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
         }
     }
 
-    public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key)
+    private void OnPropertyValueChanged(string deviceId, PropertyKey key)
     {
-        if (IsRelevantCaptureProperty(key) && IsCaptureEndpoint(pwstrDeviceId))
+        if (IsRelevantCaptureProperty(key) && IsCaptureEndpoint(deviceId))
             RaiseDevicesChanged();
     }
 
@@ -2245,7 +2246,7 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
 
         try
         {
-            enumerator.UnregisterEndpointNotificationCallback(this);
+            Interlocked.Exchange(ref _notifications, null)?.Dispose();
         }
         catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
@@ -2269,7 +2270,8 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
     private void RefreshCaptureEndpointIds(MMDeviceEnumerator enumerator)
     {
         var endpointIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All))
+        using var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All);
+        foreach (var device in endpoints)
         {
             using (device)
                 endpointIds.Add(device.ID);
@@ -2356,21 +2358,21 @@ internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
     }
 }
 
-// WaveInEvent opens the device with an event callback and reads it on its own thread, so unlike
-// NAudio's window-callback WaveIn it has no thread affinity: StopRecording and Dispose may run on
-// any thread (NAudio.WinMM 2.2.1: callbackEvent + RecordThread, no window handle). The only thread
+// WaveIn opens the device with an event callback and reads it on its own thread, so unlike the
+// window-callback WaveInWindow it has no thread affinity: StopRecording and Dispose may run on
+// any thread (NAudio.WinMM 3.1: callbackEvent + RecordThread, no window handle). The only thread
 // it remembers is the synchronization context captured at construction, used solely to post
 // RecordingStopped, which the service unsubscribes before it stops the capture.
 internal sealed class WaveInAudioInputCapture : IAudioInputCapture
 {
-    private readonly WaveInEvent _waveIn;
+    private readonly WaveIn _waveIn;
 
     /// <summary>
     /// Performs wave in audio input capture.
     /// </summary>
     public WaveInAudioInputCapture(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
     {
-        _waveIn = new WaveInEvent
+        _waveIn = new WaveIn
         {
             DeviceNumber = deviceNumber,
             WaveFormat = waveFormat,
@@ -2432,7 +2434,8 @@ internal sealed class WasapiAudioInputDeviceProvider : IAudioInputDeviceProvider
         get
         {
             using var enumerator = new MMDeviceEnumerator();
-            return enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).Count;
+            using var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+            return endpoints.Count;
         }
     }
 
@@ -2771,8 +2774,8 @@ internal static class WasapiAudioInputDeviceResolver
     public static List<CaptureEndpoint> GetCaptureDevicesInWaveInOrder()
     {
         using var enumerator = new MMDeviceEnumerator();
-        var devices = enumerator
-            .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+        using var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+        var devices = endpoints
             .Select(device => new CaptureEndpoint(device, device.FriendlyName))
             .ToList();
         var order = WasapiAudioInputDeviceOrdering.BuildWaveInCompatibleOrder(
@@ -2808,10 +2811,10 @@ internal static class WasapiAudioInputDeviceResolver
 
     private static string[] GetWaveInDeviceNames()
     {
-        var count = WaveInEvent.DeviceCount;
+        var count = WaveIn.DeviceCount;
         var names = new string[count];
         for (var i = 0; i < count; i++)
-            names[i] = WaveInEvent.GetCapabilities(i).ProductName;
+            names[i] = WaveIn.GetCapabilities(i).ProductName;
 
         return names;
     }

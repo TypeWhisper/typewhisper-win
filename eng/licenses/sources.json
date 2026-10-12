@@ -8,8 +8,8 @@
   {
     "Repository": "naudio/NAudio",
     "File": "NAudio.txt",
-    "Ref": "v2.2.1",
-    "Path": "license.txt"
+    "Ref": "v3.1.0",
+    "Path": "LICENSE"
   },
   {
     "Repository": "NuGet/NuGet.Client",

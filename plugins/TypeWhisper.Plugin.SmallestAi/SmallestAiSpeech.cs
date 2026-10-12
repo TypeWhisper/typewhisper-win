@@ -51,7 +51,7 @@ public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSe
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
-        new("speech-speed", "Speech speed", "Playback speed from 0.5 to 2. Voices are selected under Audio → Spoken feedback.", _speed.ToString("0.##", CultureInfo.InvariantCulture), 8)
+        new("speech-speed", "Speech speed", "Playback speed from 0.5 to 2. Voices are selected under Advanced → Spoken feedback.", _speed.ToString("0.##", CultureInfo.InvariantCulture), 8)
         { Section = PluginSettingsSection.Speech }
     ];
 
@@ -76,7 +76,7 @@ public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSe
     {
         if (id != "refresh-voices") throw new ArgumentException("Unknown action.", nameof(id));
         await RefreshVoicesAsync(cancellationToken);
-        return $"{_voices.Length} voices available under Audio → Spoken feedback.";
+        return $"{_voices.Length} voices available under Advanced → Spoken feedback.";
     }
 
     internal async Task RefreshVoicesAsync(CancellationToken ct)
@@ -139,7 +139,8 @@ public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSe
             throw new InvalidDataException("Speech audio must be no longer than two minutes.");
     }
 
-    internal Func<byte[], string?, ITtsPlaybackSession> PlaybackFactory { get; set; } = (audio, device) => new SmallestAiPlaybackSession(audio, device);
+    internal Func<byte[], string?, ITtsPlaybackSession> PlaybackFactory { get; set; } = (audio, device) =>
+        OperatingSystem.IsWindows() ? new SmallestAiPlaybackSession(audio, device) : throw new PlatformNotSupportedException("Speech playback requires Windows.");
 
     /// <inheritdoc />
     public async Task<ITtsPlaybackSession> SpeakAsync(TtsSpeakRequest request, CancellationToken ct)

@@ -1047,7 +1047,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             throw new InvalidDataException("Speech audio is empty, malformed, or exceeds two minutes.");
         ct.ThrowIfCancellationRequested();
         return _ttsPlaybackFactory is not null ? _ttsPlaybackFactory(pcm)
-            : new OpenAiPcmTtsPlaybackSession(pcm, OpenAiTtsConfiguration.SampleRate, request.OutputDeviceId);
+            : OperatingSystem.IsWindows() ? new OpenAiPcmTtsPlaybackSession(pcm, OpenAiTtsConfiguration.SampleRate, request.OutputDeviceId)
+            : throw new PlatformNotSupportedException("Speech playback requires Windows.");
     }
 
     // API key/settings management for settings view

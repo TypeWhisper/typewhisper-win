@@ -86,7 +86,8 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
             await XaiStreamingSession.ConnectAsync(key, language, ct, model: model, terms: terms));
         _usePortablePlayback = ttsPlaybackFactory is null;
         _ttsPlaybackFactory = ttsPlaybackFactory
-            ?? (pcm => new XaiPcmTtsPlaybackSession(pcm, XaiTtsConfiguration.SampleRate));
+            ?? (pcm => OperatingSystem.IsWindows()
+                ? new XaiPcmTtsPlaybackSession(pcm, XaiTtsConfiguration.SampleRate) : throw new PlatformNotSupportedException("Speech playback requires Windows."));
     }
 
     // ITypeWhisperPlugin
@@ -369,7 +370,9 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         var pcm = await response.Content.ReadAsByteArrayAsync(ct);
         if (pcm.Length == 0 || pcm.LongLength > MaximumSpeechAudioBytes || pcm.Length % sizeof(short) != 0)
             throw new InvalidDataException("xAI speech audio is empty, too large, or not valid PCM16.");
-        return _usePortablePlayback ? new XaiPcmTtsPlaybackSession(pcm, XaiTtsConfiguration.SampleRate, request.OutputDeviceId) : _ttsPlaybackFactory(pcm);
+        if (!_usePortablePlayback) return _ttsPlaybackFactory(pcm);
+        return OperatingSystem.IsWindows() ? new XaiPcmTtsPlaybackSession(pcm, XaiTtsConfiguration.SampleRate, request.OutputDeviceId)
+            : throw new PlatformNotSupportedException("Speech playback requires Windows.");
     }
 
     // Settings support
