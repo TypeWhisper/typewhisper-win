@@ -102,6 +102,11 @@ jobs:
           if [[ "$GITHUB_REF" =~ ^refs/heads/release/([0-9]+\.[0-9]+)$ ]] && [ "$CHANNEL" != daily ] && [[ "$version" != "${BASH_REMATCH[1]}".* ]]; then
             echo "A ${BASH_REMATCH[1]} release branch only publishes ${BASH_REMATCH[1]}.x versions."; exit 1
           fi
+          # main builds the version line of its Dailies; RC and Stable of an earlier line come from its release branch.
+          main_line="${DAILY_VERSION_PREFIX%.0-daily.}"
+          if [ "$GITHUB_REF" = refs/heads/main ] && [ "$CHANNEL" != daily ] && [[ "$version" != "$main_line".* ]]; then
+            echo "main only publishes ${main_line}.x versions; dispatch other lines on their release/X.Y branch."; exit 1
+          fi
           if [ "$CHANNEL" != daily ]; then
             if [ "$PUBLISH_LEGACY_DAILY" = true ]; then echo 'The 1.0 Daily upgrade is published only with Daily.'; exit 1; fi
             # gh release create would attach to an existing tag instead of failing.
