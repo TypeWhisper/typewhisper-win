@@ -3123,5 +3123,13 @@
   "Click to install it now, later or skip this version.": "点击以立即或稍后安装，或跳过此版本。",
   "Version {0} is available. You have version {1}.": "版本 {0} 现已推出。你当前的版本是 {1}。",
   "Later": "稍后",
-  "Skip this version": "跳过此版本"
+  "Skip this version": "跳过此版本",
+  "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the HTTP API to be running.": "TypeWhisper 可与 Raycast 配合使用。直接从启动器开始听写等操作。需要 HTTP API 正在运行。",
+  "Browser Extension": "浏览器扩展",
+  "Dictate into text fields in Chrome and Firefox, and let website workflows match the page you are on. Requires the HTTP API to be running.": "在 Chrome 和 Firefox 的文本框中听写，并让网站工作流匹配你当前打开的页面。需要 HTTP API 正在运行。",
+  "Show help": "显示帮助",
+  "Transcribe with language": "指定语言转录",
+  "JSON output": "JSON 输出",
+  "Copy to clipboard": "复制到剪贴板",
+  "Installed at {0}": "安装位置：{0}"
 }
