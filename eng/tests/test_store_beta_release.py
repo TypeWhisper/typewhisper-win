@@ -122,14 +122,16 @@ class StoreBetaReleaseTests(unittest.TestCase):
         self.receipt = self.root / "receipt.json"
 
     def test_versions_respect_all_components_and_store_reserved_revision(self):
-        self.assertEqual(release.next_version(["1.0.65535.0", "1.1.7.19"]), "1.1.8.0")
-        self.assertEqual(release.next_version([]), "1.1.1.0")
-        for value in ("1.1.65535.0", "1.2.0.0", "2.0.0.0", "1.1.65536.0", "1.1.4-beta.0", "0.1.0.0"):
+        self.assertEqual(release.next_version(["1.0.65535.0", "1.1.7.19"], "1.1"), "1.1.8.0")
+        # The first beta of a new release line starts above every version of the previous line.
+        self.assertEqual(release.next_version(["1.0.65535.0", "1.1.7.19"]), "1.2.1.0")
+        self.assertEqual(release.next_version([]), "1.2.1.0")
+        for value in ("1.2.65535.0", "1.3.0.0", "2.0.0.0", "1.2.65536.0", "1.2.4-beta.0", "0.1.0.0"):
             with self.subTest(version=value), self.assertRaises(release.ReleaseError):
                 release.next_version([value])
 
     def test_plan_uses_both_beta_targets_and_never_regular_stable(self):
-        self.assertEqual(self.plan["version"], "1.1.2.0")
+        self.assertEqual(self.plan["version"], "1.2.1.0")
         self.assertEqual(self.plan["destinations"], ["internal-flight", "public-beta"])
         self.assertEqual(self.plan["targets"]["internal-flight"]["path"], FLIGHT)
 
@@ -189,7 +191,7 @@ class StoreBetaReleaseTests(unittest.TestCase):
         make_packages(self.packages, self.plan)
         path = next(self.packages.rglob("package-info-*.json"))
         original = json.loads(path.read_text())
-        for field, value in (("sourceRevision", PREVIOUS), ("version", "1.1.99.0"),
+        for field, value in (("sourceRevision", PREVIOUS), ("version", "1.2.99.0"),
                              ("product", "other"), ("identity", {}), ("package", "../other.msix")):
             receipt = {**original, field: value}
             release.write_json(path, receipt)

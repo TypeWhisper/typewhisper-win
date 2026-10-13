@@ -7,8 +7,9 @@ Dictate into Windows applications, transcribe recordings and process text with
 reusable workflows. Choose a local transcription plugin or configure a cloud
 provider. The current application uses WinUI 3 and runs as `TypeWhisper.exe`.
 
-**This branch contains Windows 1.1 development.** Daily builds are prereleases;
-source availability does not imply stable-channel availability.
+**This branch contains Windows 1.2 development.** Daily builds are prereleases;
+source availability does not imply stable-channel availability. Windows 1.1
+release candidates, Stable and 1.1.x fixes come from the `release/1.1` branch.
 
 [Get started](docs/GETTING-STARTED.md) · [Documentation](docs/README.md) ·
 [Releases](https://github.com/TypeWhisper/typewhisper-win/releases) ·

@@ -49,7 +49,7 @@ The automation then:
 
 1. Reads the two Store products and all flights on TypeWhisper. An existing submission or draft makes the run wait without changing it; a failed submission requires review. The first submissions must finish publishing before automatic updates can start.
 2. Compares the Daily source with each beta's last published source. Unchanged destinations are skipped, and an older or diverged source cannot replace a newer beta.
-3. Allocates a version on the `1.1` release line above the packages currently visible in the regular submission, all flights, and public beta. The fourth component remains zero. Exhausting the numeric build component requires deliberately updating the release line.
+3. Allocates a version on the release line of `main` (`RELEASE_LINE` in `eng/store_beta_release.py`, currently `1.2`) above the packages currently visible in the regular submission, all flights, and public beta. The fourth component remains zero. Exhausting the numeric build component requires deliberately updating the release line.
 4. Calls **Store** to build x64 packages for the selected destinations at the exact Daily commit. The receipts record the checked-out source, not the newer workflow commit.
 5. Verifies receipts, hashes, manifest identities, architectures and required payloads, then rechecks Store state before writing. It creates new submissions, retains listing/rating/availability data, replaces the packages, and requests publication after certification.
 
@@ -114,6 +114,8 @@ Increment the numeric build component for every changed package within a product
 | Stable using the unchanged internal-flight package | `1.1.3.0` |
 
 Beta/RC status belongs to the submission, not a version suffix. The app displays the numeric build version. Do not reset the final package to `1.1.0.0` after distributing higher beta versions.
+
+Since `main` moved to 1.2, the Internal Beta flight and the public beta receive 1.2 versions, so their packages no longer match 1.1. Package a 1.1 Stable or 1.1.x submission from its `release/1.1` commit with a 1.1 version above every 1.1 package already uploaded. The 1.2 betas stay higher, so testers keep receiving them.
 
 ## Submit and promote
 
