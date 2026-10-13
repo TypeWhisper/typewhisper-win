@@ -1,6 +1,7 @@
 # Windows documentation
 
-These guides describe the current Windows 1.1 source. A merged implementation,
+These guides describe the Windows 1.2 source on `main`; the 1.1 release line and
+its guides live on the `release/1.1` branch. A merged implementation,
 a published Daily and a validated stable release are different milestones.
 Use the release notes for the package you installed when they differ from this branch.
 
