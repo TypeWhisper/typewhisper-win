@@ -27,7 +27,7 @@ Use the release notes for the package you installed when they differ from this b
 
 - [1.1 readiness](WINUI-PROGRESS.md): remaining decisions and acceptance boundaries.
 - [Daily delivery and 1.0 migration](DAILY-1.1-CANDIDATE.md): package identities, import and rollout gates.
-- [Daily release-note source](releases/1.1-daily.md): copy for the current candidate workflow.
+- [Daily release-note source](releases/1.2-daily.md): copy for the current candidate workflow.
 - [Store submission](STORE_SUBMISSION.md): separate MSIX packaging and acceptance.
 - [Polar API maintenance](POLAR-API-VERSION-MAINTENANCE.md): license compatibility and follow-up.
 - [Release notes](releases/README.md): current sources and published versions.

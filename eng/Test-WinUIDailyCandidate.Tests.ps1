@@ -10,7 +10,9 @@ function Expect-Rejection([string]$Version, [string]$Message, [string]$Channel =
     if ($null -eq $failure -or $failure -notlike "*$Message*") { throw "Expected '$Message'; received '$failure'" }
 }
 try {
-    Expect-Rejection '1.1.0' 'explicit 1.1.0-daily version'; $checks++
+    Expect-Rejection '1.1.0' 'such as 1.2.0-daily.20261013.1'; $checks++
+    Expect-Rejection '1.2.1-daily.20261013.1' 'such as 1.2.0-daily.20261013.1'; $checks++
+    Expect-Rejection '1.0.0-daily.20261013.1' '1.1.0 or later'; $checks++
     Expect-Rejection '1.1.0' 'such as 1.1.0-rc.1' 'rc'; $checks++
     Expect-Rejection '1.1.0-rc.0' 'such as 1.1.0-rc.1' 'rc'; $checks++
     Expect-Rejection '1.1.0-rc.1' 'such as 1.1.0.' 'stable'; $checks++
@@ -18,6 +20,7 @@ try {
     Expect-Rejection '1.0.10' '1.1.0 or later' 'stable'; $checks++
     Expect-Rejection '1.0.0-rc.3' '1.1.0 or later' 'rc'; $checks++
     Expect-Rejection '1.1.0-daily.20260910.1' 'missing TypeWhisper.exe'; $checks++
+    Expect-Rejection '1.2.0-daily.20261014.1' 'missing TypeWhisper.exe'; $checks++
     Expect-Rejection '1.1.0-rc.1' 'missing TypeWhisper.exe' 'rc'; $checks++
     Expect-Rejection '1.1.0' 'missing TypeWhisper.exe' 'stable'; $checks++
     $required = @('TypeWhisper.exe', 'TypeWhisper.dll', 'TypeWhisper.runtimeconfig.json',

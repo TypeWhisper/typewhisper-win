@@ -23,7 +23,7 @@ These releases contain only the original `TypeWhisper` installation: `TypeWhispe
 
 ## Release branches
 
-As on macOS, `main` carries the next minor version and each released line has its own branch. `release/1.1` starts at the 1.1.0-rc.1 commit and takes only fixes for 1.1: open hotfix pull requests against `release/1.1`, publish the next RC or `1.1.x` from that branch, and then bring each fix to `main` with its own pull request. Once `release/1.1` exists, `main` moves to 1.2 and its Dailies become `1.2.0-daily.*`. CI runs for pull requests against any branch and for pushes to `release/**`, and the `main` ruleset also protects `release/**`. Store betas keep following the Dailies from `main`; RC and Stable runs from a release branch do not reach them. Signing on a release branch also needs the branch in the `signpath` environment's deployment rules.
+As on macOS, `main` carries the next minor version and each released line has its own branch. `release/1.1` starts at the 1.1.0-rc.1 commit and takes only fixes for 1.1: open hotfix pull requests against `release/1.1`, publish the next RC or `1.1.x` from that branch, and then bring each fix to `main` with its own pull request. `main` carries 1.2, and its Dailies are `1.2.0-daily.*`; Store betas allocate 1.2 Store versions from them. CI runs for pull requests against any branch and for pushes to `release/**`, and the `main` ruleset also protects `release/**`. Store betas keep following the Dailies from `main`; RC and Stable runs from a release branch do not reach them. Signing on a release branch also needs the branch in the `signpath` environment's deployment rules.
 
 ## Profile migration
 

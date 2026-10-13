@@ -26,6 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "TypeWhisper/typewhisper-win"
 STORE_API = "https://manage.devcenter.microsoft.com/v1.0/my/"
 DAILY_PATH = ".github/workflows/winui-daily-candidate.yml"
+# Store betas follow the Dailies from main, which carries the next minor version.
+RELEASE_LINE = "1.2"
 FLIGHT_NAME = "Internal Beta"
 DESTINATIONS = {"internal-flight": "stable", "public-beta": "beta"}
 SHA_PATTERN = r"[0-9a-f]{40}"
@@ -152,7 +154,7 @@ def numeric_version(value):
     return parts
 
 
-def next_version(versions, release_line="1.1"):
+def next_version(versions, release_line=RELEASE_LINE):
     if not re.fullmatch(r"[1-9][0-9]*\.[0-9]+", release_line):
         raise ReleaseError("Invalid release line.")
     major, minor = map(int, release_line.split("."))
@@ -233,7 +235,7 @@ def inspect_store(store, identities):
     return versions, blockers, targets
 
 
-def make_plan(store, github, run_id, identities, release_line="1.1"):
+def make_plan(store, github, run_id, identities, release_line=RELEASE_LINE):
     source = github.daily_source(run_id)
     plan = {"dailyRunId": str(run_id), "sourceRevision": source, "releaseLine": release_line,
             "publish": False, "destinations": []}
@@ -402,7 +404,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     plan_args = commands.add_parser("plan")
     plan_args.add_argument("--daily-run", required=True)
-    plan_args.add_argument("--release-line", default="1.1")
+    plan_args.add_argument("--release-line", default=RELEASE_LINE)
     plan_args.add_argument("--output", default="artifacts/store-beta/plan.json")
     submit_args = commands.add_parser("submit")
     submit_args.add_argument("--plan", required=True)

@@ -8,7 +8,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 switch ($Channel) {
-    'daily' { if ($ExpectedVersion -notmatch '^1\.1\.0-daily\.[0-9]{8}\.[0-9]+$') { throw 'A Daily candidate must have an explicit 1.1.0-daily version.' } }
+    'daily' { if ($ExpectedVersion -notmatch '^[0-9]+\.[0-9]+\.0-daily\.[0-9]{8}\.[0-9]+$') { throw 'A Daily candidate must have a version such as 1.2.0-daily.20261013.1.' } }
     'rc' { if ($ExpectedVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$') { throw 'A release candidate must have a version such as 1.1.0-rc.1.' } }
     'stable' { if ($ExpectedVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable release must have a version such as 1.1.0.' } }
 }

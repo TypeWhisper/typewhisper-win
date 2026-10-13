@@ -49,9 +49,9 @@ on:
 permissions:
   contents: read
 
-# Daily versions and tags share this prefix; the release job uses it to find the previous Daily.
+# main carries the next minor version; its Daily versions and tags start with this prefix.
 env:
-  DAILY_VERSION_PREFIX: 1.1.0-daily.
+  DAILY_VERSION_PREFIX: 1.2.0-daily.
 
 concurrency:
   group: winui-daily-candidate-${{ github.ref }}-${{ inputs.channel || 'daily' }}
@@ -291,10 +291,10 @@ jobs:
           case "$CHANNEL" in
             daily)
               # Notes: the channel introduction, then GitHub's generated list of changes since the previous Daily.
+              # The first Daily of a version line starts from the last Daily of the previous line.
               previous_tag="$(gh release list --exclude-drafts --limit 100 --json tagName,publishedAt --jq 'sort_by(.publishedAt) | reverse | .[].tagName' \
-                | awk -v prefix="v${DAILY_VERSION_PREFIX}" -v current="$TAG" \
-                    'index($0, prefix) == 1 && $0 != current && !found { print; found = 1 }')"
-              notes_args=(--notes-file docs/releases/1.1-daily.md --generate-notes)
+                | awk -v current="$TAG" '/^v[0-9]+\.[0-9]+\.[0-9]+-daily\./ && $0 != current && !found { print; found = 1 }')"
+              notes_args=(--notes-file docs/releases/1.2-daily.md --generate-notes)
               if [ -n "$previous_tag" ]; then
                 echo "Generating release notes since $previous_tag"
                 notes_args+=(--notes-start-tag "$previous_tag")
