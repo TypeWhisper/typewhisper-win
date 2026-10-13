@@ -3123,5 +3123,13 @@
   "Click to install it now, later or skip this version.": "クリックして、今すぐまたは後でインストールするか、このバージョンをスキップします。",
   "Version {0} is available. You have version {1}.": "バージョン {0} が利用可能です。現在のバージョンは {1} です。",
   "Later": "後で",
-  "Skip this version": "このバージョンをスキップ"
+  "Skip this version": "このバージョンをスキップ",
+  "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the HTTP API to be running.": "TypeWhisper は Raycast と連携します。ランチャーから直接音声入力などを開始できます。HTTP API が実行中である必要があります。",
+  "Browser Extension": "ブラウザ拡張機能",
+  "Dictate into text fields in Chrome and Firefox, and let website workflows match the page you are on. Requires the HTTP API to be running.": "Chrome と Firefox のテキストフィールドに音声入力し、Web サイトのワークフローを開いているページに合わせます。HTTP API が実行中である必要があります。",
+  "Show help": "ヘルプを表示",
+  "Transcribe with language": "言語を指定して文字起こし",
+  "JSON output": "JSON 出力",
+  "Copy to clipboard": "クリップボードにコピー",
+  "Installed at {0}": "インストール先: {0}"
 }
