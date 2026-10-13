@@ -1,6 +1,7 @@
 name: Candidate
 
-# PR runs only validate. Publishing is restricted to scheduled Daily runs or explicit main runs.
+# PR runs only validate. Publishing is restricted to scheduled Daily runs and explicit runs on main, or for RC and
+# Stable on a release/<major>.<minor> branch.
 # Daily also ships the separate early 1.1 Daily installation. RC and Stable ship only the original
 # TypeWhisper installation, on the feeds its 1.0 updater reads (win-x64-rc and win-x64).
 on:
@@ -19,7 +20,7 @@ on:
         type: string
         default: ''
       publish:
-        description: 'Publish the release from main after validation'
+        description: 'Publish after validation (Daily from main; RC and Stable from main or release/X.Y)'
         type: boolean
         default: false
       publish_legacy_daily:
@@ -89,6 +90,18 @@ jobs:
               version="$REQUESTED_VERSION" ;;
             *) echo 'Unknown channel.'; exit 1 ;;
           esac
+          # Publishing needs main or a release/X.Y branch; the release job only checks the prefix.
+          if { [ "$PUBLISH" = true ] || [ "$PUBLISH_LEGACY_DAILY" = true ]; } && [ "$GITHUB_REF" != refs/heads/main ] &&
+            ! [[ "$GITHUB_REF" =~ ^refs/heads/release/[0-9]+\.[0-9]+$ ]]; then
+            echo 'Releases are published from main or a release/X.Y branch.'; exit 1
+          fi
+          # Dailies come from main only. A release/X.Y branch publishes RC and Stable versions of its own X.Y line.
+          if [ "$CHANNEL" = daily ] && [ "$GITHUB_REF" != refs/heads/main ] && { [ "$PUBLISH" = true ] || [ "$PUBLISH_LEGACY_DAILY" = true ]; }; then
+            echo 'Dailies are published from main only.'; exit 1
+          fi
+          if [[ "$GITHUB_REF" =~ ^refs/heads/release/([0-9]+\.[0-9]+)$ ]] && [ "$CHANNEL" != daily ] && [[ "$version" != "${BASH_REMATCH[1]}".* ]]; then
+            echo "A ${BASH_REMATCH[1]} release branch only publishes ${BASH_REMATCH[1]}.x versions."; exit 1
+          fi
           if [ "$CHANNEL" != daily ]; then
             if [ "$PUBLISH_LEGACY_DAILY" = true ]; then echo 'The 1.0 Daily upgrade is published only with Daily.'; exit 1; fi
             # gh release create would attach to an existing tag instead of failing.
@@ -117,8 +130,8 @@ jobs:
           if [ "$policy" = test-signing ] && { [ "$EVENT_NAME" != workflow_dispatch ] || [ "$PUBLISH_REQUESTED" = true ]; }; then
             echo 'Test-signed artifacts must not be published.'; exit 1
           fi
-          if [ "$policy" != none ] && [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo 'Signing is restricted to main through the signpath environment.'; exit 1
+          if [ "$policy" != none ] && [ "$GITHUB_REF" != refs/heads/main ] && ! [[ "$GITHUB_REF" =~ ^refs/heads/release/[0-9]+\.[0-9]+$ ]]; then
+            echo 'Signing is restricted to main and release/X.Y through the signpath environment.'; exit 1
           fi
           if [ "$RELEASE_POLICY" = release-signing ] && [ "$PUBLISH_REQUESTED" = true ] && [ "$policy" != release-signing ]; then
             echo 'Public releases require production signing once enabled.'; exit 1
@@ -126,7 +139,7 @@ jobs:
           echo "policy=$policy" >> "$GITHUB_OUTPUT"
   candidate:
     needs: version
-    # The signpath environment holds the only token copy and permits only main.
+    # The signpath environment holds the only token copy and permits only the branches in its deployment rules.
     # GitHub enforces that branch rule even if a PR changes this workflow.
     environment: ${{ needs.version.outputs.signing_policy == 'none' && 'unsigned-candidate' || 'signpath' }}
     env:
@@ -239,7 +252,7 @@ jobs:
 
   release:
     needs: [version, candidate]
-    if: needs.version.outputs.signing_policy != 'test-signing' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    if: needs.version.outputs.signing_policy != 'test-signing' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     runs-on: ubuntu-latest
     permissions:
       contents: write

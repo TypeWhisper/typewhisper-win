@@ -14,8 +14,8 @@ try {
     if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch' && env.GITHUB_EVENT_NAME !== 'schedule') {
       throw new Error('Signing is limited to explicit or scheduled workflows, never pull requests.');
     }
-    if (env.GITHUB_REF !== 'refs/heads/main') {
-      throw new Error('Signing is restricted to main through the signpath environment.');
+    if (env.GITHUB_REF !== 'refs/heads/main' && !/^refs\/heads\/release\/\d+\.\d+$/.test(env.GITHUB_REF || '')) {
+      throw new Error('Signing is restricted to main and release/X.Y through the signpath environment.');
     }
     for (const key of ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_RESULTS_URL', 'SIGNPATH_GITHUB_TOKEN']) {
       if (!env[key]) throw new Error(`Missing ${key}.`);
