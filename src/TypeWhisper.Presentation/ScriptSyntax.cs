@@ -85,6 +85,16 @@ public static class ScriptSyntax
         return output.ToString();
     }
 
+    /// <summary>
+    /// Converts the text of a rich edit document to the command it shows: the document always ends with a
+    /// paragraph mark that is not part of the command, and line breaks become <c>\n</c>.
+    /// </summary>
+    public static string FromEditorDocument(string documentText)
+    {
+        var text = documentText.EndsWith('\r') ? documentText[..^1] : documentText;
+        return text.Replace("\r\n", "\n").Replace('\r', '\n');
+    }
+
     /// <summary>Returns non-overlapping colored spans, or plain text on a tokenization timeout.</summary>
     public static IReadOnlyList<ScriptToken> Tokenize(string text, string language)
     {

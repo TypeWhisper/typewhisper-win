@@ -62,9 +62,10 @@ internal sealed class ScriptCodeEditor : RichEditBox
     private static string Normalize(string text) => text.Replace("\r\n", "\n").Replace('\r', '\n');
     private string ReadText()
     {
-        // A range with None excludes the undeletable final paragraph marker.
-        Document.GetRange(0, int.MaxValue).GetText(TextGetOptions.None, out var text);
-        return Normalize(text);
+        // Request the undeletable final paragraph marker explicitly (None also returns it in practice) so the
+        // conversion drops exactly that marker; otherwise every opened script would read as changed.
+        Document.GetRange(0, int.MaxValue).GetText(TextGetOptions.AllowFinalEop, out var text);
+        return ScriptSyntax.FromEditorDocument(text);
     }
 
     private void OnTextChanged()
