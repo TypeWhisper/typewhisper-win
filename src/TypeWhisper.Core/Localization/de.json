@@ -3123,5 +3123,13 @@
   "Click to install it now, later or skip this version.": "Klicke, um die Version jetzt oder später zu installieren oder sie zu überspringen.",
   "Version {0} is available. You have version {1}.": "Version {0} ist verfügbar. Du hast Version {1}.",
   "Later": "Später",
-  "Skip this version": "Diese Version überspringen"
+  "Skip this version": "Diese Version überspringen",
+  "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the HTTP API to be running.": "TypeWhisper funktioniert mit Raycast. Starte Diktate und mehr direkt aus deinem Launcher. Die HTTP-API muss dafür laufen.",
+  "Browser Extension": "Browser-Erweiterung",
+  "Dictate into text fields in Chrome and Firefox, and let website workflows match the page you are on. Requires the HTTP API to be running.": "Diktiere in Textfelder in Chrome und Firefox und lass Website-Workflows zur geöffneten Seite passen. Die HTTP-API muss dafür laufen.",
+  "Show help": "Hilfe anzeigen",
+  "Transcribe with language": "Mit Sprache transkribieren",
+  "JSON output": "JSON-Ausgabe",
+  "Copy to clipboard": "In die Zwischenablage kopieren",
+  "Installed at {0}": "Installiert unter {0}"
 }
