@@ -66,6 +66,8 @@ internal sealed class SettingsRow : StackPanel
     private const double StackedBelowWidth = 460;
     private const double PickerWidth = 260;
     private readonly Grid _header = new() { ColumnSpacing = 16 };
+    // An optional icon before the text, as on the integration rows.
+    private readonly Grid _lead = new();
     private readonly StackPanel _copy = new() { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
     // Left-aligned, the star column is as wide as the title but still wraps a long one.
     private readonly Grid _titleLine = new() { ColumnSpacing = 2, HorizontalAlignment = HorizontalAlignment.Left };
@@ -90,7 +92,10 @@ internal sealed class SettingsRow : StackPanel
         _title.VerticalAlignment = VerticalAlignment.Center;
         _titleLine.Children.Add(_title);
         _copy.Children.Add(_titleLine); _copy.Children.Add(_description); _copy.Children.Add(_status);
-        _header.Children.Add(_copy);
+        _lead.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        _lead.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(_copy, 1); _lead.Children.Add(_copy);
+        _header.Children.Add(_lead);
         _description.Visibility = _status.Visibility = Visibility.Collapsed;
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         SizeChanged += (_, e) => Arrange(e.NewSize.Width);
@@ -157,6 +162,13 @@ internal sealed class SettingsRow : StackPanel
         control.VerticalAlignment = VerticalAlignment.Center;
         _header.Children.Add(control);
         Arrange(ActualWidth);
+        return this;
+    }
+
+    internal SettingsRow Icon(string kind)
+    {
+        _lead.ColumnSpacing = 12;
+        _lead.Children.Add(new TypeWhisperGlyph { Kind = kind, Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Center });
         return this;
     }
 
@@ -229,7 +241,7 @@ internal sealed class SettingsRow : StackPanel
         Grid.SetRow(control, stacked ? 1 : 0);
         Grid.SetColumn(control, stacked ? 0 : 1);
         Grid.SetColumnSpan(control, stacked ? 2 : 1);
-        Grid.SetColumnSpan(_copy, stacked ? 2 : 1);
+        Grid.SetColumnSpan(_lead, stacked ? 2 : 1);
         // The switch keeps room for a label on its right; without one it lines up with the other controls.
         control.Margin = new Thickness(0, stacked ? 10 : 0, control is ToggleSwitch ? -12 : 0, 0);
         control.Width = stacked ? double.NaN : _controlWidth;
