@@ -80,6 +80,15 @@ public sealed class ScriptSyntaxTests
     public void FormatterLeavesExpandableSubexpressionsUntouched(string source) =>
         Assert.Equal(source, ScriptSyntax.FormatPowerShell(source));
 
+    [Theory]
+    [InlineData("$text = 1\r", "$text = 1")]
+    [InlineData("first\rsecond\r", "first\nsecond")]
+    [InlineData("ends with a break\r\r", "ends with a break\n")]
+    [InlineData("\r", "")]
+    [InlineData("", "")]
+    public void EditorDocumentTextDropsTheFinalParagraphMark(string document, string command) =>
+        Assert.Equal(command, ScriptSyntax.FromEditorDocument(document));
+
     [Fact]
     public void UndoMemoryIsBounded()
     {
