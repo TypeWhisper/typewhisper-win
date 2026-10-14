@@ -38,8 +38,8 @@ Plugin ZIPs are separate downloads. Setup installs .NET 10 Runtime when missing;
 the portable ZIP requires it separately. First setup needs internet access to
 install a plugin and download model assets where applicable.
 
-The source configures a minimum Windows build of 19041. Native acceptance on
-older Windows remains pending; Store packaging has its own minimum. TypeWhisper
+The source and the Store packages configure a minimum Windows build of 19041.
+Native acceptance on older Windows remains pending. TypeWhisper
 is built for x64 only; Windows 11 on Arm can run the x64 version through emulation, which is untested.
 Use the requirements attached to the actual release you install.
 
