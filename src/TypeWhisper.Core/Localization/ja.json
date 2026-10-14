@@ -3139,5 +3139,7 @@
   "Your organization provides the commercial license on this device. Activation happens automatically and the key is not shown.": "この端末の商用ライセンスは組織から提供されています。有効化は自動的に行われ、キーは表示されません。",
   "The organization license could not be activated. Check the network connection and contact your administrator if this continues.": "組織のライセンスを有効化できませんでした。ネットワーク接続を確認し、問題が続く場合は管理者に連絡してください。",
   "Retry activation": "有効化を再試行",
-  "Managed by your organization": "組織によって管理されています"
+  "Managed by your organization": "組織によって管理されています",
+  "Premium features": "Premium 機能",
+  "Your organization provides the license. Features unlock once it is active.": "ライセンスは組織から提供されます。有効になると機能が使えるようになります。"
 }
