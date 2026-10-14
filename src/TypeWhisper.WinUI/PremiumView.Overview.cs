@@ -84,6 +84,14 @@ internal sealed partial class PremiumView
             if (Access.Current.Supporter) hero.Children.Add(Copy(Loc.T("Supporter status alone does not unlock Premium features."), 12, true));
             _overview.Children.Add(Card(hero));
         }
+        else if (!active)
+        {
+            // Managed license without a successful activation yet: no purchase prompt, but no "your features" either.
+            var heading = new StackPanel { Spacing = 6 };
+            heading.Children.Add(Copy(Loc.T("Premium features"), 20));
+            heading.Children.Add(Copy(Loc.T("Your organization provides the license. Features unlock once it is active."), 13, true));
+            _overview.Children.Add(heading);
+        }
         else
         {
             var heading = new StackPanel { Spacing = 6 };

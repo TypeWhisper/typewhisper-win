@@ -76,6 +76,8 @@ internal sealed partial class PremiumView
         _managedLicenseError.Text = managed && service.ManagedLicenseFailed
             ? Loc.T("The organization license could not be activated. Check the network connection and contact your administrator if this continues.") : "";
         _managedLicenseError.Visibility = string.IsNullOrEmpty(_managedLicenseError.Text) ? Visibility.Collapsed : Visibility.Visible;
+        // Retry is for a failed or still pending activation; an active managed license only needs Refresh status.
+        _retryManagedLicense.Visibility = managed && (service.ManagedLicenseFailed || !service.HasCommercialActivation) ? Visibility.Visible : Visibility.Collapsed;
         _retryManagedLicense.IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation;
         _retryManagedLicense.Content = WinUILicensing.Busy ? Loc.T("Please wait…") : Loc.T("Retry activation");
         _licenseNotice.Text = service.StorageError ?? WinUILicensing.Notice ?? (WinUILicensing.Busy ? Loc.T("Checking license…") : "");
