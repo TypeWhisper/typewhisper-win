@@ -16,6 +16,10 @@ The app reads the native 64-bit registry view. Surrounding whitespace is ignored
 an empty value counts as absent. Supporter keys are not accepted. The app never
 writes, changes or removes the value.
 
+TypeWhisper installs per user. On a shared device each Windows user runs the
+installer once, or the deployment tool installs the app in that user's context;
+the policy value itself is device-wide and applies to every user.
+
 Example for an elevated PowerShell session:
 
 ```powershell
@@ -38,6 +42,8 @@ putting real keys in interactive shell history or script logs.
   launches and does not activate on every launch.
 - Each Windows user account on a device holds its own activation. A device with
   several users uses one seat per user, as macOS does with per-user Keychain records.
+  Polar labels each activation with the machine name and the Windows user name, for
+  example `TYPEWHISPER (tw-user2)`, so the seats of one device can be told apart.
 - Existing licenses keep their normal offline validation behavior. An initial
   activation needs internet access; failures can be retried from the License page or
   on the next launch. No background retry loop is installed.
