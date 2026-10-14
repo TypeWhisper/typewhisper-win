@@ -70,7 +70,8 @@ internal sealed partial class PremiumView
         manage.Click += (_, _) => ShowDetails(null);
         Grid.SetColumn(manage, 2); accessRow.Children.Add(manage);
         _overview.Children.Add(Card(accessRow));
-        if (!active)
+        // Purchase prompts stay hidden while the organization provides the license, even if activation is pending.
+        if (!active && !WinUILicensing.Managed)
         {
             var hero = new StackPanel { Spacing = 12 };
             hero.Children.Add(IconTile("\uE734", gold));
@@ -82,6 +83,14 @@ internal sealed partial class PremiumView
             hero.Children.Add(unlock);
             if (Access.Current.Supporter) hero.Children.Add(Copy(Loc.T("Supporter status alone does not unlock Premium features."), 12, true));
             _overview.Children.Add(Card(hero));
+        }
+        else if (!active)
+        {
+            // Managed license without a successful activation yet: no purchase prompt, but no "your features" either.
+            var heading = new StackPanel { Spacing = 6 };
+            heading.Children.Add(Copy(Loc.T("Premium features"), 20));
+            heading.Children.Add(Copy(Loc.T("Your organization provides the license. Features unlock once it is active."), 13, true));
+            _overview.Children.Add(heading);
         }
         else
         {

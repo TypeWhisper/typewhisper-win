@@ -54,7 +54,7 @@ public sealed record ManagedPolicyDefinition(
     public string ConfiguredMarkerName => Name + "Configured";
 }
 
-/// <summary>The keys supported under <c>HKLM\SOFTWARE\Policies\TypeWhisper</c>, as specified in issue #470.</summary>
+/// <summary>The keys supported under <c>HKLM\SOFTWARE\Policies\TypeWhisper</c>, as specified in issues #470 and #641.</summary>
 public static class ManagedPolicyKeys
 {
     /// <summary>Stable transcription role selection ID; enforced or recommended together with <see cref="TranscriptionModelId"/>.</summary>
@@ -91,6 +91,8 @@ public static class ManagedPolicyKeys
     public const string SkipOnboardingWhenReady = "SkipOnboardingWhenReady";
     /// <summary>1 hides optional welcome and promotional prompts.</summary>
     public const string SuppressOptionalPrompts = "SuppressOptionalPrompts";
+    /// <summary>A commercial license key the app activates for the signed-in user (#641). Enforced only; never shown.</summary>
+    public const string ManagedLicenseKey = "ManagedLicenseKey";
 
     /// <summary>Every supported key in documentation order.</summary>
     public static IReadOnlyList<ManagedPolicyDefinition> All { get; } =
@@ -111,7 +113,8 @@ public static class ManagedPolicyKeys
         new(AllowedUpdateChannels, ManagedPolicyValueKind.List),
         new(LaunchAtLogin, ManagedPolicyValueKind.Boolean, AllowsRecommendation: true),
         new(SkipOnboardingWhenReady, ManagedPolicyValueKind.Boolean),
-        new(SuppressOptionalPrompts, ManagedPolicyValueKind.Boolean, AllowsRecommendation: true)
+        new(SuppressOptionalPrompts, ManagedPolicyValueKind.Boolean, AllowsRecommendation: true),
+        new(ManagedLicenseKey, ManagedPolicyValueKind.Text, Sensitive: true)
     ];
 
     private static readonly Dictionary<string, ManagedPolicyDefinition> ByName =
