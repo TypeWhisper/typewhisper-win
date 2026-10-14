@@ -136,7 +136,7 @@ Both Store products declare the existing `typewhisper:` callback protocol. Store
 Device acceptance and release checks remain necessary alongside automation:
 
 - Verify installation, Store/Start-menu activation, microphone capture, curated plugin installation, restart, and Store-controlled updates on x64.
-- Verify the internal flight's installed upgrade and data migration. Both 1.1 Store packages require Windows 11 build 26100 or later; the existing 1.0.9 packages support older Windows.
+- Verify the internal flight's installed upgrade and data migration. Both 1.1 Store packages declare Windows build 19041 as their minimum, like the direct download, so 1.0.9 Store installations on Windows 10 receive 1.1 too. Native acceptance on Windows 10 is still pending.
 - Install public beta alongside stable. Check separate histories/settings/sign-ins, CLI installation, callback routing, and that resetting beta leaves stable data intact.
 - Complete the public beta listing, screenshots, properties, and age ratings, clearly identifying it as a beta.
 
