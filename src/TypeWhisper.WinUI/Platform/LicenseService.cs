@@ -55,6 +55,9 @@ public sealed class LicenseService
     private readonly AppDistributionKind _distributionKind;
     private readonly string _appVersion;
 
+    /// <summary>The label Polar shows for an activation: machine name plus Windows user name, since seats are per user.</summary>
+    public static string ActivationLabel => $"{Environment.MachineName} ({Environment.UserName})";
+
     /// <summary>Describes a local credential write failure without exposing the license key.</summary>
     public string? StorageError { get; private set; }
 
@@ -953,7 +956,8 @@ public sealed class LicenseService
         {
             key,
             organization_id = OrganizationId,
-            label = Environment.MachineName,
+            // Each Windows user holds their own activation; the label tells the seats of one device apart.
+            label = ActivationLabel,
             meta = new
             {
                 platform = "windows",
