@@ -21,7 +21,7 @@ public sealed class RegistryManagedPolicySourceTests : IDisposable
     public void Dispose()
     {
         try { Registry.CurrentUser.DeleteSubKeyTree(_root, throwOnMissingSubKey: false); }
-        catch (IOException) { }
+        catch (IOException) { /* best-effort cleanup of the disposable test key */ }
     }
 
     private RegistryManagedPolicySource Create() => new(RegistryHive.CurrentUser, RegistryView.Registry64, _path);
@@ -121,7 +121,7 @@ public sealed class RegistryManagedPolicySourceTests : IDisposable
     public async Task Watching_ReportsCreationChangesAndDeletion()
     {
         using var source = Create();
-        var signal = new SemaphoreSlim(0);
+        using var signal = new SemaphoreSlim(0);
         source.Changed += () => signal.Release();
         Assert.True(source.StartWatching(), source.WatchError);
         Assert.True(source.IsWatching);
