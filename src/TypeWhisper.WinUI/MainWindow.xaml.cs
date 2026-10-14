@@ -94,9 +94,9 @@ public sealed partial class MainWindow : Window
                 cancelError = Loc.T("Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.");
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingShortcut?.Value ?? "";
-            // A managed license key that appears or changes while running is applied without a restart. Registered
-            // before the fallible startup below so a failed dictation start does not leave policy changes unhandled.
-            WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(() => { if (!_closing) WinUILicensing.ApplyPolicyChange(); });
+            // Policy that appears or changes while running is applied without a restart: license key, updates, startup.
+            // Registered before the fallible startup below so a failed dictation start does not leave changes unhandled.
+            WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(ApplyManagedPolicyChange);
             // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
             InitializeEscapeCancel();
             await _dictation.InitializeAsync();
@@ -119,6 +119,7 @@ public sealed partial class MainWindow : Window
             // License and account checks can wait up to 30 s on the network. They run side by side
             // and no longer hold up activations such as --settings; sync still starts after them.
             _ = StartCloudSyncAfterAccessChecksAsync(Task.WhenAll(WinUILicensing.ValidateAsync(), WinUIPremiumAccount.RefreshAsync()));
+            _ = ApplyStartupPolicyAsync();
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
             _ = UpdatePluginsAutomaticallyAsync();
             _ = CheckApplicationUpdatesAutomaticallyAsync();
@@ -501,12 +502,11 @@ public sealed partial class MainWindow : Window
                 value => _closing || _profileRestoreClosing ? Loc.T("The app is shutting down.") : ChangeDictationHotkeys(value),
                 _dictation);
             var dictationSettings = new LiveDictationSettings(_dictation, OpenProviderSettings);
-            var startup = WindowsStartupRegistration.Create();
             DictationRecoveryView? recoveryView = null;
             _settingsWindow.ConfigureLiveSettings = (category, content, pickers) =>
             {
                 dictationSettings.Configure(category, content, pickers);
-                LiveStartupSettings.Configure(category, content, pickers, startup);
+                LiveStartupSettings.Configure(category, content, pickers, StartupRegistration, StartupPolicy, () => SetupCompleted);
                 LiveLanguageSettings.Configure(category, content, pickers, AppLanguage.Store, RestartWhenIdleAsync);
                 LiveThemeSettings.Configure(category, content, pickers, AppTheme.Store, RestartWhenIdleAsync);
                 LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates,

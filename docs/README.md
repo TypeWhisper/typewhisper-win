@@ -13,6 +13,7 @@ Use the release notes for the package you installed when they differ from this b
 - [Windows CLI](WINDOWS-CLI.md) and [HTTP API](WINUI-HTTP-API.md): supported automation contracts.
 - [Privacy policy](PRIVACY.md): data handling overview.
 - [Managed license activation](enterprise/windows-managed-license.md): provisioning a commercial license through machine policy.
+- [Managed settings](enterprise/windows-managed-settings.md): registry policies for updates, startup and onboarding.
 
 ## Develop and validate
 

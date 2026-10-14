@@ -70,8 +70,10 @@ internal sealed partial class PremiumView
         manage.Click += (_, _) => ShowDetails(null);
         Grid.SetColumn(manage, 2); accessRow.Children.Add(manage);
         _overview.Children.Add(Card(accessRow));
-        // Purchase prompts stay hidden while the organization provides the license, even if activation is pending.
-        if (!active && !WinUILicensing.Managed)
+        // Purchase prompts stay hidden while the organization provides the license, even if activation is pending,
+        // and while policy suppresses optional prompts.
+        var promptsSuppressed = TypeWhisper.Presentation.OnboardingPolicy.SuppressOptionalPrompts(WinUIManagedPolicy.Current);
+        if (!active && !WinUILicensing.Managed && !promptsSuppressed)
         {
             var hero = new StackPanel { Spacing = 12 };
             hero.Children.Add(IconTile("\uE734", gold));
@@ -86,10 +88,12 @@ internal sealed partial class PremiumView
         }
         else if (!active)
         {
-            // Managed license without a successful activation yet: no purchase prompt, but no "your features" either.
+            // No access yet and no purchase prompt: a managed license that is still pending, or suppressed prompts.
             var heading = new StackPanel { Spacing = 6 };
             heading.Children.Add(Copy(Loc.T("Premium features"), 20));
-            heading.Children.Add(Copy(Loc.T("Your organization provides the license. Features unlock once it is active."), 13, true));
+            heading.Children.Add(Copy(WinUILicensing.Managed
+                ? Loc.T("Your organization provides the license. Features unlock once it is active.")
+                : Loc.T("See the current state at a glance and open only the settings you need."), 13, true));
             _overview.Children.Add(heading);
         }
         else
