@@ -13,7 +13,7 @@ foreach ($product in @('stable', 'beta')) {
             $xml.Package.Properties.DisplayName -cne $displayName -or
             $xml.Package.Applications.Application.VisualElements.DisplayName -cne $displayName -or
             $xml.Package.Applications.Application.Executable -cne 'TypeWhisper.exe' -or
-            $xml.Package.Dependencies.TargetDeviceFamily.MinVersion -cne '10.0.26100.0' -or
+            $xml.Package.Dependencies.TargetDeviceFamily.MinVersion -cne '10.0.19041.0' -or
             $manifest -match '__[A-Z_]+__') {
             throw "Incorrect manifest for $product / $rid."
         }
