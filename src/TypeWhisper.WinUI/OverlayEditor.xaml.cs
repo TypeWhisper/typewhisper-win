@@ -17,6 +17,7 @@ public sealed partial class OverlayEditor : UserControl
         {
             OverlayWidget.Profile => Loc.T("Sample profile in this preview"),
             OverlayWidget.AppName => Loc.T("Sample app name in this preview"),
+            OverlayWidget.AppIcon => Loc.T("Sample app icon in this preview"),
             OverlayWidget.HotkeyMode => Loc.T("Sample recording mode in this preview"),
             OverlayWidget.None => Loc.T("Leave this slot empty"),
             _ => Loc.T("Shown in Standard and Compact")
@@ -52,6 +53,7 @@ public sealed partial class OverlayEditor : UserControl
     {
         OverlayWidget.HotkeyMode => Loc.T("Hotkey mode"),
         OverlayWidget.AppName => Loc.T("App name"),
+        OverlayWidget.AppIcon => Loc.T("App icon"),
         OverlayWidget.None => Loc.T("None"),
         OverlayWidget.Indicator => Loc.T("Indicator"),
         OverlayWidget.Waveform => Loc.T("Waveform"),
@@ -89,6 +91,7 @@ public sealed partial class OverlayEditor : UserControl
         OverlayWidget.Timer => "00:12",
         OverlayWidget.None => "—",
         OverlayWidget.Indicator => "●",
+        OverlayWidget.AppIcon => "▣",
         _ => Label(widget)
     };
 

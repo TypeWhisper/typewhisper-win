@@ -68,7 +68,9 @@ public sealed partial class TranscriptPreviewWindow : Window
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranscriptHeader, Loc.T("Live text window drag handle"));
         TranscriptHeading.Text = Loc.T("LIVE TRANSCRIPT");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranscriptScrollViewer, Loc.T("Live transcript text"));
-        TranscriptSourceLabel.Text = liveText is null ? Loc.T("DEMO TEXT") : Loc.T("LIVE TEXT");
+        // Only the settings preview needs a source label; during dictation it would just repeat the heading.
+        TranscriptSourceLabel.Text = Loc.T("DEMO TEXT");
+        TranscriptSourceLabel.Visibility = liveText is null ? Visibility.Visible : Visibility.Collapsed;
         NativeWindowAppearance.ApplyAppTitleBar(this);
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
