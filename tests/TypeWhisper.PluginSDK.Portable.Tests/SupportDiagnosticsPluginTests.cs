@@ -46,7 +46,7 @@ public sealed class SupportDiagnosticsPluginTests : IDisposable
         {
             var localStates = SupportDiagnosticsExporter.CaptureLocalPluginStates(models, vocabulary, null);
             return new(DateTimeOffset.UtcNow, null, null, null, null, null, null,
-                SupportDiagnosticsExporter.Plugins(store, registry, localStates), null, null, null, []);
+                SupportDiagnosticsExporter.Plugins(store, registry, localStates), null, null, null, null, []);
         }
         Assert.False(Capture().Plugins!.Single(plugin => plugin.Id == LocalTranscriptionPlugin.PluginId).HasError);
         Assert.NotNull(await vocabulary.SetEnabledAsync(true));

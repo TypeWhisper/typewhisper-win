@@ -27,8 +27,9 @@ Besides the cloud providers and integrations you configure, the Windows app make
 
 Settings > Advanced > Support diagnostics can export a local JSON support report.
 It includes app and system details, microphone names and access status, model and
-plugin state, workflow metadata, selected behavior settings, data counts, and
-retained diagnostic log entries. Microphone names appear as shown in Windows and
+plugin state, workflow metadata, selected behavior settings, data counts,
+machine policy names with their validation findings, and retained diagnostic
+log entries. Microphone names appear as shown in Windows and
 may include the owner's name, for example for Bluetooth devices.
 The report excludes API keys, audio, transcripts, workflow names and prompts,
 app and website bindings, and file paths. Collection failures contain only the
