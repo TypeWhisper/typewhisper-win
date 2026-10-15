@@ -20,14 +20,14 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         pluginDownloads, modelDownloads, NoKeys);
 
     // Like Store(), but with the fixture package declaring a locality through the manifest.
-    private async Task<PortablePluginStore> LocalityStore(string locality)
+    private async Task<PortablePluginStore> LocalityStore(string locality, string[]? categories = null)
     {
         var bundles = Path.Combine(_root, "bundles");
         var folder = Path.Combine(bundles, Id); Directory.CreateDirectory(folder);
         File.Copy(typeof(RuntimeProbePlugin).Assembly.Location, Path.Combine(folder, "fixture.dll"), overwrite: true);
         File.WriteAllText(Path.Combine(folder, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
         {
-            Id = Id, Name = "Runtime fixture", Version = "1.0.0", Locality = locality, AssemblyName = "fixture.dll", PluginClass = typeof(RuntimeProbePlugin).FullName!
+            Id = Id, Name = "Runtime fixture", Version = "1.0.0", Locality = locality, Categories = categories, AssemblyName = "fixture.dll", PluginClass = typeof(RuntimeProbePlugin).FullName!
         }));
         var store = new PortablePluginStore(Path.Combine(_root, "store"), Version, _http);
         await store.InitializeAsync(bundles);
@@ -54,6 +54,37 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Empty(registry.TranscriptionProviders);
         Assert.Equal(0, Host(Id).GetSetting<int>("activations"));
         Assert.Null(await registry.SetEnabledAsync(Id, false));
+    }
+
+    [Fact]
+    public async Task CloudPackageWithNoAllowedCapabilityIsNeverLoaded()
+    {
+        var store = await LocalityStore("cloud", ["transcription"]);
+        Host(Id).SetSetting("Enabled", true);
+        await using var registry = PolicyRegistry(store, () => Policy(cloudTranscription: false));
+
+        await registry.InitializeAsync();
+
+        var state = Assert.Single(registry.Snapshot());
+        Assert.False(state.Enabled);
+        Assert.Contains("cloud", state.Error);
+        Assert.Equal(0, Host(Id).GetSetting<int>("activations"));
+        Assert.Contains("cloud", await registry.SetEnabledAsync(Id, true));
+        Assert.Contains("cloud", registry.PackageRefusal(Id));
+        Assert.Empty(registry.TranscriptionProviders);
+    }
+
+    [Fact]
+    public async Task CloudPackageWithAnAllowedCapabilityStillLoads()
+    {
+        var store = await LocalityStore("cloud", ["transcription", "llm"]);
+        await using var registry = PolicyRegistry(store, () => Policy(cloudTranscription: false));
+
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+
+        Assert.Null(registry.PackageRefusal(Id));
+        Assert.Contains("Cloud transcription is turned off", registry.TranscriptionRefusal(Id));
+        Assert.Null(registry.LlmRefusal(Id));
     }
 
     [Fact]
@@ -141,6 +172,15 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Contains("not allowed", store.InstallRefusal(entry.Id));
         policy = Policy();
         Assert.Null(store.InstallRefusal(entry.Id));
+
+        // A remote entry is refused as a whole only when the cloud keys leave it nothing to do.
+        var cloud = entry with { Categories = ["transcription"], Locality = "cloud" };
+        policy = Policy(cloudTranscription: false);
+        Assert.Contains("cloud", store.InstallRefusal(cloud));
+        Assert.Null(store.InstallRefusal(cloud with { Categories = ["transcription", "llm"] }));
+        Assert.Null(store.InstallRefusal(cloud with { Locality = "local" }));
+        await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => store.InstallAsync(cloud));
+        Assert.Equal(0, requests);
     }
 
     [Fact]

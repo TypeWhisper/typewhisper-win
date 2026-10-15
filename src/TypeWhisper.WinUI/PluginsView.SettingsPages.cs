@@ -38,6 +38,8 @@ public sealed partial class PluginsView
             row.Toggle.Content = plugin.Enabled ? Loc.T("Disable") : Loc.T("Enable");
             AutomationProperties.SetName(row.Toggle, plugin.Enabled ? Loc.T("Disable {0}", plugin.Title) : Loc.T("Enable {0}", plugin.Title));
             row.Toggle.IsEnabled = plugin.RuntimeCanToggle && !_changingPlugin && !_runtime.CtcVocabulary.Busy && _runtime.CanChangeProvider;
+            ToolTipService.SetToolTip(row.Toggle, plugin.Enabled ? null : plugin.Refusal);
+            AutomationProperties.SetHelpText(row.Toggle, plugin.Enabled ? "" : plugin.Refusal ?? "");
             row.Remove.IsEnabled = !_changingPlugin && _runtime.CanChangeProvider && !_runtime.Models.Busy && !_runtime.CtcVocabulary.Busy;
             var id = Path.GetFileName(plugin.Id);
             row.Update.Visibility = _runtime.Packages.Updates.HasUpdate(id) ? Visibility.Visible : Visibility.Collapsed;
@@ -48,11 +50,17 @@ public sealed partial class PluginsView
             if (selected)
             {
                 PluginPageTitle.Text = plugin.Title;
-                PluginSummary.Text = plugin.Status;
+                PluginSummary.Text = plugin.Refusal ?? plugin.Status;
                 PluginIcon.PluginId = id;
-                // Manifests only declare on-device plugins; the rest are not reliably cloud services.
-                PluginKind.Text = Loc.T("Local");
-                PluginKindPill.Visibility = plugin.IsLocal ? Visibility.Visible : Visibility.Collapsed;
+                // The manifest's locality names where content is processed; an undeclared one shows no pill.
+                PluginKind.Text = plugin.Locality switch
+                {
+                    TypeWhisper.Core.Models.ContentLocality.Local => Loc.T("Local"),
+                    TypeWhisper.Core.Models.ContentLocality.Cloud => Loc.T("Cloud"),
+                    TypeWhisper.Core.Models.ContentLocality.Configurable => Loc.T("Configurable"),
+                    _ => ""
+                };
+                PluginKindPill.Visibility = plugin.Locality == TypeWhisper.Core.Models.ContentLocality.Unknown ? Visibility.Collapsed : Visibility.Visible;
                 PluginMeta.Text = string.Join(" · ", new[] { "v" + plugin.Version, plugin.Author }.Where(part => !string.IsNullOrWhiteSpace(part)));
                 PluginDescription.Text = plugin.Description;
                 PluginIconTile.Visibility = PluginMeta.Visibility = PluginDescription.Visibility = Visibility.Visible;

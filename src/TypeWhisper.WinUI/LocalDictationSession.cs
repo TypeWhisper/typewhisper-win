@@ -150,10 +150,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         new("local", LocalTranscriptionPlugin.PluginId, "NVIDIA Parakeet", Models.Enabled, true, false,
             Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray())
+            { Refusal = LocalTranscriptionRefusal() }
     }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
         .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
             provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
-                model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()))).ToArray();
+                model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()) { Refusal = PluginRuntime.TranscriptionRefusal(provider.SelectionId) })).ToArray();
     internal Task<string?> SelectProviderModelAsync(string providerId, string modelId) => providerId switch
     {
         "local" => SelectModelAsync(modelId),
@@ -788,7 +789,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 {
                     AppDiagnostics.Write("dictation.policy-refused");
                     rejected?.Invoke(denied);
-                    SetStatus(denied, DictationPhase.Error);
+                    // The notice carries the reason; a start that never captured does not flash the overlay's error state.
+                    SetStatus(denied);
                     return;
                 }
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;

@@ -35,6 +35,14 @@ public sealed class PortablePluginStore
         return policy.PluginDownloadRefusal() ?? policy.PluginRefusal(pluginId);
     }
 
+    /// <summary>Why a catalog entry may not be installed, or null: downloads are off, the package is outside the allowlist, or it is a remote package whose every declared capability is refused.</summary>
+    public string? InstallRefusal(PortableCatalogEntry entry)
+    {
+        var policy = _policy?.Invoke() ?? TypeWhisper.Core.Models.ManagedProviderPolicy.None;
+        return policy.PluginDownloadRefusal()
+            ?? policy.PackageRefusal(entry.Id, PluginLocalityMap.ToContentLocality(entry.ResolvedLocality), entry.Categories);
+    }
+
     /// <summary>Initializes the authoritative installation index. Optional bootstrap IDs select bundle directories only when no index exists.</summary>
     public async Task InitializeAsync(string? bundledRoot = null, CancellationToken ct = default,
         IReadOnlyCollection<string>? bootstrapPluginIds = null)
@@ -121,7 +129,7 @@ public sealed class PortablePluginStore
         entry.Validate();
         if (!entry.Supports(_host, PortablePluginCatalog.Architecture)) throw new InvalidDataException("This package does not support this host or architecture.");
         // Policy is checked before any byte is downloaded and before installation hooks run.
-        if (InstallRefusal(entry.Id) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refused);
+        if (InstallRefusal(entry) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refused);
         await _operation.WaitAsync(ct);
         string? package = null;
         var archive = Path.Combine(Root, Guid.NewGuid().ToString("N") + ".zip");

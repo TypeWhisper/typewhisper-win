@@ -45,11 +45,16 @@ public sealed partial class PluginsView : UserControl
             var enabled = state.Enabled;
             var provider = _runtime.DictationProviders.FirstOrDefault(item => item.PluginId == manifest?.Id);
             var setupRequired = enabled && provider is { Ready: false };
+            // A package policy refuses cannot be enabled; the page names the reason instead of offering the switch.
+            var locality = TypeWhisper.PluginHost.PluginLocalityMap.ToContentLocality(manifest?.ResolvedLocality ?? TypeWhisper.PluginSDK.Models.PluginLocality.Unknown);
+            var refusal = manifest is null ? null
+                : TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current).PackageRefusal(manifest.Id, locality, manifest.Categories);
             _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? Loc.T("An installed plugin package could not be read."),
                 "plugin", "", "", manifest?.Version ?? "Unknown", manifest?.MinHostVersion ?? "0.0.0")
             {
-                Enabled = enabled, RuntimeCanToggle = state.CanToggle, Author = manifest?.Author, IsLocal = manifest?.IsLocal == true,
-                Status = RuntimeUpdateStatus(manifest?.Id) ?? (state.Busy ? Loc.T("Updating…") : error is not null ? Loc.T("Needs attention") : setupRequired ? Loc.T("Setup required") : enabled ? Loc.T("Ready") : Loc.T("Disabled"))
+                Enabled = enabled, RuntimeCanToggle = state.CanToggle && (enabled || refusal is null), Author = manifest?.Author, IsLocal = manifest?.IsLocal == true,
+                Refusal = refusal, Locality = locality,
+                Status = RuntimeUpdateStatus(manifest?.Id) ?? (state.Busy ? Loc.T("Updating…") : refusal is not null && !enabled ? Loc.T("Not allowed") : error is not null ? Loc.T("Needs attention") : setupRequired ? Loc.T("Setup required") : enabled ? Loc.T("Ready") : Loc.T("Disabled"))
             });
         }
         UpdateUpdateAction();
@@ -71,6 +76,8 @@ public sealed partial class PluginsView : UserControl
     public PluginsView()
     {
         InitializeComponent();
+        // A policy change re-judges every package without waiting for a runtime event.
+        WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(async () => await RefreshRuntimeAsync());
         PluginPageTitle.Text = Loc.T("Integrations");
         PluginSummary.Text = Loc.T("Loading installed plugins…");
         InstalledUpdateButton.Content = Loc.T("Update all");

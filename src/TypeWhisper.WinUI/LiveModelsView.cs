@@ -105,6 +105,10 @@ internal sealed class LiveModelsView : UserControl
             row.Action.Visibility = active ? Visibility.Collapsed : Visibility.Visible;
             row.Badge.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             row.Action.IsEnabled = !_confirmingRemoval && !models.Busy && !active && (!state.Downloaded || _session.CanSelectModel);
+            // A download the policy refuses is named on the row instead of failing after the click.
+            var downloadRefusal = !state.Downloaded && !downloading ? LocalDictationSession.ModelDownloadRefusal() : null;
+            if (downloadRefusal is not null) { row.Action.IsEnabled = false; row.Status.Text = downloadRefusal; row.Status.Visibility = Visibility.Visible; }
+            ToolTipService.SetToolTip(row.Action, downloadRefusal);
             row.Remove.Visibility = !_setup && models.SupportsModelRemoval && state.Downloaded ? Visibility.Visible : Visibility.Collapsed;
             row.Remove.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanChangeProvider && models.CanRemoveModel(row.Model.Id);
             ToolTipService.SetToolTip(row.Remove, models.CanRemoveModel(row.Model.Id)

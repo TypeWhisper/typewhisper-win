@@ -111,6 +111,29 @@ public class ManagedProviderPolicyTests
     }
 
     [Fact]
+    public void PackageRefusal_RefusesARemotePackageOnlyWhenNoCapabilityIsAllowed()
+    {
+        var audioOff = ManagedProviderPolicy.From(Snapshot([(ManagedPolicyKeys.AllowCloudTranscription, Number(0))]));
+        Assert.Null(audioOff.PackageRefusal("com.typewhisper.groq", ContentLocality.Cloud, ["transcription", "llm"]));
+        Assert.Contains("cloud", audioOff.PackageRefusal("com.typewhisper.deepgram", ContentLocality.Cloud, ["transcription"]));
+        Assert.Null(audioOff.PackageRefusal("com.typewhisper.sherpa-onnx", ContentLocality.Local, ["transcription"]));
+        Assert.Null(audioOff.PackageRefusal("com.typewhisper.unknown", ContentLocality.Cloud, []));
+        Assert.Null(audioOff.PackageRefusal("com.typewhisper.unknown", ContentLocality.Cloud, null));
+
+        var bothOff = ManagedProviderPolicy.From(Snapshot([(ManagedPolicyKeys.AllowCloudTranscription, Number(0)), (ManagedPolicyKeys.AllowCloudTextProcessing, Number(0))]));
+        Assert.Contains("cloud", bothOff.PackageRefusal("com.typewhisper.groq", ContentLocality.Cloud, ["transcription", "llm"]));
+        Assert.Contains("cloud", bothOff.PackageRefusal("com.typewhisper.webhook", ContentLocality.Configurable, ["action"]));
+        Assert.Contains("cloud", bothOff.PackageRefusal("com.typewhisper.legacy", ContentLocality.Unknown, ["tts"]));
+        Assert.Null(bothOff.PackageRefusal("com.typewhisper.obsidian", ContentLocality.Local, ["memory"]));
+
+        var allowlist = ManagedProviderPolicy.From(Allowlist(ManagedPolicyKeys.AllowedPlugins, "com.typewhisper.sherpa-onnx"));
+        Assert.Contains("not allowed", allowlist.PackageRefusal("com.typewhisper.groq", ContentLocality.Local, ["transcription"]));
+        var unreadable = ManagedProviderPolicy.From(ManagedPolicyValidator.Validate(ManagedPolicyReading.Unreadable("IOException"), 1, DateTimeOffset.UtcNow));
+        Assert.Contains("could not be read", unreadable.PackageRefusal("com.typewhisper.groq", ContentLocality.Cloud, ["llm"]));
+        Assert.Null(ManagedProviderPolicy.None.PackageRefusal("com.typewhisper.groq", ContentLocality.Cloud, ["transcription"]));
+    }
+
+    [Fact]
     public void Downloads_FollowTheirKeys()
     {
         var policy = ManagedProviderPolicy.From(Snapshot([(ManagedPolicyKeys.AllowPluginDownloads, Number(0)), (ManagedPolicyKeys.AllowModelDownloads, Number(0))]));

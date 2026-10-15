@@ -9,4 +9,8 @@ public sealed record Plugin(string Id, string Title, string Description, string 
     public string Status { get; init; } = "";
     public string? Author { get; init; }
     public bool IsLocal { get; init; }
+    /// <summary>Why machine policy refuses this package as a whole, or null.</summary>
+    public string? Refusal { get; init; }
+    /// <summary>Where the package processes content, as its manifest declares it.</summary>
+    public TypeWhisper.Core.Models.ContentLocality Locality { get; init; }
 }

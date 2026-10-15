@@ -56,7 +56,10 @@ field: `local` (nothing leaves the device), `cloud` (the vendor's fixed service)
 The plugin catalog publishes the same field. Under `AllowCloudTranscription` and
 `AllowCloudTextProcessing` only `local` plugins keep running; `cloud`,
 `configurable` and packages without a recognized value are refused. A manifest
-without the field falls back to its older `isLocal` flag.
+without the field falls back to its older `isLocal` flag. A remote package whose
+every declared capability (its manifest categories) is turned off is refused as a
+whole: it is neither installed, loaded nor enabled, and the Marketplace and plugin
+page name the reason.
 
 Known limits of this release:
 
@@ -66,8 +69,10 @@ Known limits of this release:
   downloads the app itself starts. Provision those assets with the deployment.
 - Configuration actions such as validating an API key still run under
   `AllowCloudTextProcessing`; they carry credentials, not transcripts.
-- The policy page shows which plugins and providers are refused; the provider
-  pickers themselves are not yet filtered.
+- The pickers for dictation providers, models, workflow text models, memory
+  sources and actions show refused entries grayed out with the reason and never
+  switch a selection on their own; a refused provider that is still selected is
+  refused when it is used, with the same message.
 
 ## Example
 
