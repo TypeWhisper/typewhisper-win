@@ -119,6 +119,23 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckOnlyDoesNotPromiseAChannelSwitchForAnOlderVersion()
+    {
+        var backend = new Backend { Offer = new AppUpdateOffer("1.1.0", true) };
+        var policy = new ManagedUpdatePolicy(AppUpdateMode.CheckOnly, null, null, null, false);
+        var controller = Controller(Preferences(), backend, () => policy);
+
+        await controller.CheckAsync();
+
+        Assert.True(controller.Offer!.IsDowngrade);
+        Assert.Contains("1.1.0", controller.Status);
+        Assert.Contains("older than", controller.Status);
+        Assert.Contains("only checks", controller.Status);
+        Assert.DoesNotContain("switches", controller.Status);
+        Assert.False(controller.CanInstall);
+    }
+
+    [Fact]
     public async Task EnforcedChannelIsUsedAndSelectionIsRefused()
     {
         var preferences = Preferences("1.2.0");
@@ -221,6 +238,7 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
         public AppUpdateChannel? CheckedChannel { get; private set; }
         public bool AllowedDowngrade { get; private set; }
         public Action? OnDownload { get; set; }
+        public AppUpdateOffer Offer { get; init; } = new("2.0.0", false);
         public string? UnavailableReason => null;
 
         public Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel, bool allowDowngrade)
@@ -228,7 +246,7 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
             Calls.Add("check");
             CheckedChannel = channel;
             AllowedDowngrade = allowDowngrade;
-            return Task.FromResult(new AppUpdateCheck(true, new AppUpdateOffer("2.0.0", false)));
+            return Task.FromResult(new AppUpdateCheck(true, Offer));
         }
 
         public Task DownloadAsync(AppUpdateOffer offer)
