@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Administrative template for TypeWhisper for Windows 1.2 and later.
+  Registry contract: docs/enterprise/windows-managed-settings.md. Every policy is machine-scoped and writes below
+  HKLM\SOFTWARE\Policies\TypeWhisper (enforced) or its Recommended subkey (administrator defaults users may change).
+  Booleans: Enabled = 1, Disabled = 0, Not Configured = value removed. Text, enumeration and list policies: Disabled and
+  Not Configured remove the values; an enabled list with no entries plus its <Name>Configured marker denies everything.
+-->
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="typewhisper" namespace="TypeWhisper.Policies.TypeWhisper" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <supportedOn>
+    <definitions>
+      <definition name="SUPPORTED_TypeWhisper_1_2" displayName="$(string.SUPPORTED_TypeWhisper_1_2)" />
+    </definitions>
+  </supportedOn>
+  <categories>
+    <category name="TypeWhisper" displayName="$(string.TypeWhisper)" explainText="$(string.TypeWhisper_Explain)" />
+    <category name="TypeWhisper_Recommended" displayName="$(string.TypeWhisper_Recommended)" explainText="$(string.TypeWhisper_Recommended_Explain)">
+      <parentCategory ref="TypeWhisper" />
+    </category>
+  </categories>
+  <policies>
+    <!-- Providers and models -->
+    <policy name="TranscriptionSelection" class="Machine" displayName="$(string.TranscriptionSelection)" explainText="$(string.TranscriptionSelection_Explain)" presentation="$(presentation.TranscriptionSelection)" key="Software\Policies\TypeWhisper">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <text id="TranscriptionProviderId" valueName="TranscriptionProviderId" required="true" maxLength="1024" />
+        <text id="TranscriptionModelId" valueName="TranscriptionModelId" required="true" maxLength="1024" />
+      </elements>
+    </policy>
+    <policy name="LlmSelection" class="Machine" displayName="$(string.LlmSelection)" explainText="$(string.LlmSelection_Explain)" presentation="$(presentation.LlmSelection)" key="Software\Policies\TypeWhisper">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <text id="LlmProviderId" valueName="LlmProviderId" required="true" maxLength="1024" />
+        <text id="LlmModelId" valueName="LlmModelId" required="true" maxLength="1024" />
+      </elements>
+    </policy>
+    <policy name="AllowedTranscriptionProviders" class="Machine" displayName="$(string.AllowedTranscriptionProviders)" explainText="$(string.AllowedTranscriptionProviders_Explain)" presentation="$(presentation.AllowedTranscriptionProviders)" key="Software\Policies\TypeWhisper" valueName="AllowedTranscriptionProvidersConfigured">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+      <elements>
+        <list id="AllowedTranscriptionProvidersList" key="Software\Policies\TypeWhisper\AllowedTranscriptionProviders" valuePrefix="" />
+      </elements>
+    </policy>
+    <policy name="AllowedLlmProviders" class="Machine" displayName="$(string.AllowedLlmProviders)" explainText="$(string.AllowedLlmProviders_Explain)" presentation="$(presentation.AllowedLlmProviders)" key="Software\Policies\TypeWhisper" valueName="AllowedLlmProvidersConfigured">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+      <elements>
+        <list id="AllowedLlmProvidersList" key="Software\Policies\TypeWhisper\AllowedLlmProviders" valuePrefix="" />
+      </elements>
+    </policy>
+    <policy name="AllowedPlugins" class="Machine" displayName="$(string.AllowedPlugins)" explainText="$(string.AllowedPlugins_Explain)" presentation="$(presentation.AllowedPlugins)" key="Software\Policies\TypeWhisper" valueName="AllowedPluginsConfigured">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+      <elements>
+        <list id="AllowedPluginsList" key="Software\Policies\TypeWhisper\AllowedPlugins" valuePrefix="" />
+      </elements>
+    </policy>
+    <!-- Cloud processing and downloads -->
+    <policy name="AllowCloudTranscription" class="Machine" displayName="$(string.AllowCloudTranscription)" explainText="$(string.AllowCloudTranscription_Explain)" key="Software\Policies\TypeWhisper" valueName="AllowCloudTranscription">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="AllowCloudTextProcessing" class="Machine" displayName="$(string.AllowCloudTextProcessing)" explainText="$(string.AllowCloudTextProcessing_Explain)" key="Software\Policies\TypeWhisper" valueName="AllowCloudTextProcessing">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="AllowPluginDownloads" class="Machine" displayName="$(string.AllowPluginDownloads)" explainText="$(string.AllowPluginDownloads_Explain)" key="Software\Policies\TypeWhisper" valueName="AllowPluginDownloads">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="AllowModelDownloads" class="Machine" displayName="$(string.AllowModelDownloads)" explainText="$(string.AllowModelDownloads_Explain)" key="Software\Policies\TypeWhisper" valueName="AllowModelDownloads">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <!-- Updates -->
+    <policy name="UpdateMode" class="Machine" displayName="$(string.UpdateMode)" explainText="$(string.UpdateMode_Explain)" presentation="$(presentation.UpdateMode)" key="Software\Policies\TypeWhisper">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <enum id="UpdateMode" valueName="UpdateMode" required="true">
+          <item displayName="$(string.UpdateMode_External)"><value><decimal value="0" /></value></item>
+          <item displayName="$(string.UpdateMode_CheckOnly)"><value><decimal value="1" /></value></item>
+          <item displayName="$(string.UpdateMode_UserInitiated)"><value><decimal value="2" /></value></item>
+        </enum>
+      </elements>
+    </policy>
+    <policy name="UpdateChannel" class="Machine" displayName="$(string.UpdateChannel)" explainText="$(string.UpdateChannel_Explain)" presentation="$(presentation.UpdateChannel)" key="Software\Policies\TypeWhisper">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <enum id="UpdateChannel" valueName="UpdateChannel" required="true">
+          <item displayName="$(string.UpdateChannel_Stable)"><value><decimal value="0" /></value></item>
+          <item displayName="$(string.UpdateChannel_Daily)"><value><decimal value="1" /></value></item>
+          <item displayName="$(string.UpdateChannel_ReleaseCandidate)"><value><decimal value="2" /></value></item>
+        </enum>
+      </elements>
+    </policy>
+    <policy name="AllowedUpdateChannels" class="Machine" displayName="$(string.AllowedUpdateChannels)" explainText="$(string.AllowedUpdateChannels_Explain)" presentation="$(presentation.AllowedUpdateChannels)" key="Software\Policies\TypeWhisper" valueName="AllowedUpdateChannelsConfigured">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+      <elements>
+        <list id="AllowedUpdateChannelsList" key="Software\Policies\TypeWhisper\AllowedUpdateChannels" valuePrefix="" />
+      </elements>
+    </policy>
+    <!-- Startup and onboarding -->
+    <policy name="LaunchAtLogin" class="Machine" displayName="$(string.LaunchAtLogin)" explainText="$(string.LaunchAtLogin_Explain)" key="Software\Policies\TypeWhisper" valueName="LaunchAtLogin">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="SkipOnboardingWhenReady" class="Machine" displayName="$(string.SkipOnboardingWhenReady)" explainText="$(string.SkipOnboardingWhenReady_Explain)" key="Software\Policies\TypeWhisper" valueName="SkipOnboardingWhenReady">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="SuppressOptionalPrompts" class="Machine" displayName="$(string.SuppressOptionalPrompts)" explainText="$(string.SuppressOptionalPrompts_Explain)" key="Software\Policies\TypeWhisper" valueName="SuppressOptionalPrompts">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <!-- Licensing -->
+    <policy name="ManagedLicenseKey" class="Machine" displayName="$(string.ManagedLicenseKey)" explainText="$(string.ManagedLicenseKey_Explain)" presentation="$(presentation.ManagedLicenseKey)" key="Software\Policies\TypeWhisper">
+      <parentCategory ref="TypeWhisper" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <text id="ManagedLicenseKey" valueName="ManagedLicenseKey" required="true" maxLength="1024" />
+      </elements>
+    </policy>
+    <!-- Recommended settings: defaults for profiles without an explicit choice; users can change them. -->
+    <policy name="TranscriptionSelection_Recommended" class="Machine" displayName="$(string.TranscriptionSelection_Recommended)" explainText="$(string.TranscriptionSelection_Recommended_Explain)" presentation="$(presentation.TranscriptionSelection_Recommended)" key="Software\Policies\TypeWhisper\Recommended">
+      <parentCategory ref="TypeWhisper_Recommended" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <text id="TranscriptionProviderId_Recommended" valueName="TranscriptionProviderId" required="true" maxLength="1024" />
+        <text id="TranscriptionModelId_Recommended" valueName="TranscriptionModelId" required="true" maxLength="1024" />
+      </elements>
+    </policy>
+    <policy name="LlmSelection_Recommended" class="Machine" displayName="$(string.LlmSelection_Recommended)" explainText="$(string.LlmSelection_Recommended_Explain)" presentation="$(presentation.LlmSelection_Recommended)" key="Software\Policies\TypeWhisper\Recommended">
+      <parentCategory ref="TypeWhisper_Recommended" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <text id="LlmProviderId_Recommended" valueName="LlmProviderId" required="true" maxLength="1024" />
+        <text id="LlmModelId_Recommended" valueName="LlmModelId" required="true" maxLength="1024" />
+      </elements>
+    </policy>
+    <policy name="UpdateChannel_Recommended" class="Machine" displayName="$(string.UpdateChannel_Recommended)" explainText="$(string.UpdateChannel_Recommended_Explain)" presentation="$(presentation.UpdateChannel_Recommended)" key="Software\Policies\TypeWhisper\Recommended">
+      <parentCategory ref="TypeWhisper_Recommended" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <elements>
+        <enum id="UpdateChannel_Recommended" valueName="UpdateChannel" required="true">
+          <item displayName="$(string.UpdateChannel_Stable)"><value><decimal value="0" /></value></item>
+          <item displayName="$(string.UpdateChannel_Daily)"><value><decimal value="1" /></value></item>
+          <item displayName="$(string.UpdateChannel_ReleaseCandidate)"><value><decimal value="2" /></value></item>
+        </enum>
+      </elements>
+    </policy>
+    <policy name="LaunchAtLogin_Recommended" class="Machine" displayName="$(string.LaunchAtLogin_Recommended)" explainText="$(string.LaunchAtLogin_Recommended_Explain)" key="Software\Policies\TypeWhisper\Recommended" valueName="LaunchAtLogin">
+      <parentCategory ref="TypeWhisper_Recommended" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="SuppressOptionalPrompts_Recommended" class="Machine" displayName="$(string.SuppressOptionalPrompts_Recommended)" explainText="$(string.SuppressOptionalPrompts_Recommended_Explain)" key="Software\Policies\TypeWhisper\Recommended" valueName="SuppressOptionalPrompts">
+      <parentCategory ref="TypeWhisper_Recommended" />
+      <supportedOn ref="SUPPORTED_TypeWhisper_1_2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+  </policies>
+</policyDefinitions>

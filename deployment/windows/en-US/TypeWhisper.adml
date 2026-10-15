@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>TypeWhisper</displayName>
+  <description>Group Policy settings for TypeWhisper for Windows.</description>
+  <resources>
+    <stringTable>
+      <string id="SUPPORTED_TypeWhisper_1_2">TypeWhisper for Windows 1.2 or later</string>
+      <string id="TypeWhisper">TypeWhisper</string>
+      <string id="TypeWhisper_Explain">Settings for TypeWhisper for Windows 1.2 and later. Policies in this folder are enforced: users cannot change them in the app. The app reads them from HKLM\SOFTWARE\Policies\TypeWhisper, notices changes while running and never writes the key.</string>
+      <string id="TypeWhisper_Recommended">Recommended settings (users can change)</string>
+      <string id="TypeWhisper_Recommended_Explain">Administrator defaults for TypeWhisper. A recommended value applies to profiles that have not made their own choice and stays editable in the app. Enforced policies in the parent folder take precedence.</string>
+
+      <string id="TranscriptionSelection">Transcription provider and model</string>
+      <string id="TranscriptionSelection_Explain">Fixes the transcription provider and model for dictation, file transcription, recovery, training, workflows and the HTTP API.
+
+Provider ID: the provider's stable selection ID. The local Parakeet engine is com.typewhisper.sherpa-onnx; cloud plugins use their package ID, for example com.typewhisper.groq; endpoint profiles use IDs such as openai-compatible-&lt;id&gt;. Model ID: the model as the provider lists it, for example parakeet-tdt-0.6b. Both values are required; the pair is ignored when one is missing.
+
+The app selects the pair itself and locks the provider and model pickers. Workflows with their own transcription model use the enforced pair instead, and HTTP API requests that ask for another engine or model are refused with 403. If the provider is not installed, not enabled or not allowed by another policy, or the model is not available or not downloaded, dictation is blocked with the reason; the app never switches to another provider on its own. Settings &gt; Advanced &gt; Managed settings lists such conflicts.
+
+Disabled or Not Configured: the pair is removed and the user's own selection applies again.</string>
+      <string id="LlmSelection">Text model provider and model</string>
+      <string id="LlmSelection_Explain">Fixes the LLM provider and model for every workflow, translation and text processing step, including workflows that have their own selection and the default workflow LLM.
+
+Provider ID: the provider's stable selection ID, for example com.typewhisper.groq or com.typewhisper.openai. Model ID: the model as the provider lists it. Both values are required; the pair is ignored when one is missing.
+
+The pair does not enable optional processing by itself, does not install the provider and does not bypass Allow cloud text processing or Allowed text model providers. Text sent to another provider or model is refused with the reason.
+
+Disabled or Not Configured: the pair is removed and the users' own selections apply again.</string>
+      <string id="AllowedTranscriptionProviders">Allowed transcription providers</string>
+      <string id="AllowedTranscriptionProviders_Explain">Enabled: only the listed transcription selection IDs may receive audio, at every entry point including workflow and HTTP API overrides. The local Parakeet engine is com.typewhisper.sherpa-onnx; cloud plugins use their package ID. An enabled policy with an empty list blocks all transcription.
+
+Disabled or Not Configured: no restriction.</string>
+      <string id="AllowedLlmProviders">Allowed text model providers</string>
+      <string id="AllowedLlmProviders_Explain">Enabled: only the listed LLM selection IDs may receive text, including workflows, translation and alias suggestions. An enabled policy with an empty list blocks all LLM processing.
+
+Disabled or Not Configured: no restriction.</string>
+      <string id="AllowedPlugins">Allowed plugins</string>
+      <string id="AllowedPlugins_Explain">Enabled: only the listed package IDs (for example com.typewhisper.sherpa-onnx) may be installed, loaded, enabled and executed. Packages outside the list are never loaded; the plugin page and the Marketplace show the reason. An enabled policy with an empty list blocks every plugin.
+
+Disabled or Not Configured: no restriction.</string>
+
+      <string id="AllowCloudTranscription">Allow cloud transcription</string>
+      <string id="AllowCloudTranscription_Explain">Disabled: audio never reaches a transcription plugin that does not process it on the device: cloud providers, user-configured endpoints and packages without a known locality. Dictation, file transcription, recovery and the HTTP API refuse with a message instead of switching providers. Remote packages whose every capability is turned off are not installed or loaded at all.
+
+Enabled or Not Configured: cloud transcription is allowed, subject to the other restrictions.</string>
+      <string id="AllowCloudTextProcessing">Allow cloud text processing</string>
+      <string id="AllowCloudTextProcessing_Explain">Disabled: transcript, prompt and context text never reaches a plugin that does not process it on the device: LLM providers, text processors, actions, speech output and memory sources. Workflows report the refusal; the HTTP API answers 403.
+
+Enabled or Not Configured: cloud text processing is allowed, subject to the other restrictions.</string>
+      <string id="AllowPluginDownloads">Allow plugin downloads</string>
+      <string id="AllowPluginDownloads_Explain">Disabled: the app does not install or update plugins, including automatic updates and installs during setup. Installed packages keep running.
+
+Enabled or Not Configured: plugin downloads are allowed.</string>
+      <string id="AllowModelDownloads">Allow model downloads</string>
+      <string id="AllowModelDownloads_Explain">Disabled: the app does not download models or runtime assets: local transcription models, plugin models and local text models. Downloaded models keep working. Provision the required models with the deployment.
+
+Enabled or Not Configured: model downloads are allowed.</string>
+
+      <string id="UpdateMode">Application update mode</string>
+      <string id="UpdateMode_Explain">External deployment: no update checks, downloads or installations; the app refers users to the organization's deployment. Check only: the app checks for and announces new versions but never installs them. User-initiated installation: users install explicitly; nothing installs unattended.
+
+Disabled or Not Configured: the release behavior.</string>
+      <string id="UpdateMode_External">External deployment</string>
+      <string id="UpdateMode_CheckOnly">Check only</string>
+      <string id="UpdateMode_UserInitiated">User-initiated installation</string>
+      <string id="UpdateChannel">Update channel</string>
+      <string id="UpdateChannel_Explain">Fixes the release channel and locks the channel picker. The separate Daily installation only receives Daily builds.
+
+Disabled or Not Configured: users choose the channel.</string>
+      <string id="UpdateChannel_Stable">Stable</string>
+      <string id="UpdateChannel_Daily">Daily</string>
+      <string id="UpdateChannel_ReleaseCandidate">Release Candidate</string>
+      <string id="AllowedUpdateChannels">Allowed update channels</string>
+      <string id="AllowedUpdateChannels_Explain">Enabled: update checks and installations run only on the listed channels. Entries: stable, daily, release-candidate. An enabled policy with an empty list turns app updates off. An enforced channel outside the list blocks updates; the app never switches channels on its own.
+
+Disabled or Not Configured: no restriction.</string>
+
+      <string id="LaunchAtLogin">Start TypeWhisper at sign-in</string>
+      <string id="LaunchAtLogin_Explain">Enabled: the app registers its own startup entry for the signed-in user and locks the setting. Disabled: the entry is removed and the setting is locked off. The user's earlier choice is restored when the policy returns to Not Configured. Windows can still turn startup apps off in Settings &gt; Apps &gt; Startup.</string>
+      <string id="SkipOnboardingWhenReady">Skip initial setup when ready</string>
+      <string id="SkipOnboardingWhenReady_Explain">Enabled: the initial setup stays closed when a dictation shortcut, a ready transcription model and a microphone are available. Nothing is marked as completed, and setup can still be opened from the app.
+
+Disabled or Not Configured: setup opens as usual.</string>
+      <string id="SuppressOptionalPrompts">Hide optional prompts</string>
+      <string id="SuppressOptionalPrompts_Explain">Enabled: the Premium purchase prompt stays hidden. Required setup, permission requests, policy problems, license errors and operational errors stay visible.
+
+Disabled or Not Configured: prompts are shown.</string>
+
+      <string id="ManagedLicenseKey">Managed license key</string>
+      <string id="ManagedLicenseKey_Explain">Activates a commercial TypeWhisper license key for the signed-in user and manages the license controls in the app while the value is set. Supporter keys are not accepted. The app never shows the key and never writes it.
+
+Disabled or Not Configured: the key is removed; a license the user activated stays as it is.</string>
+
+      <string id="TranscriptionSelection_Recommended">Transcription provider and model (recommended)</string>
+      <string id="TranscriptionSelection_Recommended_Explain">Administrator default: the transcription provider and model a profile starts with when the user has not chosen one. Same IDs as the enforced policy; both values are required. Users can change the selection; an enforced pair takes precedence.
+
+Disabled or Not Configured: no recommendation.</string>
+      <string id="LlmSelection_Recommended">Text model provider and model (recommended)</string>
+      <string id="LlmSelection_Recommended_Explain">Administrator default: the default workflow LLM for a profile that has not saved its own. Same IDs as the enforced policy; both values are required. Users can save their own default; an enforced pair takes precedence.
+
+Disabled or Not Configured: no recommendation.</string>
+      <string id="UpdateChannel_Recommended">Update channel (recommended)</string>
+      <string id="UpdateChannel_Recommended_Explain">Administrator default: the release channel for profiles without an explicit channel choice. Users can change it; an enforced channel takes precedence.
+
+Disabled or Not Configured: no recommendation.</string>
+      <string id="LaunchAtLogin_Recommended">Start TypeWhisper at sign-in (recommended)</string>
+      <string id="LaunchAtLogin_Recommended_Explain">Administrator default: applied once to a new profile that has not completed setup and has no explicit startup choice. Users can change it; the enforced policy takes precedence.
+
+Disabled or Not Configured: no recommendation.</string>
+      <string id="SuppressOptionalPrompts_Recommended">Hide optional prompts (recommended)</string>
+      <string id="SuppressOptionalPrompts_Recommended_Explain">Administrator default for hiding the Premium purchase prompt. Users can change it; the enforced policy takes precedence.
+
+Disabled or Not Configured: no recommendation.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="TranscriptionSelection">
+        <textBox refId="TranscriptionProviderId"><label>Provider ID (for example com.typewhisper.sherpa-onnx):</label></textBox>
+        <textBox refId="TranscriptionModelId"><label>Model ID (for example parakeet-tdt-0.6b):</label></textBox>
+      </presentation>
+      <presentation id="LlmSelection">
+        <textBox refId="LlmProviderId"><label>Provider ID (for example com.typewhisper.groq):</label></textBox>
+        <textBox refId="LlmModelId"><label>Model ID:</label></textBox>
+      </presentation>
+      <presentation id="AllowedTranscriptionProviders">
+        <listBox refId="AllowedTranscriptionProvidersList">Transcription selection IDs:</listBox>
+      </presentation>
+      <presentation id="AllowedLlmProviders">
+        <listBox refId="AllowedLlmProvidersList">LLM selection IDs:</listBox>
+      </presentation>
+      <presentation id="AllowedPlugins">
+        <listBox refId="AllowedPluginsList">Package IDs:</listBox>
+      </presentation>
+      <presentation id="UpdateMode">
+        <dropdownList refId="UpdateMode" noSort="true" defaultItem="1">Update mode:</dropdownList>
+      </presentation>
+      <presentation id="UpdateChannel">
+        <dropdownList refId="UpdateChannel" noSort="true" defaultItem="0">Channel:</dropdownList>
+      </presentation>
+      <presentation id="AllowedUpdateChannels">
+        <listBox refId="AllowedUpdateChannelsList">Channels (stable, daily, release-candidate):</listBox>
+      </presentation>
+      <presentation id="ManagedLicenseKey">
+        <textBox refId="ManagedLicenseKey"><label>License key:</label></textBox>
+      </presentation>
+      <presentation id="TranscriptionSelection_Recommended">
+        <textBox refId="TranscriptionProviderId_Recommended"><label>Provider ID (for example com.typewhisper.sherpa-onnx):</label></textBox>
+        <textBox refId="TranscriptionModelId_Recommended"><label>Model ID (for example parakeet-tdt-0.6b):</label></textBox>
+      </presentation>
+      <presentation id="LlmSelection_Recommended">
+        <textBox refId="LlmProviderId_Recommended"><label>Provider ID (for example com.typewhisper.groq):</label></textBox>
+        <textBox refId="LlmModelId_Recommended"><label>Model ID:</label></textBox>
+      </presentation>
+      <presentation id="UpdateChannel_Recommended">
+        <dropdownList refId="UpdateChannel_Recommended" noSort="true" defaultItem="0">Channel:</dropdownList>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>
