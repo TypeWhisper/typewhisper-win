@@ -28,8 +28,11 @@ internal sealed partial class DictationPluginServices : IAsyncDisposable
             idlePolicy: IdlePolicy);
         Vocabulary.LoadFailed += ex => AppDiagnostics.Write("dictation.vocabulary-load.failed", ex);
         Runtime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
-            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId))
+            id => id is not (LocalTranscriptionPlugin.PluginId or LocalCtcVocabulary.PluginId),
+            () => TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current))
             { TranscriptionIsolation = isolation, IdleUnloadPolicy = IdlePolicy };
+        // The local engine runs outside the registry, so its downloads ask the policy through this hook.
+        LocalTranscriptionPlugin.ModelDownloadRefusal = () => TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current).ModelDownloadRefusal();
         Runtime.Changed += () => Changed?.Invoke();
         SpeechBackend = new(Runtime, new WindowsSystemVoiceBackend());
         SpokenFeedback = new(SpeechBackend);

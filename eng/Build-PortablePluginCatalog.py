@@ -200,6 +200,7 @@ def main() -> None:
             "author": manifest.get("author", "TypeWhisper"),
             "description": manifest.get("description", ""),
             "categories": categories,
+            "locality": manifest.get("locality") or ("local" if manifest.get("isLocal") else "cloud"),
             "downloadUrl": f"https://github.com/TypeWhisper/typewhisper-win/releases/download/{args.tag}/{name}",
             "sha256": sha256(archive),
             "size": archive.stat().st_size,

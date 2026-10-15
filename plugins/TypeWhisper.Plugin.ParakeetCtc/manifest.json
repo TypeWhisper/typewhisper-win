@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.parakeet-ctc",
+  "locality": "local",
   "name": "Parakeet CTC Vocabulary",
   "version": "0.1.1",
   "author": "TypeWhisper",

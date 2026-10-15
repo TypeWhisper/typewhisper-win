@@ -2,9 +2,9 @@
 
 Administrators can configure TypeWhisper for Windows through registry policies, the
 same mechanism Group Policy and Intune write. This page lists the keys the app
-understands today. ADMX/ADML templates and the remaining keys from
-[#470](https://github.com/TypeWhisper/typewhisper-win/issues/470) (providers, cloud
-restrictions, plugin and model downloads) follow in later releases.
+understands today. ADMX/ADML templates and the enforced provider/model pairs from
+[#470](https://github.com/TypeWhisper/typewhisper-win/issues/470) follow in later
+releases.
 
 ## Registry layout
 
@@ -37,9 +37,37 @@ any problems; the support report contains the same section.
 | `LaunchAtLogin` | `REG_DWORD` 0/1 | enforced or recommended | Enforced sets the app-owned startup registration and locks the setting; the user's earlier choice is restored when the value is removed. Recommended applies only to a new profile that has not completed setup and has no explicit choice. Windows can still disable startup in Settings > Apps > Startup. |
 | `SkipOnboardingWhenReady` | `REG_DWORD` 0/1 | enforced | 1 keeps the initial setup closed when a dictation shortcut, a ready transcription model and a microphone are available. Otherwise setup opens as usual. Nothing is marked as completed. 0 follows the normal rules. |
 | `SuppressOptionalPrompts` | `REG_DWORD` 0/1 | enforced or recommended | 1 hides the Premium purchase prompt on the Premium page. Required setup, permission requests, policy problems, license errors and operational errors stay visible. |
+| `AllowCloudTranscription` | `REG_DWORD` 0/1 | enforced | 0 blocks audio from reaching any transcription plugin that is not local: cloud providers, user-configured endpoints and packages without a known locality. Dictation, file transcription, recovery, training and the HTTP API refuse with a message instead of switching providers. |
+| `AllowCloudTextProcessing` | `REG_DWORD` 0/1 | enforced | 0 blocks transcript, prompt and context text from reaching non-local plugins: LLM providers, text processors, actions, speech output and memory sources. Workflows report the refusal; the HTTP API answers 403. |
+| `AllowedTranscriptionProviders` | list | enforced | Stable transcription selection IDs (plugin IDs, or profile IDs such as `openai-compatible-<id>`) that may receive audio. Applies to every entry point including workflow and API overrides. The local Parakeet engine is `com.typewhisper.sherpa-onnx`. |
+| `AllowedLlmProviders` | list | enforced | Stable LLM selection IDs that may receive text, including workflows, translation and alias suggestions. |
+| `AllowedPlugins` | list | enforced | Package IDs that may be installed, loaded, enabled and executed. Packages outside the list are never loaded; their plugin page shows the reason. |
+| `AllowPluginDownloads` | `REG_DWORD` 0/1 | enforced | 0 blocks plugin installation and updates, including automatic updates and setup-time installs. Installed packages keep running. |
+| `AllowModelDownloads` | `REG_DWORD` 0/1 | enforced | 0 blocks model downloads started by the app: local transcription models, registry plugin models and local text models. Existing downloaded models keep working. |
 
 Restriction keys placed under `Recommended` are reported as problems and ignored.
 Unknown keys are reported and ignored.
+
+## Plugin locality
+
+Every plugin manifest declares where it processes content through the `locality`
+field: `local` (nothing leaves the device), `cloud` (the vendor's fixed service) or
+`configurable` (a user-defined endpoint, script or command the app cannot verify).
+The plugin catalog publishes the same field. Under `AllowCloudTranscription` and
+`AllowCloudTextProcessing` only `local` plugins keep running; `cloud`,
+`configurable` and packages without a recognized value are refused. A manifest
+without the field falls back to its older `isLocal` flag.
+
+Known limits of this release:
+
+- A plugin that fetches runtime files while loading a model (for example GPU
+  runtimes inside the transcription worker, or the vocabulary assets of the local
+  Parakeet plugin) is not stopped by `AllowModelDownloads`; the key covers the
+  downloads the app itself starts. Provision those assets with the deployment.
+- Configuration actions such as validating an API key still run under
+  `AllowCloudTextProcessing`; they carry credentials, not transcripts.
+- The policy page shows which plugins and providers are refused; the provider
+  pickers themselves are not yet filtered.
 
 ## Example
 

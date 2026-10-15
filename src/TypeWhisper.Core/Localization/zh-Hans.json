@@ -3166,5 +3166,14 @@
   "Your organization's policy could not be read. Managed settings keep their last known values.": "无法读取你的组织的策略。托管设置保留其最近已知的值。",
   "Your organization's policy could not be read. This setting waits until it is readable.": "无法读取你的组织的策略。此设置将等待策略可读后再生效。",
   "Your organization's update policy could not be read. App updates wait until it is readable.": "无法读取你的组织的更新策略。应用更新将等待策略可读后再进行。",
-  "Version {0} is older than your installed version.": "版本 {0} 比已安装的版本旧。"
+  "Version {0} is older than your installed version.": "版本 {0} 比已安装的版本旧。",
+  "The plugin {0} is not allowed by your organization.": "你的组织不允许使用插件 {0}。",
+  "The transcription provider {0} is not allowed by your organization.": "你的组织不允许使用转录提供商 {0}。",
+  "Cloud transcription is turned off by your organization. Choose a local transcription model.": "你的组织已关闭云端转录。请选择本地转录模型。",
+  "The text model provider {0} is not allowed by your organization.": "你的组织不允许使用文本模型提供商 {0}。",
+  "Cloud text processing is turned off by your organization. Choose a local text model.": "你的组织已关闭云端文本处理。请选择本地文本模型。",
+  "Sending text to {0} is turned off by your organization.": "你的组织已关闭向 {0} 发送文本。",
+  "Plugin downloads are turned off by your organization.": "你的组织已关闭插件下载。",
+  "Model downloads are turned off by your organization.": "你的组织已关闭模型下载。",
+  "Your organization's policy could not be read. This operation waits until it is readable.": "无法读取你的组织的策略。此操作将等待策略可读后再进行。"
 }

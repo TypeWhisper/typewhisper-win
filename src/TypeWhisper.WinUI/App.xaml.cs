@@ -111,6 +111,8 @@ public partial class App : Application
         try
         {
             if (!await FinishPendingDataDeletionAsync(request, initialShare, skipLegacyImport)) return;
+            // Policy is read before the legacy import can install plugins; the later call is a no-op.
+            WinUIManagedPolicy.Initialize();
 #if !DEBUG
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             // #318: a failed 1.0.4 migration can leave an empty TypeWhisper-UserData beside the real profile.

@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -17,6 +18,8 @@ public sealed record PortableTranscriptionProvider(string PluginId, string Selec
     public bool SupportsStreaming { get; init; }
     /// <summary>Downloaded asset snapshots.</summary>
     public IReadOnlyList<PortableDownloadableModel> ModelStates { get; init; } = [];
+    /// <summary>Where the owning package processes audio, as declared by its manifest.</summary>
+    public ContentLocality Locality { get; init; }
 }
 /// <summary>An LLM role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableLlmProvider(string PluginId, string SelectionId, string Name,
@@ -24,6 +27,8 @@ public sealed record PortableLlmProvider(string PluginId, string SelectionId, st
 {
     /// <summary>Whether the owning package declares local processing.</summary>
     public bool IsLocal { get; init; }
+    /// <summary>Where the owning package processes text, as declared by its manifest.</summary>
+    public ContentLocality Locality { get; init; }
 }
 
 /// <summary>An enabled text processor bound to one exact package activation.</summary>
@@ -51,7 +56,8 @@ public sealed record PortableActionOutcome(PortableActionStatus Status, string M
 /// The host initializes package storage first and must route runtime calls through this owner.
 /// </summary>
 public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore store, Version hostVersion,
-    Func<string, IPluginHostServices> createServices, Func<string, bool>? ownsPlugin = null) : IAsyncDisposable
+    Func<string, IPluginHostServices> createServices, Func<string, bool>? ownsPlugin = null,
+    Func<ManagedProviderPolicy>? policy = null) : IAsyncDisposable
 {
     private sealed class Slot(string id, IPluginHostServices services)
     {
@@ -60,6 +66,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal PortablePluginPackage? Package;
         internal bool Accepting;
         internal bool IsLocal;
+        // Declared by the manifest; Unknown counts as not local under restrictive policy.
+        internal ContentLocality Locality = ContentLocality.Unknown;
         internal long Generation;
         internal string? Error;
         internal bool CapabilityError;
@@ -94,6 +102,36 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
 
     /// <summary>Raised after state changes; UI subscribers must dispatch to their UI thread.</summary>
     public event Action? Changed;
+    /// <summary>The machine policy consulted before packages load and before content reaches a plugin.</summary>
+    private ManagedProviderPolicy Policy => policy?.Invoke() ?? ManagedProviderPolicy.None;
+
+    private static ContentLocality Map(PluginLocality locality) => locality switch
+    {
+        PluginLocality.Local => ContentLocality.Local,
+        PluginLocality.Cloud => ContentLocality.Cloud,
+        PluginLocality.Configurable => ContentLocality.Configurable,
+        _ => ContentLocality.Unknown
+    };
+
+    /// <summary>Why policy refuses audio for an enabled transcription role, or null. Unknown roles return null.</summary>
+    public string? TranscriptionRefusal(string selectionId)
+    {
+        lock (_sync) return _index.Transcription.TryGetValue(selectionId, out var role)
+            ? Policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) : null;
+    }
+
+    /// <summary>Why policy refuses text for an enabled LLM role, or null. Unknown roles return null.</summary>
+    public string? LlmRefusal(string selectionId)
+    {
+        lock (_sync) return _index.Llm.TryGetValue(selectionId, out var role)
+            ? Policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) : null;
+    }
+
+    /// <summary>Why policy refuses handing text to an enabled package, or null. Unknown packages return null.</summary>
+    public string? TextTransferRefusal(string pluginId)
+    {
+        lock (_sync) return _slots.TryGetValue(pluginId, out var slot) ? Policy.TextTransferRefusal(pluginId, slot.Locality) : null;
+    }
     /// <summary>Runs selected local engines in worker processes; null keeps every engine in process.</summary>
     public TranscriptionIsolation? TranscriptionIsolation { get; init; }
     /// <summary>Whether a serialized runtime operation is currently executing.</summary>
@@ -147,15 +185,17 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         {
             if (package.Manifest is not { } manifest) continue;
             if (ownsPlugin?.Invoke(manifest.Id) == false) continue;
+            // A package policy does not allow is never loaded; its slot only carries the reason.
+            var refused = Policy.PluginRefusal(manifest.Id);
             Slot slot;
             lock (_sync)
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 if (!_slots.TryGetValue(manifest.Id, out slot!))
                     _slots.Add(manifest.Id, slot = new(manifest.Id, new RuntimePluginHostServices(createServices(manifest.Id), QueueRefresh)));
-                slot.Error = package.Error;
+                slot.Error = package.Error ?? refused;
             }
-            if (package.Error is not null) continue;
+            if (package.Error is not null || refused is not null) continue;
             try
             {
                 if (slot.Services.GetSetting<bool?>("Enabled") == true) await SetEnabledAsync(slot.Id, true);
@@ -184,6 +224,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 _slots.Add(pluginId, slot = new(pluginId, new RuntimePluginHostServices(createServices(pluginId), QueueRefresh)));
             }
             if (enabled && slot.Accepting) return null;
+            // Policy is checked before any code of the package loads; disabling is always allowed.
+            if (enabled && Policy.PluginRefusal(pluginId) is { } refused) { slot.Error = refused; return refused; }
             generation = ++slot.Generation;
             slot.Accepting = false;
             CancelRequest(slot);
@@ -216,6 +258,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             slot.Package = package;
             slot.Directory = directory;
             slot.IsLocal = inspection.Manifest.IsLocal;
+            slot.Locality = Map(inspection.Manifest.ResolvedLocality);
             try
             {
                 var next = BuildIndex();
@@ -259,8 +302,32 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_index.Transcription.TryGetValue(selectionId, out var role)) throw new InvalidOperationException("Transcription provider is unavailable.");
             owner = role.Owner;
         }
-        return UseAsync(owner, token => _index.Transcription.TryGetValue(selectionId, out var current) && current.Owner == owner
-            ? use(current.Engine, token) : throw new InvalidOperationException("Transcription provider changed."), cancellationToken);
+        // Checked before queuing and again once the lease is held, so a policy that arrived meanwhile still wins.
+        DenyTranscriptionIfRefused(selectionId, owner);
+        return UseAsync(owner, token =>
+        {
+            DenyTranscriptionIfRefused(selectionId, owner);
+            return _index.Transcription.TryGetValue(selectionId, out var current) && current.Owner == owner
+                ? use(current.Engine, token) : throw new InvalidOperationException("Transcription provider changed.");
+        }, cancellationToken);
+    }
+
+    private void DenyTranscriptionIfRefused(string selectionId, Slot owner)
+    {
+        if (Policy.TranscriptionRefusal(selectionId, owner.Id, owner.Locality) is { } refused)
+            throw new ManagedPolicyDeniedException("transcription", refused);
+    }
+
+    private void DenyLlmIfRefused(string selectionId, Slot owner)
+    {
+        if (Policy.LlmRefusal(selectionId, owner.Id, owner.Locality) is { } refused)
+            throw new ManagedPolicyDeniedException("llm", refused);
+    }
+
+    private void DenyTextTransferIfRefused(Slot owner, string capability)
+    {
+        if (Policy.TextTransferRefusal(owner.Id, owner.Locality) is { } refused)
+            throw new ManagedPolicyDeniedException(capability, refused);
     }
 
     /// <summary>Uses an LLM role within its owning package's serialized request lifetime.</summary>
@@ -282,10 +349,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_index.Llm.TryGetValue(selectionId, out var role)) throw new InvalidOperationException("LLM provider is unavailable.");
             owner = role.Owner;
         }
+        DenyLlmIfRefused(selectionId, owner);
         return UseAsync(owner, async token =>
         {
             if (!_index.Llm.TryGetValue(selectionId, out var current) || current.Owner != owner)
                 throw new InvalidOperationException("LLM provider changed.");
+            DenyLlmIfRefused(selectionId, owner);
             if (requireLocal && !owner.IsLocal)
                 throw new InvalidOperationException("Choose a local LLM for alias suggestions.");
             await RestoreLocalLlmAsync(owner, current.Provider, token).ConfigureAwait(false);
@@ -307,11 +376,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 throw new InvalidOperationException("The captured text processor is no longer available.");
             owner = role.Owner;
         }
+        DenyTextTransferIfRefused(owner, "text-processor");
         return UseAsync(owner, token =>
         {
             if (!_index.PostProcessors.TryGetValue(expected.PluginId, out var current)
                 || current.Owner != owner || (current.Snapshot with { Generation = owner.Generation }) != expected || owner.Generation != expected.Generation)
                 throw new InvalidOperationException("The captured text processor changed.");
+            DenyTextTransferIfRefused(owner, "text-processor");
             return current.Processor.ProcessAsync(text, context, token);
         }, cancellationToken);
     }
@@ -332,11 +403,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 throw new InvalidOperationException("The selected action is no longer available.");
             owner = role.Owner;
         }
+        DenyTextTransferIfRefused(owner, "action");
         return UseAsync(owner, async token =>
         {
             if (!_index.Actions.TryGetValue(expected.PluginId, out var current) || current.Owner != owner
                 || (current.Snapshot with { Generation = owner.Generation }) != expected)
                 throw new InvalidOperationException("The selected action changed before execution.");
+            DenyTextTransferIfRefused(owner, "action");
             token.ThrowIfCancellationRequested();
             try
             {
@@ -497,7 +570,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 transcriptionSnapshots.Add(new(slot.Id, id, engine.ProviderDisplayName, engine.IsConfigured,
                     engine.SelectedModelId, Array.AsReadOnly(engine.TranscriptionModels.ToArray()), engine.SupportsTranslation, engine is IPcmTranscriptionEnginePlugin,
                     Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId, engine.SupportsLanguageHints)
-                    { ModelStates = CaptureModelStates(slot, id, engine), SupportsLocalLivePreview = engine.SupportsLocalLivePreview, SupportsStreaming = engine.SupportsStreaming && engine.SupportsStreamingCompletion });
+                    { ModelStates = CaptureModelStates(slot, id, engine), SupportsLocalLivePreview = engine.SupportsLocalLivePreview, SupportsStreaming = engine.SupportsStreaming && engine.SupportsStreamingCompletion, Locality = slot.Locality });
             }
             var providers = (plugin is ILlmProviderPlugin directLlm ? new[] { directLlm } : [])
                 .Concat(plugin is IAdditionalLlmProvidersProvider additionalLlm ? additionalLlm.AdditionalLlmProviders : [])
@@ -511,7 +584,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var restorable = RestorableModel(slot, provider);
                 llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable || restorable is not null,
                     Array.AsReadOnly(restorable is null ? provider.SupportedModels.ToArray() : [restorable]))
-                    { IsLocal = slot.IsLocal });
+                    { IsLocal = slot.IsLocal, Locality = slot.Locality });
             }
         }
         return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray() };

@@ -3166,5 +3166,14 @@
   "Your organization's policy could not be read. Managed settings keep their last known values.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Verwaltete Einstellungen behalten ihre zuletzt bekannten Werte.",
   "Your organization's policy could not be read. This setting waits until it is readable.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Diese Einstellung wartet, bis sie lesbar ist.",
   "Your organization's update policy could not be read. App updates wait until it is readable.": "Die Update-Richtlinie deiner Organisation konnte nicht gelesen werden. App-Updates warten, bis sie lesbar ist.",
-  "Version {0} is older than your installed version.": "Version {0} ist älter als deine installierte Version."
+  "Version {0} is older than your installed version.": "Version {0} ist älter als deine installierte Version.",
+  "The plugin {0} is not allowed by your organization.": "Das Plugin {0} ist von deiner Organisation nicht erlaubt.",
+  "The transcription provider {0} is not allowed by your organization.": "Der Transkriptionsanbieter {0} ist von deiner Organisation nicht erlaubt.",
+  "Cloud transcription is turned off by your organization. Choose a local transcription model.": "Cloud-Transkription ist von deiner Organisation deaktiviert. Wähle ein lokales Transkriptionsmodell.",
+  "The text model provider {0} is not allowed by your organization.": "Der Textmodell-Anbieter {0} ist von deiner Organisation nicht erlaubt.",
+  "Cloud text processing is turned off by your organization. Choose a local text model.": "Cloud-Textverarbeitung ist von deiner Organisation deaktiviert. Wähle ein lokales Textmodell.",
+  "Sending text to {0} is turned off by your organization.": "Das Senden von Text an {0} ist von deiner Organisation deaktiviert.",
+  "Plugin downloads are turned off by your organization.": "Plugin-Downloads sind von deiner Organisation deaktiviert.",
+  "Model downloads are turned off by your organization.": "Modell-Downloads sind von deiner Organisation deaktiviert.",
+  "Your organization's policy could not be read. This operation waits until it is readable.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Dieser Vorgang wartet, bis sie lesbar ist."
 }

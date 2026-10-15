@@ -19,8 +19,11 @@ public sealed partial class PortablePluginRuntimeRegistry
     }
 
     /// <summary>Retains the package until playback has completed or cancellation has drained it.</summary>
-    public Task<bool> SpeakAsync(string pluginId, TtsSpeakRequest request, CancellationToken ct) =>
-        UseConfigurationAsync(pluginId, async (plugin, token) =>
+    public Task<bool> SpeakAsync(string pluginId, TtsSpeakRequest request, CancellationToken ct)
+    {
+        // Spoken feedback carries transcript text, so remote synthesis follows the text-processing policy.
+        if (TextTransferRefusal(pluginId) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refused);
+        return UseConfigurationAsync(pluginId, async (plugin, token) =>
         {
             if (plugin is not ITtsProviderPlugin { IsConfigured: true, SupportsPlaybackSelection: true } provider)
                 throw new InvalidOperationException("The selected speech provider is unavailable.");
@@ -43,4 +46,5 @@ public sealed partial class PortablePluginRuntimeRegistry
                 finally { (playback as IDisposable)?.Dispose(); }
             }
         }, ct);
+    }
 }
