@@ -188,7 +188,8 @@ foreach (var item in SherpaNativeLibraries)
       <_RequiredCtcRuntimeFiles Include="$(_CtcNativeDir)vcruntime140.dll" />
       <_RequiredCtcRuntimeFiles Include="$(_CtcNativeDir)vcruntime140_1.dll" />
     </ItemGroup>
-    <Error Condition="'$(Configuration)' == 'Release' and !Exists('%(_RequiredCtcRuntimeFiles.Identity)')"
+    <!-- The runtime files are staged by a Windows-only step; non-Windows Release builds serve headless tests only. -->
+    <Error Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT' and !Exists('%(_RequiredCtcRuntimeFiles.Identity)')"
            Text="Missing required dictionary boosting runtime file: %(_RequiredCtcRuntimeFiles.Identity)" />
   </Target>
 </Project>
