@@ -50,7 +50,8 @@ public sealed partial class PluginsView
             if (selected)
             {
                 PluginPageTitle.Text = plugin.Title;
-                PluginSummary.Text = plugin.Refusal ?? plugin.Status;
+                // The header chip stays short; the page body and the disabled switch carry the full reason.
+                PluginSummary.Text = plugin.Status;
                 PluginIcon.PluginId = id;
                 // The manifest's locality names where content is processed; an undeclared one shows no pill.
                 PluginKind.Text = plugin.Locality switch
