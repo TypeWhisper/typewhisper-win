@@ -286,6 +286,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
 
+    /// <summary>Set by the host: why machine policy refuses model downloads, or null. Absent in tests.</summary>
+    internal static Func<string?>? ModelDownloadRefusal { get; set; }
+
     internal async Task DownloadAsync(string modelId, CancellationToken ct = default, bool propagateErrors = false)
     {
         if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException(Loc.T("A model operation is already in progress."));
@@ -298,6 +301,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             var engine = _lease?.Engine ?? throw new InvalidOperationException(Loc.T("Enable the local plugin in Plugins first."));
             if (!engine.TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException(Loc.T("Unknown model."));
             if (!engine.SupportsModelDownload) throw new NotSupportedException(Loc.T("This plugin does not support downloads."));
+            if (ModelDownloadRefusal?.Invoke() is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refused);
             DownloadingModelId = modelId; Changed?.Invoke();
             await engine.DownloadModelAsync(modelId, new InlineProgress(value =>
             {

@@ -144,6 +144,7 @@ public sealed partial class PortablePluginRuntimeRegistry
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expected);
+        if (Policy.ModelDownloadRefusal() is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refused);
         Slot owner;
         lock (_sync)
         {

@@ -7,7 +7,8 @@ internal sealed class WinUIPluginPackages
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, VocabularyHostServices> Services = new(StringComparer.Ordinal);
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
-    internal PortablePluginStore Store { get; } = new(WinUIProfile.DataPath("PluginPackages"), LocalCtcVocabulary.HostVersion, Http, CreateServices);
+    internal PortablePluginStore Store { get; } = new(WinUIProfile.DataPath("PluginPackages"), LocalCtcVocabulary.HostVersion, Http, CreateServices,
+        () => TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current));
     internal PortablePluginCatalog Catalog { get; } = new(Http);
     internal PortablePluginUpdates Updates { get; }
     internal WinUIPluginPackages() => Updates = new(Store, Catalog, LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture);

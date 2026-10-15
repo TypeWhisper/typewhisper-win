@@ -150,10 +150,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         new("local", LocalTranscriptionPlugin.PluginId, "NVIDIA Parakeet", Models.Enabled, true, false,
             Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray())
+            { Refusal = LocalTranscriptionRefusal() }
     }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
         .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
             provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
-                model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()))).ToArray();
+                model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()) { Refusal = PluginRuntime.TranscriptionRefusal(provider.SelectionId) })).ToArray();
     internal Task<string?> SelectProviderModelAsync(string providerId, string modelId) => providerId switch
     {
         "local" => SelectModelAsync(modelId),
@@ -783,6 +784,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     preparingRecording = true;
                 }
                 if (await RejectWorkflowModelAsync(workflow?.TranscriptionModel, rejected)) return;
+                // Machine policy is checked before the microphone opens, with the provider a workflow may have switched to.
+                if (TranscriptionPolicyRefusal() is { } denied)
+                {
+                    AppDiagnostics.Write("dictation.policy-refused");
+                    rejected?.Invoke(denied);
+                    // The notice carries the reason; a start that never captured does not flash the overlay's error state.
+                    SetStatus(denied);
+                    return;
+                }
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
                 _taskAtStart = globalTaskAtStart;
                 // Unsupported tasks fail before microphone capture. When the model cannot translate
@@ -1208,12 +1218,17 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private async Task<string> DecodePreviewAsync(float[] samples, CancellationToken cancellation)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _operationCancellation.Token);
+        if (!UsesRegistryProvider) DenyLocalTranscriptionIfRefused();
         return (UsesRegistryProvider ? await DecodeRegistryAsync(samples, linked.Token)
             : await _transcriptionPlugin.DecodeAsync(samples, false, _taskAtStart == TranscriptionTask.Translate, linked.Token, _languageAtStart)).Text;
     }
-    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
-        UsesRegistryProvider ? DecodeRegistryAsync(samples, _operationCancellation.Token)
-            : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
+    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true)
+    {
+        if (UsesRegistryProvider) return DecodeRegistryAsync(samples, _operationCancellation.Token);
+        // The registry enforces policy for its roles; the local engine is checked here.
+        DenyLocalTranscriptionIfRefused();
+        return _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
+    }
     private void StopSilenceMonitoring()
     {
         _silence = null;

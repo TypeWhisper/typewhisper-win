@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.xai",
+  "locality": "cloud",
   "name": "xAI / Grok",
   "version": "1.3.3",
   "minHostVersion": "1.1.5",

@@ -81,6 +81,7 @@ internal sealed partial class LocalDictationSession
             ct.ThrowIfCancellationRequested();
             var samples = await MediaFoundationFileDecoder.LoadAsync(path, ct);
             ct.ThrowIfCancellationRequested();
+            if (!registry) DenyLocalTranscriptionIfRefused();
             var decoded = registry
                 ? await PluginRuntime.UseTranscriptionAsync(selection, (engine, token) =>
                     LanguageHintTranscription.DecodeAsync(engine, samples,

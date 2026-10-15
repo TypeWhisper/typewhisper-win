@@ -3166,5 +3166,17 @@
   "Your organization's policy could not be read. Managed settings keep their last known values.": "組織のポリシーを読み取れませんでした。管理対象の設定は最後に確認した値のままです。",
   "Your organization's policy could not be read. This setting waits until it is readable.": "組織のポリシーを読み取れませんでした。この設定は読み取れるようになるまで保留されます。",
   "Your organization's update policy could not be read. App updates wait until it is readable.": "組織の更新ポリシーを読み取れませんでした。アプリの更新は読み取れるようになるまで保留されます。",
-  "Version {0} is older than your installed version.": "バージョン {0} はインストール済みのバージョンより古いです。"
+  "Version {0} is older than your installed version.": "バージョン {0} はインストール済みのバージョンより古いです。",
+  "The plugin {0} is not allowed by your organization.": "プラグイン {0} は組織で許可されていません。",
+  "The transcription provider {0} is not allowed by your organization.": "文字起こしプロバイダー {0} は組織で許可されていません。",
+  "Cloud transcription is turned off by your organization. Choose a local transcription model.": "クラウド文字起こしは組織によって無効化されています。ローカルの文字起こしモデルを選んでください。",
+  "The text model provider {0} is not allowed by your organization.": "テキストモデルのプロバイダー {0} は組織で許可されていません。",
+  "Cloud text processing is turned off by your organization. Choose a local text model.": "クラウドでのテキスト処理は組織によって無効化されています。ローカルのテキストモデルを選んでください。",
+  "Sending text to {0} is turned off by your organization.": "{0} へのテキスト送信は組織によって無効化されています。",
+  "Plugin downloads are turned off by your organization.": "プラグインのダウンロードは組織によって無効化されています。",
+  "Model downloads are turned off by your organization.": "モデルのダウンロードは組織によって無効化されています。",
+  "Your organization's policy could not be read. This operation waits until it is readable.": "組織のポリシーを読み取れませんでした。この操作は読み取れるようになるまで保留されます。",
+  "Not allowed": "許可されていません",
+  "Configurable": "設定可能",
+  "This plugin processes content in the cloud, which your organization has turned off.": "このプラグインはコンテンツをクラウドで処理しますが、組織によって無効化されています。"
 }

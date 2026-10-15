@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.cohere-transcribe",
+  "locality": "local",
   "name": "Cohere Transcribe (Local)",
   "version": "1.2.4",
   "minHostVersion": "1.1.6",

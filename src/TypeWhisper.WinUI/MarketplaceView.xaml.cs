@@ -71,7 +71,12 @@ public sealed partial class MarketplaceView : UserControl
         ResetFiltersButton.Content = Loc.T("Retry");
         Loaded += async (_, _) => await RefreshCatalogAsync();
         runtime.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsDetail) UpdateDetail(); else Filter(_query); });
+        WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(() => { if (IsDetail) UpdateDetail(); else Filter(_query); });
     }
+
+    // Policy judges a catalog entry by its ID, locality and categories; an installed package is judged on its own page.
+    private string? Refusal(MarketplaceItem item) => _runtime is not null && _entries.FirstOrDefault(entry => entry.Id == item.Plugin.Id) is { } entry
+        ? _runtime.Packages.Store.InstallRefusal(entry) : null;
 
     private async Task RefreshCatalogAsync()
     {
@@ -113,7 +118,7 @@ public sealed partial class MarketplaceView : UserControl
         foreach (var item in available.Where(item => (_categoriesFilter.Length == 0 || item.CategoriesIds.Contains(_categoriesFilter, StringComparer.OrdinalIgnoreCase))
             && (item.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || item.Description.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || item.Categories.Contains(query, StringComparison.OrdinalIgnoreCase))))
-            FilteredItems.Add(item with { Installed = _isInstalled(item.Plugin.Id),
+            FilteredItems.Add(item with { Installed = _isInstalled(item.Plugin.Id), Refusal = Refusal(item),
                 UpdateAvailable = HasUpdate(item), PendingRestart = _runtime?.Packages.Store.PendingRestart(item.Plugin.Id) == true });
         MarketList.SelectedItem = FilteredItems.FirstOrDefault(item => item.Plugin.Id == selectedId) ?? FilteredItems.FirstOrDefault();
         MarketSummary.Text = FilteredItems.Count == 1 ? Loc.T("1 plugin") : Loc.T("{0} plugins", FilteredItems.Count);
@@ -162,19 +167,21 @@ public sealed partial class MarketplaceView : UserControl
         var update = HasUpdate(item);
         var pending = _runtime.Packages.Store.PendingRestart(item.Plugin.Id);
         var busy = _installation is not null || _runtime.Packages.Updates.Busy;
+        var refusal = installed ? null : Refusal(item);
         MarketTitle.Text = item.Title;
         MarketSummary.Text = Loc.T("Discover");
         MarketDescription.Text = item.Description;
         MarketPublisher.Text = item.Publisher + " / " + item.Categories;
         MarketAccess.Text = item.Plugin.Permissions;
         MarketCompatibility.Text = Loc.T("Version {0} · Minimum host {1}", item.Plugin.Version, item.Plugin.MinimumHostVersion);
-        MarketStatus.Text = busy ? Loc.T("Installing…") : _error is not null ? pending ? Loc.T("Restart unavailable") : Loc.T("Installation failed") : pending ? Loc.T("Restart required") : !item.Supported ? Loc.T("Not compatible") : update ? Loc.T("Update available") : installed ? Loc.T("Installed") : Loc.T("Available");
+        MarketStatus.Text = busy ? Loc.T("Installing…") : _error is not null ? pending ? Loc.T("Restart unavailable") : Loc.T("Installation failed") : pending ? Loc.T("Restart required") : !item.Supported ? Loc.T("Not compatible") : refusal is not null ? Loc.T("Not allowed") : update ? Loc.T("Update available") : installed ? Loc.T("Installed") : Loc.T("Available");
         MarketStatusExplanation.Text = _error ?? (busy ? _runtime.Packages.Updates.Busy ? PluginUpdateStatus.Text(_runtime.Packages.Updates) : _operationMessage ?? Loc.T("Preparing installation…")
             : pending ? Loc.T("Restart TypeWhisper to use the update. The current version remains available until then.")
             : !item.Supported ? Loc.T("This package does not support your TypeWhisper version or Windows architecture.")
+            : refusal is not null ? refusal
             : installed && !update ? Loc.T("Open plugin settings to finish setup or manage its models.")
             : Loc.T("The package is downloaded over HTTPS and checked against the catalog checksum."));
-        MarketPrimaryButton.Visibility = Visibility.Visible;
+        MarketPrimaryButton.Visibility = refusal is null ? Visibility.Visible : Visibility.Collapsed;
         MarketPrimaryButton.Content = _restarting ? Loc.T("Restarting…") : busy ? Loc.T("Installing…") : pending ? Loc.T("Restart now · Enter") : update ? Loc.T("Update") : installed ? Loc.T("Open settings") : Loc.T("Install");
         MarketPrimaryButton.IsEnabled = !_restarting && !busy && item.Supported && _runtime.Packages.Store.Initialized
             && (!pending || RestartRequested is not null);
@@ -238,7 +245,7 @@ public sealed partial class MarketplaceView : UserControl
             return;
         }
         if (_isInstalled(item.Plugin.Id) && !HasUpdate(item)) { ManageRequested?.Invoke(item.Plugin.Id); return; }
-        if (!item.Supported) return;
+        if (!item.Supported || Refusal(item) is not null) return;
         if (_isInstalled(item.Plugin.Id) && HasUpdate(item))
         {
             await _runtime.Packages.Updates.UpdateAsync(item.Plugin.Id);

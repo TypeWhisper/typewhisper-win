@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.script",
+  "locality": "configurable",
   "name": "Script Runner",
   "version": "1.3.8",
   "author": "TypeWhisper",
