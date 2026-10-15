@@ -178,5 +178,19 @@ foreach (var item in SherpaNativeLibraries)
     <ItemGroup><CtcFiles Include="../TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net10.0/**/*" /></ItemGroup>
     <Copy SourceFiles="@(CtcFiles)" DestinationFiles="@(CtcFiles->'$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="../TypeWhisper.Plugin.ParakeetCtc/manifest.json" DestinationFiles="$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/manifest.json" />
+    <Copy SourceFiles="../TypeWhisper.Plugin.ParakeetCtc/THIRD-PARTY-NOTICES.md" DestinationFiles="$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/THIRD-PARTY-NOTICES.md" />
+    <PropertyGroup>
+      <_CtcNativeDir>$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/runtimes/win-x64/native/</_CtcNativeDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_RequiredCtcRuntimeFiles Include="$(_CtcNativeDir)onnxruntime.dll" />
+      <_RequiredCtcRuntimeFiles Include="$(_CtcNativeDir)msvcp140.dll" />
+      <_RequiredCtcRuntimeFiles Include="$(_CtcNativeDir)msvcp140_1.dll" />
+      <_RequiredCtcRuntimeFiles Include="$(_CtcNativeDir)vcruntime140.dll" />
+      <_RequiredCtcRuntimeFiles Include="$(_CtcNativeDir)vcruntime140_1.dll" />
+    </ItemGroup>
+    <!-- The runtime files are staged by a Windows-only step; non-Windows Release builds serve headless tests only. -->
+    <Error Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT' and !Exists('%(_RequiredCtcRuntimeFiles.Identity)')"
+           Text="Missing required dictionary boosting runtime file: %(_RequiredCtcRuntimeFiles.Identity)" />
   </Target>
 </Project>
