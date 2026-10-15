@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -20,11 +21,22 @@ public sealed partial class ChoicePicker : UserControl
     private int _comparisonVariant;
     private TextBlock? _comparisonValue;
     private TextBlock? _comparisonDescription;
+    private readonly List<(Choice Option, HandCursorButton Button)> _rows = [];
     internal string SelectedId { get; private set; } = "";
     internal bool IsPopupOpen { get; private set; }
     internal event Action<string>? SelectionChanged;
 
-    public ChoicePicker() => InitializeComponent();
+    // Long lists such as spoken languages or provider models get a search field.
+    private const int SearchThreshold = 10;
+    private bool Searchable => _options.Count >= SearchThreshold;
+
+    public ChoicePicker()
+    {
+        InitializeComponent();
+        SearchPlaceholder.Text = Loc.T("Search…");
+        NoMatches.Text = Loc.T("No matches.");
+        AutomationProperties.SetName(ChoiceSearch, Loc.T("Search {0}", _automationName));
+    }
 
     internal void Configure(string heading, string icon, string automationName)
     {
@@ -32,6 +44,7 @@ public sealed partial class ChoicePicker : UserControl
         ChoiceIcon.Kind = icon;
         _automationName = automationName;
         AutomationProperties.SetName(ChoiceButton, automationName);
+        AutomationProperties.SetName(ChoiceSearch, Loc.T("Search {0}", automationName));
     }
 
     // Beside a settings row's title the picker is as high as a button.
@@ -117,16 +130,19 @@ public sealed partial class ChoicePicker : UserControl
     {
         IsPopupOpen = true;
         _keyboard = ChoiceButton.FocusState == FocusState.Keyboard;
+        ChoiceSearch.Text = "";
         RebuildChoices();
     }
 
     private void RebuildChoices(bool restoreFocus = false)
     {
-        var focused = FocusManager.GetFocusedElement(XamlRoot) as HandCursorButton;
+        var focusedElement = FocusManager.GetFocusedElement(XamlRoot);
+        var searching = ReferenceEquals(focusedElement, ChoiceSearch);
+        var focused = focusedElement as HandCursorButton;
         var focusedId = focused is not null && Choices.Children.Contains(focused) ? focused.Tag as string : null;
         var focusState = focusedId is not null ? focused!.FocusState : _keyboard ? FocusState.Keyboard : FocusState.Programmatic;
         _selectedButton = null;
-        Choices.Children.Clear();
+        _rows.Clear();
         var compact = _comparisonVariant is 2 or 3;
         ChoiceHeading.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         foreach (var option in _options)
@@ -163,25 +179,69 @@ public sealed partial class ChoicePicker : UserControl
             AutomationProperties.SetName(button, Loc.T("{0} option {1}", _automationName, option.Id));
             AutomationProperties.SetHelpText(button, $"{option.Label}. {option.Description}");
             AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
-            button.Click += (_, _) =>
-            {
-                var changed = SelectedId != option.Id;
-                SelectedId = option.Id;
-                ChoiceLabel.Text = option.Label;
-                UpdateSelectedIcon();
-                UpdateComparisonContent();
-                ChoiceButton.Flyout.Hide();
-                if (changed) SelectionChanged?.Invoke(option.Id);
-            };
-            Choices.Children.Add(button);
+            button.Click += (_, _) => Choose(option);
+            _rows.Add((option, button));
         }
-        if (restoreFocus)
-            (Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled && button.Tag as string == focusedId)
-                ?? _selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled))?.Focus(focusState);
+        SearchBox.Visibility = Searchable ? Visibility.Visible : Visibility.Collapsed;
+        ApplyFilter();
+        if (!restoreFocus || searching && Searchable) return;
+        var visible = Choices.Children.OfType<HandCursorButton>().ToList();
+        (visible.FirstOrDefault(button => button.IsEnabled && button.Tag as string == focusedId)
+            ?? (_selectedButton is not null && visible.Contains(_selectedButton) ? _selectedButton : null)
+            ?? visible.FirstOrDefault(button => button.IsEnabled))?.Focus(focusState);
     }
 
-    private void Choice_Opened(object sender, object e) =>
-        (_selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled))?.Focus(_keyboard ? FocusState.Keyboard : FocusState.Programmatic);
+    private void Choose(Choice option)
+    {
+        var changed = SelectedId != option.Id;
+        SelectedId = option.Id;
+        ChoiceLabel.Text = option.Label;
+        UpdateSelectedIcon();
+        UpdateComparisonContent();
+        ChoiceButton.Flyout.Hide();
+        if (changed) SelectionChanged?.Invoke(option.Id);
+    }
+
+    // Matches at the start of the name or code come first, then matches at a word start.
+    private void ApplyFilter()
+    {
+        var query = Searchable ? ChoiceSearch.Text.Trim() : "";
+        SearchPlaceholder.Visibility = ChoiceSearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        Choices.Children.Clear();
+        foreach (var row in _rows.Select(row => (Rank: MatchRank(row.Option, query), row.Button))
+            .Where(row => row.Rank >= 0).OrderBy(row => row.Rank))
+            Choices.Children.Add(row.Button);
+        NoMatches.Visibility = Choices.Children.Count == 0 && query.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static int MatchRank(Choice option, string query)
+    {
+        if (query.Length == 0) return 0;
+        var compare = CultureInfo.CurrentCulture.CompareInfo;
+        const CompareOptions options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace | CompareOptions.IgnoreWidth | CompareOptions.IgnoreKanaType;
+        if (compare.IsPrefix(option.Label, query, options) || compare.IsPrefix(option.Id, query, options)) return 0;
+        var index = compare.IndexOf(option.Label, query, options);
+        if (index < 0) return -1;
+        return index > 0 && char.IsLetterOrDigit(option.Label[index - 1]) ? 2 : 1;
+    }
+
+    private void ChoiceSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        ApplyFilter();
+        (Choices.Parent as ScrollViewer)?.ChangeView(null, 0, null, true);
+    }
+
+    private void Choice_Opened(object sender, object e)
+    {
+        var state = _keyboard ? FocusState.Keyboard : FocusState.Programmatic;
+        if (Searchable)
+        {
+            ChoiceSearch.Focus(state);
+            _selectedButton?.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0.5, AnimationDesired = false });
+            return;
+        }
+        (_selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled))?.Focus(state);
+    }
     private void Choice_Closed(object sender, object e)
     {
         IsPopupOpen = false;
@@ -191,13 +251,33 @@ public sealed partial class ChoicePicker : UserControl
     internal void FocusEntry() => ChoiceButton.Focus(FocusState.Programmatic);
     private void Choices_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        var inSearch = ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), ChoiceSearch);
+        var buttons = Choices.Children.OfType<HandCursorButton>().Where(button => button.IsEnabled).ToList();
         if (e.Key == global::Windows.System.VirtualKey.Escape) { ClosePopup(); e.Handled = true; }
-        else if (e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
+        else if (e.Key == global::Windows.System.VirtualKey.Enter && inSearch)
         {
-            var buttons = Choices.Children.OfType<HandCursorButton>().Where(button => button.IsEnabled).ToList();
-            var index = buttons.FindIndex(button => ReferenceEquals(button, FocusManager.GetFocusedElement(XamlRoot)));
-            if (buttons.Count > 0) buttons[Math.Clamp(index + (e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1), 0, buttons.Count - 1)].Focus(FocusState.Keyboard);
+            // Enter takes the best match, so typing "ger" and Enter picks German.
+            if (ChoiceSearch.Text.Trim().Length > 0 && buttons.Count > 0) Choose(_rows.First(row => ReferenceEquals(row.Button, buttons[0])).Option);
             e.Handled = true;
         }
+        else if (e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
+        {
+            var down = e.Key == global::Windows.System.VirtualKey.Down;
+            var index = inSearch ? -1 : buttons.FindIndex(button => ReferenceEquals(button, FocusManager.GetFocusedElement(XamlRoot)));
+            if (Searchable && !down && index <= 0) ChoiceSearch.Focus(FocusState.Keyboard);
+            else if (buttons.Count > 0) buttons[Math.Clamp(index + (down ? 1 : -1), 0, buttons.Count - 1)].Focus(FocusState.Keyboard);
+            e.Handled = true;
+        }
+    }
+
+    // Typing while a choice has focus continues in the search field.
+    private void Choices_CharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs e)
+    {
+        if (!Searchable || char.IsControl(e.Character) || char.IsWhiteSpace(e.Character)
+            || ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), ChoiceSearch)) return;
+        ChoiceSearch.Text += e.Character;
+        ChoiceSearch.Select(ChoiceSearch.Text.Length, 0);
+        ChoiceSearch.Focus(FocusState.Keyboard);
+        e.Handled = true;
     }
 }
