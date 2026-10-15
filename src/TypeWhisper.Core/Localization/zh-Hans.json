@@ -3178,5 +3178,16 @@
   "Your organization's policy could not be read. This operation waits until it is readable.": "无法读取你的组织的策略。此操作将等待策略可读后再进行。",
   "Not allowed": "不允许",
   "Configurable": "可配置",
-  "This plugin processes content in the cloud, which your organization has turned off.": "此插件在云端处理内容，而你的组织已关闭云端处理。"
+  "This plugin processes content in the cloud, which your organization has turned off.": "此插件在云端处理内容，而你的组织已关闭云端处理。",
+  "Your organization requires the transcription provider {0}.": "你的组织要求使用转录提供商 {0}。",
+  "Your organization requires the transcription model {0}.": "你的组织要求使用转录模型 {0}。",
+  "Your organization requires the text model provider {0}.": "你的组织要求使用文本模型提供商 {0}。",
+  "Your organization requires the text model {0}.": "你的组织要求使用文本模型 {0}。",
+  "The text model is managed by your organization.": "文本模型由你的组织管理。",
+  "The transcription provider {0} is not installed or enabled.": "转录提供商 {0} 未安装或未启用。",
+  "Managed by your organization: {0} · {1} · input is sent to this provider when you run": "由你的组织管理：{0} · {1} · 运行时输入会发送给此提供商",
+  "The selection policy state could not be loaded.": "无法加载选择策略状态。",
+  "The selection policy state could not be saved.": "无法保存选择策略状态。",
+  "The model {0} is not offered by {1}.": "{1} 不提供模型 {0}。",
+  "The text model provider {0} is not installed or enabled.": "文本模型提供商 {0} 未安装或未启用。"
 }

@@ -99,7 +99,7 @@ Raw uploads accept query parameters. Multipart accepts fields; local-file reques
 | `language_hint` / `language_hints` | Repeat `language_hint` multipart fields, or send a JSON `language_hints` array. At most two ordered language codes; do not combine with `language`. The selected provider must support language hints. |
 | `task` | `transcribe` or `translate`; omission uses the Dictation selection. Unsupported language/task returns 422. |
 | `response_format` | `json` (default), `text`, `srt` or `vtt`. |
-| `engine`, `model` | Request-scoped overrides using IDs from `/v1/models`. The backend loads the requested model and restores the previous selection afterward. |
+| `engine`, `model` | Request-scoped overrides using IDs from `/v1/models`. The backend loads the requested model and restores the previous selection afterward. When machine policy enforces a transcription provider and model, a request for another engine or model is refused with 403 `forbidden` (see [managed settings](enterprise/windows-managed-settings.md)). |
 | `await_download` | Boolean, commonly query `?await_download=1`; permits downloading required model assets before loading. Without it, required assets must already be available. Returns 507 with the required and available space when the model's drive is too full. |
 | `apply_corrections` | Defaults to `true`. Set JSON `false` or multipart `false` to bypass dictionary corrections. API file transcription does not run snippets or post-processors. |
 | `target_language` | Translate the transcript through the Windows default workflow LLM configuration. Missing default LLM configuration returns 422. This uses Windows providers, not the macOS Translation framework. |

@@ -106,6 +106,7 @@ internal sealed partial class LocalDictationSession
 
     internal async Task<string?> UseRegistryModelAsync(PortableDownloadableModel model)
     {
+        if (SelectionRefusal(SessionProviderId(model.SelectionId), model.ModelId) is { } refused) return refused;
         string? saveError = null;
         var error = await ChangeRegistryPluginAsync(model.PluginId, async () =>
         {

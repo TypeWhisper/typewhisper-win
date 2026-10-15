@@ -53,19 +53,24 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                     selectedProviderId = observedActiveProviderId = session.ActiveProviderId;
                 var providers = session.DictationProviders;
                 var selected = providers.FirstOrDefault(item => item.Id == selectedProviderId);
+                // Policy that fixes the pair locks both pickers; the enforced model stays shown even before it is downloaded.
+                var locked = LocalDictationSession.TranscriptionSelectionLocked;
                 // A refused provider stays listed with the reason; only the current selection remains clickable.
                 provider.SetOptions(providers.Select(item => new Choice(item.Id, item.Name,
                     item.Refusal ?? (item.Cloud ? Loc.T("Cloud") : Loc.T("On-device")) + " · " + item.Status,
-                    item.Refusal is null || item.Id == selectedProviderId) { PluginId = item.PluginId }).ToArray(), selectedProviderId, Loc.T("Choose a provider"));
+                    item.Refusal is null || item.Id == selectedProviderId) { PluginId = item.PluginId }).ToArray(), selectedProviderId,
+                    locked ? Loc.T("Provider unavailable") : Loc.T("Choose a provider"));
                 var canChange = session.CanChangeProvider && !session.Models.Busy && !selecting;
-                provider.IsEnabled = canChange;
+                provider.IsEnabled = canChange && !locked;
                 modelSection.Visibility = selected?.Models.Count > 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
                 model.SetOptions(selected?.Models.Select(item => new Choice(item.Id, item.Name,
-                    item.Ready ? Loc.T("Ready") : LocalDictationSession.ModelDownloadRefusal() ?? Loc.T("Download in provider settings"), item.Ready)).ToArray() ?? [], selected?.SelectedModelId ?? "", Loc.T("Choose a model"));
-                model.IsEnabled = canChange && selected?.Enabled == true && selected.Models.Any(item => item.Ready);
+                    item.Ready ? Loc.T("Ready") : LocalDictationSession.ModelDownloadRefusal() ?? Loc.T("Download in provider settings"), item.Ready)).ToArray() ?? [],
+                    (locked ? session.EnforcedModelId : null) ?? selected?.SelectedModelId ?? "", Loc.T("Choose a model"));
+                model.IsEnabled = canChange && !locked && selected?.Enabled == true && selected.Models.Any(item => item.Ready);
                 setup.IsEnabled = !selecting && selected is not null;
                 setup.Content = selected?.Ready != true ? Loc.T("Set up provider") : selected.Id != session.ActiveProviderId ? Loc.T("Use provider") : Loc.T("Provider settings");
-                row.Description = selectionError ?? (selected is null ? Loc.T("Set up a transcription provider in Integrations.")
+                row.Description = selectionError ?? (locked ? session.SelectionLockReason() ?? Loc.T("Managed by your organization")
+                    : selected is null ? Loc.T("Set up a transcription provider in Integrations.")
                     : selected.Refusal is { } refusal ? refusal
                     : !selected.Ready ? Loc.T("{0}. Open provider settings to finish setup. Active: {1}.", selected.Status, session.ActiveModelName)
                     : selected.Id != session.ActiveProviderId ? Loc.T("Ready. Select this provider to use it for dictation.")
