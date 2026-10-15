@@ -26,11 +26,20 @@
         </Grid>
         <Button.Flyout>
             <Flyout Opening="Choice_Opening" Opened="Choice_Opened" Closed="Choice_Closed" Placement="BottomEdgeAlignedLeft" FlyoutPresenterStyle="{StaticResource ChoiceFlyoutStyle}">
-                <StackPanel Width="262" Spacing="6" PreviewKeyDown="Choices_KeyDown">
+                <StackPanel Width="262" Spacing="6" PreviewKeyDown="Choices_KeyDown" CharacterReceived="Choices_CharacterReceived">
                     <TextBlock x:Name="ChoiceHeading" FontSize="10" CharacterSpacing="70" Margin="12,8,12,6" Foreground="{ThemeResource MutedBrush}" />
+                    <Border x:Name="SearchBox" Visibility="Collapsed" Margin="4,0,4,2" Background="{ThemeResource InkBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="7">
+                        <Grid MinHeight="34" Padding="10,0,3,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <local:TypeWhisperGlyph Kind="search" Width="14" Height="14" />
+                            <TextBox x:Name="ChoiceSearch" Grid.Column="1" FontSize="12" Style="{StaticResource SearchTextBoxStyle}" IsSpellCheckEnabled="False" TextChanged="ChoiceSearch_TextChanged" />
+                            <TextBlock x:Name="SearchPlaceholder" Grid.Column="1" Margin="10,0,0,0" FontSize="12" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" IsHitTestVisible="False" />
+                        </Grid>
+                    </Border>
                     <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="False">
                         <StackPanel x:Name="Choices" Spacing="3" />
                     </ScrollViewer>
+                    <TextBlock x:Name="NoMatches" Visibility="Collapsed" FontSize="12" Margin="12,4,12,8" Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
             </Flyout>
         </Button.Flyout>
