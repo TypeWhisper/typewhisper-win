@@ -27,9 +27,10 @@ internal sealed class TrayMenuWindow : Window
         _presenter = new MenuFlyoutPresenter
         {
             Style = menu.MenuFlyoutPresenterStyle,
-            RequestedTheme = ElementTheme.Dark,
+            RequestedTheme = TrayIconService.Light ? ElementTheme.Light : ElementTheme.Dark,
         };
-        var itemTemplate = (ControlTemplate)XamlReader.Load("""
+        var (hover, pressed) = TrayIconService.Light ? ("#E8E8E8", "#DEDEDE") : ("#414141", "#363636");
+        var itemTemplate = (ControlTemplate)XamlReader.Load($$"""
             <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                              TargetType="MenuFlyoutItem">
@@ -38,10 +39,10 @@ internal sealed class TrayMenuWindow : Window
                         <VisualStateGroup x:Name="CommonStates">
                             <VisualState x:Name="Normal" />
                             <VisualState x:Name="PointerOver">
-                                <VisualState.Setters><Setter Target="Root.Background" Value="#414141" /></VisualState.Setters>
+                                <VisualState.Setters><Setter Target="Root.Background" Value="{{hover}}" /></VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Pressed">
-                                <VisualState.Setters><Setter Target="Root.Background" Value="#363636" /></VisualState.Setters>
+                                <VisualState.Setters><Setter Target="Root.Background" Value="{{pressed}}" /></VisualState.Setters>
                             </VisualState>
                             <VisualState x:Name="Disabled">
                                 <VisualState.Setters><Setter Target="Label.Opacity" Value="0.45" /></VisualState.Setters>

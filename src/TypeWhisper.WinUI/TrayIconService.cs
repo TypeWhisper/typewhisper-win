@@ -30,9 +30,9 @@ internal sealed class TrayIconService : IDisposable
     {
         var menu = new MenuFlyout();
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
-        presenterStyle.Setters.Add(new Setter(FrameworkElement.RequestedThemeProperty, ElementTheme.Dark));
-        presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 43, 43, 43))));
-        presenterStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 69, 69, 69))));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.RequestedThemeProperty, Light ? ElementTheme.Light : ElementTheme.Dark));
+        presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Light ? Rgb(249, 249, 249) : Rgb(43, 43, 43))));
+        presenterStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Light ? Rgb(209, 209, 214) : Rgb(69, 69, 69))));
         presenterStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
         presenterStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(8)));
         presenterStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0, 4, 0, 4)));
@@ -160,16 +160,21 @@ internal sealed class TrayIconService : IDisposable
         Command = new TrayCommand(action),
         FontFamily = (FontFamily)Application.Current.Resources["InterfaceFont"],
         FontSize = 13,
-        Foreground = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 244, 247, 250)),
+        Foreground = new SolidColorBrush(Light ? Rgb(29, 29, 31) : Rgb(244, 247, 250)),
         Icon = new FontIcon
         {
             Glyph = glyph,
             FontSize = 16,
             Width = 16,
             Height = 16,
-            Foreground = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 10, 132, 255)),
+            Foreground = new SolidColorBrush(Light ? Rgb(0, 102, 204) : Rgb(10, 132, 255)),
         },
     };
+
+    // The menu follows the app theme, which stays fixed for the lifetime of the process.
+    internal static bool Light => Application.Current.RequestedTheme == ApplicationTheme.Light;
+
+    private static global::Windows.UI.Color Rgb(byte r, byte g, byte b) => Microsoft.UI.ColorHelper.FromArgb(255, r, g, b);
 
     private sealed class TrayCommand(Action action) : ICommand
     {
