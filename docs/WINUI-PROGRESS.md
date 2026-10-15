@@ -87,7 +87,8 @@ integration and Parakeet Realtime EOU are research, not promised 1.1 deliverable
 Managed deployment is scheduled for 1.2 (#470 for Group Policy and Intune settings,
 #641 for the managed license key). The policy foundation reads
 `HKLM\SOFTWARE\Policies\TypeWhisper` at startup and reports it in support
-diagnostics; no setting is enforced yet. Other large feature requests such as
+diagnostics; the license key, update, startup and onboarding keys are applied
+(see docs/enterprise), provider and cloud restrictions are still open. Other large feature requests such as
 voice-based field editing need a separate scope decision.
 
 ## Release procedure

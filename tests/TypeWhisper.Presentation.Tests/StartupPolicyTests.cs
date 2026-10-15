@@ -1,0 +1,147 @@
+using TypeWhisper.Core.Models;
+using Xunit;
+using static TypeWhisper.Presentation.Tests.ManagedPolicySnapshots;
+
+namespace TypeWhisper.Presentation.Tests;
+
+public sealed class StartupPolicyTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "startup-policy-tests-" + Guid.NewGuid().ToString("N"));
+
+    private StartupPolicyStore Store() => new(Path.Combine(_root, "startup-policy.json"));
+
+    [Fact]
+    public async Task EnforcedValueAppliesAndRetainsThePreviousRegistration()
+    {
+        var registration = new Registration { Enabled = false };
+        var reconciler = new StartupPolicyReconciler(registration, Store());
+
+        var outcome = await reconciler.ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]), setupCompleted: true);
+
+        Assert.True(registration.Enabled);
+        Assert.True(outcome.State.IsEnabled);
+        Assert.True(outcome.Locked);
+        Assert.Equal("Managed by your organization", outcome.LockReason);
+        Assert.False(Store().Current.RetainedBeforeEnforcement!.Value);
+        Assert.Equal(1, registration.Writes);
+
+        await reconciler.ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]), setupCompleted: true);
+        Assert.Equal(1, registration.Writes);
+    }
+
+    [Fact]
+    public async Task RemovingEnforcementRestoresTheRetainedRegistrationOnce()
+    {
+        var registration = new Registration { Enabled = true };
+        var reconciler = new StartupPolicyReconciler(registration, Store());
+        await reconciler.ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 0)]), setupCompleted: true);
+        Assert.False(registration.Enabled);
+
+        var restored = await reconciler.ApplyAsync(Build(), setupCompleted: true);
+
+        Assert.True(registration.Enabled);
+        Assert.False(restored.Locked);
+        Assert.Null(Store().Current.RetainedBeforeEnforcement);
+
+        registration.Enabled = false;
+        await reconciler.ApplyAsync(Build(), setupCompleted: true);
+        Assert.False(registration.Enabled);
+    }
+
+    [Fact]
+    public async Task RecommendationAppliesOnlyToANewProfileWithoutAnExplicitChoice()
+    {
+        var snapshot = Build(recommended: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]);
+
+        var completed = new Registration { Enabled = false };
+        await new StartupPolicyReconciler(completed, Store()).ApplyAsync(snapshot, setupCompleted: true);
+        Assert.False(completed.Enabled);
+
+        var chosen = new Registration { Enabled = false };
+        var chosenReconciler = new StartupPolicyReconciler(chosen, Store());
+        chosenReconciler.RecordUserChoice(false);
+        await chosenReconciler.ApplyAsync(snapshot, setupCompleted: false);
+        Assert.False(chosen.Enabled);
+
+        var fresh = new Registration { Enabled = false };
+        var freshStore = new StartupPolicyStore(Path.Combine(_root, "fresh", "startup-policy.json"));
+        var freshReconciler = new StartupPolicyReconciler(fresh, freshStore);
+        var outcome = await freshReconciler.ApplyAsync(snapshot, setupCompleted: false);
+        Assert.True(fresh.Enabled);
+        Assert.False(outcome.Locked);
+        Assert.True(freshStore.Current.RecommendationApplied);
+
+        fresh.Enabled = false;
+        await freshReconciler.ApplyAsync(snapshot, setupCompleted: false);
+        Assert.False(fresh.Enabled);
+    }
+
+    [Fact]
+    public async Task UnreadablePolicyLocksTheSettingWithoutChangingIt()
+    {
+        var registration = new Registration { Enabled = true };
+        var store = Store();
+        var reconciler = new StartupPolicyReconciler(registration, store);
+
+        var outcome = await reconciler.ApplyAsync(Unreadable(), setupCompleted: true);
+
+        Assert.True(registration.Enabled);
+        Assert.Equal(0, registration.Writes);
+        Assert.True(outcome.Locked);
+        Assert.Contains("could not be read", outcome.LockReason);
+        Assert.False(File.Exists(Path.Combine(_root, "startup-policy.json")));
+    }
+
+    [Fact]
+    public async Task UnchangeableRegistrationIsReportedNotForced()
+    {
+        var registration = new Registration { Enabled = false, CanChange = false };
+        var reconciler = new StartupPolicyReconciler(registration, Store());
+
+        var outcome = await reconciler.ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]), setupCompleted: true);
+
+        Assert.False(registration.Enabled);
+        Assert.Equal(0, registration.Writes);
+        Assert.True(outcome.Locked);
+        Assert.False(outcome.State.CanChange);
+    }
+
+    [Fact]
+    public void StoreSurvivesAnUnreadableFile()
+    {
+        var path = Path.Combine(_root, "startup-policy.json");
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(path, "{not json");
+
+        var store = new StartupPolicyStore(path);
+
+        Assert.NotNull(store.Error);
+        Assert.Equal(new StartupPolicyPreferences(), store.Current);
+        Assert.True(store.Save(new(UserChoice: true)));
+        Assert.True(new StartupPolicyStore(path).Current.UserChoice);
+    }
+
+    private sealed class Registration : IStartupRegistration
+    {
+        public bool Enabled { get; set; }
+        public bool CanChange { get; set; } = true;
+        public int Writes { get; private set; }
+
+        public Task<StartupRegistrationState> ReadAsync() => Task.FromResult(new StartupRegistrationState(Enabled, CanChange, null));
+
+        public Task<StartupRegistrationState> SetEnabledAsync(bool enabled)
+        {
+            if (CanChange && Enabled != enabled)
+            {
+                Enabled = enabled;
+                Writes++;
+            }
+            return ReadAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root)) Directory.Delete(_root, true);
+    }
+}

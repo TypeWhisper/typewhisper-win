@@ -40,16 +40,25 @@ internal static class LiveApplicationUpdateSettings
         string? restartError = null;
         void Refresh()
         {
-            picker.SetOptions([
-                new("Stable", Loc.T("Stable"), Loc.T("Released versions")),
-                new("Daily", Loc.T("Daily"), Loc.T("Latest development builds")),
-                new("ReleaseCandidate", Loc.T("Release Candidate"), Loc.T("Testing before release"))
-            ], controller.Preferences.Channel.ToString());
-            picker.IsEnabled = !controller.Busy;
+            var policy = controller.Policy;
+            var effective = controller.EffectiveChannel;
+            // Channels outside the organization's allowlist disappear from the picker; the effective one stays visible.
+            var choices = new List<Choice>();
+            foreach (var (channel, id, title, subtitle) in new[]
+            {
+                (AppUpdateChannel.Stable, "Stable", Loc.T("Stable"), Loc.T("Released versions")),
+                (AppUpdateChannel.Daily, "Daily", Loc.T("Daily"), Loc.T("Latest development builds")),
+                (AppUpdateChannel.ReleaseCandidate, "ReleaseCandidate", Loc.T("Release Candidate"), Loc.T("Testing before release"))
+            })
+                if (channel == effective || policy.ChannelAllowed(channel)) choices.Add(new(id, title, subtitle));
+            picker.SetOptions(choices, effective.ToString());
+            picker.IsEnabled = !controller.Busy && !controller.ChannelLocked;
+            channelRow.Status = controller.ChannelLocked ? Loc.T("Managed by your organization")
+                : policy.AllowedChannels is not null ? Loc.T("Your organization limits the available update channels.") : "";
             // The plugin catalog can be checked even where app updates are unavailable.
             check.IsEnabled = !controller.Busy && !plugins.Checking && !plugins.Busy;
             install.IsEnabled = !controller.Busy;
-            install.Visibility = controller.Offer is null ? Visibility.Collapsed : Visibility.Visible;
+            install.Visibility = controller.Offer is null || !controller.CanInstall ? Visibility.Collapsed : Visibility.Visible;
             install.Content = controller.Offer?.IsDowngrade == true ? Loc.T("Install older version and restart") : Loc.T("Download and restart");
             row.Description = controller.Status;
             var count = plugins.Available.Count;

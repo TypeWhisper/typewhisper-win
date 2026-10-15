@@ -229,9 +229,13 @@ public partial class App : Application
             UpdateTrayActions();
         };
         var initialization = _window.InitializeDictationAsync();
-        // Do not hold onboarding behind plugin discovery, downloads or account requests.
-        if (presentation == TypeWhisper.Presentation.StartupPresentation.Setup) _window.OpenSetup(returnToTray: true);
+        // Do not hold onboarding behind plugin discovery, downloads or account requests. Only a policy that
+        // skips setup when the app is ready waits for the initialized session, because readiness is judged there.
+        var setupPending = presentation == TypeWhisper.Presentation.StartupPresentation.Setup;
+        var skipWhenReady = setupPending && TypeWhisper.Presentation.OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current);
+        if (setupPending && !skipWhenReady) _window.OpenSetup(returnToTray: true);
         await initialization;
+        if (skipWhenReady && !await _window.IsSetupReadyAsync(TimeSpan.FromSeconds(20))) _window.OpenSetup(returnToTray: true);
         UpdateTrayActions();
         _window.ShowMigrationNotice();
 #if DEBUG

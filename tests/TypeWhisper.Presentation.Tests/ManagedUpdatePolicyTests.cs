@@ -1,0 +1,266 @@
+using TypeWhisper.Core.Models;
+using Xunit;
+using static TypeWhisper.Presentation.Tests.ManagedPolicySnapshots;
+
+namespace TypeWhisper.Presentation.Tests;
+
+public sealed class ManagedUpdatePolicyTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "update-policy-tests-" + Guid.NewGuid().ToString("N"));
+
+    private AppUpdatePreferences Preferences(string version = "1.2.0") => new(Path.Combine(_root, "updates.json"), version);
+
+    private static AppUpdateController Controller(AppUpdatePreferences preferences, Backend backend, Func<ManagedUpdatePolicy> policy) =>
+        new(preferences, backend, apply => { apply(); return Task.FromResult<string?>(null); }, policy);
+
+    [Fact]
+    public void From_MapsModeChannelsAndAllowlist()
+    {
+        var snapshot = Build(
+            enforced: [Number(ManagedPolicyKeys.UpdateMode, 1), Number(ManagedPolicyKeys.UpdateChannel, 2), Number(ManagedPolicyKeys.AllowedUpdateChannels + "Configured", 1)],
+            recommended: [Number(ManagedPolicyKeys.UpdateChannel, 1)],
+            enforcedLists: [List(ManagedPolicyKeys.AllowedUpdateChannels, "stable", " Release-Candidate ", "bogus")]);
+
+        var policy = ManagedUpdatePolicy.From(snapshot);
+
+        Assert.Equal(AppUpdateMode.CheckOnly, policy.Mode);
+        Assert.Equal(AppUpdateChannel.ReleaseCandidate, policy.EnforcedChannel);
+        Assert.Equal(AppUpdateChannel.Daily, policy.RecommendedChannel);
+        Assert.Equal([AppUpdateChannel.Stable, AppUpdateChannel.ReleaseCandidate], policy.AllowedChannels!.Order());
+        Assert.False(policy.Blocked);
+        Assert.True(policy.IsManaged);
+        Assert.True(policy.ChannelLocked);
+    }
+
+    [Fact]
+    public void From_WithoutPolicyIsUnmanagedAndUnreadableIsBlocked()
+    {
+        Assert.False(ManagedUpdatePolicy.From(Build()).IsManaged);
+        Assert.Equal(ManagedUpdatePolicy.None, ManagedUpdatePolicy.From(Build()));
+        var blocked = ManagedUpdatePolicy.From(Unreadable());
+        Assert.True(blocked.Blocked);
+        Assert.True(blocked.ChannelLocked);
+        Assert.Contains("could not be read", blocked.CheckRefusal(AppUpdateChannel.Stable));
+        var invalid = ManagedUpdatePolicy.From(Build(enforced: [Number(ManagedPolicyKeys.UpdateMode, 7)]));
+        Assert.True(invalid.Blocked);
+    }
+
+    [Fact]
+    public void Resolve_FollowsPrecedence()
+    {
+        var enforced = new ManagedUpdatePolicy(null, AppUpdateChannel.Daily, AppUpdateChannel.ReleaseCandidate, null, false);
+        var recommended = enforced with { EnforcedChannel = null };
+
+        Assert.Equal(AppUpdateChannel.Daily, enforced.Resolve(AppUpdateChannel.Stable, AppUpdateChannel.Stable));
+        Assert.Equal(AppUpdateChannel.Stable, recommended.Resolve(AppUpdateChannel.Stable, AppUpdateChannel.Daily));
+        Assert.Equal(AppUpdateChannel.ReleaseCandidate, recommended.Resolve(null, AppUpdateChannel.Stable));
+        Assert.Equal(AppUpdateChannel.Stable, ManagedUpdatePolicy.None.Resolve(null, AppUpdateChannel.Stable));
+    }
+
+    [Fact]
+    public void Refusals_FollowModeAndAllowlist()
+    {
+        var external = new ManagedUpdatePolicy(AppUpdateMode.External, null, null, null, false);
+        var checkOnly = external with { Mode = AppUpdateMode.CheckOnly };
+        var userInitiated = external with { Mode = AppUpdateMode.UserInitiated };
+        var limited = new ManagedUpdatePolicy(null, null, null, new HashSet<AppUpdateChannel> { AppUpdateChannel.Stable }, false);
+        var forcedOutside = limited with { EnforcedChannel = AppUpdateChannel.Daily };
+        var none = limited with { AllowedChannels = new HashSet<AppUpdateChannel>() };
+
+        Assert.Contains("deployment", external.CheckRefusal(AppUpdateChannel.Stable));
+        Assert.Contains("deployment", external.InstallRefusal(AppUpdateChannel.Stable));
+        Assert.Null(checkOnly.CheckRefusal(AppUpdateChannel.Stable));
+        Assert.Contains("only checks", checkOnly.InstallRefusal(AppUpdateChannel.Stable));
+        Assert.Null(userInitiated.CheckRefusal(AppUpdateChannel.Stable));
+        Assert.Null(userInitiated.InstallRefusal(AppUpdateChannel.Stable));
+        Assert.Null(limited.CheckRefusal(AppUpdateChannel.Stable));
+        Assert.Contains("not allowed", limited.CheckRefusal(AppUpdateChannel.Daily));
+        Assert.Contains("Contact your administrator", forcedOutside.CheckRefusal(AppUpdateChannel.Daily));
+        Assert.Contains("turned off", none.CheckRefusal(AppUpdateChannel.Stable));
+    }
+
+    [Fact]
+    public async Task ExternalModeRefusesChecksAndInstalls()
+    {
+        var backend = new Backend();
+        var policy = new ManagedUpdatePolicy(AppUpdateMode.External, null, null, null, false);
+        var controller = Controller(Preferences(), backend, () => policy);
+
+        Assert.False(controller.CanCheck);
+        Assert.False(controller.CanInstall);
+        Assert.Contains("deployment", controller.Status);
+        await controller.CheckAsync();
+        await controller.InstallAsync();
+
+        Assert.Empty(backend.Calls);
+        Assert.Null(controller.Offer);
+        Assert.Contains("deployment", controller.Status);
+    }
+
+    [Fact]
+    public async Task CheckOnlyChecksButNeverInstalls()
+    {
+        var backend = new Backend();
+        var policy = new ManagedUpdatePolicy(AppUpdateMode.CheckOnly, null, null, null, false);
+        var controller = Controller(Preferences(), backend, () => policy);
+
+        await controller.CheckAsync();
+
+        Assert.Equal(["check"], backend.Calls);
+        Assert.NotNull(controller.Offer);
+        Assert.Contains("2.0.0", controller.Status);
+        Assert.Contains("only checks", controller.Status);
+        Assert.False(controller.CanInstall);
+
+        await controller.InstallAsync();
+
+        Assert.Equal(["check"], backend.Calls);
+        Assert.Contains("only checks", controller.Status);
+    }
+
+    [Fact]
+    public async Task CheckOnlyDoesNotPromiseAChannelSwitchForAnOlderVersion()
+    {
+        var backend = new Backend { Offer = new AppUpdateOffer("1.1.0", true) };
+        var policy = new ManagedUpdatePolicy(AppUpdateMode.CheckOnly, null, null, null, false);
+        var controller = Controller(Preferences(), backend, () => policy);
+
+        await controller.CheckAsync();
+
+        Assert.True(controller.Offer!.IsDowngrade);
+        Assert.Contains("1.1.0", controller.Status);
+        Assert.Contains("older than", controller.Status);
+        Assert.Contains("only checks", controller.Status);
+        Assert.DoesNotContain("switches", controller.Status);
+        Assert.False(controller.CanInstall);
+    }
+
+    [Fact]
+    public async Task EnforcedChannelIsUsedAndSelectionIsRefused()
+    {
+        var preferences = Preferences("1.2.0");
+        Assert.True(preferences.Save(AppUpdateChannel.Stable));
+        var backend = new Backend();
+        var policy = new ManagedUpdatePolicy(null, AppUpdateChannel.Daily, null, null, false);
+        var controller = Controller(preferences, backend, () => policy);
+
+        Assert.Equal(AppUpdateChannel.Daily, controller.EffectiveChannel);
+        Assert.True(controller.ChannelLocked);
+        Assert.True(controller.AllowsDowngrade);
+        await controller.CheckAsync();
+        Assert.Equal(AppUpdateChannel.Daily, backend.CheckedChannel);
+        Assert.True(backend.AllowedDowngrade);
+
+        Assert.False(controller.Select(AppUpdateChannel.ReleaseCandidate));
+        Assert.Equal(AppUpdateChannel.Stable, preferences.Channel);
+        Assert.Contains("managed by your organization", controller.Status);
+    }
+
+    [Fact]
+    public async Task AllowlistLimitsSelectionAndBlocksChecksOutsideIt()
+    {
+        var preferences = Preferences("1.2.0-daily.20261014.1");
+        var backend = new Backend();
+        var policy = new ManagedUpdatePolicy(null, null, null, new HashSet<AppUpdateChannel> { AppUpdateChannel.Stable }, false);
+        var controller = Controller(preferences, backend, () => policy);
+
+        Assert.Equal(AppUpdateChannel.Daily, controller.EffectiveChannel);
+        Assert.False(controller.CanCheck);
+        await controller.CheckAsync();
+        Assert.Empty(backend.Calls);
+        Assert.Contains("not allowed", controller.Status);
+
+        Assert.False(controller.Select(AppUpdateChannel.ReleaseCandidate));
+        Assert.True(controller.Select(AppUpdateChannel.Stable));
+        Assert.True(controller.CanCheck);
+        await controller.CheckAsync();
+        Assert.Equal(AppUpdateChannel.Stable, backend.CheckedChannel);
+    }
+
+    [Fact]
+    public async Task PolicyChangeDropsTheOfferAndTighteningDuringDownloadPreventsApply()
+    {
+        var backend = new Backend();
+        var policy = ManagedUpdatePolicy.None;
+        var controller = Controller(Preferences(), backend, () => policy);
+        await controller.CheckAsync();
+        Assert.NotNull(controller.Offer);
+
+        controller.PolicyChanged();
+        Assert.Null(controller.Offer);
+
+        await controller.CheckAsync();
+        backend.OnDownload = () => policy = new ManagedUpdatePolicy(AppUpdateMode.CheckOnly, null, null, null, false);
+        await controller.InstallAsync();
+
+        Assert.Equal(["check", "check", "download"], backend.Calls);
+        Assert.Null(controller.Offer);
+        Assert.Contains("only checks", controller.Status);
+    }
+
+    [Fact]
+    public async Task ChannelChangedByPolicyAfterTheCheckRequiresANewCheck()
+    {
+        var backend = new Backend();
+        var policy = ManagedUpdatePolicy.None;
+        var controller = Controller(Preferences("1.2.0"), backend, () => policy);
+        await controller.CheckAsync();
+        Assert.NotNull(controller.Offer);
+
+        policy = new ManagedUpdatePolicy(null, AppUpdateChannel.Daily, null, null, false);
+        await controller.InstallAsync();
+
+        Assert.Equal(["check"], backend.Calls);
+        Assert.Contains("Check for updates again", controller.Status);
+    }
+
+    [Fact]
+    public void RecommendationAppliesUntilTheUserChoosesExplicitly()
+    {
+        var preferences = Preferences("1.2.0");
+        var policy = new ManagedUpdatePolicy(null, null, AppUpdateChannel.Daily, null, false);
+        var controller = Controller(preferences, new Backend(), () => policy);
+
+        Assert.False(preferences.HasExplicitChoice);
+        Assert.Equal(AppUpdateChannel.Daily, controller.EffectiveChannel);
+        Assert.False(controller.ChannelLocked);
+
+        Assert.True(controller.Select(AppUpdateChannel.Stable));
+
+        Assert.True(preferences.HasExplicitChoice);
+        Assert.Equal(AppUpdateChannel.Stable, controller.EffectiveChannel);
+        Assert.Equal(AppUpdateChannel.Stable, Preferences("1.2.0").ExplicitChannel);
+    }
+
+    private sealed class Backend : IAppUpdateBackend
+    {
+        public List<string> Calls { get; } = [];
+        public AppUpdateChannel? CheckedChannel { get; private set; }
+        public bool AllowedDowngrade { get; private set; }
+        public Action? OnDownload { get; set; }
+        public AppUpdateOffer Offer { get; init; } = new("2.0.0", false);
+        public string? UnavailableReason => null;
+
+        public Task<AppUpdateCheck> CheckAsync(AppUpdateChannel channel, bool allowDowngrade)
+        {
+            Calls.Add("check");
+            CheckedChannel = channel;
+            AllowedDowngrade = allowDowngrade;
+            return Task.FromResult(new AppUpdateCheck(true, Offer));
+        }
+
+        public Task DownloadAsync(AppUpdateOffer offer)
+        {
+            Calls.Add("download");
+            OnDownload?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public void Apply(AppUpdateOffer offer) => Calls.Add("apply");
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root)) Directory.Delete(_root, true);
+    }
+}
