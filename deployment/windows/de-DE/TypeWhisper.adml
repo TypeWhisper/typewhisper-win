@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>TypeWhisper</displayName>
+  <description>Gruppenrichtlinieneinstellungen für TypeWhisper für Windows.</description>
+  <resources>
+    <stringTable>
+      <string id="SUPPORTED_TypeWhisper_1_2">TypeWhisper für Windows 1.2 oder neuer</string>
+      <string id="TypeWhisper">TypeWhisper</string>
+      <string id="TypeWhisper_Explain">Einstellungen für TypeWhisper für Windows 1.2 und neuer. Richtlinien in diesem Ordner werden erzwungen: Benutzer können sie in der App nicht ändern. Die App liest sie aus HKLM\SOFTWARE\Policies\TypeWhisper, erkennt Änderungen im laufenden Betrieb und schreibt den Schlüssel nie.</string>
+      <string id="TypeWhisper_Recommended">Empfohlene Einstellungen (Benutzer können sie ändern)</string>
+      <string id="TypeWhisper_Recommended_Explain">Administratorvorgaben für TypeWhisper. Ein empfohlener Wert gilt für Profile, die noch keine eigene Wahl getroffen haben, und bleibt in der App änderbar. Erzwungene Richtlinien im übergeordneten Ordner haben Vorrang.</string>
+
+      <string id="TranscriptionSelection">Transkriptionsanbieter und -modell</string>
+      <string id="TranscriptionSelection_Explain">Legt Anbieter und Modell für Diktat, Dateitranskription, Wiederherstellung, Training, Workflows und die HTTP-API fest.
+
+Anbieter-ID: die stabile Auswahl-ID des Anbieters. Die lokale Parakeet-Engine ist com.typewhisper.sherpa-onnx; Cloud-Plugins verwenden ihre Paket-ID, zum Beispiel com.typewhisper.groq; Endpunktprofile verwenden IDs wie openai-compatible-&lt;id&gt;. Modell-ID: das Modell, wie der Anbieter es auflistet, zum Beispiel parakeet-tdt-0.6b. Beide Werte sind erforderlich; fehlt einer, wird das Paar ignoriert.
+
+Die App wählt das Paar selbst aus und sperrt die Auswahl von Anbieter und Modell. Workflows mit eigenem Transkriptionsmodell verwenden stattdessen das vorgegebene Paar, und HTTP-API-Anfragen nach einer anderen Engine oder einem anderen Modell werden mit 403 abgelehnt. Ist der Anbieter nicht installiert, nicht aktiviert oder durch eine andere Richtlinie nicht erlaubt oder ist das Modell nicht verfügbar oder nicht heruntergeladen, wird das Diktat mit Begründung blockiert; die App wechselt nie eigenständig zu einem anderen Anbieter. Einstellungen &gt; Erweitert &gt; Verwaltete Einstellungen zeigt solche Konflikte.
+
+Deaktiviert oder Nicht konfiguriert: Das Paar wird entfernt, und die eigene Auswahl des Benutzers gilt wieder.</string>
+      <string id="LlmSelection">Textmodell-Anbieter und -Modell</string>
+      <string id="LlmSelection_Explain">Legt LLM-Anbieter und -Modell für jeden Workflow-, Übersetzungs- und Textverarbeitungsschritt fest, auch für Workflows mit eigener Auswahl und für das Standard-Workflow-LLM.
+
+Anbieter-ID: die stabile Auswahl-ID des Anbieters, zum Beispiel com.typewhisper.groq oder com.typewhisper.openai. Modell-ID: das Modell, wie der Anbieter es auflistet. Beide Werte sind erforderlich; fehlt einer, wird das Paar ignoriert.
+
+Das Paar aktiviert keine optionale Verarbeitung, installiert den Anbieter nicht und umgeht weder „Cloud-Textverarbeitung erlauben“ noch „Erlaubte Textmodell-Anbieter“. Text an einen anderen Anbieter oder ein anderes Modell wird mit Begründung abgelehnt.
+
+Deaktiviert oder Nicht konfiguriert: Das Paar wird entfernt, und die eigene Auswahl der Benutzer gilt wieder.</string>
+      <string id="AllowedTranscriptionProviders">Erlaubte Transkriptionsanbieter</string>
+      <string id="AllowedTranscriptionProviders_Explain">Aktiviert: Nur die aufgeführten Transkriptions-Auswahl-IDs dürfen Audio empfangen, an jedem Einstiegspunkt einschließlich Workflow- und HTTP-API-Overrides. Die lokale Parakeet-Engine ist com.typewhisper.sherpa-onnx; Cloud-Plugins verwenden ihre Paket-ID. Eine aktivierte Richtlinie mit leerer Liste blockiert jede Transkription.
+
+Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
+      <string id="AllowedLlmProviders">Erlaubte Textmodell-Anbieter</string>
+      <string id="AllowedLlmProviders_Explain">Aktiviert: Nur die aufgeführten LLM-Auswahl-IDs dürfen Text empfangen, einschließlich Workflows, Übersetzung und Alias-Vorschlägen. Eine aktivierte Richtlinie mit leerer Liste blockiert jede LLM-Verarbeitung.
+
+Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
+      <string id="AllowedPlugins">Erlaubte Plugins</string>
+      <string id="AllowedPlugins_Explain">Aktiviert: Nur die aufgeführten Paket-IDs (zum Beispiel com.typewhisper.sherpa-onnx) dürfen installiert, geladen, aktiviert und ausgeführt werden. Pakete außerhalb der Liste werden nie geladen; Plugin-Seite und Marketplace zeigen den Grund. Eine aktivierte Richtlinie mit leerer Liste blockiert jedes Plugin.
+
+Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
+
+      <string id="AllowCloudTranscription">Cloud-Transkription erlauben</string>
+      <string id="AllowCloudTranscription_Explain">Deaktiviert: Audio erreicht nie ein Transkriptions-Plugin, das nicht auf dem Gerät verarbeitet: Cloud-Anbieter, benutzerdefinierte Endpunkte und Pakete ohne bekannte Verarbeitungsart. Diktat, Dateitranskription, Wiederherstellung und HTTP-API lehnen mit einer Meldung ab, statt den Anbieter zu wechseln. Remote-Pakete, deren sämtliche Fähigkeiten abgeschaltet sind, werden gar nicht erst installiert oder geladen.
+
+Aktiviert oder Nicht konfiguriert: Cloud-Transkription ist erlaubt, vorbehaltlich der übrigen Einschränkungen.</string>
+      <string id="AllowCloudTextProcessing">Cloud-Textverarbeitung erlauben</string>
+      <string id="AllowCloudTextProcessing_Explain">Deaktiviert: Transkript-, Prompt- und Kontexttext erreicht nie ein Plugin, das nicht auf dem Gerät verarbeitet: LLM-Anbieter, Textprozessoren, Aktionen, Sprachausgabe und Gedächtnisquellen. Workflows melden die Ablehnung; die HTTP-API antwortet mit 403.
+
+Aktiviert oder Nicht konfiguriert: Cloud-Textverarbeitung ist erlaubt, vorbehaltlich der übrigen Einschränkungen.</string>
+      <string id="AllowPluginDownloads">Plugin-Downloads erlauben</string>
+      <string id="AllowPluginDownloads_Explain">Deaktiviert: Die App installiert und aktualisiert keine Plugins, auch keine automatischen Updates und keine Installationen während der Einrichtung. Installierte Pakete laufen weiter.
+
+Aktiviert oder Nicht konfiguriert: Plugin-Downloads sind erlaubt.</string>
+      <string id="AllowModelDownloads">Modell-Downloads erlauben</string>
+      <string id="AllowModelDownloads_Explain">Deaktiviert: Die App lädt keine Modelle oder Laufzeitdateien herunter: lokale Transkriptionsmodelle, Plugin-Modelle und lokale Textmodelle. Heruntergeladene Modelle funktionieren weiter. Benötigte Modelle sind mit der Bereitstellung auszurollen.
+
+Aktiviert oder Nicht konfiguriert: Modell-Downloads sind erlaubt.</string>
+
+      <string id="UpdateMode">Update-Modus der Anwendung</string>
+      <string id="UpdateMode_Explain">Externe Bereitstellung: keine Update-Prüfungen, Downloads oder Installationen; die App verweist auf die Bereitstellung der Organisation. Nur prüfen: Die App prüft auf neue Versionen und zeigt sie an, installiert sie aber nie. Installation durch den Benutzer: Benutzer installieren ausdrücklich; nichts wird unbeaufsichtigt installiert.
+
+Deaktiviert oder Nicht konfiguriert: das Release-Verhalten.</string>
+      <string id="UpdateMode_External">Externe Bereitstellung</string>
+      <string id="UpdateMode_CheckOnly">Nur prüfen</string>
+      <string id="UpdateMode_UserInitiated">Installation durch den Benutzer</string>
+      <string id="UpdateChannel">Update-Kanal</string>
+      <string id="UpdateChannel_Explain">Legt den Release-Kanal fest und sperrt die Kanalauswahl. Die separate Daily-Installation erhält nur Daily-Builds.
+
+Deaktiviert oder Nicht konfiguriert: Benutzer wählen den Kanal.</string>
+      <string id="UpdateChannel_Stable">Stable</string>
+      <string id="UpdateChannel_Daily">Daily</string>
+      <string id="UpdateChannel_ReleaseCandidate">Release Candidate</string>
+      <string id="AllowedUpdateChannels">Erlaubte Update-Kanäle</string>
+      <string id="AllowedUpdateChannels_Explain">Aktiviert: Update-Prüfungen und Installationen laufen nur auf den aufgeführten Kanälen. Einträge: stable, daily, release-candidate. Eine aktivierte Richtlinie mit leerer Liste schaltet App-Updates ab. Ein erzwungener Kanal außerhalb der Liste blockiert Updates; die App wechselt den Kanal nie eigenständig.
+
+Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
+
+      <string id="LaunchAtLogin">TypeWhisper bei der Anmeldung starten</string>
+      <string id="LaunchAtLogin_Explain">Aktiviert: Die App registriert ihren eigenen Autostart-Eintrag für den angemeldeten Benutzer und sperrt die Einstellung. Deaktiviert: Der Eintrag wird entfernt, und die Einstellung ist gesperrt aus. Die frühere Wahl des Benutzers wird wiederhergestellt, sobald die Richtlinie auf Nicht konfiguriert zurückgeht. Windows kann Autostart-Apps weiterhin unter Einstellungen &gt; Apps &gt; Autostart abschalten.</string>
+      <string id="SkipOnboardingWhenReady">Ersteinrichtung überspringen, wenn bereit</string>
+      <string id="SkipOnboardingWhenReady_Explain">Aktiviert: Die Ersteinrichtung bleibt geschlossen, wenn ein Diktat-Kurzbefehl, ein bereites Transkriptionsmodell und ein Mikrofon verfügbar sind. Nichts wird als abgeschlossen markiert, und die Einrichtung lässt sich weiterhin aus der App öffnen.
+
+Deaktiviert oder Nicht konfiguriert: Die Einrichtung öffnet sich wie gewohnt.</string>
+      <string id="SuppressOptionalPrompts">Optionale Hinweise ausblenden</string>
+      <string id="SuppressOptionalPrompts_Explain">Aktiviert: Der Premium-Kaufhinweis bleibt ausgeblendet. Erforderliche Einrichtung, Berechtigungsanfragen, Richtlinienprobleme, Lizenzfehler und Betriebsfehler bleiben sichtbar.
+
+Deaktiviert oder Nicht konfiguriert: Hinweise werden angezeigt.</string>
+
+      <string id="ManagedLicenseKey">Verwalteter Lizenzschlüssel</string>
+      <string id="ManagedLicenseKey_Explain">Aktiviert einen kommerziellen TypeWhisper-Lizenzschlüssel für den angemeldeten Benutzer und verwaltet die Lizenzsteuerung in der App, solange der Wert gesetzt ist. Supporter-Schlüssel werden nicht akzeptiert. Die App zeigt den Schlüssel nie an und schreibt ihn nie.
+
+Deaktiviert oder Nicht konfiguriert: Der Schlüssel wird entfernt; eine vom Benutzer aktivierte Lizenz bleibt bestehen.</string>
+
+      <string id="TranscriptionSelection_Recommended">Transkriptionsanbieter und -modell (empfohlen)</string>
+      <string id="TranscriptionSelection_Recommended_Explain">Administratorvorgabe: Anbieter und Modell, mit denen ein Profil startet, wenn der Benutzer noch keine Wahl getroffen hat. Gleiche IDs wie in der erzwungenen Richtlinie; beide Werte sind erforderlich. Benutzer können die Auswahl ändern; ein erzwungenes Paar hat Vorrang.
+
+Deaktiviert oder Nicht konfiguriert: keine Empfehlung.</string>
+      <string id="LlmSelection_Recommended">Textmodell-Anbieter und -Modell (empfohlen)</string>
+      <string id="LlmSelection_Recommended_Explain">Administratorvorgabe: das Standard-Workflow-LLM für ein Profil, das noch keines gespeichert hat. Gleiche IDs wie in der erzwungenen Richtlinie; beide Werte sind erforderlich. Benutzer können einen eigenen Standard speichern; ein erzwungenes Paar hat Vorrang.
+
+Deaktiviert oder Nicht konfiguriert: keine Empfehlung.</string>
+      <string id="UpdateChannel_Recommended">Update-Kanal (empfohlen)</string>
+      <string id="UpdateChannel_Recommended_Explain">Administratorvorgabe: der Release-Kanal für Profile ohne ausdrückliche Kanalwahl. Benutzer können ihn ändern; ein erzwungener Kanal hat Vorrang.
+
+Deaktiviert oder Nicht konfiguriert: keine Empfehlung.</string>
+      <string id="LaunchAtLogin_Recommended">TypeWhisper bei der Anmeldung starten (empfohlen)</string>
+      <string id="LaunchAtLogin_Recommended_Explain">Administratorvorgabe: wird einmal auf ein neues Profil angewendet, das die Einrichtung noch nicht abgeschlossen und keine ausdrückliche Autostart-Wahl getroffen hat. Benutzer können sie ändern; die erzwungene Richtlinie hat Vorrang.
+
+Deaktiviert oder Nicht konfiguriert: keine Empfehlung.</string>
+      <string id="SuppressOptionalPrompts_Recommended">Optionale Hinweise ausblenden (empfohlen)</string>
+      <string id="SuppressOptionalPrompts_Recommended_Explain">Administratorvorgabe für das Ausblenden des Premium-Kaufhinweises. Benutzer können sie ändern; die erzwungene Richtlinie hat Vorrang.
+
+Deaktiviert oder Nicht konfiguriert: keine Empfehlung.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="TranscriptionSelection">
+        <textBox refId="TranscriptionProviderId"><label>Anbieter-ID (zum Beispiel com.typewhisper.sherpa-onnx):</label></textBox>
+        <textBox refId="TranscriptionModelId"><label>Modell-ID (zum Beispiel parakeet-tdt-0.6b):</label></textBox>
+      </presentation>
+      <presentation id="LlmSelection">
+        <textBox refId="LlmProviderId"><label>Anbieter-ID (zum Beispiel com.typewhisper.groq):</label></textBox>
+        <textBox refId="LlmModelId"><label>Modell-ID:</label></textBox>
+      </presentation>
+      <presentation id="AllowedTranscriptionProviders">
+        <listBox refId="AllowedTranscriptionProvidersList">Transkriptions-Auswahl-IDs:</listBox>
+      </presentation>
+      <presentation id="AllowedLlmProviders">
+        <listBox refId="AllowedLlmProvidersList">LLM-Auswahl-IDs:</listBox>
+      </presentation>
+      <presentation id="AllowedPlugins">
+        <listBox refId="AllowedPluginsList">Paket-IDs:</listBox>
+      </presentation>
+      <presentation id="UpdateMode">
+        <dropdownList refId="UpdateMode" noSort="true" defaultItem="1">Update-Modus:</dropdownList>
+      </presentation>
+      <presentation id="UpdateChannel">
+        <dropdownList refId="UpdateChannel" noSort="true" defaultItem="0">Kanal:</dropdownList>
+      </presentation>
+      <presentation id="AllowedUpdateChannels">
+        <listBox refId="AllowedUpdateChannelsList">Kanäle (stable, daily, release-candidate):</listBox>
+      </presentation>
+      <presentation id="ManagedLicenseKey">
+        <textBox refId="ManagedLicenseKey"><label>Lizenzschlüssel:</label></textBox>
+      </presentation>
+      <presentation id="TranscriptionSelection_Recommended">
+        <textBox refId="TranscriptionProviderId_Recommended"><label>Anbieter-ID (zum Beispiel com.typewhisper.sherpa-onnx):</label></textBox>
+        <textBox refId="TranscriptionModelId_Recommended"><label>Modell-ID (zum Beispiel parakeet-tdt-0.6b):</label></textBox>
+      </presentation>
+      <presentation id="LlmSelection_Recommended">
+        <textBox refId="LlmProviderId_Recommended"><label>Anbieter-ID (zum Beispiel com.typewhisper.groq):</label></textBox>
+        <textBox refId="LlmModelId_Recommended"><label>Modell-ID:</label></textBox>
+      </presentation>
+      <presentation id="UpdateChannel_Recommended">
+        <dropdownList refId="UpdateChannel_Recommended" noSort="true" defaultItem="0">Kanal:</dropdownList>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>
