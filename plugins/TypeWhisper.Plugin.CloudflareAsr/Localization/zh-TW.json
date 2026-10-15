@@ -1,0 +1,9 @@
+{
+  "Connect with Cloudflare": "連線至 Cloudflare",
+  "Sign in in your browser and grant TypeWhisper access to Workers AI.": "在瀏覽器中登入，並授權 TypeWhisper 存取 Workers AI。",
+  "Disconnect Cloudflare": "中斷 Cloudflare 連線",
+  "Remove the saved sign-in from this device. You can also revoke access in Cloudflare Connected Applications.": "從此裝置移除已儲存的登入資料。你也可以在 Cloudflare「已連線的應用程式」中撤銷存取權。",
+  "Cloudflare disconnected on this device.": "此裝置已中斷 Cloudflare 連線。",
+  "Connected to Cloudflare.": "已連線至 Cloudflare。",
+  "Signed in. Choose a Cloudflare account and save settings.": "已登入。選取 Cloudflare 帳戶並儲存設定。"
+}

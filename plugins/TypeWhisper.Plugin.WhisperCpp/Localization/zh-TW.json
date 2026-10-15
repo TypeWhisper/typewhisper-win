@@ -1,0 +1,9 @@
+{
+  "Processing device": "處理裝置",
+  "CUDA support was installed successfully. Restart TypeWhisper, then select this model again.": "CUDA 支援已成功安裝。請重新啟動 TypeWhisper，然後再次選取此模型。",
+  "Local transcription with whisper.cpp. Choose the processor used for transcription. Changing a loaded runtime may require an app restart.": "使用 whisper.cpp 的本機轉錄。選擇轉錄使用的處理器。變更已載入的執行階段可能需要重新啟動應用程式。",
+  "In use: ": "使用中：",
+  "Automatic": "自動",
+  " (integrated graphics)": " （整合式顯示卡）",
+  "Whisper (Local)": "Whisper（本機）"
+}

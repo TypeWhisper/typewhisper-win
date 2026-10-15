@@ -1,0 +1,9 @@
+{
+  "Local (Granite Speech)": "本機（Granite Speech）",
+  "Processing device": "處理裝置",
+  "Choose the processor for the next model load. Switching a CPU-only runtime to CUDA requires downloading the updated runtime; cached model files are reused.": "選擇下次載入模型時使用的處理器。將僅 CPU 執行階段切換至 CUDA 需要下載更新的執行階段；快取的模型檔案會重複使用。",
+  "Automatic": "自動",
+  "Remove model and runtime": "移除模型與執行階段",
+  "Unloads the model and deletes its local model files and managed runtime. Settings are preserved.": "卸載模型並刪除其本機模型檔案與受管理執行階段。設定會保留。",
+  "Model and runtime removed.": "模型與執行階段已移除。"
+}

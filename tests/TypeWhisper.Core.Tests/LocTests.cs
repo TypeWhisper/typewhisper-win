@@ -14,7 +14,7 @@ public sealed class LocCollection
 [Collection(LocCollection.Name)]
 public sealed partial class LocTests : IDisposable
 {
-    private static readonly string[] Translated = ["de", "ja", "zh-Hans"];
+    private static readonly string[] Translated = ["de", "ja", "zh-Hans", "zh-TW"];
     private readonly CultureInfo _culture = CultureInfo.CurrentUICulture;
     private readonly CultureInfo? _defaultCulture = CultureInfo.DefaultThreadCurrentUICulture;
 
@@ -29,8 +29,21 @@ public sealed partial class LocTests : IDisposable
     [InlineData("de", "en-US", "de")]
     [InlineData(null, "de-AT", "de")]
     [InlineData(null, "ja-JP", "ja")]
-    [InlineData(null, "zh-TW", "zh-Hans")]
+    [InlineData(null, "zh-TW", "zh-TW")]
+    [InlineData(null, "zh-HK", "zh-TW")]
+    [InlineData(null, "zh-MO", "zh-TW")]
+    [InlineData(null, "zh-Hant", "zh-TW")]
+    [InlineData(null, "zh-Hant-TW", "zh-TW")]
+    [InlineData(null, "zh-CN", "zh-Hans")]
+    [InlineData(null, "zh-SG", "zh-Hans")]
+    [InlineData(null, "zh-Hans", "zh-Hans")]
+    [InlineData(null, "zh-Hans-HK", "zh-Hans")]
+    [InlineData(null, "zh", "zh-Hans")]
+    [InlineData("zh-TW", "en-US", "zh-TW")]
+    [InlineData("zh-Hans", "zh-TW", "zh-Hans")]
+    [InlineData("en", "zh-TW", "en")]
     [InlineData(null, "fr-FR", "en")]
+    [InlineData(null, "", "en")]
     [InlineData("fr", "ja-JP", "ja")]
     public void Resolve_PrefersTheSavedLanguageAndFallsBackToTheSystem(string? saved, string system, string expected) =>
         Assert.Equal(expected, Loc.Resolve(saved, CultureInfo.GetCultureInfo(system)));
@@ -44,6 +57,23 @@ public sealed partial class LocTests : IDisposable
         Assert.Equal("Jetzt neustarten", Loc.T("Restart Now"));
         Assert.Equal("Text without a translation", Loc.T("Text without a translation"));
         Assert.Equal("de", CultureInfo.CurrentUICulture.Name);
+    }
+
+    [Fact]
+    public void TraditionalChinese_IsOfferedAndLoadsItsOwnCatalogAndCulture()
+    {
+        Assert.Contains(Loc.Languages, language => language.Code == "zh-TW" && language.Name == "繁體中文");
+        Loc.Use("zh-TW");
+
+        Assert.Equal("zh-TW", Loc.Language);
+        Assert.Equal("zh-TW", CultureInfo.CurrentUICulture.Name);
+        Assert.Equal("zh-TW", CultureInfo.DefaultThreadCurrentUICulture?.Name);
+        Assert.Equal("立即重新啟動", Loc.T("Restart Now"));
+        Assert.Equal("無法選取模型：tiny", Loc.T("Could not select model: {0}", "tiny"));
+        Assert.Equal("Restart Now", Loc.English(Loc.T("Restart Now")));
+        Assert.Equal("立即重新啟動", Loc.In("zh-TW", "Restart Now"));
+        Loc.Use("en");
+        Assert.Equal("立即重新啟動", Loc.In("zh-TW", "Restart Now"));
     }
 
     [Fact]

@@ -1,0 +1,17 @@
+{
+  "Settings.Test": "測試",
+  "Settings.Refresh": "重新整理",
+  "Settings.Saved": "已儲存",
+  "Settings.EnterApiKey": "請先輸入 API 金鑰",
+  "Settings.ApiKeyHint": "安全儲存，並用於 Groq 轉錄與 LLM 要求。",
+  "Settings.Testing": "測試中...",
+  "Settings.ApiKeyValid": "API 金鑰有效！",
+  "Settings.ApiKeyInvalid": "API 金鑰無效",
+  "Settings.TranscriptionModel": "轉錄模型",
+  "Settings.LlmModel": "LLM 模型",
+  "Settings.LlmModelHint": "使用預設的 Groq LLM 清單。按一下「重新整理」以擷取目前模型。",
+  "Settings.ModelsFetched": "已擷取 {0} 個 Groq LLM 模型。",
+  "Settings.ModelsFetchedHint": "顯示從 API 擷取的 {0} 個 Groq LLM 模型。",
+  "Settings.RefreshFailed": "無法擷取 Groq LLM 模型。保留已儲存／預設清單。",
+  "Settings.Error": "錯誤：{0}"
+}

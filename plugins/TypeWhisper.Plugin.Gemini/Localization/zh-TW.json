@@ -1,0 +1,18 @@
+{
+  "Transcription model": "轉錄模型",
+  "Use Refresh models to load the account's current catalog.": "使用「重新整理模型」載入帳戶目前的目錄。",
+  "Transcription mode": "轉錄模式",
+  "Smart cleans up speech; Verbatim preserves the spoken wording.": "Smart 會智慧清理語音；Verbatim 會保留說話原文。",
+  "Verbatim": "原文",
+  "Text model": "文字模型",
+  "Default for text processing. A workflow can choose another model.": "用於文字處理的預設值。工作流程可以選擇其他模型。",
+  "Temperature": "溫度",
+  "Use the provider default or set a custom temperature.": "使用供應商預設值或設定自訂溫度。",
+  "Provider default": "供應商預設值",
+  "Custom": "自定義",
+  "Custom temperature": "自訂溫度",
+  "A number from 0 to 2. Used only with Custom temperature.": "介於 0 到 2 的數字。僅與自訂溫度搭配使用。",
+  "Refresh models": "重新整理模型",
+  "Fetch and save transcription and text models using the stored API key.": "使用已儲存的 API 金鑰擷取並儲存轉錄與文字模型。",
+  "Models updated.": "模型已更新。"
+}
