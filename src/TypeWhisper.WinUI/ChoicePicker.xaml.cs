@@ -271,9 +271,13 @@ public sealed partial class ChoicePicker : UserControl
         else if (e.Key == global::Windows.System.VirtualKey.Enter && inSearch)
         {
             // Enter takes the best match, so typing "ger" and Enter picks German.
-            if (ChoiceSearch.Text.Trim().Length > 0 && buttons.Count > 0) Choose(_rows.First(row => ReferenceEquals(row.Button, buttons[0])).Option);
+            // A disabled best match (an unavailable saved language) is not skipped for a weaker one.
+            if (ChoiceSearch.Text.Trim().Length > 0 && Choices.Children.FirstOrDefault() is HandCursorButton { IsEnabled: true } best)
+                Choose(_rows.First(row => ReferenceEquals(row.Button, best)).Option);
             e.Handled = true;
         }
+        else if (e.Key == global::Windows.System.VirtualKey.Space && !inSearch && ContinuesSearch)
+            e.Handled = true; // The space goes on in the search field (CharacterReceived), not to the focused choice.
         else if (e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             var down = e.Key == global::Windows.System.VirtualKey.Down;
@@ -287,11 +291,14 @@ public sealed partial class ChoicePicker : UserControl
     // Typing while a choice has focus continues in the search field.
     private void Choices_CharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs e)
     {
-        if (!Searchable || char.IsControl(e.Character) || char.IsWhiteSpace(e.Character)
+        if (!Searchable || char.IsControl(e.Character) || char.IsWhiteSpace(e.Character) && !ContinuesSearch
             || ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), ChoiceSearch)) return;
         ChoiceSearch.Text += e.Character;
         ChoiceSearch.Select(ChoiceSearch.Text.Length, 0);
         ChoiceSearch.Focus(FocusState.Keyboard);
         e.Handled = true;
     }
+
+    // Space selects a choice, unless a search is underway: then it separates words such as "United States".
+    private bool ContinuesSearch => Searchable && ChoiceSearch.Text.Trim().Length > 0;
 }
