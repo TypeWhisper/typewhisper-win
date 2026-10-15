@@ -17,6 +17,9 @@ internal sealed class ManagedPolicyView : UserControl
     private readonly StackPanel _issues = new() { Spacing = 4 };
     private readonly TextBlock _meta = Text(12, "MutedBrush");
 
+    /// <summary>Set by the main window: conflicts between enforced provider/model pairs and the installed providers.</summary>
+    internal static Func<IEnumerable<string>>? RuntimeIssues { get; set; }
+
     internal ManagedPolicyView()
     {
         var body = new StackPanel { Spacing = 10 };
@@ -61,7 +64,12 @@ internal sealed class ManagedPolicyView : UserControl
         _issues.Children.Clear();
         foreach (var issue in snapshot.Issues)
             _issues.Children.Add(Text(12, "MutedBrush", issue.Message));
-        _issuesTitle.Visibility = _issues.Visibility = snapshot.Issues.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        IEnumerable<string> runtime = [];
+        try { runtime = (RuntimeIssues?.Invoke() ?? []).ToArray(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.view.runtime-issues", ex); }
+        foreach (var issue in runtime)
+            _issues.Children.Add(Text(12, "MutedBrush", issue));
+        _issuesTitle.Visibility = _issues.Visibility = _issues.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         var watching = WinUIManagedPolicy.Watching ? Loc.T("Watching for changes") : Loc.T("Checked every 30 seconds");
         _meta.Text = snapshot.Revision == 0 ? watching
             : Loc.T("Last change {0}", snapshot.ReadAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)) + " · " + watching;

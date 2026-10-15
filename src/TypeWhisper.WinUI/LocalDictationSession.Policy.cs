@@ -11,18 +11,24 @@ internal sealed partial class LocalDictationSession
     // The bundled dictionary-boosting package is judged by the allowlist on its own ID, like any other package.
     private static bool CtcAllowed => ProviderPolicy.PluginRefusal(LocalCtcVocabulary.PluginId) is null;
 
-    private static string? LocalTranscriptionRefusal() =>
-        ProviderPolicy.TranscriptionRefusal(LocalTranscriptionPlugin.PluginId, LocalTranscriptionPlugin.PluginId, ContentLocality.Local);
+    private static string? LocalTranscriptionRefusal(string? modelId = null) =>
+        ProviderPolicy.TranscriptionRefusal(LocalTranscriptionPlugin.PluginId, LocalTranscriptionPlugin.PluginId, ContentLocality.Local, modelId);
 
     /// <summary>
-    /// Why policy refuses the active transcription provider before audio is captured, or null. A provider whose
-    /// package the policy unloaded, or never loaded, has no role and is judged as a package: through the package the
-    /// registry last saw serving the selection, or through the package remembered with the saved selection.
+    /// Why policy refuses the active transcription provider and model before audio is captured, or null. A provider
+    /// whose package the policy unloaded, or never loaded, has no role and is judged as a package: through the package
+    /// the registry last saw serving the selection, or through the package remembered with the saved selection.
     /// </summary>
-    internal string? TranscriptionPolicyRefusal() => UsesRegistryProvider
-        ? PluginRuntime.TranscriptionRefusal(RegistrySelectionId(_providerId))
-            ?? (ActiveRegistryProvider is null ? SelectedPackageRefusal() : null)
-        : LocalTranscriptionRefusal();
+    internal string? TranscriptionPolicyRefusal()
+    {
+        if (!UsesRegistryProvider) return LocalTranscriptionRefusal(Models.ActiveModelId);
+        if (ActiveRegistryProvider is { } provider) return PluginRuntime.TranscriptionRefusal(provider.SelectionId, provider.SelectedModelId);
+        // The registry knows no such role: policy may require a provider that is not installed or enabled, or it
+        // may have unloaded the package.
+        return EnforcedTranscription is { } pair && SessionProviderId(pair.ProviderId) == _providerId
+            ? Loc.T("The transcription provider {0} is not installed or enabled.", pair.ProviderId)
+            : SelectedPackageRefusal();
+    }
 
     private string? SelectedPackageRefusal() =>
         PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(_providerId))
@@ -32,9 +38,9 @@ internal sealed partial class LocalDictationSession
     private IReadOnlyList<string>? PromptTermsFor(string selectionId, IReadOnlyList<string>? terms) =>
         terms is null || PluginRuntime.TranscriptionPromptRefusal(selectionId) is not null ? null : terms;
 
-    private static void DenyLocalTranscriptionIfRefused()
+    private void DenyLocalTranscriptionIfRefused()
     {
-        if (LocalTranscriptionRefusal() is { } refused) throw new ManagedPolicyDeniedException("transcription", refused);
+        if (LocalTranscriptionRefusal(Models.ActiveModelId) is { } refused) throw new ManagedPolicyDeniedException("transcription", refused);
     }
 
     private void DenyRegistrySelectionIfRefused(string selectionId)

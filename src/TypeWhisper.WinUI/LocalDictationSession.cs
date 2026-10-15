@@ -123,6 +123,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         ct.ThrowIfCancellationRequested();
         // Give foreground workflows priority over cancellable settings downloads.
         await LocalLlmDownload.CancelAndDrainAsync();
+        // The registry checks the provider; the model is known only here, so an enforced pair is completed here.
+        if (PluginRuntime.LlmRefusal(selectionId, model) is { } refused) throw new ManagedPolicyDeniedException("llm", refused);
         // A chat completion has no side effects, so a rate limit or server error is retried before the workflow fails.
         return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) =>
             PluginRequestRetry.RunAsync(provider.PluginId, attempt => provider.ProcessAsync(systemPrompt, text, model, attempt), token), ct);
@@ -246,6 +248,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     internal async Task<string?> SelectModelAsync(string modelId)
     {
+        if (SelectionRefusal("local", modelId) is { } refused) return refused;
         if (!CanSelectModel || !await _gate.WaitAsync(0)) return Loc.T("Finish recording or the current model operation before changing models.");
         try
         {
@@ -378,6 +381,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     });
     private Task<string?> SelectRegistryModelAsync(string providerId, string modelId)
     {
+        if (SelectionRefusal(providerId, modelId) is { } refused) return Task.FromResult<string?>(refused);
         if (_disposed || !CanChangeProvider || Models.Busy)
             return Task.FromResult<string?>(Loc.T("Finish dictation and model operations before selecting a model."));
         var model = PluginRuntime.TranscriptionProviders
@@ -470,7 +474,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private string ReadyStatus(bool prepared)
     {
         _microphoneNotice = MicrophoneNotice();
-        return _microphoneStatus = !IsReady ? UsesRegistryProvider ? Loc.T("The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation.") : !Models.Enabled ? Loc.T("Local transcription plugin disabled") : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation.")
+        return _microphoneStatus = !IsReady ? SelectionLockReason() ?? (UsesRegistryProvider ? Loc.T("The selected provider is unavailable or not configured. Open Integrations, then select a ready model in Dictation.") : !Models.Enabled ? Loc.T("Local transcription plugin disabled") : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation."))
             : _microphoneNotice is { } notice ? Loc.T("{0} ready · {1}", ActiveModelName, notice)
             : prepared ? Loc.T("{0} ready · {1} to dictate", ActiveModelName, Loc.T(Shortcut)) : Loc.T("{0} ready · microphone preparation failed; check the device", ActiveModelName);
     }
@@ -624,7 +628,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     : System.Text.Json.JsonSerializer.Deserialize<MicrophonePriorityItem>(json) is { } previous ? [previous] : [];
                 _audio.SetMicrophonePriorityList(_microphones);
             }
-            _providerId = SessionProviderId(_selection.GetSetting<string>("Provider") ?? "local");
+            _providerId = StartupProviderId();
             // Prepare the device without starting capture, so key-down need not initialize it. It is opened
             // beside the model load, so a dictation started meanwhile does not wait for the device either.
             var warmUp = Task.Run(_audio.WarmUp);
@@ -636,6 +640,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (_disposed) return;
             var prepared = await warmUp;
             await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
+            if (_disposed) return;
+            // An enforced pair for a registry provider selects its model here; the local engine applied its own above.
+            await ApplySelectionPolicyCoreAsync();
             LocalPluginError ??= Models.Error;
             SetStatus(ReadyStatus(prepared));
         }
@@ -817,12 +824,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_workflowModelOverride is not null) await RestoreWorkflowModelAsync();
                 // A dictation workflow's own model applies before its task and language are checked against it.
                 // API starts are registered once capture begins, so they load the model before the microphone opens.
-                if (!adoptEarlyCapture && captureStarted is null && SwitchesWorkflowModel(workflow?.TranscriptionModel) && BeginWorkflowModelCapture(workflow!))
+                if (!adoptEarlyCapture && captureStarted is null && SwitchesWorkflowModel(WorkflowTranscriptionModel(workflow)) && BeginWorkflowModelCapture(workflow!))
                 {
                     adoptEarlyCapture = true;
                     preparingRecording = true;
                 }
-                if (await RejectWorkflowModelAsync(workflow?.TranscriptionModel, rejected)) return;
+                if (await RejectWorkflowModelAsync(WorkflowTranscriptionModel(workflow), rejected)) return;
                 // Machine policy is checked before the microphone opens, with the provider a workflow may have switched to.
                 if (TranscriptionPolicyRefusal() is { } denied)
                 {

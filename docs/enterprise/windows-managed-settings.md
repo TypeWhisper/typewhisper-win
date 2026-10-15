@@ -2,9 +2,9 @@
 
 Administrators can configure TypeWhisper for Windows through registry policies, the
 same mechanism Group Policy and Intune write. This page lists the keys the app
-understands today. ADMX/ADML templates and the enforced provider/model pairs from
-[#470](https://github.com/TypeWhisper/typewhisper-win/issues/470) follow in later
-releases.
+understands today. ADMX/ADML templates and deployment guidance from
+[#470](https://github.com/TypeWhisper/typewhisper-win/issues/470) follow in a later
+release.
 
 ## Registry layout
 
@@ -31,6 +31,8 @@ any problems; the support report contains the same section.
 | Key | Type | Scope | Behavior |
 | --- | --- | --- | --- |
 | `ManagedLicenseKey` | `REG_SZ` | enforced | Activates a commercial license for the signed-in user. See [managed license activation](windows-managed-license.md). |
+| `TranscriptionProviderId`, `TranscriptionModelId` | `REG_SZ` pair | enforced or recommended | Enforced fixes the transcription provider and model for every entry point; recommended is the initial selection of a profile without an explicit choice. Both values must be present at the same scope. See [provider and model pairs](#provider-and-model-pairs). |
+| `LlmProviderId`, `LlmModelId` | `REG_SZ` pair | enforced or recommended | Same rules for the text model used by workflows, translation and text processing, including the default workflow LLM. The pair does not enable optional processing by itself. |
 | `UpdateMode` | `REG_DWORD` 0–2 | enforced | 0 = External: no update checks, downloads or installations; the app points to the organization's deployment. 1 = CheckOnly: the app checks and announces versions but never installs. 2 = UserInitiated: users install explicitly; nothing installs unattended. Unset keeps the release behavior. |
 | `UpdateChannel` | `REG_DWORD` 0–2 | enforced or recommended | 0 = Stable, 1 = Daily, 2 = ReleaseCandidate. Enforced fixes the channel; recommended is the default for profiles without an explicit choice. The separate Daily installation only receives Daily builds. |
 | `AllowedUpdateChannels` | list | enforced | Entries `stable`, `daily`, `release-candidate`. Checks and installations run only on an allowed channel. An empty configured list turns app updates off. An enforced channel outside the list is an error that blocks updates; the app never switches channels on its own. |
@@ -47,6 +49,53 @@ any problems; the support report contains the same section.
 
 Restriction keys placed under `Recommended` are reported as problems and ignored.
 Unknown keys are reported and ignored.
+
+## Provider and model pairs
+
+A pair names a provider by its stable selection ID and a model by the ID the
+provider lists:
+
+- The local Parakeet engine is `com.typewhisper.sherpa-onnx`; its model IDs are the
+  ones shown in Dictation and by `GET /v1/models` (`provider_id` and `id`), for
+  example `parakeet-tdt-0.6b`.
+- Cloud plugins use their package ID (`com.typewhisper.groq`, `com.typewhisper.openai`,
+  …) and the model IDs their settings page lists, for example `whisper-large-v3`.
+- Endpoint profiles of the OpenAI-compatible plugin use `openai-compatible-<id>`.
+- LLM providers use the same package IDs; the model IDs are the ones the workflow
+  editor offers for that provider.
+
+An **enforced transcription pair** is selected by the app itself and wins over the
+user's selection, dictation workflows with their own model, queued and recovered
+jobs and HTTP API requests: a request that asks for another engine or model gets
+403 `forbidden`. The dictation and setup pickers show the pair and are locked; the
+"Provider settings" button stays available for API keys and downloads. The user's
+own selection is kept in their stores, never overwritten, and applies again when
+the pair is removed. A registry plugin's own model selection is changed to the
+enforced model and restored once the policy is removed.
+
+An **enforced LLM pair** replaces the provider and model of every workflow, of the
+default workflow LLM and of API translation. The workflow editor keeps the saved
+selections but locks the pickers and names the enforced pair; the Default LLM
+dialog is read-only. Text sent to another provider or model is refused.
+
+Unknown or unavailable IDs never cause a silent switch:
+
+- A required provider that is not installed, not enabled, or refused by
+  `AllowedPlugins`, `AllowedTranscriptionProviders`, `AllowedLlmProviders` or a cloud
+  key stays visibly selected and dictation or processing is blocked with the reason.
+- A required model that the provider does not offer or that is not downloaded blocks
+  the same way. With `AllowModelDownloads` off the deployment has to provision the
+  model files; with downloads allowed the user can download it from the provider page.
+- Settings > Advanced > Managed settings lists these conflicts under "Policy
+  problems" next to the pair itself.
+- An incomplete pair (only one of the two values) is invalid: the pair is ignored and
+  the affected capability waits until the pair is complete.
+
+A **recommended pair** is the initial selection of a profile that has not chosen a
+provider (transcription) or saved a default workflow LLM (text). The user can change
+it; an existing choice is never replaced. A recommended model that is not
+downloaded yet has to be downloaded by the user or provisioned by the deployment;
+until then setup asks for a ready model as usual.
 
 ## Plugin locality
 
@@ -73,6 +122,8 @@ Known limits of this release:
   sources and actions show refused entries grayed out with the reason and never
   switch a selection on their own; a refused provider that is still selected is
   refused when it is used, with the same message.
+- Audio that a streaming provider already received before a stricter policy arrived
+  cannot be recalled; the policy is checked again at the next provider call.
 
 ## Example
 

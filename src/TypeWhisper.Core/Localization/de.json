@@ -3200,5 +3200,16 @@
   "Configurable": "Konfigurierbar",
   "This plugin processes content in the cloud, which your organization has turned off.": "Dieses Plugin verarbeitet Inhalte in der Cloud, was deine Organisation deaktiviert hat.",
   "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "Die Richtlinie deiner Organisation erlaubt die Installation dieser Plugins nicht: {0}. Ihre Einstellungen und Modelle wurden beibehalten.",
-  "Open in History": "Im Verlauf öffnen"
+  "Open in History": "Im Verlauf öffnen",
+  "Your organization requires the transcription provider {0}.": "Deine Organisation schreibt den Transkriptionsanbieter {0} vor.",
+  "Your organization requires the transcription model {0}.": "Deine Organisation schreibt das Transkriptionsmodell {0} vor.",
+  "Your organization requires the text model provider {0}.": "Deine Organisation schreibt den Textmodell-Anbieter {0} vor.",
+  "Your organization requires the text model {0}.": "Deine Organisation schreibt das Textmodell {0} vor.",
+  "The text model is managed by your organization.": "Das Textmodell wird von deiner Organisation verwaltet.",
+  "The transcription provider {0} is not installed or enabled.": "Der Transkriptionsanbieter {0} ist nicht installiert oder nicht aktiviert.",
+  "Managed by your organization: {0} · {1} · input is sent to this provider when you run": "Von deiner Organisation verwaltet: {0} · {1} · die Eingabe wird beim Ausführen an diesen Anbieter gesendet",
+  "The selection policy state could not be loaded.": "Der Zustand der Auswahlrichtlinie konnte nicht geladen werden.",
+  "The selection policy state could not be saved.": "Der Zustand der Auswahlrichtlinie konnte nicht gespeichert werden.",
+  "The model {0} is not offered by {1}.": "Das Modell {0} wird von {1} nicht angeboten.",
+  "The text model provider {0} is not installed or enabled.": "Der Textmodell-Anbieter {0} ist nicht installiert oder nicht aktiviert."
 }

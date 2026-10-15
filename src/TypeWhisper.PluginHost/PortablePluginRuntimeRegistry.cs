@@ -134,10 +134,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     }
 
     /// <summary>Why policy refuses audio for an enabled transcription role, or null. Unknown roles return null.</summary>
-    public string? TranscriptionRefusal(string selectionId)
+    public string? TranscriptionRefusal(string selectionId) => TranscriptionRefusal(selectionId, null);
+
+    /// <summary>Why audio may not be sent to a transcription role with the given model, or null for an unknown role.</summary>
+    public string? TranscriptionRefusal(string selectionId, string? modelId)
     {
         lock (_sync) return _index.Transcription.TryGetValue(selectionId, out var role)
-            ? Policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) : null;
+            ? Policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality, modelId) : null;
     }
 
     /// <summary>
@@ -151,10 +154,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     }
 
     /// <summary>Why policy refuses text for an enabled LLM role, or null. Unknown roles return null.</summary>
-    public string? LlmRefusal(string selectionId)
+    public string? LlmRefusal(string selectionId) => LlmRefusal(selectionId, null);
+
+    /// <summary>Why text may not be sent to an LLM role with the given model, or null for an unknown role.</summary>
+    public string? LlmRefusal(string selectionId, string? modelId)
     {
         lock (_sync) return _index.Llm.TryGetValue(selectionId, out var role)
-            ? Policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) : null;
+            ? Policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality, modelId) : null;
     }
 
     /// <summary>Why policy refuses handing text to an enabled package, or null. Unknown packages return null.</summary>
@@ -491,17 +497,18 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             owner = role.Owner;
         }
         // Checked before queuing and again once the lease is held, so a policy that arrived meanwhile still wins.
-        DenyTranscriptionIfRefused(selectionId, owner);
+        // Under the lease the engine's selected model is known, so an enforced pair is checked completely.
+        DenyTranscriptionIfRefused(selectionId, owner, null);
         return UseAsync(owner, async token =>
         {
-            DenyTranscriptionIfRefused(selectionId, owner);
             if (!_index.Transcription.TryGetValue(selectionId, out var current) || current.Owner != owner)
                 throw new InvalidOperationException("Transcription provider changed.");
+            DenyTranscriptionIfRefused(selectionId, owner, current.Engine.SelectedModelId);
             try { return await use(current.Engine, token).ConfigureAwait(false); }
             // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                DenyTranscriptionIfRefused(selectionId, owner);
+                DenyTranscriptionIfRefused(selectionId, owner, current.Engine.SelectedModelId);
                 // The text rule cancels a transcription that may carry a prompt, so its reason is reported as well.
                 DenyTextTransferIfRefused(owner, "transcription-prompt");
                 throw;
@@ -509,9 +516,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         }, cancellationToken);
     }
 
-    private void DenyTranscriptionIfRefused(string selectionId, Slot owner)
+    private void DenyTranscriptionIfRefused(string selectionId, Slot owner, string? modelId)
     {
-        if (Policy.TranscriptionRefusal(selectionId, owner.Id, owner.Locality) is { } refused)
+        if (Policy.TranscriptionRefusal(selectionId, owner.Id, owner.Locality, modelId) is { } refused)
             throw new ManagedPolicyDeniedException("transcription", refused);
     }
 

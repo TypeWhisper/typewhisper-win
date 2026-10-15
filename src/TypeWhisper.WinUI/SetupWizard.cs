@@ -224,8 +224,9 @@ public sealed partial class SetupWizard : UserControl
             _languagePicker.SetOptions((detects || _session.UsesRegistryProvider ? new[] { new Choice("auto", LanguageName("auto"), Loc.T("Language detection by the model")) }.Concat(choices) : choices)
                 .DistinctBy(choice => choice.Id).ToArray(), _session.Language);
             var canChange = !_selecting && _session.CanChangeProvider;
-            _providerPicker.IsEnabled = canChange;
-            _modelPicker.IsEnabled = canChange && selected?.Ready == true;
+            var locked = LocalDictationSession.TranscriptionSelectionLocked;
+            _providerPicker.IsEnabled = canChange && !locked;
+            _modelPicker.IsEnabled = canChange && !locked && selected?.Ready == true;
             _languagePicker.IsEnabled = canChange && _session.IsReady && codes.Count > 0 && _selectedProvider == _session.ActiveProviderId;
             var local = selected?.Id == "local";
             var available = providers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -237,6 +238,7 @@ public sealed partial class SetupWizard : UserControl
             if (_engineStatus is not null) _engineStatus.Text = _session.TranscriptionPolicyRefusal() is { } refusedProvider ? refusedProvider
                 : _session.IsReady
                 ? Loc.T("{0} is ready for dictation.", _session.ActiveModelName)
+                : locked ? _session.SelectionLockReason() ?? Loc.T("Managed by your organization")
                 : providers.Count == 0 ? Loc.T("Choose a transcription plugin to get started.")
                 : Loc.T("Choose a model below. Download it, then select Use model to continue.");
             if (_providerSettings is not null && _renderedProvider != selected?.Id)

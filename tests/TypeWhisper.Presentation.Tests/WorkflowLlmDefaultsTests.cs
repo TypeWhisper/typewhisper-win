@@ -72,6 +72,48 @@ public sealed class WorkflowLlmDefaultsTests : IDisposable
         Assert.Equal("default-provider/default-model", result);
     }
     [Fact]
+    public void EnforcedPairReplacesEverySelectionAndBlocksSaving()
+    {
+        new WorkflowLlmDefaults(FilePath).Save(new("saved", "saved-model"));
+        WorkflowLlmSelection? policy = new("required", "required-model");
+        var store = new WorkflowLlmDefaults(FilePath, () => policy);
+
+        Assert.Equal(policy, store.Read());
+        Assert.Equal(new WorkflowLlmSelection("saved", "saved-model"), store.ReadSaved());
+        Assert.Equal(policy, store.Effective("own", "own-model"));
+        Assert.Equal(policy, store.Effective(WorkflowLlmDefaults.Inherit, ""));
+        var own = store.Resolve(Draft("own", "own-model"));
+        Assert.Equal("required", own.Behavior.ProviderOverride);
+        Assert.Equal("required-model", own.Behavior.ModelOverride);
+        Assert.Equal("required", store.Resolve(Draft()).Behavior.ProviderOverride);
+        Assert.Equal("required", store.Resolve(Draft(null)).Behavior.ProviderOverride);
+        var dictation = Draft("own", "own-model") with { Template = WorkflowTemplate.Dictation };
+        Assert.Same(dictation, store.Resolve(dictation));
+        Assert.Throws<InvalidOperationException>(() => store.Save(new("other", "model")));
+        Assert.Equal(new WorkflowLlmSelection("saved", "saved-model"), store.ReadSaved());
+
+        // Removing the policy reveals the saved default and the workflow's own selection again.
+        policy = null;
+        Assert.Equal(new WorkflowLlmSelection("saved", "saved-model"), store.Read());
+        Assert.Equal("own", store.Resolve(Draft("own", "own-model")).Behavior.ProviderOverride);
+        Assert.Equal("saved", store.Resolve(Draft()).Behavior.ProviderOverride);
+    }
+    [Fact]
+    public void RecommendedPairIsTheDefaultUntilTheUserSavesOne()
+    {
+        var store = new WorkflowLlmDefaults(FilePath, recommended: () => new("suggested", "suggested-model"));
+
+        Assert.Equal(new WorkflowLlmSelection("suggested", "suggested-model"), store.Read());
+        Assert.Null(store.ReadSaved());
+        Assert.Equal("suggested", store.Resolve(Draft()).Behavior.ProviderOverride);
+        Assert.Equal("own", store.Resolve(Draft("own", "own-model")).Behavior.ProviderOverride);
+        Assert.Equal(new WorkflowLlmSelection("own", "own-model"), store.Effective("own", "own-model"));
+
+        store.Save(new("mine", "my-model"));
+        Assert.Equal(new WorkflowLlmSelection("mine", "my-model"), store.Read());
+        Assert.Equal("mine", store.Resolve(Draft()).Behavior.ProviderOverride);
+    }
+    [Fact]
     public void InvalidSavePreservesPreviousPair()
     {
         var store = new WorkflowLlmDefaults(FilePath); store.Save(new("provider", "model"));

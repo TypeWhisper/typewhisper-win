@@ -3200,5 +3200,16 @@
   "Configurable": "設定可能",
   "This plugin processes content in the cloud, which your organization has turned off.": "このプラグインはコンテンツをクラウドで処理しますが、組織によって無効化されています。",
   "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "組織のポリシーにより、次のプラグインはインストールできません: {0}。設定とモデルは保持されました。",
-  "Open in History": "履歴で開く"
+  "Open in History": "履歴で開く",
+  "Your organization requires the transcription provider {0}.": "組織により文字起こしプロバイダー {0} の使用が必須です。",
+  "Your organization requires the transcription model {0}.": "組織により文字起こしモデル {0} の使用が必須です。",
+  "Your organization requires the text model provider {0}.": "組織によりテキストモデルのプロバイダー {0} の使用が必須です。",
+  "Your organization requires the text model {0}.": "組織によりテキストモデル {0} の使用が必須です。",
+  "The text model is managed by your organization.": "テキストモデルは組織によって管理されています。",
+  "The transcription provider {0} is not installed or enabled.": "文字起こしプロバイダー {0} はインストールされていないか、有効になっていません。",
+  "Managed by your organization: {0} · {1} · input is sent to this provider when you run": "組織による管理: {0} · {1} · 実行時に入力がこのプロバイダーへ送信されます",
+  "The selection policy state could not be loaded.": "選択ポリシーの状態を読み込めませんでした。",
+  "The selection policy state could not be saved.": "選択ポリシーの状態を保存できませんでした。",
+  "The model {0} is not offered by {1}.": "モデル {0} は {1} では提供されていません。",
+  "The text model provider {0} is not installed or enabled.": "テキストモデルのプロバイダー {0} はインストールされていないか、有効になっていません。"
 }

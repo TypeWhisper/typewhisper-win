@@ -55,6 +55,8 @@ internal sealed partial class LocalDictationSession
         if (modelId is null) throw new LocalApiRequestException(409, "Choose a downloaded model, or set await_download to true.");
         var model = provider.Models.FirstOrDefault(item => item.Id == modelId)
             ?? throw new LocalApiRequestException(404, "Transcription model not found in this engine.");
+        // An enforced pair wins over request overrides: a different provider or model is refused, never substituted silently.
+        if (SelectionRefusal(provider.Id, modelId) is { } refused) throw new LocalApiRequestException(403, refused);
         if (provider.Id == _providerId && modelId == ActiveModelId && IsReady) return null;
         if (!model.Ready && !awaitDownload)
             throw new LocalApiRequestException(409, "The requested model is not downloaded. Set await_download to true to download it.");

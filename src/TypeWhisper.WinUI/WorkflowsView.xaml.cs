@@ -641,10 +641,15 @@ public sealed partial class WorkflowsView : UserControl
                 new Choice(provider.Id + ":" + item.Id, item.Name, provider.Name) { PluginId = provider.PluginId }));
         Choice[] options = [new("", Loc.T("Use selected model"), Loc.T("Use the transcription model selected in Dictation")), .. models];
         ConfigTranscriptionModel.SetOptions(options, model, Loc.T("{0} (unavailable)", model));
+        // A workflow's own model is ignored while policy fixes the dictation selection.
+        ConfigTranscriptionModel.IsEnabled = !LocalDictationSession.TranscriptionSelectionLocked;
     }
 
     private void ConfigureModels(string modelId)
     {
+        // Under an enforced pair the saved selection stays as it is but cannot be edited; the summary names the pair.
+        var enforced = _session?.WorkflowDefaults.Enforced is not null;
+        ConfigProvider.IsEnabled = !enforced;
         if (ConfigProvider.SelectedId == WorkflowLlmDefaults.Inherit)
         {
             var defaults = ReadDefaults();
@@ -652,8 +657,8 @@ public sealed partial class WorkflowsView : UserControl
             ConfigModel.IsEnabled = false;
             return;
         }
-        ConfigModel.IsEnabled = ConfigProvider.SelectedId != "none";
-        ConfigModel.SetOptions(Models, modelId, ConfigModel.IsEnabled ? (modelId.Length > 0 ? Loc.T("{0} (unavailable)", modelId) : Loc.T("Choose a model")) : Loc.T("No model selected"));
+        ConfigModel.IsEnabled = ConfigProvider.SelectedId != "none" && !enforced;
+        ConfigModel.SetOptions(Models, modelId, ConfigProvider.SelectedId != "none" ? (modelId.Length > 0 ? Loc.T("{0} (unavailable)", modelId) : Loc.T("Choose a model")) : Loc.T("No model selected"));
     }
 
     private void Configuration_Changed(object sender, TextChangedEventArgs e)
@@ -710,6 +715,8 @@ public sealed partial class WorkflowsView : UserControl
             : template == WorkflowTemplate.Dictation ? Loc.T("No LLM processing. Dictation uses your selected transcription model.")
             : EffectiveConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId) is { } providerError
                 ? providerError + " " + Loc.T("You can save now and complete the setup later.")
+                : _session?.WorkflowDefaults.Enforced is { } required
+                ? Loc.T("Managed by your organization") + ": " + (Providers.FirstOrDefault(p => p.Id == required.Provider)?.Label ?? required.Provider) + " · " + required.Model
                 : (ConfigTrigger.SelectedId == "DictationHotkey" ? Loc.T("Press once to start and again to stop. Applies only to this recording and uses your dictation paste and history settings.")
                     : ConfigTrigger.SelectedId == "Hotkey" ? Loc.T("The shortcut processes selected text with this provider. Results open for review.")
                     : ConfigTrigger.SelectedId == "Manual" ? "" : Loc.T("Applies automatically to matching dictations. Uses your dictation paste and history settings.")));

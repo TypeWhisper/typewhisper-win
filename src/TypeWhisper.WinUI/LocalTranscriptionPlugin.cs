@@ -138,7 +138,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             _lease.Engine.SetAccelerationPreference(Acceleration);
             try { _host.SetSetting("Enabled", true); }
             catch { await ReleaseAsync(); throw; }
-            var selected = _host.GetSetting<string>("SelectedModelId") ?? _lease.Engine.SelectedModelId
+            var policy = PolicyModels?.Invoke() ?? default;
+            var selected = policy.Enforced ?? _host.GetSetting<string>("SelectedModelId") ?? policy.Recommended ?? _lease.Engine.SelectedModelId
                 ?? Models.FirstOrDefault(model => model.Model.IsRecommended)?.Model.Id
                 ?? Models.FirstOrDefault()?.Model.Id;
             if (selected is null || !Models.Any(m => m.Model.Id == selected && m.Downloaded))
@@ -147,8 +148,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 return;
             }
             // An activation failure keeps the package available for download/retry; a policy refusal after the
-            // load already released the engine and recorded its reason.
-            try { await ActivateCoreAsync(selected, CancellationToken.None); }
+            // load already released the engine and recorded its reason. An enforced model is never saved as the
+            // user's choice.
+            try { await ActivateCoreAsync(selected, CancellationToken.None, persistSelection: policy.Enforced is null); }
             catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { }
             catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); }
         }
@@ -383,6 +385,12 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
 
     /// <summary>Set by the host: why machine policy refuses model downloads, or null. Absent in tests.</summary>
     internal static Func<string?>? ModelDownloadRefusal { get; set; }
+
+    /// <summary>Set by the host: the model policy enforces or recommends for this engine, or nulls. Absent in tests.</summary>
+    internal static Func<(string? Enforced, string? Recommended)>? PolicyModels { get; set; }
+
+    /// <summary>The model the user saved as their selection, independent of what policy loaded.</summary>
+    internal string? SavedModelId => _host.GetSetting<string>("SelectedModelId");
 
     internal async Task DownloadAsync(string modelId, CancellationToken ct = default, bool propagateErrors = false)
     {

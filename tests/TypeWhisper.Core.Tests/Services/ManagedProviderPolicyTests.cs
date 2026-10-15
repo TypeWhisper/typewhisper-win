@@ -137,6 +137,72 @@ public class ManagedProviderPolicyTests
     }
 
     [Fact]
+    public void EnforcedPairs_FixTheProviderAndTheModel()
+    {
+        var policy = ManagedProviderPolicy.From(Snapshot([
+            (ManagedPolicyKeys.TranscriptionProviderId, ManagedPolicyRawValue.FromText("com.typewhisper.sherpa-onnx")),
+            (ManagedPolicyKeys.TranscriptionModelId, ManagedPolicyRawValue.FromText("parakeet-tdt-0.6b")),
+            (ManagedPolicyKeys.LlmProviderId, ManagedPolicyRawValue.FromText("com.typewhisper.groq")),
+            (ManagedPolicyKeys.LlmModelId, ManagedPolicyRawValue.FromText("llama-3.3-70b"))]));
+
+        Assert.True(policy.IsManaged);
+        Assert.Equal(new ManagedSelection("com.typewhisper.sherpa-onnx", "parakeet-tdt-0.6b"), policy.EnforcedTranscription);
+        Assert.Equal(new ManagedSelection("com.typewhisper.groq", "llama-3.3-70b"), policy.EnforcedLlm);
+        Assert.Null(policy.RecommendedTranscription);
+        Assert.False(policy.TranscriptionSelectionBlocked);
+
+        // The provider alone passes without a model; the pair passes case-insensitively.
+        Assert.Null(policy.TranscriptionRefusal("com.typewhisper.sherpa-onnx", "com.typewhisper.sherpa-onnx", ContentLocality.Local));
+        Assert.Null(policy.TranscriptionRefusal("COM.TYPEWHISPER.SHERPA-ONNX", "com.typewhisper.sherpa-onnx", ContentLocality.Local, "PARAKEET-TDT-0.6B"));
+        Assert.Contains("requires the transcription provider com.typewhisper.sherpa-onnx",
+            policy.TranscriptionRefusal("com.typewhisper.groq", "com.typewhisper.groq", ContentLocality.Cloud, "whisper-large-v3"));
+        Assert.Contains("requires the transcription model parakeet-tdt-0.6b",
+            policy.TranscriptionRefusal("com.typewhisper.sherpa-onnx", "com.typewhisper.sherpa-onnx", ContentLocality.Local, "parakeet-ctc"));
+        Assert.Null(policy.LlmRefusal("com.typewhisper.groq", "com.typewhisper.groq", ContentLocality.Cloud, "llama-3.3-70b"));
+        Assert.Contains("requires the text model provider com.typewhisper.groq",
+            policy.LlmRefusal("com.typewhisper.ollama", "com.typewhisper.ollama", ContentLocality.Local, "llama3"));
+        Assert.Contains("requires the text model llama-3.3-70b",
+            policy.LlmRefusal("com.typewhisper.groq", "com.typewhisper.groq", ContentLocality.Cloud, "mixtral"));
+    }
+
+    [Fact]
+    public void EnforcedPairs_ReportConflictsWithRestrictionsInsteadOfRelaxingThem()
+    {
+        var policy = ManagedProviderPolicy.From(Snapshot([
+            (ManagedPolicyKeys.TranscriptionProviderId, ManagedPolicyRawValue.FromText("com.typewhisper.groq")),
+            (ManagedPolicyKeys.TranscriptionModelId, ManagedPolicyRawValue.FromText("whisper-large-v3")),
+            (ManagedPolicyKeys.AllowCloudTranscription, Number(0))]));
+
+        // The required provider is itself refused by the cloud restriction: the conflict is reported, nothing runs.
+        Assert.Contains("Cloud transcription is turned off",
+            policy.TranscriptionRefusal("com.typewhisper.groq", "com.typewhisper.groq", ContentLocality.Cloud, "whisper-large-v3"));
+        Assert.Contains("requires the transcription provider",
+            policy.TranscriptionRefusal("com.typewhisper.sherpa-onnx", "com.typewhisper.sherpa-onnx", ContentLocality.Local, "parakeet-tdt-0.6b"));
+    }
+
+    [Fact]
+    public void IncompleteOrRecommendedPairs_BehaveAsSpecified()
+    {
+        // Half a pair is invalid: transcription waits, the LLM side is untouched.
+        var incomplete = ManagedProviderPolicy.From(Snapshot([(ManagedPolicyKeys.TranscriptionProviderId, ManagedPolicyRawValue.FromText("com.typewhisper.groq"))]));
+        Assert.Null(incomplete.EnforcedTranscription);
+        Assert.True(incomplete.TranscriptionSelectionBlocked);
+        Assert.False(incomplete.LlmSelectionBlocked);
+        Assert.Contains("could not be read", incomplete.TranscriptionRefusal("com.typewhisper.groq", "com.typewhisper.groq", ContentLocality.Cloud));
+        Assert.Null(incomplete.LlmRefusal("com.typewhisper.groq", "com.typewhisper.groq", ContentLocality.Cloud, "x"));
+
+        // A recommended pair never refuses anything.
+        var section = ManagedPolicyRawSection.Of([
+            KeyValuePair.Create(ManagedPolicyKeys.LlmProviderId, ManagedPolicyRawValue.FromText("com.typewhisper.ollama")),
+            KeyValuePair.Create(ManagedPolicyKeys.LlmModelId, ManagedPolicyRawValue.FromText("llama3"))]);
+        var recommended = ManagedProviderPolicy.From(ManagedPolicyValidator.Validate(new(true, null, ManagedPolicyRawSection.Missing, section), 1, DateTimeOffset.UtcNow));
+        Assert.Equal(new ManagedSelection("com.typewhisper.ollama", "llama3"), recommended.RecommendedLlm);
+        Assert.Null(recommended.EnforcedLlm);
+        Assert.True(recommended.IsManaged);
+        Assert.Null(recommended.LlmRefusal("com.typewhisper.groq", "com.typewhisper.groq", ContentLocality.Cloud, "mixtral"));
+    }
+
+    [Fact]
     public void Downloads_FollowTheirKeys()
     {
         var policy = ManagedProviderPolicy.From(Snapshot([(ManagedPolicyKeys.AllowPluginDownloads, Number(0)), (ManagedPolicyKeys.AllowModelDownloads, Number(0))]));
