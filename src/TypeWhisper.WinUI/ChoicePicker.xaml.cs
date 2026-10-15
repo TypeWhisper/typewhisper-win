@@ -224,10 +224,11 @@ public sealed partial class ChoicePicker : UserControl
     private static int MatchRank(Choice option, string query)
     {
         if (query.Length == 0) return 0;
-        var compare = CultureInfo.CurrentCulture.CompareInfo;
+        // Labels follow the interface language, which can differ from the regional format (Turkish i).
+        var compare = CultureInfo.CurrentUICulture.CompareInfo;
         const CompareOptions options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace | CompareOptions.IgnoreWidth | CompareOptions.IgnoreKanaType;
         if (compare.IsPrefix(option.Label, query, options)) return 0;
-        if (compare.IsPrefix(option.Id, query, options)) return 1;
+        if (option.Id.StartsWith(query, StringComparison.OrdinalIgnoreCase)) return 1;
         var rank = -1;
         for (var index = compare.IndexOf(option.Label, query, options); index >= 0;
             index = index + 1 < option.Label.Length ? compare.IndexOf(option.Label, query, index + 1, options) : -1)
