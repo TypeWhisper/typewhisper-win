@@ -83,6 +83,27 @@ public sealed record ManagedProviderPolicy(
         ?? (AllowedPlugins is not null && !AllowedPlugins.Contains(pluginId)
             ? Loc.T("The plugin {0} is not allowed by your organization.", pluginId) : null);
 
+    /// <summary>
+    /// Why a package may not be installed, loaded or enabled at all: it is outside the allowlist, or it processes content
+    /// remotely and the cloud keys refuse every capability its categories declare. A package without recognized
+    /// categories is judged by the allowlist only; its roles are still checked when they are used.
+    /// </summary>
+    public string? PackageRefusal(string pluginId, ContentLocality locality, IEnumerable<string>? categories)
+    {
+        if (PluginRefusal(pluginId) is { } refused) return refused;
+        if (locality == ContentLocality.Local) return null;
+        var ids = new HashSet<string>((categories ?? []).Select(id => id.Trim()).Where(id => id.Length > 0), StringComparer.OrdinalIgnoreCase);
+        if (ids.Count == 0) return null;
+        var audio = ids.Contains("transcription");
+        var text = ids.Any(id => !id.Equals("transcription", StringComparison.OrdinalIgnoreCase));
+        var audioRefusal = !audio ? null : Blocked(ManagedPolicyKeys.AllowCloudTranscription) ?? (CloudTranscriptionAllowed == false ? CloudPackageRefusal : null);
+        var textRefusal = !text ? null : Blocked(ManagedPolicyKeys.AllowCloudTextProcessing) ?? (CloudTextProcessingAllowed == false ? CloudPackageRefusal : null);
+        if (audio && audioRefusal is null || text && textRefusal is null) return null;
+        return audioRefusal ?? textRefusal;
+    }
+
+    private static string CloudPackageRefusal => Loc.T("This plugin processes content in the cloud, which your organization has turned off.");
+
     /// <summary>Why audio may not be sent to a transcription role, or null.</summary>
     public string? TranscriptionRefusal(string selectionId, string pluginId, ContentLocality locality) =>
         PluginRefusal(pluginId)

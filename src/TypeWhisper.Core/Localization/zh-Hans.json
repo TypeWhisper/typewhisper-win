@@ -3175,5 +3175,8 @@
   "Sending text to {0} is turned off by your organization.": "你的组织已关闭向 {0} 发送文本。",
   "Plugin downloads are turned off by your organization.": "你的组织已关闭插件下载。",
   "Model downloads are turned off by your organization.": "你的组织已关闭模型下载。",
-  "Your organization's policy could not be read. This operation waits until it is readable.": "无法读取你的组织的策略。此操作将等待策略可读后再进行。"
+  "Your organization's policy could not be read. This operation waits until it is readable.": "无法读取你的组织的策略。此操作将等待策略可读后再进行。",
+  "Not allowed": "不允许",
+  "Configurable": "可配置",
+  "This plugin processes content in the cloud, which your organization has turned off.": "此插件在云端处理内容，而你的组织已关闭云端处理。"
 }

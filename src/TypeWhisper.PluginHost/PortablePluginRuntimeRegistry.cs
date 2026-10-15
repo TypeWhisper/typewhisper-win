@@ -68,6 +68,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal bool IsLocal;
         // Declared by the manifest; Unknown counts as not local under restrictive policy.
         internal ContentLocality Locality = ContentLocality.Unknown;
+        internal IReadOnlyList<string>? Categories;
         internal long Generation;
         internal string? Error;
         internal bool CapabilityError;
@@ -105,13 +106,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>The machine policy consulted before packages load and before content reaches a plugin.</summary>
     private ManagedProviderPolicy Policy => policy?.Invoke() ?? ManagedProviderPolicy.None;
 
-    private static ContentLocality Map(PluginLocality locality) => locality switch
+    /// <summary>Why policy refuses a package as a whole, or null. A package the registry has not seen is judged by the allowlist only.</summary>
+    public string? PackageRefusal(string pluginId)
     {
-        PluginLocality.Local => ContentLocality.Local,
-        PluginLocality.Cloud => ContentLocality.Cloud,
-        PluginLocality.Configurable => ContentLocality.Configurable,
-        _ => ContentLocality.Unknown
-    };
+        lock (_sync) return _slots.TryGetValue(pluginId, out var slot) && slot.Categories is not null
+            ? Policy.PackageRefusal(pluginId, slot.Locality, slot.Categories) : Policy.PluginRefusal(pluginId);
+    }
 
     /// <summary>Why policy refuses audio for an enabled transcription role, or null. Unknown roles return null.</summary>
     public string? TranscriptionRefusal(string selectionId)
@@ -186,13 +186,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (package.Manifest is not { } manifest) continue;
             if (ownsPlugin?.Invoke(manifest.Id) == false) continue;
             // A package policy does not allow is never loaded; its slot only carries the reason.
-            var refused = Policy.PluginRefusal(manifest.Id);
+            var refused = Policy.PackageRefusal(manifest.Id, PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality), manifest.Categories);
             Slot slot;
             lock (_sync)
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 if (!_slots.TryGetValue(manifest.Id, out slot!))
                     _slots.Add(manifest.Id, slot = new(manifest.Id, new RuntimePluginHostServices(createServices(manifest.Id), QueueRefresh)));
+                slot.Locality = PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality);
+                slot.Categories = manifest.Categories ?? [];
                 slot.Error = package.Error ?? refused;
             }
             if (package.Error is not null || refused is not null) continue;
@@ -225,7 +227,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             }
             if (enabled && slot.Accepting) return null;
             // Policy is checked before any code of the package loads; disabling is always allowed.
-            if (enabled && Policy.PluginRefusal(pluginId) is { } refused) { slot.Error = refused; return refused; }
+            if (enabled && PackageRefusal(pluginId) is { } refused) { slot.Error = refused; return refused; }
             generation = ++slot.Generation;
             slot.Accepting = false;
             CancelRequest(slot);
@@ -258,7 +260,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             slot.Package = package;
             slot.Directory = directory;
             slot.IsLocal = inspection.Manifest.IsLocal;
-            slot.Locality = Map(inspection.Manifest.ResolvedLocality);
+            slot.Locality = PluginLocalityMap.ToContentLocality(inspection.Manifest.ResolvedLocality);
+            slot.Categories = inspection.Manifest.Categories ?? [];
+            if (Policy.PackageRefusal(pluginId, slot.Locality, slot.Categories) is { } refusedPackage) throw new ManagedPolicyDeniedException("plugin", refusedPackage);
             try
             {
                 var next = BuildIndex();

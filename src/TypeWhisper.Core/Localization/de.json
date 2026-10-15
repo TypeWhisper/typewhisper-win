@@ -3175,5 +3175,8 @@
   "Sending text to {0} is turned off by your organization.": "Das Senden von Text an {0} ist von deiner Organisation deaktiviert.",
   "Plugin downloads are turned off by your organization.": "Plugin-Downloads sind von deiner Organisation deaktiviert.",
   "Model downloads are turned off by your organization.": "Modell-Downloads sind von deiner Organisation deaktiviert.",
-  "Your organization's policy could not be read. This operation waits until it is readable.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Dieser Vorgang wartet, bis sie lesbar ist."
+  "Your organization's policy could not be read. This operation waits until it is readable.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Dieser Vorgang wartet, bis sie lesbar ist.",
+  "Not allowed": "Nicht erlaubt",
+  "Configurable": "Konfigurierbar",
+  "This plugin processes content in the cloud, which your organization has turned off.": "Dieses Plugin verarbeitet Inhalte in der Cloud, was deine Organisation deaktiviert hat."
 }

@@ -3175,5 +3175,8 @@
   "Sending text to {0} is turned off by your organization.": "{0} へのテキスト送信は組織によって無効化されています。",
   "Plugin downloads are turned off by your organization.": "プラグインのダウンロードは組織によって無効化されています。",
   "Model downloads are turned off by your organization.": "モデルのダウンロードは組織によって無効化されています。",
-  "Your organization's policy could not be read. This operation waits until it is readable.": "組織のポリシーを読み取れませんでした。この操作は読み取れるようになるまで保留されます。"
+  "Your organization's policy could not be read. This operation waits until it is readable.": "組織のポリシーを読み取れませんでした。この操作は読み取れるようになるまで保留されます。",
+  "Not allowed": "許可されていません",
+  "Configurable": "設定可能",
+  "This plugin processes content in the cloud, which your organization has turned off.": "このプラグインはコンテンツをクラウドで処理しますが、組織によって無効化されています。"
 }

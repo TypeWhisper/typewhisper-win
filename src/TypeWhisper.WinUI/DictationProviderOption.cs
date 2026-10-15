@@ -7,6 +7,8 @@ internal sealed record DictationProviderOption(string Id, string PluginId, strin
     bool Enabled, bool Configured, bool Cloud, string? SelectedModelId,
     IReadOnlyList<DictationModelOption> Models)
 {
+    /// <summary>Why machine policy refuses this provider for dictation, or null.</summary>
+    internal string? Refusal { get; init; }
     internal bool Ready => Enabled && Configured && Models.Any(model => model.Ready);
     internal string Status => !Enabled ? Loc.T("Disabled") : !Configured ? Loc.T("Setup required")
         : !Ready ? Loc.T("Download required") : Loc.T("Ready");
