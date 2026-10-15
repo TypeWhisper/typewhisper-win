@@ -36,6 +36,7 @@ internal sealed partial class LocalDictationSession
 
     internal async Task<string?> ApiChangeModelAsync(string operation, DictationProviderOption provider, string? modelId, CancellationToken ct)
     {
+        if (operation == "load" && SelectionRefusal(provider.Id, modelId ?? "") is { } refused) throw new LocalApiRequestException(403, refused);
         if (!CanChangeProvider || Models.Busy || !await _gate.WaitAsync(0, ct))
             throw new InvalidOperationException("Finish dictation and model operations first.");
         try

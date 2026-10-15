@@ -51,7 +51,7 @@ internal sealed partial class LocalDictationSession
             samples = ShortClipCapturePolicy.PadForFinalDecode(samples);
             // Deliberately bypass dictionary hints, CTC, snippets, formatting, workflows and History.
             var language = Language == "auto" ? null : Language;
-            if (!owner.UsesRegistryProvider) DenyLocalTranscriptionIfRefused();
+            if (!owner.UsesRegistryProvider) owner.DenyLocalTranscriptionIfRefused();
             var result = owner.UsesRegistryProvider
                 ? await owner.PluginRuntime.UseTranscriptionAsync(RegistrySelectionId(owner._providerId), (engine, token) =>
                     LanguageHintTranscription.DecodeAsync(engine, samples, () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),

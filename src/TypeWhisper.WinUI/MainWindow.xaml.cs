@@ -118,6 +118,7 @@ public sealed partial class MainWindow : Window
             _ = StartCloudSyncAfterAccessChecksAsync(Task.WhenAll(WinUILicensing.ValidateAsync(), WinUIPremiumAccount.RefreshAsync()));
             // Policy that appears or changes while running is applied without a restart: license key, updates, startup.
             WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(ApplyManagedPolicyChange);
+            ManagedPolicyView.RuntimeIssues = _dictation.SelectionPolicyIssues;
             _ = ApplyStartupPolicyAsync();
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
             _ = UpdatePluginsAutomaticallyAsync();

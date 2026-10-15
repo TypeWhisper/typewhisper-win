@@ -11,13 +11,15 @@ public sealed partial class MainWindow
         new(StartupRegistration, new StartupPolicyStore(WinUIProfile.DataPath("startup-policy.json")));
     private static bool SetupCompleted => new SetupPreferencesStore(WinUIProfile.DataPath("setup.json")).Current.Completed;
 
-    // Runs on the UI thread after every policy change: the license key, cached update offers and the startup registration.
+    // Runs on the UI thread after every policy change: the license key, cached update offers, the startup registration
+    // and the enforced dictation provider and model.
     internal void ApplyManagedPolicyChange()
     {
         if (_closing || _profileRestoreClosing) return;
         WinUILicensing.ApplyPolicyChange();
         _applicationUpdates?.PolicyChanged();
         _ = ApplyStartupPolicyAsync();
+        _ = _dictation.ApplySelectionPolicyAsync();
     }
 
     internal async Task ApplyStartupPolicyAsync()
