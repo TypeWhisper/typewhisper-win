@@ -26,8 +26,11 @@ public sealed partial class PortablePluginRuntimeRegistry
             if (!_slots.TryGetValue(expected.PluginId, out owner!) || !owner.Accepting || owner.Generation != expected.Generation)
                 throw new InvalidOperationException("The selected memory source is no longer available.");
         }
+        // The query carries transcript context, so a remote memory source follows the text-processing policy.
+        DenyTextTransferIfRefused(owner, "memory");
         return UseAsync(owner, async token =>
         {
+            DenyTextTransferIfRefused(owner, "memory");
             if (owner.Generation != expected.Generation || owner.Package?.Plugin is not IMemoryStoragePlugin memory)
                 throw new InvalidOperationException("The selected memory source changed before execution.");
             return await memory.SearchAsync(query, 5, token).ConfigureAwait(false);

@@ -23,9 +23,10 @@ public sealed class PortablePluginUpdates(PortablePluginStore store, PortablePlu
     public int Updated { get; private set; }
     public bool RestartRequired => _entries.Any(entry => store.PendingRestart(entry.Id));
     public IReadOnlyList<PortableCatalogEntry> Available => _entries.Where(IsAvailable).ToArray();
+    // Packages that policy would refuse to download are not offered, so automatic updates never attempt them.
     public bool IsAvailable(PortableCatalogEntry entry) => entry.Supports(hostVersion, architecture) &&
         !store.PendingRestart(entry.Id) && Version.TryParse(store.InstalledVersion(entry.Id), out var installed) &&
-        Version.TryParse(entry.Version, out var offered) && offered > installed;
+        Version.TryParse(entry.Version, out var offered) && offered > installed && store.InstallRefusal(entry.Id) is null;
     public bool HasUpdate(string id) => _entries.Any(entry => entry.Id == id && IsAvailable(entry));
 
     public void AcceptCatalog(IReadOnlyList<PortableCatalogEntry> entries)

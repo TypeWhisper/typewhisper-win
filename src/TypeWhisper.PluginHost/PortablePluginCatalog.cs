@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginHost;
 
@@ -19,12 +20,19 @@ public sealed record PortableCatalogEntry
     public long Size { get; init; }
     public string[] Platforms { get; init; } = ["windows"];
     public string[] SupportedArchitectures { get; init; } = [];
+    /// <summary>Where the package processes content: local, cloud or configurable. Older feeds leave it null.</summary>
+    public string? Locality { get; init; }
+
+    /// <summary>The declared locality; null and unknown values are <see cref="PluginLocality.Unknown"/>.</summary>
+    public PluginLocality ResolvedLocality => PluginLocalityValues.Parse(Locality);
 
     public void Validate()
     {
         ValidateId(Id);
         if (Categories is null || Categories.Any(id => string.IsNullOrWhiteSpace(id) || id == "all"))
             throw new InvalidDataException("Invalid plugin categories.");
+        if (Locality is not null && PluginLocalityValues.Parse(Locality) == PluginLocality.Unknown)
+            throw new InvalidDataException("The catalog declares an unknown locality for " + Id + ".");
         if (string.IsNullOrWhiteSpace(Name) || !System.Version.TryParse(Version, out _) ||
             !System.Version.TryParse(MinHostVersion, out _) || !Regex.IsMatch(Sha256 ?? "", "^[a-fA-F0-9]{64}$") ||
             Size <= 0 || Size > PortablePluginStore.MaximumPackageBytes ||

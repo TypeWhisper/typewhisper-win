@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.webhook",
+  "locality": "configurable",
   "name": "Webhook",
   "version": "1.3.3",
   "author": "TypeWhisper",

@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.obsidian",
+  "locality": "local",
   "name": "Obsidian",
   "version": "1.0.0",
   "author": "TypeWhisper",

@@ -15,6 +15,7 @@ public sealed class PortablePluginStore
     private readonly HttpClient _http;
     private readonly Version _host;
     private readonly Func<string, IPluginHostServices>? _services;
+    private readonly Func<TypeWhisper.Core.Models.ManagedProviderPolicy>? _policy;
     private readonly SemaphoreSlim _operation = new(1, 1);
     private readonly object _sync = new();
     private Dictionary<string, Receipt> _installed = new(StringComparer.Ordinal);
@@ -23,8 +24,16 @@ public sealed class PortablePluginStore
     public string Root { get; }
     public string InventoryRoot => Path.Combine(Root, "installed");
     public bool Initialized => _initialized;
-    public PortablePluginStore(string root, Version host, HttpClient http, Func<string, IPluginHostServices>? services = null)
-    { Root = Path.GetFullPath(root); _host = host; _http = http; _services = services; }
+    public PortablePluginStore(string root, Version host, HttpClient http, Func<string, IPluginHostServices>? services = null,
+        Func<TypeWhisper.Core.Models.ManagedProviderPolicy>? policy = null)
+    { Root = Path.GetFullPath(root); _host = host; _http = http; _services = services; _policy = policy; }
+
+    /// <summary>Why machine policy refuses installing or updating a package, or null.</summary>
+    public string? InstallRefusal(string pluginId)
+    {
+        var policy = _policy?.Invoke() ?? TypeWhisper.Core.Models.ManagedProviderPolicy.None;
+        return policy.PluginDownloadRefusal() ?? policy.PluginRefusal(pluginId);
+    }
 
     /// <summary>Initializes the authoritative installation index. Optional bootstrap IDs select bundle directories only when no index exists.</summary>
     public async Task InitializeAsync(string? bundledRoot = null, CancellationToken ct = default,
@@ -111,6 +120,8 @@ public sealed class PortablePluginStore
     {
         entry.Validate();
         if (!entry.Supports(_host, PortablePluginCatalog.Architecture)) throw new InvalidDataException("This package does not support this host or architecture.");
+        // Policy is checked before any byte is downloaded and before installation hooks run.
+        if (InstallRefusal(entry.Id) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refused);
         await _operation.WaitAsync(ct);
         string? package = null;
         var archive = Path.Combine(Root, Guid.NewGuid().ToString("N") + ".zip");

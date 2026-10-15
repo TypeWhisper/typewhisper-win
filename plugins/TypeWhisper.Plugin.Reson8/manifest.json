@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.reson8",
+  "locality": "configurable",
   "name": "Reson8",
   "version": "1.2.10",
   "author": "Y. Vos",

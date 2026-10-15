@@ -31,18 +31,22 @@ class HostSchemaTests(unittest.TestCase):
     def entry(self):
         return dict(id='com.typewhisper.example', name='Example', version='1.0.0', minHostVersion='1.1.0',
                     sha256='a' * 64, size=100, downloadUrl='https://example.com/plugin.zip',
-                    categories=['memory'], platforms=['windows'], supportedArchitectures=['x64'])
+                    categories=['memory'], platforms=['windows'], supportedArchitectures=['x64'], locality='cloud')
 
     def test_valid_array_and_object_with_default_minimum(self):
         self.assertEqual(0, self.run_verifier([self.entry()]))
         entry = self.entry()
         entry.pop('minHostVersion')
         self.assertEqual(0, self.run_verifier({'plugins': [entry]}))
+        entry = self.entry()
+        entry.pop('locality')
+        self.assertEqual(0, self.run_verifier({'plugins': [entry]}))
 
     def test_host_rejects_invalid_metadata_and_duplicates(self):
         mutations = [dict(categories=['all']), dict(categories=[' ']), dict(categories=None), dict(id='../bad'),
                      dict(name=' '), dict(version='invalid'), dict(minHostVersion='invalid'),
-                     dict(sha256='bad'), dict(size=0), dict(size=2**50), dict(downloadUrl='http://example.com/a.zip')]
+                     dict(sha256='bad'), dict(size=0), dict(size=2**50), dict(downloadUrl='http://example.com/a.zip'),
+                     dict(locality='bogus')]
         for mutation in mutations:
             with self.subTest(mutation=mutation):
                 self.assertNotEqual(0, self.run_verifier({'plugins': [self.entry() | mutation]}))

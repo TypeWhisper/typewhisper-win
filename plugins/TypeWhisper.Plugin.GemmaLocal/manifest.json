@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.gemma-local",
+  "locality": "local",
   "name": "Gemma 3 (Local)",
   "version": "1.2.5",
   "minHostVersion": "1.1.3",

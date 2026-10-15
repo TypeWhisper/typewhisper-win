@@ -3173,5 +3173,14 @@
   "Version {0} is older than your installed version.": "バージョン {0} はインストール済みのバージョンより古いです。",
   "The update policy changed. Check for updates again.": "更新ポリシーが変更されました。もう一度更新を確認してください。",
   "Last change {0}": "最終変更 {0}",
-  "Version {0} is available. Check for updates in Settings to install it.": "バージョン {0} が利用可能です。インストールするには設定で更新を確認してください。"
+  "Version {0} is available. Check for updates in Settings to install it.": "バージョン {0} が利用可能です。インストールするには設定で更新を確認してください。",
+  "The plugin {0} is not allowed by your organization.": "プラグイン {0} は組織で許可されていません。",
+  "The transcription provider {0} is not allowed by your organization.": "文字起こしプロバイダー {0} は組織で許可されていません。",
+  "Cloud transcription is turned off by your organization. Choose a local transcription model.": "クラウド文字起こしは組織によって無効化されています。ローカルの文字起こしモデルを選んでください。",
+  "The text model provider {0} is not allowed by your organization.": "テキストモデルのプロバイダー {0} は組織で許可されていません。",
+  "Cloud text processing is turned off by your organization. Choose a local text model.": "クラウドでのテキスト処理は組織によって無効化されています。ローカルのテキストモデルを選んでください。",
+  "Sending text to {0} is turned off by your organization.": "{0} へのテキスト送信は組織によって無効化されています。",
+  "Plugin downloads are turned off by your organization.": "プラグインのダウンロードは組織によって無効化されています。",
+  "Model downloads are turned off by your organization.": "モデルのダウンロードは組織によって無効化されています。",
+  "Your organization's policy could not be read. This operation waits until it is readable.": "組織のポリシーを読み取れませんでした。この操作は読み取れるようになるまで保留されます。"
 }

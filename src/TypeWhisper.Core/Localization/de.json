@@ -3173,5 +3173,14 @@
   "Version {0} is older than your installed version.": "Version {0} ist älter als deine installierte Version.",
   "The update policy changed. Check for updates again.": "Die Update-Richtlinie hat sich geändert. Suche erneut nach Updates.",
   "Last change {0}": "Letzte Änderung {0}",
-  "Version {0} is available. Check for updates in Settings to install it.": "Version {0} ist verfügbar. Suche in den Einstellungen nach Updates, um sie zu installieren."
+  "Version {0} is available. Check for updates in Settings to install it.": "Version {0} ist verfügbar. Suche in den Einstellungen nach Updates, um sie zu installieren.",
+  "The plugin {0} is not allowed by your organization.": "Das Plugin {0} ist von deiner Organisation nicht erlaubt.",
+  "The transcription provider {0} is not allowed by your organization.": "Der Transkriptionsanbieter {0} ist von deiner Organisation nicht erlaubt.",
+  "Cloud transcription is turned off by your organization. Choose a local transcription model.": "Cloud-Transkription ist von deiner Organisation deaktiviert. Wähle ein lokales Transkriptionsmodell.",
+  "The text model provider {0} is not allowed by your organization.": "Der Textmodell-Anbieter {0} ist von deiner Organisation nicht erlaubt.",
+  "Cloud text processing is turned off by your organization. Choose a local text model.": "Cloud-Textverarbeitung ist von deiner Organisation deaktiviert. Wähle ein lokales Textmodell.",
+  "Sending text to {0} is turned off by your organization.": "Das Senden von Text an {0} ist von deiner Organisation deaktiviert.",
+  "Plugin downloads are turned off by your organization.": "Plugin-Downloads sind von deiner Organisation deaktiviert.",
+  "Model downloads are turned off by your organization.": "Modell-Downloads sind von deiner Organisation deaktiviert.",
+  "Your organization's policy could not be read. This operation waits until it is readable.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Dieser Vorgang wartet, bis sie lesbar ist."
 }
