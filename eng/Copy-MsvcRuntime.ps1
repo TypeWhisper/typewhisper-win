@@ -5,6 +5,12 @@ param(
 
     [string[]]$RuntimeIdentifiers = @("win-x64", "win-arm64"),
 
+    # Files to stage from the Visual C++ redistributable; whisper.cpp needs OpenMP, ONNX Runtime needs msvcp140_1.
+    [string[]]$Dlls = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "VCOMP140.DLL"),
+
+    # Placed below runtimes/<rid>/; "native" for NuGet-style native folders, empty for whisper.cpp's layout.
+    [string]$Subdirectory = "",
+
     [switch]$Required
 )
 
@@ -12,11 +18,15 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $requiredDlls = @(
-    "msvcp140.dll",
-    "vcruntime140.dll",
-    "vcruntime140_1.dll",
-    "VCOMP140.DLL"
+    $Dlls |
+        ForEach-Object { $_ -split "[,;]" } |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_.Length -gt 0 } |
+        Select-Object -Unique
 )
+if ($requiredDlls.Count -eq 0) {
+    throw "No runtime DLLs were requested."
+}
 
 $architectureByRuntime = @{
     "win-x64" = "x64"
@@ -159,6 +169,9 @@ foreach ($runtimeIdentifier in $normalizedRuntimeIdentifiers) {
 
     $architecture = $architectureByRuntime[$runtimeIdentifier]
     $runtimeDirectory = Join-Path (Join-Path $OutputDirectory "runtimes") $runtimeIdentifier
+    if (-not [string]::IsNullOrWhiteSpace($Subdirectory)) {
+        $runtimeDirectory = Join-Path $runtimeDirectory $Subdirectory
+    }
     New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 
     foreach ($dll in $requiredDlls) {

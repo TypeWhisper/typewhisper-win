@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
+    <PortableRuntimeIdentifiers Condition="'$(PortableRuntimeIdentifiers)' == ''">win-x64</PortableRuntimeIdentifiers>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -13,4 +14,9 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <PackageReference Include="SharpCompress" />
   </ItemGroup>
+  <!-- The ONNX Runtime from NuGet links against the Visual C++ runtime. Machines without the redistributable cannot
+       load it, so the package carries the runtime files next to onnxruntime.dll, as the whisper.cpp package does. -->
+  <Target Name="StageMsvcRuntime" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../eng/Copy-MsvcRuntime.ps1&quot; -OutputDirectory &quot;$(TargetDir).&quot; -RuntimeIdentifiers $(PortableRuntimeIdentifiers) -Subdirectory native -Dlls msvcp140.dll,msvcp140_1.dll,vcruntime140.dll,vcruntime140_1.dll -Required" />
+  </Target>
 </Project>

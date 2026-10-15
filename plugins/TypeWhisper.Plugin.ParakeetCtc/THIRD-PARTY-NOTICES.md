@@ -1,4 +1,11 @@
-# Model and algorithm references
+# Third-party notices
+
+## Bundled runtime
+
+- ONNX Runtime (NuGet `Microsoft.ML.OnnxRuntime`, bundled as `runtimes/win-x64/native/onnxruntime.dll`): Microsoft Corporation, MIT. https://github.com/microsoft/onnxruntime
+- Microsoft Visual C++ Redistributable runtime files (`msvcp140.dll`, `msvcp140_1.dll`, `vcruntime140.dll`, `vcruntime140_1.dll`, bundled next to that ONNX Runtime so it loads on machines without the redistributable): Microsoft Corporation, redistributable under the Microsoft Visual Studio license terms.
+
+## Model and algorithm references
 
 The BPE merge algorithm, per-token constrained CTC score normalization and adaptive context-bias policy follow FluidInference/FluidAudio 0.15.5, revision `19600a485baa4998812e4654b70d2bab8f2c9949` (Apache-2.0). These are C# adaptations; the full FluidAudio pipeline is not bundled. Sources: `BpeTokenizer.swift`, `CtcDPAlgorithm.swift`, `VocabularyRescorer.swift`, `VocabularyRescorer+TokenEvaluation.swift`, `ContextBiasingConstants.swift`. The separate tokenizer asset is from the official FluidInference model repository; its checksum and validation requirements are documented in README.md.
 
