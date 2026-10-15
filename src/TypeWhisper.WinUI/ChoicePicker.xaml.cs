@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -211,18 +212,30 @@ public sealed partial class ChoicePicker : UserControl
         foreach (var row in _rows.Select(row => (Rank: MatchRank(row.Option, query), row.Button))
             .Where(row => row.Rank >= 0).OrderBy(row => row.Rank))
             Choices.Children.Add(row.Button);
-        NoMatches.Visibility = Choices.Children.Count == 0 && query.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var empty = Choices.Children.Count == 0 && query.Length > 0;
+        var announce = empty && NoMatches.Visibility == Visibility.Collapsed;
+        NoMatches.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        // LiveSetting alone does not make Narrator read the message.
+        if (announce) (FrameworkElementAutomationPeer.FromElement(NoMatches) ?? FrameworkElementAutomationPeer.CreatePeerForElement(NoMatches))
+            ?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
+    // 0 name prefix, 1 code prefix, 2 word prefix, 3 inside a word, -1 no match.
     private static int MatchRank(Choice option, string query)
     {
         if (query.Length == 0) return 0;
         var compare = CultureInfo.CurrentCulture.CompareInfo;
         const CompareOptions options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace | CompareOptions.IgnoreWidth | CompareOptions.IgnoreKanaType;
-        if (compare.IsPrefix(option.Label, query, options) || compare.IsPrefix(option.Id, query, options)) return 0;
-        var index = compare.IndexOf(option.Label, query, options);
-        if (index < 0) return -1;
-        return index > 0 && char.IsLetterOrDigit(option.Label[index - 1]) ? 2 : 1;
+        if (compare.IsPrefix(option.Label, query, options)) return 0;
+        if (compare.IsPrefix(option.Id, query, options)) return 1;
+        var rank = -1;
+        for (var index = compare.IndexOf(option.Label, query, options); index >= 0;
+            index = index + 1 < option.Label.Length ? compare.IndexOf(option.Label, query, index + 1, options) : -1)
+        {
+            if (index == 0 || !char.IsLetterOrDigit(option.Label[index - 1])) return 2;
+            rank = 3;
+        }
+        return rank;
     }
 
     private void ChoiceSearch_TextChanged(object sender, TextChangedEventArgs e)
