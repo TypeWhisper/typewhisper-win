@@ -183,8 +183,9 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
             Offer = result.Offer; _offerChannel = Offer is null ? null : channel;
             Status = !result.ChannelPublished ? Loc.T("No compatible WinUI release is available on this channel yet.")
                 : Offer is null ? Loc.T("You are up to date on this channel.")
+                : Policy.InstallRefusal(channel) is { } installRefusal
+                    ? (Offer.IsDowngrade ? Loc.T("Version {0} is older than your installed version.", Offer.Version) : Loc.T("Version {0} is available.", Offer.Version)) + " " + installRefusal
                 : Offer.IsDowngrade ? Loc.T("Version {0} is older than your installed version. Installing it switches to the selected channel.", Offer.Version)
-                : Policy.InstallRefusal(channel) is { } installRefusal ? Loc.T("Version {0} is available.", Offer.Version) + " " + installRefusal
                 : Loc.T("Version {0} is available.", Offer.Version);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Update check failed: {0}", ex.Message); }
