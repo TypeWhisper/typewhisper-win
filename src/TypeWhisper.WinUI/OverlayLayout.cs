@@ -3,7 +3,7 @@ namespace TypeWhisper.WinUI;
 internal enum OverlayScreen { ActiveScreen, PrimaryScreen }
 internal enum OverlayMode { Standard, Compact, Minimal }
 internal enum OverlayAnchor { TopLeft, TopCenter, TopRight, BottomLeft, BottomCenter, BottomRight }
-internal enum OverlayWidget { None, Indicator, Waveform, Timer, Clock, Profile, HotkeyMode, AppName }
+internal enum OverlayWidget { None, Indicator, Waveform, Timer, Clock, Profile, HotkeyMode, AppName, AppIcon }
 
 internal sealed record OverlayPreferences(OverlayMode Mode, bool LiveText, bool TechnicalDetails,
     OverlayAnchor Anchor = OverlayAnchor.BottomCenter,

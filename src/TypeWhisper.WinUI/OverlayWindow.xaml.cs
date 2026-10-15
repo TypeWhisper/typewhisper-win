@@ -387,6 +387,10 @@ public sealed partial class OverlayWindow : Window
         RecordingLayout.ColumnDefinitions[1].Width = left == OverlayWidget.None ? GridLength.Auto : right == OverlayWidget.Waveform ? new GridLength(1, GridUnitType.Auto) : new GridLength(1, GridUnitType.Star);
         RecordingLayout.ColumnDefinitions[2].Width = right == OverlayWidget.Waveform ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
         RightWidgetHost.MaxWidth = _mode == OverlayMode.Compact ? 122 : 172;
+        // Without a name beside it the icon carries the widget alone, so Standard shows it a little larger.
+        var iconSize = _mode == OverlayMode.Compact ? 16 : 22;
+        LeftAppIconHost.Width = LeftAppIconHost.Height = RightAppIconHost.Width = RightAppIconHost.Height = iconSize;
+        LeftAppFallback.FontSize = RightAppFallback.FontSize = iconSize;
         UpdateWidgetText(LeftWidgetText, left);
         UpdateWidgetText(RightWidgetText, right);
         // A mandatory status dot remains even when both configurable slots are empty.
@@ -399,14 +403,18 @@ public sealed partial class OverlayWindow : Window
         var host = text == LeftWidgetText ? LeftWidgetHost : RightWidgetHost;
         var iconHost = text == LeftWidgetText ? LeftAppIconHost : RightAppIconHost;
         host.Visibility = widget is OverlayWidget.None or OverlayWidget.Timer or OverlayWidget.Waveform ? Visibility.Collapsed : Visibility.Visible;
-        iconHost.Visibility = widget == OverlayWidget.AppName ? Visibility.Visible : Visibility.Collapsed;
+        iconHost.Visibility = widget == OverlayWidget.AppIcon ? Visibility.Visible : Visibility.Collapsed;
+        text.Visibility = widget == OverlayWidget.AppIcon ? Visibility.Collapsed : Visibility.Visible;
+        var appName = widget is OverlayWidget.AppName or OverlayWidget.AppIcon
+            ? (_runtimeState?.Invoke().TargetApp is { } app ? Loc.T(app) : null) ?? "Notepad" : "";
+        AutomationProperties.SetName(iconHost, widget == OverlayWidget.AppIcon ? appName : "");
         text.Text = widget switch
         {
             // The regional short time, so 12-hour regions read "10:05 PM". The host trims at 122/172 px, which holds it at 12 px.
             OverlayWidget.Clock => DateTime.Now.ToString("t", CultureInfo.CurrentCulture),
             OverlayWidget.Profile => _runtimeState is null ? Loc.T("Default profile") : "Parakeet",
             OverlayWidget.HotkeyMode => _runtimeState?.Invoke().RecordingModeLabel ?? Loc.T("Toggle"),
-            OverlayWidget.AppName => (_runtimeState?.Invoke().TargetApp is { } app ? Loc.T(app) : null) ?? "Notepad",
+            OverlayWidget.AppName => appName,
             OverlayWidget.Indicator => _runtimeState?.Invoke().Label ?? (_paused ? Loc.T("Paused") : Loc.T("Recording")),
             _ => ""
         };

@@ -31,15 +31,15 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" Spacing="7">
-                    <TextBlock x:Name="DragHint" Text="⠿" FontSize="16" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
+                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                    <TextBlock x:Name="DragHint" Text="⠿" FontSize="16" VerticalAlignment="Center" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
                     <Ellipse Width="6" Height="6" Fill="{ThemeResource AccentBrush}"
                              VerticalAlignment="Center" />
-                    <TextBlock x:Name="TranscriptHeading" Text="LIVE TRANSCRIPT" FontSize="9" FontWeight="SemiBold"
+                    <TextBlock x:Name="TranscriptHeading" Text="LIVE TRANSCRIPT" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center"
                                CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
                 </StackPanel>
                 <TextBlock x:Name="TranscriptSourceLabel" Grid.Column="1" Text="DEMO TEXT" FontFamily="Cascadia Mono"
-                           FontSize="8" Foreground="{ThemeResource MutedBrush}" />
+                           FontSize="8" VerticalAlignment="Center" Foreground="{ThemeResource MutedBrush}" />
             </local:DragHandleGrid>
 
             <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="TranscriptScrollViewer"
