@@ -1,0 +1,8 @@
+{
+  "Refresh models": "重新整理模型",
+  "Load transcription and text models using the saved API key.": "使用已儲存的 API 金鑰載入轉錄與文字模型。",
+  "Live transcription; the language is detected automatically.": "即時轉錄；語言會自動偵測。",
+  "Transcribes after recording stops.": "錄音停止後進行轉錄。",
+  "Provider default": "供應商預設值",
+  "Custom": "自定義"
+}

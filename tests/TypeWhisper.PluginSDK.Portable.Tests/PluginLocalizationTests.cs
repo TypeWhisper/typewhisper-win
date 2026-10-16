@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Moq;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK;
@@ -15,6 +16,7 @@ public sealed class PluginLocalizationTests : IDisposable
     [Theory]
     [InlineData("ja-JP", "選択")]
     [InlineData("zh-CN", "选择")]
+    [InlineData("zh-TW", "選取")]
     [InlineData("de-AT", "Auswählen")]
     [InlineData("fr-CA", "Select")]
     public void ResourcesResolveRegionalParentsAndEnglishFallback(string language, string expected)
@@ -22,6 +24,7 @@ public sealed class PluginLocalizationTests : IDisposable
         Resource("en", new() { ["Settings.Select"] = "Select", ["English only"] = "English only" });
         Resource("ja", new() { ["Settings.Select"] = "選択" });
         Resource("zh-Hans", new() { ["Settings.Select"] = "选择" });
+        Resource("zh-TW", new() { ["Settings.Select"] = "選取" });
         Resource("de", new() { ["Settings.Select"] = "Auswählen" });
         var localization = new PackagePluginLocalization(_directory, () => language);
         Assert.Equal(expected, localization.GetString("Settings.Select"));
@@ -30,6 +33,35 @@ public sealed class PluginLocalizationTests : IDisposable
         Assert.Equal("Untranslated", localization.GetString("Untranslated"));
         Assert.Contains("ja", localization.AvailableLanguages);
     }
+
+    [Fact]
+    public void BundledTraditionalChineseCatalogsKeepEnglishKeysAndPlaceholders()
+    {
+        var root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "TypeWhisper.slnx")))
+            root = Path.GetDirectoryName(root) ?? throw new DirectoryNotFoundException("The repository root was not found.");
+        var catalogs = Directory.GetDirectories(Path.Combine(root, "plugins"))
+            .Select(directory => Path.Combine(directory, "Localization"))
+            .Where(directory => File.Exists(Path.Combine(directory, "en.json"))).ToArray();
+        Assert.NotEmpty(catalogs);
+        foreach (var directory in catalogs)
+        {
+            var english = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(directory, "en.json")))!;
+            var translated = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(directory, "zh-TW.json")))!;
+            Assert.Equal(english.Keys.Order(StringComparer.Ordinal), translated.Keys.Order(StringComparer.Ordinal));
+            var localization = new PackagePluginLocalization(Path.GetDirectoryName(directory)!, () => "zh-TW");
+            foreach (var (key, value) in english)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(translated[key]), $"{directory}: {key}");
+                Assert.Equal(Placeholders(value), Placeholders(translated[key]));
+                Assert.Equal(translated[key], localization.GetString(key));
+            }
+        }
+    }
+
+    private static string[] Placeholders(string text) =>
+        Regex.Matches(text.Replace("{{", "").Replace("}}", ""), @"\{\d+(?::[^}]*)?\}")
+            .Select(match => match.Value).Order(StringComparer.Ordinal).ToArray();
 
     [Fact]
     public void CurrentLanguageChangesWithoutReloadingAndSpecificRegionWins()

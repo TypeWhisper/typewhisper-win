@@ -1,0 +1,22 @@
+{
+  "Settings.Title": "Supertonic 3 資產",
+  "Settings.Description": "Supertonic 下載模型資產後會在本機執行。模型權重依 OpenRAIL-M 授權，另有個別條款。",
+  "Settings.AcceptLicense": "我瞭解 Supertonic 3 模型權重採用 OpenRAIL-M 授權。",
+  "Settings.Download": "下載 Supertonic 3",
+  "Settings.Downloading": "下載中...",
+  "Settings.Ready": "資產已下載並準備就緒。",
+  "Settings.NotReady": "尚未下載資產。",
+  "Settings.DownloadComplete": "下載完成。Supertonic TTS 已準備就緒。",
+  "Settings.DownloadCancelled": "下載已取消。",
+  "Settings.Error": "錯誤：{0}",
+  "Settings.Speed": "語音速度",
+  "Settings.Quality": "品質步驟",
+  "Settings.Source": "來源：https://huggingface.co/Supertone/supertonic-3",
+  "Settings.License": "授權：OpenRAIL-M",
+  "Settings.LicenseTitle": "模型授權：OpenRAIL-M",
+  "Settings.LicenseDescription": "Supertonic 3 模型資產採用 OpenRAIL-M 授權並包含使用限制。下載模型前請檢閱完整授權條款。",
+  "Settings.HuggingFaceToken": "Hugging Face 權杖（選填）",
+  "Settings.HuggingFaceTokenHint": "以 Windows DPAPI 安全儲存，且僅傳送至 huggingface.co 以下載模型。沒有權杖也可以進行公開下載。",
+  "Settings.InvalidToken": "Hugging Face 權杖無效。",
+  "Settings.TokenSaved": "權杖已安全儲存。"
+}

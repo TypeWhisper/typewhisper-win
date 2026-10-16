@@ -95,6 +95,11 @@ public sealed class ScriptTemplatesTests
     [InlineData("ja-JP", "Markdown\u30c1\u30a7\u30c3\u30af\u30ea\u30b9\u30c8")]
     [InlineData("ru-RU", "\u0421\u043f\u0438\u0441\u043e\u043a \u0437\u0430\u0434\u0430\u0447 Markdown")]
     [InlineData("zh-CN", "Markdown \u4efb\u52a1\u5217\u8868")]
+    [InlineData("zh", "Markdown \u4efb\u52a1\u5217\u8868")]
+    [InlineData("zh-TW", "Markdown 待辦清單")]
+    [InlineData("zh-MO", "Markdown 待辦清單")]
+    [InlineData("zh-HK", "Markdown 待辦清單")]
+    [InlineData("zh-Hant", "Markdown 待辦清單")]
     public async Task TemplatesUsePackagedNamesForChoicesAndBothAddActions(string locale, string expected)
     {
         var previous = System.Globalization.CultureInfo.CurrentUICulture;
@@ -119,11 +124,17 @@ public sealed class ScriptTemplatesTests
     [Fact]
     public async Task TemplateSelectionWithoutScriptsCanBeSavedAndAdded()
     {
-        using var f = new PortableFixture(); using var p = new ScriptPlugin(); await p.ActivateAsync(f.Host);
-        await p.SaveProfileSettingsAsync("none", new Dictionary<string, string> { ["template"] = "checklist" }, null, default);
-        Assert.Empty(p.Service!.Scripts);
-        await p.ExecuteSettingsActionAsync("add-template", default);
-        Assert.Equal("Markdown checklist", Assert.Single(p.Service.Scripts).Name);
+        var previous = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = new("en");
+            using var f = new PortableFixture(); using var p = new ScriptPlugin(); await p.ActivateAsync(f.Host);
+            await p.SaveProfileSettingsAsync("none", new Dictionary<string, string> { ["template"] = "checklist" }, null, default);
+            Assert.Empty(p.Service!.Scripts);
+            await p.ExecuteSettingsActionAsync("add-template", default);
+            Assert.Equal("Markdown checklist", Assert.Single(p.Service.Scripts).Name);
+        }
+        finally { System.Globalization.CultureInfo.CurrentUICulture = previous; }
     }
 }
 

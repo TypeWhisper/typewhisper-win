@@ -1,0 +1,12 @@
+{
+  "Settings.Title": "填充詞",
+  "Settings.Hint": "每行一個詞。也接受逗號與分號。",
+  "Settings.WordCount": "{0} 個詞",
+  "Settings.WordCountOne": "1 個字",
+  "Settings.ResetDefaults": "重設預設值",
+  "Settings.WordsDescription": "每行輸入一個詞或片語。只有在聽寫語言相符時，才會移除其他語言中屬於實際詞彙的詞，例如「um」。",
+  "Settings.CollapseRepeatedWords": "合併重複詞",
+  "Settings.CollapseRepeatedWordsDescription": "將連續出現三次以上的詞縮短為單一詞，例如將「I I I」變成一個詞。",
+  "Settings.On": "開啟",
+  "Settings.Off": "關閉"
+}

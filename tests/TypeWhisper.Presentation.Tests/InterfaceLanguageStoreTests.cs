@@ -18,6 +18,7 @@ public sealed class InterfaceLanguageStoreTests : IDisposable
     [InlineData("de")]
     [InlineData("ja")]
     [InlineData("zh-Hans")]
+    [InlineData("zh-TW")]
     public void SavedLanguageSurvivesReload(string language)
     {
         var store = new InterfaceLanguageStore(PreferencesPath);

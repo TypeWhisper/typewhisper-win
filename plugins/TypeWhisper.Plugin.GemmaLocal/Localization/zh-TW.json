@@ -1,0 +1,19 @@
+{
+  "Settings.SelectModel": "選取 Gemma 模型",
+  "Settings.Download": "下載",
+  "Settings.Load": "載入",
+  "Settings.Unload": "卸載",
+  "Settings.Cancel": "取消",
+  "Settings.NotDownloaded": "未下載",
+  "Settings.Downloaded": "已下載，可載入",
+  "Settings.Loaded": "已載入，準備就緒",
+  "Settings.Loading": "正在載入模型...",
+  "Settings.Downloading": "下載中...",
+  "Settings.DownloadComplete": "下載完成！按一下「載入」開始使用模型。",
+  "Settings.DownloadCancelled": "下載已取消",
+  "Settings.ModelReady": "模型已載入並準備使用！",
+  "Settings.Error": "錯誤：{0}",
+  "Discard incomplete downloads": "捨棄未完成的下載",
+  "Interrupted downloads resume on the next Download click. This removes their saved data; completed models are kept.": "中斷的下載會在下次按一下「下載」時繼續。這會移除其已儲存的資料；已完成的模型會保留。",
+  "Incomplete downloads removed.": "未完成的下載已移除。"
+}

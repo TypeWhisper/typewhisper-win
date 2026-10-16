@@ -1,0 +1,19 @@
+{
+  "Settings.HuggingFaceToken": "Hugging Face 權杖（選填）",
+  "Settings.HuggingFaceTokenHint": "以 Windows DPAPI 安全儲存，且僅傳送至 huggingface.co 以下載模型。沒有權杖也可以進行公開下載。驗證可改善速率限制的可靠性，但不保證更高的傳輸速度。",
+  "Settings.Save": "儲存",
+  "Settings.Remove": "移除",
+  "Settings.Saved": "權杖已安全儲存。",
+  "Settings.Removed": "權杖已移除。",
+  "Settings.InvalidToken": "Hugging Face 權杖無效。",
+  "Settings.SaveFailed": "無法安全儲存權杖。請再試一次。",
+  "Discard incomplete downloads": "捨棄未完成的下載",
+  "Removes unfinished model and runtime downloads. Completed models are kept.": "移除未完成的模型與執行階段下載。已完成的模型會保留。",
+  "Unload and remove selected model": "卸載並移除所選模型",
+  "Stops the selected model and deletes its downloaded weights. Download it again to use it later.": "停止所選模型並刪除已下載的權重。稍後可再次下載以使用。",
+  "Incomplete downloads removed.": "未完成的下載已移除。",
+  "Selected model removed. Shared runtime files were kept.": "所選模型已移除。共用的執行階段檔案已保留。",
+  "Processing device": "處理裝置",
+  "Transcription and live preview run locally. Choose the processor used when the model next loads.": "轉錄與即時預覽會在本機執行。選擇模型下次載入時使用的處理器。",
+  "Automatic": "自動"
+}

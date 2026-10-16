@@ -15,7 +15,7 @@ import re
 import sys
 from pathlib import Path
 
-LANGUAGES = ["de", "ja", "zh-Hans"]
+LANGUAGES = ["de", "ja", "zh-Hans", "zh-TW"]
 ROOT = Path(__file__).resolve().parent.parent
 CATALOGS = ROOT / "src" / "TypeWhisper.Core" / "Localization"
 CALL = re.compile(r'Loc\.(?:T|Mark)\(\s*"((?:[^"\\]|\\.)*)"')
@@ -66,7 +66,11 @@ def mac_translations(path):
         # A few English texts differ from their key; the visible English text is what Windows would use too.
         english = localizations.get("en", {}).get("stringUnit", {}).get("value", key)
         for language in LANGUAGES:
-            unit = localizations.get(language, {}).get("stringUnit")
+            localization = localizations.get(language, {})
+            # Xcode catalogs can use the script tag for Traditional Chinese.
+            if language == "zh-TW" and not localization:
+                localization = localizations.get("zh-Hant", {})
+            unit = localization.get("stringUnit")
             if unit and unit.get("state") == "translated" and unit.get("value"):
                 result[language].setdefault(to_windows(english), to_windows(unit["value"]))
                 result[language].setdefault(to_windows(key), to_windows(unit["value"]))

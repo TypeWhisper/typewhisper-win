@@ -1,0 +1,11 @@
+{
+  "Transcription model": "轉錄模型",
+  "Universal-3.5 Pro supports 18 languages. Universal-2 offers wider recorded-audio language support.": "Universal-3.5 Pro 支援 18 種語言。Universal-2 提供更廣泛的錄製音訊語言支援。",
+  "Speaker diarization": "說話者分離",
+  "Label speakers and preserve utterance timestamps. Uses recorded-audio transcription instead of live text.": "標記說話者並保留發話時間戳記。使用錄製音訊轉錄，而非即時文字。",
+  "Off": "關閉",
+  "On": "開啟",
+  "Check connection": "檢查連線",
+  "Verify the entered key without uploading audio or saving changes.": "在不上傳音訊或儲存變更的情況下驗證輸入的金鑰。",
+  "Connection verified. No changes saved.": "連線已驗證。未儲存變更。"
+}
