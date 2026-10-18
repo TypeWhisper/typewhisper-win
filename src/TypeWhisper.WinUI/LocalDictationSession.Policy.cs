@@ -39,10 +39,13 @@ internal sealed partial class LocalDictationSession
         {
             await PluginRuntime.ReapplyPolicyAsync();
             // Work already inside a refused local engine is cancelled, as the runtime cancels refused roles; the
-            // gate is then taken once the cancelled operation has let go of it.
-            if (Models.Enabled && !UsesRegistryProvider && (_audio.IsRecording || _fileBusy || _phase == DictationPhase.Processing)
-                && ProviderPolicy.PluginRefusal(LocalTranscriptionPlugin.PluginId) is not null)
-                RequestCancel();
+            // gate is then taken once the cancelled operation has let go of it. The full transcription rule applies,
+            // so a provider allowlist that excludes the local engine cancels as well.
+            if (Models.Enabled && !UsesRegistryProvider && TranscriptionPolicyRefusal() is not null)
+            {
+                if (_audio.IsRecording || _fileBusy || _phase == DictationPhase.Processing) RequestCancel();
+                _training?.CancelDecode();
+            }
             await _gate.WaitAsync();
             try
             {

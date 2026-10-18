@@ -329,23 +329,39 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// </summary>
     public async Task<IReadOnlyList<string>> ReapplyPolicyAsync()
     {
-        List<(Slot Slot, string? Refused)> slots;
+        List<(Slot Slot, string? Refused, long? Marked)> slots;
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            slots = _slots.Values.Select(slot => (slot, SlotRefusal(slot))).ToList();
+            // Every refused package stops accepting at once, before any unload waits for the gate: a queued call of
+            // a later package then fails at its lease instead of running the package's code.
+            slots = _slots.Values.Select(slot =>
+            {
+                var refused = SlotRefusal(slot);
+                long? marked = null;
+                if (refused is not null && slot.Package is not null)
+                {
+                    marked = ++slot.Generation;
+                    slot.Accepting = false;
+                    CancelRequest(slot);
+                }
+                return (slot, refused, marked);
+            }).ToList();
             CancelRefusedRoles();
         }
         var changed = new List<string>();
-        foreach (var (slot, refused) in slots)
+        foreach (var (slot, refused, marked) in slots)
         {
             if (refused is not null)
             {
-                try { if (await UnloadForPolicyAsync(slot)) changed.Add(slot.Id); }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                if (marked is { } generation)
                 {
-                    // The package is detached before its release can fail: the refusal stands and the others follow.
-                    changed.Add(slot.Id);
+                    try { if (await UnloadMarkedAsync(slot, generation)) changed.Add(slot.Id); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        // The package is detached before its release can fail: the refusal stands and the others follow.
+                        changed.Add(slot.Id);
+                    }
                 }
                 lock (_sync) if (slot.Package is null && (slot.Error is null || slot.PolicyRefused)) { slot.Error = refused; slot.PolicyRefused = true; }
                 continue;
@@ -389,18 +405,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 CancelRequest(slot);
     }
 
-    // The disable path without the preference write: the user's choice survives the policy. False when nothing
-    // was loaded, a newer operation superseded this one, or the policy allowed the package again meanwhile.
-    private async Task<bool> UnloadForPolicyAsync(Slot slot)
+    // The disable path without the preference write for a slot ReapplyPolicyAsync marked: the user's choice
+    // survives the policy. False when a newer operation superseded the mark or the policy allowed the package again
+    // meanwhile.
+    private async Task<bool> UnloadMarkedAsync(Slot slot, long generation)
     {
-        long generation;
-        lock (_sync)
-        {
-            if (_disposed || slot.Package is null) return false;
-            generation = ++slot.Generation;
-            slot.Accepting = false;
-            CancelRequest(slot);
-        }
         await _gate.WaitAsync();
         try
         {
@@ -574,7 +583,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_slots.TryGetValue(pluginId, out var slot) || slot.Package is null) throw new InvalidOperationException("Enable this plugin first.");
             owner = slot;
         }
-        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken, preserveCompletedResult, refreshCapabilities);
+        return UseAsync(owner, token =>
+        {
+            // Configuration runs package code: judged again under the lease, like content operations.
+            if (SlotRefusal(owner) is { } refused) throw new ManagedPolicyDeniedException("plugin", refused);
+            return use(owner.Package!.Plugin, token);
+        }, cancellationToken, preserveCompletedResult, refreshCapabilities);
     }
 
     private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false, bool refreshCapabilities = true)

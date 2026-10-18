@@ -34,6 +34,9 @@ internal sealed partial class LocalDictationSession
             _recording = true;
         }
 
+        /// <summary>Cancels a running or coming decode; policy calls this when the active provider becomes refused.</summary>
+        internal void CancelDecode() { if (_disposal is null) _cancel.Cancel(); }
+
         internal Task<string> StopAsync()
         {
             ObjectDisposedException.ThrowIf(_disposal is not null, this);
