@@ -56,7 +56,8 @@ public sealed class StartupPolicyStore
 /// <param name="State">The actual registration state.</param>
 /// <param name="Locked">True while policy owns the setting.</param>
 /// <param name="LockReason">What the settings row shows while locked.</param>
-public sealed record StartupPolicyOutcome(StartupRegistrationState State, bool Locked, string? LockReason);
+/// <param name="Notice">A persistence problem the settings row shows, or null.</param>
+public sealed record StartupPolicyOutcome(StartupRegistrationState State, bool Locked, string? LockReason, string? Notice = null);
 
 /// <summary>Keeps the owned startup registration in line with <c>LaunchAtLogin</c> without losing the user's own choice.</summary>
 public sealed class StartupPolicyReconciler(IStartupRegistration registration, StartupPolicyStore store)
@@ -92,8 +93,9 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
             // cleared only once the registration matches it, so a temporary restriction keeps it for a later pass.
             if (state.CanChange && state.IsEnabled != retained)
                 state = await registration.SetEnabledAsync(retained);
-            if (!state.Unknown && state.IsEnabled == retained)
-                store.Save(store.Current with { RetainedBeforeEnforcement = null });
+            // A clear that did not reach the disk is reported: the next launch would otherwise restore it again.
+            if (!state.Unknown && state.IsEnabled == retained && !store.Save(store.Current with { RetainedBeforeEnforcement = null }))
+                return new(state, false, null, store.Error);
             return new(state, false, null);
         }
 
@@ -102,11 +104,14 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
         {
             if (state.CanChange && state.IsEnabled != recommended.IsTrue)
                 state = await registration.SetEnabledAsync(recommended.IsTrue);
-            store.Save(store.Current with { RecommendationApplied = true });
+            // The recommendation is final once the registration matches it, or once Windows itself keeps the app from
+            // changing it (a user turned startup off in Settings); a failed write is retried on the next pass.
+            if ((state.IsEnabled == recommended.IsTrue || !state.CanChange) && !store.Save(store.Current with { RecommendationApplied = true }))
+                return new(state, false, null, store.Error);
         }
         return new(state, false, null);
     }
 
-    /// <summary>Records an explicit user choice so recommendations no longer apply to this profile.</summary>
-    public void RecordUserChoice(bool enabled) => store.Save(store.Current with { UserChoice = enabled });
+    /// <summary>Records an explicit user choice so recommendations no longer apply to this profile; false when it could not be saved.</summary>
+    public bool RecordUserChoice(bool enabled) => store.Save(store.Current with { UserChoice = enabled });
 }

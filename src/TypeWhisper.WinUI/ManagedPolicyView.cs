@@ -64,7 +64,7 @@ internal sealed class ManagedPolicyView : UserControl
         _issuesTitle.Visibility = _issues.Visibility = snapshot.Issues.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         var watching = WinUIManagedPolicy.Watching ? Loc.T("Watching for changes") : Loc.T("Checked every 30 seconds");
         _meta.Text = snapshot.Revision == 0 ? watching
-            : Loc.T("Last read {0}", snapshot.ReadAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)) + " · " + watching;
+            : Loc.T("Last change {0}", snapshot.ReadAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)) + " · " + watching;
     }
 
     private static string Describe(ManagedPolicyDefinition definition, ManagedPolicyValue value)

@@ -120,7 +120,7 @@ public interface IAppUpdateBackend
 /// installation or hand updates to enterprise deployment entirely.
 /// </summary>
 public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUpdateBackend backend,
-    Func<Action, Task<string?>> shutdownAndApply, Func<ManagedUpdatePolicy>? policy = null)
+    Func<Func<bool>, Task<string?>> shutdownAndApply, Func<ManagedUpdatePolicy>? policy = null)
 {
     private AppUpdateChannel? _offerChannel;
     /// <summary>The persisted update selection.</summary>
@@ -222,11 +222,13 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
             if (Refusal() is { } lateRefusal) { Status = lateRefusal; Offer = null; _offerChannel = null; return; }
             Status = Loc.T("Finishing work and restarting…"); Changed?.Invoke();
             // The host drains work before it runs this action, so policy is read once more at the actual apply point.
+            // The action reports whether it applied; a declined installation lets the host restart instead.
             string? refusedAtApply = null;
             var outcome = await shutdownAndApply(() =>
             {
                 refusedAtApply = Refusal();
                 if (refusedAtApply is null) backend.Apply(offer);
+                return refusedAtApply is null;
             });
             if (refusedAtApply is not null) { Offer = null; _offerChannel = null; }
             Status = refusedAtApply ?? outcome ?? Loc.T("Restart requested.");

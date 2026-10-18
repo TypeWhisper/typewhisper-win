@@ -10,10 +10,12 @@ public static class OnboardingPolicy
         !snapshot.IsBlocked(ManagedPolicyKeys.SkipOnboardingWhenReady)
         && snapshot.Enforced(ManagedPolicyKeys.SkipOnboardingWhenReady)?.IsTrue == true;
 
-    /// <summary>Whether optional welcome and promotional prompts stay hidden. Required setup and errors are never affected.</summary>
+    /// <summary>
+    /// Whether optional welcome and promotional prompts stay hidden. Required setup and errors are never affected. An
+    /// unreadable policy keeps the last known value: suppression ends only when a readable snapshot removes it.
+    /// </summary>
     public static bool SuppressOptionalPrompts(ManagedPolicySnapshot snapshot) =>
-        !snapshot.IsBlocked(ManagedPolicyKeys.SuppressOptionalPrompts)
-        && snapshot.ResolveBoolean(ManagedPolicyKeys.SuppressOptionalPrompts, false).Value;
+        snapshot.ResolveBoolean(ManagedPolicyKeys.SuppressOptionalPrompts, false).Value;
 
     /// <summary>Whether an unfinished setup may stay closed: policy asks for it and every prerequisite is actually met.</summary>
     public static bool CanSkipSetup(ManagedPolicySnapshot snapshot, bool hasShortcut, bool modelReady, bool microphoneAvailable) =>

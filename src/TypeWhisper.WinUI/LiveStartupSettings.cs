@@ -25,7 +25,7 @@ internal static class LiveStartupSettings
             updating = true;
             toggle.IsOn = outcome.State.IsEnabled;
             toggle.IsEnabled = outcome.State.CanChange && !outcome.Locked;
-            row.Status = outcome.State.Error ?? outcome.LockReason ?? "";
+            row.Status = outcome.State.Error ?? outcome.LockReason ?? outcome.Notice ?? "";
             updating = false;
         }
         async Task ApplyPolicyAsync() => Show(await policy.ApplyAsync(WinUIManagedPolicy.Current, setupCompleted()));
@@ -34,8 +34,9 @@ internal static class LiveStartupSettings
             if (updating) return;
             toggle.IsEnabled = false;
             var state = await registration.SetEnabledAsync(toggle.IsOn);
-            if (state.Error is null) policy.RecordUserChoice(toggle.IsOn);
-            Show(new(state, false, null));
+            // A choice that could not be recorded is shown: a recommendation could otherwise replace it after a restart.
+            var recorded = state.Error is not null || policy.RecordUserChoice(toggle.IsOn);
+            Show(new(state, false, null, recorded ? null : policy.Store.Error));
         };
         void OnPolicyChanged(ManagedPolicySnapshot _) => row.DispatcherQueue.TryEnqueue(async () => await ApplyPolicyAsync());
         ViewSubscriptions.Attach(row, () => WinUIManagedPolicy.Changed += OnPolicyChanged, () => WinUIManagedPolicy.Changed -= OnPolicyChanged);

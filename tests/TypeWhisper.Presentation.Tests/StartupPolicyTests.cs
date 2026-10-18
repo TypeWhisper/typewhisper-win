@@ -158,17 +158,43 @@ public sealed class StartupPolicyTests : IDisposable
         Assert.NotNull(reconciler.Store.Error);
     }
 
+    [Fact]
+    public async Task RecommendationIsFinalOnlyOnceItTookEffect()
+    {
+        var snapshot = Build(recommended: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]);
+
+        // A write that fails leaves the recommendation pending for the next pass.
+        var failing = new Registration { Enabled = false, FailWrites = true };
+        var failingStore = Store();
+        var reconciler = new StartupPolicyReconciler(failing, failingStore);
+        await reconciler.ApplyAsync(snapshot, setupCompleted: false);
+        Assert.False(failing.Enabled);
+        Assert.False(failingStore.Current.RecommendationApplied);
+        failing.FailWrites = false;
+        await reconciler.ApplyAsync(snapshot, setupCompleted: false);
+        Assert.True(failing.Enabled);
+        Assert.True(failingStore.Current.RecommendationApplied);
+
+        // Windows keeping the app from changing startup counts as the user's decision.
+        var disabled = new Registration { Enabled = false, CanChange = false };
+        var disabledStore = new StartupPolicyStore(Path.Combine(_root, "disabled", "startup-policy.json"));
+        await new StartupPolicyReconciler(disabled, disabledStore).ApplyAsync(snapshot, setupCompleted: false);
+        Assert.False(disabled.Enabled);
+        Assert.True(disabledStore.Current.RecommendationApplied);
+    }
+
     private sealed class Registration : IStartupRegistration
     {
         public bool Enabled { get; set; }
         public bool CanChange { get; set; } = true;
+        public bool FailWrites { get; set; }
         public int Writes { get; private set; }
 
         public Task<StartupRegistrationState> ReadAsync() => Task.FromResult(new StartupRegistrationState(Enabled, CanChange, null));
 
         public Task<StartupRegistrationState> SetEnabledAsync(bool enabled)
         {
-            if (CanChange && Enabled != enabled)
+            if (CanChange && !FailWrites && Enabled != enabled)
             {
                 Enabled = enabled;
                 Writes++;

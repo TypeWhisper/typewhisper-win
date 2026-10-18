@@ -502,7 +502,7 @@ public partial class App : Application
 
     private async void ExitFromTray() => await ExitOrRestartAsync(restart: false);
 
-    private async Task<string?> ExitOrRestartAsync(bool restart, Action? applyUpdate = null)
+    private async Task<string?> ExitOrRestartAsync(bool restart, Func<bool>? applyUpdate = null)
     {
         if (_exiting) return Loc.T("The app is already shutting down.");
         _exiting = true;
@@ -519,9 +519,14 @@ public partial class App : Application
                 AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
                 if (applyUpdate is not null)
                 {
-                    applyUpdate();
-                    ShowProfileFailure(Loc.T("The update restart did not complete. Close and reopen TypeWhisper."), null);
-                    return Loc.T("The update restart did not complete.");
+                    if (applyUpdate())
+                    {
+                        ShowProfileFailure(Loc.T("The update restart did not complete. Close and reopen TypeWhisper."), null);
+                        return Loc.T("The update restart did not complete.");
+                    }
+                    // Policy declined the installation at the apply point. Work is already drained, so the host
+                    // restarts itself instead of staying stopped.
+                    AppDiagnostics.Write("app.update.apply-declined");
                 }
                 // Restart the same host only after all profile writers and native owners have drained.
                 // On success this API terminates the process; returning means restart failed.

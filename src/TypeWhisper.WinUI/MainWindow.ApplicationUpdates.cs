@@ -4,7 +4,8 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    internal Func<Action, Task<string?>>? InstallApplicationUpdateAsync { get; set; }
+    /// <summary>Drains work, then runs the apply action; the action returns false when policy declined the installation.</summary>
+    internal Func<Func<bool>, Task<string?>>? InstallApplicationUpdateAsync { get; set; }
     private AppUpdateController? _applicationUpdates;
     private AppUpdateController ApplicationUpdates => _applicationUpdates ??= new(
         new AppUpdatePreferences(WinUIProfile.DataPath("updates.json"), WindowsApplicationUpdates.CurrentVersion),

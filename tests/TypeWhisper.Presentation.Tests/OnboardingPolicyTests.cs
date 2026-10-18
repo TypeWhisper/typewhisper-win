@@ -26,6 +26,17 @@ public sealed class OnboardingPolicyTests
     }
 
     [Fact]
+    public void SuppressOptionalPrompts_KeepsTheLastKnownValueWhileUnreadable()
+    {
+        var suppressing = Build(enforced: [Number(ManagedPolicyKeys.SuppressOptionalPrompts, 1)]);
+        var unreadable = Unreadable().RetainingValuesFrom(suppressing);
+
+        Assert.True(OnboardingPolicy.SuppressOptionalPrompts(unreadable));
+        Assert.False(OnboardingPolicy.SuppressOptionalPrompts(Unreadable()));
+        Assert.False(OnboardingPolicy.SuppressOptionalPrompts(Build(enforced: [Number(ManagedPolicyKeys.SuppressOptionalPrompts, 7)])));
+    }
+
+    [Fact]
     public void SuppressOptionalPrompts_AcceptsEnforcementAndRecommendation()
     {
         Assert.True(OnboardingPolicy.SuppressOptionalPrompts(Build(enforced: [Number(ManagedPolicyKeys.SuppressOptionalPrompts, 1)])));
