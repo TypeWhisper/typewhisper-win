@@ -577,6 +577,80 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Theory]
+    [InlineData("snippet")]
+    [InlineData("term")]
+    [InlineData("literal")]
+    [InlineData("exactRegex")]
+    public async Task PackageRecoveryPreservesKnownLocalDeletions(string kind)
+    {
+        var local = DictionaryEntry("teh", Date(10), UserDataSyncDictionaryEntryType.Correction, "the");
+        var oldId = UserDataSyncIdentity.DictionaryItemId(local.EntryType, local.Original);
+        CloudFolderSyncOperation removed;
+        if (kind == "snippet")
+        {
+            var snippet = Snippet(";sig", "Signature", Date(10));
+            removed = CloudFolderSyncOperation.UpsertSnippet(snippet, UserDataSyncIdentity.SnippetItemId(snippet.Trigger), "peer");
+        }
+        else
+        {
+            var entry = DictionaryEntry("removed", Date(10), kind == "term" ? UserDataSyncDictionaryEntryType.Term : UserDataSyncDictionaryEntryType.Correction,
+                kind == "term" ? null : "replacement") with { IsRegex = kind == "exactRegex" };
+            removed = CloudFolderSyncOperation.UpsertDictionary(entry, UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex), "peer");
+        }
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "recreated.json"), CloudFolderSyncJson.Serialize(removed));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [local]);
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "windows", KnownLocalItemIds = [oldId, removed.ItemId],
+            ExportedItemVersions = new() { [oldId] = "2023-11-14T22:13:30.000Z", [removed.ItemId] = "2023-11-14T22:13:30.000Z" },
+            AppliedOperationIds = ["removed-local-upsert", "removed-peer-upsert"]
+        };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        Assert.Equal(local, Assert.Single(store.DictionaryEntries));
+        Assert.Empty(store.Snippets);
+        var published = OperationFiles("windows").Select(path => CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!).ToArray();
+        Assert.Contains(published, operation => operation.Kind == CloudFolderSyncOperationKind.Delete && operation.ItemId == removed.ItemId);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40))).OperationsWritten);
+        Assert.Equal(local, Assert.Single(store.DictionaryEntries));
+        Assert.Empty(store.Snippets);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task UpgradeUsesExportedCorrectionVersionDespiteClockSkew(bool isRegex, bool locallyDeleted)
+    {
+        var entry = DictionaryEntry(@"\d", Date(10), UserDataSyncDictionaryEntryType.Correction, "current") with { IsRegex = isRegex };
+        var oldId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+        var current = CloudFolderSyncOperation.UpsertDictionary(entry, oldId, "old", "current-upsert") with { SchemaVersion = 1 };
+        var old = CloudFolderSyncOperation.UpsertDictionary(entry with { IsRegex = !isRegex, UpdatedAt = Date(15), Replacement = "old" }, oldId, "old", "older-upsert-future-clock") with { SchemaVersion = 1 };
+        var deleted = CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, oldId, "old", Date(20));
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "old");
+        Directory.CreateDirectory(folder);
+        foreach (var operation in new[] { old, deleted, current })
+            File.WriteAllText(Path.Combine(folder, operation.OperationId + ".json"), CloudFolderSyncJson.Serialize(operation));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: locallyDeleted ? [] : [entry]);
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "windows", KnownLocalItemIds = [oldId],
+            ExportedItemVersions = new() { [oldId] = "2023-11-14T22:13:30.000Z" },
+            AppliedOperationIds = [old.OperationId, deleted.OperationId, current.OperationId]
+        };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        if (locallyDeleted) Assert.Empty(store.DictionaryEntries);
+        else Assert.Equal(entry, Assert.Single(store.DictionaryEntries));
+        var published = OperationFiles("windows").Select(path => CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!).ToArray();
+        Assert.Equal(locallyDeleted, published.Any(operation => operation.Kind == CloudFolderSyncOperationKind.Delete));
+        if (locallyDeleted) Assert.Contains(published, operation => operation.SchemaVersion == 2 && operation.Kind == CloudFolderSyncOperationKind.Delete);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40))).OperationsWritten);
+    }
+
+    [Theory]
     [InlineData("missing", false)]
     [InlineData("empty", false)]
     [InlineData("replaced", false)]
@@ -712,11 +786,18 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    public async Task InvalidRegexSyncOperationsDoNotEnterTheDictionary(int schemaVersion)
+    [InlineData(1, "syntax")]
+    [InlineData(2, "syntax")]
+    [InlineData(1, "length")]
+    [InlineData(2, "length")]
+    [InlineData(1, "newline")]
+    [InlineData(2, "newline")]
+    [InlineData(1, "carriage-return")]
+    [InlineData(2, "carriage-return")]
+    public async Task InvalidRegexSyncOperationsDoNotEnterTheDictionary(int schemaVersion, string invalidKind)
     {
-        var invalid = DictionaryEntry("[", Date(20), UserDataSyncDictionaryEntryType.Correction, "invalid") with { IsRegex = true };
+        var pattern = invalidKind switch { "length" => new string('a', 161), "newline" => "line\nbreak", "carriage-return" => "line\rbreak", _ => "[" };
+        var invalid = DictionaryEntry(pattern, Date(20), UserDataSyncDictionaryEntryType.Correction, "invalid") with { IsRegex = true };
         var operation = CloudFolderSyncOperation.UpsertDictionary(invalid,
             UserDataSyncIdentity.DictionaryItemId(invalid.EntryType, invalid.Original, schemaVersion == 2), "peer") with { SchemaVersion = schemaVersion };
         var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
@@ -728,6 +809,22 @@ public sealed class CloudFolderSyncTests : IDisposable
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30));
         Assert.Equal(healthy, Assert.Single(store.DictionaryEntries));
         Assert.DoesNotContain(operation.OperationId, state.AppliedOperationIds);
+    }
+
+    [Theory]
+    [InlineData("limit")]
+    [InlineData("escaped-newline")]
+    public async Task ValidRegexCatalogBoundariesAreSynced(string patternKind)
+    {
+        var pattern = patternKind == "limit" ? new string('a', 160) : @"\n";
+        var entry = DictionaryEntry(pattern, Date(20), UserDataSyncDictionaryEntryType.Correction, "valid") with { IsRegex = true };
+        var operation = CloudFolderSyncOperation.UpsertDictionary(entry, UserDataSyncIdentity.DictionaryItemId(entry.EntryType, pattern, true), "peer");
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "valid.json"), CloudFolderSyncJson.Serialize(operation));
+        var store = new InMemoryUserDataSyncStore();
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, new CloudFolderSyncState { DeviceId = "windows" }, new PaidEntitlements(true), Date(30));
+        Assert.Equal(entry, Assert.Single(store.DictionaryEntries));
     }
 
     [Fact]

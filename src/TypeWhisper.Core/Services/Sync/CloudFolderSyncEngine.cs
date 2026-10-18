@@ -358,14 +358,22 @@ public static class CloudFolderSyncEngine
             // change which exact regex a local deletion or mode change targets.
             var previousOperations = ReadOperations(operationsPath, cancellationToken, out var unreadableHistory);
             var applied = previousOperations.Where(operation => state.AppliedOperationIds.Contains(operation.OperationId)).ToArray();
-            var known = LegacyWinningOperations(applied);
+            var known = LegacySynchronizedCorrections(applied, state);
             if (!LegacyCorrectionHistoryIsComplete(state, known))
             {
                 if (applied.Length > 0 || unreadableHistory)
                     throw new IOException(Loc.T("Previously synced correction files are missing or unreadable. Wait for your cloud provider to download them, or choose a new sync folder if the old files were deleted."));
-                // No old operations remain in an otherwise readable package. Rebuild
-                // it from local data without guessing obsolete deletion identities.
-                publicationState = state with { KnownLocalItemIds = [], ExportedItemVersions = [] };
+                // Republish local data while retaining unambiguous local deletions.
+                // Only withdraw old folded IDs for regex rules still present locally.
+                var migratedIds = initialRecords.Values
+                    .Where(record => record.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true })
+                    .Select(record => UserDataSyncIdentity.DictionaryItemId(record.Dictionary!.EntryType, record.Dictionary.Original))
+                    .Where(id => !state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal));
+                publicationState = state with
+                {
+                    KnownLocalItemIds = state.KnownLocalItemIds.Except(migratedIds, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal),
+                    ExportedItemVersions = []
+                };
             }
             foreach (var (id, operation) in known)
                 if (state.KnownLocalItemIds.Contains(id) &&
@@ -484,7 +492,9 @@ public static class CloudFolderSyncEngine
     {
         if (entry.EntryType != UserDataSyncDictionaryEntryType.Correction || !entry.IsRegex)
             return !string.IsNullOrWhiteSpace(entry.Original);
-        if (string.IsNullOrEmpty(entry.Original)) return false;
+        // Match the persisted catalog's single-line key limits before saving.
+        if (string.IsNullOrEmpty(entry.Original) || entry.Original.Length > 160 ||
+            entry.Original.Contains('\r') || entry.Original.Contains('\n')) return false;
         try
         {
             _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromSeconds(1));
@@ -547,6 +557,21 @@ public static class CloudFolderSyncEngine
         return canonical.Select(operation => operation.Kind == CloudFolderSyncOperationKind.Delete &&
             !local.ContainsKey(operation.ItemId) && aliases.TryGetValue(operation.ItemId, out var id)
                 ? operation with { ItemId = id } : operation).ToArray();
+    }
+
+    private static IReadOnlyDictionary<string, CloudFolderSyncOperation> LegacySynchronizedCorrections(
+        IReadOnlyList<CloudFolderSyncOperation> operations, CloudFolderSyncState state)
+    {
+        // The exported version records the local synchronized state even if a peer's
+        // clock gave an older operation or tombstone a later timestamp.
+        var matching = operations.Where(operation => operation.SchemaVersion == 1 &&
+            operation.Kind == CloudFolderSyncOperationKind.Upsert && IsValidOperation(operation) &&
+            state.AppliedOperationIds.Contains(operation.OperationId) &&
+            operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction } entry &&
+            state.KnownLocalItemIds.Contains(UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)) &&
+            state.ExportedItemVersions.TryGetValue(UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original), out var version) &&
+            (version == VersionString(entry.UpdatedAt) || version == "dictionary-v2|" + VersionString(entry.UpdatedAt)));
+        return LegacyWinningOperations(matching.ToArray());
     }
 
     private static bool LegacyCorrectionHistoryIsComplete(
