@@ -157,7 +157,7 @@ public sealed class ManagedPolicyValue : IEquatable<ManagedPolicyValue>
     public static ManagedPolicyValue ForText(string value) => new(ManagedPolicyValueKind.Text, 0, value, null);
 
     /// <summary>Creates a list value. Callers pass validated, deduplicated entries.</summary>
-    public static ManagedPolicyValue ForList(IReadOnlyList<string> items) => new(ManagedPolicyValueKind.List, 0, null, items.ToArray());
+    public static ManagedPolicyValue ForList(IReadOnlyList<string> items) => new(ManagedPolicyValueKind.List, 0, null, Array.AsReadOnly(items.ToArray()));
 
     /// <inheritdoc />
     public bool Equals(ManagedPolicyValue? other) =>

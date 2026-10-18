@@ -468,6 +468,7 @@ public class ManagedPolicyValidatorTests
         Assert.IsNotType<HashSet<string>>(snapshot.InvalidEnforcedKeys);
         Assert.IsNotType<List<ManagedPolicyIssue>>(snapshot.Issues);
         Assert.IsNotType<HashSet<string>>(ManagedPolicySnapshot.Empty.InvalidEnforcedKeys);
+        Assert.IsNotType<string[]>(ManagedPolicyValue.ForList(["a"]).Items);
         var unreadable = ManagedPolicyValidator.Validate(ManagedPolicyReading.Unreadable("IOException"), 1, ReadAt);
         Assert.IsNotType<HashSet<string>>(unreadable.InvalidEnforcedKeys);
         Assert.IsNotType<List<ManagedPolicyIssue>>(unreadable.Issues);
