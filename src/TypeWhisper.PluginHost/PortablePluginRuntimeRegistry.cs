@@ -102,8 +102,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sync = new();
     private readonly Dictionary<string, Slot> _slots = new(StringComparer.Ordinal);
-    // Which package served each transcription selection ID, kept after the role is gone so a refused and unloaded
-    // package can still be judged for the selection the user made.
+    // Which package served each transcription or LLM selection ID, kept after the role is gone so a refused and
+    // unloaded package can still be judged for the selection the user made.
     private readonly Dictionary<string, string> _selectionOwners = new(StringComparer.OrdinalIgnoreCase);
     private Index _index = new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], []);
     private bool _disposed;
@@ -123,12 +123,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     }
 
     /// <summary>
-    /// Why policy refuses the package behind a transcription selection ID, or null. The selection is resolved through
-    /// the package that last served it, so a role the policy unloaded is still judged by its package.
+    /// Why policy refuses the package behind a transcription or LLM selection ID, or null. The selection is resolved
+    /// through the package that last served it, or through a known package of the same ID; a selection the registry
+    /// has never seen is not judged, since a profile ID is not a plugin ID.
     /// </summary>
     public string? SelectionPackageRefusal(string selectionId)
     {
-        lock (_sync) return PackageRefusal(_selectionOwners.TryGetValue(selectionId, out var owner) ? owner : selectionId);
+        lock (_sync) return _selectionOwners.TryGetValue(selectionId, out var owner) ? PackageRefusal(owner)
+            : _slots.ContainsKey(selectionId) ? PackageRefusal(selectionId) : null;
     }
 
     /// <summary>Why policy refuses audio for an enabled transcription role, or null. Unknown roles return null.</summary>
@@ -766,6 +768,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var id = provider.GetLlmSelectionId();
                 if (string.IsNullOrWhiteSpace(id) || provider.PluginId != slot.Id || !llm.TryAdd(id, new(slot, provider)))
                     throw new CapabilityCollisionException("LLM capability identity collision or invalid owner: " + id);
+                lock (_sync) _selectionOwners[id] = slot.Id;
                 // A remembered local model loads on the next request, so its provider stays selectable while released.
                 var restorable = RestorableModel(slot, provider);
                 llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable || restorable is not null,

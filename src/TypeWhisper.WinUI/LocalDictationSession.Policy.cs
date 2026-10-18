@@ -13,12 +13,17 @@ internal sealed partial class LocalDictationSession
 
     /// <summary>
     /// Why policy refuses the active transcription provider before audio is captured, or null. A provider whose
-    /// package the policy unloaded has no role any more and is judged as a package.
+    /// package the policy unloaded, or never loaded, has no role and is judged as a package: through the package the
+    /// registry last saw serving the selection, or through the package remembered with the saved selection.
     /// </summary>
     internal string? TranscriptionPolicyRefusal() => UsesRegistryProvider
         ? PluginRuntime.TranscriptionRefusal(RegistrySelectionId(_providerId))
-            ?? (ActiveRegistryProvider is null ? PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(_providerId)) : null)
+            ?? (ActiveRegistryProvider is null ? SelectedPackageRefusal() : null)
         : LocalTranscriptionRefusal();
+
+    private string? SelectedPackageRefusal() =>
+        PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(_providerId))
+        ?? (_selection.GetSetting<string>("ProviderPluginId") is { Length: > 0 } saved ? PluginRuntime.PackageRefusal(saved) : null);
 
     // Dictionary terms are text: a cloud engine receives them as a prompt only where text processing is allowed.
     private IReadOnlyList<string>? PromptTermsFor(string selectionId, IReadOnlyList<string>? terms) =>

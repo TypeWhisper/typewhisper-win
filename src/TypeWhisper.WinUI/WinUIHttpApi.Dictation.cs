@@ -72,9 +72,11 @@ internal sealed partial class WinUIHttpApi
             {
                 LocalApiDictationSession? started = null;
                 var rejection = await session.StartForApiAsync(workflow, generation => started = _dictations.Register(generation));
-                if (started is null && rejection is not null && rejection == session.TranscriptionPolicyRefusal())
-                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", rejection);
-                if (started is null) return Error(409, rejection ?? "Dictation could not start. Check the microphone and selected model.");
+                // A policy refusal is typed by the start itself, so a workflow's provider that was restored meanwhile
+                // still answers 403 with the reason.
+                if (started is null && rejection is { PolicyRefusal: true })
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", rejection.Message);
+                if (started is null) return Error(409, rejection?.Message ?? "Dictation could not start. Check the microphone and selected model.");
                 // Capture may already be processing or complete after slow provider startup.
                 // Its ID was registered before any silence stop could run.
                 _dictations.Refresh(session.ApiDictationGeneration, session.IsRecording, session.CanCancelProcessing,

@@ -239,6 +239,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await _livePreview.StopAsync();
             await Models.ActivateAsync(modelId);
             _selection.SetSetting("Provider", "local");
+            _selection.SetSetting("ProviderPluginId", LocalTranscriptionPlugin.PluginId);
             _providerId = "local";
             LocalPluginError = null;
             SetStatus(ModelReadyStatus(), DictationPhase.Idle);
@@ -643,14 +644,19 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 #endif
     internal nint TrayMenuHandle { get; set; }
     // Each start returns only its own task rejection; a concurrent or ignored start cannot see or erase another's.
-    internal Task<string?> StartForApiAsync(AutomaticWorkflowSnapshot? workflow, Action<long> captureStarted) => StartWithRejectionAsync(workflow, captureStarted);
-    internal Task<string?> StartAsync() => StartWithRejectionAsync(null, null);
-    internal Task<string?> StartAsync(AutomaticWorkflowSnapshot workflow) => StartWithRejectionAsync(workflow, null);
-    private async Task<string?> StartWithRejectionAsync(AutomaticWorkflowSnapshot? workflow, Action<long>? captureStarted)
+    /// <summary>Why a start was rejected, and whether machine policy was the reason.</summary>
+    internal sealed record DictationStartRejection(string Message, bool PolicyRefusal);
+    internal Task<DictationStartRejection?> StartForApiAsync(AutomaticWorkflowSnapshot? workflow, Action<long> captureStarted) => StartWithRejectionAsync(workflow, captureStarted);
+    internal async Task<string?> StartAsync() => (await StartWithRejectionAsync(null, null))?.Message;
+    internal async Task<string?> StartAsync(AutomaticWorkflowSnapshot workflow) => (await StartWithRejectionAsync(workflow, null))?.Message;
+    private async Task<DictationStartRejection?> StartWithRejectionAsync(AutomaticWorkflowSnapshot? workflow, Action<long>? captureStarted)
     {
         DictationRequested?.Invoke();
-        string? rejection = null;
-        await SetRecordingAsync(true, workflow, captureStarted, error => rejection = error);
+        DictationStartRejection? rejection = null;
+        // Judged at the moment of the rejection, while a workflow's own provider is still active: a policy refusal
+        // is told apart from other rejections before the regular provider is restored. The result stays with this
+        // start, so concurrent starts keep their own.
+        await SetRecordingAsync(true, workflow, captureStarted, error => rejection = new(error, error == TranscriptionPolicyRefusal()));
         return rejection;
     }
     private bool _stopPending;
