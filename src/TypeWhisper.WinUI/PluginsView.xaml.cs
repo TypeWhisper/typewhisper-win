@@ -52,7 +52,7 @@ public sealed partial class PluginsView : UserControl
             _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? Loc.T("An installed plugin package could not be read."),
                 "plugin", "", "", manifest?.Version ?? "Unknown", manifest?.MinHostVersion ?? "0.0.0")
             {
-                Enabled = enabled, RuntimeCanToggle = state.CanToggle && (enabled || refusal is null), Author = manifest?.Author, IsLocal = manifest?.IsLocal == true,
+                Enabled = enabled, RuntimeCanToggle = state.CanToggle && (enabled || refusal is null), Author = manifest?.Author, IsLocal = manifest?.ResolvedLocality == TypeWhisper.PluginSDK.Models.PluginLocality.Local,
                 Refusal = refusal, Locality = locality,
                 Status = RuntimeUpdateStatus(manifest?.Id) ?? (state.Busy ? Loc.T("Updating…") : refusal is not null && !enabled ? Loc.T("Not allowed") : error is not null ? Loc.T("Needs attention") : setupRequired ? Loc.T("Setup required") : enabled ? Loc.T("Ready") : Loc.T("Disabled"))
             });

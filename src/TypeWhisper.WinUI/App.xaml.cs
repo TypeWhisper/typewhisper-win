@@ -111,7 +111,7 @@ public partial class App : Application
         try
         {
             if (!await FinishPendingDataDeletionAsync(request, initialShare, skipLegacyImport)) return;
-            // Policy is read before the legacy import can install plugins; the later call is a no-op.
+            // Policy is read before the legacy import can install plugins; the import consults it through the store.
             WinUIManagedPolicy.Initialize();
 #if !DEBUG
             var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -156,7 +156,8 @@ public partial class App : Application
             else await TypeWhisper.Core.Services.LegacyDailyProfileMigration.ImportAsync(legacy, WinUIProfile.Root,
                 prepareProfile: (source, stage, ct) => Task.Run(() => LegacyWindowsProfileMigration.PrepareAsync(
                     source, stage, LocalCtcVocabulary.HostVersion,
-                    update => dispatcher.TryEnqueue(() => _profileOperation?.SetMessage(update, true)), ct)));
+                    update => dispatcher.TryEnqueue(() => _profileOperation?.SetMessage(update, true)), ct,
+                    policy: () => TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current))));
             return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

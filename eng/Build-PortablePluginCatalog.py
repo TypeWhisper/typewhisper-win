@@ -40,6 +40,11 @@ def catalog_entries(document: object) -> dict[str, dict]:
     return entries
 
 
+def entry_locality(manifest):
+    """The catalog locality of a manifest: the declared value, or the one implied by the legacy isLocal flag."""
+    return manifest.get("locality") or ("local" if manifest.get("isLocal") else "cloud")
+
+
 def discover_projects(source: pathlib.Path, selected: set[str]) -> list[tuple[pathlib.Path, dict]]:
     projects = {}
     for portable in sorted(source.glob("plugins/*/portable.proj")):
@@ -132,7 +137,13 @@ def main() -> None:
         if plugin_id in entries:
             published_version = entries[plugin_id]["version"]
             if published_version == version:
-                print(f"KEEP  {plugin_id} {version}", flush=True)
+                # Metadata the catalog gained later is refreshed from the manifest without a rebuild; an entry
+                # without a locality resolves to unknown, which restrictive policies refuse even for local plugins.
+                if entries[plugin_id].get("locality") != entry_locality(manifest):
+                    entries[plugin_id]["locality"] = entry_locality(manifest)
+                    print(f"KEEP  {plugin_id} {version} (locality refreshed)", flush=True)
+                else:
+                    print(f"KEEP  {plugin_id} {version}", flush=True)
                 continue
             if numeric_version(version) <= numeric_version(published_version):
                 raise SystemExit(
@@ -200,7 +211,7 @@ def main() -> None:
             "author": manifest.get("author", "TypeWhisper"),
             "description": manifest.get("description", ""),
             "categories": categories,
-            "locality": manifest.get("locality") or ("local" if manifest.get("isLocal") else "cloud"),
+            "locality": entry_locality(manifest),
             "downloadUrl": f"https://github.com/TypeWhisper/typewhisper-win/releases/download/{args.tag}/{name}",
             "sha256": sha256(archive),
             "size": archive.stat().st_size,

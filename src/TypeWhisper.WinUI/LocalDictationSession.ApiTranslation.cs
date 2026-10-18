@@ -13,6 +13,8 @@ internal sealed partial class LocalDictationSession
         {
             try { return await ProcessLlmAsync(plan.Provider, plan.Prompt, text, plan.Model, ct); }
             catch (OperationCanceledException) { throw; }
+            // A refusal by machine policy is the documented 403, not an upstream failure.
+            catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { throw new LocalApiRequestException(502, "Translation failed. Check the default LLM provider and retry."); }
         };

@@ -127,6 +127,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 return;
             }
             if (Enabled) return;
+            // Policy is checked before the engine's assembly loads; the saved preference stays as it is.
+            if (PackageRefusal?.Invoke() is { } refused) { _policyRefused = true; Error = refused; return; }
+            _policyRefused = false;
             Error = null; Feedback = null;
             _lease = await _load();
             Generation++;
@@ -146,6 +149,45 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); }
         }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+    }
+
+    /// <summary>Why machine policy refuses this package as a whole, or null; the engine never loads while refused.</summary>
+    internal static Func<string?>? PackageRefusal { get; set; }
+    private bool _policyRefused;
+
+    /// <summary>
+    /// Re-applies the package policy after it changed: a loaded engine the policy now refuses is released without
+    /// recording a preference, and one the policy no longer refuses loads again when its preference enables it.
+    /// Returns whether the engine was released or loaded.
+    /// </summary>
+    internal async Task<bool> ReapplyPolicyAsync()
+    {
+        var refused = PackageRefusal?.Invoke();
+        if (refused is not null)
+        {
+            if (!Enabled)
+            {
+                if (Error == refused) return false;
+                _policyRefused = true; Error = refused; Changed?.Invoke();
+                return false;
+            }
+            CancelDownload();
+            await _operations.WaitAsync();
+            Busy = true; Changed?.Invoke();
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                await ReleaseAsync();
+                _policyRefused = true; Error = refused; Feedback = null;
+            }
+            finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+            return true;
+        }
+        if (!_policyRefused) return false;
+        _policyRefused = false; Error = null;
+        if (Enabled || _host.GetSetting<bool?>("Enabled") == false) { Changed?.Invoke(); return false; }
+        await SetEnabledAsync(true);
+        return true;
     }
 
     internal async Task ActivateAsync(string modelId, CancellationToken ct = default, bool persistSelection = true)

@@ -3185,5 +3185,6 @@
   "Your organization's policy could not be read. This operation waits until it is readable.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Dieser Vorgang wartet, bis sie lesbar ist.",
   "Not allowed": "Nicht erlaubt",
   "Configurable": "Konfigurierbar",
-  "This plugin processes content in the cloud, which your organization has turned off.": "Dieses Plugin verarbeitet Inhalte in der Cloud, was deine Organisation deaktiviert hat."
+  "This plugin processes content in the cloud, which your organization has turned off.": "Dieses Plugin verarbeitet Inhalte in der Cloud, was deine Organisation deaktiviert hat.",
+  "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "Die Richtlinie deiner Organisation erlaubt die Installation dieser Plugins nicht: {0}. Ihre Einstellungen und Modelle wurden beibehalten."
 }

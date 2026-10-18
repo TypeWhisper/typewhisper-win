@@ -18,7 +18,8 @@ internal static class LegacyWindowsProfileMigration
 
     internal static async Task PrepareAsync(string source, string stage, Version hostVersion,
         Action<string>? progress, CancellationToken ct,
-        Func<string, string, CancellationToken, Task<bool>>? install = null, HttpMessageHandler? handler = null)
+        Func<string, string, CancellationToken, Task<bool>>? install = null, HttpMessageHandler? handler = null,
+        Func<TypeWhisper.Core.Models.ManagedProviderPolicy>? policy = null)
     {
         var notes = new List<string>();
         var settingsPath = Path.Combine(source, "settings.json");
@@ -75,10 +76,14 @@ internal static class LegacyWindowsProfileMigration
 
         using var http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
         http.Timeout = TimeSpan.FromMinutes(10);
-        var store = new PortablePluginStore(Path.Combine(stage, "PluginPackages"), hostVersion, http);
+        var store = new PortablePluginStore(Path.Combine(stage, "PluginPackages"), hostVersion, http, policy: policy);
         IReadOnlyList<PortableCatalogEntry>? catalog = null;
         var offline = false;
-        if (ids.Count > 0 && install is null)
+        // Machine policy that turns plugin downloads off keeps the import off the network entirely; packages it
+        // refuses are deferred like an unreachable catalog, with their settings and models preserved.
+        var downloadsRefused = install is null && policy?.Invoke().PluginDownloadRefusal() is not null;
+        List<string> refusedByPolicy = [];
+        if (ids.Count > 0 && install is null && !downloadsRefused)
         {
             progress?.Invoke(Loc.T("Finding compatible plugins…"));
             // Downloads are best-effort: plugins can be installed later in Integrations. Only cancellation aborts.
@@ -128,13 +133,17 @@ internal static class LegacyWindowsProfileMigration
             await File.WriteAllTextAsync(Path.Combine(data, "settings.json"), JsonSerializer.Serialize(values), ct);
 
             bool? available = null; // null: catalog, download or package validation failed; retry later.
-            if (!offline)
+            if (downloadsRefused) refusedByPolicy.Add(id);
+            else if (!offline)
             {
                 try
                 {
                     if (install is not null) available = await install(id, stage, ct);
                     else if (catalog!.SingleOrDefault(item => item.Id == id && item.Supports(hostVersion, PortablePluginCatalog.Architecture)) is { } entry)
-                    { await store.InstallAsync(entry, ct: ct); available = true; }
+                    {
+                        if (store.InstallRefusal(entry) is not null) refusedByPolicy.Add(id);
+                        else { await store.InstallAsync(entry, ct: ct); available = true; }
+                    }
                     else available = false;
                 }
                 catch (Exception ex) when (Recoverable(ex, ct)) { }
@@ -161,6 +170,9 @@ internal static class LegacyWindowsProfileMigration
                 if (File.Exists(memories)) await File.WriteAllBytesAsync(Path.Combine(data, "memories.json"), Read(memories, source), ct);
             }
         }
+        if (refusedByPolicy.Count > 0)
+            notes.Add(Loc.T("Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.", string.Join(", ", refusedByPolicy)));
+        deferred.RemoveAll(refusedByPolicy.Contains);
         if (deferred.Count > 0)
             notes.Add(offline
                 ? Loc.T("The plugin catalog could not be reached, so these plugins were not installed: {0}. Their settings and models were preserved; install them in Integrations.", string.Join(", ", deferred))
@@ -176,7 +188,7 @@ internal static class LegacyWindowsProfileMigration
         await File.WriteAllTextAsync(Path.Combine(stage, ReportName), JsonSerializer.Serialize(new
         {
             Version = 1, InstalledPlugins = installed,
-            UnavailablePlugins = unavailable.Concat(deferred).Order(StringComparer.Ordinal), Notes = notes
+            UnavailablePlugins = unavailable.Concat(deferred).Concat(refusedByPolicy).Order(StringComparer.Ordinal), Notes = notes
         }), ct);
     }
 

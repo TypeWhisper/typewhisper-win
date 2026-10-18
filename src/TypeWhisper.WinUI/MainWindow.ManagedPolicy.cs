@@ -32,6 +32,7 @@ public sealed partial class MainWindow
         WinUILicensing.ApplyPolicyChange();
         _applicationUpdates?.PolicyChanged();
         _ = ApplyStartupPolicyAsync();
+        _ = _dictation.ApplyPolicyChangeAsync();
         if (SetupSkippedByPolicy && !OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current) && !SetupCompleted)
         {
             SetupSkippedByPolicy = false;

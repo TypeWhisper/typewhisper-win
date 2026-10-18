@@ -135,7 +135,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private bool PackageIsLocal(string id)
     {
         if (!_packageLocality.TryGetValue(id, out var local))
-            _packageLocality[id] = local = PortablePluginPackage.ReadManifest(Packages.Store.Resolve(id)).IsLocal;
+            _packageLocality[id] = local = PortablePluginPackage.ReadManifest(Packages.Store.Resolve(id)).ResolvedLocality == TypeWhisper.PluginSDK.Models.PluginLocality.Local;
         return local;
     }
     private readonly VocabularyHostServices _selection = new(WinUIProfile.DataPath("Dictation"));

@@ -23,4 +23,40 @@ internal sealed partial class LocalDictationSession
 
     /// <summary>Why policy refuses downloading models or runtime assets, or null.</summary>
     internal static string? ModelDownloadRefusal() => ProviderPolicy.ModelDownloadRefusal();
+
+    /// <summary>
+    /// Re-applies the package policy to the plugin runtime and the local engine after a policy change. Waits for a
+    /// running dictation to finish; its audio path refuses a newly refused provider on its own meanwhile.
+    /// </summary>
+    internal async Task ApplyPolicyChangeAsync()
+    {
+        if (_disposed) return;
+        try
+        {
+            await PluginRuntime.ReapplyPolicyAsync();
+            await _gate.WaitAsync();
+            try
+            {
+                // The local engine is judged only once its package exists; an absent package has nothing to refuse.
+                if (_disposed || !Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) return;
+                var previousError = LocalPluginError;
+                if (Models.Enabled && ProviderPolicy.PluginRefusal(LocalTranscriptionPlugin.PluginId) is not null) await _livePreview.StopAsync();
+                var changed = await Models.ReapplyPolicyAsync();
+                if (_disposed) return;
+                if (!changed)
+                {
+                    LocalPluginError = Models.Error ?? LocalPluginError;
+                    if (LocalPluginError != previousError) Changed?.Invoke();
+                    return;
+                }
+                var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled);
+                LocalPluginError = Models.Error ?? vocabularyError;
+                SetStatus(Models.Enabled
+                    ? IsReady ? ModelReadyStatus() : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation.")
+                    : Models.Error ?? Loc.T("Local transcription plugin disabled"), DictationPhase.Idle);
+            }
+            finally { _gate.Release(); }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.plugins.reapply-failed", ex); }
+    }
 }

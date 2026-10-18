@@ -57,6 +57,67 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
+    public async Task PolicyChangeUnloadsARefusedPackageAndReloadsItOnceAllowed()
+    {
+        var store = await Store();
+        Host(Id).SetSetting("Enabled", true);
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        await registry.InitializeAsync();
+        Assert.True(Assert.Single(registry.Snapshot()).Enabled);
+        Assert.Equal(1, Host(Id).GetSetting<int>("activations"));
+
+        policy = Policy(plugins: ["com.typewhisper.sherpa-onnx"]);
+        Assert.Equal([Id], await registry.ReapplyPolicyAsync());
+
+        var refused = Assert.Single(registry.Snapshot());
+        Assert.False(refused.Enabled);
+        Assert.Contains("not allowed", refused.Error);
+        Assert.Empty(registry.TranscriptionProviders);
+        // The preference is the user's; only the policy keeps the package out.
+        Assert.True(Host(Id).GetSetting<bool?>("Enabled"));
+        Assert.Empty(await registry.ReapplyPolicyAsync());
+
+        policy = Policy();
+        Assert.Equal([Id], await registry.ReapplyPolicyAsync());
+        var restored = Assert.Single(registry.Snapshot());
+        Assert.True(restored.Enabled);
+        Assert.Null(restored.Error);
+        Assert.Equal(2, Host(Id).GetSetting<int>("activations"));
+    }
+
+    [Fact]
+    public async Task PolicyChangeLeavesAPackageTheUserDisabledAlone()
+    {
+        var store = await Store();
+        Host(Id).SetSetting("Enabled", false);
+        var policy = Policy(plugins: ["com.typewhisper.sherpa-onnx"]);
+        await using var registry = PolicyRegistry(store, () => policy);
+        await registry.InitializeAsync();
+        Assert.Contains("not allowed", Assert.Single(registry.Snapshot()).Error);
+
+        policy = Policy();
+        Assert.Empty(await registry.ReapplyPolicyAsync());
+
+        var state = Assert.Single(registry.Snapshot());
+        Assert.False(state.Enabled);
+        Assert.Null(state.Error);
+        Assert.Equal(0, Host(Id).GetSetting<int>("activations"));
+    }
+
+    [Fact]
+    public async Task LocalityDeclaredOnlyThroughTheManifestCountsAsLocal()
+    {
+        var store = await LocalityStore("local");
+        await using var registry = PolicyRegistry(store, () => Policy());
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+
+        var provider = Assert.Single(registry.LlmProviders);
+        Assert.True(provider.IsLocal);
+        Assert.Equal(Id, await registry.UseLocalLlmAsync(provider.SelectionId, (plugin, _) => Task.FromResult(plugin.PluginId)));
+    }
+
+    [Fact]
     public async Task CloudPackageWithNoAllowedCapabilityIsNeverLoaded()
     {
         var store = await LocalityStore("cloud", ["transcription"]);

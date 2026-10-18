@@ -71,6 +71,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal IReadOnlyList<string>? Categories;
         internal long Generation;
         internal string? Error;
+        // Whether Error names a policy refusal; such a package loads again once the policy allows it.
+        internal bool PolicyRefused;
         internal bool CapabilityError;
         internal bool ApiKeyConfigured;
         internal CancellationTokenSource? Request;
@@ -196,6 +198,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 slot.Locality = PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality);
                 slot.Categories = manifest.Categories ?? [];
                 slot.Error = package.Error ?? refused;
+                slot.PolicyRefused = package.Error is null && refused is not null;
             }
             if (package.Error is not null || refused is not null) continue;
             try
@@ -227,7 +230,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             }
             if (enabled && slot.Accepting) return null;
             // Policy is checked before any code of the package loads; disabling is always allowed.
-            if (enabled && PackageRefusal(pluginId) is { } refused) { slot.Error = refused; return refused; }
+            if (enabled && PackageRefusal(pluginId) is { } refused) { slot.Error = refused; slot.PolicyRefused = true; return refused; }
             generation = ++slot.Generation;
             slot.Accepting = false;
             CancelRequest(slot);
@@ -248,7 +251,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 try { Publish(BuildIndex()); }
                 catch { Publish(new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], [])); throw; }
                 finally { if (old is not null) await ReleasePackageAsync(slot, old); }
-                lock (_sync) slot.Error = null;
+                lock (_sync) { slot.Error = null; slot.PolicyRefused = false; }
                 return null;
             }
             var directory = store.Resolve(pluginId); // Inventory paths are display identities, not loadable directories.
@@ -259,7 +262,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, slot.Services, hostVersion);
             slot.Package = package;
             slot.Directory = directory;
-            slot.IsLocal = inspection.Manifest.IsLocal;
+            // Locality is authoritative; the legacy flag only feeds it for manifests that predate the field.
+            slot.IsLocal = inspection.Manifest.ResolvedLocality == PluginLocality.Local;
             slot.Locality = PluginLocalityMap.ToContentLocality(inspection.Manifest.ResolvedLocality);
             slot.Categories = inspection.Manifest.Categories ?? [];
             if (Policy.PackageRefusal(pluginId, slot.Locality, slot.Categories) is { } refusedPackage) throw new ManagedPolicyDeniedException("plugin", refusedPackage);
@@ -272,6 +276,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                     slot.Services.SetSetting("Enabled", true);
                     slot.Accepting = true;
                     slot.Error = null;
+                    slot.PolicyRefused = false;
                     _index = next;
                 }
             }
@@ -291,6 +296,73 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             return message;
         }
         finally { _gate.Release(); NotifyChanged(); }
+    }
+
+    /// <summary>
+    /// Re-evaluates the package policy after it changed. A loaded package the policy now refuses is unloaded while
+    /// its saved preference stays as it is; a package whose refusal was lifted loads again when that preference
+    /// enables it. Returns the IDs whose runtime state changed.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ReapplyPolicyAsync()
+    {
+        List<(Slot Slot, string? Refused)> slots;
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            slots = _slots.Values.Select(slot => (slot, slot.Categories is null
+                ? Policy.PluginRefusal(slot.Id) : Policy.PackageRefusal(slot.Id, slot.Locality, slot.Categories))).ToList();
+        }
+        var changed = new List<string>();
+        foreach (var (slot, refused) in slots)
+        {
+            if (refused is not null)
+            {
+                if (await UnloadForPolicyAsync(slot, refused)) changed.Add(slot.Id);
+                else lock (_sync) if (slot.Package is null && (slot.Error is null || slot.PolicyRefused)) { slot.Error = refused; slot.PolicyRefused = true; }
+                continue;
+            }
+            bool reload;
+            lock (_sync)
+            {
+                reload = slot.PolicyRefused && slot.Package is null;
+                if (reload) { slot.PolicyRefused = false; slot.Error = null; }
+            }
+            if (!reload) continue;
+            try
+            {
+                if (slot.Services.GetSetting<bool?>("Enabled") == true && await SetEnabledAsync(slot.Id, true) is null) changed.Add(slot.Id);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            { lock (_sync) slot.Error = "Plugin enablement could not be loaded: " + ex.GetType().Name; }
+        }
+        NotifyChanged();
+        return changed;
+    }
+
+    // The disable path without the preference write: the user's choice survives the policy. False when nothing
+    // was loaded or a newer operation superseded this one.
+    private async Task<bool> UnloadForPolicyAsync(Slot slot, string refused)
+    {
+        long generation;
+        lock (_sync)
+        {
+            if (_disposed || slot.Package is null) return false;
+            generation = ++slot.Generation;
+            slot.Accepting = false;
+            CancelRequest(slot);
+        }
+        await _gate.WaitAsync();
+        try
+        {
+            lock (_sync) if (_disposed || slot.Generation != generation) return false;
+            var old = slot.Package; slot.Package = null;
+            try { Publish(BuildIndex()); }
+            catch { Publish(new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], [])); throw; }
+            finally { if (old is not null) await ReleasePackageAsync(slot, old); }
+            lock (_sync) { slot.Error = refused; slot.PolicyRefused = true; }
+            return true;
+        }
+        finally { _gate.Release(); }
     }
 
     /// <summary>
