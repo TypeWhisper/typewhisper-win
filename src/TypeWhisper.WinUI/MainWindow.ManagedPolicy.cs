@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -45,6 +46,25 @@ public sealed partial class MainWindow
         await _startupPolicyGate.WaitAsync();
         try { return await StartupPolicy.ApplyAsync(WinUIManagedPolicy.Current, SetupCompleted); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.startup.apply-failed", ex); return null; }
+        finally { _startupPolicyGate.Release(); }
+    }
+
+    // A user's own change takes the same gate and re-reads the policy first: an enforced value that arrived meanwhile
+    // wins and the row shows the locked state instead of a write that policy would undo.
+    internal async Task<StartupPolicyOutcome?> ChangeStartupFromUserAsync(bool enabled)
+    {
+        await _startupPolicyGate.WaitAsync();
+        try
+        {
+            var snapshot = WinUIManagedPolicy.Current;
+            if (snapshot.IsBlocked(ManagedPolicyKeys.LaunchAtLogin) || snapshot.IsEnforced(ManagedPolicyKeys.LaunchAtLogin))
+                return await StartupPolicy.ApplyAsync(snapshot, SetupCompleted);
+            var state = await StartupRegistration.SetEnabledAsync(enabled);
+            // A choice that could not be recorded is shown: a recommendation could otherwise replace it after a restart.
+            var recorded = state.Error is not null || StartupPolicy.RecordUserChoice(enabled);
+            return new(state, false, null, recorded ? null : StartupPolicy.Store.Error);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.startup.change-failed", ex); return null; }
         finally { _startupPolicyGate.Release(); }
     }
 

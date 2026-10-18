@@ -10,8 +10,8 @@ internal static class LiveStartupSettings
 {
     // The reconciler applies LaunchAtLogin and remembers the user's own choice; the row follows its outcome. Policy
     // passes run through the window's serialized entry point so the row never races the policy-change handler.
-    internal static async void Configure(string category, StackPanel content, List<ChoicePicker> pickers, IStartupRegistration registration,
-        StartupPolicyReconciler policy, Func<Task<StartupPolicyOutcome?>> apply)
+    internal static async void Configure(string category, StackPanel content, List<ChoicePicker> pickers,
+        Func<bool, Task<StartupPolicyOutcome?>> change, Func<Task<StartupPolicyOutcome?>> apply)
     {
         if (category != "General") return;
         var row = SettingsRow.Require(content, "AutostartEnabled").Reset(pickers);
@@ -34,10 +34,8 @@ internal static class LiveStartupSettings
         {
             if (updating) return;
             toggle.IsEnabled = false;
-            var state = await registration.SetEnabledAsync(toggle.IsOn);
-            // A choice that could not be recorded is shown: a recommendation could otherwise replace it after a restart.
-            var recorded = state.Error is not null || policy.RecordUserChoice(toggle.IsOn);
-            Show(new(state, false, null, recorded ? null : policy.Store.Error));
+            if (await change(toggle.IsOn) is { } outcome) Show(outcome);
+            else toggle.IsEnabled = true;
         };
         void OnPolicyChanged(ManagedPolicySnapshot _) => row.DispatcherQueue.TryEnqueue(async () => await ApplyPolicyAsync());
         ViewSubscriptions.Attach(row, () => WinUIManagedPolicy.Changed += OnPolicyChanged, () => WinUIManagedPolicy.Changed -= OnPolicyChanged);

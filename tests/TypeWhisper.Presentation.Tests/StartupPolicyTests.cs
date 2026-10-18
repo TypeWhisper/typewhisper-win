@@ -159,6 +159,23 @@ public sealed class StartupPolicyTests : IDisposable
     }
 
     [Fact]
+    public async Task ARecommendationReplacingEnforcementAppliesInTheSamePass()
+    {
+        var registration = new Registration { Enabled = false };
+        var reconciler = new StartupPolicyReconciler(registration, Store());
+        await reconciler.ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]), setupCompleted: false);
+        Assert.True(registration.Enabled);
+
+        var outcome = await reconciler.ApplyAsync(Build(recommended: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]), setupCompleted: false);
+
+        // Restored to the user's pre-enforcement state, then the recommendation turned it on again.
+        Assert.True(registration.Enabled);
+        Assert.False(outcome.Locked);
+        Assert.Null(Store().Current.RetainedBeforeEnforcement);
+        Assert.True(Store().Current.RecommendationApplied);
+    }
+
+    [Fact]
     public void FailedSaveLeavesTheStoredStateUntouched()
     {
         Directory.CreateDirectory(Path.Combine(_root, "startup-policy.json"));

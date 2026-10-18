@@ -94,9 +94,9 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
             if (state.CanChange && state.IsEnabled != retained)
                 state = await registration.SetEnabledAsync(retained);
             // A clear that did not reach the disk is reported: the next launch would otherwise restore it again.
-            if (!state.Unknown && state.IsEnabled == retained && !store.Save(store.Current with { RetainedBeforeEnforcement = null }))
-                return new(state, false, null, store.Error);
-            return new(state, false, null);
+            if (state.Unknown || state.IsEnabled != retained) return new(state, false, null);
+            if (!store.Save(store.Current with { RetainedBeforeEnforcement = null })) return new(state, false, null, store.Error);
+            // A recommendation that replaced the enforcement in the same revision is evaluated by this pass.
         }
 
         // A recommendation needs a readable preference state: an unreadable file may hold the user's own choice.
