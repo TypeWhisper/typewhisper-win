@@ -678,12 +678,23 @@ public sealed class LicenseService
                 if (HasCommercialActivation) return true;
             }
 
-            var previousKey = _commercialLicenseKey;
-            var previousActivationId = _commercialActivationId;
+            var previous = CaptureCommercialState();
             await ActivateKeyAsync(key!, ExpectedLicenseEntitlementKind.Commercial, ct);
+            if (StorageError is not null)
+            {
+                // The replacement has no durable record, so the next launch would reload the stored activation and
+                // activate once more. Release the replacement again and keep the stored activation until the store
+                // is writable; the managed key stays failed and Retry applies it again.
+                var replacementId = _commercialActivationId;
+                RestoreCommercialState(previous);
+                if (replacementId is not null) await TryDeactivateCoreAsync(key!, replacementId, ct);
+                ManagedLicenseFailed = true;
+                _reportFailure?.Invoke("license.managed.persist-failed", new IOException(StorageError));
+                return true;
+            }
             // The replaced activation is released after the new key is stored. A failure leaves it listed in Polar.
-            if (previousKey is not null && previousActivationId is not null && !string.Equals(previousKey, key, StringComparison.Ordinal))
-                await TryDeactivateCoreAsync(previousKey, previousActivationId, ct);
+            if (previous.Key is not null && previous.ActivationId is not null && !string.Equals(previous.Key, key, StringComparison.Ordinal))
+                await TryDeactivateCoreAsync(previous.Key, previous.ActivationId, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -702,6 +713,22 @@ public sealed class LicenseService
             NotifyStateChanged();
         }
         return true;
+    }
+
+    private readonly record struct CommercialState(
+        string? Key, string? ActivationId, DateTime? LastValidated, LicenseStatus Status, CommercialLicenseTier? Tier, bool IsLifetime);
+
+    private CommercialState CaptureCommercialState() =>
+        new(_commercialLicenseKey, _commercialActivationId, _commercialLastValidated, CommercialStatus, CommercialTier, CommercialIsLifetime);
+
+    private void RestoreCommercialState(CommercialState state)
+    {
+        _commercialLicenseKey = state.Key;
+        _commercialActivationId = state.ActivationId;
+        _commercialLastValidated = state.LastValidated;
+        CommercialStatus = state.Status;
+        CommercialTier = state.Tier;
+        CommercialIsLifetime = state.IsLifetime;
     }
 
     private async Task<ActivatedLicenseEntitlement> ActivateKeyAsync(

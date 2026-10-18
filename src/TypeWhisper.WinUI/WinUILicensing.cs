@@ -19,6 +19,7 @@ internal static class WinUILicensing
     internal static bool Busy { get; private set; }
     private static bool _closing;
     private static string? _appliedManagedKey;
+    private static bool _policyChangeQueued;
     private static Task _operation = Task.CompletedTask;
     static WinUILicensing() => Service.StatusChanged += () => Changed?.Invoke();
 
@@ -35,10 +36,12 @@ internal static class WinUILicensing
         await Service.ValidateAllIfNeededAsync();
         Notice = Service.ManagedLicenseFailed ? null : Loc.T("License status updated.");
     });
-    // Called on the UI thread after a policy change; only a different managed key starts a new pass.
+    // Called after a policy change; only a different managed key starts a new pass. A change that arrives while
+    // another license operation runs is applied once that operation completes, so no key is skipped.
     internal static void ApplyPolicyChange()
     {
         if (string.Equals(ManagedKey(), _appliedManagedKey, StringComparison.Ordinal)) return;
+        if (Busy) { _policyChangeQueued = true; return; }
         _ = ValidateAsync();
     }
     private static string? ManagedKey() => WinUIManagedPolicy.Current.Enforced(ManagedPolicyKeys.ManagedLicenseKey)?.Text;
@@ -80,6 +83,11 @@ internal static class WinUILicensing
         try { await action(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Notice = Loc.T("The license operation could not be completed. Please try again."); }
         finally { Busy = false; Changed?.Invoke(); completion.TrySetResult(); }
+        if (_policyChangeQueued && !_closing)
+        {
+            _policyChangeQueued = false;
+            ApplyPolicyChange();
+        }
     }
     internal static Task ShutdownAsync() { _closing = true; return _operation; }
 }

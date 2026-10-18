@@ -42,8 +42,10 @@ putting real keys in interactive shell history or script logs.
   launches and does not activate on every launch.
 - Each Windows user account on a device holds its own activation. A device with
   several users uses one seat per user, as macOS does with per-user Keychain records.
-  Polar labels each activation with the machine name and the Windows user name, for
-  example `TYPEWHISPER (tw-user2)`, so the seats of one device can be told apart.
+  The direct download and the Microsoft Store build keep separate profiles, so a user
+  who runs both side by side takes one seat per build. Polar labels each activation
+  with the machine name and the Windows user name, for example
+  `TYPEWHISPER (tw-user2)`, so the seats of one device can be told apart.
 - Existing licenses keep their normal offline validation behavior. An initial
   activation needs internet access; failures can be retried from the License page or
   on the next launch. No background retry loop is installed.

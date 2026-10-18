@@ -91,6 +91,37 @@ public sealed class ManagedLicenseTests : IDisposable
     }
 
     [Fact]
+    public async Task ManagedKey_ReleasesAReplacementWhoseRecordCannotBeStored()
+    {
+        var polar = new FakePolar();
+        var directory = CreateTempDir();
+        var service = Create(polar, directory);
+        await service.ActivateCommercialLicenseAsync("COM-MANUAL");
+        // A directory in place of the credential file makes every store write fail.
+        var credentialPath = Path.Combine(directory, "licenses.dat");
+        File.Delete(credentialPath);
+        Directory.CreateDirectory(credentialPath);
+
+        Assert.True(await service.ReconcileManagedLicenseAsync("COM-ORG-4"));
+
+        Assert.True(service.ManagedLicenseFailed);
+        Assert.NotNull(service.StorageError);
+        Assert.Equal("COM-MANUAL", GetPrivateField<string>(service, "_commercialLicenseKey"));
+        Assert.Equal("activation-1", GetPrivateField<string>(service, "_commercialActivationId"));
+        Assert.True(service.HasCommercialLicense);
+        Assert.Equal(["activate:COM-MANUAL", "validate:COM-MANUAL", "activate:COM-ORG-4", "validate:COM-ORG-4", "deactivate:COM-ORG-4"], polar.Operations);
+        Assert.Equal(["activation-2"], polar.DeactivatedActivations);
+
+        // Once the store is writable again the replacement goes through and releases the previous activation.
+        Directory.Delete(credentialPath);
+        Assert.True(await service.ReconcileManagedLicenseAsync("COM-ORG-4"));
+        Assert.False(service.ManagedLicenseFailed);
+        Assert.Null(service.StorageError);
+        Assert.Equal("COM-ORG-4", GetPrivateField<string>(service, "_commercialLicenseKey"));
+        Assert.Equal(["activation-2", "activation-1"], polar.DeactivatedActivations);
+    }
+
+    [Fact]
     public async Task ManagedKey_RejectsSupporterKeysAndReleasesTheirActivation()
     {
         var polar = new FakePolar();
