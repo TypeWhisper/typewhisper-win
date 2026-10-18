@@ -37,7 +37,10 @@ public sealed partial class PortablePluginRuntimeRegistry
                 playback.Completed += Completed;
                 if (!playback.IsActive) completion.TrySetResult();
                 using var registration = token.Register(() => completion.TrySetCanceled(token));
-                await completion.Task;
+                try { await completion.Task; }
+                // A cancellation the policy pass caused is reported as the refusal, not as a playback failure.
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested && TextTransferRefusal(pluginId) is { } refusedMeanwhile)
+                { throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refusedMeanwhile); }
                 if (playback.Error is not null) throw new InvalidOperationException(playback.Error);
                 return true;
             }

@@ -37,6 +37,11 @@ internal sealed partial class LocalDictationSession
         if (LocalTranscriptionRefusal() is { } refused) throw new ManagedPolicyDeniedException("transcription", refused);
     }
 
+    private void DenyRegistrySelectionIfRefused(string selectionId)
+    {
+        if (PluginRuntime.TranscriptionRefusal(selectionId) is { } refused) throw new ManagedPolicyDeniedException("transcription", refused);
+    }
+
     /// <summary>Why policy refuses downloading models or runtime assets, or null.</summary>
     internal static string? ModelDownloadRefusal() => ProviderPolicy.ModelDownloadRefusal();
 

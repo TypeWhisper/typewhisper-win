@@ -791,6 +791,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             else if (recording.HasValue && recording.Value == _audio.IsRecording) return;
             if (!IsReady && !SwitchesWorkflowModel(workflow?.TranscriptionModel))
             {
+                // A provider the policy refuses is not ready; the attempt reports the policy reason, not a missing model.
+                if (TranscriptionPolicyRefusal() is { } deniedEarly)
+                {
+                    AppDiagnostics.Write("dictation.policy-refused");
+                    rejected?.Invoke(deniedEarly, true);
+                    SetStatus(deniedEarly);
+                    return;
+                }
                 AppDiagnostics.Write("dictation.not-ready");
                 SetStatus(Loc.T("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."));
                 return;

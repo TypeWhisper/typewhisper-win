@@ -176,6 +176,9 @@ public sealed partial class PortablePluginRuntimeRegistry
                 if (!engine.IsModelDownloaded(expected.ModelId))
                     await engine.DownloadModelAsync(expected.ModelId, reports, token).ConfigureAwait(false);
             }
+            // A cancellation the policy pass caused is reported as the refusal, not as a cancelled download.
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && Policy.ModelDownloadRefusal() is { } refusedMeanwhile)
+            { throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedMeanwhile); }
             finally { lock (_sync) owner.Downloading = false; }
             token.ThrowIfCancellationRequested();
             if (!engine.IsModelDownloaded(expected.ModelId))
