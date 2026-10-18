@@ -327,9 +327,11 @@ def main():
         except (ValueError, urllib.error.URLError):
             # A previous run may have committed the feed before Pages failed.
             # Recover deployment even when no package needs rebuilding; refreshes ride along.
-            changes = verification
             if refreshed:
                 update_feed([], refreshed)
+                committed = builder.catalog_entries(refresh_feed(current, refreshed))
+                verification = [committed.get(entry["id"], entry) for entry in verification]
+            changes = verification
             api("pages/builds", method="POST")
             wait_for_live(changes)
             return

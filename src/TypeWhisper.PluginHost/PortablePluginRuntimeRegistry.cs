@@ -102,6 +102,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sync = new();
     private readonly Dictionary<string, Slot> _slots = new(StringComparer.Ordinal);
+    // Which package served each transcription selection ID, kept after the role is gone so a refused and unloaded
+    // package can still be judged for the selection the user made.
+    private readonly Dictionary<string, string> _selectionOwners = new(StringComparer.OrdinalIgnoreCase);
     private Index _index = new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], []);
     private bool _disposed;
     private int _refreshRequested;
@@ -117,6 +120,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     {
         lock (_sync) return _slots.TryGetValue(pluginId, out var slot) && slot.Categories is not null
             ? Policy.PackageRefusal(pluginId, slot.Locality, slot.Categories) : Policy.PluginRefusal(pluginId);
+    }
+
+    /// <summary>
+    /// Why policy refuses the package behind a transcription selection ID, or null. The selection is resolved through
+    /// the package that last served it, so a role the policy unloaded is still judged by its package.
+    /// </summary>
+    public string? SelectionPackageRefusal(string selectionId)
+    {
+        lock (_sync) return PackageRefusal(_selectionOwners.TryGetValue(selectionId, out var owner) ? owner : selectionId);
     }
 
     /// <summary>Why policy refuses audio for an enabled transcription role, or null. Unknown roles return null.</summary>
@@ -308,6 +320,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 lock (_sync)
                 {
                     if (_disposed || slot.Generation != generation) throw new OperationCanceledException("Plugin activation was superseded.");
+                    // Judged a last time as part of the publication, under the same lock the policy pass takes: a
+                    // package refused in the meantime is released below instead of published.
+                    if (SlotRefusal(slot) is { } refusedAtPublish) throw new ManagedPolicyDeniedException("plugin", refusedAtPublish);
                     slot.Services.SetSetting("Enabled", true);
                     slot.Accepting = true;
                     slot.Stopping = false;
@@ -327,8 +342,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var message = ex is CapabilityCollisionException ? ex.Message : "Plugin operation failed: " + ex.GetType().Name;
-            lock (_sync) slot.Error = message;
+            var message = ex is CapabilityCollisionException or ManagedPolicyDeniedException ? ex.Message : "Plugin operation failed: " + ex.GetType().Name;
+            lock (_sync) { slot.Error = message; slot.PolicyRefused = ex is ManagedPolicyDeniedException; }
             return message;
         }
         finally { _gate.Release(); NotifyChanged(); }
@@ -737,6 +752,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var id = engine.GetTranscriptionSelectionId();
                 if (string.IsNullOrWhiteSpace(id) || engine.PluginId != slot.Id || !transcription.TryAdd(id, new(slot, engine)))
                     throw new CapabilityCollisionException("Transcription capability identity collision or invalid owner: " + id);
+                lock (_sync) _selectionOwners[id] = slot.Id;
                 transcriptionSnapshots.Add(new(slot.Id, id, engine.ProviderDisplayName, engine.IsConfigured,
                     engine.SelectedModelId, Array.AsReadOnly(engine.TranscriptionModels.ToArray()), engine.SupportsTranslation, engine is IPcmTranscriptionEnginePlugin,
                     Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId, engine.SupportsLanguageHints)

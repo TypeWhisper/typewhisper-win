@@ -166,12 +166,13 @@ public sealed partial class PortablePluginRuntimeRegistry
             if (ReadModelRequirements(owner, engine).Any(item => item.ModelId == expected.ModelId && item.IsRequired && !item.IsSatisfied))
                 throw new InvalidOperationException("Complete this model's required configuration before downloading.");
             token.ThrowIfCancellationRequested();
-            // Rechecked under the lease: a policy that changed during the wait wins before any byte is downloaded.
-            if (Policy.ModelDownloadRefusal() is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedNow);
             using var reports = new ModelDownloadProgress(progress, token);
+            // Marked before the final check, so a policy pass between the check and the download finds and cancels it.
             lock (_sync) owner.Downloading = true;
             try
             {
+                // Rechecked under the lease: a policy that changed during the wait wins before any byte is downloaded.
+                if (Policy.ModelDownloadRefusal() is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedNow);
                 if (!engine.IsModelDownloaded(expected.ModelId))
                     await engine.DownloadModelAsync(expected.ModelId, reports, token).ConfigureAwait(false);
             }

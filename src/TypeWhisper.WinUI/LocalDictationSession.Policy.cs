@@ -17,7 +17,7 @@ internal sealed partial class LocalDictationSession
     /// </summary>
     internal string? TranscriptionPolicyRefusal() => UsesRegistryProvider
         ? PluginRuntime.TranscriptionRefusal(RegistrySelectionId(_providerId))
-            ?? (ActiveRegistryProvider is null ? PluginRuntime.PackageRefusal(RegistrySelectionId(_providerId)) : null)
+            ?? (ActiveRegistryProvider is null ? PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(_providerId)) : null)
         : LocalTranscriptionRefusal();
 
     // Dictionary terms are text: a cloud engine receives them as a prompt only where text processing is allowed.
@@ -49,6 +49,8 @@ internal sealed partial class LocalDictationSession
                 if (_audio.IsRecording || _fileBusy || _phase == DictationPhase.Processing) RequestCancel();
                 _training?.CancelDecode();
             }
+            // A refused local package stops downloading model data at once, before any unload is awaited.
+            if (Models.Enabled && ProviderPolicy.PluginRefusal(LocalTranscriptionPlugin.PluginId) is not null) Models.CancelDownload();
             // Downloads that passed their check before the policy turned them off stop here; the runtime cancels its
             // own downloads in its pass.
             if (ModelDownloadRefusal() is not null)

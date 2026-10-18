@@ -347,7 +347,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             var engine = _lease?.Engine ?? throw new InvalidOperationException(Loc.T("Enable the local plugin in Plugins first."));
             if (!engine.TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException(Loc.T("Unknown model."));
             if (!engine.SupportsModelDownload) throw new NotSupportedException(Loc.T("This plugin does not support downloads."));
-            if (ModelDownloadRefusal?.Invoke() is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refused);
+            // A refused package downloads nothing, whatever the download rule says.
+            if ((PackageRefusal?.Invoke() ?? ModelDownloadRefusal?.Invoke()) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refused);
             DownloadingModelId = modelId; Changed?.Invoke();
             await engine.DownloadModelAsync(modelId, new InlineProgress(value =>
             {

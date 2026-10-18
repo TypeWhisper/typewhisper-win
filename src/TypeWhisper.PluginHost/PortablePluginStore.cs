@@ -174,6 +174,8 @@ public sealed class PortablePluginStore
                     if (count == 0) break;
                     total += count;
                     if (total > entry.Size) throw new InvalidDataException("Package exceeds the catalog size.");
+                    // A policy that turned restrictive during the download stops it instead of letting it finish.
+                    if (InstallRefusal(entry) is { } refusedDuring) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedDuring);
                     await output.WriteAsync(buffer.AsMemory(0, count), ct);
                     progress?.Report(new("Downloading " + entry.Name + "…", (double)total / entry.Size));
                 }
