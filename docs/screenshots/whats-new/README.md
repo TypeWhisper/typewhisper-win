@@ -18,14 +18,14 @@ showed the inline explanation without opening the news window.
 
 Separate named profiles exercised automatic presentation, persistence across
 restart and immediate dismissal on a dictation shortcut. That shortcut check
-did not use a configured model or microphone; end-to-end capture and insertion
-target preservation still require a controlled microphone test.
+did not use a configured model or microphone. Marco subsequently confirmed
+successful real-microphone dictation and Alt+Tab in a manual test.
 
 The Release application headless suite passed 4,357 tests, with five optional
 audio tests skipped. The final borderless UI was rebuilt and checked natively
 after that suite. A follow-up run passed 45 focused startup/news tests, including
 a readable but read-only progress file across two simulated restarts.
-The follow-up focus-preservation change was reviewed and rebuilt; a native
-deactivate/reactivate check remains outstanding because the desktop was in use.
+The follow-up focus-preservation change was reviewed and rebuilt before the
+manual microphone and Alt+Tab verification.
 See the [testing guide](../../../TESTING_GUIDE.md#whats-new-after-an-update)
-for startup fixtures and the remaining acceptance scenarios.
+for startup fixtures and acceptance scenarios.
