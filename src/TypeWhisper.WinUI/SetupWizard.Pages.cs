@@ -104,6 +104,9 @@ public sealed partial class SetupWizard
         var note = Copy(Loc.T("You can change microphone access at any time in Windows settings.")); note.Foreground = Resource("MutedBrush"); _body.Children.Add(note);
     }
 
+    /// <summary>Whether Windows denies this app the microphone, regardless of connected devices.</summary>
+    internal static bool MicrophoneAccessBlocked => MicrophoneAccessStatus() == "Access blocked";
+
     private static string MicrophoneAccessStatus()
     {
         try

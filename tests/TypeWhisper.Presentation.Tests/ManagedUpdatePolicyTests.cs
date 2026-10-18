@@ -186,6 +186,8 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
         await controller.CheckAsync();
         Assert.NotNull(controller.Offer);
 
+        // A changed update policy drops the cached offer even when it still allows the channel.
+        policy = new ManagedUpdatePolicy(null, null, null, new HashSet<AppUpdateChannel> { AppUpdateChannel.Stable, AppUpdateChannel.Daily, AppUpdateChannel.ReleaseCandidate }, false);
         controller.PolicyChanged();
         Assert.Null(controller.Offer);
 
@@ -230,6 +232,26 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
         Assert.True(preferences.HasExplicitChoice);
         Assert.Equal(AppUpdateChannel.Stable, controller.EffectiveChannel);
         Assert.Equal(AppUpdateChannel.Stable, Preferences("1.2.0").ExplicitChannel);
+    }
+
+    [Fact]
+    public async Task PolicyChangedKeepsTheOfferWhenTheUpdatePolicyIsUnchanged()
+    {
+        var policy = new ManagedUpdatePolicy(null, null, null, new HashSet<AppUpdateChannel> { AppUpdateChannel.Stable }, false);
+        var backend = new Backend();
+        var controller = Controller(Preferences(), backend, () => policy);
+        await controller.CheckAsync();
+        Assert.NotNull(controller.Offer);
+
+        // Another key changed; the update projection is equal by content.
+        policy = new ManagedUpdatePolicy(null, null, null, new HashSet<AppUpdateChannel> { AppUpdateChannel.Stable }, false);
+        controller.PolicyChanged();
+        Assert.NotNull(controller.Offer);
+        Assert.True(controller.CanInstall);
+
+        policy = new ManagedUpdatePolicy(AppUpdateMode.CheckOnly, null, null, new HashSet<AppUpdateChannel> { AppUpdateChannel.Stable }, false);
+        controller.PolicyChanged();
+        Assert.Null(controller.Offer);
     }
 
     [Fact]

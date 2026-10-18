@@ -163,13 +163,24 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
         Status = backend.UnavailableReason ?? Loc.T("Channel saved. Check for updates to see available versions.");
         Changed?.Invoke(); return true;
     }
-    /// <summary>Drops cached offers after a policy change; the next check and installation re-evaluate the policy.</summary>
+    private ManagedUpdatePolicy _appliedPolicy = policy?.Invoke() ?? ManagedUpdatePolicy.None;
+    /// <summary>
+    /// Drops cached offers after a change of the update policy; the next check and installation re-evaluate it. A
+    /// policy change elsewhere (for example the license key) keeps the offer and a running download intact.
+    /// </summary>
     public void PolicyChanged()
     {
+        var current = Policy;
+        if (SamePolicy(_appliedPolicy, current)) { Changed?.Invoke(); return; }
+        _appliedPolicy = current;
         Offer = null; _offerChannel = null;
         if (!Busy) Status = preferences.Error ?? backend.UnavailableReason ?? Policy.CheckRefusal(EffectiveChannel) ?? Loc.T("Choose a channel and check for updates.");
         Changed?.Invoke();
     }
+    private static bool SamePolicy(ManagedUpdatePolicy left, ManagedUpdatePolicy right) =>
+        left.Mode == right.Mode && left.EnforcedChannel == right.EnforcedChannel && left.RecommendedChannel == right.RecommendedChannel
+        && left.Blocked == right.Blocked
+        && (left.AllowedChannels is null ? right.AllowedChannels is null : right.AllowedChannels is not null && left.AllowedChannels.SetEquals(right.AllowedChannels));
     /// <summary>Checks the effective track without allowing concurrent selection changes.</summary>
     public async Task CheckAsync()
     {

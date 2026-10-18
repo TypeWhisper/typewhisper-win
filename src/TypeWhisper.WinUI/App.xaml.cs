@@ -243,6 +243,7 @@ public partial class App : Application
             var initialized = await Task.WhenAny(initialization, Task.Delay(budget)) == initialization;
             var remaining = budget - started.Elapsed;
             if (!initialized || remaining <= TimeSpan.Zero || !await _window.IsSetupReadyAsync(remaining)) _window.OpenSetup(returnToTray: true);
+            else _window.SetupSkippedByPolicy = true;
         }
         await initialization;
         UpdateTrayActions();

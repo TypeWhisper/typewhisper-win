@@ -10,20 +10,34 @@ public sealed partial class MainWindow
     private StartupPolicyReconciler StartupPolicy => _startupPolicy ??=
         new(StartupRegistration, new StartupPolicyStore(WinUIProfile.DataPath("startup-policy.json")));
     private static bool SetupCompleted => new SetupPreferencesStore(WinUIProfile.DataPath("setup.json")).Current.Completed;
+    private readonly SemaphoreSlim _startupPolicyGate = new(1, 1);
 
-    // Runs on the UI thread after every policy change: the license key, cached update offers and the startup registration.
+    /// <summary>Set by the app when policy kept an unfinished setup closed; a policy that no longer allows it reopens setup.</summary>
+    internal bool SetupSkippedByPolicy { get; set; }
+
+    // Runs on the UI thread after every policy change: the license key, cached update offers, the startup registration
+    // and a setup that policy no longer keeps closed.
     internal void ApplyManagedPolicyChange()
     {
         if (_closing || _profileRestoreClosing) return;
         WinUILicensing.ApplyPolicyChange();
         _applicationUpdates?.PolicyChanged();
         _ = ApplyStartupPolicyAsync();
+        if (SetupSkippedByPolicy && !OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current) && !SetupCompleted)
+        {
+            SetupSkippedByPolicy = false;
+            OpenSetup(returnToTray: true);
+        }
     }
 
+    // Reconciliations run one after another and read the policy once they hold the gate, so the last run applies
+    // the newest snapshot and an older read or write can never overwrite a newer value.
     internal async Task ApplyStartupPolicyAsync()
     {
+        await _startupPolicyGate.WaitAsync();
         try { await StartupPolicy.ApplyAsync(WinUIManagedPolicy.Current, SetupCompleted); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.startup.apply-failed", ex); }
+        finally { _startupPolicyGate.Release(); }
     }
 
     // Policy may keep the setup wizard closed only when the app can actually dictate: a shortcut, a ready model and a
@@ -34,7 +48,8 @@ public sealed partial class MainWindow
         while (!_closing && !_dictation.CanChangeProvider && DateTimeOffset.UtcNow < deadline) await Task.Delay(500);
         if (_closing) return true;
         bool microphone;
-        try { microphone = _dictation.GetMicrophones().Count > 0; }
+        // The same judgment as the wizard: a device must exist and Windows must allow the app to use it.
+        try { microphone = _dictation.GetMicrophones().Count > 0 && !SetupWizard.MicrophoneAccessBlocked; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { microphone = false; }
         var hasShortcut = !string.IsNullOrWhiteSpace(_dictation.Shortcut) && _dictation.Shortcut != "No shortcut assigned";
         return OnboardingPolicy.CanSkipSetup(WinUIManagedPolicy.Current, hasShortcut, _dictation.CanChangeProvider && _dictation.IsReady, microphone);
