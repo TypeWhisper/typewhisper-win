@@ -398,6 +398,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose and configure a transcription provider in Dictation."), DictationPhase.Idle);
             return null;
         }
+        // A policy refusal carries its own safe message; it is the status and the result.
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException denied) { SetStatus(denied.Message, DictationPhase.Idle); return denied.Message; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             var message = Loc.T("Plugin operation could not be completed ({0}). Check the plugin's configuration and try again.", ex.GetType().Name);

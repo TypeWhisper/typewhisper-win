@@ -256,7 +256,8 @@ public sealed class PortablePluginStore
             package = null;
             return update;
         }
-        catch (OperationCanceledException) when (!caller.IsCancellationRequested && InstallRefusal(entry) is { } refusedMeanwhile)
+        catch (OperationCanceledException) when (!caller.IsCancellationRequested
+            && (InstallRefusal(entry) ?? (package is null ? null : ExecutionRefusal(entry.Id, package))) is { } refusedMeanwhile)
         {
             // Cancelled by the policy pass, not by the caller: the reason is the refusal.
             throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedMeanwhile);
