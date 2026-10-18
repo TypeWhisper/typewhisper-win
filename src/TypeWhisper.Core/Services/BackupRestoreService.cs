@@ -525,14 +525,15 @@ public sealed class BackupRestoreService : IBackupRestoreService
             }
 
             var now = DateTime.UtcNow;
+            var isRegex = item.EntryType == DictionaryEntryType.Correction && item.IsRegex;
             var entry = new DictionaryEntry
             {
                 Id = Guid.NewGuid().ToString(),
                 EntryType = item.EntryType,
-                Original = item.Original.Trim(),
+                Original = isRegex ? item.Original : item.Original.Trim(),
                 Replacement = item.EntryType == DictionaryEntryType.Correction ? item.Replacement ?? "" : null,
                 CaseSensitive = item.CaseSensitive,
-                IsRegex = item.IsRegex,
+                IsRegex = isRegex,
                 IsEnabled = item.IsEnabled,
                 Source = item.Source,
                 CtcMinSimilarity = item.CtcMinSimilarity,
@@ -839,7 +840,11 @@ public sealed class BackupRestoreService : IBackupRestoreService
         }
         foreach (var entry in data.Dictionary.Entries)
         {
-            if (!ValidRequired(entry.Original) || !ValidShort(entry.Original) || !ValidShort(entry.Replacement))
+            var isRegex = entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex;
+            if ((isRegex ? string.IsNullOrEmpty(entry.Original) : !ValidRequired(entry.Original))
+                || !ValidShort(entry.Original) || !ValidShort(entry.Replacement)
+                || (isRegex ? entry.Original.Length : entry.Original.Trim().Length) > 160
+                || entry.Replacement?.Length > 10_000)
                 return Loc.T("A dictionary entry contains invalid text.");
             if (!Enum.IsDefined(entry.EntryType) || !Enum.IsDefined(entry.Source))
                 return Loc.T("A dictionary entry contains an unsupported enum value.");
@@ -847,8 +852,10 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 return Loc.T("A dictionary entry contains an invalid acoustic similarity threshold.");
             if (entry.EntryType == DictionaryEntryType.Correction && entry.Replacement is null)
                 return Loc.T("A dictionary correction has no replacement.");
-            if (entry.IsRegex)
+            if (isRegex)
             {
+                if (entry.Original.Contains('\r') || entry.Original.Contains('\n'))
+                    return Loc.T("A dictionary entry contains invalid text.");
                 try { _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromMilliseconds(100)); }
                 catch (ArgumentException) { return Loc.T("A dictionary entry contains an invalid regular expression."); }
             }
@@ -1122,13 +1129,21 @@ public sealed class BackupRestoreService : IBackupRestoreService
         !entry.Id.StartsWith("pack:", StringComparison.Ordinal);
 
     private static string DictionaryKey(DictionaryEntry entry) =>
-        $"{entry.EntryType}\u001f{entry.Original.Trim().ToUpperInvariant()}\u001f{entry.CaseSensitive}\u001f{entry.IsRegex}";
+        DictionaryKey(entry.EntryType, entry.Original, entry.CaseSensitive, entry.IsRegex);
 
     private static string DictionaryKey(BackupDictionaryEntry entry) =>
-        $"{entry.EntryType}\u001f{entry.Original.Trim().ToUpperInvariant()}\u001f{entry.CaseSensitive}\u001f{entry.IsRegex}";
+        DictionaryKey(entry.EntryType, entry.Original, entry.CaseSensitive, entry.IsRegex);
+
+    private static string DictionaryKey(DictionaryEntryType entryType, string original, bool caseSensitive, bool isRegex)
+    {
+        isRegex &= entryType == DictionaryEntryType.Correction;
+        caseSensitive &= !isRegex;
+        return $"{entryType}\u001f{(isRegex ? original : original.Trim().ToUpperInvariant())}\u001f{caseSensitive}\u001f{isRegex}";
+    }
 
     private static bool DictionaryValuesEqual(DictionaryEntry existing, BackupDictionaryEntry incoming) =>
         string.Equals(existing.Replacement ?? "", incoming.Replacement ?? "", StringComparison.Ordinal)
+        && existing.CaseSensitive == incoming.CaseSensitive
         && existing.IsEnabled == incoming.IsEnabled
         && existing.CtcMinSimilarity == incoming.CtcMinSimilarity
         && existing.Source == incoming.Source;

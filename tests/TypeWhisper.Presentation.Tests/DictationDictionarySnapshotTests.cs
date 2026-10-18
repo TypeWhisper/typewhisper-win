@@ -10,6 +10,21 @@ public sealed class DictationDictionarySnapshotTests : IDisposable
     public void Dispose() => Directory.Delete(_directory, true);
 
     [Fact]
+    public void LiteralAndRegexTiesHaveTheSameOrderDuringDictation()
+    {
+        foreach (var regexFirst in new[] { false, true })
+        {
+            var path = Path.Combine(_directory, regexFirst ? "regex-first.json" : "literal-first.json");
+            var store = new Lexicon(path);
+            foreach (var isRegex in new[] { regexFirst, !regexFirst })
+                store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "foo", isRegex ? "B" : "A", IsRegex: isRegex));
+            var snapshot = DictationDictionarySnapshot.Load(path);
+            Assert.Null(snapshot.Error);
+            Assert.Equal("A", snapshot.ApplyCorrections("foo"));
+        }
+    }
+
+    [Fact]
     public void PersonalWordsAndPacksFeedExistingBoostingOnlyWhenEnabled()
     {
         var store = new Lexicon(FilePath);
@@ -43,6 +58,31 @@ public sealed class DictationDictionarySnapshotTests : IDisposable
         store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper", Enabled: false));
         store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "hello", "Grüße", Enabled: false));
         Assert.Equal("hello type whisper", DictationDictionarySnapshot.Load(FilePath).Apply("hello type whisper", true));
+    }
+
+    [Fact]
+    public void WhitespaceRegexKeepsDictionaryAvailableAndAppliesDuringDictation()
+    {
+        var store = new Lexicon(FilePath);
+        store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper"));
+        store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "teh", "the"));
+        store.Save(new(Guid.NewGuid(), LexiconKind.Correction, " ", "-", IsRegex: true));
+        var snapshot = DictationDictionarySnapshot.Load(FilePath);
+        Assert.Null(snapshot.Error);
+        Assert.Contains("TypeWhisper", snapshot.EnabledTerms);
+        Assert.Equal("the-tool", snapshot.ApplyCorrections("teh tool"));
+    }
+
+    [Theory]
+    [InlineData(false, " ")]
+    [InlineData(true, "")]
+    public void EmptyLiteralOrRegexPatternKeepsDictionaryUnavailable(bool isRegex, string original)
+    {
+        File.WriteAllText(FilePath, System.Text.Json.JsonSerializer.Serialize(new[] {
+            new DictionaryEntry { Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Correction,
+                Original = original, Replacement = "-", IsRegex = isRegex }
+        }));
+        Assert.NotNull(DictationDictionarySnapshot.Load(FilePath).Error);
     }
 
     [Fact]

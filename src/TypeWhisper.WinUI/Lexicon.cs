@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
@@ -11,7 +12,7 @@ internal enum LexiconKind { Word, Correction, Snippet }
 
 // Dictionary entries and snippets use isolated development storage.
 internal sealed record LexiconEntry(Guid Id, LexiconKind Kind, string Key,
-    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null, int UsageCount = 0);
+    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null, int UsageCount = 0, bool IsRegex = false);
 
 internal sealed class Lexicon
 {
@@ -107,7 +108,8 @@ internal sealed class Lexicon
         _entries.AddRange(_dictionary.Entries.Select(e => new LexiconEntry(UiId(e.Id),
             e.EntryType == DictionaryEntryType.Term ? LexiconKind.Word : LexiconKind.Correction,
             e.Original, e.Replacement ?? "", e.Id.StartsWith("pack:", StringComparison.Ordinal) ? Loc.T("Term pack") : "",
-            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity)));
+            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity, e.UsageCount,
+            e.EntryType == DictionaryEntryType.Correction && e.IsRegex)));
     }
 
     internal bool PackEnabled(string id) => _dictionary?.Entries.Any(e => e.Id.StartsWith($"pack:{id}:", StringComparison.Ordinal)) == true;
@@ -215,15 +217,22 @@ internal sealed class Lexicon
         if (draft.FromPack) return Loc.T("Manage this term through its term pack.");
         if (draft.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
             return Loc.T("Use a CTC similarity between 40% and 95%.");
-        var key = draft.Key.Trim();
+        draft = draft with { IsRegex = draft.Kind == LexiconKind.Correction && draft.IsRegex };
+        var key = draft.IsRegex ? draft.Key : draft.Key.Trim();
         if (key.Length == 0) return draft.Kind == LexiconKind.Snippet ? Loc.T("Enter a trigger phrase.") : Loc.T("Enter a word or phrase.");
         if (key.Length > 160 || key.Contains('\n') || key.Contains('\r')) return Loc.T("Use a single line of up to 160 characters.");
-        if (draft.Kind != LexiconKind.Word && string.IsNullOrWhiteSpace(draft.Value)) return Loc.T("Enter the replacement text.");
+        if (draft.Kind == LexiconKind.Correction && draft.IsRegex)
+        {
+            try { _ = new Regex(key, RegexOptions.None, TimeSpan.FromSeconds(1)); }
+            catch (ArgumentException) { return Loc.T("Invalid dictionary regular expression."); }
+        }
+        if (draft.Kind == LexiconKind.Snippet && string.IsNullOrWhiteSpace(draft.Value)) return Loc.T("Enter the replacement text.");
         if (draft.Value.Length > 10000) return Loc.T("Keep the replacement below 10,001 characters.");
         if (draft.Tags.Length > 300) return Loc.T("Keep tags below 301 characters.");
-        if (draft.Kind == LexiconKind.Correction && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return Loc.T("The correction must differ from the original phrase.");
+        if (draft.Kind == LexiconKind.Correction && !draft.IsRegex && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return Loc.T("The correction must differ from the original phrase.");
         if ((draft.Kind != LexiconKind.Snippet || _snippets is null) && _entries.Any(entry => entry.Id != draft.Id && entry.Kind == draft.Kind &&
-            entry.Key.Equals(key, entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
+            (draft.Kind != LexiconKind.Correction || entry.IsRegex == draft.IsRegex) && entry.Key.Equals(key,
+                draft.IsRegex || entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             return Loc.T("This word or trigger already exists in this section.");
         var normalized = draft with { Key = key, Value = draft.Kind == LexiconKind.Word ? "" : draft.Value, Tags = draft.Tags.Trim() };
         if (_snippets is not null && draft.Kind == LexiconKind.Snippet)
@@ -248,7 +257,7 @@ internal sealed class Lexicon
         {
             var existing = _dictionary.Entries.FirstOrDefault(e => UiId(e.Id) == draft.Id);
             var entry = (existing ?? new DictionaryEntry { Id = draft.Id.ToString(), EntryType = draft.Kind == LexiconKind.Word ? DictionaryEntryType.Term : DictionaryEntryType.Correction, Original = key })
-                with { Original = key, Replacement = draft.Kind == LexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, CtcMinSimilarity = draft.CtcMinSimilarity, UpdatedAt = DateTime.UtcNow };
+                with { Original = key, Replacement = draft.Kind == LexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsRegex = draft.IsRegex, IsEnabled = draft.Enabled, CtcMinSimilarity = draft.CtcMinSimilarity, UpdatedAt = DateTime.UtcNow };
             if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = DictionarySaveError(Loc.T("Could not save dictionary entry."));
             RefreshDictionary(); LastError = null; return null;
         }
@@ -278,7 +287,7 @@ internal sealed class Lexicon
             if ((suggestions ? !DictionaryAliasSuggestions.IsAlias(original) : !DictionaryTrainingPlan.IsWord(original))
                 || original.Equals(word, StringComparison.OrdinalIgnoreCase))
                 return Loc.T("Review the selected variants before saving.");
-            var existing = _entries.Where(entry => entry.Kind == LexiconKind.Correction &&
+            var existing = _entries.Where(entry => entry.Kind == LexiconKind.Correction && !entry.IsRegex &&
                 entry.Key.Equals(original, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (existing.Any(entry => !entry.Value.Equals(word, StringComparison.Ordinal)))
                 return Loc.T("A correction for {0} already points to another spelling. Keep it or edit it in Corrections.", original);

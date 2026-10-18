@@ -116,16 +116,22 @@ public sealed class PersistedCloudFolderSync
         internal bool SnippetsChanged { get; private set; }
         internal BufferStore(List<DictionaryEntry> dictionary, List<Snippet> snippets)
         {
-            if (dictionary.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) || string.IsNullOrWhiteSpace(e.Original)) ||
+            if (dictionary.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) ||
+                    (e.EntryType == DictionaryEntryType.Correction && e.IsRegex ? string.IsNullOrEmpty(e.Original) : string.IsNullOrWhiteSpace(e.Original))) ||
                 snippets.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) || string.IsNullOrWhiteSpace(e.Trigger) || e.Replacement is null || e.Tags is null))
                 throw new JsonException(Loc.T("Invalid local catalog. No sync was performed."));
-            Dictionary = dictionary; Snippets = snippets;
+            DictionaryChanged = dictionary.Any(e => e.EntryType == DictionaryEntryType.Term && e.IsRegex);
+            Dictionary = DictionaryChanged
+                ? dictionary.Select(e => e.EntryType == DictionaryEntryType.Term ? e with { IsRegex = false } : e).ToList()
+                : dictionary;
+            Snippets = snippets;
         }
         private static bool Personal(DictionaryEntry e) => !e.Id.StartsWith("pack:", StringComparison.Ordinal);
         public UserDataSyncSnapshot Snapshot() => new(
             Dictionary.Where(Personal).Select(e => new UserDataSyncDictionaryEntry(
                 e.EntryType == DictionaryEntryType.Term ? UserDataSyncDictionaryEntryType.Term : UserDataSyncDictionaryEntryType.Correction,
-                e.Original, e.Replacement, e.CaseSensitive, e.IsEnabled, e.CreatedAt, e.UpdatedAt == default ? e.CreatedAt : e.UpdatedAt, e.Source, e.IsRegex, e.CtcMinSimilarity)).ToArray(),
+                e.Original, e.Replacement, e.CaseSensitive, e.IsEnabled, e.CreatedAt, e.UpdatedAt == default ? e.CreatedAt : e.UpdatedAt, e.Source,
+                e.EntryType == DictionaryEntryType.Correction && e.IsRegex, e.CtcMinSimilarity)).ToArray(),
             Snippets.Select(e => new UserDataSyncSnippet(e.Trigger, e.Replacement, e.CaseSensitive, e.IsEnabled,
                 e.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), e.CreatedAt, e.UpdatedAt == default ? e.CreatedAt : e.UpdatedAt)).ToArray());
         public void Apply(IReadOnlyList<UserDataSyncMutation> mutations)
@@ -135,18 +141,19 @@ public sealed class PersistedCloudFolderSync
                 switch (mutation)
                 {
                     case UserDataSyncMutation.DeleteDictionary d:
-                        DictionaryChanged |= Dictionary.RemoveAll(e => Personal(e) && UserDataSyncIdentity.DictionaryItemId(e.EntryType, e.Original) == d.ItemId) > 0;
+                        DictionaryChanged |= Dictionary.RemoveAll(e => Personal(e) && UserDataSyncIdentity.DictionaryItemId(e.EntryType, e.Original, e.IsRegex) == d.ItemId) > 0;
                         break;
                     case UserDataSyncMutation.DeleteSnippet d:
                         SnippetsChanged |= Snippets.RemoveAll(e => UserDataSyncIdentity.SnippetItemId(e.Trigger) == d.ItemId) > 0;
                         break;
                     case UserDataSyncMutation.UpsertDictionary u:
                         var e = u.Entry;
-                        var id = UserDataSyncIdentity.DictionaryItemId(e.EntryType, e.Original);
-                        var old = Dictionary.FirstOrDefault(x => Personal(x) && UserDataSyncIdentity.DictionaryItemId(x.EntryType, x.Original) == id);
+                        var id = UserDataSyncIdentity.DictionaryItemId(e.EntryType, e.Original, e.IsRegex);
+                        var old = Dictionary.FirstOrDefault(x => Personal(x) && UserDataSyncIdentity.DictionaryItemId(x.EntryType, x.Original, x.IsRegex) == id);
                         var entry = (old ?? new DictionaryEntry { Id = Guid.NewGuid().ToString(), Original = e.Original, EntryType = e.EntryType == UserDataSyncDictionaryEntryType.Term ? DictionaryEntryType.Term : DictionaryEntryType.Correction })
-                            with { Original = e.Original, Replacement = e.Replacement, CaseSensitive = e.CaseSensitive, IsEnabled = e.IsEnabled, CreatedAt = e.CreatedAt, UpdatedAt = e.UpdatedAt, Source = e.Source, IsRegex = e.IsRegex, CtcMinSimilarity = e.CtcMinSimilarity };
-                        Dictionary.RemoveAll(x => Personal(x) && UserDataSyncIdentity.DictionaryItemId(x.EntryType, x.Original) == id);
+                            with { Original = e.Original, Replacement = e.Replacement, CaseSensitive = e.CaseSensitive, IsEnabled = e.IsEnabled, CreatedAt = e.CreatedAt, UpdatedAt = e.UpdatedAt, Source = e.Source,
+                                IsRegex = e.EntryType == UserDataSyncDictionaryEntryType.Correction && (e.IsRegexFieldPresent ? e.IsRegex : (old?.IsRegex ?? false)), CtcMinSimilarity = e.CtcMinSimilarity };
+                        Dictionary.RemoveAll(x => Personal(x) && UserDataSyncIdentity.DictionaryItemId(x.EntryType, x.Original, x.IsRegex) == id);
                         Dictionary.Add(entry); DictionaryChanged = true;
                         break;
                     case UserDataSyncMutation.UpsertSnippet u:

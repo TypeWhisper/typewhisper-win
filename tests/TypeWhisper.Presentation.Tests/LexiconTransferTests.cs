@@ -43,6 +43,44 @@ public sealed class LexiconTransferTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ImportedTermsIgnoreRegexFlag(bool macFormat)
+    {
+        var json = macFormat ? """[{"type":"term","original":"[","isRegex":true}]"""
+            : LexiconTransfer.WriteDictionary([Word("term", "[") with { IsRegex = true }]);
+        var term = Assert.Single(LexiconTransfer.ReadDictionary(json));
+        Assert.Equal(DictionaryEntryType.Term, term.EntryType);
+        Assert.Equal("[", term.Original);
+        Assert.False(term.IsRegex);
+    }
+
+    [Fact]
+    public void RegexPatternsStayDistinctThroughImportAndEditing()
+    {
+        var digit = Word("digit", @"\d") with { EntryType = DictionaryEntryType.Correction, Replacement = "#", IsRegex = true };
+        var other = digit with { Id = "other", Original = @"\D" };
+        var literal = digit with { Id = "literal", IsRegex = false };
+        var entries = LexiconTransfer.ReadDictionary(LexiconTransfer.WriteDictionary([digit, other, literal]));
+        Assert.Equal(3, entries.Length);
+        var macEntries = LexiconTransfer.ReadDictionary("""
+            [{"type":"correction","original":"\\d","replacement":"#","isRegex":true},
+             {"type":"correction","original":"\\D","replacement":"#","isRegex":true},
+             {"type":"correction","original":"\\d","replacement":"literal","isRegex":false}]
+            """);
+        Assert.Equal(3, macEntries.Length);
+        Assert.Equal(2, macEntries.Count(entry => entry.IsRegex));
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(DictionaryPath, LexiconTransfer.WriteDictionary(entries));
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        var draft = Assert.Single(store.Entries, entry => entry.IsRegex && entry.Key == @"\D");
+        Assert.Null(store.Save(draft with { Value = "changed" }));
+        Assert.Equal(3, store.Entries.Count);
+        Assert.Equal(2, store.Entries.Count(entry => entry.IsRegex));
+        Assert.NotNull(store.Save(draft with { Key = @"\d" }));
+    }
+
+    [Theory]
     [InlineData("null")]
     [InlineData("[null]")]
     [InlineData("[{\"Id\":\"a\",\"EntryType\":99,\"Original\":\"word\"}]")]

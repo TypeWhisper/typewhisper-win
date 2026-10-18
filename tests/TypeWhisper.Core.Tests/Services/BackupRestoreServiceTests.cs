@@ -13,6 +13,105 @@ public sealed class BackupRestoreServiceTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"typewhisper-backup-tests-{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task BackupRejectsRegexPatternsWithLiteralLineBreaksBeforeChangingCatalogs()
+    {
+        var source = CreateProfile("multiline-source");
+        source.Dictionary.AddEntry(new DictionaryEntry { Id = "regex", EntryType = DictionaryEntryType.Correction,
+            Original = "word", Replacement = "#", IsRegex = true });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var destination = CreateProfile("multiline-target");
+        destination.Dictionary.AddEntry(new DictionaryEntry { Id = "existing", EntryType = DictionaryEntryType.Term, Original = "existing" });
+        foreach (var pattern in new[] { "\nword", "word\r", "wo\nrd", "\r\n" })
+        {
+            json["data"]!["dictionary"]!["entries"]![0]!["original"] = pattern;
+            Assert.False(destination.Backup.PreviewImport(json.ToJsonString()).IsValid);
+            Assert.False((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+            Assert.Equal("existing", Assert.Single(destination.Dictionary.Entries).Original);
+        }
+        json["data"]!["dictionary"]!["entries"]![0]!["original"] = @"\n";
+        Assert.True(destination.Backup.PreviewImport(json.ToJsonString()).IsValid);
+        Assert.True((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.IsRegex && entry.Original == @"\n");
+    }
+
+    [Fact]
+    public async Task RegexPatternCaseSurvivesBackupMerge()
+    {
+        var source = CreateProfile("regex-source");
+        foreach (var pattern in new[] { @"\d", @"\D", " word ", " " })
+            source.Dictionary.AddEntry(new DictionaryEntry {
+                Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Correction,
+                Original = pattern, Replacement = "#", IsRegex = true
+            });
+        var json = await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary });
+        var destination = CreateProfile("regex-destination");
+        Assert.True((await destination.Backup.ImportAsync(json)).Success);
+        Assert.Equal(4, destination.Dictionary.Entries.Count);
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == " word ");
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == " ");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BackupRegexCaseSensitivityIsAConflictNotANewIdentity(bool localCaseSensitive)
+    {
+        var source = CreateProfile("case-source");
+        source.Dictionary.AddEntry(new DictionaryEntry { Id = "incoming", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "the", IsRegex = true, CaseSensitive = !localCaseSensitive });
+        var json = await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary });
+        var destination = CreateProfile("case-target");
+        destination.Dictionary.AddEntry(new DictionaryEntry { Id = "local", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "the", IsRegex = true, CaseSensitive = localCaseSensitive });
+        var result = await destination.Backup.ImportAsync(json);
+        Assert.True(result.Success);
+        Assert.Equal(0, result.Categories[BackupCategory.Dictionary].Imported);
+        Assert.Equal(1, result.Categories[BackupCategory.Dictionary].Conflicts);
+        var retained = Assert.Single(destination.Dictionary.Entries);
+        Assert.Equal("local", retained.Id);
+        Assert.Equal(localCaseSensitive, retained.CaseSensitive);
+    }
+
+    [Fact]
+    public async Task RegexFlagDoesNotAllowWhitespaceOnlyBackupTerms()
+    {
+        var source = CreateProfile("invalid-regex-term");
+        source.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "term", EntryType = DictionaryEntryType.Term, Original = "healthy" });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var entry = json["data"]!["dictionary"]!["entries"]![0]!;
+        entry["original"] = " ";
+        entry["isRegex"] = true;
+        var destination = CreateProfile("invalid-regex-term-target");
+        destination.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "existing", EntryType = DictionaryEntryType.Term, Original = "existing" });
+        Assert.False(destination.Backup.PreviewImport(json.ToJsonString()).IsValid);
+        Assert.False((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        Assert.Equal("existing", Assert.Single(destination.Dictionary.Entries).Original);
+    }
+
+    [Theory]
+    [InlineData(" word ")]
+    [InlineData(" [ ")]
+    public async Task BackupTermsIgnoreRegexModeAndTrimWhitespace(string original)
+    {
+        var source = CreateProfile("regex-flag-term-source");
+        source.Dictionary.AddEntry(new DictionaryEntry { Id = "term", EntryType = DictionaryEntryType.Term, Original = "healthy" });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var entry = json["data"]!["dictionary"]!["entries"]![0]!;
+        entry["original"] = original;
+        entry["isRegex"] = true;
+        var destination = CreateProfile("regex-flag-term-target");
+        Assert.True((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        var restored = Assert.Single(destination.Dictionary.Entries);
+        Assert.Equal(original.Trim(), restored.Original);
+        Assert.False(restored.IsRegex);
+        entry["isRegex"] = false;
+        Assert.True((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        Assert.Single(destination.Dictionary.Entries);
+    }
+
+    [Fact]
     public async Task Export_UsesAllowlistAndNeverIncludesSecretsPathsOrAudio()
     {
         var services = CreateProfile("source");

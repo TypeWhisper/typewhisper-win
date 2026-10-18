@@ -36,7 +36,9 @@ internal sealed class DictationDictionarySnapshot
         {
             if (!File.Exists(path)) return new([]);
             var entries = JsonSerializer.Deserialize<DictionaryEntry[]>(File.ReadAllText(path));
-            if (entries is null || entries.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) || string.IsNullOrWhiteSpace(e.Original)))
+            if (entries is null || entries.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) ||
+                (e.EntryType == DictionaryEntryType.Correction && e.IsRegex
+                    ? string.IsNullOrEmpty(e.Original) : string.IsNullOrWhiteSpace(e.Original))))
                 throw new JsonException();
             return new(entries);
         }

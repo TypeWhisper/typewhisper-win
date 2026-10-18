@@ -155,7 +155,7 @@ public sealed class DictionaryService : IDictionaryService
     /// <summary>Compiles the enabled corrections of a fixed snapshot once, so applying them later builds no regexes.</summary>
     public static CorrectionSet CompileCorrections(IReadOnlyList<DictionaryEntry> entries) => new(entries);
 
-    /// <summary>Enabled corrections of an entry snapshot, longest original first.</summary>
+    /// <summary>Enabled corrections, longest original first, then ordinal original and literal before regex.</summary>
     public sealed class CorrectionSet
     {
         private readonly (string Id, Regex Regex, string Replacement)[] _rules;
@@ -165,7 +165,9 @@ public sealed class DictionaryService : IDictionaryService
             var rules = new List<(string, Regex, string)>();
             foreach (var entry in entries
                 .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction && e.Replacement is not null)
-                .OrderByDescending(e => e.Original.Length))
+                .OrderByDescending(e => e.Original.Length)
+                .ThenBy(e => e.Original, StringComparer.Ordinal)
+                .ThenBy(e => e.IsRegex))
             {
                 var replacement = ExpandReplacementEscapes(entry.Replacement!);
                 var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);
@@ -407,7 +409,7 @@ public sealed class DictionaryService : IDictionaryService
         using var mutation = ProfileMutationCoordinator.Enter();
         if (!TryBeginMutation(out var rollback)) return;
         var existing = _cache.FirstOrDefault(e =>
-            e.EntryType == DictionaryEntryType.Correction &&
+            e.EntryType == DictionaryEntryType.Correction && !e.IsRegex &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
 
         if (existing is not null)
@@ -451,7 +453,7 @@ public sealed class DictionaryService : IDictionaryService
         using var mutation = ProfileMutationCoordinator.Enter();
         if (!TryBeginMutation(out var rollback)) return false;
         var removed = _cache.RemoveAll(e =>
-            e.EntryType == DictionaryEntryType.Correction &&
+            e.EntryType == DictionaryEntryType.Correction && !e.IsRegex &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
 
         if (removed == 0)
@@ -469,7 +471,7 @@ public sealed class DictionaryService : IDictionaryService
         EnsureCacheLoaded();
 
         var existing = _cache.FirstOrDefault(e =>
-            e.EntryType == DictionaryEntryType.Correction &&
+            e.EntryType == DictionaryEntryType.Correction && !e.IsRegex &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
 
         if (existing is not null)
@@ -501,7 +503,7 @@ public sealed class DictionaryService : IDictionaryService
 
         var learned = new List<LearnedDictionaryCorrection>();
         var existingOriginals = _cache
-            .Where(e => e.EntryType == DictionaryEntryType.Correction)
+            .Where(e => e.EntryType == DictionaryEntryType.Correction && !e.IsRegex)
             .Select(e => e.Original)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var seenOriginals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -667,7 +669,7 @@ public sealed class DictionaryService : IDictionaryService
                 entry.CreatedAt,
                 entry.UpdatedAt,
                 entry.Source,
-                entry.IsRegex, entry.CtcMinSimilarity))
+                entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex, entry.CtcMinSimilarity))
             .ToList();
     }
 
@@ -704,13 +706,16 @@ public sealed class DictionaryService : IDictionaryService
         var targetType = synced.EntryType == UserDataSyncDictionaryEntryType.Term
             ? DictionaryEntryType.Term
             : DictionaryEntryType.Correction;
-        var targetId = UserDataSyncIdentity.DictionaryItemId(synced.EntryType, synced.Original);
+        var targetId = UserDataSyncIdentity.DictionaryItemId(synced.EntryType, synced.Original, synced.IsRegex);
         var replacement = targetType == DictionaryEntryType.Correction ? synced.Replacement ?? string.Empty : null;
 
         var idx = _cache.FindIndex(entry =>
             entry.EntryType == targetType &&
             IsUserAuthored(entry) &&
-            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == targetId);
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == targetId);
+        if (idx < 0 && targetType == DictionaryEntryType.Correction && !synced.IsRegexFieldPresent)
+            idx = _cache.FindIndex(entry => IsUserAuthored(entry) && entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex &&
+                string.Equals(entry.Original, synced.Original, StringComparison.Ordinal));
 
         if (idx >= 0)
         {
@@ -720,8 +725,8 @@ public sealed class DictionaryService : IDictionaryService
                 Original = synced.Original,
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
-                IsRegex = synced.IsRegex,
-            CtcMinSimilarity = synced.CtcMinSimilarity,
+                IsRegex = targetType == DictionaryEntryType.Correction && (synced.IsRegexFieldPresent ? synced.IsRegex : existing.IsRegex),
+                CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -736,7 +741,7 @@ public sealed class DictionaryService : IDictionaryService
             Original = synced.Original,
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
-            IsRegex = synced.IsRegex,
+            IsRegex = targetType == DictionaryEntryType.Correction && synced.IsRegex,
             CtcMinSimilarity = synced.CtcMinSimilarity,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,
@@ -750,7 +755,7 @@ public sealed class DictionaryService : IDictionaryService
     {
         var removed = _cache.RemoveAll(entry =>
             IsUserAuthored(entry) &&
-            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == itemId);
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == itemId);
         return removed > 0;
     }
 

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Tests.Services;
 
@@ -13,6 +14,67 @@ public class DictionaryServiceTests : IDisposable
     {
         _filePath = Path.GetTempFileName();
         _sut = new DictionaryService(_filePath);
+    }
+
+    [Fact]
+    public void CorrectionTiesDoNotDependOnCatalogOrder()
+    {
+        var literal = new DictionaryEntry { Id = "literal", EntryType = DictionaryEntryType.Correction, Original = "foo", Replacement = "A" };
+        var regex = literal with { Id = "regex", Replacement = "B", IsRegex = true };
+        var preceding = literal with { Id = "preceding", Original = "bar", Replacement = "foo" };
+        DictionaryEntry[][] orders = [[literal, regex, preceding], [literal, preceding, regex],
+            [regex, literal, preceding], [regex, preceding, literal],
+            [preceding, literal, regex], [preceding, regex, literal]];
+        foreach (var entries in orders)
+        {
+            Assert.Equal("A A", DictionaryService.ApplyCorrectionsSnapshot("bar foo", entries));
+            Assert.Equal("A A", DictionaryService.CompileCorrections(entries).Apply("bar foo"));
+            File.WriteAllText(_filePath, JsonSerializer.Serialize(entries));
+            Assert.Equal("A A", new DictionaryService(_filePath).ApplyCorrections("bar foo"));
+            Assert.Equal("A A", new DictionaryService(_filePath).ApplyCorrections("bar foo"));
+        }
+    }
+
+    [Fact]
+    public void SyncedRegexPatternsAndLiteralModeKeepIndependentStoredEntries()
+    {
+        var now = DateTime.UtcNow;
+        var digit = new UserDataSyncDictionaryEntry(UserDataSyncDictionaryEntryType.Correction, @"\d", "#", false, true, now, now, IsRegex: true);
+        var other = digit with { Original = @"\D" };
+        var literal = digit with { IsRegex = false };
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.UpsertDictionary(digit),
+            new UserDataSyncMutation.UpsertDictionary(other)]);
+        Assert.Equal(2, _sut.Entries.Count);
+        var legacy = other with { IsRegex = false, IsRegexFieldPresent = false, Replacement = "updated" };
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.UpsertDictionary(legacy)]);
+        Assert.True(Assert.Single(_sut.Entries, entry => entry.Original == @"\D").IsRegex);
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.UpsertDictionary(literal)]);
+        Assert.Equal(3, _sut.Entries.Count);
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.DeleteDictionary(
+            UserDataSyncIdentity.DictionaryItemId(other.EntryType, other.Original, true))]);
+        var reloaded = new DictionaryService(_filePath);
+        Assert.Equal(2, reloaded.Entries.Count);
+        Assert.Single(reloaded.Entries, entry => entry.IsRegex);
+        Assert.Single(reloaded.Entries, entry => !entry.IsRegex);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LiteralCrudPreservesRegexWithSameOriginal(bool hasLiteral)
+    {
+        var regex = new DictionaryEntry { Id = "regex", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "regex", IsRegex = true, CaseSensitive = true };
+        _sut.AddEntry(regex);
+        regex = Assert.Single(_sut.Entries);
+        if (hasLiteral) _sut.AddEntry(new DictionaryEntry { Id = "literal", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "old" });
+        _sut.UpsertCorrection("TEH", "The", caseSensitive: false);
+        Assert.Equal(regex, Assert.Single(_sut.Entries, entry => entry.IsRegex));
+        Assert.Equal("The", Assert.Single(_sut.Entries, entry => !entry.IsRegex).Replacement);
+        Assert.True(_sut.DeleteCorrection("teh"));
+        Assert.Equal(regex, Assert.Single(new DictionaryService(_filePath).Entries));
+        Assert.False(_sut.DeleteCorrection("teh"));
     }
 
     [Fact]
@@ -398,6 +460,31 @@ public class DictionaryServiceTests : IDisposable
         Assert.True(deleted);
         var remaining = Assert.Single(_sut.GetEnabledCorrections());
         Assert.Equal("um", remaining.Original);
+    }
+
+    [Fact]
+    public void LearnedLiteralCorrectionsDoNotUpdateOrSuppressRegexRules()
+    {
+        var regex = new DictionaryEntry
+        {
+            Id = "regex", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "regex replacement", IsRegex = true, UsageCount = 7
+        };
+        _sut.AddEntry(regex);
+        regex = Assert.Single(_sut.Entries);
+        _sut.LearnCorrection("teh", "the");
+        _sut.LearnCorrection("TEH", "The");
+        Assert.Equal(regex, Assert.Single(_sut.Entries, entry => entry.IsRegex));
+        var literal = Assert.Single(_sut.Entries, entry => !entry.IsRegex);
+        Assert.Equal("The", literal.Replacement);
+        Assert.Equal(1, literal.UsageCount);
+
+        _sut.DeleteEntry(literal.Id);
+        var learned = _sut.LearnCorrections([new CorrectionSuggestion("teh", "the")]);
+        Assert.Single(learned);
+        var reloaded = new DictionaryService(_filePath);
+        Assert.Equal(regex, Assert.Single(reloaded.Entries, entry => entry.IsRegex));
+        Assert.Equal("the", Assert.Single(reloaded.Entries, entry => !entry.IsRegex).Replacement);
     }
 
     [Fact]

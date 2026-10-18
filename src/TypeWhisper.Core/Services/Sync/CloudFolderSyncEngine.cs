@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services.Sync;
@@ -218,7 +219,7 @@ public sealed record CloudFolderSyncOperation
         string? operationId = null) =>
         new()
         {
-            SchemaVersion = 1,
+            SchemaVersion = entry.EntryType == UserDataSyncDictionaryEntryType.Correction && entry.IsRegex ? 2 : 1,
             OperationId = operationId ?? Guid.NewGuid().ToString(),
             DeviceId = deviceId,
             Collection = UserDataSyncCollection.Dictionary,
@@ -259,7 +260,7 @@ public sealed record CloudFolderSyncOperation
         string? operationId = null) =>
         new()
         {
-            SchemaVersion = 1,
+            SchemaVersion = itemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) ? 2 : 1,
             OperationId = operationId ?? Guid.NewGuid().ToString(),
             DeviceId = deviceId,
             Collection = collection,
@@ -348,12 +349,48 @@ public static class CloudFolderSyncEngine
         WritePackageMetadata(packagePath, devicesPath, deviceId, syncNow);
 
         var initialRecords = RecordsFrom(store.Snapshot());
-        var localOperations = MakeLocalOperations(initialRecords, state, syncNow);
+        var legacyRegexIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        var publicationState = state;
+        if (state.KnownLocalItemIds.Any(id => id.StartsWith("dictionary:correction:", StringComparison.Ordinal) &&
+            (!state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal))))
+        {
+            // Use the version this device actually synced. Unseen remote edits cannot
+            // change which exact regex a local deletion or mode change targets.
+            var previousOperations = ReadOperations(operationsPath, cancellationToken, out var unreadableHistory);
+            var applied = previousOperations.Where(operation => state.AppliedOperationIds.Contains(operation.OperationId)).ToArray();
+            var known = LegacySynchronizedCorrections(applied, state);
+            if (!LegacyCorrectionHistoryIsComplete(state, known))
+            {
+                if (applied.Length > 0 || unreadableHistory)
+                    throw new IOException(Loc.T("Previously synced correction files are missing or unreadable. Wait for your cloud provider to download them, or choose a new sync folder if the old files were deleted."));
+                // Republish local data while retaining unambiguous local deletions.
+                // Only unchanged regex rules can withdraw their old folded IDs.
+                // Changed rules may have replaced literals that still need deleting.
+                var migratedIds = initialRecords.Values
+                    .Where(record => record.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true })
+                    .Select(record => record.Dictionary!)
+                    .Where(entry => state.ExportedItemVersions.TryGetValue(UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original), out var version) &&
+                        (version == VersionString(entry.UpdatedAt) || version == "dictionary-v2|" + VersionString(entry.UpdatedAt)))
+                    .Select(entry => UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original));
+                publicationState = state with
+                {
+                    KnownLocalItemIds = state.KnownLocalItemIds.Except(migratedIds, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal),
+                    ExportedItemVersions = []
+                };
+            }
+            foreach (var (id, operation) in known)
+                if (state.KnownLocalItemIds.Contains(id) &&
+                    (!state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal)) &&
+                    operation.Kind == CloudFolderSyncOperationKind.Upsert &&
+                    operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } entry)
+                    legacyRegexIds[id] = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true);
+        }
+        var localOperations = MakeLocalOperations(initialRecords, publicationState, legacyRegexIds, syncNow);
         Write(localOperations, deviceOperationsPath, syncNow);
         // Keep tombstones: deleting them while old upserts remain would resurrect data on a new device.
         cancellationToken.ThrowIfCancellationRequested();
 
-        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken), initialRecords);
+        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken, out _), initialRecords, out var observedOperationIds);
         var winners = WinningOperations(operations);
         var mutations = MakeMutations(winners, initialRecords, state.DeviceId, state.AppliedOperationIds);
 
@@ -367,7 +404,20 @@ public static class CloudFolderSyncEngine
             pair => pair.Key,
             pair => pair.Value.Version,
             StringComparer.Ordinal);
-        state.AppliedOperationIds.UnionWith(operations.Select(operation => operation.OperationId));
+        // Publish preserved mode metadata and migrated v1 regex entries once.
+        foreach (var mutation in mutations.OfType<UserDataSyncMutation.UpsertDictionary>())
+        {
+            var entry = mutation.Entry;
+            var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex);
+            if (entry.EntryType == UserDataSyncDictionaryEntryType.Correction &&
+                (!entry.IsRegexFieldPresent || operations.Any(operation =>
+                    operation.SchemaVersion == 1 && !state.AppliedOperationIds.Contains(operation.OperationId) &&
+                    operation.Dictionary?.IsRegex == true && operation.ItemId == itemId)))
+                state.ExportedItemVersions.Remove(itemId);
+        }
+        // Suppressed v1 regex upserts were seen too. Remember them even if a
+        // winning tombstone later disappears, so the stale rule cannot reappear.
+        state.AppliedOperationIds.UnionWith(observedOperationIds);
         state.LastSyncAt = syncNow;
 
         return Task.FromResult(new CloudFolderSyncResult(
@@ -386,12 +436,12 @@ public static class CloudFolderSyncEngine
 
         foreach (var entry in snapshot.DictionaryEntries)
         {
-            var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+            var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex);
             Merge(new CloudFolderSyncRecord(
                 UserDataSyncCollection.Dictionary,
                 itemId,
                 NormalizeUtc(entry.UpdatedAt),
-                VersionString(entry.UpdatedAt),
+                "dictionary-v3|" + VersionString(entry.UpdatedAt),
                 entry,
                 null), records);
         }
@@ -431,41 +481,170 @@ public static class CloudFolderSyncEngine
     }
 
     private static bool IsValidOperation(CloudFolderSyncOperation operation) =>
-        operation.SchemaVersion == 1 && !string.IsNullOrWhiteSpace(operation.OperationId) &&
+        IsSupportedSchema(operation) && !string.IsNullOrWhiteSpace(operation.OperationId) &&
         !string.IsNullOrWhiteSpace(operation.DeviceId) && !string.IsNullOrWhiteSpace(operation.ItemId) &&
         operation.UpdatedAt != default && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
         (operation.Kind == CloudFolderSyncOperationKind.Delete ||
          operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { } d &&
-            !string.IsNullOrWhiteSpace(d.Original) && Enum.IsDefined(d.EntryType) &&
+            IsValidDictionaryOriginal(d) && Enum.IsDefined(d.EntryType) &&
+            (d.EntryType != UserDataSyncDictionaryEntryType.Correction || d.Replacement is { Length: <= 10000 }) &&
             (d.CtcMinSimilarity is null || float.IsFinite(d.CtcMinSimilarity.Value) && d.CtcMinSimilarity >= .4f && d.CtcMinSimilarity <= .95f) ||
          operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { } n &&
             !string.IsNullOrWhiteSpace(n.Trigger) && n.Replacement is not null);
 
+    private static bool IsValidDictionaryOriginal(UserDataSyncDictionaryEntry entry)
+    {
+        if (entry.EntryType != UserDataSyncDictionaryEntryType.Correction || !entry.IsRegex)
+            return !string.IsNullOrWhiteSpace(entry.Original);
+        // Match the persisted catalog's single-line key limits before saving.
+        if (string.IsNullOrEmpty(entry.Original) || entry.Original.Length > 160 ||
+            entry.Original.Contains('\r') || entry.Original.Contains('\n')) return false;
+        try
+        {
+            _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromSeconds(1));
+            return true;
+        }
+        catch (ArgumentException) { return false; }
+    }
+
+    private static bool IsSupportedSchema(CloudFolderSyncOperation operation) =>
+        operation.SchemaVersion == 1 || operation.SchemaVersion == 2 &&
+        operation.Collection == UserDataSyncCollection.Dictionary &&
+        operation.ItemId?.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) == true &&
+        (operation.Kind == CloudFolderSyncOperationKind.Delete ||
+         operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } entry &&
+         !string.IsNullOrEmpty(entry.Original) &&
+         operation.ItemId == UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true));
+
     private static IReadOnlyList<CloudFolderSyncOperation> NormalizeIdentities(
-        IReadOnlyList<CloudFolderSyncOperation> operations, IReadOnlyDictionary<string, CloudFolderSyncRecord> local)
+        IReadOnlyList<CloudFolderSyncOperation> operations, IReadOnlyDictionary<string, CloudFolderSyncRecord> local,
+        out IReadOnlyCollection<string> observedOperationIds)
     {
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
         void Remember(CloudFolderSyncRecord record)
         {
             var legacy = record.Dictionary is { } d ? $"dictionary:{UserDataSyncIdentity.JsonName(d.EntryType)}:{UserDataSyncIdentity.NormalizedKey(d.Original)}"
                 : record.Snippet is { } n ? "snippet:" + UserDataSyncIdentity.NormalizedKey(n.Trigger) : record.ItemId;
-            aliases[legacy] = record.ItemId;
+            // Folded legacy tombstones cannot identify which regex was deleted.
+            aliases[legacy] = record.Dictionary is { } entry
+                ? UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)
+                : record.ItemId;
         }
         foreach (var record in local.Values) Remember(record);
-        var valid = operations.Where(IsValidOperation).ToArray();
-        var canonical = valid.Select(operation =>
+        CloudFolderSyncOperation PreserveLegacyRegexMode(CloudFolderSyncOperation operation)
         {
-            if (operation.Kind != CloudFolderSyncOperationKind.Upsert) return operation;
-            var id = operation.Collection == UserDataSyncCollection.Dictionary
-                ? UserDataSyncIdentity.DictionaryItemId(operation.Dictionary!.EntryType, operation.Dictionary.Original)
+            // Resolve omitted mode before validation: a space-only pattern is valid
+            // only when it addresses an existing regex, not a new literal correction.
+            if (operation.SchemaVersion == 1 && operation.Kind == CloudFolderSyncOperationKind.Upsert &&
+                operation.Collection == UserDataSyncCollection.Dictionary &&
+                operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegexFieldPresent: false } legacy &&
+                !string.IsNullOrEmpty(legacy.Original) &&
+                !local.ContainsKey(UserDataSyncIdentity.DictionaryItemId(legacy.EntryType, legacy.Original)) && local.Values.Any(record =>
+                    record.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } known &&
+                    string.Equals(known.Original, legacy.Original, StringComparison.Ordinal)))
+                return operation with { Dictionary = legacy with { IsRegex = true } };
+            return operation;
+        }
+        var valid = operations.Select(PreserveLegacyRegexMode).Where(IsValidOperation).ToArray();
+        observedOperationIds = valid.Select(operation => operation.OperationId).ToArray();
+        // Superseded upserts still identify the target of an unencoded tombstone.
+        // Keep every v1 alias in the folded namespace, including legacy regexes.
+        foreach (var operation in valid.Where(operation => operation.SchemaVersion == 1 && operation.Kind == CloudFolderSyncOperationKind.Upsert))
+        {
+            var id = operation.Dictionary is { } entry
+                ? UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)
                 : UserDataSyncIdentity.SnippetItemId(operation.Snippet!.Trigger);
             aliases[operation.ItemId] = id;
             Remember(new(operation.Collection, id, operation.UpdatedAt, "", operation.Dictionary, operation.Snippet));
+        }
+        var legacyWinners = LegacyWinningOperations(valid);
+        var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Kind != CloudFolderSyncOperationKind.Upsert ||
+            operation.Dictionary is not { EntryType: UserDataSyncDictionaryEntryType.Correction } entry ||
+            legacyWinners[UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)].OperationId == operation.OperationId)
+            .Select(operation =>
+        {
+            if (operation.Kind != CloudFolderSyncOperationKind.Upsert) return operation;
+            var id = operation.Collection == UserDataSyncCollection.Dictionary
+                ? UserDataSyncIdentity.DictionaryItemId(operation.Dictionary!.EntryType, operation.Dictionary.Original, operation.Dictionary.IsRegex)
+                : UserDataSyncIdentity.SnippetItemId(operation.Snippet!.Trigger);
             return operation with { ItemId = id };
         }).ToArray();
-        return canonical.Select(operation => operation.Kind == CloudFolderSyncOperationKind.Delete &&
-            !local.ContainsKey(operation.ItemId) && aliases.TryGetValue(operation.ItemId, out var id)
-                ? operation with { ItemId = id } : operation).ToArray();
+        return canonical.Select(operation => operation.SchemaVersion == 1 && operation.Kind == CloudFolderSyncOperationKind.Delete &&
+            (operation.ItemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) || !local.ContainsKey(operation.ItemId))
+                ? operation with { ItemId = LegacyItemId(operation.ItemId, aliases) } : operation).ToArray();
+    }
+
+    private static string LegacyItemId(string itemId, IReadOnlyDictionary<string, string> aliases)
+    {
+        if (aliases.TryGetValue(itemId, out var canonical)) return canonical;
+        // A v1 Base64URL suffix cannot contain a colon. In schema 1 this tag is
+        // part of a raw literal, never an exact-pattern v2 identity.
+        return itemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal)
+            ? UserDataSyncIdentity.DictionaryItemId(UserDataSyncDictionaryEntryType.Correction, itemId["dictionary:correction:".Length..])
+            : itemId;
+    }
+
+    private static IReadOnlyDictionary<string, CloudFolderSyncOperation> LegacySynchronizedCorrections(
+        IReadOnlyList<CloudFolderSyncOperation> operations, CloudFolderSyncState state)
+    {
+        // The exported version records the local synchronized state even if a peer's
+        // clock gave an older operation or tombstone a later timestamp.
+        // Already-applied history is evidence of the old state, not a new import.
+        // Current catalog limits must not make a readable old version disappear.
+        var known = new Dictionary<string, CloudFolderSyncOperation>(StringComparer.Ordinal);
+        foreach (var operation in operations)
+        {
+            if (operation.SchemaVersion != 1 || operation.Collection != UserDataSyncCollection.Dictionary ||
+                operation.Kind != CloudFolderSyncOperationKind.Upsert || operation.UpdatedAt == default ||
+                string.IsNullOrWhiteSpace(operation.OperationId) || string.IsNullOrWhiteSpace(operation.DeviceId) ||
+                string.IsNullOrWhiteSpace(operation.ItemId) || !state.AppliedOperationIds.Contains(operation.OperationId) ||
+                operation.Dictionary is not { EntryType: UserDataSyncDictionaryEntryType.Correction } entry ||
+                string.IsNullOrEmpty(entry.Original)) continue;
+            var id = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+            if (!state.KnownLocalItemIds.Contains(id) || !state.ExportedItemVersions.TryGetValue(id, out var version) ||
+                version != VersionString(entry.UpdatedAt) && version != "dictionary-v2|" + VersionString(entry.UpdatedAt)) continue;
+            if (!known.TryGetValue(id, out var existing) || Prefers(operation, existing)) known[id] = operation;
+        }
+        return known;
+    }
+
+    private static bool LegacyCorrectionHistoryIsComplete(
+        CloudFolderSyncState state, IReadOnlyDictionary<string, CloudFolderSyncOperation> known)
+    {
+        foreach (var itemId in state.KnownLocalItemIds)
+        {
+            if (!itemId.StartsWith("dictionary:correction:", StringComparison.Ordinal) ||
+                itemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) ||
+                !state.ExportedItemVersions.TryGetValue(itemId, out var version) ||
+                version.StartsWith("dictionary-v3|", StringComparison.Ordinal)) continue;
+            // Only the last exported correction version is required. Applied IDs of
+            // unrelated tombstones can legitimately outlive their pruned files.
+            if (!known.TryGetValue(itemId, out var operation) || operation.Kind != CloudFolderSyncOperationKind.Upsert ||
+                operation.Dictionary is not { EntryType: UserDataSyncDictionaryEntryType.Correction } entry) return false;
+            var timestamp = VersionString(entry.UpdatedAt);
+            if (version != timestamp && version != "dictionary-v2|" + timestamp) return false;
+        }
+        return true;
+    }
+
+    // Resolve v1 identities before migrating. Deleted or renamed legacy patterns
+    // must not reappear as new regex entries on an upgraded device.
+    private static IReadOnlyDictionary<string, CloudFolderSyncOperation> LegacyWinningOperations(
+        IReadOnlyList<CloudFolderSyncOperation> operations)
+    {
+        var valid = operations.Where(operation => operation.SchemaVersion == 1 && IsValidOperation(operation)).ToArray();
+        var legacyAliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var operation in valid.Where(operation => operation.Dictionary is not null))
+        {
+            var entry = operation.Dictionary!;
+            var key = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+            legacyAliases[operation.ItemId] = key;
+            legacyAliases[$"dictionary:{UserDataSyncIdentity.JsonName(entry.EntryType)}:{UserDataSyncIdentity.NormalizedKey(entry.Original)}"] = key;
+        }
+        return WinningOperations(valid
+            .Select(operation => operation.Dictionary is { } entry
+                ? operation with { ItemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) }
+                : operation with { ItemId = LegacyItemId(operation.ItemId, legacyAliases) }));
     }
 
     private static void Merge(
@@ -498,6 +677,8 @@ public static class CloudFolderSyncEngine
                 dictionary.Replacement ?? string.Empty,
                 dictionary.CaseSensitive,
                 dictionary.IsEnabled,
+                dictionary.IsRegexFieldPresent,
+                dictionary.IsRegex,
                 VersionString(dictionary.CreatedAt));
         }
 
@@ -519,6 +700,7 @@ public static class CloudFolderSyncEngine
     private static IReadOnlyList<CloudFolderSyncOperation> MakeLocalOperations(
         IReadOnlyDictionary<string, CloudFolderSyncRecord> records,
         CloudFolderSyncState state,
+        IReadOnlyDictionary<string, string> legacyRegexIds,
         DateTime now)
     {
         var operations = new List<CloudFolderSyncOperation>();
@@ -537,8 +719,18 @@ public static class CloudFolderSyncEngine
                 operations.Add(CloudFolderSyncOperation.UpsertSnippet(snippet, record.ItemId, state.DeviceId));
         }
 
+        // A regex deleted before its first upgraded sync has no exact ID in state yet.
+        // Publish its v2 tombstone even when the old ID is now occupied by a literal.
+        foreach (var (_, regexId) in legacyRegexIds.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+            if (!records.ContainsKey(regexId) && !state.KnownLocalItemIds.Contains(regexId))
+                operations.Add(CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, regexId, state.DeviceId, now));
+
         foreach (var itemId in state.KnownLocalItemIds.Except(records.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
+            // Only the same, previously synced regex still present under its exact ID is
+            // a migration. A literal-to-regex edit must delete the old literal normally.
+            if (legacyRegexIds.TryGetValue(itemId, out var regexId) && records.ContainsKey(regexId))
+                continue;
             var collection = itemId.StartsWith("snippet:", StringComparison.Ordinal)
                 ? UserDataSyncCollection.Snippets
                 : UserDataSyncCollection.Dictionary;
@@ -598,8 +790,9 @@ public static class CloudFolderSyncEngine
         if (operation.UpdatedAt > local.UpdatedAt)
             return true;
 
-        return operation.UpdatedAt == local.UpdatedAt &&
-               operation.DeviceId.CompareTo(localDeviceId) > 0;
+        if (operation.UpdatedAt != local.UpdatedAt) return false;
+        if (RegexPresencePreference(operation.Dictionary, local.Dictionary) is { } presence) return presence;
+        return operation.DeviceId.CompareTo(localDeviceId) > 0;
     }
 
     private static bool Prefers(CloudFolderSyncOperation candidate, CloudFolderSyncOperation existing)
@@ -607,11 +800,19 @@ public static class CloudFolderSyncEngine
         if (candidate.UpdatedAt != existing.UpdatedAt)
             return candidate.UpdatedAt > existing.UpdatedAt;
 
+        if (RegexPresencePreference(candidate.Dictionary, existing.Dictionary) is { } presence) return presence;
+
         if (!string.Equals(candidate.DeviceId, existing.DeviceId, StringComparison.Ordinal))
             return candidate.DeviceId.CompareTo(existing.DeviceId) > 0;
 
         return candidate.OperationId.CompareTo(existing.OperationId) > 0;
     }
+
+    private static bool? RegexPresencePreference(UserDataSyncDictionaryEntry? candidate, UserDataSyncDictionaryEntry? existing) =>
+        candidate?.EntryType == UserDataSyncDictionaryEntryType.Correction &&
+        existing?.EntryType == UserDataSyncDictionaryEntryType.Correction &&
+        candidate.IsRegexFieldPresent != existing.IsRegexFieldPresent
+            ? candidate.IsRegexFieldPresent : null;
 
     private static void WritePackageMetadata(string packagePath, string devicesPath, string deviceId, DateTime now)
     {
@@ -677,8 +878,10 @@ public static class CloudFolderSyncEngine
         }
     }
 
-    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(string operationsPath, CancellationToken cancellationToken)
+    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(
+        string operationsPath, CancellationToken cancellationToken, out bool unreadableHistory)
     {
+        unreadableHistory = false;
         if (!Directory.Exists(operationsPath))
             return [];
 
@@ -691,18 +894,70 @@ public static class CloudFolderSyncEngine
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var operation = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(
-                        File.ReadAllText(file));
-                    if (operation is not null) operations.Add(operation);
+                    using var document = JsonDocument.Parse(File.ReadAllText(file));
+                    var envelope = document.RootElement;
+                    if (!HasReadableOperationEnvelope(envelope))
+                    {
+                        unreadableHistory = true;
+                        continue;
+                    }
+                    // Valid Mac history and future schemas are not partial files.
+                    if (envelope.TryGetProperty("collection", out var collection) && collection.ValueKind == JsonValueKind.String && collection.GetString() == "history" ||
+                        envelope.TryGetProperty("schemaVersion", out var schema) && schema.TryGetInt32(out var version) && version > 2) continue;
+                    var operation = envelope.Deserialize<CloudFolderSyncOperation>(CloudFolderSyncJson.Options);
+                    if (operation is not null && HasReadableOperationStructure(operation))
+                    {
+                        // Keep readable old payloads as migration evidence, regardless
+                        // of current import limits. Defaults from partial objects are
+                        // not evidence that the old package was deliberately removed.
+                        operations.Add(operation);
+                    }
+                    else unreadableHistory = true;
                 }
                 catch
                 {
-                    // Cloud providers can leave transient or partial files; skip unreadable operations.
+                    // A completely unreadable old package is not proof it was reset.
+                    unreadableHistory = true;
                 }
             }
         }
 
         return operations;
+    }
+
+    private static bool HasReadableOperationEnvelope(JsonElement envelope)
+    {
+        if (envelope.ValueKind != JsonValueKind.Object ||
+            !envelope.TryGetProperty("schemaVersion", out var schema) || schema.ValueKind != JsonValueKind.Number ||
+            !schema.TryGetInt32(out var version) || version < 1) return false;
+        foreach (var field in new[] { "operationId", "deviceId", "itemId" })
+            if (!envelope.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(value.GetString())) return false;
+        // Future schemas may add collection/kind values. Preserve support for
+        // both string and integer enum encodings without interpreting their payloads.
+        foreach (var field in new[] { "collection", "kind" })
+        {
+            if (!envelope.TryGetProperty(field, out var value)) return false;
+            if (value.ValueKind == JsonValueKind.String)
+            {
+                if (string.IsNullOrWhiteSpace(value.GetString())) return false;
+            }
+            else if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out _)) return false;
+        }
+        if (version <= 2 && !Enum.IsDefined(envelope.GetProperty("kind").Deserialize<CloudFolderSyncOperationKind>(CloudFolderSyncJson.Options)))
+            return false;
+        return envelope.TryGetProperty("updatedAt", out var updatedAt) && updatedAt.ValueKind == JsonValueKind.String &&
+            updatedAt.Deserialize<DateTime>(CloudFolderSyncJson.Options) != default;
+    }
+
+    private static bool HasReadableOperationStructure(CloudFolderSyncOperation operation)
+    {
+        return operation.SchemaVersion is 1 or 2 && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
+            (operation.Kind == CloudFolderSyncOperationKind.Delete ||
+             operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { Original: not null } d &&
+                Enum.IsDefined(d.EntryType) && d.CreatedAt != default && d.UpdatedAt != default ||
+             operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { Trigger: not null, Replacement: not null } n &&
+                n.CreatedAt != default && n.UpdatedAt != default);
     }
 
     // A uniquely named temporary file avoids colliding with other writers, and the flushed move shows

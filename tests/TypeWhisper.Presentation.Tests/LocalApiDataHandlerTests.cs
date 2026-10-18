@@ -19,6 +19,37 @@ public sealed class LocalApiDataHandlerTests : IDisposable
             Encoding.UTF8.GetBytes(body ?? ""), body is null ? null : "application/json", query ?? new Dictionary<string, string?>()))!;
     private DictionaryEntry[] Read() => LexiconTransfer.ReadDictionary(File.ReadAllText(DictionaryPath), allowPackEntries: true);
 
+    [Theory]
+    [InlineData("TypeWhisper")]
+    [InlineData("[")]
+    public void TermDeletionIgnoresStrayRegexFlag(string word)
+    {
+        File.WriteAllText(DictionaryPath, LexiconTransfer.WriteDictionary([new DictionaryEntry
+        { Id = "term", EntryType = DictionaryEntryType.Term, Original = word, IsRegex = true }]));
+        var response = Call("DELETE", "/v1/dictionary/terms", JsonSerializer.Serialize(new { term = word }));
+        Assert.Equal(200, response.StatusCode);
+        Assert.Empty(Read());
+    }
+
+    [Fact]
+    public void RegexModeIsExplicitAndDeletingOnePatternPreservesOtherModes()
+    {
+        const string path = "/v1/dictionary/corrections";
+        foreach (var original in new[] { @"\d", @"\D", " word ", " " })
+            Assert.Equal(200, Call("PUT", path, JsonSerializer.Serialize(new { original, replacement = "#", isRegex = true })).StatusCode);
+        Assert.Equal(200, Call("PUT", path, JsonSerializer.Serialize(new { original = @"\d", replacement = "literal" })).StatusCode);
+        using var response = JsonDocument.Parse(Call("GET", path).Body);
+        var entries = response.RootElement.GetProperty("corrections").EnumerateArray().ToArray();
+        Assert.Equal(5, entries.Length);
+        Assert.Equal(4, entries.Count(entry => entry.GetProperty("isRegex").GetBoolean()));
+        Assert.Contains(entries, entry => entry.GetProperty("original").GetString() == " word ");
+        Assert.Equal(400, Call("PUT", path, """{"original":"[","replacement":"#","isRegex":true}""").StatusCode);
+        Assert.Equal(200, Call("DELETE", path, JsonSerializer.Serialize(new { original = @"\D", isRegex = true })).StatusCode);
+        Assert.Equal(4, Read().Length);
+        Assert.Contains(Read(), entry => entry.Original == @"\d" && entry.IsRegex);
+        Assert.Contains(Read(), entry => entry.Original == @"\d" && !entry.IsRegex);
+    }
+
     [Fact]
     public void ReplaceTermsPreservesPacksAndCorrectionMetadata()
     {

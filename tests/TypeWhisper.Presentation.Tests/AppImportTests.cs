@@ -32,6 +32,37 @@ public sealed class AppImportTests : IDisposable
         Assert.Contains(entries, e => e.Original == "übermorgen");
     }
 
+    [Theory]
+    [InlineData("TypeWhisper")]
+    [InlineData("[")]
+    public void WisprTermMatchesExistingTermWithStrayRegexFlag(string word)
+    {
+        var term = new DictionaryEntry { Id = "term", EntryType = DictionaryEntryType.Term, Original = word, IsRegex = true };
+        var batch = LexiconAppImport.MapWispr([new(word, null, false, false)], false);
+        var review = LexiconAppImport.Review(batch, false, LexiconTransfer.WriteDictionary([term]));
+        Assert.Equal(0, review.Additions);
+        Assert.Equal(AppImportOutcome.Duplicate, Assert.Single(review.Lines).Outcome);
+        var retained = Assert.Single(LexiconTransfer.ReadDictionary(review.Json));
+        Assert.Equal(term.Id, retained.Id);
+        Assert.False(retained.IsRegex);
+    }
+
+    [Fact]
+    public void WisprLiteralCorrectionCanCoexistWithRegexAndReimportIsIdempotent()
+    {
+        var regex = new DictionaryEntry
+        { Id = "regex", EntryType = DictionaryEntryType.Correction, Original = "teh", Replacement = "regex", IsRegex = true, UsageCount = 7 };
+        var batch = LexiconAppImport.MapWispr([new("teh", "the", false, false)], false);
+        var review = LexiconAppImport.Review(batch, false, LexiconTransfer.WriteDictionary([regex]));
+        Assert.Contains(review.Lines, line => line.Kind == "Correction" && line.Outcome == AppImportOutcome.Add);
+        var entries = LexiconTransfer.ReadDictionary(review.Json);
+        Assert.Equal(regex, Assert.Single(entries, entry => entry.IsRegex));
+        Assert.Equal("the", Assert.Single(entries, entry => entry.EntryType == DictionaryEntryType.Correction && !entry.IsRegex).Replacement);
+        Assert.Equal(0, LexiconAppImport.Review(batch, false, review.Json).Additions);
+        var conflict = LexiconAppImport.Review(LexiconAppImport.MapWispr([new("TEH", "different", false, false)], false), false, review.Json);
+        Assert.Contains(conflict.Lines, line => line.Kind == "Correction" && line.Outcome == AppImportOutcome.Conflict);
+    }
+
     [Fact]
     public void DuplicateAndConflictingSnippetsNeverReplaceExistingContentOrMetadata()
     {

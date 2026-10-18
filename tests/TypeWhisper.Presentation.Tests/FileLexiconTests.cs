@@ -1,6 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Models.Backup;
+using TypeWhisper.Core.Services;
 using TypeWhisper.WinUI;
 using Xunit;
 
@@ -30,6 +33,208 @@ public sealed class FileLexiconTests : IDisposable
         var queue = new FileTranscriptionQueue();
         Assert.Null(queue.Add(Path.Combine(_root, "source.wav")));
         return queue;
+    }
+
+    [Theory]
+    [InlineData(DictionaryEntryType.Correction, true, 161, 2, false)]
+    [InlineData(DictionaryEntryType.Correction, false, 163, 2, false)]
+    [InlineData(DictionaryEntryType.Term, false, 163, 0, false)]
+    [InlineData(DictionaryEntryType.Term, true, 163, 0, false)]
+    [InlineData(DictionaryEntryType.Correction, true, 160, 10_001, false)]
+    [InlineData(DictionaryEntryType.Correction, false, 162, 10_001, false)]
+    [InlineData(DictionaryEntryType.Correction, true, 160, 10_000, true)]
+    [InlineData(DictionaryEntryType.Correction, false, 162, 10_000, true)]
+    [InlineData(DictionaryEntryType.Term, false, 162, 0, true)]
+    [InlineData(DictionaryEntryType.Term, true, 162, 0, true)]
+    public async Task BackupDictionaryLengthValidationKeepsLexiconLoadable(
+        DictionaryEntryType type, bool isRegex, int originalLength, int replacementLength, bool accepted)
+    {
+        var dictionary = new DictionaryService(DictionaryPath);
+        dictionary.AddEntry(new DictionaryEntry
+        { Id = "existing", EntryType = DictionaryEntryType.Term, Original = "existing" });
+        var backup = new BackupRestoreService(
+            new SettingsService(Path.Combine(_root, "settings.json")),
+            new WorkflowService(Path.Combine(_root, "workflows.json")), dictionary,
+            new SnippetService(SnippetPath), new HistoryService(Path.Combine(_root, "history.json")));
+        var json = JsonNode.Parse(await backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var entry = json["data"]!["dictionary"]!["entries"]![0]!;
+        // Include a surrogate pair and surrounding spaces to distinguish UTF-16 limits and trimming.
+        var original = " " + new string('a', originalLength - 4) + "\U0001F600 ";
+        var replacement = type == DictionaryEntryType.Term ? null : new string('b', replacementLength - 2) + "\U0001F600";
+        entry["entryType"] = type.ToString();
+        entry["original"] = original;
+        entry["replacement"] = replacement;
+        entry["isRegex"] = isRegex;
+        var before = File.ReadAllBytes(DictionaryPath);
+
+        Assert.Equal(accepted, backup.PreviewImport(json.ToJsonString()).IsValid);
+        Assert.Equal(accepted, (await backup.ImportAsync(json.ToJsonString())).Success);
+        if (!accepted)
+            Assert.Equal(before, File.ReadAllBytes(DictionaryPath));
+
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Contains(reloaded.Entries, item => item.Key == "existing");
+        Assert.Equal(accepted ? 2 : 1, reloaded.Entries.Count);
+        if (accepted)
+        {
+            var restored = Assert.Single(reloaded.Entries, item => item.Key != "existing");
+            var preservesPattern = type == DictionaryEntryType.Correction && isRegex;
+            Assert.Equal(preservesPattern ? original : original.Trim(), restored.Key);
+            Assert.Equal(replacement ?? "", restored.Value);
+            Assert.Equal(preservesPattern, restored.IsRegex);
+        }
+    }
+
+    [Theory]
+    [InlineData("word")]
+    [InlineData("[")]
+    public void EditingLegacyFlaggedTermsTrimsAndKeepsTheCatalogLoadable(string original)
+    {
+        File.WriteAllText(DictionaryPath, JsonSerializer.Serialize(new[] {
+            new DictionaryEntry { Id = "legacy-term", EntryType = DictionaryEntryType.Term, Original = "old", IsRegex = true }
+        }));
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.LastError);
+        var draft = Assert.Single(store.Entries);
+        Assert.Null(store.Save(draft with { Key = " " + original + " ", IsRegex = true }));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        var saved = Assert.Single(reloaded.Entries);
+        Assert.Equal(original, saved.Key);
+        Assert.False(saved.IsRegex);
+        var persisted = Assert.Single(JsonSerializer.Deserialize<DictionaryEntry[]>(File.ReadAllText(DictionaryPath))!);
+        Assert.Equal("legacy-term", persisted.Id);
+        Assert.False(persisted.IsRegex);
+        Assert.NotNull(reloaded.Save(new(Guid.NewGuid(), LexiconKind.Word, " " + original.ToUpperInvariant() + " ", IsRegex: true)));
+        var bytes = File.ReadAllBytes(DictionaryPath);
+        Assert.NotNull(reloaded.Save(saved with { Key = " ", IsRegex = true }));
+        Assert.Equal(bytes, File.ReadAllBytes(DictionaryPath));
+        Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries);
+    }
+
+    [Fact]
+    public void LegacyTermFlagIsHiddenFromTheEditorDraft()
+    {
+        File.WriteAllText(DictionaryPath, JsonSerializer.Serialize(new[] {
+            new DictionaryEntry { Id = "legacy-term", EntryType = DictionaryEntryType.Term, Original = "word", IsRegex = true }
+        }));
+        Assert.False(Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries).IsRegex);
+    }
+
+    [Theory]
+    [InlineData(false, "the")]
+    [InlineData(true, "the")]
+    [InlineData(false, "another")]
+    [InlineData(true, "another")]
+    public void LiteralVariantsCanCoexistWithRegex(bool suggestions, string replacement)
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "teh", replacement) { IsRegex = true }));
+        Assert.Null(suggestions ? store.SaveSuggestedAliases("the", ["teh"]) : store.SaveTraining("the", ["teh"]));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Contains(reloaded.Entries, entry => entry.IsRegex && entry.Key == "teh" && entry.Value == replacement);
+        Assert.Contains(reloaded.Entries, entry => entry.Kind == LexiconKind.Correction && !entry.IsRegex && entry.Key == "teh" && entry.Value == "the");
+        Assert.Contains(reloaded.Entries, entry => entry.Kind == LexiconKind.Word && entry.Key == "the");
+        Assert.Equal(3, reloaded.Entries.Count);
+        Assert.Null(reloaded.SaveTraining("the", ["teh"]));
+        Assert.Equal(3, reloaded.Entries.Count);
+        Assert.NotNull(reloaded.SaveTraining("different", ["teh"]));
+        Assert.Equal(3, new Lexicon(DictionaryPath, SnippetPath).Entries.Count);
+    }
+
+    [Fact]
+    public void FileBackedLearningCreatesALiteralBesideRegex()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "teh", "regex") { IsRegex = true }));
+        var learned = Assert.Single(LearnedCorrectionStore.Save(DictionaryPath, [new("teh", "the")]));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Equal(2, reloaded.Entries.Count);
+        Assert.Contains(reloaded.Entries, entry => entry.IsRegex && entry.Value == "regex");
+        Assert.Contains(reloaded.Entries, entry => !entry.IsRegex && entry.Value == "the" && entry.Key == learned.Original);
+        Assert.Empty(LearnedCorrectionStore.Save(DictionaryPath, [new("TEH", "other")]));
+        Assert.Equal(2, new Lexicon(DictionaryPath, SnippetPath).Entries.Count);
+    }
+
+    [Theory]
+    [InlineData(false, "")]
+    [InlineData(true, "")]
+    [InlineData(false, " ")]
+    [InlineData(true, " ")]
+    public void ImportedDeletionCorrectionRemainsEditable(bool regex, string replacement)
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        var json = JsonSerializer.Serialize(new[] { new DictionaryEntry { Id = "correction",
+            EntryType = DictionaryEntryType.Correction, Original = "filler", Replacement = replacement, IsRegex = regex } });
+        Assert.Null(store.Import(json, snippets: false, replace: false));
+        var entry = Assert.Single(store.Entries);
+        Assert.Null(store.Save(entry with { Key = "other" }));
+        var saved = Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries);
+        Assert.Equal("other", saved.Key);
+        Assert.Equal(replacement, saved.Value);
+        Assert.Equal(regex, saved.IsRegex);
+        Assert.NotNull(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, ";empty", replacement)));
+    }
+
+    [Fact]
+    public async Task RegexCanBeEditedWhenPatternEqualsReplacement()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Import("""[{"type":"correction","original":"a+","replacement":"a+","isRegex":true}]""", snippets: false, replace: false));
+        var entry = Assert.Single(store.Entries);
+        Assert.Null(store.Save(entry with { CaseSensitive = true, Enabled = false }));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        var saved = Assert.Single(reloaded.Entries);
+        Assert.Equal(entry.Id, saved.Id);
+        Assert.True(saved.IsRegex);
+        Assert.True(saved.CaseSensitive);
+        Assert.False(saved.Enabled);
+        Assert.Equal("a+", saved.Key);
+        Assert.Equal("a+", saved.Value);
+        Assert.Equal("aaaa AAAA", (await Process(Snapshot(), "aaaa AAAA")).Text);
+        Assert.Null(reloaded.Save(saved with { Enabled = true }));
+        Assert.Equal("a+ AAAA", (await Process(Snapshot(), "aaaa AAAA")).Text);
+        Assert.Null(reloaded.Save(Assert.Single(reloaded.Entries) with { CaseSensitive = false }));
+        Assert.Equal("a+ a+", (await Process(Snapshot(), "aaaa AAAA")).Text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EqualPatternAndReplacementKeepsLiteralNoOpValidation(bool regex)
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        var error = store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "a+", "a+") { IsRegex = regex });
+        if (regex)
+        {
+            Assert.Null(error);
+            Assert.True(Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries).IsRegex);
+        }
+        else
+        {
+            Assert.NotNull(error);
+            Assert.Empty(new Lexicon(DictionaryPath, SnippetPath).Entries);
+        }
+    }
+
+    [Fact]
+    public void InvalidRegexEditPreservesStoredRuleAndRemainsLoadable()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Import("""[{"type":"correction","original":"\\d+","replacement":"#","isRegex":true}]""", snippets: false, replace: false));
+        var entry = Assert.Single(store.Entries);
+        var bytes = File.ReadAllBytes(DictionaryPath);
+        Assert.NotNull(store.Save(entry with { Key = "[" }));
+        Assert.Equal(bytes, File.ReadAllBytes(DictionaryPath));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Equal(@"\d+", Assert.Single(reloaded.Entries).Key);
+        Assert.Null(store.Save(entry with { Key = @"\D+" }));
+        Assert.True(Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries).IsRegex);
     }
 
     [Fact]

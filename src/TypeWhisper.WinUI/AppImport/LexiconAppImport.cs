@@ -167,9 +167,13 @@ internal static partial class LexiconAppImport
                     if (entry.EntryType == DictionaryEntryType.Correction && ReplacementEscapes().IsMatch(entry.Replacement ?? ""))
                         throw new JsonException("A literal source spelling cannot become a formatting command.");
                     _ = LexiconTransfer.ReadDictionary(serialized);
-                    var collisions = next.Where(item => item.EntryType == entry.EntryType && item.Original.Equals(entry.Original, StringComparison.OrdinalIgnoreCase)).ToArray();
+                    var regex = entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex;
+                    var collisions = next.Where(item => item.EntryType == entry.EntryType &&
+                        (entry.EntryType != DictionaryEntryType.Correction || item.IsRegex == regex) &&
+                        item.Original.Equals(entry.Original, regex ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)).ToArray();
                     if (collisions.Length > 0)
-                        outcome = collisions.All(item => item.Replacement == entry.Replacement && item.CaseSensitive == entry.CaseSensitive && item.IsEnabled == entry.IsEnabled && !item.IsRegex)
+                        outcome = collisions.All(item => item.Replacement == entry.Replacement && item.CaseSensitive == entry.CaseSensitive && item.IsEnabled == entry.IsEnabled &&
+                            (item.EntryType != DictionaryEntryType.Correction || !item.IsRegex))
                             ? AppImportOutcome.Duplicate : AppImportOutcome.Conflict;
                 }
                 catch (JsonException) { outcome = AppImportOutcome.Unsupported; }
