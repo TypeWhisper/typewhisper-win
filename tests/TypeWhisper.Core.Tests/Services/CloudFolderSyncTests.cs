@@ -555,6 +555,45 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task UpgradingSyncedRegexDoesNotDeleteItOnLegacyPeers()
+    {
+        var legacy = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "PremiumSync", "upsert-dictionary-regex-v1.json")))!;
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "legacy.json"), CloudFolderSyncJson.Serialize(legacy));
+        var entry = legacy.Dictionary!;
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [entry]);
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "windows",
+            KnownLocalItemIds = [legacy.ItemId],
+            ExportedItemVersions = new() { [legacy.ItemId] = "1700000010000" },
+            AppliedOperationIds = [legacy.OperationId]
+        };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        var published = OperationFiles("windows").Select(path =>
+            CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!).ToArray();
+        Assert.Equal(2, Assert.Single(published).SchemaVersion);
+        Assert.DoesNotContain(legacy.ItemId, state.KnownLocalItemIds);
+        // An old peer only sees v1 operations: the pre-upgrade rule must still win.
+        Assert.Equal(legacy, CloudFolderSyncEngine.WinningOperations(
+            published.Append(legacy).Where(operation => operation.SchemaVersion == 1))[legacy.ItemId]);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40))).OperationsWritten);
+
+        // After migration, a literal with the same folded ID can be created and really deleted.
+        store.DictionaryEntries.Add(entry with { IsRegex = false, UpdatedAt = Date(50) });
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(55));
+        store.DictionaryEntries.RemoveAll(item => !item.IsRegex);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(60));
+        Assert.Contains(OperationFiles("windows").Select(path =>
+            CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!),
+            operation => operation.Kind == CloudFolderSyncOperationKind.Delete && operation.ItemId == legacy.ItemId);
+        Assert.True(Assert.Single(store.DictionaryEntries).IsRegex);
+    }
+
+    [Fact]
     public async Task LegacyRegexMigrationRepublishesV2AndKeepsFoldedTombstonesSeparate()
     {
         var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");

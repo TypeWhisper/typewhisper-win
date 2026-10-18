@@ -581,6 +581,14 @@ public static class CloudFolderSyncEngine
 
         foreach (var itemId in state.KnownLocalItemIds.Except(records.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
+            // An upgrade changes a regex's identity, not its existence. Withdrawing the old
+            // folded ID must not send a v1 deletion to peers that still use that identity.
+            // Once exported as v3, the same ID represents a real literal and deletes normally.
+            if ((!state.ExportedItemVersions.TryGetValue(itemId, out var previousVersion) ||
+                 !previousVersion.StartsWith("dictionary-v3|", StringComparison.Ordinal)) &&
+                records.Values.Any(record => record.Dictionary is { IsRegex: true } entry &&
+                    UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == itemId))
+                continue;
             var collection = itemId.StartsWith("snippet:", StringComparison.Ordinal)
                 ? UserDataSyncCollection.Snippets
                 : UserDataSyncCollection.Dictionary;

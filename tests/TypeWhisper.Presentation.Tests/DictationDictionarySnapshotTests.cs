@@ -46,6 +46,31 @@ public sealed class DictationDictionarySnapshotTests : IDisposable
     }
 
     [Fact]
+    public void WhitespaceRegexKeepsDictionaryAvailableAndAppliesDuringDictation()
+    {
+        var store = new Lexicon(FilePath);
+        store.Save(new(Guid.NewGuid(), LexiconKind.Word, "TypeWhisper"));
+        store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "teh", "the"));
+        store.Save(new(Guid.NewGuid(), LexiconKind.Correction, " ", "-", IsRegex: true));
+        var snapshot = DictationDictionarySnapshot.Load(FilePath);
+        Assert.Null(snapshot.Error);
+        Assert.Contains("TypeWhisper", snapshot.EnabledTerms);
+        Assert.Equal("the-tool", snapshot.ApplyCorrections("teh tool"));
+    }
+
+    [Theory]
+    [InlineData(false, " ")]
+    [InlineData(true, "")]
+    public void EmptyLiteralOrRegexPatternKeepsDictionaryUnavailable(bool isRegex, string original)
+    {
+        File.WriteAllText(FilePath, System.Text.Json.JsonSerializer.Serialize(new[] {
+            new DictionaryEntry { Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Correction,
+                Original = original, Replacement = "-", IsRegex = isRegex }
+        }));
+        Assert.NotNull(DictationDictionarySnapshot.Load(FilePath).Error);
+    }
+
+    [Fact]
     public void MalformedDictionaryKeepsOriginalTextAndFile()
     {
         File.WriteAllText(FilePath, "{broken");
