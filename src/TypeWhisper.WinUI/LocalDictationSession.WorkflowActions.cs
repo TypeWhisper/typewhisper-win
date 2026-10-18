@@ -54,7 +54,7 @@ internal sealed partial class LocalDictationSession
             throw new InvalidOperationException(Loc.T("The workflow action is unavailable. Enable its plugin first."));
         }
         var text = await ManualWorkflowRunner.RunAsync(workflow, input,
-            (provider, model) => LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)),
+            LlmAvailableForWorkflow,
             ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
         if (action is null) return (text, null, null);
         var result = await ExecuteWorkflowActionAsync(action, text, new ActionContext(null, null, null, null, input), ct);

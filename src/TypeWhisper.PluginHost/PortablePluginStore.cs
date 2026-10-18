@@ -21,9 +21,10 @@ public sealed class PortablePluginStore
     private Dictionary<string, Receipt> _installed = new(StringComparer.Ordinal);
     private bool _initialized;
     private sealed record Receipt(string Directory, string Version, string? PendingDirectory = null, string? PendingVersion = null, string? UpdateWarning = null);
-    // The installation in progress, so a policy pass can cancel it; guarded by _sync.
-    private CancellationTokenSource? _activeInstall;
-    private PortableCatalogEntry? _activeEntry;
+    // The lifecycle operation in progress and why the policy would refuse it, so a policy pass can cancel it;
+    // guarded by _sync.
+    private CancellationTokenSource? _activeOperation;
+    private Func<string?>? _activeRefusal;
     public string Root { get; }
     public string InventoryRoot => Path.Combine(Root, "installed");
     public bool Initialized => _initialized;
@@ -31,11 +32,11 @@ public sealed class PortablePluginStore
         Func<TypeWhisper.Core.Models.ManagedProviderPolicy>? policy = null)
     { Root = Path.GetFullPath(root); _host = host; _http = http; _services = services; _policy = policy; }
 
-    /// <summary>Cancels an installation in progress that the policy refuses by now, hook included.</summary>
+    /// <summary>Cancels an installation or uninstall hook in progress that the policy refuses by now.</summary>
     public void ReapplyPolicy()
     {
         CancellationTokenSource? cancel;
-        lock (_sync) cancel = _activeEntry is { } entry && InstallRefusal(entry) is not null ? _activeInstall : null;
+        lock (_sync) cancel = _activeRefusal?.Invoke() is not null ? _activeOperation : null;
         try { cancel?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
@@ -170,7 +171,7 @@ public sealed class PortablePluginStore
         var caller = ct;
         using var policyLinked = CancellationTokenSource.CreateLinkedTokenSource(caller);
         ct = policyLinked.Token;
-        lock (_sync) { _activeInstall = policyLinked; _activeEntry = entry; }
+        lock (_sync) { _activeOperation = policyLinked; _activeRefusal = () => InstallRefusal(entry); }
         string? package = null;
         var archive = Path.Combine(Root, Guid.NewGuid().ToString("N") + ".zip");
         try
@@ -243,7 +244,7 @@ public sealed class PortablePluginStore
         }
         finally
         {
-            lock (_sync) { _activeInstall = null; _activeEntry = null; }
+            lock (_sync) { _activeOperation = null; _activeRefusal = null; }
             if (package is not null) TryDelete(package);
             try { File.Delete(archive); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             _operation.Release();
@@ -263,8 +264,16 @@ public sealed class PortablePluginStore
             lock (_sync) next = new(_installed, StringComparer.Ordinal);
             progress?.Report(new("Running plugin cleanup…"));
             // A package the policy refuses is removed without running its code: the hook would load the assembly.
+            // A hook already running is cancelled by the policy pass once the policy refuses the package.
             if (next.TryGetValue(id, out var previous) && _services is not null && !RefusedForExecution(id, PackagePath(previous.Directory)))
-                await PortablePluginPackage.RunInstallationHookAsync(PackagePath(previous.Directory), _services(id), _host, previous.Version, uninstall: true, ct, progress);
+            {
+                var directory = PackagePath(previous.Directory);
+                using var policyLinked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                lock (_sync) { _activeOperation = policyLinked; _activeRefusal = () => ExecutionRefusal(id, directory); }
+                try { await PortablePluginPackage.RunInstallationHookAsync(directory, _services(id), _host, previous.Version, uninstall: true, policyLinked.Token, progress); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+                finally { lock (_sync) { _activeOperation = null; _activeRefusal = null; } }
+            }
             ct.ThrowIfCancellationRequested();
             if (!next.Remove(id)) throw new InvalidOperationException("This plugin is not installed.");
             Commit(next);

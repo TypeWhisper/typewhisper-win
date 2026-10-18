@@ -49,6 +49,8 @@ internal sealed partial class WinUIHttpApi
             var resultModel = await session.ApiChangeModelAsync(operation, provider, model, ct);
             return LocalApiResponse.Json(200, new { engine, model = resultModel, status = operation switch { "load" => "ready", "unload" => "unloaded", _ => "deleted" } });
         }
+        // A policy refusal is the documented 403, not a conflict.
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { throw; }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or IOException)
         { return Error(409, ex.Message); }
     }
