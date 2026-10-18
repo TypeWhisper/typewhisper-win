@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
@@ -218,6 +219,11 @@ internal sealed class Lexicon
         var key = draft.IsRegex ? draft.Key : draft.Key.Trim();
         if (key.Length == 0) return draft.Kind == LexiconKind.Snippet ? Loc.T("Enter a trigger phrase.") : Loc.T("Enter a word or phrase.");
         if (key.Length > 160 || key.Contains('\n') || key.Contains('\r')) return Loc.T("Use a single line of up to 160 characters.");
+        if (draft.Kind == LexiconKind.Correction && draft.IsRegex)
+        {
+            try { _ = new Regex(key, RegexOptions.None, TimeSpan.FromSeconds(1)); }
+            catch (ArgumentException) { return Loc.T("Invalid dictionary regular expression."); }
+        }
         if (draft.Kind != LexiconKind.Word && string.IsNullOrWhiteSpace(draft.Value)) return Loc.T("Enter the replacement text.");
         if (draft.Value.Length > 10000) return Loc.T("Keep the replacement below 10,001 characters.");
         if (draft.Tags.Length > 300) return Loc.T("Keep tags below 301 characters.");

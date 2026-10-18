@@ -33,6 +33,22 @@ public sealed class FileLexiconTests : IDisposable
     }
 
     [Fact]
+    public void InvalidRegexEditPreservesStoredRuleAndRemainsLoadable()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Import("""[{"type":"correction","original":"\\d+","replacement":"#","isRegex":true}]""", snippets: false, replace: false));
+        var entry = Assert.Single(store.Entries);
+        var bytes = File.ReadAllBytes(DictionaryPath);
+        Assert.NotNull(store.Save(entry with { Key = "[" }));
+        Assert.Equal(bytes, File.ReadAllBytes(DictionaryPath));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Equal(@"\d+", Assert.Single(reloaded.Entries).Key);
+        Assert.Null(store.Save(entry with { Key = @"\D+" }));
+        Assert.True(Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries).IsRegex);
+    }
+
+    [Fact]
     public void SavingAStaleDictionaryPreservesLearnedCorrectionsAndReloadsBeforeRetry()
     {
         var store = new Lexicon(DictionaryPath, SnippetPath);

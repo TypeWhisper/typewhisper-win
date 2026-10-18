@@ -348,7 +348,22 @@ public static class CloudFolderSyncEngine
         WritePackageMetadata(packagePath, devicesPath, deviceId, syncNow);
 
         var initialRecords = RecordsFrom(store.Snapshot());
-        var localOperations = MakeLocalOperations(initialRecords, state, syncNow);
+        var legacyRegexIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (state.KnownLocalItemIds.Any(id => id.StartsWith("dictionary:correction:", StringComparison.Ordinal) &&
+            (!state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal))))
+        {
+            // Use the version this device actually synced. Unseen remote edits cannot
+            // change which exact regex a local deletion or mode change targets.
+            var known = LegacyWinningOperations(ReadOperations(operationsPath, cancellationToken)
+                .Where(operation => state.AppliedOperationIds.Contains(operation.OperationId)).ToArray());
+            foreach (var (id, operation) in known)
+                if (state.KnownLocalItemIds.Contains(id) &&
+                    (!state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal)) &&
+                    operation.Kind == CloudFolderSyncOperationKind.Upsert &&
+                    operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } entry)
+                    legacyRegexIds[id] = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true);
+        }
+        var localOperations = MakeLocalOperations(initialRecords, state, legacyRegexIds, syncNow);
         Write(localOperations, deviceOperationsPath, syncNow);
         // Keep tombstones: deleting them while old upserts remain would resurrect data on a new device.
         cancellationToken.ThrowIfCancellationRequested();
@@ -473,27 +488,14 @@ public static class CloudFolderSyncEngine
         }
         foreach (var record in local.Values) Remember(record);
         var valid = operations.Where(IsValidOperation).ToArray();
-        // Resolve v1 identities before migrating. Deleted or renamed legacy patterns
-        // must not reappear as new regex entries on an upgraded device.
-        var legacyAliases = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var operation in valid.Where(operation => operation.SchemaVersion == 1 && operation.Dictionary?.IsRegex == true))
-        {
-            var entry = operation.Dictionary!;
-            var key = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
-            legacyAliases[operation.ItemId] = key;
-            legacyAliases[$"dictionary:correction:{UserDataSyncIdentity.NormalizedKey(entry.Original)}"] = key;
-        }
-        var legacyWinners = WinningOperations(valid.Where(operation => operation.SchemaVersion == 1)
-            .Select(operation => operation.Dictionary is { } entry
-                ? operation with { ItemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) }
-                : operation with { ItemId = legacyAliases.GetValueOrDefault(operation.ItemId, operation.ItemId) }));
+        var legacyWinners = LegacyWinningOperations(valid);
         var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Dictionary?.IsRegex != true ||
             legacyWinners[UserDataSyncIdentity.DictionaryItemId(operation.Dictionary.EntryType, operation.Dictionary.Original)].OperationId == operation.OperationId)
             .Select(operation =>
         {
             if (operation.Kind != CloudFolderSyncOperationKind.Upsert) return operation;
             if (operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegexFieldPresent: false } legacy &&
-                !local.ContainsKey(operation.ItemId) && local.Values.Any(record =>
+                !local.ContainsKey(UserDataSyncIdentity.DictionaryItemId(legacy.EntryType, legacy.Original)) && local.Values.Any(record =>
                     record.Dictionary?.IsRegex == true && string.Equals(record.Dictionary.Original, legacy.Original, StringComparison.Ordinal)))
                 operation = operation with { Dictionary = legacy with { IsRegex = true } };
             var id = operation.Collection == UserDataSyncCollection.Dictionary
@@ -506,6 +508,26 @@ public static class CloudFolderSyncEngine
         return canonical.Select(operation => operation.Kind == CloudFolderSyncOperationKind.Delete &&
             !local.ContainsKey(operation.ItemId) && aliases.TryGetValue(operation.ItemId, out var id)
                 ? operation with { ItemId = id } : operation).ToArray();
+    }
+
+    // Resolve v1 identities before migrating. Deleted or renamed legacy patterns
+    // must not reappear as new regex entries on an upgraded device.
+    private static IReadOnlyDictionary<string, CloudFolderSyncOperation> LegacyWinningOperations(
+        IReadOnlyList<CloudFolderSyncOperation> operations)
+    {
+        var valid = operations.Where(operation => operation.SchemaVersion == 1 && IsValidOperation(operation)).ToArray();
+        var legacyAliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var operation in valid.Where(operation => operation.Dictionary?.IsRegex == true))
+        {
+            var entry = operation.Dictionary!;
+            var key = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+            legacyAliases[operation.ItemId] = key;
+            legacyAliases[$"dictionary:correction:{UserDataSyncIdentity.NormalizedKey(entry.Original)}"] = key;
+        }
+        return WinningOperations(valid
+            .Select(operation => operation.Dictionary is { } entry
+                ? operation with { ItemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) }
+                : operation with { ItemId = legacyAliases.GetValueOrDefault(operation.ItemId, operation.ItemId) }));
     }
 
     private static void Merge(
@@ -561,6 +583,7 @@ public static class CloudFolderSyncEngine
     private static IReadOnlyList<CloudFolderSyncOperation> MakeLocalOperations(
         IReadOnlyDictionary<string, CloudFolderSyncRecord> records,
         CloudFolderSyncState state,
+        IReadOnlyDictionary<string, string> legacyRegexIds,
         DateTime now)
     {
         var operations = new List<CloudFolderSyncOperation>();
@@ -579,15 +602,17 @@ public static class CloudFolderSyncEngine
                 operations.Add(CloudFolderSyncOperation.UpsertSnippet(snippet, record.ItemId, state.DeviceId));
         }
 
+        // A regex deleted before its first upgraded sync has no exact ID in state yet.
+        // Publish its v2 tombstone even when the old ID is now occupied by a literal.
+        foreach (var (_, regexId) in legacyRegexIds.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+            if (!records.ContainsKey(regexId) && !state.KnownLocalItemIds.Contains(regexId))
+                operations.Add(CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, regexId, state.DeviceId, now));
+
         foreach (var itemId in state.KnownLocalItemIds.Except(records.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
-            // An upgrade changes a regex's identity, not its existence. Withdrawing the old
-            // folded ID must not send a v1 deletion to peers that still use that identity.
-            // Once exported as v3, the same ID represents a real literal and deletes normally.
-            if ((!state.ExportedItemVersions.TryGetValue(itemId, out var previousVersion) ||
-                 !previousVersion.StartsWith("dictionary-v3|", StringComparison.Ordinal)) &&
-                records.Values.Any(record => record.Dictionary is { IsRegex: true } entry &&
-                    UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == itemId))
+            // Only the same, previously synced regex still present under its exact ID is
+            // a migration. A literal-to-regex edit must delete the old literal normally.
+            if (legacyRegexIds.TryGetValue(itemId, out var regexId) && records.ContainsKey(regexId))
                 continue;
             var collection = itemId.StartsWith("snippet:", StringComparison.Ordinal)
                 ? UserDataSyncCollection.Snippets
