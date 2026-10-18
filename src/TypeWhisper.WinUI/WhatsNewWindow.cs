@@ -15,6 +15,7 @@ internal sealed class WhatsNewWindow : Window
     internal const int ContentVersion = 1;
     private bool _active;
     private bool _closed;
+    private bool _focusedOnce;
 
     internal WhatsNewWindow()
     {
@@ -88,7 +89,11 @@ internal sealed class WhatsNewWindow : Window
         NativeWindowAppearance.RemoveSystemBorder(this);
         Closed += (_, _) => _closed = true;
         // Set a useful tab stop only after the user activates this window; startup must keep the dictation target.
-        void FocusDone() { if (_active && !_closed) done.Focus(FocusState.Programmatic); }
+        void FocusDone()
+        {
+            if (_active && !_closed && !_focusedOnce)
+                _focusedOnce = done.Focus(FocusState.Programmatic);
+        }
         shell.Loaded += (_, _) => FocusDone();
         Activated += (_, e) =>
         {

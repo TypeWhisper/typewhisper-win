@@ -119,11 +119,16 @@ while a model loads), recorder capture, file processing and workflows discard
 the startup opportunity. Finishing that activity does not show news later.
 Closing, **Skip**, **Got it** and Escape all leave displayed content marked as seen.
 Fresh setup baselines the current version without showing another introduction.
+Automatic presentation saves its content version before showing the prepared
+window. If saving fails, the window stays hidden; if showing fails after saving,
+the content remains available manually but is not retried automatically.
 
 **Account & about → What's new in TypeWhisper** reopens the current highlights
 on demand and is included in settings search. Manual viewing marks the content
 as seen without rearming the startup opportunity. Active recording or processing
 shows an inline explanation instead; viewing can be retried after that work ends.
+Model downloads alone do not block manual viewing. Returning to an open news
+window preserves the selected keyboard focus.
 The window has no native title bar. Its upper logo area is draggable, and the
 custom close button, Escape and footer actions dismiss it. Screenshots and the
 tested scenarios are in [UI evidence](docs/screenshots/whats-new/README.md).

@@ -8,7 +8,8 @@ public sealed partial class MainWindow
     private readonly WhatsNewSession _whatsNewSession;
     private WhatsNewWindow? _whatsNewWindow;
 
-    private bool WhatsNewBusy => _closing || _profileRestoreClosing || ShortcutActionBusy
+    private bool WhatsNewBusy => _closing || _profileRestoreClosing
+        || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false }
         || _dictation.HasActiveUserWork || WorkflowsView.IsBusy;
 
     private WhatsNewWindow CreateWhatsNewWindow()
@@ -69,7 +70,7 @@ public sealed partial class MainWindow
         try
         {
             if (!_whatsNewSession.Pending) return;
-            var busy = WhatsNewBusy || _settingsWindow is not null
+            var busy = WhatsNewBusy || ShortcutActionBusy || _settingsWindow is not null
                 || _notice?.IsShowing == true || _reviewWindows.Count > 0;
             if (busy) { _whatsNewSession.Suppress(); return; }
             var window = CreateWhatsNewWindow();

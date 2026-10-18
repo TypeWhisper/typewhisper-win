@@ -146,13 +146,14 @@ public sealed class WhatsNewTests : IDisposable
     }
 
     [Fact]
-    public void FailedWindowCreationDoesNotConsumeThePersistedVersionOrRetryDuringTheSession()
+    public void FailedPresentationDoesNotAutomaticallyRetryAcrossSessions()
     {
         var session = Session();
         Assert.Throws<InvalidOperationException>(() => session.TryShow(false, () => throw new InvalidOperationException("Window unavailable")));
         Assert.False(session.TryShow(false, UnexpectedShow));
-        Assert.False(File.Exists(StorePath));
-        Assert.True(Session().TryShow(false, () => { }));
+        Assert.Equal(1, Store().LastSeenContentVersion);
+        Assert.False(Session().TryShow(false, UnexpectedShow));
+        Assert.True(Session().TryShowManually(false, () => { }));
     }
 
     [Theory]
@@ -175,19 +176,45 @@ public sealed class WhatsNewTests : IDisposable
     }
 
     [Fact]
-    public void FailedSaveKeepsPreviousVersionAndDoesNotBlockOrRepeatTheView()
+    public void FailedSaveKeepsPreviousVersionAndSuppressesAutomaticPresentation()
     {
         var store = Store();
         store.RecordSeen(1);
         var session = new WhatsNewSession(store, ApplicationActivationRequest.Parse([]), true, 2);
         File.Delete(StorePath);
         Directory.CreateDirectory(StorePath);
-        Assert.True(session.TryShow(false, () => { }));
+        Assert.False(session.TryShow(false, UnexpectedShow));
         Assert.NotNull(session.Error);
         Assert.Equal(1, store.LastSeenContentVersion);
         Assert.False(session.TryShow(false, UnexpectedShow));
         Assert.True(Directory.Exists(StorePath));
         Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
+    }
+
+    [WindowsReadOnlyNewsFact]
+    public void ReadableButReadOnlyProgressSuppressesAutomaticNewsAcrossRestarts()
+    {
+        Store().RecordSeen(1);
+        var original = File.GetAttributes(StorePath);
+        File.SetAttributes(StorePath, original | FileAttributes.ReadOnly);
+        try
+        {
+            for (var launch = 0; launch < 2; launch++)
+            {
+                var session = Session(version: 2);
+                Assert.Null(session.Error);
+                Assert.False(session.TryShow(false, UnexpectedShow));
+                Assert.NotNull(session.Error);
+                Assert.False(session.TryShow(false, UnexpectedShow));
+                Assert.True(session.TryShowManually(false, () => { }));
+                Assert.Equal(1, Store().LastSeenContentVersion);
+                Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
+            }
+        }
+        finally { File.SetAttributes(StorePath, original); }
+
+        Assert.True(Session(version: 2).TryShow(false, () => { }));
+        Assert.False(Session(version: 2).TryShow(false, UnexpectedShow));
     }
 
     [Fact]
@@ -205,4 +232,12 @@ public sealed class WhatsNewTests : IDisposable
 
     private static void UnexpectedShow() => Assert.Fail("News must not interrupt this launch.");
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true); }
+}
+
+public sealed class WindowsReadOnlyNewsFactAttribute : FactAttribute
+{
+    public WindowsReadOnlyNewsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Requires Windows read-only file replacement semantics.";
+    }
 }

@@ -3,11 +3,11 @@ using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Presentation;
 
-/// <summary>Remembers reviewed content independently of application and setup versions.</summary>
+/// <summary>Remembers consumed content independently of application and setup versions.</summary>
 public sealed class WhatsNewPreferencesStore
 {
     private readonly string _path;
-    /// <summary>The highest content version already presented or included in initial setup.</summary>
+    /// <summary>The highest content version reserved for presentation or included in initial setup.</summary>
     public int LastSeenContentVersion { get; private set; }
     /// <summary>A storage failure for diagnostics; optional news must never block startup.</summary>
     public Exception? Error { get; private set; }

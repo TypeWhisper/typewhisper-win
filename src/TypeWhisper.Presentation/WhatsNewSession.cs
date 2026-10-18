@@ -30,14 +30,16 @@ public sealed class WhatsNewSession
     /// <summary>May be called directly from an activation or keyboard callback without doing I/O or UI work.</summary>
     public void Suppress() => Interlocked.Exchange(ref _available, 0);
 
-    /// <summary>Consumes the sole opportunity, preserving unseen content when work takes priority or showing fails.</summary>
+    /// <summary>Consumes the sole opportunity, requiring durable progress before automatic presentation.</summary>
     public bool TryShow(bool busy, Action show)
     {
         if (busy) Suppress();
         if (Interlocked.Exchange(ref _available, 0) == 0) return false;
-        show();
-        // Closing, Escape, Skip and Got it all count equally; no close handler can leave a repeat pending.
+        // Persist first: a readable but unwritable file must not show the same news on every launch.
+        // A failed presentation stays consumed; optional news remains available through the About page.
         _store.RecordSeen(_contentVersion);
+        if (_store.Error is not null) return false;
+        show();
         return true;
     }
 
