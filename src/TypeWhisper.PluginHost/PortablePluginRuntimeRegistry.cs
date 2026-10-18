@@ -427,15 +427,18 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         try
         {
             string? refused;
+            var kept = false;
             lock (_sync)
             {
                 if (_disposed || slot.Generation != generation) return false;
                 // Judged again under the gate: a policy that relaxed during the wait keeps the package running.
                 refused = SlotRefusal(slot);
                 slot.Stopping = false;
-                if (refused is null) { slot.Accepting = slot.Package is not null; return false; }
-                slot.Error = refused; slot.PolicyRefused = true;
+                if (refused is null) { slot.Accepting = slot.Package is not null; kept = true; }
+                else { slot.Error = refused; slot.PolicyRefused = true; }
             }
+            // A package kept after all is published again: an earlier unload may have left it out of the index.
+            if (kept) { Publish(BuildIndex()); return false; }
             var old = slot.Package; slot.Package = null;
             try { Publish(BuildIndex()); }
             catch { Publish(new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], [])); throw; }

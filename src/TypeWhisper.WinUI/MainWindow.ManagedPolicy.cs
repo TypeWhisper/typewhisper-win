@@ -33,7 +33,10 @@ public sealed partial class MainWindow
         _applicationUpdates?.PolicyChanged();
         _ = ApplyStartupPolicyAsync();
         _ = _dictation.ApplyPolicyChangeAsync();
-        if (SetupSkippedByPolicy && !OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current) && !SetupCompleted)
+        // A setup kept closed by policy reopens when the skip rule goes away or when the provider it relied on is
+        // refused now: a profile without a usable provider must not stay marked as skipped.
+        if (SetupSkippedByPolicy && !SetupCompleted
+            && (!OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current) || _dictation.TranscriptionPolicyRefusal() is not null))
         {
             SetupSkippedByPolicy = false;
             OpenSetup(returnToTray: true);
@@ -81,6 +84,8 @@ public sealed partial class MainWindow
         try { microphone = _dictation.GetMicrophones().Count > 0 && SetupWizard.MicrophoneAccessAllowed; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { microphone = false; }
         var hasShortcut = !string.IsNullOrWhiteSpace(_dictation.Shortcut) && _dictation.Shortcut != "No shortcut assigned";
-        return OnboardingPolicy.CanSkipSetup(WinUIManagedPolicy.Current, hasShortcut, _dictation.CanChangeProvider && _dictation.IsReady, microphone);
+        // A provider the policy refuses is not ready, whatever its model state.
+        return OnboardingPolicy.CanSkipSetup(WinUIManagedPolicy.Current, hasShortcut,
+            _dictation.CanChangeProvider && _dictation.IsReady && _dictation.TranscriptionPolicyRefusal() is null, microphone);
     }
 }
