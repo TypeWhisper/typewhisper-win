@@ -34,6 +34,7 @@ public static class CloudFolderSyncJson
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = writeIndented
         };
+        options.Converters.Add(new SyncDictionaryEntryJsonConverter());
         options.Converters.Add(new DictionaryEntrySourceJsonConverter());
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         options.Converters.Add(new CloudFolderSyncDateTimeConverter());
@@ -73,5 +74,35 @@ internal sealed class CloudFolderSyncDateTimeConverter : JsonConverter<DateTime>
     {
         var utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
         writer.WriteStringValue(utc.ToString(Format, CultureInfo.InvariantCulture));
+    }
+}
+
+internal sealed class SyncDictionaryEntryJsonConverter : JsonConverter<UserDataSyncDictionaryEntry>
+{
+    private JsonSerializerOptions WithoutThisConverter(JsonSerializerOptions options)
+    {
+        var copy = new JsonSerializerOptions(options);
+        copy.Converters.Remove(this);
+        return copy;
+    }
+
+    public override UserDataSyncDictionaryEntry Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        var entry = document.RootElement.Deserialize<UserDataSyncDictionaryEntry>(WithoutThisConverter(options))
+            ?? throw new JsonException("Missing dictionary entry.");
+        return entry with { IsRegexFieldPresent = document.RootElement.TryGetProperty("isRegex", out _) };
+    }
+
+    public override void Write(Utf8JsonWriter writer, UserDataSyncDictionaryEntry value, JsonSerializerOptions options)
+    {
+        var element = JsonSerializer.SerializeToElement(value, WithoutThisConverter(options));
+        writer.WriteStartObject();
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.NameEquals("isRegex") && !value.IsRegexFieldPresent) continue;
+            property.WriteTo(writer);
+        }
+        writer.WriteEndObject();
     }
 }

@@ -218,7 +218,7 @@ public sealed record CloudFolderSyncOperation
         string? operationId = null) =>
         new()
         {
-            SchemaVersion = 1,
+            SchemaVersion = entry.EntryType == UserDataSyncDictionaryEntryType.Correction && entry.IsRegex ? 2 : 1,
             OperationId = operationId ?? Guid.NewGuid().ToString(),
             DeviceId = deviceId,
             Collection = UserDataSyncCollection.Dictionary,
@@ -259,7 +259,7 @@ public sealed record CloudFolderSyncOperation
         string? operationId = null) =>
         new()
         {
-            SchemaVersion = 1,
+            SchemaVersion = itemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) ? 2 : 1,
             OperationId = operationId ?? Guid.NewGuid().ToString(),
             DeviceId = deviceId,
             Collection = collection,
@@ -367,6 +367,16 @@ public static class CloudFolderSyncEngine
             pair => pair.Key,
             pair => pair.Value.Version,
             StringComparer.Ordinal);
+        // Publish preserved mode metadata and migrated v1 regex entries once.
+        foreach (var mutation in mutations.OfType<UserDataSyncMutation.UpsertDictionary>())
+        {
+            var entry = mutation.Entry;
+            var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex);
+            if (entry.EntryType == UserDataSyncDictionaryEntryType.Correction &&
+                (!entry.IsRegexFieldPresent || operations.Any(operation =>
+                    operation.SchemaVersion == 1 && operation.Dictionary?.IsRegex == true && operation.ItemId == itemId)))
+                state.ExportedItemVersions.Remove(itemId);
+        }
         state.AppliedOperationIds.UnionWith(operations.Select(operation => operation.OperationId));
         state.LastSyncAt = syncNow;
 
@@ -386,12 +396,12 @@ public static class CloudFolderSyncEngine
 
         foreach (var entry in snapshot.DictionaryEntries)
         {
-            var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+            var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex);
             Merge(new CloudFolderSyncRecord(
                 UserDataSyncCollection.Dictionary,
                 itemId,
                 NormalizeUtc(entry.UpdatedAt),
-                VersionString(entry.UpdatedAt),
+                "dictionary-v3|" + VersionString(entry.UpdatedAt),
                 entry,
                 null), records);
         }
@@ -431,15 +441,23 @@ public static class CloudFolderSyncEngine
     }
 
     private static bool IsValidOperation(CloudFolderSyncOperation operation) =>
-        operation.SchemaVersion == 1 && !string.IsNullOrWhiteSpace(operation.OperationId) &&
+        IsSupportedSchema(operation) && !string.IsNullOrWhiteSpace(operation.OperationId) &&
         !string.IsNullOrWhiteSpace(operation.DeviceId) && !string.IsNullOrWhiteSpace(operation.ItemId) &&
         operation.UpdatedAt != default && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
         (operation.Kind == CloudFolderSyncOperationKind.Delete ||
          operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { } d &&
-            !string.IsNullOrWhiteSpace(d.Original) && Enum.IsDefined(d.EntryType) &&
+            (d.IsRegex ? !string.IsNullOrEmpty(d.Original) : !string.IsNullOrWhiteSpace(d.Original)) && Enum.IsDefined(d.EntryType) &&
             (d.CtcMinSimilarity is null || float.IsFinite(d.CtcMinSimilarity.Value) && d.CtcMinSimilarity >= .4f && d.CtcMinSimilarity <= .95f) ||
          operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { } n &&
             !string.IsNullOrWhiteSpace(n.Trigger) && n.Replacement is not null);
+
+    private static bool IsSupportedSchema(CloudFolderSyncOperation operation) =>
+        operation.SchemaVersion == 1 || operation.SchemaVersion == 2 &&
+        operation.Collection == UserDataSyncCollection.Dictionary &&
+        operation.ItemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) &&
+        (operation.Kind == CloudFolderSyncOperationKind.Delete ||
+         operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } entry &&
+         operation.ItemId == UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true));
 
     private static IReadOnlyList<CloudFolderSyncOperation> NormalizeIdentities(
         IReadOnlyList<CloudFolderSyncOperation> operations, IReadOnlyDictionary<string, CloudFolderSyncRecord> local)
@@ -447,19 +465,41 @@ public static class CloudFolderSyncEngine
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
         void Remember(CloudFolderSyncRecord record)
         {
+            // Folded legacy tombstones cannot identify which regex was deleted.
+            if (record.Dictionary?.IsRegex == true) return;
             var legacy = record.Dictionary is { } d ? $"dictionary:{UserDataSyncIdentity.JsonName(d.EntryType)}:{UserDataSyncIdentity.NormalizedKey(d.Original)}"
                 : record.Snippet is { } n ? "snippet:" + UserDataSyncIdentity.NormalizedKey(n.Trigger) : record.ItemId;
             aliases[legacy] = record.ItemId;
         }
         foreach (var record in local.Values) Remember(record);
         var valid = operations.Where(IsValidOperation).ToArray();
-        var canonical = valid.Select(operation =>
+        // Resolve v1 identities before migrating. Deleted or renamed legacy patterns
+        // must not reappear as new regex entries on an upgraded device.
+        var legacyAliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var operation in valid.Where(operation => operation.SchemaVersion == 1 && operation.Dictionary?.IsRegex == true))
+        {
+            var entry = operation.Dictionary!;
+            var key = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+            legacyAliases[operation.ItemId] = key;
+            legacyAliases[$"dictionary:correction:{UserDataSyncIdentity.NormalizedKey(entry.Original)}"] = key;
+        }
+        var legacyWinners = WinningOperations(valid.Where(operation => operation.SchemaVersion == 1)
+            .Select(operation => operation.Dictionary is { } entry
+                ? operation with { ItemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) }
+                : operation with { ItemId = legacyAliases.GetValueOrDefault(operation.ItemId, operation.ItemId) }));
+        var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Dictionary?.IsRegex != true ||
+            legacyWinners[UserDataSyncIdentity.DictionaryItemId(operation.Dictionary.EntryType, operation.Dictionary.Original)].OperationId == operation.OperationId)
+            .Select(operation =>
         {
             if (operation.Kind != CloudFolderSyncOperationKind.Upsert) return operation;
+            if (operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegexFieldPresent: false } legacy &&
+                !local.ContainsKey(operation.ItemId) && local.Values.Any(record =>
+                    record.Dictionary?.IsRegex == true && string.Equals(record.Dictionary.Original, legacy.Original, StringComparison.Ordinal)))
+                operation = operation with { Dictionary = legacy with { IsRegex = true } };
             var id = operation.Collection == UserDataSyncCollection.Dictionary
-                ? UserDataSyncIdentity.DictionaryItemId(operation.Dictionary!.EntryType, operation.Dictionary.Original)
+                ? UserDataSyncIdentity.DictionaryItemId(operation.Dictionary!.EntryType, operation.Dictionary.Original, operation.Dictionary.IsRegex)
                 : UserDataSyncIdentity.SnippetItemId(operation.Snippet!.Trigger);
-            aliases[operation.ItemId] = id;
+            if (operation.Dictionary?.IsRegex != true) aliases[operation.ItemId] = id;
             Remember(new(operation.Collection, id, operation.UpdatedAt, "", operation.Dictionary, operation.Snippet));
             return operation with { ItemId = id };
         }).ToArray();
@@ -498,6 +538,8 @@ public static class CloudFolderSyncEngine
                 dictionary.Replacement ?? string.Empty,
                 dictionary.CaseSensitive,
                 dictionary.IsEnabled,
+                dictionary.IsRegexFieldPresent,
+                dictionary.IsRegex,
                 VersionString(dictionary.CreatedAt));
         }
 
@@ -598,8 +640,9 @@ public static class CloudFolderSyncEngine
         if (operation.UpdatedAt > local.UpdatedAt)
             return true;
 
-        return operation.UpdatedAt == local.UpdatedAt &&
-               operation.DeviceId.CompareTo(localDeviceId) > 0;
+        if (operation.UpdatedAt != local.UpdatedAt) return false;
+        if (RegexPresencePreference(operation.Dictionary, local.Dictionary) is { } presence) return presence;
+        return operation.DeviceId.CompareTo(localDeviceId) > 0;
     }
 
     private static bool Prefers(CloudFolderSyncOperation candidate, CloudFolderSyncOperation existing)
@@ -607,11 +650,19 @@ public static class CloudFolderSyncEngine
         if (candidate.UpdatedAt != existing.UpdatedAt)
             return candidate.UpdatedAt > existing.UpdatedAt;
 
+        if (RegexPresencePreference(candidate.Dictionary, existing.Dictionary) is { } presence) return presence;
+
         if (!string.Equals(candidate.DeviceId, existing.DeviceId, StringComparison.Ordinal))
             return candidate.DeviceId.CompareTo(existing.DeviceId) > 0;
 
         return candidate.OperationId.CompareTo(existing.OperationId) > 0;
     }
+
+    private static bool? RegexPresencePreference(UserDataSyncDictionaryEntry? candidate, UserDataSyncDictionaryEntry? existing) =>
+        candidate?.EntryType == UserDataSyncDictionaryEntryType.Correction &&
+        existing?.EntryType == UserDataSyncDictionaryEntryType.Correction &&
+        candidate.IsRegexFieldPresent != existing.IsRegexFieldPresent
+            ? candidate.IsRegexFieldPresent : null;
 
     private static void WritePackageMetadata(string packagePath, string devicesPath, string deviceId, DateTime now)
     {

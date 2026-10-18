@@ -11,7 +11,7 @@ internal enum LexiconKind { Word, Correction, Snippet }
 
 // Dictionary entries and snippets use isolated development storage.
 internal sealed record LexiconEntry(Guid Id, LexiconKind Kind, string Key,
-    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null, int UsageCount = 0);
+    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null, int UsageCount = 0, bool IsRegex = false);
 
 internal sealed class Lexicon
 {
@@ -107,7 +107,7 @@ internal sealed class Lexicon
         _entries.AddRange(_dictionary.Entries.Select(e => new LexiconEntry(UiId(e.Id),
             e.EntryType == DictionaryEntryType.Term ? LexiconKind.Word : LexiconKind.Correction,
             e.Original, e.Replacement ?? "", e.Id.StartsWith("pack:", StringComparison.Ordinal) ? Loc.T("Term pack") : "",
-            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity)));
+            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity, e.UsageCount, e.IsRegex)));
     }
 
     internal bool PackEnabled(string id) => _dictionary?.Entries.Any(e => e.Id.StartsWith($"pack:{id}:", StringComparison.Ordinal)) == true;
@@ -215,7 +215,7 @@ internal sealed class Lexicon
         if (draft.FromPack) return Loc.T("Manage this term through its term pack.");
         if (draft.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
             return Loc.T("Use a CTC similarity between 40% and 95%.");
-        var key = draft.Key.Trim();
+        var key = draft.IsRegex ? draft.Key : draft.Key.Trim();
         if (key.Length == 0) return draft.Kind == LexiconKind.Snippet ? Loc.T("Enter a trigger phrase.") : Loc.T("Enter a word or phrase.");
         if (key.Length > 160 || key.Contains('\n') || key.Contains('\r')) return Loc.T("Use a single line of up to 160 characters.");
         if (draft.Kind != LexiconKind.Word && string.IsNullOrWhiteSpace(draft.Value)) return Loc.T("Enter the replacement text.");
@@ -223,7 +223,8 @@ internal sealed class Lexicon
         if (draft.Tags.Length > 300) return Loc.T("Keep tags below 301 characters.");
         if (draft.Kind == LexiconKind.Correction && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return Loc.T("The correction must differ from the original phrase.");
         if ((draft.Kind != LexiconKind.Snippet || _snippets is null) && _entries.Any(entry => entry.Id != draft.Id && entry.Kind == draft.Kind &&
-            entry.Key.Equals(key, entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
+            entry.IsRegex == draft.IsRegex && entry.Key.Equals(key,
+                draft.IsRegex || entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             return Loc.T("This word or trigger already exists in this section.");
         var normalized = draft with { Key = key, Value = draft.Kind == LexiconKind.Word ? "" : draft.Value, Tags = draft.Tags.Trim() };
         if (_snippets is not null && draft.Kind == LexiconKind.Snippet)
@@ -248,7 +249,7 @@ internal sealed class Lexicon
         {
             var existing = _dictionary.Entries.FirstOrDefault(e => UiId(e.Id) == draft.Id);
             var entry = (existing ?? new DictionaryEntry { Id = draft.Id.ToString(), EntryType = draft.Kind == LexiconKind.Word ? DictionaryEntryType.Term : DictionaryEntryType.Correction, Original = key })
-                with { Original = key, Replacement = draft.Kind == LexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, CtcMinSimilarity = draft.CtcMinSimilarity, UpdatedAt = DateTime.UtcNow };
+                with { Original = key, Replacement = draft.Kind == LexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsRegex = draft.IsRegex, IsEnabled = draft.Enabled, CtcMinSimilarity = draft.CtcMinSimilarity, UpdatedAt = DateTime.UtcNow };
             if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = DictionarySaveError(Loc.T("Could not save dictionary entry."));
             RefreshDictionary(); LastError = null; return null;
         }

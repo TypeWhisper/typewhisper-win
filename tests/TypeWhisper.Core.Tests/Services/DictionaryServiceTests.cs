@@ -1,6 +1,7 @@
 using System.Text.Json;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Tests.Services;
 
@@ -13,6 +14,29 @@ public class DictionaryServiceTests : IDisposable
     {
         _filePath = Path.GetTempFileName();
         _sut = new DictionaryService(_filePath);
+    }
+
+    [Fact]
+    public void SyncedRegexPatternsAndLiteralModeKeepIndependentStoredEntries()
+    {
+        var now = DateTime.UtcNow;
+        var digit = new UserDataSyncDictionaryEntry(UserDataSyncDictionaryEntryType.Correction, @"\d", "#", false, true, now, now, IsRegex: true);
+        var other = digit with { Original = @"\D" };
+        var literal = digit with { IsRegex = false };
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.UpsertDictionary(digit),
+            new UserDataSyncMutation.UpsertDictionary(other)]);
+        Assert.Equal(2, _sut.Entries.Count);
+        var legacy = other with { IsRegex = false, IsRegexFieldPresent = false, Replacement = "updated" };
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.UpsertDictionary(legacy)]);
+        Assert.True(Assert.Single(_sut.Entries, entry => entry.Original == @"\D").IsRegex);
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.UpsertDictionary(literal)]);
+        Assert.Equal(3, _sut.Entries.Count);
+        _sut.ApplyUserDataSyncMutations([new UserDataSyncMutation.DeleteDictionary(
+            UserDataSyncIdentity.DictionaryItemId(other.EntryType, other.Original, true))]);
+        var reloaded = new DictionaryService(_filePath);
+        Assert.Equal(2, reloaded.Entries.Count);
+        Assert.Single(reloaded.Entries, entry => entry.IsRegex);
+        Assert.Single(reloaded.Entries, entry => !entry.IsRegex);
     }
 
     [Fact]

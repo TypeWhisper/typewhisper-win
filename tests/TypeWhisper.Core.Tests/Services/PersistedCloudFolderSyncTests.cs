@@ -22,6 +22,29 @@ public sealed class PersistedCloudFolderSyncTests : IDisposable
     private static DictionaryEntry Word(string name, DateTime time) => new() { Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Term, Original = name, CreatedAt = time, UpdatedAt = time, CtcMinSimilarity = .65f };
 
     [Fact]
+    public async Task RegexIdentitiesSurvivePersistedSyncAndRestart()
+    {
+        var a = Client("a"); var b = Client("b");
+        var time = DateTime.UtcNow.AddHours(-1);
+        var digit = Word(@"\d", time) with { EntryType = DictionaryEntryType.Correction, Replacement = "#", IsRegex = true, CtcMinSimilarity = null };
+        var other = digit with { Id = Guid.NewGuid().ToString(), Original = @"\D" };
+        var literal = digit with { Id = Guid.NewGuid().ToString(), IsRegex = false };
+        Write("a", "dictionary.json", new[] { digit, other, literal });
+        await a.SyncAsync(() => true); await b.SyncAsync(() => true);
+        var received = Read<DictionaryEntry[]>("b", "dictionary.json");
+        Assert.Equal(3, received.Length);
+        Write("b", "dictionary.json", received.Where(entry => !(entry.IsRegex && entry.Original == @"\D")).ToArray());
+        await b.SyncAsync(() => true); await a.SyncAsync(() => true);
+        var remaining = Read<DictionaryEntry[]>("a", "dictionary.json");
+        Assert.Equal(2, remaining.Length);
+        Assert.Single(remaining, entry => entry.IsRegex);
+        var restarted = new PersistedCloudFolderSync(Profile("a"));
+        var repeated = await restarted.SyncAsync(() => true);
+        Assert.Equal(0, repeated.OperationsWritten);
+        Assert.Equal(0, repeated.MutationsApplied);
+    }
+
+    [Fact]
     public async Task TwoDevicesExchangeEditsAndDeletesAndKeepProgressAfterRestart()
     {
         var a = Client("a"); var b = Client("b");

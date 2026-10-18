@@ -529,7 +529,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
             {
                 Id = Guid.NewGuid().ToString(),
                 EntryType = item.EntryType,
-                Original = item.Original.Trim(),
+                Original = item.IsRegex ? item.Original : item.Original.Trim(),
                 Replacement = item.EntryType == DictionaryEntryType.Correction ? item.Replacement ?? "" : null,
                 CaseSensitive = item.CaseSensitive,
                 IsRegex = item.IsRegex,
@@ -839,7 +839,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         }
         foreach (var entry in data.Dictionary.Entries)
         {
-            if (!ValidRequired(entry.Original) || !ValidShort(entry.Original) || !ValidShort(entry.Replacement))
+            if ((entry.IsRegex ? string.IsNullOrEmpty(entry.Original) : !ValidRequired(entry.Original)) || !ValidShort(entry.Original) || !ValidShort(entry.Replacement))
                 return Loc.T("A dictionary entry contains invalid text.");
             if (!Enum.IsDefined(entry.EntryType) || !Enum.IsDefined(entry.Source))
                 return Loc.T("A dictionary entry contains an unsupported enum value.");
@@ -1122,10 +1122,10 @@ public sealed class BackupRestoreService : IBackupRestoreService
         !entry.Id.StartsWith("pack:", StringComparison.Ordinal);
 
     private static string DictionaryKey(DictionaryEntry entry) =>
-        $"{entry.EntryType}\u001f{entry.Original.Trim().ToUpperInvariant()}\u001f{entry.CaseSensitive}\u001f{entry.IsRegex}";
+        $"{entry.EntryType}\u001f{(entry.IsRegex ? entry.Original : entry.Original.Trim().ToUpperInvariant())}\u001f{entry.CaseSensitive}\u001f{entry.IsRegex}";
 
     private static string DictionaryKey(BackupDictionaryEntry entry) =>
-        $"{entry.EntryType}\u001f{entry.Original.Trim().ToUpperInvariant()}\u001f{entry.CaseSensitive}\u001f{entry.IsRegex}";
+        $"{entry.EntryType}\u001f{(entry.IsRegex ? entry.Original : entry.Original.Trim().ToUpperInvariant())}\u001f{entry.CaseSensitive}\u001f{entry.IsRegex}";
 
     private static bool DictionaryValuesEqual(DictionaryEntry existing, BackupDictionaryEntry incoming) =>
         string.Equals(existing.Replacement ?? "", incoming.Replacement ?? "", StringComparison.Ordinal)

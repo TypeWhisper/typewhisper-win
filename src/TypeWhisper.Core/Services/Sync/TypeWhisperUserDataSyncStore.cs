@@ -131,13 +131,16 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
 
     private void UpsertDictionaryFallback(UserDataSyncDictionaryEntry synced)
     {
-        var targetId = UserDataSyncIdentity.DictionaryItemId(synced.EntryType, synced.Original);
+        var targetId = UserDataSyncIdentity.DictionaryItemId(synced.EntryType, synced.Original, synced.IsRegex);
         var targetType = synced.EntryType == UserDataSyncDictionaryEntryType.Term
             ? DictionaryEntryType.Term
             : DictionaryEntryType.Correction;
         var existing = _dictionary.Entries.FirstOrDefault(entry =>
             entry.EntryType == targetType &&
-            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == targetId);
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == targetId);
+        if (existing is null && targetType == DictionaryEntryType.Correction && !synced.IsRegexFieldPresent)
+            existing = _dictionary.Entries.FirstOrDefault(entry => entry.IsRegex &&
+                string.Equals(entry.Original, synced.Original, StringComparison.Ordinal));
         var replacement = targetType == DictionaryEntryType.Correction ? synced.Replacement ?? string.Empty : null;
 
         if (existing is not null)
@@ -147,8 +150,8 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 Original = synced.Original,
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
-                IsRegex = synced.IsRegex,
-            CtcMinSimilarity = synced.CtcMinSimilarity,
+                IsRegex = synced.IsRegexFieldPresent ? synced.IsRegex : existing.IsRegex,
+                CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -175,7 +178,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
     private void DeleteDictionaryFallback(string itemId)
     {
         var entry = _dictionary.Entries.FirstOrDefault(entry =>
-            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == itemId);
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == itemId);
         if (entry is not null)
             _dictionary.DeleteEntry(entry.Id);
     }

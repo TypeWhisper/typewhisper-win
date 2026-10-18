@@ -25,7 +25,7 @@ public static class LexiconTransfer
             if (node.ContainsKey("type"))
             {
                 // macOS DictionaryExporter exports fields, not SwiftData IDs or timestamps.
-                var allowed = new HashSet<string> { "type", "original", "replacement", "caseSensitive", "isEnabled", "ctcMinSimilarity", "source" };
+                var allowed = new HashSet<string> { "type", "original", "replacement", "caseSensitive", "isEnabled", "isRegex", "ctcMinSimilarity", "source" };
                 if (node.Any(p => !allowed.Contains(p.Key))) throw new JsonException(Loc.T("Unknown macOS dictionary field. Import canceled to avoid data loss."));
                 if (node["type"] is not JsonValue typeValue || !typeValue.TryGetValue<string>(out var type))
                     throw new JsonException(Loc.T("Dictionary type must be a string."));
@@ -105,7 +105,7 @@ public static class LexiconTransfer
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in entries)
         {
-            ValidateKey(entry.Id, entry.Original, entry.UsageCount, ids);
+            ValidateKey(entry.Id, entry.Original, entry.UsageCount, ids, entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex);
             if (!allowPackEntries && entry.Id.StartsWith("pack:", StringComparison.Ordinal)) throw new JsonException(Loc.T("Import personal entries only. Manage installed terms through Term packs."));
             if (!Enum.IsDefined(entry.EntryType)) throw new JsonException(Loc.T("Unknown dictionary entry type."));
             if (entry.Replacement?.Length > 10000 || entry.EntryType == DictionaryEntryType.Correction && entry.Replacement is null)
@@ -118,10 +118,14 @@ public static class LexiconTransfer
                 try { _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromSeconds(1)); }
                 catch (ArgumentException) { throw new JsonException(Loc.T("Invalid dictionary regular expression.")); }
         }
-        foreach (var group in entries.Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal))
+        foreach (var group in entries.Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal) &&
+                !(entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex))
             .GroupBy(entry => $"{(int)entry.EntryType}:{entry.Original}", StringComparer.OrdinalIgnoreCase))
             if (group.Count() > 1 && (group.Any(entry => !entry.CaseSensitive) || group.Select(entry => entry.Original).Distinct(StringComparer.Ordinal).Count() != group.Count()))
                 throw new JsonException(Loc.T("Conflicting dictionary phrases. No entries were imported; review duplicates or choose Replace."));
+        if (entries.Where(entry => entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex)
+            .GroupBy(entry => entry.Original, StringComparer.Ordinal).Any(group => group.Count() > 1))
+            throw new JsonException(Loc.T("Conflicting dictionary phrases. No entries were imported; review duplicates or choose Replace."));
     }
 
     private static void ValidateSnippets(IReadOnlyList<Snippet> entries)
@@ -140,10 +144,10 @@ public static class LexiconTransfer
                 throw new JsonException(Loc.T("Conflicting snippet triggers. No entries were imported; review duplicates or choose Replace."));
     }
 
-    private static void ValidateKey(string id, string key, int usage, HashSet<string> ids)
+    private static void ValidateKey(string id, string key, int usage, HashSet<string> ids, bool isRegex = false)
     {
         if (string.IsNullOrWhiteSpace(id) || !ids.Add(id)) throw new JsonException(Loc.T("Missing or duplicate entry ID. No entries were imported."));
-        if (string.IsNullOrWhiteSpace(key) || key.Length > 160 || key.Contains('\r') || key.Contains('\n') || key != key.Trim())
+        if (string.IsNullOrEmpty(key) || key.Length > 160 || key.Contains('\r') || key.Contains('\n') || !isRegex && key != key.Trim())
             throw new JsonException(Loc.T("Entry phrases must be single lines of 1–160 characters without surrounding whitespace."));
         if (usage < 0) throw new JsonException(Loc.T("Usage counts cannot be negative."));
     }

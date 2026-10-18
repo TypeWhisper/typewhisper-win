@@ -13,6 +13,23 @@ public sealed class BackupRestoreServiceTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"typewhisper-backup-tests-{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task RegexPatternCaseSurvivesBackupMerge()
+    {
+        var source = CreateProfile("regex-source");
+        foreach (var pattern in new[] { @"\d", @"\D", " word ", " " })
+            source.Dictionary.AddEntry(new DictionaryEntry {
+                Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Correction,
+                Original = pattern, Replacement = "#", IsRegex = true
+            });
+        var json = await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary });
+        var destination = CreateProfile("regex-destination");
+        Assert.True((await destination.Backup.ImportAsync(json)).Success);
+        Assert.Equal(4, destination.Dictionary.Entries.Count);
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == " word ");
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == " ");
+    }
+
+    [Fact]
     public async Task Export_UsesAllowlistAndNeverIncludesSecretsPathsOrAudio()
     {
         var services = CreateProfile("source");

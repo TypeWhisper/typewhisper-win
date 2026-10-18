@@ -704,13 +704,16 @@ public sealed class DictionaryService : IDictionaryService
         var targetType = synced.EntryType == UserDataSyncDictionaryEntryType.Term
             ? DictionaryEntryType.Term
             : DictionaryEntryType.Correction;
-        var targetId = UserDataSyncIdentity.DictionaryItemId(synced.EntryType, synced.Original);
+        var targetId = UserDataSyncIdentity.DictionaryItemId(synced.EntryType, synced.Original, synced.IsRegex);
         var replacement = targetType == DictionaryEntryType.Correction ? synced.Replacement ?? string.Empty : null;
 
         var idx = _cache.FindIndex(entry =>
             entry.EntryType == targetType &&
             IsUserAuthored(entry) &&
-            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == targetId);
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == targetId);
+        if (idx < 0 && targetType == DictionaryEntryType.Correction && !synced.IsRegexFieldPresent)
+            idx = _cache.FindIndex(entry => IsUserAuthored(entry) && entry.IsRegex &&
+                string.Equals(entry.Original, synced.Original, StringComparison.Ordinal));
 
         if (idx >= 0)
         {
@@ -720,8 +723,8 @@ public sealed class DictionaryService : IDictionaryService
                 Original = synced.Original,
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
-                IsRegex = synced.IsRegex,
-            CtcMinSimilarity = synced.CtcMinSimilarity,
+                IsRegex = synced.IsRegexFieldPresent ? synced.IsRegex : existing.IsRegex,
+                CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -750,7 +753,7 @@ public sealed class DictionaryService : IDictionaryService
     {
         var removed = _cache.RemoveAll(entry =>
             IsUserAuthored(entry) &&
-            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == itemId);
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == itemId);
         return removed > 0;
     }
 

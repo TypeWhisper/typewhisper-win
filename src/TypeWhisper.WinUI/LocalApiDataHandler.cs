@@ -86,11 +86,13 @@ internal sealed class LocalApiDataHandler(string dictionaryPath, string workflow
         bool deleted = false;
         if (request.Method == "DELETE")
         {
-            Fields(root, terms ? ["term"] : ["original"]);
-            var key = RequiredString(root, terms ? "term" : "original").Trim();
+            Fields(root, terms ? ["term"] : ["original", "isRegex"]);
+            var isRegex = !terms && OptionalBoolean(root, "isRegex", false);
+            var key = RequiredString(root, terms ? "term" : "original");
+            if (!isRegex) key = key.Trim();
             if (key.Length == 0) return Error(400, "The phrase cannot be empty.");
-            deleted = current.RemoveAll(entry => entry.EntryType == kind && entry.Original.Equals(key,
-                StringComparison.OrdinalIgnoreCase)) > 0;
+            deleted = current.RemoveAll(entry => entry.EntryType == kind && entry.IsRegex == isRegex && entry.Original.Equals(key,
+                isRegex ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)) > 0;
         }
         else if (terms)
         {
@@ -141,13 +143,16 @@ internal sealed class LocalApiDataHandler(string dictionaryPath, string workflow
         }
         else
         {
-            Fields(root, ["original", "replacement", "caseSensitive"]);
-            var key = RequiredString(root, "original").Trim();
+            Fields(root, ["original", "replacement", "caseSensitive", "isRegex"]);
+            var isRegex = OptionalBoolean(root, "isRegex", false);
+            var key = RequiredString(root, "original");
+            if (!isRegex) key = key.Trim();
             var replacement = RequiredString(root, "replacement");
             var sensitive = OptionalBoolean(root, "caseSensitive", false);
-            var existing = current.FirstOrDefault(entry => entry.EntryType == kind && entry.Original.Equals(key, StringComparison.OrdinalIgnoreCase));
+            var existing = current.FirstOrDefault(entry => entry.EntryType == kind && entry.IsRegex == isRegex &&
+                entry.Original.Equals(key, isRegex ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase));
             var next = (existing ?? NewEntry(kind, key)) with { Original = key, Replacement = replacement,
-                CaseSensitive = sensitive, IsEnabled = true, UpdatedAt = DateTime.UtcNow };
+                CaseSensitive = sensitive, IsRegex = isRegex, IsEnabled = true, UpdatedAt = DateTime.UtcNow };
             current.RemoveAll(entry => entry.Id == next.Id);
             current.Add(next);
         }
@@ -175,7 +180,7 @@ internal sealed class LocalApiDataHandler(string dictionaryPath, string workflow
                 term_entries = entries.Select(entry => new { term = entry.Key, ctc_min_similarity = entry.CtcMinSimilarity }), count = entries.Length });
         }
         var corrections = lexicon.Entries.Where(entry => entry.Kind == LexiconKind.Correction)
-            .Select(entry => new { original = entry.Key, replacement = entry.Value, caseSensitive = entry.CaseSensitive }).ToArray();
+            .Select(entry => new { original = entry.Key, replacement = entry.Value, caseSensitive = entry.CaseSensitive, isRegex = entry.IsRegex }).ToArray();
         return LocalApiResponse.Json(200, new { corrections, count = corrections.Length });
     }
 

@@ -63,7 +63,12 @@ public sealed record UserDataSyncDictionaryEntry(
     DateTime UpdatedAt,
     DictionaryEntrySource Source = DictionaryEntrySource.Manual,
     bool IsRegex = false,
-    float? CtcMinSimilarity = null);
+    float? CtcMinSimilarity = null)
+{
+    /// <summary>Whether the sender explicitly supplied the regex mode.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsRegexFieldPresent { get; init; } = true;
+}
 
 /// <summary>
 /// Represents user data sync snippet data.
@@ -163,18 +168,23 @@ public interface IUserDataSyncStore
 public static class UserDataSyncIdentity
 {
     /// <summary>
-    /// Returns the dictionary item id.
+    /// Prefix for exact-pattern regex correction identities.
     /// </summary>
-    public static string DictionaryItemId(UserDataSyncDictionaryEntryType entryType, string original) =>
-        $"dictionary:{JsonName(entryType)}:{EncodedKey(NormalizedKey(original))}";
+    public const string RegexCorrectionPrefix = "dictionary:correction:regex:";
+
+    /// <summary>Returns the sync identity, preserving the exact pattern for regex corrections.</summary>
+    public static string DictionaryItemId(UserDataSyncDictionaryEntryType entryType, string original, bool isRegex = false) =>
+        entryType == UserDataSyncDictionaryEntryType.Correction && isRegex
+            ? RegexCorrectionPrefix + EncodedKey(original)
+            : $"dictionary:{JsonName(entryType)}:{EncodedKey(NormalizedKey(original))}";
 
     /// <summary>
     /// Returns the dictionary item id.
     /// </summary>
-    public static string DictionaryItemId(DictionaryEntryType entryType, string original) =>
+    public static string DictionaryItemId(DictionaryEntryType entryType, string original, bool isRegex = false) =>
         DictionaryItemId(entryType == DictionaryEntryType.Term
             ? UserDataSyncDictionaryEntryType.Term
-            : UserDataSyncDictionaryEntryType.Correction, original);
+            : UserDataSyncDictionaryEntryType.Correction, original, isRegex);
 
     /// <summary>
     /// Returns the snippet item id.
