@@ -60,6 +60,7 @@ public sealed class PortablePluginStore
             {
                 next = JsonSerializer.Deserialize<Dictionary<string, Receipt>>(await File.ReadAllTextAsync(index, ct), PortablePluginCatalog.Json)
                     ?? throw new InvalidDataException("The installed plugin index is invalid.");
+                var promoted = new List<(string Id, Receipt Staged)>();
                 foreach (var (id, receipt) in next.ToArray())
                 {
                     PortableCatalogEntry.ValidateId(id);
@@ -72,6 +73,7 @@ public sealed class PortablePluginStore
                         if (UpdateRefused(id) || RefusedForExecution(id, PackagePath(pending))) continue;
                         ValidatePackage(PackagePath(pending), id, receipt.PendingVersion!);
                         next[id] = new(pending, receipt.PendingVersion!);
+                        promoted.Add((id, receipt));
                     }
                     catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
                     {
@@ -81,6 +83,10 @@ public sealed class PortablePluginStore
                             "The staged update was invalid. The previous version was kept; retry the update.");
                     }
                 }
+                // Judged once more right before the commit: a policy that turned restrictive while the index was
+                // scanned keeps the update staged and the previous version running.
+                foreach (var (id, staged) in promoted)
+                    if (UpdateRefused(id) || RefusedForExecution(id, PackagePath(next[id].Directory))) next[id] = staged;
             }
             else if (bundledRoot is not null && Directory.Exists(bundledRoot))
             {
@@ -195,8 +201,10 @@ public sealed class PortablePluginStore
             if (_services is not null)
                 await PortablePluginPackage.RunInstallationHookAsync(package, _services(entry.Id), _host, previous?.Version, uninstall: false, ct, progress);
             ct.ThrowIfCancellationRequested();
-            // Judged once more after the hook: a policy revoked meanwhile keeps the package out of the index.
-            if (InstallRefusal(entry) is { } refusedAfterHook) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedAfterHook);
+            // Judged once more after the hook, by the entry and by the extracted manifest: a policy revoked meanwhile
+            // keeps the package out of the index.
+            if ((InstallRefusal(entry) ?? ExecutionRefusal(entry.Id, package)) is { } refusedAfterHook)
+                throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedAfterHook);
             next[entry.Id] = update ? previous! with { PendingDirectory = token, PendingVersion = entry.Version, UpdateWarning = null } : new(token, entry.Version);
             Commit(next);
             package = null;

@@ -63,10 +63,10 @@ internal sealed partial class WinUIHttpApi
                 }
             }
             // A workflow model loads at the start, so only other starts need the selected model to be ready.
-            if (workflow?.TranscriptionModel is null && !session.CanTranscribeFile) return Error(409, "Finish the current operation before starting dictation.");
-            // A provider the policy refuses answers 403, the documented policy contract, not a conflict.
+            // A provider the policy refuses answers 403, the documented policy contract, before any readiness conflict.
             if (workflow?.TranscriptionModel is null && session.TranscriptionPolicyRefusal() is { } refusedByPolicy)
                 throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedByPolicy);
+            if (workflow?.TranscriptionModel is null && !session.CanTranscribeFile) return Error(409, "Finish the current operation before starting dictation.");
             _startingDictation = true;
             try
             {

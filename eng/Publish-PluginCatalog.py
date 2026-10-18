@@ -315,9 +315,11 @@ def main():
             return
         try:
             verify_live(verification)
-            # Metadata refreshes need no package: they are committed on their own.
+            # Metadata refreshes need no package: they are committed on their own and verified on Pages.
             if refreshed and update_feed([], refreshed):
                 api("pages/builds", method="POST")
+                committed = builder.catalog_entries(refresh_feed(current, refreshed))
+                wait_for_live([committed[entry["id"]] for entry in refreshed if entry["id"] in committed])
                 print("Selected versions are already public; refreshed catalog metadata committed.")
                 return
             print("Selected versions are already public. No remote changes made.")

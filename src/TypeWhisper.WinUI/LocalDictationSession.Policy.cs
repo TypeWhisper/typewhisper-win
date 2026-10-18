@@ -11,9 +11,13 @@ internal sealed partial class LocalDictationSession
     private static string? LocalTranscriptionRefusal() =>
         ProviderPolicy.TranscriptionRefusal(LocalTranscriptionPlugin.PluginId, LocalTranscriptionPlugin.PluginId, ContentLocality.Local);
 
-    /// <summary>Why policy refuses the active transcription provider before audio is captured, or null.</summary>
+    /// <summary>
+    /// Why policy refuses the active transcription provider before audio is captured, or null. A provider whose
+    /// package the policy unloaded has no role any more and is judged as a package.
+    /// </summary>
     internal string? TranscriptionPolicyRefusal() => UsesRegistryProvider
         ? PluginRuntime.TranscriptionRefusal(RegistrySelectionId(_providerId))
+            ?? (ActiveRegistryProvider is null ? PluginRuntime.PackageRefusal(RegistrySelectionId(_providerId)) : null)
         : LocalTranscriptionRefusal();
 
     // Dictionary terms are text: a cloud engine receives them as a prompt only where text processing is allowed.
@@ -37,23 +41,23 @@ internal sealed partial class LocalDictationSession
         if (_disposed) return;
         try
         {
-            await PluginRuntime.ReapplyPolicyAsync();
-            // Downloads that passed their check before the policy turned them off stop here; the runtime cancels its
-            // own downloads in the same pass.
-            if (ModelDownloadRefusal() is not null)
-            {
-                Models.CancelDownload();
-                await LocalLlmDownload.CancelAndDrainAsync();
-                ModelDownloadsRefused?.Invoke();
-            }
-            // Work already inside a refused local engine is cancelled, as the runtime cancels refused roles; the
-            // gate is then taken once the cancelled operation has let go of it. The full transcription rule applies,
-            // so a provider allowlist that excludes the local engine cancels as well.
+            // Work already inside a refused local engine is cancelled first, before any registry unload is awaited;
+            // the gate is then taken once the cancelled operation has let go of it. The full transcription rule
+            // applies, so a provider allowlist that excludes the local engine cancels as well.
             if (Models.Enabled && !UsesRegistryProvider && TranscriptionPolicyRefusal() is not null)
             {
                 if (_audio.IsRecording || _fileBusy || _phase == DictationPhase.Processing) RequestCancel();
                 _training?.CancelDecode();
             }
+            // Downloads that passed their check before the policy turned them off stop here; the runtime cancels its
+            // own downloads in its pass.
+            if (ModelDownloadRefusal() is not null)
+            {
+                Models.CancelDownload();
+                ModelDownloadsRefused?.Invoke();
+                await LocalLlmDownload.CancelAndDrainAsync();
+            }
+            await PluginRuntime.ReapplyPolicyAsync();
             await _gate.WaitAsync();
             try
             {
