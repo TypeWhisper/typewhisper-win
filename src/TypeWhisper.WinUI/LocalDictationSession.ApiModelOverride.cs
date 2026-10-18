@@ -36,6 +36,10 @@ internal sealed partial class LocalDictationSession
                 var matches = DictationProviders.Where(item => item.Models.Any(model => model.Id == modelId)).ToArray();
                 provider = matches.FirstOrDefault(item => item.Id == _providerId)
                     ?? (matches.Length == 1 ? matches[0] : null);
+                // A qualified model whose provider the policy unloaded is judged through the package that served it.
+                if (provider is null && modelId.IndexOf(':') is > 0 and var separator
+                    && PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(modelId[..separator])) is { } refusedPrefix)
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedPrefix);
                 if (provider is null) throw new LocalApiRequestException(matches.Length == 0 ? 404 : 400,
                     matches.Length == 0 ? "Transcription model not found." : "Specify an engine for this ambiguous model ID.");
             }

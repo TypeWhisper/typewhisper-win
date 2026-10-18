@@ -728,6 +728,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         var actions = new Dictionary<string, ActionRole>(StringComparer.Ordinal);
         foreach (var slot in slots)
         {
+            // Judged once more right before its capabilities are read: a package marked or refused since the slots
+            // were captured contributes nothing, and its code is not called.
+            bool skip;
+            lock (_sync) skip = slot.Package is null || slot.Stopping || SlotRefusal(slot) is not null;
+            if (skip) continue;
             var plugin = slot.Package!.Plugin;
             if (plugin is ITtsProviderPlugin tts && tts.SupportsPlaybackSelection)
                 ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())) { IsLocal = slot.IsLocal });
