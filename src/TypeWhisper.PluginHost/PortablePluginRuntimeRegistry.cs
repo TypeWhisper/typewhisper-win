@@ -432,7 +432,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         var policy = Policy;
         // A transcription may carry dictionary terms as a prompt, so the text rule cancels a running one as well.
         foreach (var (selectionId, role) in _index.Transcription)
-            if (policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null
+            // Judged with the engine's selected model, so a pair that moved to another model cancels the running request.
+            if (policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality, role.Engine.SelectedModelId) is not null
                 || policy.TextTransferRefusal(role.Owner.Id, role.Owner.Locality) is not null)
                 CancelRequest(role.Owner);
         foreach (var (selectionId, role) in _index.Llm)

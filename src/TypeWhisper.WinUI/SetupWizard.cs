@@ -214,8 +214,11 @@ public sealed partial class SetupWizard : UserControl
             _providerPicker.SetOptions(providers.Select(item => new Choice(item.Id, item.Name,
                 item.Refusal ?? (item.Cloud ? Loc.T("{0} - cloud", item.Status) : Loc.T("{0} - on device", item.Status)),
                 item.Refusal is null || item.Id == _selectedProvider)).ToArray(), _selectedProvider ?? "", Loc.T("Provider unavailable"));
-            _modelPicker.SetOptions(selected?.Models.Where(item => item.Ready).Select(item => new Choice(item.Id, item.Name, Loc.T("Ready"))).ToArray() ?? [],
-                _selectedProvider == _session.ActiveProviderId ? selected?.SelectedModelId ?? "" : "", Loc.T("Choose a ready model; otherwise configure the plugin"));
+            // Under an enforced pair the required model is shown selected, ready or not, so setup names what policy requires.
+            var requiredModel = LocalDictationSession.TranscriptionSelectionLocked && _selectedProvider == _session.ActiveProviderId ? _session.EnforcedModelId : null;
+            _modelPicker.SetOptions(selected?.Models.Where(item => item.Ready || item.Id == requiredModel)
+                .Select(item => new Choice(item.Id, item.Name, item.Ready ? Loc.T("Ready") : LocalDictationSession.ModelDownloadRefusal() ?? Loc.T("Download in provider settings"), item.Ready)).ToArray() ?? [],
+                requiredModel ?? (_selectedProvider == _session.ActiveProviderId ? selected?.SelectedModelId ?? "" : ""), Loc.T("Choose a ready model; otherwise configure the plugin"));
             var detects = _session.SupportedLanguages.Count == 0;
             var codes = _session.LanguageChoices;
             var choices = codes.Select(code => new Choice(code, LanguageName(code), detects

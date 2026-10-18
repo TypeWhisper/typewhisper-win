@@ -76,11 +76,17 @@ internal sealed partial class LocalDictationSession
     private string PolicyLlmProviderId(string selectionId) =>
         LlmProviders.FirstOrDefault(provider => string.Equals(provider.SelectionId, selectionId, StringComparison.OrdinalIgnoreCase))?.SelectionId ?? selectionId;
 
-    private WorkflowLlmSelection? EnforcedLlmSelection() =>
-        ProviderPolicy.EnforcedLlm is { } pair ? new(PolicyLlmProviderId(pair.ProviderId), pair.ModelId) : null;
+    private WorkflowLlmSelection? EnforcedLlmSelection() => ProviderPolicy.EnforcedLlm is { } pair ? PolicyLlmSelection(pair) : null;
 
-    private WorkflowLlmSelection? RecommendedLlmSelection() =>
-        ProviderPolicy.RecommendedLlm is { } pair ? new(PolicyLlmProviderId(pair.ProviderId), pair.ModelId) : null;
+    private WorkflowLlmSelection? RecommendedLlmSelection() => ProviderPolicy.RecommendedLlm is { } pair ? PolicyLlmSelection(pair) : null;
+
+    // The provider's own spelling of the model as well: availability checks compare model IDs exactly.
+    private WorkflowLlmSelection PolicyLlmSelection(ManagedSelection pair)
+    {
+        var provider = LlmProviders.FirstOrDefault(item => string.Equals(item.SelectionId, pair.ProviderId, StringComparison.OrdinalIgnoreCase));
+        return new(provider?.SelectionId ?? pair.ProviderId,
+            provider?.Models.FirstOrDefault(model => pair.IsModel(model.Id))?.Id ?? pair.ModelId);
+    }
 
     /// <summary>Applies the enforced transcription pair after a policy change; serialized behind the dictation gate.</summary>
     internal async Task ApplySelectionPolicyAsync()
@@ -132,8 +138,13 @@ internal sealed partial class LocalDictationSession
                         // one retained selection is enough for every provider a policy replaced.
                         if (_selectionPolicy.Current.RetainedProviderId is { } other && other != provider.SelectionId)
                             await RestoreRetainedSelectionAsync();
-                        if (_selectionPolicy.Current.RetainedProviderId is null && provider.SelectedModelId is not null)
-                            _selectionPolicy.Save(new(provider.SelectionId, provider.SelectedModelId));
+                        // The provider is changed only once the user's own model is safely retained.
+                        if (_selectionPolicy.Current.RetainedProviderId is null && provider.SelectedModelId is not null
+                            && !_selectionPolicy.Save(new(provider.SelectionId, provider.SelectedModelId)))
+                        {
+                            AppDiagnostics.Write("policy.selection.retention-failed");
+                            return;
+                        }
                         await PluginRuntime.SelectModelAsync(target, CancellationToken.None);
                         await PluginRuntime.RefreshCapabilitiesAsync();
                     }
