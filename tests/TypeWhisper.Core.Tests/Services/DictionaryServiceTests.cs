@@ -425,6 +425,31 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void LearnedLiteralCorrectionsDoNotUpdateOrSuppressRegexRules()
+    {
+        var regex = new DictionaryEntry
+        {
+            Id = "regex", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "regex replacement", IsRegex = true, UsageCount = 7
+        };
+        _sut.AddEntry(regex);
+        regex = Assert.Single(_sut.Entries);
+        _sut.LearnCorrection("teh", "the");
+        _sut.LearnCorrection("TEH", "The");
+        Assert.Equal(regex, Assert.Single(_sut.Entries, entry => entry.IsRegex));
+        var literal = Assert.Single(_sut.Entries, entry => !entry.IsRegex);
+        Assert.Equal("The", literal.Replacement);
+        Assert.Equal(1, literal.UsageCount);
+
+        _sut.DeleteEntry(literal.Id);
+        var learned = _sut.LearnCorrections([new CorrectionSuggestion("teh", "the")]);
+        Assert.Single(learned);
+        var reloaded = new DictionaryService(_filePath);
+        Assert.Equal(regex, Assert.Single(reloaded.Entries, entry => entry.IsRegex));
+        Assert.Equal("the", Assert.Single(reloaded.Entries, entry => !entry.IsRegex).Replacement);
+    }
+
+    [Fact]
     public void LearnCorrection_AddsNewCorrection()
     {
         _sut.LearnCorrection("kubernets", "Kubernetes");

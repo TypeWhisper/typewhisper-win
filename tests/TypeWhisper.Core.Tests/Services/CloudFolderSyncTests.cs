@@ -555,6 +555,104 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task MigratedRegexEditsDoNotRepublishBecauseOfOldOperationFiles()
+    {
+        var legacy = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "PremiumSync", "upsert-dictionary-regex-v1.json")))!;
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "legacy.json"), CloudFolderSyncJson.Serialize(legacy));
+        var store = new InMemoryUserDataSyncStore();
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(20));
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(25));
+        var updated = legacy.Dictionary! with { Replacement = "edited", UpdatedAt = Date(30) };
+        var operation = CloudFolderSyncOperation.UpsertDictionary(updated,
+            UserDataSyncIdentity.DictionaryItemId(updated.EntryType, updated.Original, true), "peer");
+        File.WriteAllText(Path.Combine(folder, "edit.json"), CloudFolderSyncJson.Serialize(operation));
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40));
+        Assert.Equal("edited", Assert.Single(store.DictionaryEntries).Replacement);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(50))).OperationsWritten);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RegexUpgradeWaitsForAppliedLegacyFilesBeforeChangingDataOrState(bool deleted)
+    {
+        var legacy = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "PremiumSync", "upsert-dictionary-regex-v1.json")))!;
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "legacy.json");
+        File.WriteAllText(path, "{");
+        var older = CloudFolderSyncOperation.UpsertDictionary(legacy.Dictionary! with
+            { IsRegex = false, UpdatedAt = Date(5) }, legacy.ItemId, "old-peer", "older-literal");
+        File.WriteAllText(Path.Combine(folder, "older.json"), CloudFolderSyncJson.Serialize(older));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: deleted ? [] : [legacy.Dictionary!]);
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "windows", KnownLocalItemIds = [legacy.ItemId],
+            ExportedItemVersions = new() { [legacy.ItemId] = "1700000010000" },
+            AppliedOperationIds = [legacy.OperationId, older.OperationId]
+        };
+        var previousState = CloudFolderSyncJson.Serialize(state);
+        var entitlement = new PaidEntitlements(true);
+        await Assert.ThrowsAsync<IOException>(() => CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(20)));
+        Assert.Equal(previousState, CloudFolderSyncJson.Serialize(state));
+        Assert.Equal(deleted ? 0 : 1, store.DictionaryEntries.Count);
+        Assert.Empty(OperationFiles("windows"));
+        File.WriteAllText(path, CloudFolderSyncJson.Serialize(legacy));
+        // An unrelated partial file does not block migration once all applied history is readable.
+        File.WriteAllText(Path.Combine(folder, "unapplied-partial.json"), "{");
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        var published = OperationFiles("windows").Select(file =>
+            CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(file))!).ToArray();
+        if (deleted)
+        {
+            Assert.Empty(store.DictionaryEntries);
+            Assert.Contains(published, operation => operation.SchemaVersion == 2 && operation.Kind == CloudFolderSyncOperationKind.Delete);
+        }
+        else
+        {
+            Assert.True(Assert.Single(store.DictionaryEntries).IsRegex);
+            Assert.Equal(2, Assert.Single(published).SchemaVersion);
+            Assert.Equal(CloudFolderSyncOperationKind.Upsert, published[0].Kind);
+        }
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40))).OperationsWritten);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task InvalidRegexSyncOperationsDoNotEnterTheDictionary(int schemaVersion)
+    {
+        var invalid = DictionaryEntry("[", Date(20), UserDataSyncDictionaryEntryType.Correction, "invalid") with { IsRegex = true };
+        var operation = CloudFolderSyncOperation.UpsertDictionary(invalid,
+            UserDataSyncIdentity.DictionaryItemId(invalid.EntryType, invalid.Original, schemaVersion == 2), "peer") with { SchemaVersion = schemaVersion };
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "invalid.json"), CloudFolderSyncJson.Serialize(operation));
+        var healthy = DictionaryEntry("healthy", Date(10));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [healthy]);
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30));
+        Assert.Equal(healthy, Assert.Single(store.DictionaryEntries));
+        Assert.DoesNotContain(operation.OperationId, state.AppliedOperationIds);
+    }
+
+    [Fact]
+    public void MalformedRegexSyncIdentifiersAreSkipped()
+    {
+        var entry = DictionaryEntry("valid", Date(20), UserDataSyncDictionaryEntryType.Correction, "replacement") with { IsRegex = true };
+        var operation = CloudFolderSyncOperation.UpsertDictionary(entry,
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true), "peer");
+        Assert.Empty(CloudFolderSyncEngine.WinningOperations([operation with { ItemId = null! }]));
+        Assert.Empty(CloudFolderSyncEngine.WinningOperations([operation with { Dictionary = entry with { Original = null! } }]));
+    }
+
+    [Fact]
     public async Task LiteralToRegexBeforeFirstUpgradeSyncDeletesTheOldLiteral()
     {
         var entry = DictionaryEntry("foo", Date(10), UserDataSyncDictionaryEntryType.Correction, "bar");

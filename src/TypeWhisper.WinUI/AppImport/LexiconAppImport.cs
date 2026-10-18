@@ -167,7 +167,8 @@ internal static partial class LexiconAppImport
                     if (entry.EntryType == DictionaryEntryType.Correction && ReplacementEscapes().IsMatch(entry.Replacement ?? ""))
                         throw new JsonException("A literal source spelling cannot become a formatting command.");
                     _ = LexiconTransfer.ReadDictionary(serialized);
-                    var collisions = next.Where(item => item.EntryType == entry.EntryType && item.Original.Equals(entry.Original, StringComparison.OrdinalIgnoreCase)).ToArray();
+                    var collisions = next.Where(item => item.EntryType == entry.EntryType && item.IsRegex == entry.IsRegex &&
+                        item.Original.Equals(entry.Original, entry.IsRegex ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)).ToArray();
                     if (collisions.Length > 0)
                         outcome = collisions.All(item => item.Replacement == entry.Replacement && item.CaseSensitive == entry.CaseSensitive && item.IsEnabled == entry.IsEnabled && !item.IsRegex)
                             ? AppImportOutcome.Duplicate : AppImportOutcome.Conflict;

@@ -839,7 +839,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         }
         foreach (var entry in data.Dictionary.Entries)
         {
-            if ((entry.IsRegex ? string.IsNullOrEmpty(entry.Original) : !ValidRequired(entry.Original)) || !ValidShort(entry.Original) || !ValidShort(entry.Replacement))
+            if ((entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex ? string.IsNullOrEmpty(entry.Original) : !ValidRequired(entry.Original)) || !ValidShort(entry.Original) || !ValidShort(entry.Replacement))
                 return Loc.T("A dictionary entry contains invalid text.");
             if (!Enum.IsDefined(entry.EntryType) || !Enum.IsDefined(entry.Source))
                 return Loc.T("A dictionary entry contains an unsupported enum value.");

@@ -30,6 +30,24 @@ public sealed class BackupRestoreServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RegexFlagDoesNotAllowWhitespaceOnlyBackupTerms()
+    {
+        var source = CreateProfile("invalid-regex-term");
+        source.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "term", EntryType = DictionaryEntryType.Term, Original = "healthy" });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var entry = json["data"]!["dictionary"]!["entries"]![0]!;
+        entry["original"] = " ";
+        entry["isRegex"] = true;
+        var destination = CreateProfile("invalid-regex-term-target");
+        destination.Dictionary.AddEntry(new DictionaryEntry
+        { Id = "existing", EntryType = DictionaryEntryType.Term, Original = "existing" });
+        Assert.False(destination.Backup.PreviewImport(json.ToJsonString()).IsValid);
+        Assert.False((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        Assert.Equal("existing", Assert.Single(destination.Dictionary.Entries).Original);
+    }
+
+    [Fact]
     public async Task Export_UsesAllowlistAndNeverIncludesSecretsPathsOrAudio()
     {
         var services = CreateProfile("source");

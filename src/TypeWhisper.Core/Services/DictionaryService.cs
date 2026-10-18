@@ -469,7 +469,7 @@ public sealed class DictionaryService : IDictionaryService
         EnsureCacheLoaded();
 
         var existing = _cache.FirstOrDefault(e =>
-            e.EntryType == DictionaryEntryType.Correction &&
+            e.EntryType == DictionaryEntryType.Correction && !e.IsRegex &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
 
         if (existing is not null)
@@ -501,7 +501,7 @@ public sealed class DictionaryService : IDictionaryService
 
         var learned = new List<LearnedDictionaryCorrection>();
         var existingOriginals = _cache
-            .Where(e => e.EntryType == DictionaryEntryType.Correction)
+            .Where(e => e.EntryType == DictionaryEntryType.Correction && !e.IsRegex)
             .Select(e => e.Original)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var seenOriginals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services.Sync;
@@ -354,7 +355,12 @@ public static class CloudFolderSyncEngine
         {
             // Use the version this device actually synced. Unseen remote edits cannot
             // change which exact regex a local deletion or mode change targets.
-            var known = LegacyWinningOperations(ReadOperations(operationsPath, cancellationToken)
+            var previousOperations = ReadOperations(operationsPath, cancellationToken, out var incompleteRead);
+            // A partial applied file makes the last mode ambiguous. Preserve local
+            // data and migration state until the provider can supply that history.
+            if (incompleteRead && !state.AppliedOperationIds.IsSubsetOf(previousOperations.Select(operation => operation.OperationId)))
+                throw new IOException(Loc.T("Some previously synced files are not readable yet. Retry Cloud Folder Sync once your cloud provider has finished downloading them."));
+            var known = LegacyWinningOperations(previousOperations
                 .Where(operation => state.AppliedOperationIds.Contains(operation.OperationId)).ToArray());
             foreach (var (id, operation) in known)
                 if (state.KnownLocalItemIds.Contains(id) &&
@@ -368,7 +374,7 @@ public static class CloudFolderSyncEngine
         // Keep tombstones: deleting them while old upserts remain would resurrect data on a new device.
         cancellationToken.ThrowIfCancellationRequested();
 
-        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken), initialRecords);
+        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken, out _), initialRecords);
         var winners = WinningOperations(operations);
         var mutations = MakeMutations(winners, initialRecords, state.DeviceId, state.AppliedOperationIds);
 
@@ -389,7 +395,8 @@ public static class CloudFolderSyncEngine
             var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex);
             if (entry.EntryType == UserDataSyncDictionaryEntryType.Correction &&
                 (!entry.IsRegexFieldPresent || operations.Any(operation =>
-                    operation.SchemaVersion == 1 && operation.Dictionary?.IsRegex == true && operation.ItemId == itemId)))
+                    operation.SchemaVersion == 1 && !state.AppliedOperationIds.Contains(operation.OperationId) &&
+                    operation.Dictionary?.IsRegex == true && operation.ItemId == itemId)))
                 state.ExportedItemVersions.Remove(itemId);
         }
         state.AppliedOperationIds.UnionWith(operations.Select(operation => operation.OperationId));
@@ -461,17 +468,31 @@ public static class CloudFolderSyncEngine
         operation.UpdatedAt != default && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
         (operation.Kind == CloudFolderSyncOperationKind.Delete ||
          operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { } d &&
-            (d.IsRegex ? !string.IsNullOrEmpty(d.Original) : !string.IsNullOrWhiteSpace(d.Original)) && Enum.IsDefined(d.EntryType) &&
+            IsValidDictionaryOriginal(d) && Enum.IsDefined(d.EntryType) &&
             (d.CtcMinSimilarity is null || float.IsFinite(d.CtcMinSimilarity.Value) && d.CtcMinSimilarity >= .4f && d.CtcMinSimilarity <= .95f) ||
          operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { } n &&
             !string.IsNullOrWhiteSpace(n.Trigger) && n.Replacement is not null);
 
+    private static bool IsValidDictionaryOriginal(UserDataSyncDictionaryEntry entry)
+    {
+        if (entry.EntryType != UserDataSyncDictionaryEntryType.Correction || !entry.IsRegex)
+            return !string.IsNullOrWhiteSpace(entry.Original);
+        if (string.IsNullOrEmpty(entry.Original)) return false;
+        try
+        {
+            _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromSeconds(1));
+            return true;
+        }
+        catch (ArgumentException) { return false; }
+    }
+
     private static bool IsSupportedSchema(CloudFolderSyncOperation operation) =>
         operation.SchemaVersion == 1 || operation.SchemaVersion == 2 &&
         operation.Collection == UserDataSyncCollection.Dictionary &&
-        operation.ItemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) &&
+        operation.ItemId?.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) == true &&
         (operation.Kind == CloudFolderSyncOperationKind.Delete ||
          operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } entry &&
+         !string.IsNullOrEmpty(entry.Original) &&
          operation.ItemId == UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true));
 
     private static IReadOnlyList<CloudFolderSyncOperation> NormalizeIdentities(
@@ -761,8 +782,10 @@ public static class CloudFolderSyncEngine
         }
     }
 
-    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(string operationsPath, CancellationToken cancellationToken)
+    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(
+        string operationsPath, CancellationToken cancellationToken, out bool incompleteRead)
     {
+        incompleteRead = false;
         if (!Directory.Exists(operationsPath))
             return [];
 
@@ -778,10 +801,12 @@ public static class CloudFolderSyncEngine
                     var operation = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(
                         File.ReadAllText(file));
                     if (operation is not null) operations.Add(operation);
+                    else incompleteRead = true;
                 }
                 catch
                 {
                     // Cloud providers can leave transient or partial files; skip unreadable operations.
+                    incompleteRead = true;
                 }
             }
         }

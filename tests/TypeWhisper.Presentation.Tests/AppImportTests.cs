@@ -33,6 +33,22 @@ public sealed class AppImportTests : IDisposable
     }
 
     [Fact]
+    public void WisprLiteralCorrectionCanCoexistWithRegexAndReimportIsIdempotent()
+    {
+        var regex = new DictionaryEntry
+        { Id = "regex", EntryType = DictionaryEntryType.Correction, Original = "teh", Replacement = "regex", IsRegex = true, UsageCount = 7 };
+        var batch = LexiconAppImport.MapWispr([new("teh", "the", false, false)], false);
+        var review = LexiconAppImport.Review(batch, false, LexiconTransfer.WriteDictionary([regex]));
+        Assert.Contains(review.Lines, line => line.Kind == "Correction" && line.Outcome == AppImportOutcome.Add);
+        var entries = LexiconTransfer.ReadDictionary(review.Json);
+        Assert.Equal(regex, Assert.Single(entries, entry => entry.IsRegex));
+        Assert.Equal("the", Assert.Single(entries, entry => entry.EntryType == DictionaryEntryType.Correction && !entry.IsRegex).Replacement);
+        Assert.Equal(0, LexiconAppImport.Review(batch, false, review.Json).Additions);
+        var conflict = LexiconAppImport.Review(LexiconAppImport.MapWispr([new("TEH", "different", false, false)], false), false, review.Json);
+        Assert.Contains(conflict.Lines, line => line.Kind == "Correction" && line.Outcome == AppImportOutcome.Conflict);
+    }
+
+    [Fact]
     public void DuplicateAndConflictingSnippetsNeverReplaceExistingContentOrMetadata()
     {
         var existing = new Snippet { Id = "existing", Trigger = "signature", Replacement = "My signature", IsEnabled = false, UsageCount = 12, Tags = "work" };
