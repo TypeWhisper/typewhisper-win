@@ -350,16 +350,23 @@ public static class CloudFolderSyncEngine
 
         var initialRecords = RecordsFrom(store.Snapshot());
         var legacyRegexIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        var publicationState = state;
         if (state.KnownLocalItemIds.Any(id => id.StartsWith("dictionary:correction:", StringComparison.Ordinal) &&
             (!state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal))))
         {
             // Use the version this device actually synced. Unseen remote edits cannot
             // change which exact regex a local deletion or mode change targets.
-            var previousOperations = ReadOperations(operationsPath, cancellationToken);
-            var known = LegacyWinningOperations(previousOperations
-                .Where(operation => state.AppliedOperationIds.Contains(operation.OperationId)).ToArray());
+            var previousOperations = ReadOperations(operationsPath, cancellationToken, out var unreadableHistory);
+            var applied = previousOperations.Where(operation => state.AppliedOperationIds.Contains(operation.OperationId)).ToArray();
+            var known = LegacyWinningOperations(applied);
             if (!LegacyCorrectionHistoryIsComplete(state, known))
-                throw new IOException(Loc.T("Some previously synced files are not readable yet. Retry Cloud Folder Sync once your cloud provider has finished downloading them."));
+            {
+                if (applied.Length > 0 || unreadableHistory)
+                    throw new IOException(Loc.T("Previously synced correction files are missing or unreadable. Wait for your cloud provider to download them, or choose a new sync folder if the old files were deleted."));
+                // No old operations remain in an otherwise readable package. Rebuild
+                // it from local data without guessing obsolete deletion identities.
+                publicationState = state with { KnownLocalItemIds = [], ExportedItemVersions = [] };
+            }
             foreach (var (id, operation) in known)
                 if (state.KnownLocalItemIds.Contains(id) &&
                     (!state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal)) &&
@@ -367,12 +374,12 @@ public static class CloudFolderSyncEngine
                     operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } entry)
                     legacyRegexIds[id] = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true);
         }
-        var localOperations = MakeLocalOperations(initialRecords, state, legacyRegexIds, syncNow);
+        var localOperations = MakeLocalOperations(initialRecords, publicationState, legacyRegexIds, syncNow);
         Write(localOperations, deviceOperationsPath, syncNow);
         // Keep tombstones: deleting them while old upserts remain would resurrect data on a new device.
         cancellationToken.ThrowIfCancellationRequested();
 
-        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken), initialRecords);
+        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken, out _), initialRecords, out var observedOperationIds);
         var winners = WinningOperations(operations);
         var mutations = MakeMutations(winners, initialRecords, state.DeviceId, state.AppliedOperationIds);
 
@@ -397,7 +404,9 @@ public static class CloudFolderSyncEngine
                     operation.Dictionary?.IsRegex == true && operation.ItemId == itemId)))
                 state.ExportedItemVersions.Remove(itemId);
         }
-        state.AppliedOperationIds.UnionWith(operations.Select(operation => operation.OperationId));
+        // Suppressed v1 regex upserts were seen too. Remember them even if a
+        // winning tombstone later disappears, so the stale rule cannot reappear.
+        state.AppliedOperationIds.UnionWith(observedOperationIds);
         state.LastSyncAt = syncNow;
 
         return Task.FromResult(new CloudFolderSyncResult(
@@ -494,7 +503,8 @@ public static class CloudFolderSyncEngine
          operation.ItemId == UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, true));
 
     private static IReadOnlyList<CloudFolderSyncOperation> NormalizeIdentities(
-        IReadOnlyList<CloudFolderSyncOperation> operations, IReadOnlyDictionary<string, CloudFolderSyncRecord> local)
+        IReadOnlyList<CloudFolderSyncOperation> operations, IReadOnlyDictionary<string, CloudFolderSyncRecord> local,
+        out IReadOnlyCollection<string> observedOperationIds)
     {
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
         void Remember(CloudFolderSyncRecord record)
@@ -520,6 +530,7 @@ public static class CloudFolderSyncEngine
             return operation;
         }
         var valid = operations.Select(PreserveLegacyRegexMode).Where(IsValidOperation).ToArray();
+        observedOperationIds = valid.Select(operation => operation.OperationId).ToArray();
         var legacyWinners = LegacyWinningOperations(valid);
         var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Dictionary?.IsRegex != true ||
             legacyWinners[UserDataSyncIdentity.DictionaryItemId(operation.Dictionary.EntryType, operation.Dictionary.Original)].OperationId == operation.OperationId)
@@ -564,12 +575,12 @@ public static class CloudFolderSyncEngine
     {
         var valid = operations.Where(operation => operation.SchemaVersion == 1 && IsValidOperation(operation)).ToArray();
         var legacyAliases = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var operation in valid.Where(operation => operation.Dictionary?.IsRegex == true))
+        foreach (var operation in valid.Where(operation => operation.Dictionary is not null))
         {
             var entry = operation.Dictionary!;
             var key = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
             legacyAliases[operation.ItemId] = key;
-            legacyAliases[$"dictionary:correction:{UserDataSyncIdentity.NormalizedKey(entry.Original)}"] = key;
+            legacyAliases[$"dictionary:{UserDataSyncIdentity.JsonName(entry.EntryType)}:{UserDataSyncIdentity.NormalizedKey(entry.Original)}"] = key;
         }
         return WinningOperations(valid
             .Select(operation => operation.Dictionary is { } entry
@@ -808,8 +819,10 @@ public static class CloudFolderSyncEngine
         }
     }
 
-    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(string operationsPath, CancellationToken cancellationToken)
+    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(
+        string operationsPath, CancellationToken cancellationToken, out bool unreadableHistory)
     {
+        unreadableHistory = false;
         if (!Directory.Exists(operationsPath))
             return [];
 
@@ -822,13 +835,19 @@ public static class CloudFolderSyncEngine
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var operation = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(
-                        File.ReadAllText(file));
+                    using var document = JsonDocument.Parse(File.ReadAllText(file));
+                    var envelope = document.RootElement;
+                    // Valid Mac history and future schemas are not partial files.
+                    if (envelope.TryGetProperty("collection", out var collection) && collection.ValueKind == JsonValueKind.String && collection.GetString() == "history" ||
+                        envelope.TryGetProperty("schemaVersion", out var schema) && schema.TryGetInt32(out var version) && version > 2) continue;
+                    var operation = envelope.Deserialize<CloudFolderSyncOperation>(CloudFolderSyncJson.Options);
                     if (operation is not null) operations.Add(operation);
+                    else unreadableHistory = true;
                 }
                 catch
                 {
-                    // Skip partial files and collections from other clients (such as Mac history).
+                    // A completely unreadable old package is not proof it was reset.
+                    unreadableHistory = true;
                 }
             }
         }
