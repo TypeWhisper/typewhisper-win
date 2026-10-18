@@ -40,13 +40,17 @@ internal static class WinUILicensing
     // another license operation runs is applied once that operation completes, so no key is skipped.
     internal static void ApplyPolicyChange()
     {
-        if (string.Equals(ManagedKey(), _appliedManagedKey, StringComparison.Ordinal)) return;
+        if (ManagedKeyBlocked || string.Equals(ManagedKey(), _appliedManagedKey, StringComparison.Ordinal)) return;
         if (Busy) { _policyChangeQueued = true; return; }
         _ = ValidateAsync();
     }
     private static string? ManagedKey() => WinUIManagedPolicy.Current.Enforced(ManagedPolicyKeys.ManagedLicenseKey)?.Text;
+    // An unreadable policy or an invalid key value is not a removal: the current managed state stays as it is until a
+    // readable snapshot arrives, so manual controls never appear because the policy could not be read.
+    private static bool ManagedKeyBlocked => WinUIManagedPolicy.Current.IsBlocked(ManagedPolicyKeys.ManagedLicenseKey);
     private static async Task ReconcileManagedAsync()
     {
+        if (ManagedKeyBlocked) return;
         var key = ManagedKey();
         _appliedManagedKey = key;
         await Service.ReconcileManagedLicenseAsync(key);

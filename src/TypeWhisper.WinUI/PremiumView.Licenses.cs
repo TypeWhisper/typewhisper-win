@@ -97,7 +97,8 @@ internal sealed partial class PremiumView
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var refresh = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Refresh status"), IsEnabled = !WinUILicensing.Busy && !_confirmingDeactivation };
         AutomationProperties.SetName(refresh, Loc.T("Refresh {0}", title));
-        refresh.Click += async (_, _) => await WinUILicensing.RefreshAsync(commercial);
+        // A managed commercial license refreshes through the managed pass, which recreates an activation Polar removed.
+        refresh.Click += async (_, _) => { if (managed) await WinUILicensing.RetryManagedAsync(); else await WinUILicensing.RefreshAsync(commercial); };
         actions.Children.Add(refresh);
         // A managed activation is released by removing the policy value or centrally in Polar, not per device.
         if (!managed)
