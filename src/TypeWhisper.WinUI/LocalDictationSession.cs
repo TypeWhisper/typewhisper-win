@@ -217,7 +217,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await _livePreview.StopAsync();
             await _transcriptionPlugin.SetEnabledAsync(enabled);
             if (_disposed) return Loc.T("The application is shutting down.");
-            var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled);
+            var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
             LocalPluginError = Models.Error ?? vocabularyError;
             SetStatus(enabled ? IsReady ? ModelReadyStatus() : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation.") : Loc.T("Local transcription plugin disabled"), DictationPhase.Idle);
             return LocalPluginError;
@@ -615,7 +615,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             catch (Exception ex) when (ex is not OutOfMemoryException) { LocalPluginError = ex.Message; }
             if (_disposed) return;
             var prepared = await warmUp;
-            await CtcVocabulary.SetEnabledAsync(Models.Enabled);
+            await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
             LocalPluginError ??= Models.Error;
             SetStatus(ReadyStatus(prepared));
         }

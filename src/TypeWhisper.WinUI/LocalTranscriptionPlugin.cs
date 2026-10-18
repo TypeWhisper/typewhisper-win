@@ -149,6 +149,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             // An activation failure keeps the package available for download/retry.
             try { await ActivateCoreAsync(selected, CancellationToken.None); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); }
+            // Judged once more after the model loaded: a policy that changed during the load releases the engine.
+            if (PackageRefusal?.Invoke() is { } refusedAfterModel) { await ReleaseAsync(); _policyRefused = true; Error = refusedAfterModel; }
         }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }

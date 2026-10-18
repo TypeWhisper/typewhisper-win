@@ -8,6 +8,9 @@ internal sealed partial class LocalDictationSession
     // checks live here; its engine reports the sherpa-onnx package as its selection ID.
     private static ManagedProviderPolicy ProviderPolicy => ManagedProviderPolicy.From(WinUIManagedPolicy.Current);
 
+    // The bundled dictionary-boosting package is judged by the allowlist on its own ID, like any other package.
+    private static bool CtcAllowed => ProviderPolicy.PluginRefusal(LocalCtcVocabulary.PluginId) is null;
+
     private static string? LocalTranscriptionRefusal() =>
         ProviderPolicy.TranscriptionRefusal(LocalTranscriptionPlugin.PluginId, LocalTranscriptionPlugin.PluginId, ContentLocality.Local);
 
@@ -76,11 +79,17 @@ internal sealed partial class LocalDictationSession
                 if (_disposed) return;
                 if (!changed)
                 {
-                    LocalPluginError = Models.Error ?? LocalPluginError;
+                    // The dependency follows its own allowlist entry even when the engine's state did not change.
+                    if (CtcVocabulary.Enabled != (Models.Enabled && CtcAllowed))
+                    {
+                        var dependencyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
+                        LocalPluginError = Models.Error ?? dependencyError ?? LocalPluginError;
+                    }
+                    else LocalPluginError = Models.Error ?? LocalPluginError;
                     if (LocalPluginError != previousError) Changed?.Invoke();
                     return;
                 }
-                var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled);
+                var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
                 LocalPluginError = Models.Error ?? vocabularyError;
                 SetStatus(Models.Enabled
                     ? IsReady ? ModelReadyStatus() : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation.")

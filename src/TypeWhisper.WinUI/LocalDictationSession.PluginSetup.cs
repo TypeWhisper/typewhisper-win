@@ -25,7 +25,7 @@ internal sealed partial class LocalDictationSession
             if (_disposed) return Loc.T("The application is shutting down.");
             await _transcriptionPlugin.SetEnabledAsync(true);
             progress.Report(new(Loc.T("Preparing dictionary boosting…")));
-            var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled, ct);
+            var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed, ct);
             LocalPluginError = Models.Error ?? vocabularyError;
             return LocalPluginError;
         }
