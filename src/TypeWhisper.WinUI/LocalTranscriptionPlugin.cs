@@ -132,6 +132,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             _policyRefused = false;
             Error = null; Feedback = null;
             _lease = await _load();
+            // Judged once more after activation: a policy that changed during the load releases the engine.
+            if (PackageRefusal?.Invoke() is { } refusedAfterLoad) { await ReleaseAsync(); _policyRefused = true; Error = refusedAfterLoad; return; }
             Generation++;
             _lease.Engine.SetAccelerationPreference(Acceleration);
             try { _host.SetSetting("Enabled", true); }

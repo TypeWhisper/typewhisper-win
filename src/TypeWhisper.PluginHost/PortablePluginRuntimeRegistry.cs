@@ -73,6 +73,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal string? Error;
         // Whether Error names a policy refusal; such a package loads again once the policy allows it.
         internal bool PolicyRefused;
+        // Marked for a policy unload that has not run yet: no capability rebuild touches the package meanwhile.
+        internal bool Stopping;
         internal bool CapabilityError;
         internal bool ApiKeyConfigured;
         internal CancellationTokenSource? Request;
@@ -283,6 +285,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             }
             var loadedHere = slot.Package is null;
             var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, slot.Services, hostVersion);
+            // Judged once more after activation: a policy that changed during the await releases the package
+            // instead of publishing it.
+            if (Policy.PackageRefusal(pluginId, locality, categories) is { } refusedAfterLoad)
+            {
+                slot.Package = null;
+                lock (_sync) { slot.Error = refusedAfterLoad; slot.PolicyRefused = true; }
+                await ReleasePackageAsync(slot, package);
+                return refusedAfterLoad;
+            }
             slot.Package = package;
             slot.Directory = directory;
             // Locality is authoritative; the legacy flag only feeds it for manifests that predate the field.
@@ -295,6 +306,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                     if (_disposed || slot.Generation != generation) throw new OperationCanceledException("Plugin activation was superseded.");
                     slot.Services.SetSetting("Enabled", true);
                     slot.Accepting = true;
+                    slot.Stopping = false;
                     slot.Error = null;
                     slot.PolicyRefused = false;
                     _index = next;
@@ -343,6 +355,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 {
                     marked = ++slot.Generation;
                     slot.Accepting = false;
+                    slot.Stopping = true;
                     CancelRequest(slot);
                 }
                 return (slot, refused, marked);
@@ -419,6 +432,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 if (_disposed || slot.Generation != generation) return false;
                 // Judged again under the gate: a policy that relaxed during the wait keeps the package running.
                 refused = SlotRefusal(slot);
+                slot.Stopping = false;
                 if (refused is null) { slot.Accepting = slot.Package is not null; return false; }
                 slot.Error = refused; slot.PolicyRefused = true;
             }
@@ -678,7 +692,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private Index BuildIndex()
     {
         Slot[] slots;
-        lock (_sync) slots = _slots.Values.Where(slot => slot.Package is not null).ToArray();
+        // A package marked for a policy unload is left out: reading its capabilities would run its code.
+        lock (_sync) slots = _slots.Values.Where(slot => slot.Package is not null && !slot.Stopping).ToArray();
         var transcription = new Dictionary<string, TranscriptionRole>(StringComparer.OrdinalIgnoreCase);
         var llm = new Dictionary<string, LlmRole>(StringComparer.OrdinalIgnoreCase);
         var transcriptionSnapshots = new List<PortableTranscriptionProvider>();

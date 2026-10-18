@@ -324,8 +324,10 @@ def main():
             return
         except (ValueError, urllib.error.URLError):
             # A previous run may have committed the feed before Pages failed.
-            # Recover deployment even when no package needs rebuilding.
+            # Recover deployment even when no package needs rebuilding; refreshes ride along.
             changes = verification
+            if refreshed:
+                update_feed([], refreshed)
             api("pages/builds", method="POST")
             wait_for_live(changes)
             return

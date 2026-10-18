@@ -61,9 +61,12 @@ public sealed record PluginManifest
     /// </summary>
     public string? Locality { get; init; }
 
-    /// <summary>The declared locality, or the value implied by <see cref="IsLocal"/>; unrecognized values are <see cref="PluginLocality.Unknown"/>.</summary>
+    /// <summary>
+    /// The declared locality, or for a manifest without the field the value implied by <see cref="IsLocal"/>; an
+    /// explicit blank or unrecognized value is <see cref="PluginLocality.Unknown"/>.
+    /// </summary>
     [JsonIgnore]
-    public PluginLocality ResolvedLocality => string.IsNullOrWhiteSpace(Locality)
+    public PluginLocality ResolvedLocality => Locality is null
         ? IsLocal ? PluginLocality.Local : PluginLocality.Cloud
         : PluginLocalityValues.Parse(Locality);
 

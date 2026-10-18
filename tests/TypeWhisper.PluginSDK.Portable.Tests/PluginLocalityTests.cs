@@ -14,6 +14,8 @@ public sealed class PluginLocalityTests
     [InlineData("\"locality\":\" Cloud \"", PluginLocality.Cloud)]
     [InlineData("\"locality\":\"configurable\",\"isLocal\":true", PluginLocality.Configurable)]
     [InlineData("\"locality\":\"bogus\",\"isLocal\":true", PluginLocality.Unknown)]
+    [InlineData("\"locality\":\" \",\"isLocal\":true", PluginLocality.Unknown)]
+    [InlineData("\"locality\":null,\"isLocal\":true", PluginLocality.Local)]
     [InlineData("\"isLocal\":true", PluginLocality.Local)]
     [InlineData("\"isLocal\":false", PluginLocality.Cloud)]
     [InlineData("", PluginLocality.Cloud)]

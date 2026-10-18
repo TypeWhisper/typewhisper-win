@@ -193,6 +193,8 @@ public sealed class PortablePluginStore
             if (_services is not null)
                 await PortablePluginPackage.RunInstallationHookAsync(package, _services(entry.Id), _host, previous?.Version, uninstall: false, ct, progress);
             ct.ThrowIfCancellationRequested();
+            // Judged once more after the hook: a policy revoked meanwhile keeps the package out of the index.
+            if (InstallRefusal(entry) is { } refusedAfterHook) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedAfterHook);
             next[entry.Id] = update ? previous! with { PendingDirectory = token, PendingVersion = entry.Version, UpdateWarning = null } : new(token, entry.Version);
             Commit(next);
             package = null;
