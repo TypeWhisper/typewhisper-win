@@ -322,7 +322,8 @@ public sealed class LicenseServiceTests : IDisposable
 
         using var payload = JsonDocument.Parse(Assert.IsType<string>(activationBody));
         var root = payload.RootElement;
-        Assert.Equal(Environment.MachineName, root.GetProperty("label").GetString());
+        Assert.Equal(LicenseService.ActivationLabel, root.GetProperty("label").GetString());
+        Assert.Contains(Environment.UserName, LicenseService.ActivationLabel);
         Assert.Equal("windows", root.GetProperty("meta").GetProperty("platform").GetString());
         Assert.Equal("9.8.7-test", root.GetProperty("meta").GetProperty("app_version").GetString());
         Assert.Equal(expectedDistribution, root.GetProperty("meta").GetProperty("distribution").GetString());

@@ -3148,5 +3148,11 @@
   "Got it": "Verstanden",
   "Review the latest feature highlights.": "Sieh dir die wichtigsten Neuerungen noch einmal an.",
   "Finish recording or processing before viewing what's new.": "Beende die Aufnahme oder Verarbeitung, bevor du die Neuerungen öffnest.",
-  "What's new could not be opened. Try again.": "Die Neuerungen konnten nicht geöffnet werden. Versuche es erneut."
+  "What's new could not be opened. Try again.": "Die Neuerungen konnten nicht geöffnet werden. Versuche es erneut.",
+  "Your organization provides the commercial license on this device. Activation happens automatically and the key is not shown.": "Deine Organisation stellt die kommerzielle Lizenz auf diesem Gerät bereit. Die Aktivierung erfolgt automatisch, der Schlüssel wird nicht angezeigt.",
+  "The organization license could not be activated. Check the network connection and contact your administrator if this continues.": "Die Organisationslizenz konnte nicht aktiviert werden. Prüfe die Netzwerkverbindung und kontaktiere bei anhaltenden Problemen deine Administration.",
+  "Retry activation": "Aktivierung erneut versuchen",
+  "Managed by your organization": "Von deiner Organisation verwaltet",
+  "Premium features": "Premium-Funktionen",
+  "Your organization provides the license. Features unlock once it is active.": "Deine Organisation stellt die Lizenz bereit. Die Funktionen werden freigeschaltet, sobald sie aktiv ist."
 }

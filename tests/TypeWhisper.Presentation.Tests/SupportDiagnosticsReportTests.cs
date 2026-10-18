@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using Xunit;
 using Report = TypeWhisper.Presentation.SupportDiagnosticsReport;
 
@@ -7,7 +8,71 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class SupportDiagnosticsReportTests
 {
-    private static Report Empty() => new(DateTimeOffset.UtcNow, null, null, null, null, null, null, null, null, null, null, []);
+    private static Report Empty() => new(DateTimeOffset.UtcNow, null, null, null, null, null, null, null, null, null, null, null, []);
+
+    [Fact]
+    public void PolicySectionKeepsIdentifiersAndOmitsFreeText()
+    {
+        var reading = new ManagedPolicyReading(true, null, ManagedPolicyRawSection.Of(
+            [
+                KeyValuePair.Create("TranscriptionProviderId", ManagedPolicyRawValue.FromText("com.typewhisper.sherpa-onnx")),
+                KeyValuePair.Create("TranscriptionModelId", ManagedPolicyRawValue.FromText(@"C:\models\private.bin")),
+                KeyValuePair.Create("AllowCloudTranscription", ManagedPolicyRawValue.FromNumber(0)),
+                KeyValuePair.Create("AllowedPluginsConfigured", ManagedPolicyRawValue.FromNumber(1)),
+                KeyValuePair.Create("UpdateMode", ManagedPolicyRawValue.FromNumber(9)),
+                KeyValuePair.Create("CustomMarker", ManagedPolicyRawValue.FromNumber(1)),
+                KeyValuePair.Create(@"C:\notes\private note", ManagedPolicyRawValue.FromText("x"))
+            ],
+            [
+                KeyValuePair.Create("AllowedPlugins", new ManagedPolicyRawList(["com.typewhisper.sherpa-onnx", "not an id"])),
+                KeyValuePair.Create("Customer Secret", new ManagedPolicyRawList(["a"]))
+            ]),
+            ManagedPolicyRawSection.Missing);
+        var snapshot = ManagedPolicyValidator.Validate(reading, 4, DateTimeOffset.UtcNow);
+
+        var policy = Report.SummarizePolicy(snapshot, watching: true);
+
+        Assert.Equal("Present", policy.Status);
+        Assert.Equal(4, policy.Revision);
+        Assert.True(policy.Watching);
+        Assert.Equal(["AllowCloudTranscription", "AllowedPlugins", "TranscriptionModelId", "TranscriptionProviderId"],
+            policy.Enforced.Select(value => value.Name));
+        Assert.Equal("0", policy.Enforced[0].Value);
+        Assert.Equal(["com.typewhisper.sherpa-onnx", "[omitted]"], policy.Enforced[1].Items);
+        Assert.Equal("[omitted]", policy.Enforced[2].Value);
+        Assert.Equal("com.typewhisper.sherpa-onnx", policy.Enforced[3].Value);
+        Assert.Empty(policy.Recommended);
+        Assert.Equal(["UpdateMode"], policy.InvalidEnforced);
+        var issue = Assert.Single(policy.Issues, item => item.Key == "UpdateMode");
+        Assert.Equal("Enforced", issue.Scope);
+        // Unknown registry names reach the report only as technical identifiers.
+        Assert.Contains(policy.Issues, item => item.Key == "CustomMarker" && item.Message.Contains("CustomMarker"));
+        Assert.Equal(2, policy.Issues.Count(item => item.Key == "[omitted]" && item.Message.Contains("[omitted]")));
+
+        var json = (Empty() with { Policy = policy }).ToJson();
+        Assert.Contains("\"schemaVersion\": 3", json);
+        Assert.Contains("\"policy\"", json);
+        Assert.DoesNotContain("private.bin", json);
+        Assert.DoesNotContain("not an id", json);
+        Assert.DoesNotContain("private note", json);
+        Assert.DoesNotContain("Customer Secret", json);
+    }
+
+    [Fact]
+    public void PolicySectionReportsSensitiveValuesAsSetOnly()
+    {
+        var reading = new ManagedPolicyReading(true, null, ManagedPolicyRawSection.Of(
+            [KeyValuePair.Create("ManagedLicenseKey", ManagedPolicyRawValue.FromText("TW-SECRET-KEY-1234"))]),
+            ManagedPolicyRawSection.Missing);
+
+        var policy = Report.SummarizePolicy(ManagedPolicyValidator.Validate(reading, 1, DateTimeOffset.UtcNow), watching: false);
+
+        var value = Assert.Single(policy.Enforced);
+        Assert.Equal("ManagedLicenseKey", value.Name);
+        Assert.Equal("[set]", value.Value);
+        Assert.Null(value.Items);
+        Assert.DoesNotContain("SECRET", (Empty() with { Policy = policy }).ToJson());
+    }
 
     [Fact]
     public void WorkflowsKeepTechnicalMetadataWithoutUserContent()
@@ -160,7 +225,7 @@ public sealed class SupportDiagnosticsReportTests
             var json = File.ReadAllText(destination);
             Assert.DoesNotContain("private", json, StringComparison.OrdinalIgnoreCase);
             using var document = JsonDocument.Parse(json);
-            Assert.Equal(2, document.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(3, document.RootElement.GetProperty("schemaVersion").GetInt32());
             var entry = Assert.Single(document.RootElement.GetProperty("log").GetProperty("entries").EnumerateArray());
             Assert.Equal("sherpa-onnx", entry.GetProperty("data").GetProperty("engine").GetString());
             Assert.False(entry.TryGetProperty("error", out _));

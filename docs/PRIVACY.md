@@ -12,7 +12,7 @@ Besides the cloud providers and integrations you configure, the Windows app make
 
 - **Plugin catalog** (`typewhisper.github.io`): fetched about one minute after every start and then once a day while "Update plugins automatically" is on (the default), and when you open Account & about or choose "Check for updates". A plain download without account data; plugin packages are then downloaded from the GitHub release URLs listed in the catalog.
 - **App update check** (`api.github.com`): only when you choose "Check for updates" in Settings or the tray menu. Lists the releases of the `TypeWhisper/typewhisper-win` repository and downloads the selected package from GitHub. Microsoft Store builds do not use it; the Store delivers their updates.
-- **License activation and validation** (`api.polar.sh`): only if you enter a license key. Activation sends the key, the TypeWhisper organization ID, your computer name as the activation label, the platform (`windows`), the app version and whether this is the Store or direct build. Validation and deactivation send the key, the organization ID and the activation ID; validation runs at start when due, every 7 days for commercial licenses and every 30 days for supporter licenses.
+- **License activation and validation** (`api.polar.sh`): only if you enter a license key, or if your organization provisions one through machine policy (`ManagedLicenseKey`); a managed key is activated automatically at start and when the policy changes. Activation sends the key, the TypeWhisper organization ID, your computer name and your Windows user name as the activation label, the platform (`windows`), the app version and whether this is the Store or direct build. Validation and deactivation send the key, the organization ID and the activation ID; validation runs at start when due, every 7 days for commercial licenses and every 30 days for supporter licenses.
 - **Premium account** (`app.typewhisper.com`): only after you sign in. Sign-in opens your browser; afterwards each request carries your session and a random device ID that is generated locally and stored in the profile folder (`premium-account-device.txt`). While signed in, the entitlement is refreshed at start.
 - **Model and runtime downloads**: only when you download a model or install an acceleration runtime in a local plugin. Depending on the plugin, files come from `huggingface.co`, GitHub releases (`github.com`), `pypi.org`, `download.pytorch.org` and `developer.download.nvidia.com`. An optional Hugging Face token, if you enter one, is sent only to `huggingface.co`.
 
@@ -27,8 +27,11 @@ Besides the cloud providers and integrations you configure, the Windows app make
 
 Settings > Advanced > Support diagnostics can export a local JSON support report.
 It includes app and system details, microphone names and access status, model and
-plugin state, workflow metadata, selected behavior settings, data counts, and
-retained diagnostic log entries. Microphone names appear as shown in Windows and
+plugin state, workflow metadata, selected behavior settings, data counts,
+machine policy names with their validation findings and non-sensitive values
+(numbers and technical identifiers; a managed license key appears only as set,
+unknown registry names only when they are plain identifiers), and retained
+diagnostic log entries. Microphone names appear as shown in Windows and
 may include the owner's name, for example for Bluetooth devices.
 The report excludes API keys, audio, transcripts, workflow names and prompts,
 app and website bindings, and file paths. Collection failures contain only the
