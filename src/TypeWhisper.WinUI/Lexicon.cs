@@ -285,7 +285,7 @@ internal sealed class Lexicon
             if ((suggestions ? !DictionaryAliasSuggestions.IsAlias(original) : !DictionaryTrainingPlan.IsWord(original))
                 || original.Equals(word, StringComparison.OrdinalIgnoreCase))
                 return Loc.T("Review the selected variants before saving.");
-            var existing = _entries.Where(entry => entry.Kind == LexiconKind.Correction &&
+            var existing = _entries.Where(entry => entry.Kind == LexiconKind.Correction && !entry.IsRegex &&
                 entry.Key.Equals(original, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (existing.Any(entry => !entry.Value.Equals(word, StringComparison.Ordinal)))
                 return Loc.T("A correction for {0} already points to another spelling. Keep it or edit it in Corrections.", original);

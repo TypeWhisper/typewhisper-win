@@ -32,6 +32,28 @@ public sealed class FileLexiconTests : IDisposable
         return queue;
     }
 
+    [Theory]
+    [InlineData(false, "the")]
+    [InlineData(true, "the")]
+    [InlineData(false, "another")]
+    [InlineData(true, "another")]
+    public void LiteralVariantsCanCoexistWithRegex(bool suggestions, string replacement)
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "teh", replacement) { IsRegex = true }));
+        Assert.Null(suggestions ? store.SaveSuggestedAliases("the", ["teh"]) : store.SaveTraining("the", ["teh"]));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Contains(reloaded.Entries, entry => entry.IsRegex && entry.Key == "teh" && entry.Value == replacement);
+        Assert.Contains(reloaded.Entries, entry => entry.Kind == LexiconKind.Correction && !entry.IsRegex && entry.Key == "teh" && entry.Value == "the");
+        Assert.Contains(reloaded.Entries, entry => entry.Kind == LexiconKind.Word && entry.Key == "the");
+        Assert.Equal(3, reloaded.Entries.Count);
+        Assert.Null(reloaded.SaveTraining("the", ["teh"]));
+        Assert.Equal(3, reloaded.Entries.Count);
+        Assert.NotNull(reloaded.SaveTraining("different", ["teh"]));
+        Assert.Equal(3, new Lexicon(DictionaryPath, SnippetPath).Entries.Count);
+    }
+
     [Fact]
     public void InvalidRegexEditPreservesStoredRuleAndRemainsLoadable()
     {

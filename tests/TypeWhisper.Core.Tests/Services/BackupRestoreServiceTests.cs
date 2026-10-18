@@ -47,6 +47,27 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Equal("existing", Assert.Single(destination.Dictionary.Entries).Original);
     }
 
+    [Theory]
+    [InlineData(" word ")]
+    [InlineData(" [ ")]
+    public async Task BackupTermsIgnoreRegexModeAndTrimWhitespace(string original)
+    {
+        var source = CreateProfile("regex-flag-term-source");
+        source.Dictionary.AddEntry(new DictionaryEntry { Id = "term", EntryType = DictionaryEntryType.Term, Original = "healthy" });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var entry = json["data"]!["dictionary"]!["entries"]![0]!;
+        entry["original"] = original;
+        entry["isRegex"] = true;
+        var destination = CreateProfile("regex-flag-term-target");
+        Assert.True((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        var restored = Assert.Single(destination.Dictionary.Entries);
+        Assert.Equal(original.Trim(), restored.Original);
+        Assert.False(restored.IsRegex);
+        entry["isRegex"] = false;
+        Assert.True((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        Assert.Single(destination.Dictionary.Entries);
+    }
+
     [Fact]
     public async Task Export_UsesAllowlistAndNeverIncludesSecretsPathsOrAudio()
     {

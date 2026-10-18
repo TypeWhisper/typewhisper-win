@@ -364,11 +364,14 @@ public static class CloudFolderSyncEngine
                 if (applied.Length > 0 || unreadableHistory)
                     throw new IOException(Loc.T("Previously synced correction files are missing or unreadable. Wait for your cloud provider to download them, or choose a new sync folder if the old files were deleted."));
                 // Republish local data while retaining unambiguous local deletions.
-                // Only withdraw old folded IDs for regex rules still present locally.
+                // Only unchanged regex rules can withdraw their old folded IDs.
+                // Changed rules may have replaced literals that still need deleting.
                 var migratedIds = initialRecords.Values
                     .Where(record => record.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true })
-                    .Select(record => UserDataSyncIdentity.DictionaryItemId(record.Dictionary!.EntryType, record.Dictionary.Original))
-                    .Where(id => !state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal));
+                    .Select(record => record.Dictionary!)
+                    .Where(entry => state.ExportedItemVersions.TryGetValue(UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original), out var version) &&
+                        (version == VersionString(entry.UpdatedAt) || version == "dictionary-v2|" + VersionString(entry.UpdatedAt)))
+                    .Select(entry => UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original));
                 publicationState = state with
                 {
                     KnownLocalItemIds = state.KnownLocalItemIds.Except(migratedIds, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal),
@@ -484,6 +487,7 @@ public static class CloudFolderSyncEngine
         (operation.Kind == CloudFolderSyncOperationKind.Delete ||
          operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { } d &&
             IsValidDictionaryOriginal(d) && Enum.IsDefined(d.EntryType) &&
+            (d.EntryType != UserDataSyncDictionaryEntryType.Correction || d.Replacement is { Length: <= 10000 }) &&
             (d.CtcMinSimilarity is null || float.IsFinite(d.CtcMinSimilarity.Value) && d.CtcMinSimilarity >= .4f && d.CtcMinSimilarity <= .95f) ||
          operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { } n &&
             !string.IsNullOrWhiteSpace(n.Trigger) && n.Replacement is not null);
@@ -542,8 +546,9 @@ public static class CloudFolderSyncEngine
         var valid = operations.Select(PreserveLegacyRegexMode).Where(IsValidOperation).ToArray();
         observedOperationIds = valid.Select(operation => operation.OperationId).ToArray();
         var legacyWinners = LegacyWinningOperations(valid);
-        var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Dictionary?.IsRegex != true ||
-            legacyWinners[UserDataSyncIdentity.DictionaryItemId(operation.Dictionary.EntryType, operation.Dictionary.Original)].OperationId == operation.OperationId)
+        var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Kind != CloudFolderSyncOperationKind.Upsert ||
+            operation.Dictionary is not { EntryType: UserDataSyncDictionaryEntryType.Correction } entry ||
+            legacyWinners[UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)].OperationId == operation.OperationId)
             .Select(operation =>
         {
             if (operation.Kind != CloudFolderSyncOperationKind.Upsert) return operation;
