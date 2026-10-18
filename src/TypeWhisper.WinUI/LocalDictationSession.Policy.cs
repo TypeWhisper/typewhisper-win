@@ -25,7 +25,7 @@ internal sealed partial class LocalDictationSession
         if (ActiveRegistryProvider is { } provider) return PluginRuntime.TranscriptionRefusal(provider.SelectionId, provider.SelectedModelId);
         // The registry knows no such role: policy may require a provider that is not installed or enabled, or it
         // may have unloaded the package.
-        return EnforcedTranscription is { } pair && SessionProviderId(pair.ProviderId) == _providerId
+        return EnforcedTranscription is { } pair && IsProviderId(pair.ProviderId, _providerId)
             ? Loc.T("The transcription provider {0} is not installed or enabled.", pair.ProviderId)
             : SelectedPackageRefusal();
     }

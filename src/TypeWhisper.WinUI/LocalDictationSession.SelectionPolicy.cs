@@ -18,8 +18,17 @@ internal sealed partial class LocalDictationSession
     /// <summary>Whether the dictation provider and model are fixed by policy or wait for a readable one.</summary>
     internal static bool TranscriptionSelectionLocked => EnforcedTranscription is not null || ProviderPolicy.TranscriptionSelectionBlocked;
 
+    // Policy names providers by their stable selection ID; the session calls the local engine "local" and the
+    // built-in Groq role "groq". IDs compare case-insensitively, as the registry does.
+    private static string PolicyProviderId(string selectionId) =>
+        string.Equals(selectionId, LocalTranscriptionPlugin.PluginId, StringComparison.OrdinalIgnoreCase) ? "local"
+        : string.Equals(selectionId, CloudTranscriptionPlugin.PluginId, StringComparison.OrdinalIgnoreCase) ? "groq" : selectionId;
+
+    private static bool IsProviderId(string policyId, string sessionId) =>
+        string.Equals(PolicyProviderId(policyId), sessionId, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The model policy enforces for the active provider, or null; shown selected even before it is downloaded.</summary>
-    internal string? EnforcedModelId => EnforcedTranscription is { } pair && SessionProviderId(pair.ProviderId) == _providerId ? pair.ModelId : null;
+    internal string? EnforcedModelId => EnforcedTranscription is { } pair && IsProviderId(pair.ProviderId, _providerId) ? pair.ModelId : null;
 
     /// <summary>What the locked dictation row says: the required pair, or why it cannot be used yet.</summary>
     internal string? SelectionLockReason()
@@ -27,8 +36,8 @@ internal sealed partial class LocalDictationSession
         if (ProviderPolicy.TranscriptionSelectionBlocked)
             return Loc.T("Your organization's policy could not be read. This operation waits until it is readable.");
         if (EnforcedTranscription is not { } pair) return null;
-        var provider = DictationProviders.FirstOrDefault(item => item.Id == SessionProviderId(pair.ProviderId));
-        var model = provider?.Models.FirstOrDefault(item => string.Equals(item.Id, pair.ModelId, StringComparison.OrdinalIgnoreCase));
+        var provider = DictationProviders.FirstOrDefault(item => IsProviderId(pair.ProviderId, item.Id));
+        var model = provider?.Models.FirstOrDefault(item => pair.IsModel(item.Id));
         return Loc.T("Managed by your organization") + ": " + (provider?.Name ?? pair.ProviderId) + " · " + (model?.Name ?? pair.ModelId)
             + (TranscriptionPolicyRefusal() is { } refused ? " · " + refused : "");
     }
@@ -39,7 +48,7 @@ internal sealed partial class LocalDictationSession
         if (ProviderPolicy.TranscriptionSelectionBlocked)
             return Loc.T("Your organization's policy could not be read. This operation waits until it is readable.");
         if (EnforcedTranscription is not { } pair) return null;
-        return SessionProviderId(pair.ProviderId) != providerId
+        return !IsProviderId(pair.ProviderId, providerId)
             ? Loc.T("Your organization requires the transcription provider {0}.", pair.ProviderId)
             : !pair.IsModel(modelId) ? Loc.T("Your organization requires the transcription model {0}.", pair.ModelId) : null;
     }
@@ -49,8 +58,9 @@ internal sealed partial class LocalDictationSession
         TranscriptionSelectionLocked ? null : workflow?.TranscriptionModel;
 
     // The provider at startup: the enforced pair, then the user's saved choice, then a recommendation, then local.
-    private string StartupProviderId() => SessionProviderId(
-        EnforcedTranscription?.ProviderId ?? _selection.GetSetting<string>("Provider") ?? ProviderPolicy.RecommendedTranscription?.ProviderId ?? "local");
+    private string StartupProviderId() => EnforcedTranscription is { } enforced ? PolicyProviderId(enforced.ProviderId)
+        : _selection.GetSetting<string>("Provider") is { } chosen ? SessionProviderId(chosen)
+        : ProviderPolicy.RecommendedTranscription is { } recommended ? PolicyProviderId(recommended.ProviderId) : "local";
 
     // The local engine reads the pair when it enables itself, so the enforced model loads once instead of twice.
     internal static (string? Enforced, string? Recommended) LocalEnginePolicyModels()
@@ -98,7 +108,7 @@ internal sealed partial class LocalDictationSession
             if (policy.EnforcedTranscription is { } pair)
             {
                 await _livePreview.StopAsync();
-                _providerId = SessionProviderId(pair.ProviderId);
+                _providerId = PolicyProviderId(pair.ProviderId);
                 if (!UsesRegistryProvider)
                 {
                     if (Models.Enabled && !Models.Busy && Models.ActiveModelId != pair.ModelId
@@ -132,7 +142,8 @@ internal sealed partial class LocalDictationSession
                 _selectionPolicy.Save(new());
             }
             var chosen = _selection.GetSetting<string>("Provider");
-            var saved = SessionProviderId(chosen ?? policy.RecommendedTranscription?.ProviderId ?? "local");
+            var saved = chosen is not null ? SessionProviderId(chosen)
+                : policy.RecommendedTranscription is { } suggested ? PolicyProviderId(suggested.ProviderId) : "local";
             if (_providerId != saved) { await _livePreview.StopAsync(); _providerId = saved; }
             // A recommended registry model is the initial selection of a profile without any choice, once it is downloaded.
             if (chosen is null && policy.RecommendedTranscription is { } recommended && UsesRegistryProvider
@@ -164,7 +175,7 @@ internal sealed partial class LocalDictationSession
         var policy = ProviderPolicy;
         if (policy.EnforcedTranscription is { } transcription)
         {
-            var provider = DictationProviders.FirstOrDefault(item => item.Id == SessionProviderId(transcription.ProviderId));
+            var provider = DictationProviders.FirstOrDefault(item => IsProviderId(transcription.ProviderId, item.Id));
             if (provider is null)
                 yield return ManagedPolicyKeys.TranscriptionProviderId + ": " + Loc.T("The transcription provider {0} is not installed or enabled.", transcription.ProviderId);
             else
