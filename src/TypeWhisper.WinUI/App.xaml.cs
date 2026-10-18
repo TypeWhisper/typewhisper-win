@@ -183,6 +183,8 @@ public partial class App : Application
         AppDiagnostics.Start();
         // Retries and splits of cloud requests are decided in the plugin host, which has no log of its own.
         TypeWhisper.PluginHost.PluginHostDiagnostics.Sink = (stage, error) => AppDiagnostics.Write(stage, error);
+        // Machine policy is read before setup, stores and plugins so none of them decide without it.
+        WinUIManagedPolicy.Initialize();
         var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);

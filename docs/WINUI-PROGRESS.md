@@ -84,8 +84,11 @@ current acceptance scope.
 
 Calendar OAuth registrations and usable sign-in remain absent. Browser microphone
 integration and Parakeet Realtime EOU are research, not promised 1.1 deliverables.
-Large feature requests such as managed deployment or voice-based field editing
-need a separate scope decision.
+Managed deployment is scheduled for 1.2 (#470 for Group Policy and Intune settings,
+#641 for the managed license key). The policy foundation reads
+`HKLM\SOFTWARE\Policies\TypeWhisper` at startup and reports it in support
+diagnostics; no setting is enforced yet. Other large feature requests such as
+voice-based field editing need a separate scope decision.
 
 ## Release procedure
 

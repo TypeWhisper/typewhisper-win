@@ -53,7 +53,8 @@ internal static partial class SupportDiagnosticsExporter
                 dictionary?.Count(entry => entry.EntryType == DictionaryEntryType.Correction),
                 snippets?.Length, snippets?.Count(entry => entry.IsEnabled));
             var log = capture.Try("diagnosticLog", AppDiagnostics.CaptureLog);
-            return new Report(exportedAt, app, system, model, apiInfo, audio, settings, plugins, workflows, counts, log, capture.Errors);
+            var policy = capture.Try("policy", () => Report.SummarizePolicy(WinUIManagedPolicy.Current, WinUIManagedPolicy.Watching));
+            return new Report(exportedAt, app, system, model, apiInfo, audio, settings, plugins, workflows, counts, log, policy, capture.Errors);
         });
     }
 

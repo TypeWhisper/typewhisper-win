@@ -20,6 +20,8 @@
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/LicenseService.cs" Link="LicenseService.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/WindowsLocalPeerVerifier.cs" Link="WindowsLocalPeerVerifier.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/NativeMethods.LocalPeer.cs" Link="NativeMethods.LocalPeer.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/RegistryManagedPolicySource.cs" Link="RegistryManagedPolicySource.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/NativeMethods.Registry.cs" Link="NativeMethods.Registry.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AppDistribution.cs" Link="AppDistribution.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AppReleaseGithubSource.cs" Link="AppReleaseGithubSource.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/WindowsClipboardTransaction.cs" Link="WindowsClipboardTransaction.cs" />
