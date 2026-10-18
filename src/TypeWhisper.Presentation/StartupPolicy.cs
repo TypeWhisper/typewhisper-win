@@ -21,6 +21,9 @@ public sealed class StartupPolicyStore
     /// <summary>A readable persistence failure.</summary>
     public string? Error { get; private set; }
 
+    /// <summary>Whether the file exists but could not be read; its content is unknown until a save replaces it.</summary>
+    public bool Unreadable { get; private set; }
+
     /// <summary>Loads the preferences without creating files.</summary>
     public StartupPolicyStore(string path)
     {
@@ -31,7 +34,10 @@ public sealed class StartupPolicyStore
                 Current = JsonSerializer.Deserialize<StartupPolicyPreferences>(File.ReadAllText(path)) ?? new();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        { Error = Loc.T("The startup policy state could not be loaded."); }
+        {
+            Unreadable = true;
+            Error = Loc.T("The startup policy state could not be loaded.");
+        }
     }
 
     /// <summary>Saves atomically; <see cref="Current"/> advances only once the file holds the new state.</summary>
@@ -42,6 +48,7 @@ public sealed class StartupPolicyStore
             AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(next));
             Current = next;
             Error = null;
+            Unreadable = false;
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -79,9 +86,10 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
         {
             // The pre-enforcement value must be on disk before the registration changes; otherwise a restart under
             // the same policy would retain the enforced state and a later removal could not restore the user's choice.
-            // An unreadable state file may already hold the pre-enforcement value: nothing is written over it.
+            // An unreadable state file may already hold the pre-enforcement value: nothing is written over it. A
+            // write that failed earlier is simply tried again.
             if (store.Current.RetainedBeforeEnforcement is null && !state.Unknown
-                && (store.Error is not null || !store.Save(store.Current with { RetainedBeforeEnforcement = state.IsEnabled })))
+                && (store.Unreadable || !store.Save(store.Current with { RetainedBeforeEnforcement = state.IsEnabled })))
                 return new(state, true, store.Error ?? Loc.T("Managed by your organization"));
             if (state.CanChange && state.IsEnabled != enforced.IsTrue)
                 state = await registration.SetEnabledAsync(enforced.IsTrue);
@@ -101,7 +109,7 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
         }
 
         // A recommendation needs a readable preference state: an unreadable file may hold the user's own choice.
-        if (snapshot.Recommended(ManagedPolicyKeys.LaunchAtLogin) is { } recommended && store.Error is null
+        if (snapshot.Recommended(ManagedPolicyKeys.LaunchAtLogin) is { } recommended && !store.Unreadable
             && store.Current.UserChoice is null && !setupCompleted && !store.Current.RecommendationApplied)
         {
             if (state.CanChange && state.IsEnabled != recommended.IsTrue)
@@ -116,6 +124,9 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
         return new(state, false, null);
     }
 
-    /// <summary>Records an explicit user choice so recommendations no longer apply to this profile; false when it could not be saved.</summary>
-    public bool RecordUserChoice(bool enabled) => store.Save(store.Current with { UserChoice = enabled });
+    /// <summary>
+    /// Records an explicit user choice so recommendations no longer apply to this profile; false when it could not be
+    /// saved. The choice supersedes a pre-enforcement value that is still retained, so no later pass restores that.
+    /// </summary>
+    public bool RecordUserChoice(bool enabled) => store.Save(store.Current with { UserChoice = enabled, RetainedBeforeEnforcement = null });
 }

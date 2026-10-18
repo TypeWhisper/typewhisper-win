@@ -176,6 +176,41 @@ public sealed class StartupPolicyTests : IDisposable
     }
 
     [Fact]
+    public async Task EnforcementRetriesRetentionAfterAFailedWrite()
+    {
+        var registration = new Registration { Enabled = true };
+        var store = Store();
+        var reconciler = new StartupPolicyReconciler(registration, store);
+        var snapshot = Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 0)]);
+        // The first pass cannot write: a directory sits where the file belongs.
+        var blocker = Path.Combine(_root, "startup-policy.json");
+        Directory.CreateDirectory(blocker);
+        await reconciler.ApplyAsync(snapshot, setupCompleted: true);
+        Assert.True(registration.Enabled);
+        Assert.False(store.Unreadable);
+
+        // Once the write succeeds the enforcement applies without a restart.
+        Directory.Delete(blocker);
+        var outcome = await reconciler.ApplyAsync(snapshot, setupCompleted: true);
+        Assert.False(registration.Enabled);
+        Assert.True(outcome.Locked);
+        Assert.True(store.Current.RetainedBeforeEnforcement);
+    }
+
+    [Fact]
+    public void AUserChoiceSupersedesARetainedValue()
+    {
+        var store = Store();
+        Assert.True(store.Save(new(RetainedBeforeEnforcement: true)));
+        var reconciler = new StartupPolicyReconciler(new Registration(), store);
+
+        Assert.True(reconciler.RecordUserChoice(false));
+
+        Assert.False(store.Current.UserChoice);
+        Assert.Null(store.Current.RetainedBeforeEnforcement);
+    }
+
+    [Fact]
     public void FailedSaveLeavesTheStoredStateUntouched()
     {
         Directory.CreateDirectory(Path.Combine(_root, "startup-policy.json"));
