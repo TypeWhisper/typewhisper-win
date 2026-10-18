@@ -86,7 +86,7 @@ internal sealed partial class LocalDictationSession
                     LanguageHintTranscription.DecodeAsync(engine, samples,
                         () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),
                         language == "auto" ? null : language,
-                        hints, translate, token, lexicon.Dictionary?.EnabledTerms), ct)
+                        hints, translate, token, PromptTermsFor(providerSelection, lexicon.Dictionary?.EnabledTerms)), ct)
                 : await _transcriptionPlugin.DecodeResultAsync(samples, language == "auto" ? null : language, translate, ct);
             // Keep the gate until non-interruptible native work has actually drained.
             ct.ThrowIfCancellationRequested();

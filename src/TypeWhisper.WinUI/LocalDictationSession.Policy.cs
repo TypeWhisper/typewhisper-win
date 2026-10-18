@@ -16,6 +16,10 @@ internal sealed partial class LocalDictationSession
         ? PluginRuntime.TranscriptionRefusal(RegistrySelectionId(_providerId))
         : LocalTranscriptionRefusal();
 
+    // Dictionary terms are text: a cloud engine receives them as a prompt only where text processing is allowed.
+    private IReadOnlyList<string>? PromptTermsFor(string selectionId, IReadOnlyList<string>? terms) =>
+        terms is null || PluginRuntime.TranscriptionPromptRefusal(selectionId) is not null ? null : terms;
+
     private static void DenyLocalTranscriptionIfRefused()
     {
         if (LocalTranscriptionRefusal() is { } refused) throw new ManagedPolicyDeniedException("transcription", refused);

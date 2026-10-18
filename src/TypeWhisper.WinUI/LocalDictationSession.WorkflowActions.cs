@@ -33,6 +33,8 @@ internal sealed partial class LocalDictationSession
             return new(result.Status == PortableActionStatus.Succeeded, result.Message);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        // A policy refusal names its reason; the generic wording would hide an administrator's decision.
+        catch (ManagedPolicyDeniedException ex) { return new(false, ex.Message); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return new(false, Loc.T("The workflow action could not run. Check its destination before trying again."));

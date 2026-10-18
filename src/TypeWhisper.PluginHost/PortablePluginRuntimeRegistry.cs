@@ -122,6 +122,16 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             ? Policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) : null;
     }
 
+    /// <summary>
+    /// Why policy refuses prompt text, such as dictionary terms, alongside audio for an enabled transcription role,
+    /// or null. Audio itself follows <see cref="TranscriptionRefusal"/>. Unknown roles return null.
+    /// </summary>
+    public string? TranscriptionPromptRefusal(string selectionId)
+    {
+        lock (_sync) return _index.Transcription.TryGetValue(selectionId, out var role)
+            ? Policy.TextTransferRefusal(role.Owner.Id, role.Owner.Locality) : null;
+    }
+
     /// <summary>Why policy refuses text for an enabled LLM role, or null. Unknown roles return null.</summary>
     public string? LlmRefusal(string selectionId)
     {

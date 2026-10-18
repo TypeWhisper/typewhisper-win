@@ -136,6 +136,8 @@ public sealed class PortablePluginStore
         try
         {
             EnsureInitialized();
+            // Rechecked after the wait: a policy that changed meanwhile wins before any byte is downloaded.
+            if (InstallRefusal(entry) is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedNow);
             lock (_sync)
                 if (_installed.TryGetValue(entry.Id, out var current) && (current.PendingDirectory is not null || Version.Parse(current.Version) >= Version.Parse(entry.Version)))
                     throw new InvalidOperationException(current.PendingDirectory is not null ? "Restart TypeWhisper to finish the update." : "This version or a newer version is already installed.");

@@ -143,6 +143,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
     private async Task RunAsync(Func<ILocalTtsModelManagement, CancellationToken, Task> action, bool download = false)
     {
         if (_busy || !_session.CanStartPluginSettingsAction || _lifetime is not { } lifetime) { UpdateButtons(); return; }
+        // A download the policy refuses never starts; a model that is already on disk still loads.
+        if (download && !_downloaded && LocalDictationSession.ModelDownloadRefusal() is { } refused) { _message.Text = refused; UpdateButtons(); return; }
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         _operation = operation; _busy = true; _message.Text = "";
         var refresh = true;
@@ -185,7 +187,9 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         var available = !_busy && _session.CanStartPluginSettingsAction;
         foreach (var control in _licenses.Children.OfType<Control>()) control.IsEnabled = available;
         _download.Content = _downloaded ? Loc.T("Load model") : Loc.T("Download & Load");
-        _download.IsEnabled = available && _accepted && !_loaded;
+        var downloadRefusal = _downloaded ? null : LocalDictationSession.ModelDownloadRefusal();
+        _download.IsEnabled = available && _accepted && !_loaded && downloadRefusal is null;
+        ToolTipService.SetToolTip(_download, downloadRefusal);
         _download.Visibility = _loaded ? Visibility.Collapsed : Visibility.Visible;
         _unload.IsEnabled = available && _loaded;
         _unload.Visibility = _loaded ? Visibility.Visible : Visibility.Collapsed;

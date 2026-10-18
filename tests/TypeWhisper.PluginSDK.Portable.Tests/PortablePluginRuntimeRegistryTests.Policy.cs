@@ -191,6 +191,19 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
+    public async Task CloudTextPolicyKeepsPromptTextAwayFromCloudTranscription()
+    {
+        var store = await LocalityStore("cloud", ["transcription"]);
+        await using var registry = PolicyRegistry(store, () => Policy(cloudText: false));
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+
+        // Audio may still go to the cloud engine; the dictionary prompt may not.
+        Assert.Null(registry.TranscriptionRefusal(Id));
+        Assert.Contains("turned off", registry.TranscriptionPromptRefusal(Id));
+        Assert.Null(registry.TranscriptionPromptRefusal("unknown-selection"));
+    }
+
+    [Fact]
     public async Task CloudTextPolicyRefusesLlmProcessorAndActionOfACloudPackage()
     {
         var store = await LocalityStore("configurable");

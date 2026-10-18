@@ -391,7 +391,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         {
             return LanguageHintTranscription.DecodeAsync(engine, samples,
                 () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes), language,
-                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct, dictionary?.EnabledTerms);
+                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct,
+                PromptTermsFor(RegistrySelectionId(_providerId), dictionary?.EnabledTerms));
         }, cancellation);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }

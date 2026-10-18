@@ -25,6 +25,8 @@ public sealed partial class PortablePluginRuntimeRegistry
         if (TextTransferRefusal(pluginId) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refused);
         return UseConfigurationAsync(pluginId, async (plugin, token) =>
         {
+            // The policy may have changed while this request waited for the runtime gate.
+            if (TextTransferRefusal(pluginId) is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refusedNow);
             if (plugin is not ITtsProviderPlugin { IsConfigured: true, SupportsPlaybackSelection: true } provider)
                 throw new InvalidOperationException("The selected speech provider is unavailable.");
             var playback = await provider.SpeakAsync(request, token);
