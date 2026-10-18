@@ -840,7 +840,11 @@ public sealed class BackupRestoreService : IBackupRestoreService
         }
         foreach (var entry in data.Dictionary.Entries)
         {
-            if ((entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex ? string.IsNullOrEmpty(entry.Original) : !ValidRequired(entry.Original)) || !ValidShort(entry.Original) || !ValidShort(entry.Replacement))
+            var isRegex = entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex;
+            if ((isRegex ? string.IsNullOrEmpty(entry.Original) : !ValidRequired(entry.Original))
+                || !ValidShort(entry.Original) || !ValidShort(entry.Replacement)
+                || (isRegex ? entry.Original.Length : entry.Original.Trim().Length) > 160
+                || entry.Replacement?.Length > 10_000)
                 return Loc.T("A dictionary entry contains invalid text.");
             if (!Enum.IsDefined(entry.EntryType) || !Enum.IsDefined(entry.Source))
                 return Loc.T("A dictionary entry contains an unsupported enum value.");
@@ -848,7 +852,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 return Loc.T("A dictionary entry contains an invalid acoustic similarity threshold.");
             if (entry.EntryType == DictionaryEntryType.Correction && entry.Replacement is null)
                 return Loc.T("A dictionary correction has no replacement.");
-            if (entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex)
+            if (isRegex)
             {
                 if (entry.Original.Contains('\r') || entry.Original.Contains('\n'))
                     return Loc.T("A dictionary entry contains invalid text.");

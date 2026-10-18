@@ -1,6 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Models.Backup;
+using TypeWhisper.Core.Services;
 using TypeWhisper.WinUI;
 using Xunit;
 
@@ -30,6 +33,57 @@ public sealed class FileLexiconTests : IDisposable
         var queue = new FileTranscriptionQueue();
         Assert.Null(queue.Add(Path.Combine(_root, "source.wav")));
         return queue;
+    }
+
+    [Theory]
+    [InlineData(DictionaryEntryType.Correction, true, 161, 2, false)]
+    [InlineData(DictionaryEntryType.Correction, false, 163, 2, false)]
+    [InlineData(DictionaryEntryType.Term, false, 163, 0, false)]
+    [InlineData(DictionaryEntryType.Term, true, 163, 0, false)]
+    [InlineData(DictionaryEntryType.Correction, true, 160, 10_001, false)]
+    [InlineData(DictionaryEntryType.Correction, false, 162, 10_001, false)]
+    [InlineData(DictionaryEntryType.Correction, true, 160, 10_000, true)]
+    [InlineData(DictionaryEntryType.Correction, false, 162, 10_000, true)]
+    [InlineData(DictionaryEntryType.Term, false, 162, 0, true)]
+    [InlineData(DictionaryEntryType.Term, true, 162, 0, true)]
+    public async Task BackupDictionaryLengthValidationKeepsLexiconLoadable(
+        DictionaryEntryType type, bool isRegex, int originalLength, int replacementLength, bool accepted)
+    {
+        var dictionary = new DictionaryService(DictionaryPath);
+        dictionary.AddEntry(new DictionaryEntry
+        { Id = "existing", EntryType = DictionaryEntryType.Term, Original = "existing" });
+        var backup = new BackupRestoreService(
+            new SettingsService(Path.Combine(_root, "settings.json")),
+            new WorkflowService(Path.Combine(_root, "workflows.json")), dictionary,
+            new SnippetService(SnippetPath), new HistoryService(Path.Combine(_root, "history.json")));
+        var json = JsonNode.Parse(await backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var entry = json["data"]!["dictionary"]!["entries"]![0]!;
+        // Include a surrogate pair and surrounding spaces to distinguish UTF-16 limits and trimming.
+        var original = " " + new string('a', originalLength - 4) + "\U0001F600 ";
+        var replacement = type == DictionaryEntryType.Term ? null : new string('b', replacementLength - 2) + "\U0001F600";
+        entry["entryType"] = type.ToString();
+        entry["original"] = original;
+        entry["replacement"] = replacement;
+        entry["isRegex"] = isRegex;
+        var before = File.ReadAllBytes(DictionaryPath);
+
+        Assert.Equal(accepted, backup.PreviewImport(json.ToJsonString()).IsValid);
+        Assert.Equal(accepted, (await backup.ImportAsync(json.ToJsonString())).Success);
+        if (!accepted)
+            Assert.Equal(before, File.ReadAllBytes(DictionaryPath));
+
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Contains(reloaded.Entries, item => item.Key == "existing");
+        Assert.Equal(accepted ? 2 : 1, reloaded.Entries.Count);
+        if (accepted)
+        {
+            var restored = Assert.Single(reloaded.Entries, item => item.Key != "existing");
+            var preservesPattern = type == DictionaryEntryType.Correction && isRegex;
+            Assert.Equal(preservesPattern ? original : original.Trim(), restored.Key);
+            Assert.Equal(replacement ?? "", restored.Value);
+            Assert.Equal(preservesPattern, restored.IsRegex);
+        }
     }
 
     [Theory]
