@@ -42,7 +42,7 @@ any problems; the support report contains the same section.
 | `AllowedTranscriptionProviders` | list | enforced | Stable transcription selection IDs (plugin IDs, or profile IDs such as `openai-compatible-<id>`) that may receive audio. Applies to every entry point including workflow and API overrides. The local Parakeet engine is `com.typewhisper.sherpa-onnx`. |
 | `AllowedLlmProviders` | list | enforced | Stable LLM selection IDs that may receive text, including workflows, translation and alias suggestions. |
 | `AllowedPlugins` | list | enforced | Package IDs that may be installed, loaded, enabled and executed. Packages outside the list are never loaded; their plugin page shows the reason. A package that is running when the list changes is unloaded, and it loads again once the list allows it. The upgrade from a 1.0 profile also skips packages outside the list. |
-| `AllowPluginDownloads` | `REG_DWORD` 0/1 | enforced | 0 blocks plugin installation and updates, including automatic updates and setup-time installs. Installed packages keep running. |
+| `AllowPluginDownloads` | `REG_DWORD` 0/1 | enforced | 0 blocks plugin installation and updates from the catalog, including automatic updates and setup-time installs. Installed packages keep running. |
 | `AllowModelDownloads` | `REG_DWORD` 0/1 | enforced | 0 blocks model downloads started by the app: local transcription models, registry plugin models, local text models and local speech models. Existing downloaded models keep working. |
 
 Restriction keys placed under `Recommended` are reported as problems and ignored.

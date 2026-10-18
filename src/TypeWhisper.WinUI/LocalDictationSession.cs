@@ -215,7 +215,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal const string DefaultShortcut = "Ctrl+Shift";
     internal string Shortcut { get; set; } = DefaultShortcut;
     internal bool IsRecording => !_recorderReserved && _audio.IsRecording;
-    internal bool IsReady => UsesRegistryProvider ? ActiveRegistryProvider?.Ready == true : _transcriptionPlugin.Ready;
+    // A provider the policy refuses is not ready even while its package stays loaded: file transcription, the API
+    // status and the model snapshot report it like a missing model instead of admitting work that the policy rejects.
+    internal bool IsReady => TranscriptionPolicyRefusal() is null && (UsesRegistryProvider ? ActiveRegistryProvider?.Ready == true : _transcriptionPlugin.Ready);
     internal string? LocalPluginError { get; private set; }
 
     internal async Task<string?> SetLocalPluginEnabledAsync(bool enabled)
