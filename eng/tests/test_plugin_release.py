@@ -63,6 +63,15 @@ class CatalogTests(unittest.TestCase):
         self.assertNotIn("com.typewhisper.missing", plugins)
         self.assertEqual(current["plugins"][0].get("locality"), None)
 
+    def test_metadata_refresh_alone_commits_the_feed(self):
+        with patch.object(publish, "snapshot", return_value=("old", {"plugins": [entry()]})), \
+             patch.object(publish, "api", return_value={}) as api:
+            self.assertTrue(publish.update_feed([], [entry() | {"locality": "local"}]))
+            self.assertFalse(publish.update_feed([], [entry()]))
+        api.assert_called_once()
+        committed = json.loads(publish.base64.b64decode(api.call_args.args[1]["content"]))
+        self.assertEqual("local", committed["plugins"][0]["locality"])
+
     def test_metadata_refresh_rejects_package_changes(self):
         with self.assertRaises(ValueError):
             publish.refresh_feed([entry()], [entry() | {"sha256": "different", "locality": "local"}])

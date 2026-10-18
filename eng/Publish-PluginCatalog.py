@@ -256,17 +256,18 @@ def ensure_release(stage, summary):
 
 
 def update_feed(changes, refreshed=()):
+    """Commits the merged feed; returns whether the live feed changed."""
     for attempt in range(4):
         sha, current = snapshot()
         updated = refresh_feed(merge_feed(current, changes), refreshed)
         if updated == current:
-            return
+            return False
         validate_catalog(updated)
         payload = {"message": "Publish tested portable plugin packages", "branch": "gh-pages", "sha": sha,
                    "content": base64.b64encode((json.dumps(updated, ensure_ascii=False, indent=2) + '\n').encode()).decode()}
         try:
             api(f"contents/{FEED_PATH}", payload, "PUT")
-            return
+            return True
         except RuntimeError as error:
             if attempt == 3 or not any(code in str(error) for code in ("409", "422")):
                 raise
@@ -314,6 +315,11 @@ def main():
             return
         try:
             verify_live(verification)
+            # Metadata refreshes need no package: they are committed on their own.
+            if refreshed and update_feed([], refreshed):
+                api("pages/builds", method="POST")
+                print("Selected versions are already public; refreshed catalog metadata committed.")
+                return
             print("Selected versions are already public. No remote changes made.")
             return
         except (ValueError, urllib.error.URLError):

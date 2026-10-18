@@ -115,7 +115,14 @@ public sealed class PortablePluginStore
     public string? InstalledVersion(string id) { lock (_sync) return _installed.GetValueOrDefault(id)?.Version; }
     /// <summary>Persistent, non-fatal feedback after rejecting a damaged staged update.</summary>
     public string? UpdateWarning(string id) { lock (_sync) return _installed.GetValueOrDefault(id)?.UpdateWarning; }
-    public bool PendingRestart(string id) { lock (_sync) return _installed.GetValueOrDefault(id)?.PendingDirectory is not null; }
+    /// <summary>Whether a staged update waits for a restart. One the policy refuses is not promoted by a restart, so none is advertised.</summary>
+    public bool PendingRestart(string id)
+    {
+        Receipt? receipt;
+        lock (_sync) receipt = _installed.GetValueOrDefault(id);
+        if (receipt?.PendingDirectory is not { } pending) return false;
+        return _policy is null || !(UpdateRefused(id) || RefusedForExecution(id, PackagePath(pending)));
+    }
     public string Resolve(string id)
     {
         lock (_sync) return _installed.TryGetValue(id, out var receipt) ? PackagePath(receipt.Directory)

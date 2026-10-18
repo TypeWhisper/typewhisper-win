@@ -223,6 +223,18 @@ def main() -> None:
         }
         print(f"ZIP   {name} {archive.stat().st_size:,} bytes", flush=True)
         changed.append(entries[plugin_id])
+    # Metadata refreshes cover every manifest, not only the selected projects: a release of any plugin carries
+    # the locality of all unchanged entries along, and the publisher commits refreshes without a package too.
+    if args.plugin_id:
+        covered = {m["id"] for _, m in projects}
+        for _, manifest in discover_projects(source, set()):
+            plugin_id = manifest["id"]
+            if plugin_id in covered or plugin_id in excluded or plugin_id not in entries:
+                continue
+            if entries[plugin_id]["version"] == manifest["version"] and entries[plugin_id].get("locality") != entry_locality(manifest):
+                entries[plugin_id]["locality"] = entry_locality(manifest)
+                refreshed.append(entries[plugin_id])
+                print(f"KEEP  {plugin_id} {manifest['version']} (locality refreshed)", flush=True)
     feed = {"plugins": sorted(entries.values(), key=lambda entry: (entry["name"].casefold(), entry["id"]))}
     (output / "plugins-v2.json").write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output / "summary.json").write_text(json.dumps({"source": str(source), "sourceCommit": source_commit,
