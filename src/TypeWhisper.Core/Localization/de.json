@@ -3135,5 +3135,11 @@
   "Transcribe with language": "Mit Sprache transkribieren",
   "JSON output": "JSON-Ausgabe",
   "Copy to clipboard": "In die Zwischenablage kopieren",
-  "Installed at {0}": "Installiert unter {0}"
+  "Installed at {0}": "Installiert unter {0}",
+  "Your organization provides the commercial license on this device. Activation happens automatically and the key is not shown.": "Deine Organisation stellt die kommerzielle Lizenz auf diesem Gerät bereit. Die Aktivierung erfolgt automatisch, der Schlüssel wird nicht angezeigt.",
+  "The organization license could not be activated. Check the network connection and contact your administrator if this continues.": "Die Organisationslizenz konnte nicht aktiviert werden. Prüfe die Netzwerkverbindung und kontaktiere bei anhaltenden Problemen deine Administration.",
+  "Retry activation": "Aktivierung erneut versuchen",
+  "Managed by your organization": "Von deiner Organisation verwaltet",
+  "Premium features": "Premium-Funktionen",
+  "Your organization provides the license. Features unlock once it is active.": "Deine Organisation stellt die Lizenz bereit. Die Funktionen werden freigeschaltet, sobald sie aktiv ist."
 }

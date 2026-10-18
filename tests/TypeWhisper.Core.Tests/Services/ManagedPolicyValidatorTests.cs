@@ -514,10 +514,15 @@ public class ManagedPolicyValidatorTests
             "TranscriptionProviderId", "TranscriptionModelId", "LlmProviderId", "LlmModelId",
             "AllowedTranscriptionProviders", "AllowedLlmProviders", "AllowedPlugins",
             "AllowCloudTranscription", "AllowCloudTextProcessing", "AllowPluginDownloads", "AllowModelDownloads",
-            "UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "LaunchAtLogin", "SkipOnboardingWhenReady", "SuppressOptionalPrompts"
+            "UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "LaunchAtLogin", "SkipOnboardingWhenReady", "SuppressOptionalPrompts",
+            "ManagedLicenseKey"
         ];
 
         Assert.Equal(expected, ManagedPolicyKeys.All.Select(definition => definition.Name));
+        var licenseKey = ManagedPolicyKeys.Find(ManagedPolicyKeys.ManagedLicenseKey)!;
+        Assert.True(licenseKey.Sensitive);
+        Assert.False(licenseKey.AllowsRecommendation);
+        Assert.Equal([ManagedPolicyKeys.ManagedLicenseKey], ManagedPolicyKeys.All.Where(definition => definition.Sensitive).Select(definition => definition.Name));
         Assert.All(ManagedPolicyKeys.All, definition => Assert.Same(definition, ManagedPolicyKeys.Find(definition.Name)));
         Assert.Null(ManagedPolicyKeys.Find("transcriptionproviderid"));
         Assert.Equal(

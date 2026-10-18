@@ -55,6 +55,9 @@ public sealed class LicenseService
     private readonly AppDistributionKind _distributionKind;
     private readonly string _appVersion;
 
+    /// <summary>The label Polar shows for an activation: machine name plus Windows user name, since seats are per user.</summary>
+    public static string ActivationLabel => $"{Environment.MachineName} ({Environment.UserName})";
+
     /// <summary>Describes a local credential write failure without exposing the license key.</summary>
     public string? StorageError { get; private set; }
 
@@ -116,6 +119,12 @@ public sealed class LicenseService
 
     /// <summary>Gets or sets the last commercial refresh error.</summary>
     public string? CommercialRefreshError { get; set; }
+
+    /// <summary>Whether a managed license key from machine policy governs the commercial license.</summary>
+    public bool IsLicenseManaged { get; private set; }
+
+    /// <summary>Whether the last managed activation failed. The reason stays in diagnostics; server bodies can echo the key.</summary>
+    public bool ManagedLicenseFailed { get; private set; }
 
     /// <summary>Gets or sets the supporter license status.</summary>
     public LicenseStatus SupporterStatus
@@ -638,6 +647,90 @@ public sealed class LicenseService
         await ValidateSupporterIfNeededAsync(ct);
     }
 
+    /// <summary>
+    /// Applies a managed commercial key from machine policy: a matching activation is reused, a different one is
+    /// replaced only after the new key is active, and a failed activation leaves the stored license untouched.
+    /// Null or blank ends managed mode without deactivating anything.
+    /// </summary>
+    /// <returns>True when a managed key governs the commercial license, whether or not activation succeeded.</returns>
+    public async Task<bool> ReconcileManagedLicenseAsync(string? managedKey, CancellationToken ct = default)
+    {
+        var key = managedKey?.Trim();
+        var managed = !string.IsNullOrEmpty(key);
+        var changed = IsLicenseManaged != managed || ManagedLicenseFailed;
+        IsLicenseManaged = managed;
+        ManagedLicenseFailed = false;
+        if (!managed)
+        {
+            if (changed) NotifyStateChanged();
+            return false;
+        }
+
+        ct.ThrowIfCancellationRequested();
+        if (IsCommercialActivating) return true;
+        IsCommercialActivating = true;
+        try
+        {
+            if (HasCommercialActivation && string.Equals(_commercialLicenseKey, key, StringComparison.Ordinal))
+            {
+                await ValidateCommercialIfNeededAsync(ct);
+                // Only an activation that Polar confirmed as gone is created again.
+                if (HasCommercialActivation) return true;
+            }
+
+            var previous = CaptureCommercialState();
+            await ActivateKeyAsync(key!, ExpectedLicenseEntitlementKind.Commercial, ct);
+            if (StorageError is not null)
+            {
+                // The replacement has no durable record, so the next launch would reload the stored activation and
+                // activate once more. Release the replacement again and keep the stored activation until the store
+                // is writable; the managed key stays failed and Retry applies it again.
+                var replacementId = _commercialActivationId;
+                RestoreCommercialState(previous);
+                if (replacementId is not null) await TryDeactivateCoreAsync(key!, replacementId, ct);
+                ManagedLicenseFailed = true;
+                _reportFailure?.Invoke("license.managed.persist-failed", new IOException(StorageError));
+                return true;
+            }
+            // The replaced activation is released after the new key is stored. A failure leaves it listed in Polar.
+            if (previous.Key is not null && previous.ActivationId is not null && !string.Equals(previous.Key, key, StringComparison.Ordinal))
+                await TryDeactivateCoreAsync(previous.Key, previous.ActivationId, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
+        {
+            ManagedLicenseFailed = true;
+            _reportFailure?.Invoke("license.managed.activate-failed", ex);
+            // A rejected replacement must not stop the stored license's regular checks.
+            await ValidateCommercialIfNeededAsync(ct);
+        }
+        finally
+        {
+            IsCommercialActivating = false;
+            NotifyStateChanged();
+        }
+        return true;
+    }
+
+    private readonly record struct CommercialState(
+        string? Key, string? ActivationId, DateTime? LastValidated, LicenseStatus Status, CommercialLicenseTier? Tier, bool IsLifetime);
+
+    private CommercialState CaptureCommercialState() =>
+        new(_commercialLicenseKey, _commercialActivationId, _commercialLastValidated, CommercialStatus, CommercialTier, CommercialIsLifetime);
+
+    private void RestoreCommercialState(CommercialState state)
+    {
+        _commercialLicenseKey = state.Key;
+        _commercialActivationId = state.ActivationId;
+        _commercialLastValidated = state.LastValidated;
+        CommercialStatus = state.Status;
+        CommercialTier = state.Tier;
+        CommercialIsLifetime = state.IsLifetime;
+    }
+
     private async Task<ActivatedLicenseEntitlement> ActivateKeyAsync(
         string key,
         ExpectedLicenseEntitlementKind expectedEntitlement,
@@ -890,7 +983,8 @@ public sealed class LicenseService
         {
             key,
             organization_id = OrganizationId,
-            label = Environment.MachineName,
+            // Each Windows user holds their own activation; the label tells the seats of one device apart.
+            label = ActivationLabel,
             meta = new
             {
                 platform = "windows",

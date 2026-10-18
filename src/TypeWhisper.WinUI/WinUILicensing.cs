@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.Presentation;
 using TypeWhisper.WinUI.Platform;
 
@@ -11,14 +12,49 @@ internal static class WinUILicensing
     internal static LicenseService Service { get; } = new(Http, Path.GetDirectoryName(WinUIProfile.DataPath("licenses.dat"))!, reportFailure: AppDiagnostics.Write);
     internal static PremiumAccess Current => new(Commercial: Service.HasCommercialLicense, Supporter: Service.HasSupporterLicense,
         SignedIn: WinUIPremiumAccount.SignedIn, PremiumAccount: WinUIPremiumAccount.Premium);
+    // A managed key from machine policy hides manual commercial controls and purchase links.
+    internal static bool Managed => Service.IsLicenseManaged;
     internal static event Action? Changed;
     internal static string? Notice { get; private set; }
     internal static bool Busy { get; private set; }
     private static bool _closing;
+    private static string? _appliedManagedKey;
+    private static bool _policyChangeQueued;
     private static Task _operation = Task.CompletedTask;
     static WinUILicensing() => Service.StatusChanged += () => Changed?.Invoke();
 
-    internal static Task ValidateAsync() => RunAsync(async () => { await Service.ValidateAllIfNeededAsync(); });
+    // The managed key is applied before the regular checks so a replaced key is active before validation.
+    internal static Task ValidateAsync() => RunAsync(async () =>
+    {
+        await ReconcileManagedAsync();
+        await Service.ValidateAllIfNeededAsync();
+    });
+    // Retry from the License page reports the outcome where the automatic pass stays silent.
+    internal static Task RetryManagedAsync() => RunAsync(async () =>
+    {
+        await ReconcileManagedAsync();
+        await Service.ValidateAllIfNeededAsync();
+        Notice = Service.ManagedLicenseFailed ? null : Loc.T("License status updated.");
+    });
+    // Called after a policy change; only a different managed key starts a new pass. A change that arrives while
+    // another license operation runs is applied once that operation completes, so no key is skipped.
+    internal static void ApplyPolicyChange()
+    {
+        if (ManagedKeyBlocked || string.Equals(ManagedKey(), _appliedManagedKey, StringComparison.Ordinal)) return;
+        if (Busy) { _policyChangeQueued = true; return; }
+        _ = ValidateAsync();
+    }
+    private static string? ManagedKey() => WinUIManagedPolicy.Current.Enforced(ManagedPolicyKeys.ManagedLicenseKey)?.Text;
+    // An unreadable policy or an invalid key value is not a removal: the current managed state stays as it is until a
+    // readable snapshot arrives, so manual controls never appear because the policy could not be read.
+    private static bool ManagedKeyBlocked => WinUIManagedPolicy.Current.IsBlocked(ManagedPolicyKeys.ManagedLicenseKey);
+    private static async Task ReconcileManagedAsync()
+    {
+        if (ManagedKeyBlocked) return;
+        var key = ManagedKey();
+        _appliedManagedKey = key;
+        await Service.ReconcileManagedLicenseAsync(key);
+    }
     internal static Task ActivateAsync(string key) => RunAsync(async () =>
     {
         var entitlement = await Service.ActivateAnyLicenseKeyAsync(key);
@@ -51,6 +87,11 @@ internal static class WinUILicensing
         try { await action(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Notice = Loc.T("The license operation could not be completed. Please try again."); }
         finally { Busy = false; Changed?.Invoke(); completion.TrySetResult(); }
+        if (_policyChangeQueued && !_closing)
+        {
+            _policyChangeQueued = false;
+            ApplyPolicyChange();
+        }
     }
     internal static Task ShutdownAsync() { _closing = true; return _operation; }
 }

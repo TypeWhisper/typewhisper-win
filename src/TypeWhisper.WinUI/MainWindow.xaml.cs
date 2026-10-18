@@ -94,6 +94,9 @@ public sealed partial class MainWindow : Window
                 cancelError = Loc.T("Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.");
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingShortcut?.Value ?? "";
+            // A managed license key that appears or changes while running is applied without a restart. Registered
+            // before the fallible startup below so a failed dictation start does not leave policy changes unhandled.
+            WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(() => { if (!_closing) WinUILicensing.ApplyPolicyChange(); });
             // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
             InitializeEscapeCancel();
             await _dictation.InitializeAsync();
@@ -120,7 +123,13 @@ public sealed partial class MainWindow : Window
             _ = UpdatePluginsAutomaticallyAsync();
             _ = CheckApplicationUpdatesAutomaticallyAsync();
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (_closing) return;
+            ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message)));
+            // Settings stay usable after a failed start, so the managed license key still has to be applied.
+            _ = WinUILicensing.ValidateAsync();
+        }
     }
 
     private async Task StartCloudSyncAfterAccessChecksAsync(Task accessChecks)
