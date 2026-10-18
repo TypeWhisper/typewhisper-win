@@ -108,7 +108,8 @@ internal sealed class Lexicon
         _entries.AddRange(_dictionary.Entries.Select(e => new LexiconEntry(UiId(e.Id),
             e.EntryType == DictionaryEntryType.Term ? LexiconKind.Word : LexiconKind.Correction,
             e.Original, e.Replacement ?? "", e.Id.StartsWith("pack:", StringComparison.Ordinal) ? Loc.T("Term pack") : "",
-            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity, e.UsageCount, e.IsRegex)));
+            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity, e.UsageCount,
+            e.EntryType == DictionaryEntryType.Correction && e.IsRegex)));
     }
 
     internal bool PackEnabled(string id) => _dictionary?.Entries.Any(e => e.Id.StartsWith($"pack:{id}:", StringComparison.Ordinal)) == true;
@@ -216,6 +217,7 @@ internal sealed class Lexicon
         if (draft.FromPack) return Loc.T("Manage this term through its term pack.");
         if (draft.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
             return Loc.T("Use a CTC similarity between 40% and 95%.");
+        draft = draft with { IsRegex = draft.Kind == LexiconKind.Correction && draft.IsRegex };
         var key = draft.IsRegex ? draft.Key : draft.Key.Trim();
         if (key.Length == 0) return draft.Kind == LexiconKind.Snippet ? Loc.T("Enter a trigger phrase.") : Loc.T("Enter a word or phrase.");
         if (key.Length > 160 || key.Contains('\n') || key.Contains('\r')) return Loc.T("Use a single line of up to 160 characters.");
@@ -229,7 +231,7 @@ internal sealed class Lexicon
         if (draft.Tags.Length > 300) return Loc.T("Keep tags below 301 characters.");
         if (draft.Kind == LexiconKind.Correction && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return Loc.T("The correction must differ from the original phrase.");
         if ((draft.Kind != LexiconKind.Snippet || _snippets is null) && _entries.Any(entry => entry.Id != draft.Id && entry.Kind == draft.Kind &&
-            entry.IsRegex == draft.IsRegex && entry.Key.Equals(key,
+            (draft.Kind != LexiconKind.Correction || entry.IsRegex == draft.IsRegex) && entry.Key.Equals(key,
                 draft.IsRegex || entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             return Loc.T("This word or trigger already exists in this section.");
         var normalized = draft with { Key = key, Value = draft.Kind == LexiconKind.Word ? "" : draft.Value, Tags = draft.Tags.Trim() };

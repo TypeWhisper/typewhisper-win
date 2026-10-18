@@ -523,11 +523,12 @@ public static class CloudFolderSyncEngine
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
         void Remember(CloudFolderSyncRecord record)
         {
-            // Folded legacy tombstones cannot identify which regex was deleted.
-            if (record.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true }) return;
             var legacy = record.Dictionary is { } d ? $"dictionary:{UserDataSyncIdentity.JsonName(d.EntryType)}:{UserDataSyncIdentity.NormalizedKey(d.Original)}"
                 : record.Snippet is { } n ? "snippet:" + UserDataSyncIdentity.NormalizedKey(n.Trigger) : record.ItemId;
-            aliases[legacy] = record.ItemId;
+            // Folded legacy tombstones cannot identify which regex was deleted.
+            aliases[legacy] = record.Dictionary is { } entry
+                ? UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)
+                : record.ItemId;
         }
         foreach (var record in local.Values) Remember(record);
         CloudFolderSyncOperation PreserveLegacyRegexMode(CloudFolderSyncOperation operation)
@@ -546,6 +547,16 @@ public static class CloudFolderSyncEngine
         }
         var valid = operations.Select(PreserveLegacyRegexMode).Where(IsValidOperation).ToArray();
         observedOperationIds = valid.Select(operation => operation.OperationId).ToArray();
+        // Superseded upserts still identify the target of an unencoded tombstone.
+        // Keep every v1 alias in the folded namespace, including legacy regexes.
+        foreach (var operation in valid.Where(operation => operation.SchemaVersion == 1 && operation.Kind == CloudFolderSyncOperationKind.Upsert))
+        {
+            var id = operation.Dictionary is { } entry
+                ? UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)
+                : UserDataSyncIdentity.SnippetItemId(operation.Snippet!.Trigger);
+            aliases[operation.ItemId] = id;
+            Remember(new(operation.Collection, id, operation.UpdatedAt, "", operation.Dictionary, operation.Snippet));
+        }
         var legacyWinners = LegacyWinningOperations(valid);
         var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Kind != CloudFolderSyncOperationKind.Upsert ||
             operation.Dictionary is not { EntryType: UserDataSyncDictionaryEntryType.Correction } entry ||
@@ -556,13 +567,21 @@ public static class CloudFolderSyncEngine
             var id = operation.Collection == UserDataSyncCollection.Dictionary
                 ? UserDataSyncIdentity.DictionaryItemId(operation.Dictionary!.EntryType, operation.Dictionary.Original, operation.Dictionary.IsRegex)
                 : UserDataSyncIdentity.SnippetItemId(operation.Snippet!.Trigger);
-            if (operation.Dictionary?.IsRegex != true) aliases[operation.ItemId] = id;
-            Remember(new(operation.Collection, id, operation.UpdatedAt, "", operation.Dictionary, operation.Snippet));
             return operation with { ItemId = id };
         }).ToArray();
-        return canonical.Select(operation => operation.Kind == CloudFolderSyncOperationKind.Delete &&
-            !local.ContainsKey(operation.ItemId) && aliases.TryGetValue(operation.ItemId, out var id)
-                ? operation with { ItemId = id } : operation).ToArray();
+        return canonical.Select(operation => operation.SchemaVersion == 1 && operation.Kind == CloudFolderSyncOperationKind.Delete &&
+            (operation.ItemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) || !local.ContainsKey(operation.ItemId))
+                ? operation with { ItemId = LegacyItemId(operation.ItemId, aliases) } : operation).ToArray();
+    }
+
+    private static string LegacyItemId(string itemId, IReadOnlyDictionary<string, string> aliases)
+    {
+        if (aliases.TryGetValue(itemId, out var canonical)) return canonical;
+        // A v1 Base64URL suffix cannot contain a colon. In schema 1 this tag is
+        // part of a raw literal, never an exact-pattern v2 identity.
+        return itemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal)
+            ? UserDataSyncIdentity.DictionaryItemId(UserDataSyncDictionaryEntryType.Correction, itemId["dictionary:correction:".Length..])
+            : itemId;
     }
 
     private static IReadOnlyDictionary<string, CloudFolderSyncOperation> LegacySynchronizedCorrections(
@@ -625,7 +644,7 @@ public static class CloudFolderSyncEngine
         return WinningOperations(valid
             .Select(operation => operation.Dictionary is { } entry
                 ? operation with { ItemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) }
-                : operation with { ItemId = legacyAliases.GetValueOrDefault(operation.ItemId, operation.ItemId) }));
+                : operation with { ItemId = LegacyItemId(operation.ItemId, legacyAliases) }));
     }
 
     private static void Merge(

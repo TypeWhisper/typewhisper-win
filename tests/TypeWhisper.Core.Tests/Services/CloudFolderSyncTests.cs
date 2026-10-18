@@ -1131,6 +1131,74 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SchemaOneRawRegexPrefixTombstoneNeverDeletesSchemaTwoRegex(bool hasLocalEntries, bool hasLegacyUpsert)
+    {
+        var regex = DictionaryEntry(@"\d+", Date(20), UserDataSyncDictionaryEntryType.Correction, "regex") with { IsRegex = true };
+        var regexId = UserDataSyncIdentity.DictionaryItemId(regex.EntryType, regex.Original, true);
+        var literal = DictionaryEntry(regexId["dictionary:correction:".Length..], Date(10), UserDataSyncDictionaryEntryType.Correction, "literal");
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");
+        Directory.CreateDirectory(folder);
+        if (hasLegacyUpsert)
+            File.WriteAllText(Path.Combine(folder, "literal.json"), CloudFolderSyncJson.Serialize(
+                CloudFolderSyncOperation.UpsertDictionary(literal, regexId, "legacy", "raw-literal")));
+        File.WriteAllText(Path.Combine(folder, "delete-literal.json"), CloudFolderSyncJson.Serialize(
+            CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, regexId, "legacy", Date(30)) with { SchemaVersion = 1 }));
+        File.WriteAllText(Path.Combine(folder, "regex.json"), CloudFolderSyncJson.Serialize(
+            CloudFolderSyncOperation.UpsertDictionary(regex, regexId, "modern")));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: hasLocalEntries ? [literal, regex] : []);
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(35));
+        Assert.Equal(regex, Assert.Single(store.DictionaryEntries));
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40))).OperationsWritten);
+        var newcomer = new InMemoryUserDataSyncStore();
+        var newcomerState = new CloudFolderSyncState { DeviceId = "newcomer" };
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, newcomer, newcomerState, entitlement, Date(45));
+        Assert.Equal(regex, Assert.Single(newcomer.DictionaryEntries));
+
+        File.WriteAllText(Path.Combine(folder, "delete-regex.json"), CloudFolderSyncJson.Serialize(
+            CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, regexId, "modern", Date(50))));
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(60));
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, newcomer, newcomerState, entitlement, Date(65));
+        Assert.Empty(store.DictionaryEntries);
+        Assert.Empty(newcomer.DictionaryEntries);
+        var afterDeletion = new InMemoryUserDataSyncStore();
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, afterDeletion, new() { DeviceId = "after-deletion" }, entitlement, Date(70));
+        Assert.Empty(afterDeletion.DictionaryEntries);
+    }
+
+    [Theory]
+    [InlineData(UserDataSyncDictionaryEntryType.Correction, false)]
+    [InlineData(UserDataSyncDictionaryEntryType.Correction, true)]
+    [InlineData(UserDataSyncDictionaryEntryType.Term, false)]
+    [InlineData(UserDataSyncDictionaryEntryType.Term, true)]
+    public async Task SupersededUppercaseLegacyUpsertsStillSupplyDeletionAliases(UserDataSyncDictionaryEntryType type, bool hasLocalEntry)
+    {
+        var entry = DictionaryEntry("TEH", Date(10), type, type == UserDataSyncDictionaryEntryType.Correction ? "the" : null);
+        var rawId = $"dictionary:{(type == UserDataSyncDictionaryEntryType.Correction ? "correction" : "term")}:TEH";
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");
+        Directory.CreateDirectory(folder);
+        var upsert = CloudFolderSyncOperation.UpsertDictionary(entry, rawId, "legacy", "uppercase-upsert");
+        File.WriteAllText(Path.Combine(folder, "upsert.json"), CloudFolderSyncJson.Serialize(upsert));
+        var deletePath = Path.Combine(folder, "delete.json");
+        File.WriteAllText(deletePath, CloudFolderSyncJson.Serialize(
+            CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, rawId, "legacy", Date(20))));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: hasLocalEntry ? [entry] : []);
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        Assert.Empty(store.DictionaryEntries);
+        Assert.Contains(upsert.OperationId, state.AppliedOperationIds);
+        File.Delete(deletePath);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40));
+        Assert.Empty(store.DictionaryEntries);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task LegacyTombstonePreventsResurrectionButDoesNotDeleteV2Rule(bool unencodedLegacyId)

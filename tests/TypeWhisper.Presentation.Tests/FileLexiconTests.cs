@@ -33,6 +33,42 @@ public sealed class FileLexiconTests : IDisposable
     }
 
     [Theory]
+    [InlineData("word")]
+    [InlineData("[")]
+    public void EditingLegacyFlaggedTermsTrimsAndKeepsTheCatalogLoadable(string original)
+    {
+        File.WriteAllText(DictionaryPath, JsonSerializer.Serialize(new[] {
+            new DictionaryEntry { Id = "legacy-term", EntryType = DictionaryEntryType.Term, Original = "old", IsRegex = true }
+        }));
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.LastError);
+        var draft = Assert.Single(store.Entries);
+        Assert.Null(store.Save(draft with { Key = " " + original + " ", IsRegex = true }));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        var saved = Assert.Single(reloaded.Entries);
+        Assert.Equal(original, saved.Key);
+        Assert.False(saved.IsRegex);
+        var persisted = Assert.Single(JsonSerializer.Deserialize<DictionaryEntry[]>(File.ReadAllText(DictionaryPath))!);
+        Assert.Equal("legacy-term", persisted.Id);
+        Assert.False(persisted.IsRegex);
+        Assert.NotNull(reloaded.Save(new(Guid.NewGuid(), LexiconKind.Word, " " + original.ToUpperInvariant() + " ", IsRegex: true)));
+        var bytes = File.ReadAllBytes(DictionaryPath);
+        Assert.NotNull(reloaded.Save(saved with { Key = " ", IsRegex = true }));
+        Assert.Equal(bytes, File.ReadAllBytes(DictionaryPath));
+        Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries);
+    }
+
+    [Fact]
+    public void LegacyTermFlagIsHiddenFromTheEditorDraft()
+    {
+        File.WriteAllText(DictionaryPath, JsonSerializer.Serialize(new[] {
+            new DictionaryEntry { Id = "legacy-term", EntryType = DictionaryEntryType.Term, Original = "word", IsRegex = true }
+        }));
+        Assert.False(Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries).IsRegex);
+    }
+
+    [Theory]
     [InlineData(false, "the")]
     [InlineData(true, "the")]
     [InlineData(false, "another")]
