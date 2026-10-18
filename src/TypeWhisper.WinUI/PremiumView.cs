@@ -49,10 +49,13 @@ internal sealed partial class PremiumView : UserControl
             development.Children.Add(_scenario);
             _accessDetails.Children.Add(Card(development));
         }
-        ViewSubscriptions.Attach(this, () => { Access.Changed += Refresh; CorrectionLearning.Changed += RefreshLearning; Refresh(); },
-            () => { Access.Changed -= Refresh; CorrectionLearning.Changed -= RefreshLearning; });
+        ViewSubscriptions.Attach(this, () => { Access.Changed += Refresh; CorrectionLearning.Changed += RefreshLearning; WinUIManagedPolicy.Changed += RefreshOnPolicy; Refresh(); },
+            () => { Access.Changed -= Refresh; CorrectionLearning.Changed -= RefreshLearning; WinUIManagedPolicy.Changed -= RefreshOnPolicy; });
         Refresh();
     }
+
+    // SuppressOptionalPrompts and the managed license state are read while rendering; a policy change re-renders.
+    private void RefreshOnPolicy(TypeWhisper.Core.Models.ManagedPolicySnapshot _) => DispatcherQueue.TryEnqueue(Refresh);
 
     private void Refresh()
     {

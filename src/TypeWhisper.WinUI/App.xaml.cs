@@ -229,8 +229,24 @@ public partial class App : Application
             UpdateTrayActions();
         };
         var initialization = _window.InitializeDictationAsync();
-        // Do not hold onboarding behind plugin discovery, downloads or account requests.
-        if (presentation == TypeWhisper.Presentation.StartupPresentation.Setup) _window.OpenSetup(returnToTray: true);
+        // Do not hold onboarding behind plugin discovery, downloads or account requests. Only a policy that
+        // skips setup when the app is ready waits for the initialized session, because readiness is judged there.
+        var setupPending = presentation == TypeWhisper.Presentation.StartupPresentation.Setup;
+        var skipWhenReady = setupPending && TypeWhisper.Presentation.OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current);
+        if (setupPending && !skipWhenReady) _window.OpenSetup(returnToTray: true);
+        if (skipWhenReady)
+        {
+            // The bounded wait covers initialization itself: a slow or hanging plugin or model load must not leave
+            // an incomplete profile without its setup window.
+            var budget = TimeSpan.FromSeconds(20);
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var initialized = await Task.WhenAny(initialization, Task.Delay(budget)) == initialization;
+            var remaining = budget - started.Elapsed;
+            // The policy may have gone away during the wait; then setup opens instead of being marked as skipped.
+            if (!initialized || remaining <= TimeSpan.Zero || !await _window.IsSetupReadyAsync(remaining)
+                || !TypeWhisper.Presentation.OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current)) _window.OpenSetup(returnToTray: true);
+            else _window.SetupSkippedByPolicy = true;
+        }
         await initialization;
         UpdateTrayActions();
         _window.ShowMigrationNotice();
@@ -488,7 +504,7 @@ public partial class App : Application
 
     private async void ExitFromTray() => await ExitOrRestartAsync(restart: false);
 
-    private async Task<string?> ExitOrRestartAsync(bool restart, Action? applyUpdate = null)
+    private async Task<string?> ExitOrRestartAsync(bool restart, Func<bool>? applyUpdate = null)
     {
         if (_exiting) return Loc.T("The app is already shutting down.");
         _exiting = true;
@@ -505,9 +521,14 @@ public partial class App : Application
                 AppDiagnostics.Flush(TimeSpan.FromSeconds(2));
                 if (applyUpdate is not null)
                 {
-                    applyUpdate();
-                    ShowProfileFailure(Loc.T("The update restart did not complete. Close and reopen TypeWhisper."), null);
-                    return Loc.T("The update restart did not complete.");
+                    if (applyUpdate())
+                    {
+                        ShowProfileFailure(Loc.T("The update restart did not complete. Close and reopen TypeWhisper."), null);
+                        return Loc.T("The update restart did not complete.");
+                    }
+                    // Policy declined the installation at the apply point. Work is already drained, so the host
+                    // restarts itself instead of staying stopped.
+                    AppDiagnostics.Write("app.update.apply-declined");
                 }
                 // Restart the same host only after all profile writers and native owners have drained.
                 // On success this API terminates the process; returning means restart failed.

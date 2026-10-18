@@ -4,7 +4,8 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class MainWindow
 {
-    internal Func<Action, Task<string?>>? InstallApplicationUpdateAsync { get; set; }
+    /// <summary>Drains work, then runs the apply action; the action returns false when policy declined the installation.</summary>
+    internal Func<Func<bool>, Task<string?>>? InstallApplicationUpdateAsync { get; set; }
     private AppUpdateController? _applicationUpdates;
     private AppUpdateController ApplicationUpdates => _applicationUpdates ??= new(
         new AppUpdatePreferences(WinUIProfile.DataPath("updates.json"), WindowsApplicationUpdates.CurrentVersion),
@@ -13,7 +14,7 @@ public sealed partial class MainWindow
             if (_closing || _profileRestoreClosing || !_dictation.CanChangeProvider || _dictation.Packages.Updates.Busy || _dictation.Models.Busy)
                 return Task.FromResult<string?>(Loc.T("Finish recording, processing and plugin updates before restarting TypeWhisper."));
             return InstallApplicationUpdateAsync?.Invoke(action) ?? Task.FromResult<string?>(Loc.T("Restart is currently unavailable."));
-        });
+        }, () => ManagedUpdatePolicy.From(WinUIManagedPolicy.Current));
     private AppUpdateReminder? _updateReminder;
     private AppUpdateReminder UpdateReminder
     {
@@ -82,8 +83,10 @@ public sealed partial class MainWindow
     private void AnnounceApplicationUpdate(AppUpdateOffer offer)
     {
         if (!UpdateReminder.ShouldNotify(offer.Version, DateTimeOffset.Now)) return;
+        // Under a check-only policy the notice informs; installation stays with the organization's deployment.
         ShowTrayNotification?.Invoke(Loc.T("TypeWhisper {0} is available", offer.Version),
-            Loc.T("Click to install it now, later or skip this version."), () => DispatcherQueue.TryEnqueue(() => ShowApplicationUpdateNotice(offer)));
+            ApplicationUpdates.CanInstall ? Loc.T("Click to install it now, later or skip this version.") : Loc.T("Installation is managed by your organization."),
+            () => DispatcherQueue.TryEnqueue(() => ShowApplicationUpdateNotice(offer)));
     }
 
 #if DEBUG
@@ -94,10 +97,21 @@ public sealed partial class MainWindow
     private void ShowApplicationUpdateNotice(AppUpdateOffer offer)
     {
         if (_closing || _profileRestoreClosing) return;
-        ShowNotice(new AppNotice(Loc.T("Version {0} is available. You have version {1}.", offer.Version, WindowsApplicationUpdates.CurrentVersion),
-            Loc.T("Update available"), IsError: false, Duration: TimeSpan.FromMinutes(1), Actions: [
+        // A policy change since the notification may have dropped the offer; only the offer the controller still
+        // holds can be installed from here, otherwise Settings runs a fresh check.
+        var current = ApplicationUpdates.Offer?.Version == offer.Version;
+        var installable = ApplicationUpdates.CanInstall && current;
+        var message = installable
+            ? Loc.T("Version {0} is available. You have version {1}.", offer.Version, WindowsApplicationUpdates.CurrentVersion)
+            : !current && ApplicationUpdates.CanCheck ? Loc.T("Version {0} is available. Check for updates in Settings to install it.", offer.Version)
+            : Loc.T("Version {0} is available. Installation is managed by your organization.", offer.Version);
+        ShowNotice(new AppNotice(message, Loc.T("Update available"), IsError: false, Duration: TimeSpan.FromMinutes(1), Actions: installable
+            ? [
                 new(Loc.T("Download and restart"), () => InstallApplicationUpdate(offer), Primary: true),
                 new(Loc.T("Later"), () => AnswerUpdateNotice(reminder => reminder.Later(DateTimeOffset.Now))),
+                new(Loc.T("Skip this version"), () => AnswerUpdateNotice(reminder => reminder.Skip(offer.Version)))]
+            : [
+                new(Loc.T("Later"), () => AnswerUpdateNotice(reminder => reminder.Later(DateTimeOffset.Now)), Primary: true),
                 new(Loc.T("Skip this version"), () => AnswerUpdateNotice(reminder => reminder.Skip(offer.Version)))]));
     }
 
