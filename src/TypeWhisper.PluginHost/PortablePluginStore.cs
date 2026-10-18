@@ -124,7 +124,12 @@ public sealed class PortablePluginStore
                         // the bundle; a cancelled bundle is left out and its copy removed.
                         using var policyLinked = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         lock (_sync) { _activeOperation = policyLinked; _activeRefusal = () => ExecutionRefusal(manifest.Id, target); }
-                        try { await PortablePluginPackage.RunInstallationHookAsync(target, _services(manifest.Id), _host, null, uninstall: false, policyLinked.Token); }
+                        try
+                        {
+                            // Judged again once the operation is registered: a policy pass during the copy could not cancel it.
+                            if (ExecutionRefusal(manifest.Id, target) is not null) { TryDelete(target); continue; }
+                            await PortablePluginPackage.RunInstallationHookAsync(target, _services(manifest.Id), _host, null, uninstall: false, policyLinked.Token);
+                        }
                         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { TryDelete(target); continue; }
                         finally { lock (_sync) { _activeOperation = null; _activeRefusal = null; } }
                     }

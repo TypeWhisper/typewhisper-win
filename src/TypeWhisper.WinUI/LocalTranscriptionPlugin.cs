@@ -243,6 +243,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 // A package the policy refuses by now is released instead of rolled back: the rollback would run its code.
                 if (PackageRefusal?.Invoke() is { } refusedDuringSwitch)
                 {
+                    // The host setting is not package code: the failed device is not kept for the next activation.
+                    _host.SetSetting(AccelerationSetting, previous.ToString());
                     await ReleaseAsync();
                     _policyRefused = true; Error = refusedDuringSwitch; Feedback = null;
                     throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedDuringSwitch);
