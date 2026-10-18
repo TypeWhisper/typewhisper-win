@@ -17,6 +17,7 @@ public sealed partial class MainWindow
     private void OpenHistory()
     {
         if (_closing || _profileRestoreClosing || _historyService is null) return;
+        SuppressStartupWhatsNew();
         if (_historyWindow is null)
         {
             var actions = new HistoryActions(_historyService);

@@ -49,7 +49,7 @@ public sealed partial class MainWindow
     private ActionShortcut? InitializeActionShortcut(string key, Action callback, int idBase, string fileName, string displayName, string name)
     {
         if (_closing || _profileRestoreClosing) return null;
-        var shortcut = new ActionShortcut(this, key, callback, idBase, fileName, displayName, name, ShortcutConflict);
+        var shortcut = new ActionShortcut(this, key, () => { SuppressStartupWhatsNew(); callback(); }, idBase, fileName, displayName, name, ShortcutConflict);
         var error = shortcut.Initialize();
         _settingsValues[key] = shortcut.Value;
         if (error is not null) ShowActivationNotice(error);

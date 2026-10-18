@@ -3135,5 +3135,18 @@
   "Transcribe with language": "指定语言转录",
   "JSON output": "JSON 输出",
   "Copy to clipboard": "复制到剪贴板",
-  "Installed at {0}": "安装位置：{0}"
+  "Installed at {0}": "安装位置：{0}",
+  "What's new in TypeWhisper": "TypeWhisper 新功能",
+  "A quick look at the latest improvements. Your settings stay as they are.": "快速了解最新改进。你的设置保持不变。",
+  "Find your spoken language faster": "更快找到你的口语语言",
+  "Search long selection lists by typing a language name. Open Dictation in Settings to try it.": "输入语言名称即可搜索较长的选项列表。打开设置中的“听写”试一试。",
+  "An app icon for your overlay": "将应用图标用作悬浮窗",
+  "Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.": "在“外观”设置中，选择 TypeWhisper 应用图标作为紧凑的悬浮窗小组件。",
+  "Browser dictation within reach": "轻松找到浏览器听写功能",
+  "Find the browser extension in Integrations, alongside Raycast and the command-line tool.": "在“集成”中查找浏览器扩展，与 Raycast 和命令行工具集中在一起。",
+  "Skip": "跳过",
+  "Got it": "知道了",
+  "Review the latest feature highlights.": "再次查看最新功能亮点。",
+  "Finish recording or processing before viewing what's new.": "请先结束录音或处理，再查看新功能。",
+  "What's new could not be opened. Try again.": "无法打开新功能介绍。请重试。"
 }

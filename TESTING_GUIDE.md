@@ -109,6 +109,44 @@ Automated output tests cover disabled insertion, processing/action failure,
 History/audio save warnings, cancellation and changed output preferences.
 A native first-dictation test remains necessary for target capture/paste behavior.
 
+## What's new after an update
+
+The optional news window uses `whats-new.json` and a content version independent
+of the application version. Only an ordinary foreground launch with completed
+setup can show it. Autostart, `--minimized`, explicit routes, files, protocol
+callbacks and redirected activations take priority. Dictation attempts (including
+while a model loads), recorder capture, file processing and workflows discard
+the startup opportunity. Finishing that activity does not show news later.
+Closing, **Skip**, **Got it** and Escape all leave displayed content marked as seen.
+Fresh setup baselines the current version without showing another introduction.
+
+**Account & about → What's new in TypeWhisper** reopens the current highlights
+on demand and is included in settings search. Manual viewing marks the content
+as seen without rearming the startup opportunity. Active recording or processing
+shows an inline explanation instead; viewing can be retried after that work ends.
+The window has no native title bar. Its upper logo area is draggable, and the
+custom close button, Escape and footer actions dismiss it. Screenshots and the
+tested scenarios are in [UI evidence](docs/screenshots/whats-new/README.md).
+
+For native acceptance, create a named Debug test profile with
+`setup.json` containing `{"Step":4,"Completed":true}`. Set
+`TYPEWHISPER_WINUI_WHATS_NEW_FIXTURE=1` and run the development helper with
+`--run --profile <name> <checkout-path>`. This Debug-only fixture treats the
+helper's initial `--settings` as an ordinary launch; it does not bypass setup,
+the saved news version or activity guards. Clear the variable after the launch.
+
+Check the content in light/dark themes, keyboard dismissal and that the previously
+focused app keeps focus. Restart the same profile and verify there is no repeat.
+With a fresh test profile, press the dictation shortcut while news is visible and
+verify it disappears before capture starts. A real capture check needs a configured
+provider and microphone. Also exercise a targeted launch without the fixture;
+it must preserve unseen news for a later ordinary start.
+
+When changing the curated highlights in `WhatsNewWindow`, increment
+`ContentVersion` and update all interface translations. Versions skipped by an
+upgrade show only the latest highlights. `WhatsNewTests` covers persistence,
+setup, launch priority, activity races, malformed storage and write failures.
+
 ## Tray-menu layout regression check
 
 The Debug-only native probe uses the real tray menu in a named test profile,

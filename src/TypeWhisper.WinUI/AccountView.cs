@@ -7,6 +7,8 @@ namespace TypeWhisper.WinUI;
 // About information reflects this build; Premium owns access state.
 internal sealed class AccountView : UserControl
 {
+    internal const string WhatsNewSettingKey = "WhatsNew";
+    internal Func<string?>? OpenWhatsNew { get; set; }
     // LiveApplicationUpdateSettings fills this with the update cards.
     internal StackPanel UpdatePanel { get; } = new() { Spacing = 20 };
     internal AccountView(Dictionary<string, string> values, List<ChoicePicker> pickers)
@@ -18,6 +20,22 @@ internal sealed class AccountView : UserControl
         identity.Children.Add(Copy("TypeWhisper", 26, center: true));
         identity.Children.Add(Copy("Windows", 13, true, true));
         identity.Children.Add(Copy(Loc.T("Speak naturally. Keep your flow."), 14, true, true));
+        var news = new HandCursorButton
+        {
+            Tag = WhatsNewSettingKey, Content = Loc.T("What's new in TypeWhisper"),
+            Style = (Style)Application.Current.Resources["SecondaryButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0)
+        };
+        var newsStatus = Copy("", 12, true, true);
+        newsStatus.Visibility = Visibility.Collapsed;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(newsStatus,
+            Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        news.Click += (_, _) =>
+        {
+            newsStatus.Text = OpenWhatsNew?.Invoke() ?? "";
+            newsStatus.Visibility = newsStatus.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        };
+        identity.Children.Add(news); identity.Children.Add(newsStatus);
         body.Children.Add(identity);
 
         var licenses = new SettingsCard();

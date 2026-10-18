@@ -3135,5 +3135,18 @@
   "Transcribe with language": "言語を指定して文字起こし",
   "JSON output": "JSON 出力",
   "Copy to clipboard": "クリップボードにコピー",
-  "Installed at {0}": "インストール先: {0}"
+  "Installed at {0}": "インストール先: {0}",
+  "What's new in TypeWhisper": "TypeWhisperの新機能",
+  "A quick look at the latest improvements. Your settings stay as they are.": "最近の改善点を簡単にご紹介します。設定はそのまま保持されます。",
+  "Find your spoken language faster": "音声の言語をすばやく検索",
+  "Search long selection lists by typing a language name. Open Dictation in Settings to try it.": "言語名を入力して長い選択リストを検索できます。設定の「ディクテーション」でお試しください。",
+  "An app icon for your overlay": "オーバーレイにアプリアイコンを表示",
+  "Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.": "「外観」設定で、TypeWhisperのアプリアイコンをコンパクトなオーバーレイウィジェットとして選択できます。",
+  "Browser dictation within reach": "ブラウザー音声入力を見つけやすく",
+  "Find the browser extension in Integrations, alongside Raycast and the command-line tool.": "「統合」でRaycastやコマンドラインツールと一緒にブラウザー拡張機能を見つけられます。",
+  "Skip": "スキップ",
+  "Got it": "確認しました",
+  "Review the latest feature highlights.": "主な新機能をもう一度確認します。",
+  "Finish recording or processing before viewing what's new.": "新機能を表示する前に、録音または処理を終了してください。",
+  "What's new could not be opened. Try again.": "新機能を表示できませんでした。もう一度お試しください。"
 }

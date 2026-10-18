@@ -654,6 +654,7 @@ public sealed partial class SettingsWindow : Window
         new("Advanced", DiagnosticsSettingsView.SettingKey, Loc.T("Diagnostics"), Loc.T("Export a support report or manage the local diagnostic log."), "settings", "error log crash troubleshooting support export retention json system microphone plugins"),
         new("Premium", "", Loc.T("Premium"), Loc.T("Premium access, commercial license and development activation."), "lock", "supporter calendar correction learning cloud sync"),
         new("Account & about", "", Loc.T("Account & about"), Loc.T("License, Premium, updates and app information."), "info"),
+        new("Account & about", AccountView.WhatsNewSettingKey, Loc.T("What's new in TypeWhisper"), Loc.T("Review the latest feature highlights."), "info", "news release features updates"),
         new("Home", "", Loc.T("Home"), Loc.T("Recent activity and transcriptions."), "home", "dashboard overview start"),
         new("Workflows", "", Loc.T("Workflows"), Loc.T("Create and edit workflows, triggers and their LLM."), "workflow", "prompt template automation selected text"),
         new("Dictionary", "", Loc.T("Dictionary"), Loc.T("Your words, corrections and term packs."), "dictionary", "vocabulary words corrections spelling"),

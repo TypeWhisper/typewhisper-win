@@ -14,6 +14,7 @@ public sealed partial class MainWindow
 
     internal void FreezeForProfileRestore()
     {
+        SuppressStartupWhatsNew();
         _profileRestoreClosing = true;
         _closing = true;
         _dictationHotkey?.Dispose();
