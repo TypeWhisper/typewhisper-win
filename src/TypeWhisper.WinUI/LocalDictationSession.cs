@@ -135,7 +135,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private bool PackageIsLocal(string id)
     {
         if (!_packageLocality.TryGetValue(id, out var local))
-            _packageLocality[id] = local = PortablePluginPackage.ReadManifest(Packages.Store.Resolve(id)).IsLocal;
+            _packageLocality[id] = local = PortablePluginPackage.ReadManifest(Packages.Store.Resolve(id)).ResolvedLocality == TypeWhisper.PluginSDK.Models.PluginLocality.Local;
         return local;
     }
     private readonly VocabularyHostServices _selection = new(WinUIProfile.DataPath("Dictation"));
@@ -146,14 +146,27 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal string ActiveChoiceId => UsesRegistryProvider ? _providerId + ":" + ActiveModelId : Models.ActiveModelId ?? "";
     internal string ActiveProviderId => _providerId;
     internal string ActiveEngineId => UsesRegistryProvider ? ActiveRegistryProvider?.EngineId ?? RegistrySelectionId(_providerId) : "sherpa-onnx";
-    internal IReadOnlyList<DictationProviderOption> DictationProviders => new DictationProviderOption[]
+    internal IReadOnlyList<DictationProviderOption> DictationProviders
     {
-        new("local", LocalTranscriptionPlugin.PluginId, "NVIDIA Parakeet", Models.Enabled, true, false,
-            Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray())
-    }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
-        .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
-            provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
-                model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()))).ToArray();
+        get
+        {
+            var providers = new DictationProviderOption[]
+            {
+                new("local", LocalTranscriptionPlugin.PluginId, "NVIDIA Parakeet", Models.Enabled, true, false,
+                    Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray())
+                    { Refusal = LocalTranscriptionRefusal() }
+            }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
+                .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
+                    provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
+                        model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()) { Refusal = PluginRuntime.TranscriptionRefusal(provider.SelectionId) })).ToList();
+            // A saved selection whose package the policy unloaded stays listed, disabled, with the reason, instead
+            // of vanishing from the pickers.
+            if (UsesRegistryProvider && providers.All(provider => provider.Id != _providerId) && SelectedPackageRefusal() is { } refused)
+                providers.Add(new(_providerId, _selection.GetSetting<string>("ProviderPluginId") ?? RegistrySelectionId(_providerId),
+                    _selection.GetSetting<string>("ProviderName") ?? RegistrySelectionId(_providerId), false, false, true, null, []) { Refusal = refused });
+            return providers;
+        }
+    }
     internal Task<string?> SelectProviderModelAsync(string providerId, string modelId) => providerId switch
     {
         "local" => SelectModelAsync(modelId),
@@ -172,6 +185,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal bool HasActiveUserWork => _fileBusy || _recorderReserved || _workflowReserved || IsRecording || _phase == DictationPhase.Processing;
     internal event Action? DictationRequested;
     internal event Action? RecordingStarting;
+    /// <summary>Raised when the model download policy turned downloads off; running downloads stop.</summary>
+    internal event Action? ModelDownloadsRefused;
     internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
     private OriginalDictationField? _originalField;
@@ -200,7 +215,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal const string DefaultShortcut = "Ctrl+Shift";
     internal string Shortcut { get; set; } = DefaultShortcut;
     internal bool IsRecording => !_recorderReserved && _audio.IsRecording;
-    internal bool IsReady => UsesRegistryProvider ? ActiveRegistryProvider?.Ready == true : _transcriptionPlugin.Ready;
+    // A provider the policy refuses is not ready even while its package stays loaded: file transcription, the API
+    // status and the model snapshot report it like a missing model instead of admitting work that the policy rejects.
+    internal bool IsReady => TranscriptionPolicyRefusal() is null && (UsesRegistryProvider ? ActiveRegistryProvider?.Ready == true : _transcriptionPlugin.Ready);
     internal string? LocalPluginError { get; private set; }
 
     internal async Task<string?> SetLocalPluginEnabledAsync(bool enabled)
@@ -214,7 +231,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             await _livePreview.StopAsync();
             await _transcriptionPlugin.SetEnabledAsync(enabled);
             if (_disposed) return Loc.T("The application is shutting down.");
-            var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled);
+            var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
             LocalPluginError = Models.Error ?? vocabularyError;
             SetStatus(enabled ? IsReady ? ModelReadyStatus() : Models.Error ?? Loc.T("Download a model in plugin settings, then select it in Dictation.") : Loc.T("Local transcription plugin disabled"), DictationPhase.Idle);
             return LocalPluginError;
@@ -233,9 +250,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         try
         {
             SetStatus(Loc.T("Loading model… Wait until the model is ready before dictating."), DictationPhase.LoadingModel);
+            // The local provider the policy refuses for transcription is not selected; judged again after the load,
+            // before the selection is saved.
+            DenyLocalTranscriptionIfRefused();
             await _livePreview.StopAsync();
             await Models.ActivateAsync(modelId);
+            DenyLocalTranscriptionIfRefused();
             _selection.SetSetting("Provider", "local");
+            _selection.SetSetting("ProviderPluginId", LocalTranscriptionPlugin.PluginId);
             _providerId = "local";
             LocalPluginError = null;
             SetStatus(ModelReadyStatus(), DictationPhase.Idle);
@@ -376,6 +398,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             SetStatus(IsReady ? ModelReadyStatus() : Loc.T("Choose and configure a transcription provider in Dictation."), DictationPhase.Idle);
             return null;
         }
+        // A policy refusal carries its own safe message; it is the status and the result.
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException denied) { SetStatus(denied.Message, DictationPhase.Idle); return denied.Message; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             var message = Loc.T("Plugin operation could not be completed ({0}). Check the plugin's configuration and try again.", ex.GetType().Name);
@@ -392,7 +416,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         {
             return LanguageHintTranscription.DecodeAsync(engine, samples,
                 () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes), language,
-                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct, dictionary?.EnabledTerms);
+                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct,
+                PromptTermsFor(RegistrySelectionId(_providerId), dictionary?.EnabledTerms));
         }, cancellation);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }
@@ -610,7 +635,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             catch (Exception ex) when (ex is not OutOfMemoryException) { LocalPluginError = ex.Message; }
             if (_disposed) return;
             var prepared = await warmUp;
-            await CtcVocabulary.SetEnabledAsync(Models.Enabled);
+            await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
             LocalPluginError ??= Models.Error;
             SetStatus(ReadyStatus(prepared));
         }
@@ -639,14 +664,18 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 #endif
     internal nint TrayMenuHandle { get; set; }
     // Each start returns only its own task rejection; a concurrent or ignored start cannot see or erase another's.
-    internal Task<string?> StartForApiAsync(AutomaticWorkflowSnapshot? workflow, Action<long> captureStarted) => StartWithRejectionAsync(workflow, captureStarted);
-    internal Task<string?> StartAsync() => StartWithRejectionAsync(null, null);
-    internal Task<string?> StartAsync(AutomaticWorkflowSnapshot workflow) => StartWithRejectionAsync(workflow, null);
-    private async Task<string?> StartWithRejectionAsync(AutomaticWorkflowSnapshot? workflow, Action<long>? captureStarted)
+    /// <summary>Why a start was rejected, and whether machine policy was the reason.</summary>
+    internal sealed record DictationStartRejection(string Message, bool PolicyRefusal);
+    internal Task<DictationStartRejection?> StartForApiAsync(AutomaticWorkflowSnapshot? workflow, Action<long> captureStarted) => StartWithRejectionAsync(workflow, captureStarted);
+    internal async Task<string?> StartAsync() => (await StartWithRejectionAsync(null, null))?.Message;
+    internal async Task<string?> StartAsync(AutomaticWorkflowSnapshot workflow) => (await StartWithRejectionAsync(workflow, null))?.Message;
+    private async Task<DictationStartRejection?> StartWithRejectionAsync(AutomaticWorkflowSnapshot? workflow, Action<long>? captureStarted)
     {
         DictationRequested?.Invoke();
-        string? rejection = null;
-        await SetRecordingAsync(true, workflow, captureStarted, error => rejection = error);
+        DictationStartRejection? rejection = null;
+        // The rejection says itself whether policy was the reason, so a workflow's own provider that was restored
+        // meanwhile changes nothing. The result stays with this start, so concurrent starts keep their own.
+        await SetRecordingAsync(true, workflow, captureStarted, (error, policy) => rejection = new(error, policy));
         return rejection;
     }
     private bool _stopPending;
@@ -703,7 +732,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null,
-        Action<string>? rejected = null, bool adoptEarlyCapture = false)
+        Action<string, bool>? rejected = null, bool adoptEarlyCapture = false)
     {
         // Shutdown stops a capture that is never adopted.
         if (_disposed) { if (adoptEarlyCapture) { _earlyCapture = false; _gate.Release(); } return; }
@@ -768,6 +797,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             else if (recording.HasValue && recording.Value == _audio.IsRecording) return;
             if (!IsReady && !SwitchesWorkflowModel(workflow?.TranscriptionModel))
             {
+                // A provider the policy refuses is not ready; the attempt reports the policy reason, not a missing model.
+                if (TranscriptionPolicyRefusal() is { } deniedEarly)
+                {
+                    AppDiagnostics.Write("dictation.policy-refused");
+                    rejected?.Invoke(deniedEarly, true);
+                    SetStatus(deniedEarly);
+                    return;
+                }
                 AppDiagnostics.Write("dictation.not-ready");
                 SetStatus(Loc.T("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."));
                 return;
@@ -786,6 +823,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     preparingRecording = true;
                 }
                 if (await RejectWorkflowModelAsync(workflow?.TranscriptionModel, rejected)) return;
+                // Machine policy is checked before the microphone opens, with the provider a workflow may have switched to.
+                if (TranscriptionPolicyRefusal() is { } denied)
+                {
+                    AppDiagnostics.Write("dictation.policy-refused");
+                    rejected?.Invoke(denied, true);
+                    // The notice carries the reason; a start that never captured does not flash the overlay's error state.
+                    SetStatus(denied);
+                    return;
+                }
                 var globalTaskAtStart = TranscriptionTaskPreferences.Current;
                 _taskAtStart = globalTaskAtStart;
                 // Unsupported tasks fail before microphone capture. When the model cannot translate
@@ -1211,12 +1257,17 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private async Task<string> DecodePreviewAsync(float[] samples, CancellationToken cancellation)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _operationCancellation.Token);
+        if (!UsesRegistryProvider) DenyLocalTranscriptionIfRefused();
         return (UsesRegistryProvider ? await DecodeRegistryAsync(samples, linked.Token)
             : await _transcriptionPlugin.DecodeAsync(samples, false, _taskAtStart == TranscriptionTask.Translate, linked.Token, _languageAtStart)).Text;
     }
-    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
-        UsesRegistryProvider ? DecodeRegistryAsync(samples, _operationCancellation.Token)
-            : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
+    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true)
+    {
+        if (UsesRegistryProvider) return DecodeRegistryAsync(samples, _operationCancellation.Token);
+        // The registry enforces policy for its roles; the local engine is checked here.
+        DenyLocalTranscriptionIfRefused();
+        return _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
+    }
     private void StopSilenceMonitoring()
     {
         _silence = null;

@@ -14,7 +14,13 @@ internal sealed partial class LocalDictationSession
         ct.ThrowIfCancellationRequested();
         DictationProviderOption? provider = null;
         if (engine is { Length: > 0 })
-            provider = ApiModelProvider(engine) ?? throw new LocalApiRequestException(404, "Transcription engine not found.");
+        {
+            // An engine the policy unloaded is judged through the package that served it, before it reads as unknown.
+            provider = ApiModelProvider(engine)
+                ?? (PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(engine)) is { } refusedEngine
+                    ? throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedEngine)
+                    : throw new LocalApiRequestException(404, "Transcription engine not found."));
+        }
         if (modelId is { Length: > 0 })
         {
             var qualified = DictationProviders.FirstOrDefault(item => modelId.StartsWith(item.Id + ":", StringComparison.Ordinal));
@@ -30,12 +36,18 @@ internal sealed partial class LocalDictationSession
                 var matches = DictationProviders.Where(item => item.Models.Any(model => model.Id == modelId)).ToArray();
                 provider = matches.FirstOrDefault(item => item.Id == _providerId)
                     ?? (matches.Length == 1 ? matches[0] : null);
+                // A qualified model whose provider the policy unloaded is judged through the package that served it.
+                if (provider is null && modelId.IndexOf(':') is > 0 and var separator
+                    && PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(modelId[..separator])) is { } refusedPrefix)
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedPrefix);
                 if (provider is null) throw new LocalApiRequestException(matches.Length == 0 ? 404 : 400,
                     matches.Length == 0 ? "Transcription model not found." : "Specify an engine for this ambiguous model ID.");
             }
         }
         provider ??= ApiModelProvider(_providerId)
             ?? throw new LocalApiRequestException(409, "Choose a transcription provider first.");
+        // A provider the policy refuses answers 403, the documented policy contract, before any readiness conflict.
+        if (provider.Refusal is { } refusedProvider) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedProvider);
         if (!provider.Enabled) throw new LocalApiRequestException(409, "Enable this transcription provider first.");
         if (provider.Cloud && !provider.Configured) throw new LocalApiRequestException(409, "Configure this transcription provider first.");
         modelId ??= provider.SelectedModelId ?? provider.PreferredModelId

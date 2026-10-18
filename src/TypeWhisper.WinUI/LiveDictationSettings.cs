@@ -53,17 +53,20 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                     selectedProviderId = observedActiveProviderId = session.ActiveProviderId;
                 var providers = session.DictationProviders;
                 var selected = providers.FirstOrDefault(item => item.Id == selectedProviderId);
+                // A refused provider stays listed with the reason; only the current selection remains clickable.
                 provider.SetOptions(providers.Select(item => new Choice(item.Id, item.Name,
-                    (item.Cloud ? Loc.T("Cloud") : Loc.T("On-device")) + " · " + item.Status) { PluginId = item.PluginId }).ToArray(), selectedProviderId, Loc.T("Choose a provider"));
+                    item.Refusal ?? (item.Cloud ? Loc.T("Cloud") : Loc.T("On-device")) + " · " + item.Status,
+                    item.Refusal is null || item.Id == selectedProviderId) { PluginId = item.PluginId }).ToArray(), selectedProviderId, Loc.T("Choose a provider"));
                 var canChange = session.CanChangeProvider && !session.Models.Busy && !selecting;
                 provider.IsEnabled = canChange;
                 modelSection.Visibility = selected?.Models.Count > 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
                 model.SetOptions(selected?.Models.Select(item => new Choice(item.Id, item.Name,
-                    item.Ready ? Loc.T("Ready") : Loc.T("Download in provider settings"), item.Ready)).ToArray() ?? [], selected?.SelectedModelId ?? "", Loc.T("Choose a model"));
+                    item.Ready ? Loc.T("Ready") : LocalDictationSession.ModelDownloadRefusal() ?? Loc.T("Download in provider settings"), item.Ready)).ToArray() ?? [], selected?.SelectedModelId ?? "", Loc.T("Choose a model"));
                 model.IsEnabled = canChange && selected?.Enabled == true && selected.Models.Any(item => item.Ready);
                 setup.IsEnabled = !selecting && selected is not null;
                 setup.Content = selected?.Ready != true ? Loc.T("Set up provider") : selected.Id != session.ActiveProviderId ? Loc.T("Use provider") : Loc.T("Provider settings");
                 row.Description = selectionError ?? (selected is null ? Loc.T("Set up a transcription provider in Integrations.")
+                    : selected.Refusal is { } refusal ? refusal
                     : !selected.Ready ? Loc.T("{0}. Open provider settings to finish setup. Active: {1}.", selected.Status, session.ActiveModelName)
                     : selected.Id != session.ActiveProviderId ? Loc.T("Ready. Select this provider to use it for dictation.")
                     : selected.Cloud ? session.SupportsLiveTranscription
@@ -71,8 +74,9 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                         : Loc.T("Recorded audio is sent to this provider after recording. Live preview is unavailable.")
                     : Loc.T("Audio is transcribed on this device."));
             });
-            ViewSubscriptions.Attach(row, () => { session.Models.Changed += Refresh; session.Changed += Refresh; Refresh(); },
-                () => { session.Models.Changed -= Refresh; session.Changed -= Refresh; });
+            void PolicyChanged(TypeWhisper.Core.Models.ManagedPolicySnapshot _) => Refresh();
+            ViewSubscriptions.Attach(row, () => { session.Models.Changed += Refresh; session.Changed += Refresh; WinUIManagedPolicy.Changed += PolicyChanged; Refresh(); },
+                () => { session.Models.Changed -= Refresh; session.Changed -= Refresh; WinUIManagedPolicy.Changed -= PolicyChanged; });
             async Task Select(string providerId, string modelId)
             {
                 selecting = true; selectionError = null; Refresh();

@@ -13,7 +13,11 @@ internal sealed partial class LocalDictationSession
     private async Task<IReadOnlyList<string>> RecallMemoryAsync(PortableMemoryProvider? source, string id, string query, CancellationToken ct)
     {
         if (source is null || source.PluginId != id)
+        {
+            // A package the policy unloaded reads as missing; the policy reason is reported instead.
+            if (PluginRuntime.PackageRefusal(id) is { } refusedSource) throw new ManagedPolicyDeniedException("memory", refusedSource);
             throw new InvalidOperationException(Loc.T("The selected memory source is unavailable. Enable its plugin or turn memory context off."));
+        }
         ct.ThrowIfCancellationRequested();
         await LocalLlmDownload.CancelAndDrainAsync();
         return await PluginRuntime.SearchMemoryAsync(source, query, ct);
@@ -33,6 +37,8 @@ internal sealed partial class LocalDictationSession
             return new(result.Status == PortableActionStatus.Succeeded, result.Message);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        // A policy refusal names its reason; the generic wording would hide an administrator's decision.
+        catch (ManagedPolicyDeniedException ex) { return new(false, ex.Message); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return new(false, Loc.T("The workflow action could not run. Check its destination before trying again."));
@@ -45,9 +51,14 @@ internal sealed partial class LocalDictationSession
         var action = FindWorkflowAction(workflow.Output.TargetActionPluginId);
         var memory = FindWorkflowMemory(workflow.Behavior.MemoryPluginId);
         if (!string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId) && action is null)
+        {
+            // A package the policy unloaded reads as missing; the policy reason is reported instead.
+            if (PluginRuntime.PackageRefusal(workflow.Output.TargetActionPluginId!) is { } refusedAction)
+                throw new ManagedPolicyDeniedException("action", refusedAction);
             throw new InvalidOperationException(Loc.T("The workflow action is unavailable. Enable its plugin first."));
+        }
         var text = await ManualWorkflowRunner.RunAsync(workflow, input,
-            (provider, model) => LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)),
+            LlmAvailableForWorkflow,
             ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
         if (action is null) return (text, null, null);
         var result = await ExecuteWorkflowActionAsync(action, text, new ActionContext(null, null, null, null, input), ct);

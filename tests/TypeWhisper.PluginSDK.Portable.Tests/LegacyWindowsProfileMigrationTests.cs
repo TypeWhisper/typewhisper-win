@@ -33,9 +33,16 @@ public sealed class LegacyWindowsProfileMigrationTests : IDisposable
             LegacyWindowsProfileMigration.PrepareAsync(source, stage, new(1, 1, 5), null, ct,
                 installer ?? ((_, _, _) => Task.FromResult(true))));
     // Uses the real catalog and package store against a stubbed network.
-    private Task<bool> ImportFromCatalog(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
+    private Task<bool> ImportFromCatalog(Func<HttpRequestMessage, HttpResponseMessage> respond, Func<ManagedProviderPolicy>? policy = null) =>
         LegacyDailyProfileMigration.ImportAsync(Source, Destination, prepareProfile: (source, stage, ct) =>
-            LegacyWindowsProfileMigration.PrepareAsync(source, stage, new(1, 1, 5), null, ct, handler: new StubHandler(respond)));
+            LegacyWindowsProfileMigration.PrepareAsync(source, stage, new(1, 1, 5), null, ct, handler: new StubHandler(respond), policy: policy));
+    private static ManagedProviderPolicy Policy(bool? pluginDownloads = null, string[]? plugins = null) => new(null, null, null, null,
+        plugins is null ? null : new HashSet<string>(plugins, StringComparer.OrdinalIgnoreCase), pluginDownloads, null, new HashSet<string>(StringComparer.Ordinal));
+    private string Catalog => JsonSerializer.Serialize(new
+    {
+        plugins = new[] { new { id = Plugin, name = "Groq", version = "1.0.0", minHostVersion = "1.1.0", downloadUrl = "https://example.invalid/groq.zip",
+            sha256 = new string('0', 64), size = 10, platforms = new[] { "windows" }, supportedArchitectures = new[] { TypeWhisper.PluginHost.PortablePluginCatalog.Architecture } } }
+    });
     private string Report => File.ReadAllText(Path.Combine(Destination, LegacyWindowsProfileMigration.ReportName));
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
@@ -131,6 +138,28 @@ public sealed class LegacyWindowsProfileMigrationTests : IDisposable
         Assert.Contains("plugin catalog could not be reached", Report);
         Assert.Empty(JsonDocument.Parse(Report).RootElement.GetProperty("InstalledPlugins").EnumerateArray());
         Assert.True(LegacyDailyProfileMigration.WasImported(Destination));
+    }
+    [Fact]
+    public async Task PolicyWithoutPluginDownloadsImportsWithoutTouchingTheNetwork()
+    {
+        Seed();
+        Assert.True(await ImportFromCatalog(_ => throw new Exception("No request may leave the device under this policy."), () => Policy(pluginDownloads: false)));
+        Assert.Equal("test-key", await new WindowsPluginSecretStore(Path.Combine(Destination, "PluginData", Plugin)).LoadAsync("api-key"));
+        Assert.Contains("policy does not allow installing these plugins: " + Plugin, Report);
+        Assert.Equal(Plugin, JsonDocument.Parse(Report).RootElement.GetProperty("UnavailablePlugins").EnumerateArray().Single().GetString());
+        Assert.Empty(JsonDocument.Parse(Report).RootElement.GetProperty("InstalledPlugins").EnumerateArray());
+    }
+    [Fact]
+    public async Task PackageOutsideTheAllowlistIsNotDownloaded()
+    {
+        Seed();
+        var catalog = Catalog;
+        Assert.True(await ImportFromCatalog(request => request.RequestUri!.AbsolutePath.EndsWith(".zip", StringComparison.Ordinal)
+            ? throw new Exception("A refused package must not be downloaded.") : new(System.Net.HttpStatusCode.OK) { Content = new StringContent(catalog) },
+            () => Policy(plugins: ["com.typewhisper.sherpa-onnx"])));
+        Assert.Contains("policy does not allow installing these plugins: " + Plugin, Report);
+        Assert.DoesNotContain("could not be downloaded", Report);
+        Assert.Empty(Directory.GetFiles(Path.Combine(Destination, "PluginPackages"), "*.zip"));
     }
     [Fact]
     public async Task FailedPackageFromCatalogIsDeferred()

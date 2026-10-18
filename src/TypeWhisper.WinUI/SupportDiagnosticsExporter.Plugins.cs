@@ -36,7 +36,8 @@ internal static partial class SupportDiagnosticsExporter
                     new Report.ProviderInfo("llm", Report.Identifier(provider.SelectionId), provider.Ready, null)))
                 .Concat(tts.Where(provider => provider.PluginId == id).Select(provider =>
                     new Report.ProviderInfo("tts", Report.Identifier(provider.PluginId), provider.Ready, null))).ToArray();
-            return new Report.PluginInfo(Report.Identifier(id), Report.Identifier(manifest?.Version), manifest?.IsLocal,
+            return new Report.PluginInfo(Report.Identifier(id), Report.Identifier(manifest?.Version),
+                manifest is null ? null : manifest.ResolvedLocality == TypeWhisper.PluginSDK.Models.PluginLocality.Local,
                 state?.Enabled ?? local.Enabled, package.Error is not null || state?.Error is not null || local.HasError,
                 store.PendingRestart(id), store.UpdateWarning(id) is not null, providers);
         }).OrderBy(plugin => plugin.Id, StringComparer.Ordinal).ToArray();

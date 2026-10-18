@@ -127,8 +127,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 return;
             }
             if (Enabled) return;
+            // Policy is checked before the engine's assembly loads; the saved preference stays as it is.
+            if (PackageRefusal?.Invoke() is { } refused) { _policyRefused = true; Error = refused; return; }
+            _policyRefused = false;
             Error = null; Feedback = null;
             _lease = await _load();
+            // Judged once more after activation: a policy that changed during the load releases the engine.
+            if (PackageRefusal?.Invoke() is { } refusedAfterLoad) { await ReleaseAsync(); _policyRefused = true; Error = refusedAfterLoad; return; }
             Generation++;
             _lease.Engine.SetAccelerationPreference(Acceleration);
             try { _host.SetSetting("Enabled", true); }
@@ -141,11 +146,54 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 Feedback = Loc.T("Choose a downloaded model or download one below.");
                 return;
             }
-            // An activation failure keeps the package available for download/retry.
+            // An activation failure keeps the package available for download/retry; a policy refusal after the
+            // load already released the engine and recorded its reason.
             try { await ActivateCoreAsync(selected, CancellationToken.None); }
+            catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { }
             catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); }
         }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+    }
+
+    /// <summary>Why machine policy refuses this package as a whole, or null; the engine never loads while refused.</summary>
+    internal static Func<string?>? PackageRefusal { get; set; }
+    private bool _policyRefused;
+
+    /// <summary>
+    /// Re-applies the package policy after it changed: a loaded engine the policy now refuses is released without
+    /// recording a preference, and one the policy no longer refuses loads again when its preference enables it.
+    /// Returns whether the engine was released or loaded.
+    /// </summary>
+    internal async Task<bool> ReapplyPolicyAsync()
+    {
+        var refused = PackageRefusal?.Invoke();
+        if (refused is not null)
+        {
+            if (!Enabled)
+            {
+                if (Error == refused) return false;
+                _policyRefused = true; Error = refused; Changed?.Invoke();
+                return false;
+            }
+            CancelDownload();
+            await _operations.WaitAsync();
+            Busy = true; Changed?.Invoke();
+            try
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                // Judged again under the gate: a policy that relaxed during the wait keeps the engine loaded.
+                if (PackageRefusal?.Invoke() is not { } refusedNow) return false;
+                await ReleaseAsync();
+                _policyRefused = true; Error = refusedNow; Feedback = null;
+            }
+            finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+            return true;
+        }
+        if (!_policyRefused) return false;
+        _policyRefused = false; Error = null;
+        if (Enabled || _host.GetSetting<bool?>("Enabled") == false) { Changed?.Invoke(); return false; }
+        await SetEnabledAsync(true);
+        return true;
     }
 
     internal async Task ActivateAsync(string modelId, CancellationToken ct = default, bool persistSelection = true)
@@ -153,6 +201,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException(Loc.T("A model operation is already in progress."));
         Busy = true; Error = null; Feedback = null; Changed?.Invoke();
         try { ObjectDisposedException.ThrowIf(_disposed, this); await ActivateCoreAsync(modelId, ct, persistSelection); }
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); throw; }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
@@ -191,6 +240,15 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             }
             catch
             {
+                // A package the policy refuses by now is released instead of rolled back: the rollback would run its code.
+                if (PackageRefusal?.Invoke() is { } refusedDuringSwitch)
+                {
+                    // The host setting is not package code: the failed device is not kept for the next activation.
+                    _host.SetSetting(AccelerationSetting, previous.ToString());
+                    await ReleaseAsync();
+                    _policyRefused = true; Error = refusedDuringSwitch; Feedback = null;
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedDuringSwitch);
+                }
                 _host.SetSetting(AccelerationSetting, previous.ToString());
                 engine.SetAccelerationPreference(previous);
                 try { await engine.LoadModelAsync(model, CancellationToken.None); ActiveModelId = model; }
@@ -198,7 +256,15 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 { _host.Log(PluginLogLevel.Error, "Could not restore the previous processing device: " + rollback.Message); }
                 throw;
             }
+            // Judged once more after the load: a policy that changed during the switch releases the engine.
+            if (PackageRefusal?.Invoke() is { } refusedAfterSwitch)
+            {
+                await ReleaseAsync();
+                _policyRefused = true; Error = refusedAfterSwitch; Feedback = null;
+                throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedAfterSwitch);
+            }
         }
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Feedback = null;
@@ -228,6 +294,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         }
         catch
         {
+            // A package the policy refuses by now is released instead of rolled back: the rollback would run its code.
+            if (PackageRefusal?.Invoke() is { } refusedDuringLoad)
+            {
+                await ReleaseAsync();
+                _policyRefused = true; Error = refusedDuringLoad; Feedback = null;
+                throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedDuringLoad);
+            }
             try
             {
                 if (previous is not null) { await engine.LoadModelAsync(previous, CancellationToken.None); ActiveModelId = previous; }
@@ -236,6 +309,14 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             catch (Exception rollback) when (rollback is not OutOfMemoryException)
             { _host.Log(PluginLogLevel.Error, "Could not restore previous model: " + rollback.Message); }
             throw;
+        }
+        // Judged once more after the load, for every operation that loads a model: a policy that changed during the
+        // await releases the engine instead of publishing the model.
+        if (PackageRefusal?.Invoke() is { } refusedAfterLoad)
+        {
+            await ReleaseAsync();
+            _policyRefused = true; Error = refusedAfterLoad; Feedback = null;
+            throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedAfterLoad);
         }
     }
 
@@ -267,6 +348,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             if (activeModel is not null) await ActivateCoreAsync(activeModel, CancellationToken.None, persistSelection: false);
             else
             {
+                // A package the policy refuses by now restores nothing: the engine is released and the reason recorded.
+                if (PackageRefusal?.Invoke() is { } refusedBeforeRestore)
+                {
+                    await ReleaseAsync();
+                    _policyRefused = true; Error = refusedBeforeRestore; Feedback = null;
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedBeforeRestore);
+                }
                 await _lease!.Engine.UnloadModelAsync();
                 ActiveModelId = null;
                 if (selectedModel is not null) await _lease.Engine.SelectModelAsync(selectedModel, CancellationToken.None);
@@ -277,6 +365,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                     await ReleaseAsync();
                     _lease = await _load();
                     Generation++;
+                    // Judged once more after the reload: a policy that changed meanwhile releases the fresh package.
+                    if (PackageRefusal?.Invoke() is { } refusedAfterReload)
+                    {
+                        await ReleaseAsync();
+                        _policyRefused = true; Error = refusedAfterReload; Feedback = null;
+                        throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedAfterReload);
+                    }
                     _lease.Engine.SetAccelerationPreference(Acceleration);
                     if (_lease.Engine.SelectedModelId is not null)
                         throw new InvalidOperationException("The local plugin did not restore its unselected state.");
@@ -285,6 +380,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
+
+    /// <summary>Set by the host: why machine policy refuses model downloads, or null. Absent in tests.</summary>
+    internal static Func<string?>? ModelDownloadRefusal { get; set; }
 
     internal async Task DownloadAsync(string modelId, CancellationToken ct = default, bool propagateErrors = false)
     {
@@ -298,6 +396,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             var engine = _lease?.Engine ?? throw new InvalidOperationException(Loc.T("Enable the local plugin in Plugins first."));
             if (!engine.TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException(Loc.T("Unknown model."));
             if (!engine.SupportsModelDownload) throw new NotSupportedException(Loc.T("This plugin does not support downloads."));
+            // A refused package downloads nothing, whatever the download rule says.
+            if ((PackageRefusal?.Invoke() ?? ModelDownloadRefusal?.Invoke()) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refused);
             DownloadingModelId = modelId; Changed?.Invoke();
             await engine.DownloadModelAsync(modelId, new InlineProgress(value =>
             {

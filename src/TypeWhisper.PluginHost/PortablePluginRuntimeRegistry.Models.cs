@@ -144,6 +144,7 @@ public sealed partial class PortablePluginRuntimeRegistry
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expected);
+        if (Policy.ModelDownloadRefusal() is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refused);
         Slot owner;
         lock (_sync)
         {
@@ -166,8 +167,19 @@ public sealed partial class PortablePluginRuntimeRegistry
                 throw new InvalidOperationException("Complete this model's required configuration before downloading.");
             token.ThrowIfCancellationRequested();
             using var reports = new ModelDownloadProgress(progress, token);
-            if (!engine.IsModelDownloaded(expected.ModelId))
-                await engine.DownloadModelAsync(expected.ModelId, reports, token).ConfigureAwait(false);
+            // Marked before the final check, so a policy pass between the check and the download finds and cancels it.
+            lock (_sync) owner.Downloading = true;
+            try
+            {
+                // Rechecked under the lease: a policy that changed during the wait wins before any byte is downloaded.
+                if (Policy.ModelDownloadRefusal() is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedNow);
+                if (!engine.IsModelDownloaded(expected.ModelId))
+                    await engine.DownloadModelAsync(expected.ModelId, reports, token).ConfigureAwait(false);
+            }
+            // A cancellation the policy pass caused is reported as the refusal, not as a cancelled download.
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && Policy.ModelDownloadRefusal() is { } refusedMeanwhile)
+            { throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedMeanwhile); }
+            finally { lock (_sync) owner.Downloading = false; }
             token.ThrowIfCancellationRequested();
             if (!engine.IsModelDownloaded(expected.ModelId))
                 throw new InvalidOperationException("The plugin did not confirm that the model was downloaded.");

@@ -109,13 +109,19 @@ internal sealed partial class LocalDictationSession
         string? saveError = null;
         var error = await ChangeRegistryPluginAsync(model.PluginId, async () =>
         {
+            // A provider the policy refuses for transcription is not selected, even while its package stays loaded;
+            // judged again after the load, before the selection is saved.
+            DenyRegistrySelectionIfRefused(model.SelectionId);
             var ct = _operationCancellation.Begin();
             await PluginRuntime.SelectModelAsync(model, ct);
             await PluginRuntime.RefreshCapabilitiesAsync();
             if (_disposed) return;
+            DenyRegistrySelectionIfRefused(model.SelectionId);
             try
             {
                 _selection.SetSetting("Provider", SessionProviderId(model.SelectionId));
+                _selection.SetSetting("ProviderPluginId", model.PluginId);
+                _selection.SetSetting("ProviderName", PluginRuntime.TranscriptionProviders.FirstOrDefault(provider => provider.SelectionId == model.SelectionId)?.Name ?? model.SelectionId);
                 _providerId = SessionProviderId(model.SelectionId);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)

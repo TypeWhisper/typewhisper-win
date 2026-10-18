@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.file-memory",
+  "locality": "local",
   "name": "File Memory",
   "version": "1.4.1",
   "author": "TypeWhisper",

@@ -82,4 +82,27 @@ public sealed class StructuredDictionaryPromptTests
         engine.Verify(e => e.StartStreamingWithLanguageHintsAndPromptAsync(It.IsAny<IReadOnlyList<string>>(), prompt,
             It.IsAny<CancellationToken>()), Times.Once());
     }
+
+    [Fact]
+    public async Task StreamingDropsThePromptWhenItIsNoLongerAllowedAtTheLease()
+    {
+        var engine = new Mock<ITranscriptionEnginePlugin>();
+        engine.SetupGet(e => e.SupportsStreaming).Returns(true);
+        engine.SetupGet(e => e.SupportsStreamingCompletion).Returns(true);
+        engine.SetupGet(e => e.SupportsDictionaryTerms).Returns(true);
+        engine.Setup(e => e.SupportsStreamingForPrompt(null)).Returns(true);
+        var session = new Mock<IStreamingSession>();
+        session.Setup(s => s.FinalizeAsync(It.IsAny<CancellationToken>())).Callback(() =>
+            session.Raise(s => s.TranscriptReceived += null, new StreamingTranscriptEvent("done", true))).Returns(Task.CompletedTask);
+        engine.Setup(e => e.StartStreamingWithLanguageHintsAndPromptAsync(It.IsAny<IReadOnlyList<string>>(), null,
+            It.IsAny<CancellationToken>())).ReturnsAsync(session.Object);
+        var failed = false;
+        // Terms were eligible when the stream was prepared; the policy answer at the lease wins.
+        await using var stream = new StreamingDictation((use, ct) => use(engine.Object, ct), ["de"], _ => {}, () => failed = true, default,
+            ["Washington, D.C."], promptAllowed: () => false);
+        Assert.Equal("done", await stream.FinishAsync().WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.False(failed);
+        engine.Verify(e => e.StartStreamingWithLanguageHintsAndPromptAsync(It.IsAny<IReadOnlyList<string>>(), null,
+            It.IsAny<CancellationToken>()), Times.Once());
+    }
 }

@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.speechmatics",
+  "locality": "cloud",
   "name": "Speechmatics",
   "version": "1.2.6",
   "minHostVersion": "1.1.5",

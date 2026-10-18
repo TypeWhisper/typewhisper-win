@@ -50,6 +50,32 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             publish.merge_feed([entry()], [replacement])
 
+    def test_metadata_refresh_updates_only_the_refreshable_fields_of_live_entries(self):
+        current = {"schema": 1, "plugins": [entry(), entry("com.typewhisper.other", "9.0.0")]}
+        refreshed = [entry() | {"locality": "local", "name": "renamed"},
+                     entry("com.typewhisper.other", "8.0.0") | {"locality": "cloud"},
+                     entry("com.typewhisper.missing") | {"locality": "cloud"}]
+        updated = publish.refresh_feed(current, refreshed)
+        plugins = {item["id"]: item for item in updated["plugins"]}
+        self.assertEqual("local", plugins["com.typewhisper.example"]["locality"])
+        self.assertEqual("com.typewhisper.example", plugins["com.typewhisper.example"]["name"])
+        self.assertNotIn("locality", plugins["com.typewhisper.other"])
+        self.assertNotIn("com.typewhisper.missing", plugins)
+        self.assertEqual(current["plugins"][0].get("locality"), None)
+
+    def test_metadata_refresh_alone_commits_the_feed(self):
+        with patch.object(publish, "snapshot", return_value=("old", {"plugins": [entry()]})), \
+             patch.object(publish, "api", return_value={}) as api:
+            self.assertTrue(publish.update_feed([], [entry() | {"locality": "local"}]))
+            self.assertFalse(publish.update_feed([], [entry()]))
+        api.assert_called_once()
+        committed = json.loads(publish.base64.b64decode(api.call_args.args[1]["content"]))
+        self.assertEqual("local", committed["plugins"][0]["locality"])
+
+    def test_metadata_refresh_rejects_package_changes(self):
+        with self.assertRaises(ValueError):
+            publish.refresh_feed([entry()], [entry() | {"sha256": "different", "locality": "local"}])
+
     def test_duplicate_ids_rejected(self):
         with self.assertRaises(ValueError):
             builder.catalog_entries([entry(), entry()])
@@ -415,10 +441,11 @@ class StageTests(unittest.TestCase):
         with patch('sys.argv', ['publish', '--stage', str(self.stage), '--publish']), \
              patch.object(publish, "snapshot", return_value=("old", {"plugins": [entry()]})), \
              patch.object(publish, "verify_live", side_effect=ValueError("stale")), \
-             patch.object(publish, "wait_for_live") as wait, patch.object(publish, "api") as api, \
+             patch.object(publish, "wait_for_live") as wait, \
+             patch.object(publish, "api", side_effect=lambda path, *args, **kwargs: {"status": "identical"} if path.startswith("compare/") else {}) as api, \
              patch.object(publish, "ensure_release") as release:
             publish.main()
-        api.assert_called_once_with("pages/builds", method="POST")
+        api.assert_any_call("pages/builds", method="POST")
         wait.assert_called_once_with([entry()])
         release.assert_not_called()
 

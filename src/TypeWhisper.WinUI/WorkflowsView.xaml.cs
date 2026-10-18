@@ -68,14 +68,35 @@ public sealed partial class WorkflowsView : UserControl
         ConfigShortcutHost.Children.OfType<ShortcutRecorder>().FirstOrDefault(r => r.IsCapturing)?.CaptureKeyUp(e);
     internal bool IsBusy => _defaultsDialog is not null || _testDialog is not null || _run is not null || _page == Page.Configuration || _deleteCompletion is { Task.IsCompleted: false };
     private string? _loadError;
+    private bool _policyHooked;
     private CancellationTokenSource? _run;
     private IReadOnlyList<Choice> Providers => [new(WorkflowLlmDefaults.Inherit, Loc.T("Use default"), Loc.T("Use the shared workflow LLM")), new("none", Loc.T("Not configured"), Loc.T("Choose an installed LLM provider")),
-        .. (_session?.LlmProviders.Select(p => new Choice(p.SelectionId, p.Name, p.Ready ? Loc.T("Ready") : Loc.T("Requires configuration")) { PluginId = p.PluginId }) ?? [])];
+        .. LlmProviderChoices()];
+    // A saved selection whose package the policy unloaded stays listed, disabled, with the reason.
+    private IReadOnlyList<Choice> ProvidersFor(string? selected)
+    {
+        var choices = Providers;
+        if (_session is not { } session || string.IsNullOrEmpty(selected) || choices.Any(choice => choice.Id == selected)
+            || session.PluginRuntime.SelectionPackageRefusal(selected) is not { } refusal) return choices;
+        return [.. choices, new Choice(selected, selected, refusal, false)];
+    }
+
+    // A provider the policy refuses stays visible with the reason but cannot be chosen.
+    private IEnumerable<Choice> LlmProviderChoices()
+    {
+        if (_session is not { } session) yield break;
+        foreach (var p in session.LlmProviders)
+        {
+            var refusal = session.PluginRuntime.LlmRefusal(p.SelectionId);
+            yield return new Choice(p.SelectionId, p.Name, refusal ?? (p.Ready ? Loc.T("Ready") : Loc.T("Requires configuration")), refusal is null) { PluginId = p.PluginId };
+        }
+    }
 
     internal void Connect(LocalDictationSession session)
     {
         if (_session is not null) _session.Changed -= RuntimeChanged;
         _session = session;
+        if (!_policyHooked) { _policyHooked = true; WinUIManagedPolicy.Changed += _ => RuntimeChanged(); }
         _session.Changed += RuntimeChanged;
         _store = new ManualWorkflowStore(WinUIProfile.DataPath("workflows.json"));
         try
@@ -94,14 +115,42 @@ public sealed partial class WorkflowsView : UserControl
         if (_page != Page.Configuration) return;
         ConfigureActionTargets(ConfigActionTarget.SelectedId);
         ConfigureMemorySources(ConfigMemory.SelectedId);
-        ConfigProvider.SetOptions(Providers, ConfigProvider.SelectedId, Loc.T("{0} (unavailable)", ConfigProvider.SelectedId));
+        ConfigProvider.SetOptions(ProvidersFor(ConfigProvider.SelectedId), ConfigProvider.SelectedId, Loc.T("{0} (unavailable)", ConfigProvider.SelectedId));
         ConfigureModels(ConfigModel.SelectedId);
         UpdateConfigurationState();
     });
 
-    private void ConfigureMemorySources(string selected) => ConfigMemory.SetOptions([new("", Loc.T("Off"), Loc.T("Do not use saved memories")), .. (_session?.PluginRuntime.MemoryProviders.OrderBy(p => p.Name).Select(p => new Choice(p.PluginId, p.Name, Loc.T("Use matching saved facts")) { PluginId = p.PluginId }) ?? [])], selected, Loc.T("Unavailable memory source: {0}", selected));
+    private void ConfigureMemorySources(string selected)
+    {
+        var session = _session;
+        var choices = new List<Choice> { new("", Loc.T("Off"), Loc.T("Do not use saved memories")) };
+        choices.AddRange(session?.PluginRuntime.MemoryProviders.OrderBy(p => p.Name).Select(p =>
+            session.PluginRuntime.TextTransferRefusal(p.PluginId) is { } refusal
+                ? new Choice(p.PluginId, p.Name, refusal, false) { PluginId = p.PluginId }
+                : new Choice(p.PluginId, p.Name, Loc.T("Use matching saved facts")) { PluginId = p.PluginId }) ?? []);
+        AddDetachedPackage(choices, session, selected);
+        ConfigMemory.SetOptions(choices, selected, Loc.T("Unavailable memory source: {0}", selected));
+    }
 
-    private void ConfigureActionTargets(string selected) => ConfigActionTarget.SetOptions([new("", Loc.T("Insert Text"), Loc.T("Use dictation output preferences")), .. (_session?.PluginRuntime.Actions.OrderBy(a => a.Name).Select(a => new Choice(a.PluginId, a.Name, Loc.T("Send the workflow result to this action")) { PluginId = a.PluginId }) ?? [])], selected, Loc.T("Unavailable action: {0}", selected));
+    private void ConfigureActionTargets(string selected)
+    {
+        var session = _session;
+        var choices = new List<Choice> { new("", Loc.T("Insert Text"), Loc.T("Use dictation output preferences")) };
+        choices.AddRange(session?.PluginRuntime.Actions.OrderBy(a => a.Name).Select(a =>
+            session.PluginRuntime.TextTransferRefusal(a.PluginId) is { } refusal
+                ? new Choice(a.PluginId, a.Name, refusal, false) { PluginId = a.PluginId }
+                : new Choice(a.PluginId, a.Name, Loc.T("Send the workflow result to this action")) { PluginId = a.PluginId }) ?? []);
+        AddDetachedPackage(choices, session, selected);
+        ConfigActionTarget.SetOptions(choices, selected, Loc.T("Unavailable action: {0}", selected));
+    }
+
+    // A saved package the policy unloaded stays listed, disabled, with the reason, instead of reading as merely gone.
+    private static void AddDetachedPackage(List<Choice> choices, LocalDictationSession? session, string selected)
+    {
+        if (session is null || string.IsNullOrEmpty(selected) || choices.Any(choice => choice.Id == selected)
+            || session.PluginRuntime.PackageRefusal(selected) is not { } refusal) return;
+        choices.Add(new Choice(selected, selected, refusal, false) { PluginId = selected });
+    }
 
     private bool Available(string provider, string model) => _session?.LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)) == true;
     internal ObservableCollection<WorkflowDraft> FilteredWorkflows { get; } = [];
@@ -559,7 +608,7 @@ public sealed partial class WorkflowsView : UserControl
             definition.Template.ToString(), Loc.T(definition.Name), Loc.T(definition.Description))).ToArray(), _opened.Template.ToString());
         ConfigTranslationTarget.Text = _opened.TranslationTarget ?? "";
         ConfigInstruction.Text = _opened.Instruction.ReplaceLineEndings("\r");
-        ConfigProvider.SetOptions(Providers, _opened.ProviderId, Loc.T("{0} (unavailable)", _opened.ProviderId));
+        ConfigProvider.SetOptions(ProvidersFor(_opened.ProviderId), _opened.ProviderId, Loc.T("{0} (unavailable)", _opened.ProviderId));
         ConfigureModels(_opened.ModelId);
         _loadingConfiguration = false;
         ShowPage(Page.Configuration);
@@ -586,7 +635,7 @@ public sealed partial class WorkflowsView : UserControl
     private void ConfigureTranscriptionModels(string model)
     {
         // A provider without an initial model selection cannot be restored after a workflow switches it.
-        var models = (_session?.DictationProviders ?? []).Where(provider => provider.Enabled && provider.Configured
+        var models = (_session?.DictationProviders ?? []).Where(provider => provider.Enabled && provider.Configured && provider.Refusal is null
                 && (provider.Id == "local" || provider.SelectedModelId is not null))
             .SelectMany(provider => provider.Models.Where(item => item.Ready).Select(item =>
                 new Choice(provider.Id + ":" + item.Id, item.Name, provider.Name) { PluginId = provider.PluginId }));

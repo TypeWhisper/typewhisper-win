@@ -80,12 +80,13 @@ internal sealed partial class LocalDictationSession
             { throw new LocalApiRequestException(422, "The audio could not be decoded. Use supported media up to 60 minutes."); }
             ct.ThrowIfCancellationRequested();
             Report(Loc.T("Transcribing with {0}…", modelName));
+            if (!registryProvider) DenyLocalTranscriptionIfRefused();
             var decoded = registryProvider
                 ? await PluginRuntime.UseTranscriptionAsync(providerSelection, (engine, token) =>
                     LanguageHintTranscription.DecodeAsync(engine, samples,
                         () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),
                         language == "auto" ? null : language,
-                        hints, translate, token, lexicon.Dictionary?.EnabledTerms), ct)
+                        hints, translate, token, PromptTermsFor(providerSelection, lexicon.Dictionary?.EnabledTerms)), ct)
                 : await _transcriptionPlugin.DecodeResultAsync(samples, language == "auto" ? null : language, translate, ct);
             // Keep the gate until non-interruptible native work has actually drained.
             ct.ThrowIfCancellationRequested();

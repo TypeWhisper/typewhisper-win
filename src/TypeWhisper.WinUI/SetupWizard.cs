@@ -94,7 +94,8 @@ public sealed partial class SetupWizard : UserControl
             return Loc.T("Allow microphone access in Windows settings to continue, or skip setup.");
         return SetupReadiness.ValidateStep(currentStep ? _state.Step : 4, _selecting || !_session.CanChangeProvider,
             !string.IsNullOrWhiteSpace(_session.Shortcut) && _session.Shortcut != "No shortcut assigned",
-            _session.IsReady, microphoneAvailable);
+            // A provider the policy refuses is not ready, whatever its model state.
+            _session.IsReady && _session.TranscriptionPolicyRefusal() is null, microphoneAvailable);
     }
 
     private void RefreshStatus()
@@ -209,7 +210,10 @@ public sealed partial class SetupWizard : UserControl
                 _pluginInstallation is null && _session.Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)
                     ? Visibility.Collapsed : Visibility.Visible;
             var selected = providers.FirstOrDefault(item => item.Id == _selectedProvider);
-            _providerPicker.SetOptions(providers.Select(item => new Choice(item.Id, item.Name, item.Cloud ? Loc.T("{0} - cloud", item.Status) : Loc.T("{0} - on device", item.Status))).ToArray(), _selectedProvider ?? "", Loc.T("Provider unavailable"));
+            // A refused provider stays listed with the reason; only the current selection remains clickable.
+            _providerPicker.SetOptions(providers.Select(item => new Choice(item.Id, item.Name,
+                item.Refusal ?? (item.Cloud ? Loc.T("{0} - cloud", item.Status) : Loc.T("{0} - on device", item.Status)),
+                item.Refusal is null || item.Id == _selectedProvider)).ToArray(), _selectedProvider ?? "", Loc.T("Provider unavailable"));
             _modelPicker.SetOptions(selected?.Models.Where(item => item.Ready).Select(item => new Choice(item.Id, item.Name, Loc.T("Ready"))).ToArray() ?? [],
                 _selectedProvider == _session.ActiveProviderId ? selected?.SelectedModelId ?? "" : "", Loc.T("Choose a ready model; otherwise configure the plugin"));
             var detects = _session.SupportedLanguages.Count == 0;
@@ -230,7 +234,8 @@ public sealed partial class SetupWizard : UserControl
             if (_languageLabel is not null) _languageLabel.Visibility = available;
             _modelPicker.Visibility = local ? Visibility.Collapsed : available;
             if (_modelLabel is not null) _modelLabel.Visibility = _modelPicker.Visibility;
-            if (_engineStatus is not null) _engineStatus.Text = _session.IsReady
+            if (_engineStatus is not null) _engineStatus.Text = _session.TranscriptionPolicyRefusal() is { } refusedProvider ? refusedProvider
+                : _session.IsReady
                 ? Loc.T("{0} is ready for dictation.", _session.ActiveModelName)
                 : providers.Count == 0 ? Loc.T("Choose a transcription plugin to get started.")
                 : Loc.T("Choose a model below. Download it, then select Use model to continue.");

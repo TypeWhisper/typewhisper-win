@@ -147,6 +147,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             catch (OperationCanceledException) { completion.TrySetCanceled(ct); }
             catch (JsonException) { completion.TrySetResult(Error(400, "Invalid JSON request.")); }
             catch (LocalApiRequestException ex) { completion.TrySetResult(Error(ex.StatusCode, ex.Message)); }
+            catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException ex) { completion.TrySetResult(Error(403, ex.Message)); }
             catch (NotSupportedException) { completion.TrySetResult(Error(422, "This model or file does not support the requested operation.")); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -157,7 +158,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         return completion.Task;
     }
     internal Func<LocalApiRequest, CancellationToken, Task<LocalApiResponse?>>? RecorderRequest { get; set; }
-    private static LocalApiResponse Error(int code, string message) => LocalApiResponse.Json(code, new { error = new { code = code switch { 400 => "bad_request", 401 => "unauthorized", 404 => "not_found", 405 => "method_not_allowed", 409 => "conflict", 413 => "payload_too_large", 503 => "service_unavailable", _ => "error" }, message = Loc.English(message) } });
+    private static LocalApiResponse Error(int code, string message) => LocalApiResponse.Json(code, new { error = new { code = code switch { 400 => "bad_request", 401 => "unauthorized", 403 => "forbidden", 404 => "not_found", 405 => "method_not_allowed", 409 => "conflict", 413 => "payload_too_large", 503 => "service_unavailable", _ => "error" }, message = Loc.English(message) } });
 
     private async Task<LocalApiResponse> HandleAsync(LocalApiRequest request, CancellationToken ct)
     {

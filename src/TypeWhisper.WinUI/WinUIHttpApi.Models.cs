@@ -41,6 +41,8 @@ internal sealed partial class WinUIHttpApi
         }
         if (string.IsNullOrWhiteSpace(engine) || operation != "unload" && string.IsNullOrWhiteSpace(model))
             return Error(400, operation == "unload" ? "'engine' is required." : "Both 'engine' and 'model' are required.");
+        // A refused engine answers 403, the documented policy contract, before any not-found.
+        if (session.ApiEngineRefusal(engine) is { } refusedEngine) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedEngine);
         var provider = session.ApiModelProvider(engine);
         if (provider is null) return Error(404, "Engine not found.");
         if (operation != "unload" && !provider.Models.Any(item => item.Id == model)) return Error(404, "Model not found for this engine.");
@@ -49,6 +51,8 @@ internal sealed partial class WinUIHttpApi
             var resultModel = await session.ApiChangeModelAsync(operation, provider, model, ct);
             return LocalApiResponse.Json(200, new { engine, model = resultModel, status = operation switch { "load" => "ready", "unload" => "unloaded", _ => "deleted" } });
         }
+        // A policy refusal is the documented 403, not a conflict.
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { throw; }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or IOException)
         { return Error(409, ex.Message); }
     }

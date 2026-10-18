@@ -40,6 +40,11 @@ def catalog_entries(document: object) -> dict[str, dict]:
     return entries
 
 
+def entry_locality(manifest):
+    """The catalog locality of a manifest: the declared value, or the one implied by the legacy isLocal flag."""
+    return manifest.get("locality") or ("local" if manifest.get("isLocal") else "cloud")
+
+
 def discover_projects(source: pathlib.Path, selected: set[str]) -> list[tuple[pathlib.Path, dict]]:
     projects = {}
     for portable in sorted(source.glob("plugins/*/portable.proj")):
@@ -118,6 +123,7 @@ def main() -> None:
     excluded = set(args.exclude_id)
     entries = {key: value for key, value in existing_entries.items() if key not in excluded}
     changed = []
+    refreshed = []  # Entries kept at their published version whose metadata the manifest updated.
     projects = discover_projects(source, set(args.plugin_id))
     for portable, manifest in projects:
         manifest_path = portable.parent / "manifest.json"
@@ -132,7 +138,15 @@ def main() -> None:
         if plugin_id in entries:
             published_version = entries[plugin_id]["version"]
             if published_version == version:
-                print(f"KEEP  {plugin_id} {version}", flush=True)
+                # Metadata the catalog gained later is refreshed from the manifest without a rebuild; an entry
+                # without a locality resolves to unknown, which restrictive policies refuse even for local plugins.
+                # The publisher applies such refreshes to the live feed alongside the next plugin release.
+                if entries[plugin_id].get("locality") != entry_locality(manifest):
+                    entries[plugin_id]["locality"] = entry_locality(manifest)
+                    refreshed.append(entries[plugin_id])
+                    print(f"KEEP  {plugin_id} {version} (locality refreshed)", flush=True)
+                else:
+                    print(f"KEEP  {plugin_id} {version}", flush=True)
                 continue
             if numeric_version(version) <= numeric_version(published_version):
                 raise SystemExit(
@@ -200,6 +214,7 @@ def main() -> None:
             "author": manifest.get("author", "TypeWhisper"),
             "description": manifest.get("description", ""),
             "categories": categories,
+            "locality": entry_locality(manifest),
             "downloadUrl": f"https://github.com/TypeWhisper/typewhisper-win/releases/download/{args.tag}/{name}",
             "sha256": sha256(archive),
             "size": archive.stat().st_size,
@@ -208,11 +223,23 @@ def main() -> None:
         }
         print(f"ZIP   {name} {archive.stat().st_size:,} bytes", flush=True)
         changed.append(entries[plugin_id])
+    # Metadata refreshes cover every manifest, not only the selected projects: a release of any plugin carries
+    # the locality of all unchanged entries along, and the publisher commits refreshes without a package too.
+    if args.plugin_id:
+        covered = {m["id"] for _, m in projects}
+        for _, manifest in discover_projects(source, set()):
+            plugin_id = manifest["id"]
+            if plugin_id in covered or plugin_id in excluded or plugin_id not in entries:
+                continue
+            if entries[plugin_id]["version"] == manifest["version"] and entries[plugin_id].get("locality") != entry_locality(manifest):
+                entries[plugin_id]["locality"] = entry_locality(manifest)
+                refreshed.append(entries[plugin_id])
+                print(f"KEEP  {plugin_id} {manifest['version']} (locality refreshed)", flush=True)
     feed = {"plugins": sorted(entries.values(), key=lambda entry: (entry["name"].casefold(), entry["id"]))}
     (output / "plugins-v2.json").write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output / "summary.json").write_text(json.dumps({"source": str(source), "sourceCommit": source_commit,
         "tag": args.tag, "excludedIds": sorted(excluded), "entryCount": len(entries),
-        "archiveCount": len(list(archives.glob("*.zip"))), "changedPlugins": changed,
+        "archiveCount": len(list(archives.glob("*.zip"))), "changedPlugins": changed, "refreshedPlugins": refreshed,
         "selectedIds": sorted(m["id"] for _, m in projects if m["id"] not in excluded),
         "testsRequired": args.test}, indent=2) + "\n", encoding="utf-8")
     print(f"DONE {len(entries)} entries, {len(list(archives.glob('*.zip')))} archives", flush=True)

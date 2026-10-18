@@ -3187,5 +3187,18 @@
   "The update policy changed. Check for updates again.": "更新策略已更改。请再次检查更新。",
   "Last change {0}": "最近更改 {0}",
   "Version {0} is available. Check for updates in Settings to install it.": "版本 {0} 可用。请在设置中检查更新以安装。",
+  "The plugin {0} is not allowed by your organization.": "你的组织不允许使用插件 {0}。",
+  "The transcription provider {0} is not allowed by your organization.": "你的组织不允许使用转录提供商 {0}。",
+  "Cloud transcription is turned off by your organization. Choose a local transcription model.": "你的组织已关闭云端转录。请选择本地转录模型。",
+  "The text model provider {0} is not allowed by your organization.": "你的组织不允许使用文本模型提供商 {0}。",
+  "Cloud text processing is turned off by your organization. Choose a local text model.": "你的组织已关闭云端文本处理。请选择本地文本模型。",
+  "Sending text to {0} is turned off by your organization.": "你的组织已关闭向 {0} 发送文本。",
+  "Plugin downloads are turned off by your organization.": "你的组织已关闭插件下载。",
+  "Model downloads are turned off by your organization.": "你的组织已关闭模型下载。",
+  "Your organization's policy could not be read. This operation waits until it is readable.": "无法读取你的组织的策略。此操作将等待策略可读后再进行。",
+  "Not allowed": "不允许",
+  "Configurable": "可配置",
+  "This plugin processes content in the cloud, which your organization has turned off.": "此插件在云端处理内容，而你的组织已关闭云端处理。",
+  "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "你所在组织的策略不允许安装以下插件：{0}。其设置和模型已保留。",
   "Open in History": "在历史记录中打开"
 }

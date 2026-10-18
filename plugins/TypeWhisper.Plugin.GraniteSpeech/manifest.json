@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.granite-speech",
+  "locality": "local",
   "name": "IBM Granite Speech (Local)",
   "version": "1.2.7",
   "minHostVersion": "1.1.2",

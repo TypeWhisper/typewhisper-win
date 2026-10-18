@@ -14,12 +14,15 @@ internal sealed partial class LocalDictationSession
     {
         if (!CanStartPluginSettingsAction || LocalLlmDownload.State.IsBusy || LocalLlmDownload.State.IsClosing)
             throw new InvalidOperationException(Loc.T("Finish the current model operation first."));
+        if (ModelDownloadRefusal() is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refused);
         LocalLlmDownloadPluginId = pluginId;
         LocalLlmDownloadModelName = name;
         await LocalLlmDownload.RunAsync((progress, ct) => PluginRuntime.UseConfigurationAsync(pluginId, async (plugin, token) =>
         {
             if (plugin is not ILocalLlmModelManagement local || !local.LocalModels.Any(model => model.Model.Id == modelId))
                 throw new InvalidOperationException(Loc.T("The local model provider changed."));
+            // Rechecked under the lease: a policy that changed during the wait wins before any byte is downloaded.
+            if (ModelDownloadRefusal() is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedNow);
             await local.DownloadModelAsync(modelId, progress, token);
             return true;
         }, ct, preserveCompletedResult: true));

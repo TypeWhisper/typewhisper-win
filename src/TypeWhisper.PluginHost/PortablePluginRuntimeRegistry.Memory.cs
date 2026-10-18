@@ -24,13 +24,22 @@ public sealed partial class PortablePluginRuntimeRegistry
         lock (_sync)
         {
             if (!_slots.TryGetValue(expected.PluginId, out owner!) || !owner.Accepting || owner.Generation != expected.Generation)
+            {
+                // A source whose package the policy unloaded meanwhile reports the policy, not a missing source.
+                if (PackageRefusal(expected.PluginId) is { } refusedPackage) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("memory", refusedPackage);
                 throw new InvalidOperationException("The selected memory source is no longer available.");
+            }
         }
+        // The query carries transcript context, so a remote memory source follows the text-processing policy.
+        DenyTextTransferIfRefused(owner, "memory");
         return UseAsync(owner, async token =>
         {
+            DenyTextTransferIfRefused(owner, "memory");
             if (owner.Generation != expected.Generation || owner.Package?.Plugin is not IMemoryStoragePlugin memory)
                 throw new InvalidOperationException("The selected memory source changed before execution.");
-            return await memory.SearchAsync(query, 5, token).ConfigureAwait(false);
+            try { return await memory.SearchAsync(query, 5, token).ConfigureAwait(false); }
+            // A cancellation the policy pass caused is reported as the refusal, so the workflow keeps the reason.
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { DenyTextTransferIfRefused(owner, "memory"); throw; }
         }, ct, refreshCapabilities: false);
     }
 }

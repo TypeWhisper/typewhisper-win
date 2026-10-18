@@ -54,6 +54,9 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
                 _progress.Value = percent;
                 _state.Text = percent >= 100 ? Loc.T("Download complete · Loading model…") : Loc.T("Downloading · {0:0}%", percent);
             }));
+            // Rechecked under the lease: a download the policy refuses since the click never starts; a model on
+            // disk still loads.
+            if (!_downloaded && LocalDictationSession.ModelDownloadRefusal() is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedNow);
             await model.DownloadAndLoadModelAsync(progress, ct);
         }, download: true);
         _unload.Click += async (_, _) => await RunAsync((model, ct) => model.UnloadModelAsync(ct));
@@ -143,6 +146,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
     private async Task RunAsync(Func<ILocalTtsModelManagement, CancellationToken, Task> action, bool download = false)
     {
         if (_busy || !_session.CanStartPluginSettingsAction || _lifetime is not { } lifetime) { UpdateButtons(); return; }
+        // A download the policy refuses never starts; a model that is already on disk still loads.
+        if (download && !_downloaded && LocalDictationSession.ModelDownloadRefusal() is { } refused) { _message.Text = refused; UpdateButtons(); return; }
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         _operation = operation; _busy = true; _message.Text = "";
         var refresh = true;
@@ -155,6 +160,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         _cancel.Content = download ? Loc.T("Cancel download / loading") : Loc.T("Cancel");
         void CancelForRecording() => operation.Cancel();
         _session.RecordingStarting += CancelForRecording;
+        // A download also stops when the policy turns downloads off; a model on disk loads regardless.
+        if (download && !_downloaded) _session.ModelDownloadsRefused += CancelForRecording;
         UpdateButtons();
         try
         {
@@ -166,6 +173,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         }
         catch (CredentialValidationException error)
         { refresh = false; if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = error.Message; }
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException error)
+        { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = error.Message; }
         catch (OperationCanceledException)
         { if (IsLoaded && ReferenceEquals(_lifetime, lifetime)) _message.Text = Loc.T("Operation cancelled. Downloaded files are kept for the next attempt."); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -173,6 +182,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         finally
         {
             _session.RecordingStarting -= CancelForRecording;
+            _session.ModelDownloadsRefused -= CancelForRecording;
             _operation = null; _busy = false;
             if (IsLoaded)
             { if (refresh || !ReferenceEquals(_lifetime, lifetime)) await ReadAsync(); else UpdateButtons(); }
@@ -185,7 +195,9 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         var available = !_busy && _session.CanStartPluginSettingsAction;
         foreach (var control in _licenses.Children.OfType<Control>()) control.IsEnabled = available;
         _download.Content = _downloaded ? Loc.T("Load model") : Loc.T("Download & Load");
-        _download.IsEnabled = available && _accepted && !_loaded;
+        var downloadRefusal = _downloaded ? null : LocalDictationSession.ModelDownloadRefusal();
+        _download.IsEnabled = available && _accepted && !_loaded && downloadRefusal is null;
+        ToolTipService.SetToolTip(_download, downloadRefusal);
         _download.Visibility = _loaded ? Visibility.Collapsed : Visibility.Visible;
         _unload.IsEnabled = available && _loaded;
         _unload.Visibility = _loaded ? Visibility.Visible : Visibility.Collapsed;

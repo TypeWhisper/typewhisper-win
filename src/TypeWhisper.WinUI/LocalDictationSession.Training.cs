@@ -34,6 +34,9 @@ internal sealed partial class LocalDictationSession
             _recording = true;
         }
 
+        /// <summary>Cancels a running or coming decode; policy calls this when the active provider becomes refused.</summary>
+        internal void CancelDecode() { if (_disposal is null) _cancel.Cancel(); }
+
         internal Task<string> StopAsync()
         {
             ObjectDisposedException.ThrowIf(_disposal is not null, this);
@@ -51,6 +54,7 @@ internal sealed partial class LocalDictationSession
             samples = ShortClipCapturePolicy.PadForFinalDecode(samples);
             // Deliberately bypass dictionary hints, CTC, snippets, formatting, workflows and History.
             var language = Language == "auto" ? null : Language;
+            if (!owner.UsesRegistryProvider) DenyLocalTranscriptionIfRefused();
             var result = owner.UsesRegistryProvider
                 ? await owner.PluginRuntime.UseTranscriptionAsync(RegistrySelectionId(owner._providerId), (engine, token) =>
                     LanguageHintTranscription.DecodeAsync(engine, samples, () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),

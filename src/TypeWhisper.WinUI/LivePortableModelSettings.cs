@@ -344,7 +344,9 @@ internal sealed class LivePortableModelSettings : UserControl
             var selected = _session.IsRegistryModelSelected(model) && provider?.Ready == true;
             var required = model.Requirements.Any(r => r.IsRequired && !r.IsSatisfied);
             row.Download.Visibility = model.SupportsDownload && !model.Downloaded && !(active && state.IsBusy) ? Visibility.Visible : Visibility.Collapsed;
-            row.Download.IsEnabled = available && provider is not null && !required;
+            var downloadRefusal = model.SupportsDownload && !model.Downloaded ? LocalDictationSession.ModelDownloadRefusal() : null;
+            row.Download.IsEnabled = available && provider is not null && !required && downloadRefusal is null;
+            ToolTipService.SetToolTip(row.Download, downloadRefusal);
             // The badge marks the selected model, so its button is not shown.
             row.Use.Visibility = selected || model.SupportsDownload && !model.Downloaded ? Visibility.Collapsed : Visibility.Visible;
             var loading = ReferenceEquals(_loadingRow, row);
@@ -366,10 +368,10 @@ internal sealed class LivePortableModelSettings : UserControl
             row.Progress.Value = (state.Progress ?? 0) * 100;
             row.State.Text = loading ? Loc.T("Loading model into memory…") : active && state.Message is not null ? state.Message : provider is null
                 ? Loc.T("Provider unavailable. Refresh after enabling the plugin.") : model.SupportsDownload
-                    ? selected ? Loc.T("Downloaded · 100%. Selected for dictation.") : model.Downloaded ? Loc.T("Downloaded · 100%. Choose Use model to load it.") : Loc.T("Not downloaded.")
+                    ? selected ? Loc.T("Downloaded · 100%. Selected for dictation.") : model.Downloaded ? Loc.T("Downloaded · 100%. Choose Use model to load it.") : downloadRefusal ?? Loc.T("Not downloaded.")
                     : provider.Ready ? Loc.T("Provider ready.") : Loc.T("Complete provider configuration before selecting a model.");
             // Shown only when it says more than the badge and buttons do.
-            row.State.Visibility = loading || active && state.Message is not null || provider is null || !model.SupportsDownload && !provider.Ready
+            row.State.Visibility = downloadRefusal is not null || loading || active && state.Message is not null || provider is null || !model.SupportsDownload && !provider.Ready
                 ? Visibility.Visible : Visibility.Collapsed;
         }
         if (_cloudMode)

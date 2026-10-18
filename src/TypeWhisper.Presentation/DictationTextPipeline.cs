@@ -137,7 +137,10 @@ public static class DictationTextPipeline
             return new()
             {
                 Text = rawText, Warnings = warnings.ToArray(), TextProcessors = provenance.ToArray(),
-                WorkflowError = Loc.T("Workflow processing failed. Your transcript was retained for review; nothing was pasted.")
+                // A policy refusal names its reason; the generic wording would hide an administrator's decision.
+                WorkflowError = (ex as ManagedPolicyDeniedException ?? ex.InnerException as ManagedPolicyDeniedException) is { } denied
+                    ? denied.Message
+                    : Loc.T("Workflow processing failed. Your transcript was retained for review; nothing was pasted.")
             };
         }
     }

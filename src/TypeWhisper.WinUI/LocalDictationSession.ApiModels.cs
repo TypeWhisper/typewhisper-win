@@ -7,6 +7,10 @@ internal sealed partial class LocalDictationSession
     internal DictationProviderOption? ApiModelProvider(string engine) => DictationProviders.FirstOrDefault(provider =>
         provider.Id == engine || provider.PluginId == engine || ApiEngineId(provider) == engine);
 
+    /// <summary>Why policy refuses the engine an API request names, or null; an unloaded package is judged through the selection it served.</summary>
+    internal string? ApiEngineRefusal(string engine) =>
+        ApiModelProvider(engine)?.Refusal ?? PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(engine));
+
     private string ApiEngineId(DictationProviderOption provider) => provider.Id == "local" ? "sherpa-onnx"
         : PluginRuntime.TranscriptionProviders.FirstOrDefault(item => item.SelectionId == RegistrySelectionId(provider.Id))?.EngineId ?? provider.Id;
 
@@ -43,6 +47,9 @@ internal sealed partial class LocalDictationSession
             SetStatus(Loc.T("Updating transcription model…"), DictationPhase.Configuring);
             await _livePreview.StopAsync();
             ct.ThrowIfCancellationRequested();
+            // A provider the policy refuses for transcription is not loaded as the selection; judged again after the
+            // load, before the selection is saved.
+            if (operation == "load") DenyProviderIfRefused(provider);
             if (operation == "unload")
             {
                 if (provider.Cloud) throw new NotSupportedException("This provider does not support explicit model unloading.");
@@ -75,7 +82,10 @@ internal sealed partial class LocalDictationSession
             ct.ThrowIfCancellationRequested();
             if (operation == "load")
             {
+                DenyProviderIfRefused(provider);
                 _selection.SetSetting("Provider", provider.Id);
+                _selection.SetSetting("ProviderPluginId", provider.PluginId);
+                _selection.SetSetting("ProviderName", provider.Name);
                 _providerId = provider.Id;
             }
             return modelId;

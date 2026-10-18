@@ -1,5 +1,6 @@
 {
   "id": "com.typewhisper.openai",
+  "locality": "cloud",
   "name": "OpenAI / ChatGPT",
   "version": "1.1.6",
   "minHostVersion": "1.1.5",

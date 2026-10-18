@@ -62,7 +62,7 @@ internal sealed partial class LocalDictationSession
 
     // Reports a configuration failure without treating it as cancellation:
     // a previously canceled recording may still own the operation token.
-    private bool RejectTask(string? selectedTask, TranscriptionTask globalTask, Action<string>? rejected)
+    private bool RejectTask(string? selectedTask, TranscriptionTask globalTask, Action<string, bool>? rejected)
     {
         try
         {
@@ -71,14 +71,14 @@ internal sealed partial class LocalDictationSession
         }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
-            rejected?.Invoke(ex.Message);
+            rejected?.Invoke(ex.Message, false);
             SetStatus(ex.Message, DictationPhase.Error);
             return true;
         }
     }
 
     // Rejects an explicitly requested language the active model cannot use before microphone capture.
-    private bool RejectLanguage(string? language, Action<string>? rejected)
+    private bool RejectLanguage(string? language, Action<string, bool>? rejected)
     {
         try
         {
@@ -87,7 +87,7 @@ internal sealed partial class LocalDictationSession
         }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
-            rejected?.Invoke(ex.Message);
+            rejected?.Invoke(ex.Message, false);
             SetStatus(ex.Message, DictationPhase.Error);
             return true;
         }
@@ -98,8 +98,16 @@ internal sealed partial class LocalDictationSession
         var snapshot = _workflowAtStart;
         var memory = _workflowMemoryAtStart;
         return snapshot is null ? null : (text, ct) => snapshot.ProcessAsync(text, configuredLanguage, detectedLanguage,
-            (provider, model) => LlmProviders.Any(item => item.SelectionId == provider && item.Ready
-                && item.Models.Any(candidate => candidate.Id == model)),
-            ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
+            LlmAvailableForWorkflow, ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
+    }
+
+    // Whether a workflow's LLM is ready. One the policy refuses, or whose package the policy unloaded, reports the
+    // reason instead of reading as merely unavailable.
+    private bool LlmAvailableForWorkflow(string provider, string model)
+    {
+        if (LlmProviders.Any(item => item.SelectionId == provider && item.Ready && item.Models.Any(candidate => candidate.Id == model))) return true;
+        if ((PluginRuntime.LlmRefusal(provider) ?? PluginRuntime.SelectionPackageRefusal(provider)) is { } refused)
+            throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("llm", refused);
+        return false;
     }
 }
