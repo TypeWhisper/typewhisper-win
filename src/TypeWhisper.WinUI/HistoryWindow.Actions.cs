@@ -37,6 +37,11 @@ public sealed partial class HistoryWindow
         return button;
     }
 
+    // The menu acts on the row it was opened on, or on the whole selection when that row is part of it, as on macOS.
+    private TranscriptionRecord[] MenuTargets(TranscriptionRecord record) =>
+        _selection.Count > 1 && _selection.Contains(record.Id) ? SelectedRecords()
+            : [_records.FirstOrDefault(item => item.Id == record.Id) ?? record];
+
     private MenuFlyout RowMenu(TranscriptionRecord record)
     {
         var menu = new MenuFlyout();
@@ -49,27 +54,28 @@ public sealed partial class HistoryWindow
         menu.Opening += (_, _) =>
         {
             menu.Items.Clear();
-            var records = SelectedRecords();
-            Add(Loc.T("Copy"), CopySelection);
+            var records = MenuTargets(record);
+            Add(Loc.T("Copy"), () => CopySelection(records));
             var export = new MenuFlyoutSubItem { Text = Loc.T("Export as…") };
             foreach (var (label, extension) in new[] { ("Markdown", ".md"), (Loc.T("Plain Text"), ".txt"), ("JSON", ".json") })
             {
                 var item = new MenuFlyoutItem { Text = label };
-                item.Click += (_, _) => _ = ExportAsync(extension);
+                item.Click += (_, _) => _ = ExportAsync(extension, records);
                 export.Items.Add(item);
             }
             menu.Items.Add(export);
-            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true));
-            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false));
+            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true, records));
+            if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false, records));
             menu.Items.Add(new MenuFlyoutSeparator());
-            Add(records.Length > 1 ? Loc.T("Delete {0} Entries…", records.Length) : Loc.T("Delete…"), () => _ = DeleteSelectionAsync());
+            Add(records.Length > 1 ? Loc.T("Delete {0} Entries…", records.Length) : Loc.T("Delete…"), () => _ = DeleteSelectionAsync(records));
         };
         return menu;
     }
 
-    private void CopySelection()
+    private void CopySelection() => CopySelection(SelectedRecords());
+
+    private void CopySelection(TranscriptionRecord[] records)
     {
-        var records = SelectedRecords();
         if (records.Length == 0) return;
         // A single entry copies what is on screen, including unsaved edits.
         var text = records.Length == 1 && _editor is not null && _editedId == records[0].Id
@@ -88,9 +94,9 @@ public sealed partial class HistoryWindow
         }
     }
 
-    private async Task SetInboxAsync(bool completed)
+    private async Task SetInboxAsync(bool completed, TranscriptionRecord[]? records = null)
     {
-        var ids = SelectedRecords().Select(record => record.Id).ToArray();
+        var ids = (records ?? SelectedRecords()).Select(record => record.Id).ToArray();
         if (ids.Length == 0) return;
         try
         {
@@ -107,9 +113,9 @@ public sealed partial class HistoryWindow
         await RefreshAsync();
     }
 
-    private async Task ExportAsync(string extension)
+    private async Task ExportAsync(string extension, TranscriptionRecord[]? records = null)
     {
-        var ids = SelectedRecords().Select(record => record.Id).ToArray();
+        var ids = (records ?? SelectedRecords()).Select(record => record.Id).ToArray();
         if (ids.Length == 0) return;
         try
         {
@@ -131,9 +137,9 @@ public sealed partial class HistoryWindow
         }
     }
 
-    private async Task DeleteSelectionAsync()
+    private async Task DeleteSelectionAsync(TranscriptionRecord[]? records = null)
     {
-        var ids = SelectedRecords().Select(record => record.Id).ToArray();
+        var ids = (records ?? SelectedRecords()).Select(record => record.Id).ToArray();
         if (ids.Length == 0 || _dialogOpen) return;
         _dialogOpen = true;
         bool confirmed;
@@ -145,14 +151,15 @@ public sealed partial class HistoryWindow
         }
         finally { _dialogOpen = false; }
         if (!confirmed) return;
-        StopAudioPlayback();
+        // A row deleted from its menu can differ from the entry whose audio is playing.
+        if (_playerId is { } playing && ids.Contains(playing)) StopAudioPlayback();
         try
         {
             if (await _actions.DeleteAsync(ids))
             {
-                _editor = null;
-                _editedId = null;
-                _selection.Clear();
+                // A row deleted from its menu can differ from the open entry; keep that entry and its edits.
+                if (_editedId is { } edited && ids.Contains(edited)) { _editor = null; _editedId = null; }
+                _selection.RemoveAll(id => ids.Contains(id));
                 _notice.Text = ids.Length == 1 ? Loc.T("Entry deleted.") : Loc.T("Deleted {0} entries.", ids.Length);
             }
             else _notice.Text = Loc.T("The entries could not be deleted. Your history was not changed.");

@@ -21,6 +21,11 @@ public sealed class HomeView : UserControl
     private bool _refreshAgain;
     private string? _loadError;
     internal event Action<string>? NavigateRequested;
+    // Asks to open one transcription in History; carries its record id.
+    internal event Action<string>? OpenRecordRequested;
+    // Reports the outcome of copying from the recent list; kept across re-renders.
+    private readonly TextBlock _notice = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _noticeTimer;
 
     public HomeView()
     {
@@ -37,6 +42,12 @@ public sealed class HomeView : UserControl
         Grid.SetRow(scroll, 1);
         root.Children.Add(scroll);
         Content = root;
+        _notice.Foreground = Brush("MutedBrush");
+        AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite);
+        _noticeTimer = DispatcherQueue.CreateTimer();
+        _noticeTimer.Interval = TimeSpan.FromSeconds(4);
+        _noticeTimer.IsRepeating = false;
+        _noticeTimer.Tick += (_, _) => ShowNotice("");
     }
 
     internal void Connect(HistoryReader reader, Func<string> dictationShortcut)
@@ -76,6 +87,36 @@ public sealed class HomeView : UserControl
         }
         _body.Children.Add(_records.Count == 0 && !_loading ? GettingStarted() : Activity());
         _body.Children.Add(Recent());
+        if (_notice.Parent is Panel parent) parent.Children.Remove(_notice);
+        _body.Children.Add(_notice);
+    }
+
+    private void ShowNotice(string text)
+    {
+        _noticeTimer.Stop();
+        _notice.Text = text;
+        _notice.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        if (text.Length == 0) return;
+        _noticeTimer.Start();
+        // LiveSetting alone does not make Narrator read the message.
+        _notice.UpdateLayout();
+        (FrameworkElementAutomationPeer.FromElement(_notice) ?? FrameworkElementAutomationPeer.CreatePeerForElement(_notice))
+            ?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+    }
+
+    private void Copy(TranscriptionRecord record) =>
+        ShowNotice(ClipboardText.TrySet(record.DisplayText) ? Loc.T("Copied to the clipboard.") : Loc.T("The clipboard is busy. Try copying again."));
+
+    private MenuFlyout RecordMenu(TranscriptionRecord record)
+    {
+        var menu = new MenuFlyout();
+        var copy = new MenuFlyoutItem { Text = Loc.T("Copy") };
+        copy.Click += (_, _) => Copy(record);
+        menu.Items.Add(copy);
+        var open = new MenuFlyoutItem { Text = Loc.T("Open in History") };
+        open.Click += (_, _) => OpenRecordRequested?.Invoke(record.Id);
+        menu.Items.Add(open);
+        return menu;
     }
 
     private Border GettingStarted()
@@ -188,7 +229,8 @@ public sealed class HomeView : UserControl
             // The last row follows the card's lower corners.
             var corner = ReferenceEquals(record, recent[^1]) ? 11 : 0;
             button.CornerRadius = new CornerRadius(0, 0, corner, corner);
-            button.Click += (_, _) => NavigateRequested?.Invoke("History");
+            button.Click += (_, _) => OpenRecordRequested?.Invoke(record.Id);
+            button.ContextFlyout = RecordMenu(record);
             AutomationProperties.SetName(button, Loc.T("Open in History: {0}", text.Text));
             rows.Children.Add(button);
         }

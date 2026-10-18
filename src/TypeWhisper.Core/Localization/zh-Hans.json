@@ -3186,5 +3186,6 @@
   "Version {0} is older than your installed version.": "版本 {0} 比已安装的版本旧。",
   "The update policy changed. Check for updates again.": "更新策略已更改。请再次检查更新。",
   "Last change {0}": "最近更改 {0}",
-  "Version {0} is available. Check for updates in Settings to install it.": "版本 {0} 可用。请在设置中检查更新以安装。"
+  "Version {0} is available. Check for updates in Settings to install it.": "版本 {0} 可用。请在设置中检查更新以安装。",
+  "Open in History": "在历史记录中打开"
 }

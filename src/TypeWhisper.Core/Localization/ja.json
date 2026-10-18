@@ -3186,5 +3186,6 @@
   "Version {0} is older than your installed version.": "バージョン {0} はインストール済みのバージョンより古いです。",
   "The update policy changed. Check for updates again.": "更新ポリシーが変更されました。もう一度更新を確認してください。",
   "Last change {0}": "最終変更 {0}",
-  "Version {0} is available. Check for updates in Settings to install it.": "バージョン {0} が利用可能です。インストールするには設定で更新を確認してください。"
+  "Version {0} is available. Check for updates in Settings to install it.": "バージョン {0} が利用可能です。インストールするには設定で更新を確認してください。",
+  "Open in History": "履歴で開く"
 }

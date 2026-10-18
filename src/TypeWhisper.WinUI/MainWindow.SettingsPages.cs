@@ -72,6 +72,7 @@ public sealed partial class MainWindow
                     _home = new HomeView();
                     _home.Connect(_dictation.HistoryReader, () => _dictation.Shortcut);
                     _home.NavigateRequested += NavigateFromSettingsPage;
+                    _home.OpenRecordRequested += id => OpenHistory(id);
                 }
                 if (entering) _home.Present();
                 return _home;

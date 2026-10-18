@@ -41,6 +41,10 @@ public sealed partial class HistoryWindow : Window
     private readonly HashSet<HistoryDateGroup> _collapsed = [];
     private readonly List<string> _selection = [];
     private string? _anchor;
+    private string? _pendingReveal;
+    private string? _filteredSearch;
+    // Position of each entry in the list's rows, for scrolling an entry into view.
+    private readonly Dictionary<string, int> _rowIndex = new(StringComparer.Ordinal);
     private int _shown = PageSize;
     private HistoryScope _scope = HistoryScope.All;
     private HistoryDateRange _range = HistoryDateRange.AllTime;
@@ -133,7 +137,8 @@ public sealed partial class HistoryWindow : Window
         root.Children.Add(detailSurface);
         Content = root;
 
-        _search.TextChanged += async (_, _) => { if (await ConfirmLeaveEditAsync()) { _shown = PageSize; Refilter(); } };
+        // Text set in code has already been applied by the time this event arrives.
+        _search.TextChanged += async (_, _) => { if (_search.Text != _filteredSearch && await ConfirmLeaveEditAsync()) { _shown = PageSize; Refilter(); } };
         root.KeyDown += Root_KeyDown;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(brand);
@@ -207,7 +212,66 @@ public sealed partial class HistoryWindow : Window
         _selection.RemoveAll(id => !existing.Contains(id));
         BuildMenus();
         Render();
+        if (_pendingReveal is { } reveal) { _pendingReveal = null; ApplyReveal(reveal); }
     }
+
+    // Opens one entry, as when it is clicked on the start page.
+    internal async void Reveal(string id)
+    {
+        if (_closing) return;
+        if (_loading) { _pendingReveal = id; return; }
+        if (_selection is [var only] && only == id)
+        {
+            // The open entry keeps its edits; it only needs to be shown again if search, filters or a collapsed section hide it.
+            if (_rowIndex.ContainsKey(id)) BringIntoView(id); else ApplyReveal(id);
+            return;
+        }
+        if (!await ConfirmLeaveEditAsync()) return;
+        if (_records.All(record => record.Id != id)) await RefreshAsync();
+        if (!_closing) ApplyReveal(id);
+    }
+
+    private void ApplyReveal(string id)
+    {
+        if (_records.FirstOrDefault(record => record.Id == id) is not { } record) return;
+        bool Shows(HistoryScope scope, string search, HistoryDateRange range, string? app) =>
+            HistoryWorkspace.Query([record], scope, search, range, app, _sort, DateTimeOffset.Now, localDeviceId: LocalDeviceId()).Any();
+        if (!Shows(_scope, _search.Text, _range, _app))
+        {
+            // Clear search and filters first; leave the mailbox or device only if it hides the entry too.
+            _range = HistoryDateRange.AllTime;
+            _app = null;
+            _search.Text = "";
+            if (!Shows(_scope, "", _range, _app)) _scope = HistoryScope.All;
+            BuildMenus();
+        }
+        _collapsed.Remove(HistoryWorkspace.GroupOf(record.Timestamp, DateTimeOffset.Now));
+        if (_selection is not [var open] || open != id)
+        {
+            _selection.Clear();
+            _selection.Add(id);
+            StopAudioPlayback();
+            _detailMode = "final";
+            _notice.Text = "";
+        }
+        _anchor = id;
+        _visible = HistoryWorkspace.Query(_records, _scope, _search.Text, _range, _app, _sort, DateTimeOffset.Now, localDeviceId: LocalDeviceId());
+        // Rows of collapsed sections are counted too; showing a few more rows is harmless.
+        var index = _visible.ToList().FindIndex(item => item.Id == id);
+        if (index >= _shown) _shown = index + PageSize;
+        RenderSidebar();
+        Refilter();
+        BringIntoView(id);
+    }
+
+    private void BringIntoView(string id) => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (_closing || !_rowIndex.TryGetValue(id, out var index)) return;
+        // A row created outside the viewport needs a layout pass before it has a position to scroll to.
+        var element = _list.GetOrCreateElement(index);
+        element.UpdateLayout();
+        element.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0.3, AnimationDesired = false });
+    });
 
     private void Render()
     {
@@ -217,6 +281,7 @@ public sealed partial class HistoryWindow : Window
 
     private void Refilter()
     {
+        _filteredSearch = _search.Text;
         _visible = HistoryWorkspace.Query(_records, _scope, _search.Text, _range, _app, _sort, DateTimeOffset.Now, localDeviceId: LocalDeviceId());
         _listTitle.Text = ScopeTitle(_scope);
         _listCount.Text = _loading ? Loc.T("Loading…") : _visible.Count == 1 ? Loc.T("1 entry") : Loc.T("{0:N0} entries", _visible.Count);
@@ -368,6 +433,7 @@ public sealed partial class HistoryWindow : Window
         // Keep lightweight factories as the data source. WinUI creates controls only for the
         // viewport and its cache, including after loading many pages or changing selection.
         var rows = new List<Func<UIElement>>();
+        _rowIndex.Clear();
         if (_loadError is not null) { rows.Add(() => EmptyState("info", Loc.T("History unavailable"), _loadError)); _list.ItemsSource = rows; return; }
         if (_loading) { rows.Add(() => EmptyState("history", Loc.T("Loading history…"), "")); _list.ItemsSource = rows; return; }
         if (_visible.Count == 0) { rows.Add(EmptyList); _list.ItemsSource = rows; return; }
@@ -392,6 +458,7 @@ public sealed partial class HistoryWindow : Window
                 if (rendered++ >= _shown) break;
                 if (!first) rows.Add(() => new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(12, 0, 12, 0) });
                 first = false;
+                _rowIndex[record.Id] = rows.Count;
                 rows.Add(() => ListRow(record, now));
             }
         }
@@ -479,7 +546,6 @@ public sealed partial class HistoryWindow : Window
         AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         button.Click += (_, _) => SelectRecord(record.Id);
         button.ContextFlyout = RowMenu(record);
-        button.ContextRequested += (_, _) => { if (!_selection.Contains(record.Id)) SelectRecord(record.Id); };
         return button;
     }
 
